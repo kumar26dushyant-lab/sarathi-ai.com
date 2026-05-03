@@ -11102,15 +11102,18 @@ _DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
 
 
 def _run_deploy():
-    """Run the deploy script as a background process after returning 200."""
+    """Start deploy script fully detached so it survives when it kills this process."""
+    import os as _os
     try:
-        result = _subprocess.run(
-            ["bash", str(_DEPLOY_SCRIPT)],
-            capture_output=True, text=True, timeout=120
-        )
-        logger.info("deploy script exit=%d stdout=%s", result.returncode, result.stdout[-500:])
-        if result.returncode != 0:
-            logger.error("deploy script stderr: %s", result.stderr[-500:])
+        log_path = "/tmp/sarathi-deploy.log"
+        with open(log_path, "a") as _lf:
+            _subprocess.Popen(
+                ["bash", str(_DEPLOY_SCRIPT)],
+                stdout=_lf, stderr=_lf,
+                start_new_session=True,  # detach from our process group
+                close_fds=True,
+            )
+        logger.info("🚀 deploy script started (detached), log: %s", log_path)
     except Exception as exc:
         logger.error("deploy script error: %s", exc)
 

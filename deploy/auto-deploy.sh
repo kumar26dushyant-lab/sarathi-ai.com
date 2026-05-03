@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  auto-deploy.sh — Called by /internal/deploy webhook after each git push
-#  Runs as the ubuntu user (no sudo needed for git since ubuntu owns /opt/sarathi)
+#  Runs as the sarathi service user (sudoers allows: systemctl restart sarathi)
 # =============================================================================
 set -euo pipefail
 
@@ -32,9 +32,20 @@ asyncio.run(init_db())
 print('DB OK')
 " 2>&1 | tee -a "$LOG"
 
-# Restart service (ubuntu has NOPASSWD sudo on Oracle Cloud)
-sudo systemctl restart sarathi
-sleep 8
-sudo systemctl is-active sarathi | tee -a "$LOG"
+# Kill the current process — systemd will auto-restart it
+echo "Restarting sarathi service..." | tee -a "$LOG"
+pkill -SIGTERM -f "python.*sarathi_biz" 2>/dev/null || true
+
+# Poll until the app comes back online
+echo "Waiting for service to restart..." | tee -a "$LOG"
+for i in 1 2 3 4 5 6 7 8; do
+    CODE=$(curl -sk -o /dev/null -w '%{http_code}' https://sarathi-ai.com/ 2>/dev/null || echo "000")
+    if [ "$CODE" = "200" ]; then
+        echo "Service UP after restart (HTTP $CODE)" | tee -a "$LOG"
+        break
+    fi
+    echo "Attempt $i: HTTP $CODE, waiting 5s..." | tee -a "$LOG"
+    sleep 5
+done
 
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') Deploy complete ===" | tee -a "$LOG"
