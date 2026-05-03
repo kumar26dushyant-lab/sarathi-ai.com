@@ -883,6 +883,174 @@ async def init_db():
             except Exception:
                 pass
 
+        # ─────────────────────────────────────────────────────────────────────
+        #  Nidaan Partner — Phase 1b (plug-and-play; additive only)
+        # ─────────────────────────────────────────────────────────────────────
+
+        await conn.executescript("""
+            -- Nidaan internal admins (super, sub-super, legal agents)
+            CREATE TABLE IF NOT EXISTS nidaan_admins (
+                admin_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name              TEXT NOT NULL,
+                email             TEXT NOT NULL UNIQUE,
+                password_hash     TEXT,
+                google_sub        TEXT,
+                role              TEXT NOT NULL,
+                status            TEXT DEFAULT 'active',
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login_at     TIMESTAMP
+            );
+
+            -- Customer firm / account (advisor or enterprise with a Nidaan plan)
+            CREATE TABLE IF NOT EXISTS nidaan_accounts (
+                account_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_name        TEXT NOT NULL,
+                firm_name         TEXT,
+                email             TEXT NOT NULL UNIQUE,
+                phone             TEXT NOT NULL,
+                password_hash     TEXT,
+                google_sub        TEXT,
+                status            TEXT DEFAULT 'active',
+                notes             TEXT,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login_at     TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_accounts_email
+                ON nidaan_accounts(email);
+
+            -- Sub-users under an account
+            CREATE TABLE IF NOT EXISTS nidaan_users (
+                user_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id        INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
+                name              TEXT NOT NULL,
+                email             TEXT NOT NULL,
+                password_hash     TEXT,
+                role              TEXT DEFAULT 'agent',
+                status            TEXT DEFAULT 'invited',
+                invited_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                joined_at         TIMESTAMP,
+                UNIQUE(account_id, email)
+            );
+
+            -- Subscriptions (quarterly via Razorpay)
+            CREATE TABLE IF NOT EXISTS nidaan_subscriptions (
+                sub_id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id                INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
+                plan                      TEXT NOT NULL,
+                amount_paid               INTEGER NOT NULL,
+                billing_cycle             TEXT DEFAULT 'quarterly',
+                razorpay_subscription_id  TEXT,
+                started_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                current_period_end        TIMESTAMP,
+                status                    TEXT DEFAULT 'active',
+                auto_renew                INTEGER DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_subs_account
+                ON nidaan_subscriptions(account_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_subs_status
+                ON nidaan_subscriptions(status);
+
+            -- Claims (core lead-gen; NO sensitive docs stored)
+            CREATE TABLE IF NOT EXISTS nidaan_claims (
+                claim_id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id                  INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
+                user_id                     INTEGER REFERENCES nidaan_users(user_id),
+                claim_type                  TEXT NOT NULL,
+                insured_name                TEXT NOT NULL,
+                insured_phone               TEXT NOT NULL,
+                insured_email               TEXT,
+                insurer_name                TEXT,
+                policy_no                   TEXT,
+                disputed_amount             INTEGER,
+                claim_event_date            DATE,
+                type_specific               TEXT,
+                notes_from_agent            TEXT,
+                status                      TEXT DEFAULT 'intimated',
+                assigned_to_legal_user_id   INTEGER REFERENCES nidaan_admins(admin_id),
+                created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_status_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at                   TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_claims_account
+                ON nidaan_claims(account_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_claims_status
+                ON nidaan_claims(status);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_claims_assigned
+                ON nidaan_claims(assigned_to_legal_user_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_claims_created
+                ON nidaan_claims(created_at);
+
+            -- Claim status history
+            CREATE TABLE IF NOT EXISTS nidaan_claim_status_log (
+                log_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id          INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                from_status       TEXT,
+                to_status         TEXT NOT NULL,
+                note              TEXT,
+                changed_by_type   TEXT NOT NULL,
+                changed_by_id     INTEGER,
+                changed_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notify_sent       TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_status_log_claim
+                ON nidaan_claim_status_log(claim_id);
+
+            -- Direct-to-consumer per-claim review (rupees 999)
+            CREATE TABLE IF NOT EXISTS nidaan_per_claim_purchase (
+                purchase_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                insured_name          TEXT NOT NULL,
+                insured_phone         TEXT NOT NULL,
+                insured_email         TEXT,
+                insurer_name          TEXT,
+                policy_no             TEXT,
+                disputed_amount       INTEGER,
+                brief_description     TEXT,
+                amount_paid           INTEGER NOT NULL,
+                razorpay_order_id     TEXT,
+                review_outcome        TEXT DEFAULT 'pending',
+                review_note           TEXT,
+                converted_to_claim_id INTEGER REFERENCES nidaan_claims(claim_id),
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at           TIMESTAMP
+            );
+
+            -- Rolling 30-day quota cache per account
+            CREATE TABLE IF NOT EXISTS nidaan_plan_quota (
+                account_id              INTEGER PRIMARY KEY
+                                            REFERENCES nidaan_accounts(account_id),
+                current_window_start    DATE NOT NULL,
+                claims_this_window      INTEGER DEFAULT 0,
+                updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Bridge between Nidaan accounts and Sarathi tenants
+            CREATE TABLE IF NOT EXISTS product_link (
+                link_id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                nidaan_account_id     INTEGER NOT NULL
+                                          REFERENCES nidaan_accounts(account_id),
+                sarathi_tenant_id     INTEGER NULL
+                                          REFERENCES tenants(tenant_id),
+                source                TEXT NOT NULL,
+                active                INTEGER DEFAULT 1,
+                linked_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                unlinked_at           TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_product_link_nidaan
+                ON product_link(nidaan_account_id);
+            CREATE INDEX IF NOT EXISTS idx_product_link_sarathi
+                ON product_link(sarathi_tenant_id);
+        """)
+
+        # Sarathi cross-promo column (which product source referred this tenant)
+        nidaan_migrations = [
+            "ALTER TABLE tenants ADD COLUMN plan_source TEXT DEFAULT 'sarathi'",
+        ]
+        for m in nidaan_migrations:
+            try:
+                await conn.execute(m)
+            except Exception:
+                pass
+
         await conn.commit()
     logger.info("Database initialized: %s", DB_PATH)
 
