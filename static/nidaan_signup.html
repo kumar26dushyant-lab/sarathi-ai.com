@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign Up — Nidaan Partner</title>
+<meta name="description" content="Create your Nidaan Partner account and start handling insurance claim disputes professionally.">
+<link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh}
+  a{color:#22d3ee;text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* NAV */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;background:rgba(10,22,40,.95);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50}
+  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff}
+  .nav-brand img{height:36px;width:auto;border-radius:6px}
+  .nav-links{display:flex;gap:1.25rem;align-items:center;font-size:.9rem}
+
+  /* MAIN */
+  main{max-width:520px;margin:2.5rem auto;padding:0 1rem}
+  h1{font-size:1.65rem;font-weight:800;line-height:1.25;margin-bottom:.4rem}
+  .sub{color:rgba(255,255,255,.65);font-size:.93rem;margin-bottom:1.75rem}
+
+  /* PLAN SELECTOR */
+  .plan-selector{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1.75rem}
+  .plan-card{border:2px solid rgba(255,255,255,.1);border-radius:12px;padding:.9rem .7rem;cursor:pointer;transition:all .15s;text-align:center;background:rgba(255,255,255,.03)}
+  .plan-card:hover{border-color:#22d3ee;background:rgba(6,182,212,.08)}
+  .plan-card.selected{border-color:#22d3ee;background:rgba(6,182,212,.15)}
+  .plan-name{font-weight:700;font-size:.9rem;margin-bottom:.25rem}
+  .plan-price{color:#22d3ee;font-weight:800;font-size:1.05rem}
+  .plan-price span{font-size:.7rem;font-weight:400;color:rgba(255,255,255,.55)}
+  .plan-features{font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.35rem;line-height:1.5}
+
+  /* FORM */
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.75rem}
+  .field{margin-bottom:1.1rem}
+  label{display:block;font-size:.82rem;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:.4rem}
+  input[type=text],input[type=email],input[type=tel],input[type=password]{
+    width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);
+    border-radius:8px;padding:.7rem .95rem;color:#fff;font-size:.95rem;outline:none;transition:border .15s}
+  input:focus{border-color:#22d3ee}
+  input::placeholder{color:rgba(255,255,255,.3)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
+  .btn{width:100%;background:#06b6d4;color:#fff;border:none;border-radius:10px;padding:.85rem;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s;margin-top:.5rem}
+  .btn:hover{background:#0891b2}
+  .btn:disabled{background:#1e4a5c;cursor:not-allowed}
+  .msg{font-size:.85rem;padding:.6rem .9rem;border-radius:8px;margin-top:.9rem;display:none}
+  .msg.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
+  .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#86efac;display:block}
+  .terms{font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-top:.9rem;line-height:1.6}
+  .already{text-align:center;margin-top:1.1rem;font-size:.88rem;color:rgba(255,255,255,.55)}
+
+  /* LANG TOGGLE */
+  .lang-toggle{display:flex;gap:.4rem}
+  .lang-btn{padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);font-size:.78rem;cursor:pointer}
+  .lang-btn.active{background:#22d3ee;color:#0a1628;border-color:#22d3ee;font-weight:700}
+
+  .body.hi .en{display:none!important}
+  .body.en .hi{display:none!important}
+
+  @media(max-width:480px){.row2{grid-template-columns:1fr}.plan-selector{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="body en">
+
+<nav>
+  <a href="/" class="nav-brand">
+    <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+    <span>Nidaan Partner</span>
+  </a>
+  <div class="nav-links">
+    <a href="/nidaan/login" class="en">Log in</a>
+    <a href="/nidaan/login" class="hi">लॉग इन</a>
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" onclick="setLang('hi')">हिं</button>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <h1 class="en">Create your account</h1>
+  <h1 class="hi">अपना खाता बनाएं</h1>
+  <p class="sub en">Choose a plan and start handling insurance disputes professionally.</p>
+  <p class="sub hi">एक प्लान चुनें और पेशेवर तरीके से बीमा विवादों को सुलझाएं।</p>
+
+  <!-- Plan selector -->
+  <div class="plan-selector" id="planSelector">
+    <div class="plan-card selected" data-plan="silver" onclick="selectPlan('silver')">
+      <div class="plan-name en">Silver</div>
+      <div class="plan-name hi">सिल्वर</div>
+      <div class="plan-price">₹1,500<span>/quarter</span></div>
+      <div class="plan-features en">1 user · 10 claims/mo<br>Legal review</div>
+      <div class="plan-features hi">1 यूजर · 10 क्लेम/माह<br>कानूनी समीक्षा</div>
+    </div>
+    <div class="plan-card" data-plan="gold" onclick="selectPlan('gold')">
+      <div class="plan-name en">Gold</div>
+      <div class="plan-name hi">गोल्ड</div>
+      <div class="plan-price">₹3,000<span>/quarter</span></div>
+      <div class="plan-features en">5 users · 25 claims/mo<br>+ Sarathi bundle</div>
+      <div class="plan-features hi">5 यूजर · 25 क्लेम/माह<br>+ सारथी बंडल</div>
+    </div>
+    <div class="plan-card" data-plan="platinum" onclick="selectPlan('platinum')">
+      <div class="plan-name en">Platinum</div>
+      <div class="plan-name hi">प्लैटिनम</div>
+      <div class="plan-price">₹6,000<span>/quarter</span></div>
+      <div class="plan-features en">Unlimited · Priority<br>+ Sarathi bundle</div>
+      <div class="plan-features hi">अनलिमिटेड · प्राथमिकता<br>+ सारथी बंडल</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="signupForm" onsubmit="doSignup(event)">
+      <div class="row2">
+        <div class="field">
+          <label class="en">Full Name *</label>
+          <label class="hi">पूरा नाम *</label>
+          <input type="text" id="ownerName" placeholder="Rajesh Kumar" required>
+        </div>
+        <div class="field">
+          <label class="en">Firm / Company Name</label>
+          <label class="hi">फर्म / कंपनी का नाम</label>
+          <input type="text" id="firmName" placeholder="Kumar & Associates">
+        </div>
+      </div>
+      <div class="field">
+        <label class="en">Email Address *</label>
+        <label class="hi">ईमेल पता *</label>
+        <input type="email" id="email" placeholder="you@example.com" required>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="en">Phone Number *</label>
+          <label class="hi">फोन नंबर *</label>
+          <input type="tel" id="phone" placeholder="9876543210" required>
+        </div>
+        <div class="field">
+          <label class="en">Password *</label>
+          <label class="hi">पासवर्ड *</label>
+          <input type="password" id="password" placeholder="Min 8 characters" required minlength="8">
+        </div>
+      </div>
+      <button type="submit" class="btn" id="submitBtn">
+        <span class="en">Create Account →</span>
+        <span class="hi">खाता बनाएं →</span>
+      </button>
+      <div class="msg" id="msg"></div>
+    </form>
+    <p class="terms en">By signing up you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. Subscription billed quarterly via Razorpay.</p>
+    <p class="terms hi">साइन अप करके आप हमारी <a href="#">सेवा की शर्तें</a> और <a href="#">गोपनीयता नीति</a> से सहमत हैं। Razorpay के माध्यम से त्रैमासिक बिलिंग।</p>
+  </div>
+
+  <p class="already en">Already have an account? <a href="/nidaan/login">Log in →</a></p>
+  <p class="already hi">पहले से खाता है? <a href="/nidaan/login">लॉग इन करें →</a></p>
+</main>
+
+<script>
+  let selectedPlan = 'silver';
+  const urlPlan = new URLSearchParams(location.search).get('plan');
+  if (urlPlan && ['silver','gold','platinum'].includes(urlPlan)) selectPlan(urlPlan);
+
+  function selectPlan(plan) {
+    selectedPlan = plan;
+    document.querySelectorAll('.plan-card').forEach(c => c.classList.toggle('selected', c.dataset.plan === plan));
+  }
+
+  async function doSignup(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('msg');
+    btn.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = '';
+    try {
+      const res = await fetch('/nidaan/api/signup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          owner_name: document.getElementById('ownerName').value.trim(),
+          firm_name: document.getElementById('firmName').value.trim(),
+          email: document.getElementById('email').value.trim(),
+          phone: document.getElementById('phone').value.trim(),
+          password: document.getElementById('password').value,
+          plan: selectedPlan
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Signup failed');
+      localStorage.setItem('nidaan_token', data.access_token);
+      localStorage.setItem('nidaan_plan', data.plan);
+      msg.className = 'msg ok';
+      msg.textContent = document.body.classList.contains('hi')
+        ? 'खाता बना! डैशबोर्ड पर जा रहे हैं…'
+        : 'Account created! Redirecting to dashboard…';
+      setTimeout(() => location.href = '/nidaan/dashboard', 1000);
+    } catch(err) {
+      msg.className = 'msg err';
+      msg.textContent = err.message;
+      btn.disabled = false;
+    }
+  }
+
+  function setLang(l) {
+    document.body.className = 'body ' + l;
+    localStorage.setItem('nidaan_lang', l);
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
+  }
+  const saved = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
+  setLang(saved);
+</script>
+</body>
+</html>

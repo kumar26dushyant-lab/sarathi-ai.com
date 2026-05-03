@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Log In — Nidaan Partner</title>
+<link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh;display:flex;flex-direction:column}
+  a{color:#22d3ee;text-decoration:none}
+  a:hover{text-decoration:underline}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;background:rgba(10,22,40,.95);border-bottom:1px solid rgba(255,255,255,.07)}
+  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff}
+  .nav-brand img{height:36px;width:auto;border-radius:6px}
+  .lang-toggle{display:flex;gap:.4rem}
+  .lang-btn{padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);font-size:.78rem;cursor:pointer}
+  .lang-btn.active{background:#22d3ee;color:#0a1628;border-color:#22d3ee;font-weight:700}
+  main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+  .box{width:100%;max-width:420px}
+  .logo-wrap{text-align:center;margin-bottom:1.75rem}
+  .logo-wrap img{height:64px;width:auto;border-radius:10px}
+  h1{font-size:1.55rem;font-weight:800;text-align:center;margin-bottom:.35rem}
+  .sub{text-align:center;color:rgba(255,255,255,.55);font-size:.9rem;margin-bottom:1.75rem}
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.75rem}
+  .field{margin-bottom:1.1rem}
+  label{display:block;font-size:.82rem;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:.4rem}
+  input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:.7rem .95rem;color:#fff;font-size:.95rem;outline:none;transition:border .15s}
+  input:focus{border-color:#22d3ee}
+  input::placeholder{color:rgba(255,255,255,.3)}
+  .btn{width:100%;background:#06b6d4;color:#fff;border:none;border-radius:10px;padding:.85rem;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s;margin-top:.4rem}
+  .btn:hover{background:#0891b2}
+  .btn:disabled{background:#1e4a5c;cursor:not-allowed}
+  .msg{font-size:.85rem;padding:.6rem .9rem;border-radius:8px;margin-top:.9rem;display:none}
+  .msg.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
+  .footer-links{text-align:center;margin-top:1.25rem;font-size:.88rem;color:rgba(255,255,255,.5)}
+  .body.hi .en{display:none!important}
+  .body.en .hi{display:none!important}
+</style>
+</head>
+<body class="body en">
+<nav>
+  <a href="/" class="nav-brand">
+    <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+    <span>Nidaan Partner</span>
+  </a>
+  <div class="lang-toggle">
+    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" onclick="setLang('hi')">हिं</button>
+  </div>
+</nav>
+<main>
+  <div class="box">
+    <div class="logo-wrap">
+      <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+    </div>
+    <h1 class="en">Welcome back</h1>
+    <h1 class="hi">वापसी पर स्वागत</h1>
+    <p class="sub en">Log in to your Nidaan Partner account</p>
+    <p class="sub hi">अपने Nidaan Partner खाते में लॉग इन करें</p>
+
+    <div class="card">
+      <form id="loginForm" onsubmit="doLogin(event)">
+        <div class="field">
+          <label class="en">Email Address</label>
+          <label class="hi">ईमेल पता</label>
+          <input type="email" id="email" placeholder="you@example.com" required autofocus>
+        </div>
+        <div class="field">
+          <label class="en">Password</label>
+          <label class="hi">पासवर्ड</label>
+          <input type="password" id="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn" id="submitBtn">
+          <span class="en">Log In →</span>
+          <span class="hi">लॉग इन करें →</span>
+        </button>
+        <div class="msg" id="msg"></div>
+      </form>
+    </div>
+
+    <div class="footer-links">
+      <span class="en">Don't have an account? <a href="/nidaan/signup">Sign up →</a></span>
+      <span class="hi">खाता नहीं है? <a href="/nidaan/signup">साइन अप करें →</a></span>
+    </div>
+  </div>
+</main>
+
+<script>
+  // If already logged in, redirect to dashboard
+  if (localStorage.getItem('nidaan_token')) location.href = '/nidaan/dashboard';
+
+  async function doLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('msg');
+    btn.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = '';
+    try {
+      const res = await fetch('/nidaan/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Login failed');
+      localStorage.setItem('nidaan_token', data.access_token);
+      localStorage.setItem('nidaan_plan', data.account.plan || '');
+      location.href = '/nidaan/dashboard';
+    } catch(err) {
+      msg.className = 'msg err';
+      msg.textContent = err.message;
+      btn.disabled = false;
+    }
+  }
+
+  function setLang(l) {
+    document.body.className = 'body ' + l;
+    localStorage.setItem('nidaan_lang', l);
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
+  }
+  const saved = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
+  setLang(saved);
+</script>
+</body>
+</html>

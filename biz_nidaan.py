@@ -433,3 +433,43 @@ async def get_sarathi_tenant_for_nidaan(nidaan_account_id: int) -> Optional[int]
         )
         row = await cur.fetchone()
         return row[0] if row else None
+
+
+# =============================================================================
+#  JWT HELPERS  (Nidaan-namespaced — cannot be used as Sarathi tokens)
+# =============================================================================
+
+import jwt as _jwt_lib
+
+
+def _nidaan_secret() -> str:
+    """Return a namespaced JWT secret so Sarathi tokens can't be used here."""
+    base = os.environ.get("JWT_SECRET", "")
+    if not base:
+        base = "nidaan-fallback-secret-change-in-env"
+        logger.warning("JWT_SECRET not set — Nidaan tokens use fallback secret")
+    return base + ":nidaan"
+
+
+def create_nidaan_token(account_id: int, email: str, plan: str = "") -> str:
+    """Create a signed JWT for a Nidaan account session (valid 30 days)."""
+    payload = {
+        "typ": "nidaan",
+        "sub": account_id,
+        "email": email,
+        "plan": plan,
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int((datetime.utcnow() + timedelta(days=30)).timestamp()),
+    }
+    return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
+
+
+def verify_nidaan_token(token: str) -> Optional[dict]:
+    """Decode and verify a Nidaan JWT. Returns payload dict or None."""
+    try:
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        if payload.get("typ") != "nidaan":
+            return None
+        return payload
+    except Exception:
+        return None

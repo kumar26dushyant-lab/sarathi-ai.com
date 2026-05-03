@@ -53,6 +53,7 @@ import biz_resilience as resilience
 import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
+import biz_nidaan as nidaan
 
 # =============================================================================
 #  LOGGING
@@ -271,6 +272,189 @@ async def onboarding_page():
     if ob_file.exists():
         return HTMLResponse(ob_file.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Onboarding page not found</h1>", status_code=404)
+
+
+# =============================================================================
+#  NIDAAN PHASE 2 — PAGES + API
+# =============================================================================
+
+def _nidaan_page(filename: str) -> HTMLResponse:
+    f = static_dir / filename
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"))
+    return HTMLResponse(f"<h1>{filename} not found</h1>", status_code=404)
+
+
+def _nidaan_bearer(request: Request) -> Optional[dict]:
+    """Extract and verify Nidaan JWT from Authorization header."""
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        return nidaan.verify_nidaan_token(h[7:])
+    return None
+
+
+# ── Page routes ───────────────────────────────────────────────────────────────
+
+@app.get("/nidaan/signup", response_class=HTMLResponse)
+async def nidaan_signup_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_signup.html")
+
+
+@app.get("/nidaan/login", response_class=HTMLResponse)
+async def nidaan_login_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_login.html")
+
+
+@app.get("/nidaan/dashboard", response_class=HTMLResponse)
+async def nidaan_dashboard_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_dashboard.html")
+
+
+@app.get("/nidaan/get-reviewed", response_class=HTMLResponse)
+async def nidaan_review_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_review.html")
+
+
+@app.get("/nidaan/logout")
+async def nidaan_logout(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return RedirectResponse("/nidaan/login")
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class NidaanSignupReq(BaseModel):
+    owner_name: str
+    email: str
+    phone: str
+    password: str
+    firm_name: str = ""
+    plan: str = "silver"
+
+
+class NidaanLoginReq(BaseModel):
+    email: str
+    password: str
+
+
+class NidaanClaimReq(BaseModel):
+    claim_type: str
+    insured_name: str
+    insured_phone: str
+    insured_email: str = ""
+    insurer_name: str = ""
+    policy_no: str = ""
+    disputed_amount: Optional[int] = None
+    claim_event_date: Optional[str] = None
+    notes_from_agent: str = ""
+
+
+# ── API routes ────────────────────────────────────────────────────────────────
+
+@app.post("/nidaan/api/signup")
+async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if body.plan not in ("silver", "gold", "platinum"):
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    account_id = await nidaan.create_account(
+        owner_name=body.owner_name.strip(),
+        email=body.email.strip(),
+        phone=body.phone.strip(),
+        password=body.password,
+        firm_name=body.firm_name.strip(),
+    )
+    if account_id is None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    token = nidaan.create_nidaan_token(account_id, body.email.lower().strip(), body.plan)
+    return {"access_token": token, "account_id": account_id, "plan": body.plan}
+
+
+@app.post("/nidaan/api/login")
+async def nidaan_api_login(body: NidaanLoginReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    account = await nidaan.authenticate_account(body.email, body.password)
+    if not account:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+@app.get("/nidaan/api/me")
+async def nidaan_api_me(request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    return {
+        "account_id": account["account_id"],
+        "owner_name": account["owner_name"],
+        "firm_name": account["firm_name"],
+        "email": account["email"],
+        "phone": account["phone"],
+        "status": account["status"],
+        "subscription": dict(sub) if sub else None,
+    }
+
+
+@app.get("/nidaan/api/claims")
+async def nidaan_api_claims(request: Request, status: Optional[str] = None, limit: int = 50):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    claims = await nidaan.get_claims(payload["sub"], status=status, limit=limit)
+    return {"claims": claims, "count": len(claims)}
+
+
+@app.post("/nidaan/api/claims/submit")
+async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not body.claim_type or not body.insured_name or not body.insured_phone:
+        raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
+    claim_id, reason = await nidaan.submit_claim(
+        account_id=payload["sub"],
+        user_id=None,
+        claim_type=body.claim_type,
+        insured_name=body.insured_name,
+        insured_phone=body.insured_phone,
+        insured_email=body.insured_email,
+        insurer_name=body.insurer_name,
+        policy_no=body.policy_no,
+        disputed_amount=body.disputed_amount,
+        claim_event_date=body.claim_event_date,
+        notes_from_agent=body.notes_from_agent,
+    )
+    if claim_id is None:
+        raise HTTPException(status_code=402, detail=reason)
+    return {"claim_id": claim_id, "status": "intimated"}
 
 
 @app.get("/sitemap.xml")
