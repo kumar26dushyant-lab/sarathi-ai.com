@@ -245,7 +245,7 @@ span.hi-inline{display:none}
   .nav-brand img{height:38px}
   .nav-brand .brand-sub{display:none}
   .nav-brand{font-size:.95rem}
-  .nav-inner{height:52px;overflow:visible}
+  .nav-inner{height:52px}
 
   /* Hero */
   .hero{padding:2.25rem 1rem 2rem}
@@ -1052,8 +1052,16 @@ function setLang(l) {
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l === 'hi' ? 'हिं' : 'EN')));
   // Sync nav link visibility
+  var _mob = window.innerWidth <= 768;
   document.querySelectorAll('.nav-links a.en, .nav-links a.hi').forEach(a => {
-    a.style.display = '';
+    var mine = a.classList.contains(l);
+    if (a.classList.contains('nav-cta')) {
+      // Login button: always show/hide by language
+      a.style.display = mine ? '' : 'none';
+    } else {
+      // Text links: hidden on mobile, language-gated on desktop
+      a.style.display = (!_mob && mine) ? '' : 'none';
+    }
   });
 }
 (function(){
