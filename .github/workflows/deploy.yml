@@ -7,61 +7,36 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup SSH key
+      - name: Trigger deploy webhook
         run: |
-          mkdir -p ~/.ssh
-          # Strip Windows CRLF line endings from the key (common issue)
-          echo "${{ secrets.PROD_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          # Validate key is well-formed before trying to connect
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null && echo "Key valid" || (echo "Key INVALID - check PROD_SSH_KEY secret"; exit 1)
-          ssh-keyscan -H "${{ secrets.PROD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "SSH setup done"
+          echo "Calling deploy webhook on sarathi-ai.com..."
+          HTTP_CODE=$(curl -sf \
+            -o /tmp/deploy_response.json \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            https://sarathi-ai.com/internal/deploy)
 
-      - name: Deploy to Oracle Cloud VM
-        env:
-          PROD_HOST: ${{ secrets.PROD_HOST }}
-          PROD_USER: ${{ secrets.PROD_USER }}
+          echo "Response code: $HTTP_CODE"
+          cat /tmp/deploy_response.json 2>/dev/null || true
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Deploy webhook failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "Deploy triggered successfully!"
+
+      - name: Wait and verify
         run: |
-          ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=20 \
-              -o BatchMode=yes \
-              "$PROD_USER@$PROD_HOST" \
-              "bash -s" << 'REMOTE_SCRIPT'
-          set -e
-          echo "=== Pull latest ==="
-          git config --global --add safe.directory /opt/sarathi
-          git -C /opt/sarathi fetch origin master
-          git -C /opt/sarathi reset --hard origin/master
-          echo "Deployed: $(git -C /opt/sarathi log --oneline -1)"
-
-          echo "=== Syntax check ==="
-          /opt/sarathi/venv/bin/python -c "import ast; ast.parse(open('/opt/sarathi/sarathi_biz.py',encoding='utf-8').read()); print('Syntax OK')"
-
-          echo "=== DB migration ==="
-          cd /opt/sarathi && /opt/sarathi/venv/bin/python -c "
-          import asyncio, sys
-          sys.path.insert(0, '/opt/sarathi')
-          from biz_database import init_db
-          asyncio.run(init_db())
-          print('DB OK')
-          "
-
-          echo "=== Restart ==="
-          sudo systemctl restart sarathi
-          sleep 8
-          sudo systemctl is-active sarathi || (journalctl -u sarathi -n 20; exit 1)
-
-          echo "=== Smoke test ==="
-          S=$(curl -sk -o /dev/null -w "%{http_code}" https://sarathi-ai.com/)
-          N=$(curl -sk -o /dev/null -w "%{http_code}" https://nidaanpartner.com/)
-          echo "sarathi=$S  nidaan=$N"
-          [ "$S" = "200" ] && [ "$N" = "200" ] && echo "=== DEPLOY SUCCESS ===" || (echo "SMOKE TEST FAILED"; exit 1)
-          REMOTE_SCRIPT
+          echo "Waiting 30s for deploy to complete..."
+          sleep 30
+          SARATHI=$(curl -sk -o /dev/null -w "%{http_code}" https://sarathi-ai.com/)
+          NIDAAN=$(curl -sk -o /dev/null -w "%{http_code}" https://nidaanpartner.com/)
+          echo "sarathi-ai.com: $SARATHI"
+          echo "nidaanpartner.com: $NIDAAN"
+          [ "$SARATHI" = "200" ] && [ "$NIDAAN" = "200" ] && echo "Both sites OK!" || (echo "Smoke test FAILED"; exit 1)

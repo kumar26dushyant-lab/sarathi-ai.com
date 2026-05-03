@@ -11089,6 +11089,53 @@ async def main():
         logger.info("👋 Sarathi-AI stopped. See you!")
 
 
+# =============================================================================
+#  AUTO-DEPLOY WEBHOOK  (called by GitHub Actions — no SSH key needed)
+# =============================================================================
+
+import hmac as _hmac
+import subprocess as _subprocess
+from fastapi import BackgroundTasks
+
+_DEPLOY_TOKEN = os.getenv("DEPLOY_TOKEN", "")
+_DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
+
+
+def _run_deploy():
+    """Run the deploy script as a background process after returning 200."""
+    try:
+        result = _subprocess.run(
+            ["bash", str(_DEPLOY_SCRIPT)],
+            capture_output=True, text=True, timeout=120
+        )
+        logger.info("deploy script exit=%d stdout=%s", result.returncode, result.stdout[-500:])
+        if result.returncode != 0:
+            logger.error("deploy script stderr: %s", result.stderr[-500:])
+    except Exception as exc:
+        logger.error("deploy script error: %s", exc)
+
+
+@app.post("/internal/deploy")
+async def internal_deploy_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    GitHub Actions calls this endpoint after each push to master.
+    Authenticates via Bearer token (DEPLOY_TOKEN env var).
+    The deploy script runs in background after this response is sent.
+    """
+    # Token auth — timing-safe comparison
+    auth = request.headers.get("Authorization", "")
+    token = auth.removeprefix("Bearer ").strip()
+    if not _DEPLOY_TOKEN:
+        raise HTTPException(status_code=503, detail="DEPLOY_TOKEN not configured on server")
+    if not _hmac.compare_digest(token, _DEPLOY_TOKEN):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not _DEPLOY_SCRIPT.exists():
+        raise HTTPException(status_code=503, detail="Deploy script not found")
+    background_tasks.add_task(_run_deploy)
+    logger.info("🚀 Deploy triggered by GitHub Actions")
+    return {"status": "deploying", "script": str(_DEPLOY_SCRIPT)}
+
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())
