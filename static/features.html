@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>All Features — Sarathi-AI Business Technologies</title>
+  <meta name="description" content="Complete feature guide for Sarathi-AI — India's first voice-first CRM for insurance and financial advisors. See every feature, use case, and real example.">
+  <meta name="theme-color" content="#0d9488">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/static/favicon.ico">
+  <link rel="apple-touch-icon" href="/static/icon-180x180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/dark-mode.css?v=4">
+  <script src="/static/dark-mode.js?v=3"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#f8fafc;--text:#1e293b;--text2:#475569;--card:#fff;--border:#e2e8f0;--muted:#94a3b8;--teal:#0d9488;--teal-light:#ccfbf1;--amber:#f59e0b;--indigo:#4338ca;--green:#059669;--r:12px}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+    a{text-decoration:none;color:inherit}
+
+    /* ── Navbar ───────────────────────────────────────── */
+    .navbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px}
+    .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05em}
+    .logo img{height:42px;border-radius:6px}
+    .brand-name{font-family:'Poppins',sans-serif;color:var(--indigo)}
+    .ai-tag{color:var(--teal)}
+    nav{display:flex;align-items:center;gap:8px}
+    nav a{font-size:.9em;font-weight:500;color:var(--text2);padding:6px 14px;border-radius:8px;transition:all .2s}
+    nav a:hover{color:var(--teal);background:rgba(13,148,136,.06)}
+    .lang-toggle{display:inline-flex;border:1.5px solid var(--border);border-radius:100px;overflow:hidden;font-size:.8em;margin:0 4px}
+    .lang-btn{background:none;border:none;padding:5px 12px;font-weight:600;cursor:pointer;color:var(--muted);transition:all .2s;font-family:inherit}
+    .lang-btn.active{background:var(--teal);color:#fff}
+
+    /* ── Hero ─────────────────────────────────────────── */
+    .hero{background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;text-align:center;padding:60px 24px 48px}
+    .hero h1{font-family:'Poppins',sans-serif;font-size:clamp(1.8em,4vw,2.6em);font-weight:800;margin-bottom:12px}
+    .hero h1 .teal{color:#2dd4bf}
+    .hero p{color:rgba(255,255,255,.65);max-width:700px;margin:0 auto;font-size:1.05em}
+    .hero-stats{display:flex;justify-content:center;gap:32px;margin-top:24px;flex-wrap:wrap}
+    .hero-stat{text-align:center}
+    .hero-stat .num{font-size:1.8em;font-weight:800;color:#2dd4bf}
+    .hero-stat .lbl{font-size:.78em;color:rgba(255,255,255,.5);margin-top:2px}
+
+    /* ── Container ────────────────────────────────────── */
+    .container{max-width:1200px;margin:0 auto;padding:40px 24px 60px}
+
+    /* ── Category filter ─────────────────────────────── */
+    .cat-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:36px;justify-content:center}
+    .cat-pill{padding:8px 20px;border-radius:50px;font-size:.88em;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text2);transition:all .2s}
+    .cat-pill:hover{border-color:var(--teal);color:var(--teal)}
+    .cat-pill.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+
+    /* ── Feature cards ───────────────────────────────── */
+    .feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:24px}
+    .feat-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .3s;position:relative;overflow:hidden}
+    .feat-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
+    .feat-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}
+    .feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5em;flex-shrink:0}
+    .feat-title{font-family:'Poppins',sans-serif;font-weight:700;font-size:1.1em;color:var(--text)}
+    .feat-sub{font-size:.82em;color:var(--muted);margin-top:2px}
+    .feat-desc{font-size:.92em;color:var(--text2);margin-bottom:16px;line-height:1.65}
+    .feat-use{background:rgba(13,148,136,.04);border:1px solid rgba(13,148,136,.12);border-radius:var(--r);padding:14px 16px;margin-bottom:12px}
+    .feat-use-title{font-size:.78em;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+    .feat-use p{font-size:.88em;color:var(--text2);margin:4px 0;line-height:1.5}
+    .feat-use code{background:rgba(13,148,136,.08);color:var(--teal);padding:2px 6px;border-radius:4px;font-size:.9em;font-weight:600}
+    .feat-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+    .feat-tag{font-size:.72em;font-weight:600;padding:3px 10px;border-radius:50px;background:var(--teal-light);color:var(--teal)}
+    .feat-tag.bot{background:#dbeafe;color:#2563eb}
+    .feat-tag.web{background:#fef3c7;color:#92400e}
+    .feat-tag.all{background:#e0e7ff;color:#4338ca}
+    .feat-plan{position:absolute;top:16px;right:16px;font-size:.68em;font-weight:700;padding:3px 10px;border-radius:50px;background:#ecfdf5;color:#059669}
+    .feat-plan.team{background:#dbeafe;color:#2563eb}
+    .feat-plan.enterprise{background:#fce7f3;color:#be185d}
+
+    /* ── CTA ──────────────────────────────────────────── */
+    .cta{background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;text-align:center;padding:48px 24px;border-radius:20px;margin-top:40px}
+    .cta h2{font-family:'Poppins',sans-serif;font-size:1.6em;font-weight:800;margin-bottom:10px}
+    .cta p{color:rgba(255,255,255,.6);margin-bottom:20px}
+    .cta-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:50px;font-weight:700;font-size:1.05em;border:2px solid rgba(255,255,255,.2);box-shadow:0 4px 20px rgba(245,158,11,.4);transition:transform .2s}
+    .cta-btn:hover{transform:scale(1.06)}
+
+    /* ── Footer ───────────────────────────────────────── */
+    .footer{background:#0f172a;color:rgba(255,255,255,.5);text-align:center;padding:32px 24px;font-size:.85em}
+    .footer a{color:#2dd4bf}
+    .footer .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px}
+    .footer .brand img{height:48px;border-radius:6px}
+    .footer .brand span{font-family:'Poppins',sans-serif;color:#e2e8f0;font-weight:700;font-size:1.1em}
+
+    /* ── Responsive ───────────────────────────────────── */
+    @media(max-width:768px){
+      .feat-grid{grid-template-columns:1fr}
+      .hero-stats{gap:20px}
+      nav a:not(:last-child){display:none}
+      .hero{padding:48px 16px 36px}
+    }
+  </style>
+</head>
+<body>
+
+<div class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <img src="/static/logo.png?v=3" alt="Sarathi-AI" onerror="this.style.display='none'">
+      <span class="brand-name">Sarathi<span class="ai-tag">-AI</span></span>
+    </a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/demo">Demo</a>
+      <a href="/help">Help</a>
+      <div class="lang-toggle">
+        <button class="lang-btn active" id="lang-en" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" id="lang-hi" onclick="setLang('hi')">हिं</button>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+    </nav>
+  </div>
+</div>
+
+<div class="hero">
+  <h1 data-en="Every Feature. <span class='teal'>Real Use Cases.</span>" data-hi="हर फ़ीचर। <span class='teal'>असली उदाहरण।</span>">Every Feature. <span class="teal">Real Use Cases.</span></h1>
+  <p data-en="See exactly what Sarathi-AI can do for your insurance business — with real examples of how agents use it daily." data-hi="देखें Sarathi-AI आपके बीमा व्यवसाय के लिए क्या कर सकता है — असली उदाहरणों के साथ।">See exactly what Sarathi-AI can do for your insurance business — with real examples of how agents use it daily.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">40+</div><div class="lbl" data-en="Features" data-hi="फ़ीचर्स">Features</div></div>
+    <div class="hero-stat"><div class="num">12</div><div class="lbl" data-en="Calculators" data-hi="कैलकुलेटर">Calculators</div></div>
+    <div class="hero-stat"><div class="num">2</div><div class="lbl" data-en="Languages" data-hi="भाषाएँ">Languages</div></div>
+    <div class="hero-stat"><div class="num">4</div><div class="lbl" data-en="Channels" data-hi="चैनल">Channels</div></div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Category filter -->
+  <div class="cat-bar" id="catBar">
+    <span class="cat-pill active" data-cat="all" onclick="filterCat('all')">All</span>
+    <span class="cat-pill" data-cat="voice" onclick="filterCat('voice')" data-en="🎙️ Voice AI" data-hi="🎙️ वॉइस AI">🎙️ Voice AI</span>
+    <span class="cat-pill" data-cat="crm" onclick="filterCat('crm')" data-en="📋 CRM" data-hi="📋 CRM">📋 CRM</span>
+    <span class="cat-pill" data-cat="calc" onclick="filterCat('calc')" data-en="🧮 Calculators" data-hi="🧮 कैलकुलेटर">🧮 Calculators</span>
+    <span class="cat-pill" data-cat="ai" onclick="filterCat('ai')" data-en="🤖 AI Tools" data-hi="🤖 AI टूल्स">🤖 AI Tools</span>
+    <span class="cat-pill" data-cat="docs" onclick="filterCat('docs')" data-en="📄 Documents" data-hi="📄 डॉक्यूमेंट">📄 Documents</span>
+    <span class="cat-pill" data-cat="team" onclick="filterCat('team')" data-en="👥 Team" data-hi="👥 टीम">👥 Team</span>
+    <span class="cat-pill" data-cat="engage" onclick="filterCat('engage')" data-en="📣 Engagement" data-hi="📣 एंगेजमेंट">📣 Engagement</span>
+  </div>
+
+  <!-- Feature grid -->
+  <div class="feat-grid" id="featGrid">
+
+    <!-- ═══ VOICE AI ═══ -->
+    <div class="feat-card" data-cat="voice">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ccfbf1">🎙️</div>
+        <div>
+          <div class="feat-title" data-en="Voice-to-Action AI" data-hi="वॉइस-टू-एक्शन AI">Voice-to-Action AI</div>
+          <div class="feat-sub" data-en="Speak in Hindi, English, or mix — AI does the rest" data-hi="हिंदी, अंग्रेज़ी या मिक्स में बोलें — AI बाकी करेगा">Speak in Hindi, English, or mix — AI does the rest</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Send a voice note to your Telegram bot. AI transcribes it, understands intent, and takes action — add lead, set reminder, update policy, run calculator. No typing needed." data-hi="अपने Telegram बॉट को वॉइस नोट भेजें। AI ट्रांसक्राइब करके समझता है और एक्शन लेता है — लीड जोड़ना, रिमाइंडर, पॉलिसी अपडेट, कैलकुलेटर। टाइपिंग की ज़रूरत नहीं।">Send a voice note to your Telegram bot. AI transcribes it, understands intent, and takes action — add lead, set reminder, update policy, run calculator. No typing needed.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="You say: <code>\"Naya client aaya Sharma ji, 35 saal, health insurance chahiye\"</code>" data-hi="आप बोलें: <code>\"नया क्लाइंट आया शर्मा जी, 35 साल, हेल्थ इंश्योरेंस चाहिए\"</code>">You say: <code>"Naya client aaya Sharma ji, 35 saal, health insurance chahiye"</code></p>
+        <p data-en="Bot creates: Lead &quot;Sharma Ji&quot; → Age 35 → Interest: Health → Stage: New" data-hi="बॉट बनाता है: लीड &quot;शर्मा जी&quot; → उम्र 35 → रुचि: हेल्थ → स्टेज: New">Bot creates: Lead "Sharma Ji" → Age 35 → Interest: Health → Stage: New</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">Hindi + English</span></div>
+    </div>
+
+    <!-- Smart Follow-up -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">⏰</div>
+        <div>
+          <div class="feat-title" data-en="Smart Follow-up & Accountability" data-hi="स्मार्ट फॉलो-अप और एकाउंटेबिलिटी">Smart Follow-up & Accountability</div>
+          <div class="feat-sub" data-en="Never forget a follow-up. Ever." data-hi="कभी कोई फॉलो-अप न भूलें। कभी नहीं।">Never forget a follow-up. Ever.</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Set reminders by voice or text. Bot sends you follow-up alerts at the right time. Track every interaction in a lead timeline. AI holds you accountable for every promised callback." data-hi="वॉइस या टेक्स्ट से रिमाइंडर सेट करें। बॉट सही समय पर अलर्ट भेजता है। हर इंटरेक्शन लीड टाइमलाइन में ट्रैक होता है। AI हर वादे किए गए कॉलबैक के लिए आपको ज़िम्मेदार ठहराता है।">Set reminders by voice or text. Bot sends you follow-up alerts at the right time. Track every interaction in a lead timeline. AI holds you accountable for every promised callback.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="You say: <code>\"Kal 3 baje Priya ko call karna hai\"</code>" data-hi="आप बोलें: <code>\"कल 3 बजे प्रिया को कॉल करना है\"</code>">You say: <code>"Kal 3 baje Priya ko call karna hai"</code></p>
+        <p data-en="Tomorrow at 3 PM: Bot sends ⏰ Reminder — Call Priya now!" data-hi="कल दोपहर 3 बजे: बॉट भेजता है ⏰ रिमाइंडर — अभी प्रिया को कॉल करें!">Tomorrow at 3 PM: Bot sends ⏰ Reminder — Call Priya now!</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Dashboard</span></div>
+    </div>
+
+    <!-- 12 Financial Calculators -->
+    <div class="feat-card" data-cat="calc">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#dbeafe">🧮</div>
+        <div>
+          <div class="feat-title" data-en="12 Financial Calculators" data-hi="12 फाइनेंशियल कैलकुलेटर">12 Financial Calculators</div>
+          <div class="feat-sub" data-en="SIP, SWP, EMI, Inflation, Term Life, HLV, and more" data-hi="SIP, SWP, EMI, इन्फ्लेशन, टर्म लाइफ, HLV, और बहुत कुछ">SIP, SWP, EMI, Inflation, Term Life, HLV, and more</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Run any calculator by voice or from the web. Get instant results with professional charts. Generate branded PDF reports to share with clients instantly via WhatsApp." data-hi="किसी भी कैलकुलेटर को वॉइस या वेब से चलाएँ। प्रोफेशनल चार्ट्स के साथ तुरंत नतीजे। WhatsApp पर क्लाइंट को शेयर करने के लिए ब्रांडेड PDF रिपोर्ट बनाएँ।">Run any calculator by voice or from the web. Get instant results with professional charts. Generate branded PDF reports to share with clients instantly via WhatsApp.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="You say: <code>\"₹10,000 SIP, 20 saal ke liye calculate karo\"</code>" data-hi="आप बोलें: <code>\"₹10,000 SIP, 20 साल के लिए कैलकुलेट करो\"</code>">You say: <code>"₹10,000 SIP, 20 saal ke liye calculate karo"</code></p>
+        <p data-en="Bot returns: ₹10K/mo → ₹1,00,75,681 in 20 yrs @ 12%. PDF report with your firm branding ready to share!" data-hi="बॉट रिटर्न करता है: ₹10K/mo → ₹1,00,75,681 20 साल में @ 12%। आपकी फर्म ब्रांडिंग के साथ PDF रिपोर्ट शेयर के लिए तैयार!">Bot returns: ₹10K/mo → ₹1,00,75,681 in 20 yrs @ 12%. PDF report with your firm branding ready to share!</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Web Calculators</span><span class="feat-tag">PDF Reports</span></div>
+    </div>
+
+    <!-- Branded PDF Reports -->
+    <div class="feat-card" data-cat="docs">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fce7f3">📊</div>
+        <div>
+          <div class="feat-title" data-en="Branded PDF Reports & WhatsApp Sharing" data-hi="ब्रांडेड PDF रिपोर्ट और WhatsApp शेयरिंग">Branded PDF Reports & WhatsApp Sharing</div>
+          <div class="feat-sub" data-en="Your logo, your colors, your firm — on every report" data-hi="आपका लोगो, आपके कलर, आपकी फर्म — हर रिपोर्ट पर">Your logo, your colors, your firm — on every report</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Every calculator report is professionally branded with your firm name, logo, website, email, and IRDAI credentials. WhatsApp share messages show your website and email — not ours. Clients see YOUR brand." data-hi="हर कैलकुलेटर रिपोर्ट आपकी फर्म, लोगो, वेबसाइट, ईमेल, और IRDAI क्रेडेंशियल्स के साथ ब्रांडेड होती है। WhatsApp शेयर में आपकी वेबसाइट और ईमेल दिखती है — हमारी नहीं। क्लाइंट्स आपका ब्रांड देखते हैं।">Every calculator report is professionally branded with your firm name, logo, website, email, and IRDAI credentials. WhatsApp share messages show your website and email — not ours. Clients see YOUR brand.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="How it helps" data-hi="कैसे मदद करता है">How it helps</div>
+        <p data-en="Send a client a SIP calculator report → they see <code>Kapoor Insurance Group | www.kapoorinsurance.com</code> — not Sarathi-AI. Builds trust instantly." data-hi="क्लाइंट को SIP कैलकुलेटर रिपोर्ट भेजें → वे देखते हैं <code>Kapoor Insurance Group | www.kapoorinsurance.com</code> — Sarathi-AI नहीं। तुरंत भरोसा बनता है।">Send a client a SIP calculator report → they see <code>Kapoor Insurance Group | www.kapoorinsurance.com</code> — not Sarathi-AI. Builds trust instantly.</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag">PDF Reports</span><span class="feat-tag bot">WhatsApp Share</span><span class="feat-tag web">Dashboard</span></div>
+    </div>
+
+    <!-- Google Drive Sync -->
+    <div class="feat-card" data-cat="docs">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#dbeafe">📂</div>
+        <div>
+          <div class="feat-title" data-en="Google Drive Sync" data-hi="Google Drive सिंक">Google Drive Sync</div>
+          <div class="feat-sub" data-en="Connect your Drive — reports auto-saved, documents synced" data-hi="अपना Drive कनेक्ट करें — रिपोर्ट ऑटो-सेव, डॉक्यूमेंट सिंक">Connect your Drive — reports auto-saved, documents synced</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Link your Google Drive in 2 minutes. Every calculator report and PDF you generate is automatically saved to your CRM folder on Drive. Access your reports from anywhere, even offline." data-hi="2 मिनट में अपना Google Drive लिंक करें। हर कैलकुलेटर रिपोर्ट और PDF ऑटोमैटिकली आपके CRM फोल्डर में सेव होती है। कहीं से भी, ऑफलाइन भी एक्सेस करें।">Link your Google Drive in 2 minutes. Every calculator report and PDF you generate is automatically saved to your CRM folder on Drive. Access your reports from anywhere, even offline.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="How it works" data-hi="कैसे काम करता है">How it works</div>
+        <p data-en="Dashboard → Settings → Connect Google Drive → Reports auto-upload to <code>Your Firm — Reports</code> folder" data-hi="Dashboard → Settings → Google Drive कनेक्ट करें → रिपोर्ट ऑटो-अपलोड <code>Your Firm — Reports</code> फोल्डर में">Dashboard → Settings → Connect Google Drive → Reports auto-upload to <code>Your Firm — Reports</code> folder</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag web">Dashboard</span><span class="feat-tag">Auto-Sync</span></div>
+    </div>
+
+    <!-- AI Document Scanner / OCR -->
+    <div class="feat-card" data-cat="docs">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ecfdf5">📷</div>
+        <div>
+          <div class="feat-title" data-en="AI Document Scanner (OCR)" data-hi="AI डॉक्यूमेंट स्कैनर (OCR)">AI Document Scanner (OCR)</div>
+          <div class="feat-sub" data-en="Snap a photo of any policy — AI extracts all details" data-hi="किसी भी पॉलिसी की फोटो लें — AI सारी डिटेल निकाल लेता है">Snap a photo of any policy — AI extracts all details</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Upload a photo or scan of any insurance policy document. Gemini AI Vision reads it and extracts: policy number, insurer, premium, renewal dates, sum assured — automatically filling the CRM fields." data-hi="किसी भी बीमा पॉलिसी डॉक्यूमेंट की फोटो या स्कैन अपलोड करें। Gemini AI Vision पढ़कर निकालता है: पॉलिसी नंबर, बीमा कंपनी, प्रीमियम, रिन्यूअल तारीख, बीमा राशि — CRM फील्ड ऑटो-फिल।">Upload a photo or scan of any insurance policy document. Gemini AI Vision reads it and extracts: policy number, insurer, premium, renewal dates, sum assured — automatically filling the CRM fields.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="Upload photo of LIC policy → AI extracts: <code>Policy #12345, LIC Jeevan Anand, ₹50,000 annual, Renewal: 2026-08-15</code> → One click to save" data-hi="LIC पॉलिसी की फोटो अपलोड करें → AI निकालता है: <code>Policy #12345, LIC Jeevan Anand, ₹50,000 annual, Renewal: 2026-08-15</code> → एक क्लिक में सेव">Upload photo of LIC policy → AI extracts: <code>Policy #12345, LIC Jeevan Anand, ₹50,000 annual, Renewal: 2026-08-15</code> → One click to save</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag web">Dashboard</span><span class="feat-tag">Gemini Vision AI</span></div>
+    </div>
+
+    <!-- Lead Management -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ccfbf1">📋</div>
+        <div>
+          <div class="feat-title" data-en="Lead Management & Pipeline" data-hi="लीड मैनेजमेंट और पाइपलाइन">Lead Management & Pipeline</div>
+          <div class="feat-sub" data-en="Unlimited leads, stages, notes, and full history" data-hi="अनलिमिटेड लीड, स्टेज, नोट्स, और पूरा हिस्ट्री">Unlimited leads, stages, notes, and full history</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Add leads by voice, text, or web form. Track every lead through stages: New → Contacted → Pitched → Proposal → Won/Lost. View pipeline overview with premium totals. Full interaction timeline for every lead." data-hi="वॉइस, टेक्स्ट, या वेब फॉर्म से लीड जोड़ें। हर लीड को स्टेज में ट्रैक करें: New → Contacted → Pitched → Proposal → Won/Lost। प्रीमियम टोटल के साथ पाइपलाइन ओवरव्यू। हर लीड की पूरी इंटरेक्शन टाइमलाइन।">Add leads by voice, text, or web form. Track every lead through stages: New → Contacted → Pitched → Proposal → Won/Lost. View pipeline overview with premium totals. Full interaction timeline for every lead.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="<code>/pipeline</code> → 📊 12 New → 8 Contacted → 5 Pitched → 3 Proposal → 2 Won = ₹18.5L premium" data-hi="<code>/pipeline</code> → 📊 12 New → 8 Contacted → 5 Pitched → 3 Proposal → 2 Won = ₹18.5L प्रीमियम"><code>/pipeline</code> → 📊 12 New → 8 Contacted → 5 Pitched → 3 Proposal → 2 Won = ₹18.5L premium</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Dashboard</span><span class="feat-tag">Voice</span></div>
+    </div>
+
+    <!-- Policy Tracker -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">📑</div>
+        <div>
+          <div class="feat-title" data-en="Policy & Renewal Tracker" data-hi="पॉलिसी और रिन्यूअल ट्रैकर">Policy & Renewal Tracker</div>
+          <div class="feat-sub" data-en="Track all client policies, premiums, renewal dates" data-hi="सभी क्लाइंट पॉलिसी, प्रीमियम, रिन्यूअल तारीखें ट्रैक करें">Track all client policies, premiums, renewal dates</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Manage your entire policy book. Track policy type, insurer, sum assured, premium, renewal date. Get automated renewal reminders before policies lapse. Link policies to leads for a complete client view." data-hi="अपनी पूरी पॉलिसी बुक मैनेज करें। पॉलिसी टाइप, बीमा कंपनी, बीमा राशि, प्रीमियम, रिन्यूअल तारीख ट्रैक करें। पॉलिसी लैप्स से पहले ऑटोमैटेड रिन्यूअल रिमाइंडर पाएँ।">Manage your entire policy book. Track policy type, insurer, sum assured, premium, renewal date. Get automated renewal reminders before policies lapse. Link policies to leads for a complete client view.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="Bot: ⏰ <code>3 policies due for renewal this week: Sharma (LIC), Verma (HDFC), Gupta (Star Health)</code>" data-hi="बॉट: ⏰ <code>इस हफ्ते 3 पॉलिसी रिन्यूअल ड्यू: शर्मा (LIC), वर्मा (HDFC), गुप्ता (Star Health)</code>">Bot: ⏰ <code>3 policies due for renewal this week: Sharma (LIC), Verma (HDFC), Gupta (Star Health)</code></p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Dashboard</span></div>
+    </div>
+
+    <!-- AI Lead Scoring -->
+    <div class="feat-card" data-cat="ai">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#e0e7ff">🎯</div>
+        <div>
+          <div class="feat-title" data-en="AI Lead Scoring" data-hi="AI लीड स्कोरिंग">AI Lead Scoring</div>
+          <div class="feat-sub" data-en="Know which leads to call first — AI ranks them" data-hi="जानें किसे पहले कॉल करें — AI रैंक करता है">Know which leads to call first — AI ranks them</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="AI analyzes every lead's profile, interaction history, policy interest, and timing to assign a priority score. Hot leads bubble up. Cold leads get nurture suggestions. Focus your time where it matters most." data-hi="AI हर लीड की प्रोफाइल, इंटरेक्शन हिस्ट्री, पॉलिसी इंटरेस्ट, और टाइमिंग एनालाइज़ करके प्रायोरिटी स्कोर देता है। हॉट लीड ऊपर आती हैं। कोल्ड लीड्स को नर्चर सुझाव मिलते हैं।">AI analyzes every lead's profile, interaction history, policy interest, and timing to assign a priority score. Hot leads bubble up. Cold leads get nurture suggestions. Focus your time where it matters most.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">Gemini AI</span></div>
+    </div>
+
+    <!-- AI Sales Pitches -->
+    <div class="feat-card" data-cat="ai">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fce7f3">💬</div>
+        <div>
+          <div class="feat-title" data-en="AI Sales Pitch Generator" data-hi="AI सेल्स पिच जनरेटर">AI Sales Pitch Generator</div>
+          <div class="feat-sub" data-en="Personalized pitches + objection handling for every client" data-hi="हर क्लाइंट के लिए पर्सनलाइज़्ड पिच + ऑब्जेक्शन हैंडलिंग">Personalized pitches + objection handling for every client</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Tell the bot your client's age, family situation, and interest. AI crafts a personalized pitch with 3 common objections and how to handle them. Ready to copy-paste or speak on call." data-hi="बॉट को क्लाइंट की उम्र, परिवार, और इंटरेस्ट बताएँ। AI पर्सनलाइज़्ड पिच बनाता है 3 कॉमन ऑब्जेक्शन और उनके जवाब के साथ। कॉल पर बोलने या कॉपी-पेस्ट के लिए तैयार।">Tell the bot your client's age, family situation, and interest. AI crafts a personalized pitch with 3 common objections and how to handle them. Ready to copy-paste or speak on call.</div>
+      <div class="feat-use">
+        <div class="feat-use-title" data-en="Real example" data-hi="असली उदाहरण">Real example</div>
+        <p data-en="<code>\"Verma ji ko term insurance pitch karo, 40 saal, 1 bachcha\"</code> → AI crafts: &quot;Verma ji, 40 me ₹1Cr term = ₹1200/mo. Bachche ka future secure.&quot; + 3 objections" data-hi="<code>\"वर्मा जी को टर्म इंश्योरेंस पिच करो, 40 साल, 1 बच्चा\"</code> → AI बनाता है: &quot;वर्मा जी, 40 में ₹1Cr टर्म = ₹1200/mo। बच्चे का भविष्य सुरक्षित।&quot; + 3 ऑब्जेक्शन"><code>"Verma ji ko term insurance pitch karo, 40 saal, 1 bachcha"</code> → AI crafts: "Verma ji, 40 me ₹1Cr term = ₹1200/mo. Bachche ka future secure." + 3 objections</p>
+      </div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">Gemini AI</span></div>
+    </div>
+
+    <!-- Proactive AI Nudges -->
+    <div class="feat-card" data-cat="ai">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">🔔</div>
+        <div>
+          <div class="feat-title" data-en="Proactive AI Nudges & Daily Briefings" data-hi="प्रोएक्टिव AI नज और डेली ब्रीफिंग">Proactive AI Nudges & Daily Briefings</div>
+          <div class="feat-sub" data-en="AI reminds you what to do — before you forget" data-hi="AI आपको याद दिलाता है क्या करना है — भूलने से पहले">AI reminds you what to do — before you forget</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Every morning, get a briefing: leads to follow up, policies about to lapse, stale prospects to re-engage. AI generates personalized nudge messages. Never miss an opportunity because you forgot." data-hi="हर सुबह ब्रीफिंग पाएँ: फॉलो-अप करने वाली लीड्स, लैप्स होने वाली पॉलिसी, पुरानी प्रॉस्पेक्ट्स। AI पर्सनलाइज़्ड नज मैसेज बनाता है। भूलने से कोई मौका न छूटे।">Every morning, get a briefing: leads to follow up, policies about to lapse, stale prospects to re-engage. AI generates personalized nudge messages. Never miss an opportunity because you forgot.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">AI-Powered</span><span class="feat-tag">Automated</span></div>
+    </div>
+
+    <!-- AI Templates -->
+    <div class="feat-card" data-cat="ai">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#e0e7ff">📝</div>
+        <div>
+          <div class="feat-title" data-en="AI Message Templates" data-hi="AI मैसेज टेम्पलेट">AI Message Templates</div>
+          <div class="feat-sub" data-en="Professional messages for every situation" data-hi="हर स्थिति के लिए प्रोफेशनल मैसेज">Professional messages for every situation</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Generate birthday wishes, policy anniversary messages, festival greetings, claim follow-ups, and more. AI personalizes each template with client name and context. Copy and send via WhatsApp in seconds." data-hi="बर्थडे विशेज, पॉलिसी एनिवर्सरी मैसेज, फेस्टिवल ग्रीटिंग, क्लेम फॉलो-अप बनाएँ। AI हर टेम्पलेट को क्लाइंट नाम और कॉन्टेक्स्ट के साथ पर्सनलाइज़ करता है।">Generate birthday wishes, policy anniversary messages, festival greetings, claim follow-ups, and more. AI personalizes each template with client name and context. Copy and send via WhatsApp in seconds.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">Gemini AI</span></div>
+    </div>
+
+    <!-- SEBI/IRDAI Compliance -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ecfdf5">🛡️</div>
+        <div>
+          <div class="feat-title" data-en="SEBI Credentials & DPDP Compliance" data-hi="SEBI क्रेडेंशियल्स और DPDP अनुपालन">SEBI Credentials & DPDP Compliance</div>
+          <div class="feat-sub" data-en="Professional credentials displayed, consent tracked" data-hi="प्रोफेशनल क्रेडेंशियल्स दिखाए जाते हैं, सहमति ट्रैक होती है">Professional credentials displayed, consent tracked</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Add your IRDAI license, AMFI ARN, and other credentials. They appear on your branded report headers. Track client data consent as per India's DPDP Act requirements." data-hi="अपना IRDAI लाइसेंस, AMFI ARN, और अन्य क्रेडेंशियल्स जोड़ें। ये आपकी ब्रांडेड रिपोर्ट हेडर पर दिखते हैं। भारत के DPDP एक्ट के अनुसार क्लाइंट डेटा सहमति ट्रैक करें।">Add your IRDAI license, AMFI ARN, and other credentials. They appear on your branded report headers. Track client data consent as per India's DPDP Act requirements.</div>
+      <div class="feat-tags"><span class="feat-tag web">Dashboard</span><span class="feat-tag">Regulatory</span></div>
+    </div>
+
+    <!-- Partner Program -->
+    <div class="feat-card" data-cat="engage">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">🤝</div>
+        <div>
+          <div class="feat-title" data-en="Partner & Earn Program" data-hi="पार्टनर और कमाएँ प्रोग्राम">Partner & Earn Program</div>
+          <div class="feat-sub" data-en="Refer other advisors, earn commissions" data-hi="अन्य एडवाइज़र रेफर करें, कमीशन कमाएँ">Refer other advisors, earn commissions</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Share your unique referral link. When another advisor signs up and pays, you earn a commission. Track your referrals, converts, and earnings from the Partner Dashboard. Cross-signup between customer and partner is seamless." data-hi="अपना यूनिक रेफरल लिंक शेयर करें। जब कोई एडवाइज़र साइनअप करके पे करे, आप कमीशन कमाएँ। पार्टनर डैशबोर्ड से रेफरल, कन्वर्ट, और कमाई ट्रैक करें।">Share your unique referral link. When another advisor signs up and pays, you earn a commission. Track your referrals, converts, and earnings from the Partner Dashboard. Cross-signup between customer and partner is seamless.</div>
+      <div class="feat-tags"><span class="feat-tag web">Partner Dashboard</span><span class="feat-tag web">Customer Dashboard</span></div>
+    </div>
+
+    <!-- ═══ TEAM FEATURES ═══ -->
+    <div class="feat-card" data-cat="team">
+      <div class="feat-plan team">Team+</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#dbeafe">👥</div>
+        <div>
+          <div class="feat-title" data-en="Team Dashboard & Agent Tracking" data-hi="टीम डैशबोर्ड और एजेंट ट्रैकिंग">Team Dashboard & Agent Tracking</div>
+          <div class="feat-sub" data-en="Admin sees everything — each agent gets own bot" data-hi="एडमिन सब देखता है — हर एजेंट को अपना बॉट मिलता है">Admin sees everything — each agent gets own bot</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Admin dashboard shows team-wide pipeline, each agent's performance, lead counts, and follow-up compliance. Every team member gets their own Telegram bot. Admin receives daily digest with team stats." data-hi="एडमिन डैशबोर्ड टीम-वाइड पाइपलाइन, हर एजेंट का परफॉर्मेंस, लीड काउंट, और फॉलो-अप कम्प्लायंस दिखाता है। हर टीम मेंबर को अपना Telegram बॉट मिलता है। एडमिन को डेली डाइजेस्ट मिलती है।">Admin dashboard shows team-wide pipeline, each agent's performance, lead counts, and follow-up compliance. Every team member gets their own Telegram bot. Admin receives daily digest with team stats.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Admin Dashboard</span></div>
+    </div>
+
+    <!-- Bulk Campaigns -->
+    <div class="feat-card" data-cat="team">
+      <div class="feat-plan team">Team+</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">📣</div>
+        <div>
+          <div class="feat-title" data-en="Bulk Campaigns & Broadcasts" data-hi="बल्क कैम्पेन और ब्रॉडकास्ट">Bulk Campaigns & Broadcasts</div>
+          <div class="feat-sub" data-en="Send messages to all leads at once" data-hi="एक साथ सभी लीड्स को मैसेज भेजें">Send messages to all leads at once</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Create broadcast campaigns for festivals, product launches, or renewal reminders. Filter by stage, policy type, or custom criteria. Send to all or selected leads. Track delivery stats." data-hi="त्यौहारों, प्रोडक्ट लॉन्च, या रिन्यूअल रिमाइंडर के लिए ब्रॉडकास्ट कैम्पेन बनाएँ। स्टेज, पॉलिसी टाइप, या कस्टम क्राइटेरिया से फ़िल्टर करें। डिलीवरी स्टैट्स ट्रैक करें।">Create broadcast campaigns for festivals, product launches, or renewal reminders. Filter by stage, policy type, or custom criteria. Send to all or selected leads. Track delivery stats.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Dashboard</span></div>
+    </div>
+
+    <!-- ═══ ENTERPRISE FEATURES ═══ -->
+    <div class="feat-card" data-cat="team">
+      <div class="feat-plan enterprise">Enterprise</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fce7f3">🎨</div>
+        <div>
+          <div class="feat-title" data-en="Custom Branding & White Label" data-hi="कस्टम ब्रांडिंग और व्हाइट लेबल">Custom Branding & White Label</div>
+          <div class="feat-sub" data-en="Your logo, your colors — everywhere" data-hi="आपका लोगो, आपके रंग — हर जगह">Your logo, your colors — everywhere</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Full custom branding: your logo, primary/secondary colors, tagline on every page. Calculator pages, PDF reports, and WhatsApp shares all show your firm identity — zero Sarathi-AI branding visible to clients." data-hi="पूरी कस्टम ब्रांडिंग: आपका लोगो, प्राइमरी/सेकेंडरी कलर, हर पेज पर टैगलाइन। कैलकुलेटर पेज, PDF रिपोर्ट, और WhatsApp शेयर — क्लाइंट्स को Sarathi-AI ब्रांडिंग नहीं दिखती।">Full custom branding: your logo, primary/secondary colors, tagline on every page. Calculator pages, PDF reports, and WhatsApp shares all show your firm identity — zero Sarathi-AI branding visible to clients.</div>
+      <div class="feat-tags"><span class="feat-tag web">All Channels</span><span class="feat-tag">White Label</span></div>
+    </div>
+
+    <div class="feat-card" data-cat="team">
+      <div class="feat-plan enterprise">Enterprise</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#e0e7ff">🔌</div>
+        <div>
+          <div class="feat-title" data-en="API Access & Integrations" data-hi="API एक्सेस और इंटीग्रेशन">API Access & Integrations</div>
+          <div class="feat-sub" data-en="Connect Sarathi-AI to your existing systems" data-hi="Sarathi-AI को अपने मौजूदा सिस्टम से कनेक्ट करें">Connect Sarathi-AI to your existing systems</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Full REST API access for lead management, policy data, calculator results. Integrate with your existing tools, website, or third-party services. Webhook support for real-time events." data-hi="लीड मैनेजमेंट, पॉलिसी डेटा, कैलकुलेटर रिजल्ट के लिए पूरा REST API एक्सेस। अपने मौजूदा टूल्स, वेबसाइट, या थर्ड-पार्टी सर्विसेज़ से इंटीग्रेट करें।">Full REST API access for lead management, policy data, calculator results. Integrate with your existing tools, website, or third-party services. Webhook support for real-time events.</div>
+      <div class="feat-tags"><span class="feat-tag">REST API</span><span class="feat-tag">Webhooks</span></div>
+    </div>
+
+    <!-- Multi-channel access -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ccfbf1">📱</div>
+        <div>
+          <div class="feat-title" data-en="4 Channels — Bot, Web, Mobile, PWA" data-hi="4 चैनल — बॉट, वेब, मोबाइल, PWA">4 Channels — Bot, Web, Mobile, PWA</div>
+          <div class="feat-sub" data-en="Access your CRM from anywhere, any device" data-hi="कहीं से भी, किसी भी डिवाइस से अपना CRM एक्सेस करें">Access your CRM from anywhere, any device</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Use Telegram bot on your phone for voice commands. Use the web dashboard on your laptop for detailed views. Install as a PWA for app-like experience. Everything syncs in real-time across all channels." data-hi="फ़ोन पर वॉइस कमांड के लिए Telegram बॉट। लैपटॉप पर डिटेल व्यू के लिए वेब डैशबोर्ड। ऐप जैसे एक्सपीरियंस के लिए PWA इंस्टॉल करें। सब रियल-टाइम सिंक।">Use Telegram bot on your phone for voice commands. Use the web dashboard on your laptop for detailed views. Install as a PWA for app-like experience. Everything syncs in real-time across all channels.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag web">Web Dashboard</span><span class="feat-tag all">PWA</span></div>
+    </div>
+
+    <!-- Claims checklists -->
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#fef3c7">📋</div>
+        <div>
+          <div class="feat-title" data-en="Claims Document Checklists" data-hi="क्लेम डॉक्यूमेंट चेकलिस्ट">Claims Document Checklists</div>
+          <div class="feat-sub" data-en="Know exactly what documents each claim needs" data-hi="जानें हर क्लेम के लिए कौन से डॉक्यूमेंट चाहिए">Know exactly what documents each claim needs</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Ask the bot for a claim checklist by type — health, motor, life, fire. Get a bilingual list of every document needed. Share the checklist directly with your client via message." data-hi="बॉट से क्लेम टाइप से चेकलिस्ट पूछें — हेल्थ, मोटर, लाइफ, फायर। बाइलिंगुअल डॉक्यूमेंट लिस्ट पाएँ। चेकलिस्ट सीधे क्लाइंट को शेयर करें।">Ask the bot for a claim checklist by type — health, motor, life, fire. Get a bilingual list of every document needed. Share the checklist directly with your client via message.</div>
+      <div class="feat-tags"><span class="feat-tag bot">Telegram Bot</span><span class="feat-tag">Bilingual</span></div>
+    </div>
+
+    <!-- Bilingual everything -->
+    <div class="feat-card" data-cat="engage">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#e0e7ff">🌐</div>
+        <div>
+          <div class="feat-title" data-en="Full Hindi + English Bilingual" data-hi="पूर्ण हिंदी + अंग्रेज़ी बाइलिंगुअल">Full Hindi + English Bilingual</div>
+          <div class="feat-sub" data-en="Every screen, every bot reply, every report — in your language" data-hi="हर स्क्रीन, हर बॉट रिप्लाई, हर रिपोर्ट — आपकी भाषा में">Every screen, every bot reply, every report — in your language</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Switch between Hindi and English anywhere — bot, dashboard, calculators, help pages. Voice commands work in Hindi, English, or Hinglish mix. AI understands the intent regardless of language." data-hi="कहीं भी हिंदी और अंग्रेज़ी के बीच स्विच करें — बॉट, डैशबोर्ड, कैलकुलेटर, हेल्प पेज। वॉइस कमांड हिंदी, अंग्रेज़ी, या हिंग्लिश मिक्स में काम करते हैं।">Switch between Hindi and English anywhere — bot, dashboard, calculators, help pages. Voice commands work in Hindi, English, or Hinglish mix. AI understands the intent regardless of language.</div>
+      <div class="feat-tags"><span class="feat-tag all">All Channels</span><span class="feat-tag">Hindi</span><span class="feat-tag">English</span></div>
+    </div>
+
+    <!-- Audio Help -->
+    <div class="feat-card" data-cat="engage">
+      <div class="feat-plan">All Plans</div>
+      <div class="feat-head">
+        <div class="feat-icon" style="background:#ccfbf1">🔊</div>
+        <div>
+          <div class="feat-title" data-en="Audio Help & Learning" data-hi="ऑडियो हेल्प और लर्निंग">Audio Help & Learning</div>
+          <div class="feat-sub" data-en="Listen to help topics — don't just read them" data-hi="हेल्प टॉपिक सुनें — सिर्फ पढ़ें नहीं">Listen to help topics — don't just read them</div>
+        </div>
+      </div>
+      <div class="feat-desc" data-en="Every help topic has an audio button. Tap to hear the explanation in Hindi — perfect if you prefer listening or want to share with team members who aren't comfortable reading English docs." data-hi="हर हेल्प टॉपिक में ऑडियो बटन है। हिंदी में सुनने के लिए टैप करें — उन लोगों के लिए परफेक्ट जो पढ़ने से ज़्यादा सुनना पसंद करते हैं।">Every help topic has an audio button. Tap to hear the explanation in Hindi — perfect if you prefer listening or want to share with team members who aren't comfortable reading English docs.</div>
+      <div class="feat-tags"><span class="feat-tag web">Help Page</span><span class="feat-tag">Audio</span></div>
+    </div>
+
+  </div>
+
+  <!-- CTA -->
+  <div class="cta">
+    <h2 data-en="Ready to transform your business?" data-hi="अपना बिज़नेस ट्रांसफॉर्म करने के लिए तैयार?">Ready to transform your business?</h2>
+    <p data-en="Start your 14-day free trial — all features included, no credit card required." data-hi="14 दिन का फ्री ट्रायल शुरू करें — सभी फ़ीचर शामिल, क्रेडिट कार्ड नहीं चाहिए।">Start your 14-day free trial — all features included, no credit card required.</p>
+    <a href="/#pricing" class="cta-btn" data-en="Start Free Trial →" data-hi="फ्री ट्रायल शुरू करें →">Start Free Trial →</a>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="brand">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:48px;border-radius:6px" onerror="this.style.display='none'">
+    <span>Sarathi-AI</span>
+  </div>
+  <p>© 2026 Sarathi-AI Business Technologies. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+</div>
+
+<script>
+// ── Language toggle ─────────────────────────────────────
+let _lang = localStorage.getItem('sarathi_lang') || 'en';
+function setLang(l) {
+  _lang = l;
+  localStorage.setItem('sarathi_lang', l);
+  document.querySelectorAll('[data-en]').forEach(el => {
+    const txt = el.getAttribute('data-' + l);
+    if (txt) {
+      if (el.tagName === 'INPUT') el.placeholder = txt;
+      else el.innerHTML = txt;
+    }
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', (l === 'en' && b.id === 'lang-en') || (l === 'hi' && b.id === 'lang-hi'));
+  });
+}
+if (_lang !== 'en') setLang(_lang);
+
+// ── Category filter ─────────────────────────────────────
+function filterCat(cat) {
+  document.querySelectorAll('.cat-pill').forEach(p => p.classList.toggle('active', p.dataset.cat === cat));
+  document.querySelectorAll('.feat-card').forEach(c => {
+    c.style.display = (cat === 'all' || c.dataset.cat === cat) ? '' : 'none';
+  });
+}
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

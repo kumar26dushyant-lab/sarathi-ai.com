@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin Dashboard — Sarathi-AI</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+:root {
+  --blue: #0d9488;
+  --blue-dark: #0f766e;
+  --blue-light: #ccfbf1;
+  --saffron: #f59e0b;
+  --saffron-light: #fffbeb;
+  --green: #059669;
+  --green-light: #d1fae5;
+  --red: #dc2626;
+  --red-light: #fee2e2;
+  --yellow: #d97706;
+  --yellow-light: #fef3c7;
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-400: #94a3b8;
+  --gray-600: #475569;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+  --radius: 16px;
+  --shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter','Poppins',sans-serif; background:var(--gray-50); color:var(--gray-800); min-height:100vh; }
+.login-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+.login-card { background:#fff; border-radius:var(--radius); padding:48px; max-width:420px; width:100%; box-shadow:var(--shadow); text-align:center; border:1px solid var(--gray-200); }
+.login-card h1 { font-size:1.5em; font-weight:700; margin-bottom:8px; color:var(--gray-900); }
+.login-card p { color:var(--gray-600); font-size:0.9em; margin-bottom:24px; }
+.login-card input { width:100%; padding:14px 16px; border:2px solid var(--gray-200); border-radius:12px; font-family:inherit; font-size:0.95em; outline:none; transition:border .2s; margin-bottom:16px; }
+.login-card input:focus { border-color:var(--blue); }
+.login-card .error-msg { color:var(--red); font-size:0.85em; margin-bottom:12px; display:none; }
+
+.header { background:linear-gradient(135deg,var(--blue-dark),var(--blue)); padding:20px 32px; color:#fff; display:flex; align-items:center; justify-content:space-between; }
+.header h1 { font-size:1.3em; font-weight:700; display:flex; align-items:center; gap:10px; }
+.header .logo-svg { width:36px; height:36px; }
+.header-right { display:flex; align-items:center; gap:16px; }
+.header .badge { background:rgba(255,255,255,0.2); padding:6px 14px; border-radius:8px; font-size:0.8em; font-weight:500; }
+
+.container { max-width:1280px; margin:0 auto; padding:24px; }
+
+/* Stat Cards */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:28px; }
+.stat-card { background:#fff; border-radius:var(--radius); padding:20px 24px; border:1px solid var(--gray-200); box-shadow:var(--shadow); }
+.stat-card .label { font-size:0.78em; font-weight:500; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+.stat-card .value { font-size:1.8em; font-weight:800; }
+.stat-card .value.blue { color:var(--blue); }
+.stat-card .value.green { color:var(--green); }
+.stat-card .value.saffron { color:var(--saffron); }
+.stat-card .value.red { color:var(--red); }
+.stat-card .value.yellow { color:var(--yellow); }
+
+/* Filter / Search */
+.toolbar { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; align-items:center; }
+.toolbar input { padding:10px 16px; border:2px solid var(--gray-200); border-radius:10px; font-family:inherit; font-size:0.9em; outline:none; min-width:240px; transition:border .2s; }
+.toolbar input:focus { border-color:var(--blue); }
+.toolbar select { padding:10px 14px; border:2px solid var(--gray-200); border-radius:10px; font-family:inherit; font-size:0.9em; outline:none; cursor:pointer; background:#fff; }
+.toolbar .refresh-btn { margin-left:auto; }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:10px 20px; border-radius:10px; font-weight:600; font-size:0.85em; text-decoration:none; cursor:pointer; border:none; font-family:inherit; transition:all .2s; }
+.btn-blue { background:linear-gradient(135deg,var(--blue),#14b8a6); color:#fff; }
+.btn-blue:hover { box-shadow:0 4px 16px rgba(13,148,136,0.3); transform:translateY(-1px); }
+.btn-green { background:var(--green); color:#fff; }
+.btn-green:hover { background:#047857; }
+.btn-red { background:var(--red); color:#fff; }
+.btn-red:hover { background:#b91c1c; }
+.btn-saffron { background:var(--saffron); color:#fff; }
+.btn-saffron:hover { background:#c2410c; }
+.btn-sm { padding:6px 12px; font-size:0.78em; border-radius:8px; }
+.btn-ghost { background:transparent; color:var(--blue); border:1.5px solid var(--blue); }
+.btn-ghost:hover { background:var(--blue); color:#fff; }
+
+/* Table */
+.table-wrap { background:#fff; border-radius:var(--radius); border:1px solid var(--gray-200); box-shadow:var(--shadow); overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:0.88em; }
+thead th { background:var(--gray-100); padding:14px 16px; text-align:left; font-weight:600; color:var(--gray-600); font-size:0.82em; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid var(--gray-200); white-space:nowrap; }
+tbody td { padding:12px 16px; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+tbody tr:hover { background:var(--blue-light); }
+tbody tr:last-child td { border-bottom:none; }
+
+.status-badge { display:inline-block; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; white-space:nowrap; }
+.status-trial { background:var(--blue-light); color:var(--blue); }
+.status-paid { background:var(--green-light); color:var(--green); }
+.status-expired { background:var(--yellow-light); color:var(--yellow); }
+.status-wiped { background:var(--red-light); color:var(--red); }
+
+.tenant-name { font-weight:600; color:var(--gray-900); }
+.tenant-owner { font-size:0.82em; color:var(--gray-400); }
+
+/* Actions dropdown */
+.actions-cell { display:flex; gap:4px; flex-wrap:wrap; }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.active { display:flex; }
+.modal { background:#fff; border-radius:var(--radius); padding:32px; max-width:480px; width:90%; box-shadow:0 16px 48px rgba(0,0,0,0.2); }
+.modal h3 { margin-bottom:16px; font-size:1.1em; }
+.modal .form-group { margin-bottom:14px; }
+.modal label { display:block; font-size:0.85em; font-weight:500; color:var(--gray-600); margin-bottom:4px; }
+.modal input, .modal select { width:100%; padding:10px 14px; border:2px solid var(--gray-200); border-radius:10px; font-family:inherit; font-size:0.9em; }
+.modal .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+
+/* Loading */
+.loading { text-align:center; padding:60px; color:var(--gray-400); font-size:0.95em; }
+.spin { animation:spin 1s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Toast */
+.toast { position:fixed; bottom:24px; right:24px; background:var(--gray-900); color:#fff; padding:14px 24px; border-radius:12px; font-size:0.88em; font-weight:500; z-index:2000; opacity:0; transform:translateY(10px); transition:all .3s; }
+.toast.show { opacity:1; transform:translateY(0); }
+.toast.success { background:var(--green); }
+.toast.error { background:var(--red); }
+
+/* Bot Management Section */
+.section-title { font-size:1.15em; font-weight:700; color:var(--gray-900); margin-top:36px; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
+.section-title .section-badge { background:var(--blue-light); color:var(--blue); font-size:0.65em; padding:4px 12px; border-radius:20px; font-weight:600; }
+.bot-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; margin-bottom:28px; }
+.bot-card { background:#fff; border-radius:var(--radius); padding:20px; border:1px solid var(--gray-200); box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px; }
+.bot-card.master { border-left:4px solid var(--blue); }
+.bot-card.tenant { border-left:4px solid var(--saffron); }
+.bot-card .bot-header { display:flex; align-items:center; justify-content:space-between; }
+.bot-card .bot-header .bot-label { font-weight:600; font-size:0.95em; color:var(--gray-900); }
+.bot-card .bot-header .bot-type { font-size:0.72em; font-weight:600; padding:3px 10px; border-radius:20px; text-transform:uppercase; }
+.bot-card .bot-type.type-master { background:var(--blue-light); color:var(--blue); }
+.bot-card .bot-type.type-tenant { background:var(--saffron-light); color:var(--saffron); }
+.bot-card .bot-details { display:flex; flex-direction:column; gap:4px; font-size:0.85em; color:var(--gray-600); }
+.bot-card .bot-details span { display:flex; align-items:center; gap:6px; }
+.bot-card .bot-actions { display:flex; gap:8px; margin-top:auto; }
+.bot-status-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.bot-status-dot.running { background:var(--green); box-shadow:0 0 6px rgba(5,150,105,0.4); }
+.bot-status-dot.stopped { background:var(--red); }
+.no-bots { text-align:center; padding:40px; color:var(--gray-400); font-size:0.9em; background:#fff; border-radius:var(--radius); border:1px solid var(--gray-200); }
+
+/* Responsive */
+@media(max-width:768px) {
+  .container { padding:16px; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .header { padding:16px; }
+  .toolbar { flex-direction:column; }
+  .toolbar input { min-width:auto; width:100%; }
+  .login-card { padding:24px; max-width:100%; }
+  .login-card h1 { font-size:1.2em; }
+  .modal { max-width:95%; width:95%; padding:20px; }
+  table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+}
+@media(max-width:480px) {
+  .stats-grid { grid-template-columns:1fr; }
+  .login-card { padding:20px; margin:0 12px; }
+  .container { padding:12px; }
+  .header h1 { font-size:1.1em; }
+  .modal { padding:16px; }
+  .btn { padding:10px 18px; font-size:.85em; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div style="font-size:2.5em;margin-bottom:12px"><img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:90px;border-radius:8px" onerror="this.outerHTML='🛡️'"></div>
+    <h1>Admin Dashboard</h1>
+    <p>Sarathi-<span style="color:#0d9488;font-weight:700">AI</span> Business Technologies</p>
+    <div id="loginError" class="error-msg">Invalid admin key. Try again.</div>
+    <input type="password" id="adminKeyInput" placeholder="Enter Admin API Key" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn btn-blue" style="width:100%;justify-content:center;padding:14px" onclick="doLogin()">🔑 Login</button>
+  </div>
+</div>
+
+<!-- ═══ MAIN DASHBOARD ═══ -->
+<div id="mainDashboard" style="display:none">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>
+      <img src="/static/logo.png?v=3" alt="Sarathi-AI" class="logo-svg" style="height:80px;border-radius:6px" onerror="this.style.display='none'">
+      Sarathi-<span style="color:#5eead4">AI</span> Admin
+    </h1>
+    <div class="header-right">
+      <span class="badge" id="liveTime"></span>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3)" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Stats Grid -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="label">Total Tenants</div><div class="value blue" id="statTotal">—</div></div>
+      <div class="stat-card"><div class="label">Active Trials</div><div class="value green" id="statTrials">—</div></div>
+      <div class="stat-card"><div class="label">Paid Subscribers</div><div class="value green" id="statPaid">—</div></div>
+      <div class="stat-card"><div class="label">Expired</div><div class="value yellow" id="statExpired">—</div></div>
+      <div class="stat-card"><div class="label">Wiped</div><div class="value red" id="statWiped">—</div></div>
+      <div class="stat-card"><div class="label">Today's Signups</div><div class="value saffron" id="statToday">—</div></div>
+      <div class="stat-card"><div class="label">Total Agents</div><div class="value blue" id="statAgents">—</div></div>
+      <div class="stat-card"><div class="label">Total Leads</div><div class="value blue" id="statLeads">—</div></div>
+      <div class="stat-card"><div class="label">🏆 Founding</div><div class="value" id="statFounding" style="color:#f59e0b">—</div></div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="🔍  Search by name, phone, email..." oninput="filterTable()">
+      <select id="statusFilter" onchange="filterTable()">
+        <option value="">All Status</option>
+        <option value="trial">Trial</option>
+        <option value="paid">Paid</option>
+        <option value="expired">Expired</option>
+        <option value="wiped">Wiped</option>
+      </select>
+      <select id="planFilter" onchange="filterTable()">
+        <option value="">All Plans</option>
+        <option value="individual">Individual</option>
+        <option value="team">Team</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <button class="btn btn-blue btn-sm refresh-btn" onclick="loadData()">🔄 Refresh</button>
+      <button class="btn btn-saffron btn-sm" onclick="openModal('createFirmModal')">➕ Create Firm</button>
+    </div>
+
+    <!-- Tenant Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Firm / Owner</th>
+            <th>Phone</th>
+            <th>Plan</th>
+            <th>Status</th>
+            <th>Trial Ends</th>
+            <th>Agents</th>
+            <th>Leads</th>
+            <th>Founding</th>
+            <th>Signed Up</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tenantBody">
+          <tr><td colspan="11" class="loading"><span class="spin">⏳</span> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══ BOT MANAGEMENT SECTION ═══ -->
+    <div class="section-title">
+      🤖 Telegram Bot Management
+      <span class="section-badge" id="botCountBadge">0 running</span>
+      <button class="btn btn-blue btn-sm" style="margin-left:auto" onclick="loadBots()">🔄 Refresh Bots</button>
+    </div>
+    <div class="bot-grid" id="botGrid">
+      <div class="no-bots"><span class="spin">⏳</span> Loading bot status...</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ EXTEND TRIAL MODAL ═══ -->
+<div class="modal-overlay" id="extendModal">
+  <div class="modal">
+    <h3>⏰ Extend Trial</h3>
+    <div class="form-group">
+      <label>Tenant</label>
+      <input id="extendTenantName" disabled>
+    </div>
+    <div class="form-group">
+      <label>Extend by (days)</label>
+      <input type="number" id="extendDays" value="7" min="1" max="90">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('extendModal')">Cancel</button>
+      <button class="btn btn-blue btn-sm" onclick="doExtendTrial()">Extend</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ACTIVATE MODAL ═══ -->
+<div class="modal-overlay" id="activateModal">
+  <div class="modal">
+    <h3>✅ Activate Paid Subscription</h3>
+    <div class="form-group">
+      <label>Tenant</label>
+      <input id="activateTenantName" disabled>
+    </div>
+    <div class="form-group">
+      <label>Plan</label>
+      <select id="activatePlan">
+        <option value="individual">Solo (₹199/mo)</option>
+        <option value="team">Team (₹799/mo)</option>
+        <option value="enterprise">Enterprise (₹1,999/mo)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('activateModal')">Cancel</button>
+      <button class="btn btn-green btn-sm" onclick="doActivate()">Activate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CREATE FIRM MODAL ═══ -->
+<div class="modal-overlay" id="createFirmModal">
+  <div class="modal">
+    <h3>➕ Create Firm Manually</h3>
+    <div class="form-group">
+      <label>Firm Name *</label>
+      <input id="cfFirmName" placeholder="ABC Insurance Agency">
+    </div>
+    <div class="form-group">
+      <label>Owner Name *</label>
+      <input id="cfOwnerName" placeholder="Ravi Kumar">
+    </div>
+    <div class="form-group">
+      <label>Phone *</label>
+      <input id="cfPhone" placeholder="9876543210">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input id="cfEmail" placeholder="owner@email.com">
+    </div>
+    <div class="form-group">
+      <label>Plan</label>
+      <select id="cfPlan">
+        <option value="trial">Trial (14 days free)</option>
+        <option value="individual">Solo (₹199/mo)</option>
+        <option value="team">Team (₹799/mo)</option>
+        <option value="enterprise">Enterprise (₹1,999/mo)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('createFirmModal')">Cancel</button>
+      <button class="btn btn-saffron btn-sm" onclick="doCreateFirm()">Create Firm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let adminKey = '';
+let allTenants = [];
+let selectedTenantId = null;
+
+// ── Clock ──
+function updateClock() {
+  const now = new Date();
+  const el = document.getElementById('liveTime');
+  if (el) el.textContent = now.toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' });
+}
+setInterval(updateClock, 30000);
+
+// ── Login ──
+async function doLogin() {
+  const key = document.getElementById('adminKeyInput').value.trim();
+  if (!key) return;
+
+  try {
+    const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(key)}`);
+    if (res.status === 401) {
+      document.getElementById('loginError').style.display = 'block';
+      return;
+    }
+    adminKey = key;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainDashboard').style.display = 'block';
+    updateClock();
+    loadData();
+    loadBots();
+  } catch (e) {
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+function doLogout() {
+  adminKey = '';
+  allTenants = [];
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('mainDashboard').style.display = 'none';
+  document.getElementById('adminKeyInput').value = '';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+// ── Load Data ──
+async function loadData() {
+  try {
+    const [statsRes, tenantsRes] = await Promise.all([
+      fetch(`/api/admin/stats?key=${encodeURIComponent(adminKey)}`),
+      fetch(`/api/admin/tenants?key=${encodeURIComponent(adminKey)}`)
+    ]);
+
+    if (statsRes.status === 401) { doLogout(); return; }
+
+    const stats = await statsRes.json();
+    const data = await tenantsRes.json();
+
+    // Update stat cards
+    document.getElementById('statTotal').textContent = stats.total_tenants || 0;
+    document.getElementById('statTrials').textContent = stats.active_trials || 0;
+    document.getElementById('statPaid').textContent = stats.paid || 0;
+    document.getElementById('statExpired').textContent = stats.expired || 0;
+    document.getElementById('statWiped').textContent = stats.wiped || 0;
+    document.getElementById('statToday').textContent = stats.today_signups || 0;
+    document.getElementById('statAgents').textContent = stats.total_agents || 0;
+    document.getElementById('statLeads').textContent = stats.total_leads || 0;
+
+    // Founding count from tenants
+    const foundingCount = (data.tenants || []).filter(t => t.founding_discount).length;
+    document.getElementById('statFounding').textContent = foundingCount + '/500';
+
+    // Store and render tenants
+    allTenants = data.tenants || [];
+    renderTable(allTenants);
+
+    showToast('Data refreshed', 'success');
+    loadBots();
+  } catch (e) {
+    showToast('Failed to load data', 'error');
+  }
+}
+
+// ── Render Table ──
+function renderTable(tenants) {
+  const tbody = document.getElementById('tenantBody');
+  if (!tenants.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#94a3b8">No tenants found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = tenants.map(t => {
+    const statusClass = `status-${t.subscription_status || 'trial'}`;
+    const statusLabel = (t.subscription_status || 'trial').toUpperCase();
+    const trialEnd = t.trial_ends_at ? new Date(t.trial_ends_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+    const createdAt = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '—';
+    const isWiped = t.subscription_status === 'wiped';
+
+    return `<tr>
+      <td><strong>${t.tenant_id}</strong></td>
+      <td>
+        <div class="tenant-name">${esc(t.firm_name || '—')}</div>
+        <div class="tenant-owner">${esc(t.owner_name || '')}</div>
+      </td>
+      <td>${esc(t.phone || '—')}</td>
+      <td>${(t.plan || 'individual').charAt(0).toUpperCase() + (t.plan || 'individual').slice(1)}</td>
+      <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+      <td>${trialEnd}</td>
+      <td>${t.agent_count || 0}</td>
+      <td>${t.lead_count || 0}</td>
+      <td>${t.founding_discount ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:0.75em;font-weight:600">🏆 Yes</span>' : '<span style="color:#94a3b8;font-size:0.8em">—</span>'}</td>
+      <td>${createdAt}</td>
+      <td class="actions-cell">
+        ${isWiped ? '<span style="color:#94a3b8;font-size:0.8em">—</span>' : `
+          <button class="btn btn-sm btn-saffron" onclick="openExtend(${t.tenant_id},'${esc(t.firm_name)}')">⏰</button>
+          <button class="btn btn-sm btn-green" onclick="openActivate(${t.tenant_id},'${esc(t.firm_name)}')">✅</button>
+          ${t.is_active ? `<button class="btn btn-sm btn-red" onclick="doDeactivate(${t.tenant_id})">🚫</button>` : ''}
+        `}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Filter ──
+function filterTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase().trim();
+  const status = document.getElementById('statusFilter').value;
+  const plan = document.getElementById('planFilter').value;
+
+  let filtered = allTenants;
+
+  if (search) {
+    filtered = filtered.filter(t =>
+      (t.firm_name || '').toLowerCase().includes(search) ||
+      (t.owner_name || '').toLowerCase().includes(search) ||
+      (t.phone || '').includes(search) ||
+      (t.email || '').toLowerCase().includes(search) ||
+      String(t.tenant_id).includes(search)
+    );
+  }
+  if (status) {
+    filtered = filtered.filter(t => t.subscription_status === status);
+  }
+  if (plan) {
+    filtered = filtered.filter(t => t.plan === plan);
+  }
+  renderTable(filtered);
+}
+
+// ── Modal Helpers ──
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function openExtend(tenantId, name) {
+  selectedTenantId = tenantId;
+  document.getElementById('extendTenantName').value = `#${tenantId} — ${name}`;
+  document.getElementById('extendDays').value = 7;
+  openModal('extendModal');
+}
+
+function openActivate(tenantId, name) {
+  selectedTenantId = tenantId;
+  document.getElementById('activateTenantName').value = `#${tenantId} — ${name}`;
+  openModal('activateModal');
+}
+
+// ── Admin Actions ──
+async function doExtendTrial() {
+  const days = parseInt(document.getElementById('extendDays').value) || 7;
+  try {
+    const res = await fetch(`/api/admin/tenant/${selectedTenantId}/extend?key=${encodeURIComponent(adminKey)}&days=${days}`, { method:'POST' });
+    if (res.ok) {
+      showToast(`Trial extended by ${days} days`, 'success');
+      closeModal('extendModal');
+      loadData();
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function doActivate() {
+  const plan = document.getElementById('activatePlan').value;
+  try {
+    const res = await fetch(`/api/admin/tenant/${selectedTenantId}/activate?key=${encodeURIComponent(adminKey)}&plan=${plan}`, { method:'POST' });
+    if (res.ok) {
+      showToast('Subscription activated!', 'success');
+      closeModal('activateModal');
+      loadData();
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function doDeactivate(tenantId) {
+  if (!confirm(`Deactivate tenant #${tenantId}? This will disable their access.`)) return;
+  try {
+    const res = await fetch(`/api/admin/tenant/${tenantId}/deactivate?key=${encodeURIComponent(adminKey)}`, { method:'POST' });
+    if (res.ok) {
+      showToast('Tenant deactivated', 'success');
+      loadData();
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function doCreateFirm() {
+  const firm = document.getElementById('cfFirmName').value.trim();
+  const owner = document.getElementById('cfOwnerName').value.trim();
+  const phone = document.getElementById('cfPhone').value.trim();
+  const email = document.getElementById('cfEmail').value.trim();
+  const plan = document.getElementById('cfPlan').value;
+  if (!firm || !owner || !phone) { showToast('Firm, Owner, and Phone are required', 'error'); return; }
+  try {
+    const res = await fetch(`/api/admin/create-firm?key=${encodeURIComponent(adminKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firm_name: firm, owner_name: owner, phone, email, plan })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      showToast(`Firm created! ID: ${data.tenant_id}`, 'success');
+      closeModal('createFirmModal');
+      document.getElementById('cfFirmName').value = '';
+      document.getElementById('cfOwnerName').value = '';
+      document.getElementById('cfPhone').value = '';
+      document.getElementById('cfEmail').value = '';
+      loadData();
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+// ── Toast ──
+function showToast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+// ── Bot Management ──
+async function loadBots() {
+  try {
+    const res = await fetch(`/api/admin/bots?key=${encodeURIComponent(adminKey)}`);
+    if (res.status === 401) { doLogout(); return; }
+    const data = await res.json();
+    renderBots(data);
+  } catch (e) {
+    document.getElementById('botGrid').innerHTML = '<div class="no-bots">Failed to load bot status</div>';
+  }
+}
+
+function renderBots(data) {
+  const grid = document.getElementById('botGrid');
+  const badge = document.getElementById('botCountBadge');
+  const totalRunning = (data.master_bot_running ? 1 : 0) + (data.tenant_bots_running || 0);
+  badge.textContent = `${totalRunning} running`;
+
+  let html = '';
+
+  // Master bot card
+  html += `<div class="bot-card master">
+    <div class="bot-header">
+      <span class="bot-label">Master Bot</span>
+      <span class="bot-type type-master">Master</span>
+    </div>
+    <div class="bot-details">
+      <span><span class="bot-status-dot ${data.master_bot_running ? 'running' : 'stopped'}"></span>
+        ${data.master_bot_running ? 'Running' : 'Stopped'}</span>
+      <span>@SarathiBizBot (Sarathi-AI.com) — Main orchestrator</span>
+    </div>
+  </div>`;
+
+  // Tenant bot cards
+  if (data.tenant_bots && data.tenant_bots.length > 0) {
+    data.tenant_bots.forEach(bot => {
+      html += `<div class="bot-card tenant">
+        <div class="bot-header">
+          <span class="bot-label">${esc(bot.bot_name || 'Bot')}</span>
+          <span class="bot-type type-tenant">Tenant #${bot.tenant_id}</span>
+        </div>
+        <div class="bot-details">
+          <span><span class="bot-status-dot running"></span> Running</span>
+          <span>${esc(bot.bot_username || 'unknown')}</span>
+        </div>
+        <div class="bot-actions">
+          <button class="btn btn-saffron btn-sm" onclick="restartBot(${bot.tenant_id})">🔄 Restart</button>
+          <button class="btn btn-red btn-sm" onclick="stopBot(${bot.tenant_id})">⏹ Stop</button>
+        </div>
+      </div>`;
+    });
+  } else {
+    html += '<div class="no-bots">No tenant bots are currently running</div>';
+  }
+
+  grid.innerHTML = html;
+}
+
+async function restartBot(tenantId) {
+  if (!confirm(`Restart bot for tenant #${tenantId}?`)) return;
+  try {
+    const res = await fetch(`/api/admin/tenant/${tenantId}/bot/restart?key=${encodeURIComponent(adminKey)}`, { method:'POST' });
+    if (res.ok) {
+      showToast(`Bot for tenant #${tenantId} restarted`, 'success');
+      setTimeout(loadBots, 1500);
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Restart failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+async function stopBot(tenantId) {
+  if (!confirm(`Stop bot for tenant #${tenantId}? The tenant will lose CRM bot access.`)) return;
+  try {
+    const res = await fetch(`/api/admin/tenant/${tenantId}/bot/stop?key=${encodeURIComponent(adminKey)}`, { method:'POST' });
+    if (res.ok) {
+      showToast(`Bot for tenant #${tenantId} stopped`, 'success');
+      setTimeout(loadBots, 1000);
+    } else {
+      const d = await res.json();
+      showToast(d.detail || 'Stop failed', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+// ── Escape HTML ──
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+
+<!-- ── Footer ──────────────────────────────────────────── -->
+<div style="background:#0f172a;color:#fff;text-align:center;padding:32px 24px">
+  <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;font-size:1.1em;margin-bottom:4px">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:64px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi-<span style="color:#14b8a6">AI</span>&nbsp;Business Technologies
+  </div>
+  <p style="color:#94a3b8;font-size:0.85em;margin-bottom:12px">AI-Powered Financial Advisor CRM Platform · sarathi-ai.com</p>
+  <p style="color:#64748b;font-size:0.72em;opacity:0.6">© 2026 Sarathi-AI Business Technologies. All rights reserved.</p>
+</div>
+
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

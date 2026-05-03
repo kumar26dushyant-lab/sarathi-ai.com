@@ -1,0 +1,127 @@
+# =============================================================================
+#  Evolution API stack — for Sarathi-AI WhatsApp v2 (Agent-Assist)
+# =============================================================================
+#  Run on Oracle VM (or local dev) with:
+#    docker compose -f docker-compose.evolution.yml up -d
+#
+#  After first run, scan QR via Sarathi dashboard → /dashboard → WhatsApp tab.
+#  All WhatsApp protocol handling stays in Evolution (Baileys, Node.js).
+#  Sarathi (Python/FastAPI) talks to it via REST + receives webhooks.
+# =============================================================================
+
+services:
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: sarathi-evolution
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"     # Bind to localhost only — proxied via nginx
+    environment:
+      # ── Server ──
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      CORS_ORIGIN: "*"
+      CORS_METHODS: "GET,POST,PUT,DELETE"
+
+      # ── Authentication ──
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?must set EVOLUTION_API_KEY in .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+
+      # ── Database (Postgres) ──
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD:-evolution_pw}@postgres:5432/evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_exchange
+
+      # ── Cache (Redis) ──
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "true"
+      CACHE_LOCAL_ENABLED: "false"
+
+      # ── WhatsApp / Baileys ──
+      CONFIG_SESSION_PHONE_CLIENT: "Sarathi-AI Business"
+      CONFIG_SESSION_PHONE_NAME: "Chrome"
+      QRCODE_LIMIT: 30
+      QRCODE_COLOR: "#000000"
+
+      # ── Webhook (global; per-instance overrides set via API) ──
+      WEBHOOK_GLOBAL_ENABLED: "false"
+
+      # ── Logging ──
+      LOG_LEVEL: "ERROR,WARN,INFO"
+      LOG_COLOR: "true"
+      LOG_BAILEYS: "error"
+
+      # ── Cleanup ──
+      CLEAN_STORE_CLEANING_INTERVAL: 7200
+      CLEAN_STORE_MESSAGES: "true"
+      CLEAN_STORE_MESSAGE_UP: "true"
+      CLEAN_STORE_CONTACTS: "true"
+      CLEAN_STORE_CHATS: "true"
+
+      # ── Disable features we don't use ──
+      DEL_INSTANCE: "false"
+      TYPEBOT_ENABLED: "false"
+      CHATWOOT_ENABLED: "false"
+      OPENAI_ENABLED: "false"
+      DIFY_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      SQS_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sarathi-wa
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sarathi-evolution-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-evolution_pw}
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sarathi-wa
+
+  redis:
+    image: redis:7-alpine
+    container_name: sarathi-evolution-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - evolution_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sarathi-wa
+
+volumes:
+  evolution_instances:
+  evolution_store:
+  evolution_pg:
+  evolution_redis:
+
+networks:
+  sarathi-wa:
+    driver: bridge

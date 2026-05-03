@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+<title>{{ADVISOR_NAME}} — {{FIRM_NAME}}</title>
+<meta name="description" content="{{ADVISOR_NAME}} — financial advisor at {{FIRM_NAME}}. Plan insurance, investments, retirement and tax with a trusted advisor." />
+<meta name="theme-color" content="{{PRIMARY_COLOR}}" />
+<meta property="og:title" content="{{ADVISOR_NAME}} — {{FIRM_NAME}}" />
+<meta property="og:description" content="Financial advisory by {{ADVISOR_NAME}}. Free calculators, expert plans, and one-tap WhatsApp/call." />
+<meta property="og:image" content="{{PHOTO_URL}}" />
+<meta property="og:url" content="{{PUBLIC_URL}}" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='{{PRIMARY_COLOR}}'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'%3ES%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --p: {{PRIMARY_COLOR}};
+    --a: {{ACCENT_COLOR}};
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --txt: #0f172a;
+    --mut: #64748b;
+    --line: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--txt); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--p); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 12px 22px; border-radius: 999px; font-weight: 600; font-size: 15px;
+    border: 0; cursor: pointer; transition: transform .1s ease;
+    text-decoration: none;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--p); color: #fff; }
+  .btn-accent  { background: var(--a); color: #fff; }
+  .btn-ghost   { background: #fff; color: var(--p); border: 1px solid var(--p); }
+  .btn-wa      { background: #25D366; color: #fff; }
+
+  /* Hero */
+  header.hero {
+    background: linear-gradient(135deg, var(--p) 0%, color-mix(in srgb, var(--p) 70%, #000 30%) 100%);
+    color: #fff; padding: 36px 0 80px; position: relative;
+  }
+  .hero-inner { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .avatar {
+    width: 110px; height: 110px; border-radius: 50%; object-fit: cover;
+    border: 4px solid rgba(255,255,255,0.3); background: #fff;
+    flex-shrink: 0;
+  }
+  .avatar-fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px; font-weight: 700; color: var(--p);
+  }
+  .hero h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; }
+  .hero .firm { opacity: 0.92; font-size: 16px; }
+  .hero .creds { margin-top: 8px; font-size: 13px; opacity: 0.85; }
+  .hero-cta { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+  /* Stats strip */
+  .stats {
+    margin-top: -50px; background: var(--card); border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.08); padding: 18px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;
+  }
+  .stat .num { font-size: 22px; font-weight: 800; color: var(--p); }
+  .stat .lbl { font-size: 12px; color: var(--mut); margin-top: 2px; }
+
+  /* Sections */
+  section { padding: 32px 0; }
+  section h2 { margin: 0 0 16px; font-size: 20px; }
+  .card {
+    background: var(--card); border-radius: 12px; padding: 18px;
+    border: 1px solid var(--line);
+  }
+  .services { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .service-pill {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; font-size: 14px; font-weight: 500; display: flex;
+    align-items: center; gap: 8px;
+  }
+  .service-pill::before { content: "✓"; color: var(--p); font-weight: 800; }
+
+  .calc-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  }
+  .calc-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; cursor: pointer; transition: all .15s; text-align: left;
+    font: inherit; color: inherit; display: block; width: 100%;
+  }
+  .calc-card:hover { border-color: var(--p); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .calc-card .ico { font-size: 22px; margin-bottom: 6px; }
+  .calc-card .nm { font-weight: 600; font-size: 14px; }
+  .calc-card .ds { font-size: 12px; color: var(--mut); margin-top: 4px; }
+
+  .testimonial {
+    background: var(--card); border-radius: 12px; padding: 16px;
+    border-left: 4px solid var(--a); margin-bottom: 10px;
+  }
+  .testimonial .qt { font-style: italic; color: var(--txt); }
+  .testimonial .nm { margin-top: 8px; font-weight: 600; font-size: 14px; color: var(--mut); }
+
+  /* Lead form */
+  form.lead { background: var(--card); border-radius: 14px; padding: 20px;
+              border: 1px solid var(--line); }
+  form.lead label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+  form.lead input, form.lead select, form.lead textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+    border-radius: 8px; font-size: 15px; font-family: inherit; background: #fff;
+  }
+  form.lead input:focus, form.lead textarea:focus, form.lead select:focus {
+    outline: none; border-color: var(--p); box-shadow: 0 0 0 3px color-mix(in srgb, var(--p) 18%, transparent);
+  }
+  .consent { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 12px; color: var(--mut); }
+  .consent input { width: auto; margin-top: 3px; }
+  .form-msg { margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 8px; display: none; }
+  .form-msg.ok { background: #dcfce7; color: #14532d; display: block; }
+  .form-msg.err { background: #fee2e2; color: #7f1d1d; display: block; }
+
+  /* Sticky bottom bar */
+  .stickybar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: #fff;
+    border-top: 1px solid var(--line); padding: 8px 12px;
+    display: flex; gap: 8px; z-index: 50; box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
+  }
+  .stickybar .btn { flex: 1; padding: 12px 8px; font-size: 14px; border-radius: 10px; }
+  body { padding-bottom: 70px; }
+
+  footer.foot {
+    text-align: center; padding: 24px 16px 90px; color: var(--mut); font-size: 12px;
+  }
+  .badge {
+    display: inline-block; margin-top: 8px; padding: 4px 10px; background: var(--card);
+    border-radius: 999px; border: 1px solid var(--line); font-size: 11px;
+  }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.6); display: none;
+    z-index: 100; align-items: flex-end; justify-content: center;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 480px; border-radius: 16px 16px 0 0;
+    padding: 20px; max-height: 88vh; overflow: auto;
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .modal .close { float: right; background: none; border: 0; font-size: 24px; cursor: pointer; color: var(--mut); }
+  .calc-result { margin-top: 14px; padding: 14px; background: #f1f5f9; border-radius: 10px;
+                  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px;
+                  white-space: pre-wrap; }
+
+  @media (min-width: 720px) {
+    .modal-bg { align-items: center; }
+    .modal { border-radius: 16px; }
+    .calc-grid { grid-template-columns: repeat(3, 1fr); }
+    .services { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap hero-inner">
+    <img class="avatar" id="avatar" src="{{PHOTO_URL}}" alt="{{ADVISOR_NAME}}"
+         onerror="this.style.display='none';document.getElementById('avatarFallback').style.display='flex';" />
+    <div id="avatarFallback" class="avatar avatar-fallback" style="display:none">{{ADVISOR_NAME}}</div>
+    <div style="flex:1; min-width:200px;">
+      <h1>{{ADVISOR_NAME}}</h1>
+      <div class="firm">{{FIRM_NAME}}</div>
+      <div class="creds" id="creds"></div>
+      <div class="hero-cta">
+        <a class="btn btn-accent" href="#contact">Get a free consultation</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><div class="num">{{YEARS_EXP}}+</div><div class="lbl">Years Experience</div></div>
+    <div class="stat"><div class="num">{{FAMILIES_SERVED}}+</div><div class="lbl">Families Served</div></div>
+    <div class="stat"><div class="num">12</div><div class="lbl">Free Calculators</div></div>
+  </div>
+
+  <section id="about">
+    <h2>About</h2>
+    <div class="card" id="bioCard"></div>
+  </section>
+
+  <section id="services">
+    <h2>Services</h2>
+    <div class="services" id="servicesGrid"></div>
+  </section>
+
+  <section id="calculators">
+    <h2>Free financial calculators</h2>
+    <div class="calc-grid" id="calcGrid"></div>
+  </section>
+
+  <section id="testimonials" style="display:none;">
+    <h2>What clients say</h2>
+    <div id="testimonialList"></div>
+  </section>
+
+  <section id="contact">
+    <h2>Request a call back</h2>
+    <form class="lead" id="leadForm">
+      <label for="lf-name">Your name *</label>
+      <input id="lf-name" name="name" required maxlength="80" autocomplete="name" />
+
+      <label for="lf-phone">Phone (10 digits) *</label>
+      <input id="lf-phone" name="phone" required inputmode="tel" pattern="\d{10,15}" maxlength="15" autocomplete="tel" />
+
+      <label for="lf-city">City</label>
+      <input id="lf-city" name="city" maxlength="60" autocomplete="address-level2" />
+
+      <label for="lf-need">What are you looking for?</label>
+      <select id="lf-need" name="need_type">
+        <option value="health">Health Insurance</option>
+        <option value="term">Term Life Insurance</option>
+        <option value="investment">Investment / SIP</option>
+        <option value="retirement">Retirement Planning</option>
+        <option value="tax">Tax Saving</option>
+        <option value="general">General advice</option>
+      </select>
+
+      <label for="lf-msg">Message (optional)</label>
+      <textarea id="lf-msg" name="message" rows="3" maxlength="500" placeholder="Tell your advisor what you'd like help with…"></textarea>
+
+      <label class="consent">
+        <input id="lf-consent" type="checkbox" required />
+        <span>I agree to be contacted by this advisor about my enquiry and consent to processing of my personal data as per the Digital Personal Data Protection Act, 2023.</span>
+      </label>
+
+      <div style="margin-top:14px;">
+        <button type="submit" class="btn btn-primary" id="lf-submit" style="width:100%;">Send request</button>
+      </div>
+      <div class="form-msg" id="lf-msgbox"></div>
+    </form>
+  </section>
+</div>
+
+<div class="stickybar">
+  <a class="btn btn-primary" href="tel:{{PHONE}}" id="callBtn">📞 Call</a>
+  <a class="btn btn-wa" href="https://wa.me/{{WA_PHONE}}?text=Hi%20{{ADVISOR_NAME}}%2C%20I%20visited%20your%20website%20and%20would%20like%20to%20talk." id="waBtn">💬 WhatsApp</a>
+  <a class="btn btn-accent" href="#contact">📝 Form</a>
+</div>
+
+<footer class="foot">
+  <div id="footCreds"></div>
+  <div>© <span id="yr"></span> {{FIRM_NAME}}. All rights reserved.</div>
+  <div id="badgeBox"></div>
+</footer>
+
+<!-- Calculator modal -->
+<div class="modal-bg" id="calcModal" onclick="if(event.target===this)closeCalc()">
+  <div class="modal">
+    <button class="close" onclick="closeCalc()">×</button>
+    <h3 id="calcTitle"></h3>
+    <p id="calcDesc" style="color:var(--mut); font-size:13px; margin:0 0 12px;"></p>
+    <div id="calcInputs"></div>
+    <button class="btn btn-primary" onclick="runCalc()" style="width:100%;">Calculate</button>
+    <div class="calc-result" id="calcResult" style="display:none;"></div>
+    <div style="margin-top:14px; text-align:center;">
+      <a class="btn btn-ghost" href="#contact" onclick="closeCalc()">Discuss with advisor</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const CFG = {
+    slug: "{{SLUG}}",
+    advisor: "{{ADVISOR_NAME}}",
+    firm: "{{FIRM_NAME}}",
+    bio: {{BIO_JSON}},
+    photo: "{{PHOTO_URL}}",
+    services: {{SERVICES_JSON}},
+    testimonials: {{TESTIMONIALS_JSON}},
+    irdai: "{{IRDAI_CODE}}",
+    arn: "{{ARN_CODE}}",
+    phone: "{{PHONE}}",
+    waPhone: "{{WA_PHONE}}",
+    showBadge: "{{SHOW_BADGE}}" === "1",
+  };
+
+  // Avatar fallback initial
+  const fb = document.getElementById('avatarFallback');
+  if (CFG.advisor) fb.textContent = CFG.advisor.trim().charAt(0).toUpperCase();
+  if (!CFG.photo) {
+    document.getElementById('avatar').style.display = 'none';
+    fb.style.display = 'flex';
+  }
+
+  // Bio
+  const bioCard = document.getElementById('bioCard');
+  bioCard.textContent = CFG.bio || `${CFG.advisor} is a trusted financial advisor at ${CFG.firm}, helping families plan insurance, investments, and retirement with personalised, unbiased advice.`;
+
+  // Services
+  const sg = document.getElementById('servicesGrid');
+  (CFG.services || []).forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'service-pill';
+    d.textContent = s;
+    sg.appendChild(d);
+  });
+
+  // Credentials line
+  const credParts = [];
+  if (CFG.irdai) credParts.push(`IRDAI: ${CFG.irdai}`);
+  if (CFG.arn) credParts.push(`ARN: ${CFG.arn}`);
+  if (credParts.length) {
+    document.getElementById('creds').textContent = credParts.join(' · ');
+    document.getElementById('footCreds').textContent = credParts.join(' · ');
+  }
+
+  // Testimonials
+  if (CFG.testimonials && CFG.testimonials.length) {
+    document.getElementById('testimonials').style.display = 'block';
+    const list = document.getElementById('testimonialList');
+    CFG.testimonials.forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'testimonial';
+      d.innerHTML = `<div class="qt">"${escapeHtml(t.text)}"</div><div class="nm">— ${escapeHtml(t.name)}</div>`;
+      list.appendChild(d);
+    });
+  }
+
+  // Footer year + badge
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  if (CFG.showBadge) {
+    document.getElementById('badgeBox').innerHTML = '<a class="badge" href="https://sarathi-ai.com" target="_blank" rel="noopener">⚡ Powered by Sarathi-AI</a>';
+  }
+
+  // Hide call/WA buttons if missing
+  if (!CFG.phone) document.getElementById('callBtn').style.display = 'none';
+  if (!CFG.waPhone) document.getElementById('waBtn').style.display = 'none';
+
+  // Calculators catalog
+  const CALCS = [
+    { id: 'inflation', icon: '📈', name: 'Inflation Eraser', desc: 'See what ₹ today buys in future',
+      fields: [
+        { k: 'amount', label: 'Current monthly amount (₹)', t: 'number', v: 50000 },
+        { k: 'inflation', label: 'Inflation rate (%)', t: 'number', v: 6, step: '0.1' },
+        { k: 'years', label: 'Years', t: 'number', v: 10 },
+      ]},
+    { id: 'hlv', icon: '🛡️', name: 'Human Life Value', desc: 'Right life cover for your family',
+      fields: [
+        { k: 'monthly_expense', label: 'Monthly household expense (₹)', t: 'number', v: 50000 },
+        { k: 'loans', label: 'Outstanding loans (₹)', t: 'number', v: 0 },
+        { k: 'children_expense', label: "Children's future expense (₹)", t: 'number', v: 0 },
+        { k: 'savings', label: 'Existing savings (₹)', t: 'number', v: 0 },
+        { k: 'existing_cover', label: 'Existing life cover (₹)', t: 'number', v: 0 },
+        { k: 'current_age', label: 'Your age', t: 'number', v: 35 },
+        { k: 'retirement_age', label: 'Retirement age', t: 'number', v: 60 },
+      ]},
+    { id: 'retirement', icon: '🌴', name: 'Retirement Planner', desc: 'Corpus needed at retirement',
+      fields: [
+        { k: 'current_age', label: 'Current age', t: 'number', v: 30 },
+        { k: 'retirement_age', label: 'Retirement age', t: 'number', v: 60 },
+        { k: 'current_expense', label: 'Current monthly expense (₹)', t: 'number', v: 50000 },
+        { k: 'inflation', label: 'Inflation (%)', t: 'number', v: 6, step: '0.1' },
+        { k: 'post_return', label: 'Post-retirement return (%)', t: 'number', v: 7, step: '0.1' },
+        { k: 'life_expectancy', label: 'Life expectancy', t: 'number', v: 85 },
+      ]},
+    { id: 'emi', icon: '🏠', name: 'EMI Calculator', desc: 'Monthly EMI for any loan',
+      fields: [
+        { k: 'principal', label: 'Loan amount (₹)', t: 'number', v: 2500000 },
+        { k: 'rate', label: 'Interest rate (%)', t: 'number', v: 8.5, step: '0.1' },
+        { k: 'tenure_years', label: 'Tenure (years)', t: 'number', v: 20 },
+      ]},
+    { id: 'health', icon: '🏥', name: 'Health Cover', desc: 'How much health cover you need',
+      fields: [
+        { k: 'family_size', label: 'Family size', t: 'number', v: 4 },
+        { k: 'city_tier', label: 'City tier (1/2/3)', t: 'number', v: 1 },
+        { k: 'oldest_age', label: 'Oldest member age', t: 'number', v: 45 },
+      ]},
+    { id: 'sipvslump', icon: '⚖️', name: 'SIP vs Lumpsum', desc: 'Which approach grows more',
+      fields: [
+        { k: 'lumpsum', label: 'Lumpsum amount (₹)', t: 'number', v: 600000 },
+        { k: 'monthly_sip', label: 'Monthly SIP (₹)', t: 'number', v: 10000 },
+        { k: 'years', label: 'Years', t: 'number', v: 10 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 12, step: '0.1' },
+      ]},
+    { id: 'mfsip', icon: '💰', name: 'MF SIP Planner', desc: 'Wealth from monthly SIP',
+      fields: [
+        { k: 'monthly_sip', label: 'Monthly SIP (₹)', t: 'number', v: 10000 },
+        { k: 'years', label: 'Years', t: 'number', v: 15 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 12, step: '0.1' },
+      ]},
+    { id: 'ulipvsmf', icon: '🔁', name: 'ULIP vs MF', desc: 'Compare over the long run',
+      fields: [
+        { k: 'annual_premium', label: 'Annual premium (₹)', t: 'number', v: 100000 },
+        { k: 'years', label: 'Years', t: 'number', v: 15 },
+        { k: 'ulip_return', label: 'ULIP return (%)', t: 'number', v: 8, step: '0.1' },
+        { k: 'mf_return', label: 'MF return (%)', t: 'number', v: 12, step: '0.1' },
+      ]},
+    { id: 'nps', icon: '👴', name: 'NPS Planner', desc: 'Pension corpus at 60',
+      fields: [
+        { k: 'current_age', label: 'Current age', t: 'number', v: 30 },
+        { k: 'monthly_contribution', label: 'Monthly contribution (₹)', t: 'number', v: 5000 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 10, step: '0.1' },
+      ]},
+    { id: 'stepup', icon: '📊', name: 'Step-Up SIP', desc: 'Increase SIP every year',
+      fields: [
+        { k: 'monthly_sip', label: 'Starting monthly SIP (₹)', t: 'number', v: 10000 },
+        { k: 'years', label: 'Years', t: 'number', v: 15 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 12, step: '0.1' },
+        { k: 'stepup_pct', label: 'Annual step-up (%)', t: 'number', v: 10, step: '0.5' },
+      ]},
+    { id: 'swp', icon: '💸', name: 'SWP Calculator', desc: 'How long your corpus lasts',
+      fields: [
+        { k: 'initial_corpus', label: 'Initial corpus (₹)', t: 'number', v: 5000000 },
+        { k: 'monthly_withdrawal', label: 'Monthly withdrawal (₹)', t: 'number', v: 30000 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 8, step: '0.1' },
+        { k: 'years', label: 'Years', t: 'number', v: 25 },
+      ]},
+    { id: 'delay', icon: '⏰', name: 'Cost of Delay', desc: 'What waiting costs you',
+      fields: [
+        { k: 'monthly_sip', label: 'Monthly SIP (₹)', t: 'number', v: 10000 },
+        { k: 'years', label: 'Total years', t: 'number', v: 25 },
+        { k: 'annual_return', label: 'Expected return (%)', t: 'number', v: 12, step: '0.1' },
+        { k: 'delay_years', label: 'Delay (years)', t: 'number', v: 5 },
+      ]},
+  ];
+
+  const grid = document.getElementById('calcGrid');
+  CALCS.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'calc-card';
+    b.innerHTML = `<div class="ico">${c.icon}</div><div class="nm">${c.name}</div><div class="ds">${c.desc}</div>`;
+    b.onclick = () => openCalc(c);
+    grid.appendChild(b);
+  });
+
+  let _currentCalc = null;
+  window.openCalc = function(c) {
+    _currentCalc = c;
+    document.getElementById('calcTitle').textContent = c.name;
+    document.getElementById('calcDesc').textContent = c.desc;
+    const ins = document.getElementById('calcInputs');
+    ins.innerHTML = '';
+    c.fields.forEach(f => {
+      const wrap = document.createElement('div');
+      wrap.style.marginBottom = '10px';
+      wrap.innerHTML = `<label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">${f.label}</label>
+                       <input data-k="${f.k}" type="${f.t}" value="${f.v}" ${f.step ? `step="${f.step}"` : ''}
+                              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;" />`;
+      ins.appendChild(wrap);
+    });
+    document.getElementById('calcResult').style.display = 'none';
+    document.getElementById('calcModal').classList.add('open');
+  };
+  window.closeCalc = function() {
+    document.getElementById('calcModal').classList.remove('open');
+  };
+  window.runCalc = async function() {
+    if (!_currentCalc) return;
+    const params = {};
+    document.querySelectorAll('#calcInputs input').forEach(i => { params[i.dataset.k] = i.value; });
+    const url = '/api/calc/' + _currentCalc.id + '?' + new URLSearchParams(params).toString();
+    const box = document.getElementById('calcResult');
+    box.style.display = 'block'; box.textContent = 'Calculating…';
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      box.textContent = formatCalc(j);
+    } catch (e) {
+      box.textContent = 'Could not calculate. Please try again.';
+    }
+  };
+
+  function formatCalc(j) {
+    if (!j || typeof j !== 'object') return String(j);
+    const lines = [];
+    Object.keys(j).forEach(k => {
+      const v = j[k];
+      if (v === null || v === undefined) return;
+      if (typeof v === 'object') return;
+      const lbl = k.replace(/_/g, ' ').replace(/\b\w/g, x => x.toUpperCase());
+      let val = v;
+      if (typeof v === 'number') {
+        val = (k.includes('rate') || k.includes('pct') || k.includes('percent'))
+          ? v.toFixed(2) + '%'
+          : '₹ ' + Math.round(v).toLocaleString('en-IN');
+      }
+      lines.push(lbl + ': ' + val);
+    });
+    return lines.join('\n');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Lead form submit
+  const form = document.getElementById('leadForm');
+  const msgbox = document.getElementById('lf-msgbox');
+  const submitBtn = document.getElementById('lf-submit');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msgbox.className = 'form-msg'; msgbox.textContent = '';
+    const data = {
+      name: document.getElementById('lf-name').value.trim(),
+      phone: document.getElementById('lf-phone').value.trim(),
+      city: document.getElementById('lf-city').value.trim(),
+      need_type: document.getElementById('lf-need').value,
+      message: document.getElementById('lf-msg').value.trim(),
+      consent: document.getElementById('lf-consent').checked,
+    };
+    if (!data.consent) {
+      msgbox.className = 'form-msg err'; msgbox.textContent = 'Please tick the consent box.';
+      return;
+    }
+    submitBtn.disabled = true; submitBtn.textContent = 'Sending…';
+    try {
+      const r = await fetch('/m/' + CFG.slug + '/lead', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data),
+      });
+      const j = await r.json();
+      if (r.ok && j.ok) {
+        msgbox.className = 'form-msg ok';
+        msgbox.textContent = j.message || 'Thanks! Your advisor will reach out shortly.';
+        form.reset();
+      } else {
+        msgbox.className = 'form-msg err';
+        msgbox.textContent = j.error || 'Could not send. Please try again.';
+      }
+    } catch (err) {
+      msgbox.className = 'form-msg err';
+      msgbox.textContent = 'Network error. Please try again.';
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = 'Send request';
+    }
+  });
+})();
+</script>
+</body>
+</html>

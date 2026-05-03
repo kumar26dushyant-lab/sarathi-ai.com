@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1,user-scalable=no">
+<title>Cockpit — Sarathi-AI</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+--teal:#0d9488;--teal-d:#0f766e;--teal-l:#ccfbf1;--teal-bg:#f0fdfa;
+--red:#ef4444;--green:#22c55e;--amber:#f59e0b;--blue:#3b82f6;--indigo:#6366f1;
+--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#1e293b;--text2:#64748b;
+--radius:16px;--shadow:0 1px 8px rgba(0,0,0,.06);
+--nav-h:64px;--bottom-h:68px;
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
+line-height:1.5;min-height:100vh;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+
+/* ── Login Screen ── */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,#0f766e 0%,#0d9488 50%,#14b8a6 100%)}
+.login-box{background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.15);text-align:center}
+.login-box img{width:60px;height:60px;margin-bottom:12px;border-radius:14px}
+.login-box h2{font-size:20px;margin-bottom:4px;color:var(--text)}
+.login-box p{font-size:13px;color:var(--text2);margin-bottom:24px}
+.login-field{position:relative;margin-bottom:14px}
+.login-field input{width:100%;padding:12px 14px 12px 40px;border:1.5px solid var(--border);border-radius:12px;font-size:15px;outline:none;transition:.2s}
+.login-field input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.login-field .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text2)}
+.login-btn{width:100%;padding:13px;background:var(--teal);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s}
+.login-btn:active{transform:scale(.97)}
+.otp-row{display:flex;gap:8px;margin-bottom:14px}
+.otp-row input{flex:1;text-align:center;padding:12px 4px;border:1.5px solid var(--border);border-radius:10px;font-size:18px;letter-spacing:4px;font-weight:600}
+.login-error{color:var(--red);font-size:13px;margin-bottom:10px;display:none}
+
+/* ── App Shell ── */
+#appShell{display:none}
+
+/* Top Bar */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--nav-h);background:var(--card);border-bottom:1px solid var(--border);
+display:flex;align-items:center;padding:0 16px;z-index:100;gap:10px}
+.topbar-title{font-size:17px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-title span{color:var(--teal)}
+.topbar-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--card);
+display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;position:relative;transition:.15s}
+.topbar-btn:active{background:var(--bg)}
+.topbar-btn .badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;
+font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+
+/* Bottom Nav */
+.bottomnav{position:fixed;bottom:0;left:0;right:0;height:var(--bottom-h);background:var(--card);border-top:1px solid var(--border);
+display:flex;z-index:100;padding:0 4px;padding-bottom:env(safe-area-inset-bottom)}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+cursor:pointer;color:var(--text2);transition:.15s;-webkit-tap-highlight-color:transparent;font-size:10px;position:relative}
+.bnav-item.active{color:var(--teal)}
+.bnav-item.active::before{content:'';position:absolute;top:-1px;left:20%;right:20%;height:3px;background:var(--teal);border-radius:0 0 3px 3px}
+.bnav-icon{font-size:22px;line-height:1}
+
+/* Content Area */
+.content{padding:calc(var(--nav-h) + 12px) 12px calc(var(--bottom-h) + 12px) 12px;max-width:600px;margin:0 auto}
+
+/* Panels */
+.panel{display:none}.panel.active{display:block}
+
+/* Cards */
+.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;border:1px solid var(--border);box-shadow:var(--shadow)}
+.card-title{font-size:14px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* KPI Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{background:var(--card);border-radius:14px;padding:14px 12px;border:1px solid var(--border);text-align:center}
+.kpi-val{font-size:26px;font-weight:800;line-height:1.1}
+.kpi-label{font-size:11px;color:var(--text2);margin-top:2px;font-weight:500}
+.kpi.teal .kpi-val{color:var(--teal)}.kpi.green .kpi-val{color:var(--green)}
+.kpi.amber .kpi-val{color:var(--amber)}.kpi.red .kpi-val{color:var(--red)}
+.kpi.blue .kpi-val{color:var(--blue)}.kpi.indigo .kpi-val{color:var(--indigo)}
+
+/* Health Indicators */
+.health-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.health-row:last-child{border-bottom:none}
+.health-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.health-dot.ok{background:var(--green)}.health-dot.warn{background:var(--amber)}.health-dot.err{background:var(--red)}.health-dot.off{background:#cbd5e1}
+.health-name{flex:1;font-size:13px;font-weight:600}
+.health-detail{font-size:11px;color:var(--text2);max-width:120px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Lists */
+.list-item{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;cursor:pointer;transition:.15s}
+.list-item:active{background:var(--bg)}
+.list-avatar{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0}
+.list-body{flex:1;min-width:0}
+.list-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-sub{font-size:12px;color:var(--text2)}
+.list-badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:8px;white-space:nowrap}
+.badge-trial{background:#dbeafe;color:#2563eb}.badge-paid{background:#dcfce7;color:#16a34a}
+.badge-expired{background:#fee2e2;color:#dc2626}.badge-inactive{background:#f1f5f9;color:#64748b}
+.badge-wiped{background:#fef3c7;color:#92400e}
+
+/* Action Buttons */
+.action-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.act-btn{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;
+display:inline-flex;align-items:center;gap:6px;transition:.15s;flex:1;justify-content:center;min-width:0}
+.act-btn:active{transform:scale(.96)}
+.act-btn.primary{background:var(--teal);color:#fff}
+.act-btn.danger{background:var(--red);color:#fff}
+.act-btn.warning{background:var(--amber);color:#fff}
+.act-btn.secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+.act-btn.green{background:var(--green);color:#fff}
+
+/* Search */
+.search-box{position:relative;margin-bottom:12px}
+.search-box input{width:100%;padding:11px 14px 11px 38px;border:1.5px solid var(--border);border-radius:12px;font-size:14px;
+background:var(--card);outline:none;transition:.2s}
+.search-box input:focus{border-color:var(--teal)}
+.search-box .s-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text2)}
+
+/* Tabs */
+.tab-row{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.tab-row::-webkit-scrollbar{display:none}
+.tab-pill{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;
+background:var(--bg);color:var(--text2);border:1px solid var(--border);transition:.15s;flex-shrink:0}
+.tab-pill.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+
+/* Detail Overlay */
+.overlay{position:fixed;inset:0;z-index:200;display:none}
+.overlay.open{display:flex;flex-direction:column}
+.overlay-bg{position:absolute;inset:0;background:rgba(0,0,0,.4)}
+.overlay-panel{position:relative;margin-top:auto;max-height:92vh;background:var(--card);border-radius:20px 20px 0 0;
+overflow-y:auto;-webkit-overflow-scrolling:touch;animation:slideUp .3s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.overlay-header{position:sticky;top:0;background:var(--card);padding:16px;border-bottom:1px solid var(--border);
+display:flex;align-items:center;gap:10px;z-index:1}
+.overlay-header h3{flex:1;font-size:16px;font-weight:700}
+.overlay-close{width:34px;height:34px;border-radius:50%;border:none;background:var(--bg);font-size:20px;cursor:pointer;
+display:flex;align-items:center;justify-content:center}
+.overlay-body{padding:16px}
+
+/* Stat Chips */
+.stat-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.stat-chip{padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;background:var(--bg);display:flex;gap:4px;align-items:center}
+
+/* Event / Error rows */
+.event-row{padding:10px 0;border-bottom:1px solid var(--border)}
+.event-row:last-child{border-bottom:none}
+.event-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+.event-type.error{color:var(--red)}.event-type.warning{color:var(--amber)}.event-type.info{color:var(--blue)}
+.event-type.fix{color:var(--green)}
+.event-msg{font-size:13px;font-weight:500}
+.event-time{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* Toast */
+.toast{position:fixed;bottom:calc(var(--bottom-h) + 16px);left:50%;transform:translateX(-50%);
+background:#1e293b;color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;
+z-index:999;opacity:0;transition:.3s;pointer-events:none;max-width:90%;text-align:center}
+.toast.show{opacity:1}
+
+/* Loading */
+.spinner{display:inline-block;width:18px;height:18px;border:2.5px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-center{display:flex;justify-content:center;padding:40px}
+
+/* Empty state */
+.empty{text-align:center;padding:40px 20px;color:var(--text2)}
+.empty-icon{font-size:48px;margin-bottom:8px}
+
+/* Chart bars */
+.chart-bars{display:flex;align-items:flex-end;gap:3px;height:80px;margin-top:8px}
+.chart-bar{flex:1;background:var(--teal);border-radius:4px 4px 0 0;min-width:6px;transition:.3s;position:relative}
+
+/* Ticket badge */
+.tkt-priority{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;text-transform:uppercase}
+.tkt-priority.high{background:#fee2e2;color:#dc2626}.tkt-priority.medium{background:#fef3c7;color:#92400e}
+.tkt-priority.low{background:#dbeafe;color:#2563eb}
+
+/* Affiliate stat */
+.aff-stat{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.aff-stat:last-child{border-bottom:none}
+.aff-stat label{font-size:13px;color:var(--text2)}.aff-stat span{font-size:14px;font-weight:700}
+
+/* Responsive */
+@media(min-width:480px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:768px){.content{padding-left:24px;padding-right:24px;max-width:700px}}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ LOGIN ════════════════════ -->
+<div id="loginScreen">
+<div class="login-box">
+<img src="/static/logo.png?v=3" alt="Sarathi-AI">
+<h2>Cockpit Login</h2>
+<p>Super Admin Access Only</p>
+<div id="loginError" class="login-error"></div>
+<div id="loginStep1">
+<div class="login-field"><span class="icon">📱</span><input id="loginPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Phone number" autocomplete="tel"></div>
+<div class="login-field"><span class="icon">🔒</span><input id="loginPass" type="password" placeholder="Password" autocomplete="current-password"></div>
+<button class="login-btn" onclick="doLogin()">Login →</button>
+</div>
+<div id="loginStep2" style="display:none">
+<p style="margin-bottom:14px;font-size:13px;color:var(--text2)">Enter OTP sent to your phone</p>
+<div class="otp-row"><input id="otpInput" type="tel" inputmode="numeric" maxlength="6" placeholder="OTP"></div>
+<button class="login-btn" onclick="verifyOTP()">Verify OTP</button>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════ APP SHELL ════════════════════ -->
+<div id="appShell">
+
+<!-- Top Bar -->
+<div class="topbar">
+<div class="topbar-title">✈️ <span>Cockpit</span></div>
+<button class="topbar-btn" onclick="refreshAll()" title="Refresh">🔄</button>
+<button class="topbar-btn" id="notifBtn" onclick="showPanel('alerts')" title="Alerts">
+🔔<span class="badge" id="alertBadge" style="display:none">0</span>
+</button>
+<button class="topbar-btn" onclick="doLogout()" title="Logout">🚪</button>
+</div>
+
+<!-- ── PANELS ── -->
+<div class="content">
+
+<!-- ═══ COMMAND CENTER (Home) ═══ -->
+<div class="panel active" id="panelHome">
+
+<!-- System Health Strip -->
+<div class="card" id="healthCard">
+<div class="card-title">🛡️ System Health</div>
+<div id="healthList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" id="kpiGrid">
+<div class="kpi teal"><div class="kpi-val" id="kTotal">—</div><div class="kpi-label">Total Firms</div></div>
+<div class="kpi green"><div class="kpi-val" id="kActive">—</div><div class="kpi-label">Active</div></div>
+<div class="kpi blue"><div class="kpi-val" id="kTrials">—</div><div class="kpi-label">Trials</div></div>
+<div class="kpi amber"><div class="kpi-val" id="kPaid">—</div><div class="kpi-label">Paid</div></div>
+<div class="kpi red"><div class="kpi-val" id="kExpired">—</div><div class="kpi-label">Expired</div></div>
+<div class="kpi indigo"><div class="kpi-val" id="kMRR">—</div><div class="kpi-label">MRR ₹</div></div>
+</div>
+
+<!-- Signup Trend -->
+<div class="card" style="margin-top:12px">
+<div class="card-title">📈 Signups (30d)</div>
+<div class="stat-chips" id="signupChips"></div>
+<div class="chart-bars" id="signupChart"></div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+<div class="card-title">⚡ Quick Actions</div>
+<div class="action-bar">
+<button class="act-btn primary" onclick="showPanel('tenants')">🏢 Tenants</button>
+<button class="act-btn secondary" onclick="showCreateFirm()">➕ Create Firm</button>
+</div>
+<div class="action-bar">
+<button class="act-btn warning" onclick="showPanel('support')">🎫 Tickets</button>
+<button class="act-btn green" onclick="showPanel('affiliates')">🤝 Affiliates</button>
+</div>
+<div class="action-bar">
+<button class="act-btn secondary" onclick="exportData('tenants')">📥 Export CSV</button>
+<button class="act-btn danger" onclick="serverRestart()">🔄 Restart Server</button>
+</div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+<div class="card-title">📋 Recent Activity</div>
+<div id="recentAudit"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+</div>
+
+<!-- ═══ TENANTS ═══ -->
+<div class="panel" id="panelTenants">
+<div class="search-box"><span class="s-icon">🔍</span><input id="tenantSearch" placeholder="Search firms..." oninput="filterTenants()"></div>
+<div class="tab-row" id="tenantTabs">
+<div class="tab-pill active" data-filter="all" onclick="setTenantFilter(this)">All</div>
+<div class="tab-pill" data-filter="trial" onclick="setTenantFilter(this)">Trial</div>
+<div class="tab-pill" data-filter="paid" onclick="setTenantFilter(this)">Paid</div>
+<div class="tab-pill" data-filter="expired" onclick="setTenantFilter(this)">Expired</div>
+<div class="tab-pill" data-filter="inactive" onclick="setTenantFilter(this)">Inactive</div>
+</div>
+<div id="tenantList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<!-- ═══ ALERTS & EVENTS ═══ -->
+<div class="panel" id="panelAlerts">
+<div class="card">
+<div class="card-title">⚠️ System Alerts</div>
+<div class="action-bar" style="margin-top:0;margin-bottom:12px">
+<button class="act-btn primary" onclick="runAnomalyScan()">🔍 Scan Now</button>
+<button class="act-btn secondary" onclick="aiClassify()">🤖 AI Classify</button>
+<button class="act-btn green" onclick="autoRemediate()">🔧 Auto-Fix</button>
+</div>
+<div class="tab-row">
+<div class="tab-pill active" data-ef="all" onclick="setEventFilter(this)">All</div>
+<div class="tab-pill" data-ef="error" onclick="setEventFilter(this)">Errors</div>
+<div class="tab-pill" data-ef="warning" onclick="setEventFilter(this)">Warnings</div>
+<div class="tab-pill" data-ef="auto_fix" onclick="setEventFilter(this)">Auto-Fixed</div>
+</div>
+</div>
+<div id="eventList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<!-- ═══ SUPPORT TICKETS ═══ -->
+<div class="panel" id="panelSupport">
+<div class="card">
+<div class="card-title">🎫 Support Tickets</div>
+<div class="stat-chips" id="ticketStats"></div>
+<div class="tab-row">
+<div class="tab-pill active" data-tf="all" onclick="setTicketFilter(this)">All</div>
+<div class="tab-pill" data-tf="open" onclick="setTicketFilter(this)">Open</div>
+<div class="tab-pill" data-tf="in_progress" onclick="setTicketFilter(this)">In Progress</div>
+<div class="tab-pill" data-tf="resolved" onclick="setTicketFilter(this)">Resolved</div>
+</div>
+</div>
+<div id="ticketList"><div class="loading-center"><div class="spinner"></div></div></div>
+<div class="card" style="margin-top:12px">
+<div class="card-title">🎫 Affiliate Support Tickets</div>
+<div class="tab-row">
+<div class="tab-pill active" data-atf="all" onclick="setAffTicketFilter(this)">All</div>
+<div class="tab-pill" data-atf="open" onclick="setAffTicketFilter(this)">Open</div>
+<div class="tab-pill" data-atf="in_progress" onclick="setAffTicketFilter(this)">In Progress</div>
+<div class="tab-pill" data-atf="resolved" onclick="setAffTicketFilter(this)">Resolved</div>
+</div>
+<div id="affTicketStats" style="margin-bottom:8px"></div>
+<div id="affTicketList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+</div>
+
+<!-- ═══ AFFILIATES ═══ -->
+<div class="panel" id="panelAffiliates">
+<div class="card">
+<div class="card-title">🤝 Affiliate Program</div>
+<div id="affStats"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+<div class="card">
+<div class="card-title" style="display:flex;justify-content:space-between;align-items:center">📋 Affiliates<div id="affBulkBar" style="display:none"><span id="affSelCount" style="font-size:12px;margin-right:8px">0 selected</span><button class="act-btn danger" style="padding:4px 10px;font-size:11px" onclick="bulkDeleteAffiliates()">🗑️ Delete Selected</button></div></div>
+<div class="tab-row">
+<div class="tab-pill active" data-af="all" onclick="setAffFilter(this)">All</div>
+<div class="tab-pill" data-af="active" onclick="setAffFilter(this)">Active</div>
+<div class="tab-pill" data-af="pending_verification" onclick="setAffFilter(this)">Pending</div>
+<div class="tab-pill" data-af="inactive" onclick="setAffFilter(this)">Inactive</div>
+</div>
+<div id="affList"></div>
+</div>
+<div class="card">
+<div class="card-title">💰 Payout Queue</div>
+<div id="payoutQueue"></div>
+</div>
+</div>
+
+<!-- Affiliate Edit Overlay -->
+<div class="overlay" id="affEditOverlay">
+<div class="overlay-bg" onclick="closeOverlay('affEditOverlay')"></div>
+<div class="overlay-panel">
+<div class="overlay-header"><h3 id="ovAffEditTitle">Edit Affiliate</h3><button class="overlay-close" onclick="closeOverlay('affEditOverlay')">✕</button></div>
+<div class="overlay-body" id="ovAffEditBody"></div>
+</div>
+</div>
+
+<!-- Affiliate Ticket Detail Overlay -->
+<div class="overlay" id="affTicketOverlay">
+<div class="overlay-bg" onclick="closeOverlay('affTicketOverlay')"></div>
+<div class="overlay-panel">
+<div class="overlay-header"><h3 id="ovAffTicketTitle">Ticket</h3><button class="overlay-close" onclick="closeOverlay('affTicketOverlay')">✕</button></div>
+<div class="overlay-body" id="ovAffTicketBody"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+</div>
+
+<!-- ═══ HEALTH MONITOR ═══ -->
+<div class="panel" id="panelMonitor">
+<!-- Overall Status Banner -->
+<div class="card" id="monitorBanner" style="background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none">
+<div style="display:flex;align-items:center;gap:12px">
+<div id="monitorPulse" style="width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:24px">💚</div>
+<div style="flex:1">
+<div style="font-size:18px;font-weight:800" id="monitorTitle">System Healthy</div>
+<div style="font-size:12px;opacity:.85" id="monitorSub">Loading...</div>
+</div>
+<button class="act-btn" style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:8px 14px;font-size:12px;flex:none" onclick="runHealthCheck()">▶ Run Now</button>
+</div>
+</div>
+
+<!-- Check Summary Cards -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px" id="monitorKpis">
+<div class="kpi green" style="padding:10px 8px"><div class="kpi-val" id="mHealthy">—</div><div class="kpi-label">Healthy</div></div>
+<div class="kpi amber" style="padding:10px 8px"><div class="kpi-val" id="mWarning">—</div><div class="kpi-label">Warnings</div></div>
+<div class="kpi red" style="padding:10px 8px"><div class="kpi-val" id="mCritical">—</div><div class="kpi-label">Critical</div></div>
+<div class="kpi teal" style="padding:10px 8px"><div class="kpi-val" id="mFixed">—</div><div class="kpi-label">Auto-Fixed</div></div>
+</div>
+
+<!-- Live Checks Grid -->
+<div class="card">
+<div class="card-title">🔍 Latest Health Checks</div>
+<div id="monitorChecks"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<!-- Recent History -->
+<div class="card">
+<div class="card-title">📊 Check History (Last 10 Runs)</div>
+<div id="monitorHistory"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<!-- Alert Log -->
+<div class="card">
+<div class="card-title">🔔 Recent Alerts</div>
+<div id="monitorAlerts"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+</div>
+
+<!-- ═══ MORE (Bots / Revenue / Audit / Export) ═══ -->
+<div class="panel" id="panelMore">
+<div class="card">
+<div class="card-title">🤖 Telegram Bots</div>
+<div id="botList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+<div class="card">
+<div class="card-title">💰 Revenue</div>
+<div id="revenueData"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+<div class="card">
+<div class="card-title">📊 Audit Log</div>
+<div class="search-box"><span class="s-icon">🔍</span><input id="auditSearch" placeholder="Search audit..." oninput="filterAudit()"></div>
+<div id="auditList"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+<div class="card">
+<div class="card-title">📥 Exports &amp; Tools</div>
+<div class="action-bar"><button class="act-btn secondary" onclick="exportData('tenants')">📊 Tenants CSV</button><button class="act-btn secondary" onclick="exportData('leads')">📋 Leads CSV</button></div>
+<div class="action-bar"><button class="act-btn secondary" onclick="exportData('affiliates')">🤝 Affiliates CSV</button><button class="act-btn secondary" onclick="loadDuplicates()">🔍 Duplicates</button></div>
+</div>
+<div id="duplicatesCard" style="display:none"></div>
+</div>
+</div>
+
+<!-- Bottom Navigation -->
+<div class="bottomnav">
+<div class="bnav-item active" onclick="showPanel('home')"><div class="bnav-icon">🏠</div>Home</div>
+<div class="bnav-item" onclick="showPanel('tenants')"><div class="bnav-icon">🏢</div>Firms</div>
+<div class="bnav-item" onclick="showPanel('monitor')"><div class="bnav-icon">📡</div>Monitor</div>
+<div class="bnav-item" onclick="showPanel('alerts')"><div class="bnav-icon">⚠️</div>Alerts</div>
+<div class="bnav-item" onclick="showPanel('support')"><div class="bnav-icon">🎫</div>Support</div>
+<div class="bnav-item" onclick="showPanel('more')"><div class="bnav-icon">⚙️</div>More</div>
+</div>
+
+<!-- ═══ OVERLAYS ═══ -->
+
+<!-- Tenant Detail -->
+<div class="overlay" id="tenantOverlay">
+<div class="overlay-bg" onclick="closeOverlay('tenantOverlay')"></div>
+<div class="overlay-panel">
+<div class="overlay-header"><h3 id="ovTenantName">Tenant</h3><button class="overlay-close" onclick="closeOverlay('tenantOverlay')">✕</button></div>
+<div class="overlay-body" id="ovTenantBody"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+</div>
+
+<!-- Create Firm -->
+<div class="overlay" id="createFirmOverlay">
+<div class="overlay-bg" onclick="closeOverlay('createFirmOverlay')"></div>
+<div class="overlay-panel">
+<div class="overlay-header"><h3>➕ Create New Firm</h3><button class="overlay-close" onclick="closeOverlay('createFirmOverlay')">✕</button></div>
+<div class="overlay-body">
+<div class="login-field" style="margin-bottom:10px"><span class="icon">🏢</span><input id="cfFirm" placeholder="Firm name" style="padding-left:38px"></div>
+<div class="login-field" style="margin-bottom:10px"><span class="icon">👤</span><input id="cfOwner" placeholder="Owner name" style="padding-left:38px"></div>
+<div class="login-field" style="margin-bottom:10px"><span class="icon">📱</span><input id="cfPhone" type="tel" placeholder="Phone (10 digits)" maxlength="10" style="padding-left:38px"></div>
+<div class="login-field" style="margin-bottom:10px"><span class="icon">📧</span><input id="cfEmail" type="email" placeholder="Email" style="padding-left:38px"></div>
+<div style="margin-bottom:14px">
+<label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block">Plan</label>
+<select id="cfPlan" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:14px">
+<option value="trial">Trial (14 days)</option><option value="individual">Individual ₹499</option>
+<option value="team">Team ₹999</option><option value="enterprise">Enterprise ₹1999</option>
+</select>
+</div>
+<button class="act-btn primary" style="width:100%" onclick="createFirm()">Create Firm</button>
+</div>
+</div>
+</div>
+
+<!-- Ticket Detail -->
+<div class="overlay" id="ticketOverlay">
+<div class="overlay-bg" onclick="closeOverlay('ticketOverlay')"></div>
+<div class="overlay-panel">
+<div class="overlay-header"><h3 id="ovTicketTitle">Ticket</h3><button class="overlay-close" onclick="closeOverlay('ticketOverlay')">✕</button></div>
+<div class="overlay-body" id="ovTicketBody"></div>
+</div>
+</div>
+
+</div><!-- /appShell -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   COCKPIT — Sarathi-AI Super Admin (Mobile-First)
+   All 60+ SA API endpoints wired. Bottom nav, card UI, overlays.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const API='/api/sa';
+let TOKEN=localStorage.getItem('sa_token')||'';
+let _loginRequestId='';
+let _currentPanel='home';
+let _tenants=[];let _tenantFilter='all';
+let _events=[];let _eventFilter='all';
+let _tickets=[];let _ticketFilter='all';
+let _affiliates=[];let _affFilter='all';
+let _auditAll=[];
+
+/* ── Auth ─────────────────────────────────────────────────────── */
+function hdrs(x){return{...x,'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}}
+
+async function doLogin(){
+  const phone=document.getElementById('loginPhone').value.trim();
+  const pass=document.getElementById('loginPass').value;
+  if(phone.length!==10){showLoginErr('Enter 10-digit phone');return}
+  if(!pass){showLoginErr('Enter password');return}
+  try{
+    const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password:pass}),credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok){showLoginErr(d.detail||'Login failed');return}
+    if(d.status==='authenticated'){TOKEN='cookie';localStorage.setItem('sa_token','cookie');enterApp()}
+    else if(d.requires_otp){_loginRequestId=d.request_id;document.getElementById('loginStep1').style.display='none';document.getElementById('loginStep2').style.display='block';showLoginErr('')}
+    else if(d.token){TOKEN=d.token;localStorage.setItem('sa_token',TOKEN);enterApp()}
+  }catch(e){showLoginErr('Network error')}
+}
+
+async function verifyOTP(){
+  const otp=document.getElementById('otpInput').value.trim();
+  if(otp.length<4){showLoginErr('Enter OTP');return}
+  try{
+    const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:_loginRequestId,otp}),credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok){showLoginErr(d.detail||'Invalid OTP');return}
+    if(d.status==='authenticated'){TOKEN='cookie';localStorage.setItem('sa_token','cookie');enterApp()}
+    else if(d.token){TOKEN=d.token;localStorage.setItem('sa_token',TOKEN);enterApp()}
+  }catch(e){showLoginErr('Network error')}
+}
+
+function showLoginErr(msg){const el=document.getElementById('loginError');el.textContent=msg;el.style.display=msg?'block':'none'}
+
+async function doLogout(){
+  try{await fetch(API+'/logout',{method:'POST',headers:hdrs()})}catch(e){}
+  TOKEN='';localStorage.removeItem('sa_token');location.reload()
+}
+
+async function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='block';
+  refreshAll();
+}
+
+// Check session on load
+(async function(){
+  if(!TOKEN)return;
+  try{const r=await fetch(API+'/me',{headers:hdrs(),credentials:'same-origin'});if(r.ok)enterApp();else{TOKEN='';localStorage.removeItem('sa_token')}}
+  catch(e){TOKEN='';localStorage.removeItem('sa_token')}
+})();
+
+/* ── Navigation ───────────────────────────────────────────────── */
+const panelMap={home:'panelHome',tenants:'panelTenants',alerts:'panelAlerts',support:'panelSupport',more:'panelMore',affiliates:'panelAffiliates',monitor:'panelMonitor'};
+
+function showPanel(key){
+  _currentPanel=key;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  const t=document.getElementById(panelMap[key]);if(t)t.classList.add('active');
+  const names=['home','tenants','monitor','alerts','support','more'];
+  document.querySelectorAll('.bnav-item').forEach((n,i)=>{n.classList.toggle('active',names[i]===key||(key==='affiliates'&&names[i]==='more'))});
+  if(key==='tenants'&&!_tenants.length)loadTenants();
+  if(key==='alerts'&&!_events.length)loadEvents();
+  if(key==='support'&&!_tickets.length){loadTickets();loadAffTickets()}
+  if(key==='affiliates'){loadAffiliates();loadAffTickets()}
+  if(key==='more'){loadBots();loadRevenue();loadAudit()}
+  if(key==='monitor')loadMonitor();
+}
+
+/* ── Refresh All ──────────────────────────────────────────────── */
+async function refreshAll(){
+  loadDashboard();loadHealth();loadEvents();
+  if(_currentPanel==='tenants')loadTenants();
+  if(_currentPanel==='support'){loadTickets();loadAffTickets()}
+  if(_currentPanel==='more'){loadBots();loadRevenue();loadAudit()}
+  if(_currentPanel==='monitor')loadMonitor();
+}
+
+/* ── Dashboard ────────────────────────────────────────────────── */
+async function loadDashboard(){
+  try{
+    const r=await fetch(API+'/dashboard',{headers:hdrs()});if(!r.ok)return;
+    const d=await r.json();const k=d.kpis;
+    $('kTotal').textContent=k.total_tenants;$('kActive').textContent=k.active;
+    $('kTrials').textContent=k.trials;$('kPaid').textContent=k.paid;
+    $('kExpired').textContent=k.expired;$('kMRR').textContent=fmtK(k.mrr);
+    $('signupChips').innerHTML=`<div class="stat-chip">Today <b>${k.signups_today}</b></div><div class="stat-chip">7d <b>${k.signups_7d}</b></div><div class="stat-chip">30d <b>${k.signups_30d}</b></div><div class="stat-chip">Agents <b>${k.total_agents}</b></div><div class="stat-chip">Leads <b>${k.total_leads}</b></div><div class="stat-chip" style="color:#f59e0b">🏆 Founding <b>${k.founding_customers||0}/500</b></div>`;
+    const trend=d.signup_trend||[];
+    if(trend.length){const mx=Math.max(...trend.map(t=>t.count),1);$('signupChart').innerHTML=trend.map(t=>`<div class="chart-bar" style="height:${Math.max(t.count/mx*100,4)}%" title="${t.day}: ${t.count}"></div>`).join('')}
+    const audit=d.recent_audit||[];
+    $('recentAudit').innerHTML=audit.length?audit.slice(0,8).map(a=>`<div class="event-row"><div class="event-type info">${esc(a.action)}</div><div class="event-msg">${esc((a.detail||'').slice(0,80))}</div><div class="event-time">${a.firm_name?esc(a.firm_name)+' · ':''}${timeAgo(a.created_at)}</div></div>`).join(''):'<div class="empty">No recent activity</div>';
+  }catch(e){console.error('Dashboard error',e)}
+}
+
+/* ── System Health ────────────────────────────────────────────── */
+async function loadHealth(){
+  try{
+    const r=await fetch(API+'/system-status',{headers:hdrs()});if(!r.ok)return;
+    const d=await r.json();const comps=d.components||[];
+    $('healthList').innerHTML=comps.map(c=>{
+      const s=c.status;const dot=s==='healthy'||s==='configured'?'ok':s==='warning'||s==='idle'?'warn':s==='down'?'err':'off';
+      return`<div class="health-row"><div class="health-dot ${dot}"></div><div class="health-name">${esc(c.name)}</div><div class="health-detail">${esc(c.detail||'')}</div></div>`;
+    }).join('');
+  }catch(e){}
+}
+
+/* ── Tenants ──────────────────────────────────────────────────── */
+async function loadTenants(){
+  try{const r=await fetch(API+'/tenants?limit=500',{headers:hdrs()});if(!r.ok)return;const d=await r.json();_tenants=d.tenants||d||[];renderTenants()}catch(e){}
+}
+
+function renderTenants(){
+  let list=_tenants;const q=$('tenantSearch').value.toLowerCase();
+  if(q)list=list.filter(t=>(t.firm_name||'').toLowerCase().includes(q)||(t.owner_name||'').toLowerCase().includes(q)||(t.phone||'').includes(q));
+  if(_tenantFilter!=='all'){
+    if(_tenantFilter==='paid')list=list.filter(t=>t.subscription_status==='paid'||t.subscription_status==='active');
+    else if(_tenantFilter==='inactive')list=list.filter(t=>!t.is_active);
+    else list=list.filter(t=>t.subscription_status===_tenantFilter);
+  }
+  if(!list.length){$('tenantList').innerHTML='<div class="empty"><div class="empty-icon">🏢</div>No firms found</div>';return}
+  const colors=['#0d9488','#6366f1','#f59e0b','#3b82f6','#ef4444','#22c55e','#8b5cf6','#ec4899'];
+  $('tenantList').innerHTML=list.map(t=>{
+    const st=t.subscription_status||'trial';
+    const badge=st==='paid'||st==='active'?'badge-paid':st==='trial'?'badge-trial':st==='expired'?'badge-expired':st==='wiped'?'badge-wiped':'badge-inactive';
+    const bgc=colors[(t.tenant_id||0)%colors.length];
+    const ini=(t.firm_name||'?').slice(0,2).toUpperCase();
+    const foundingBadge=t.founding_discount?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600">🏆</span>':'';
+    const refBadge=t.referred_by?'<span style="background:#dbeafe;color:#1e40af;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px">🤝 '+esc(t.referred_by)+'</span>':'';
+    return`<div class="list-item" onclick="openTenant(${t.tenant_id})"><div class="list-avatar" style="background:${bgc}">${ini}</div><div class="list-body"><div class="list-title">${esc(t.firm_name||'Unknown')}${foundingBadge}${refBadge}</div><div class="list-sub">${esc(t.owner_name||'')} · ${esc(t.phone||'')}</div></div><div class="list-badge ${badge}">${st}</div></div>`;
+  }).join('');
+}
+
+function filterTenants(){renderTenants()}
+function setTenantFilter(el){document.querySelectorAll('#tenantTabs .tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_tenantFilter=el.dataset.filter;renderTenants()}
+
+/* ── Tenant Detail ────────────────────────────────────────────── */
+async function openTenant(id){
+  $('ovTenantName').textContent='Loading...';$('ovTenantBody').innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  openOverlay('tenantOverlay');
+  try{
+    const[tr,er]=await Promise.all([
+      fetch(API+'/tenant/'+id,{headers:hdrs()}).then(r=>r.json()),
+      fetch(API+'/tenant/'+id+'/errors?limit=20',{headers:hdrs()}).then(r=>r.ok?r.json():{events:[],error_logs:[],dead_letters:[]}).catch(()=>({events:[],error_logs:[],dead_letters:[]}))
+    ]);
+    const t=tr.tenant||tr;$('ovTenantName').textContent=t.firm_name||'Tenant #'+id;
+    const st=t.subscription_status||'trial';
+    const badge=st==='paid'||st==='active'?'badge-paid':st==='trial'?'badge-trial':st==='expired'?'badge-expired':'badge-inactive';
+
+    const allIssues=[...(er.events||[]).map(e=>({...e,source:'system'})),...(er.error_logs||[]).map(e=>({...e,source:'audit',event_type:e.action}))];
+    allIssues.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+    const hasIssues=allIssues.length>0;const deadCount=(er.dead_letters||[]).length;
+
+    const foundingInfo=t.founding_discount?`<div class="aff-stat"><label>🏆 Founding</label><span style="color:#f59e0b;font-weight:600">Yes — 20% off until ${fmtDate(t.founding_discount_until)}</span></div>`:'';
+    const referredInfo=t.referred_by?`<div class="aff-stat"><label>🤝 Referred By</label><span style="color:#1e40af;font-weight:600">${esc(t.referred_by)} (${esc(t.referred_code||'')})</span></div>`:'';
+    let h=`<div class="stat-chips"><div class="stat-chip"><span class="list-badge ${badge}">${st}</span></div><div class="stat-chip">Plan: <b>${t.plan||'trial'}</b></div>${t.is_active?'<div class="stat-chip" style="color:var(--green)">● Active</div>':'<div class="stat-chip" style="color:var(--red)">○ Inactive</div>'}${t.founding_discount?'<div class="stat-chip" style="color:#f59e0b;font-weight:600">🏆 Founding</div>':''}${t.referred_by?'<div class="stat-chip" style="color:#1e40af">🤝 Referred</div>':''}</div>
+    <div class="card" style="margin:0 0 12px"><div class="aff-stat"><label>📱 Phone</label><span>${esc(t.phone||'—')}</span></div><div class="aff-stat"><label>📧 Email</label><span style="font-size:12px">${esc(t.email||'—')}</span></div><div class="aff-stat"><label>👤 Owner</label><span>${esc(t.owner_name||'—')}</span></div><div class="aff-stat"><label>📅 Created</label><span>${fmtDate(t.created_at)}</span></div><div class="aff-stat"><label>⏰ Trial Ends</label><span>${fmtDate(t.trial_ends_at)}</span></div><div class="aff-stat"><label>👥 Agents</label><span>${t.agent_count??'—'}</span></div><div class="aff-stat"><label>📋 Leads</label><span>${t.lead_count??'—'}</span></div><div class="aff-stat"><label>🤖 Bot</label><span>${t.has_bot?'Active':t.tg_bot_token?'Configured':'—'}</span></div>${referredInfo}${foundingInfo}</div>`;
+
+    // Customer Health — the cockpit diagnostic view
+    h+=`<div class="card" style="margin:0 0 12px;border-color:${hasIssues?'var(--amber)':'var(--border)'}"><div class="card-title">${hasIssues?'🔴':'✅'} Customer Health ${hasIssues?'('+allIssues.length+' issues)':'(No issues)'}</div>`;
+    if(deadCount>0)h+=`<div style="background:#fef2f2;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px"><b>⚠️ ${deadCount} Dead Letters</b> — Messages that failed processing.</div>`;
+    if(hasIssues){
+      h+=allIssues.slice(0,10).map(e=>{
+        const tp=(e.event_type||e.severity||'info').toLowerCase();
+        const cls=tp.includes('error')||tp.includes('fail')||tp.includes('denied')?'error':tp.includes('warn')?'warning':tp.includes('fix')||tp.includes('remediat')?'fix':'info';
+        const autoFixed=tp.includes('fix')||tp.includes('remediat')||(e.detail||'').toLowerCase().includes('auto');
+        return`<div class="event-row"><div class="event-type ${cls}">${autoFixed?'🔧 AUTO-FIXED':'📛 '+tp}</div><div class="event-msg">${esc((e.detail||e.message||'').slice(0,120))}</div><div class="event-time">${timeAgo(e.created_at)}</div></div>`;
+      }).join('');
+    }else{h+=`<div style="text-align:center;padding:16px;color:var(--green);font-size:14px">All systems operational for this firm ✓</div>`}
+    h+=`</div>`;
+
+    // Actions
+    h+=`<div class="card" style="margin:0"><div class="card-title">🎮 Actions</div>
+    <div class="action-bar">${st==='trial'?`<button class="act-btn primary" onclick="tenantAction(${id},'extend')">⏰ Extend Trial</button>`:''} ${st!=='paid'&&st!=='active'?`<button class="act-btn green" onclick="tenantAction(${id},'activate')">✅ Activate</button>`:''}<button class="act-btn warning" onclick="tenantAction(${id},'plan')">📦 Change Plan</button></div>
+    <div class="action-bar">${t.is_active?`<button class="act-btn secondary" onclick="tenantAction(${id},'deactivate')">⏸️ Deactivate</button>`:`<button class="act-btn green" onclick="tenantAction(${id},'activate')">▶️ Reactivate</button>`}<button class="act-btn secondary" onclick="tenantAction(${id},'bot-restart')">🤖 Restart Bot</button></div>
+    <div class="action-bar"><button class="act-btn danger" onclick="tenantAction(${id},'delete')">🗑️ Delete</button><button class="act-btn secondary" onclick="tenantAction(${id},'impersonate')">👁️ Impersonate</button></div></div>`;
+
+    $('ovTenantBody').innerHTML=h;
+  }catch(e){$('ovTenantBody').innerHTML='<div class="empty">Error loading tenant</div>'}
+}
+
+async function tenantAction(id,action){
+  let url,method='POST',body=null;
+  switch(action){
+    case 'extend':const days=prompt('Extend trial by how many days?','7');if(!days)return;url=`${API}/tenant/${id}/extend`;body={days:parseInt(days)};break;
+    case 'activate':const plan=prompt('Plan (trial / individual / team / enterprise):','individual');if(!plan)return;url=`${API}/tenant/${id}/activate?plan=${encodeURIComponent(plan)}`;break;
+    case 'deactivate':if(!confirm('Deactivate this firm?'))return;url=`${API}/tenant/${id}/deactivate`;break;
+    case 'delete':if(!confirm('⚠️ DELETE permanently?'))return;if(!confirm('Are you sure?'))return;url=`${API}/tenant/${id}`;method='DELETE';break;
+    case 'plan':const np=prompt('New plan (trial / individual / team / enterprise):');if(!np)return;url=`${API}/tenant/${id}/plan?plan=${encodeURIComponent(np)}`;break;
+    case 'bot-restart':url=`${API}/tenant/${id}/bot/restart`;break;
+    case 'impersonate':url=`${API}/tenant/${id}/impersonate`;break;
+    default:return;
+  }
+  try{
+    const opts={method,headers:hdrs()};if(body)opts.body=JSON.stringify(body);
+    const r=await fetch(url,opts);const d=await r.json();
+    if(r.ok){
+      if(action==='impersonate' && d.token){
+        const imp=encodeURIComponent(d.token);
+        const firm=encodeURIComponent(d.firm_name||'');
+        window.open(`/dashboard?_imp_token=${imp}&_imp_firm=${firm}`,'_blank');
+        toast('👁️ Impersonating '+esc(d.firm_name||'Tenant'));
+        return;
+      }
+      toast('✅ '+action+' done');loadTenants();openTenant(id)
+    }else{toast('❌ '+(d.detail||'Failed'))}
+  }catch(e){toast('❌ Network error')}
+}
+
+/* ── Events / Alerts ──────────────────────────────────────────── */
+async function loadEvents(){
+  try{
+    const r=await fetch(API+'/events?limit=100',{headers:hdrs()});if(!r.ok)return;
+    const d=await r.json();_events=d.events||d||[];
+    const unresolved=_events.filter(e=>!e.resolved).length;
+    const b=$('alertBadge');if(unresolved>0){b.textContent=unresolved;b.style.display='flex'}else{b.style.display='none'}
+    renderEvents();
+  }catch(e){}
+}
+
+function renderEvents(){
+  let list=_events;if(_eventFilter!=='all')list=list.filter(e=>(e.event_type||e.severity||'').toLowerCase().includes(_eventFilter));
+  if(!list.length){$('eventList').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">✅</div>No alerts</div></div>';return}
+  $('eventList').innerHTML=list.map(e=>{
+    const tp=(e.event_type||e.severity||'info').toLowerCase();
+    const cls=tp.includes('error')?'error':tp.includes('warn')?'warning':tp.includes('fix')||tp.includes('remediat')?'fix':'info';
+    return`<div class="card" style="margin-bottom:8px;${e.resolved?'opacity:.6':''}"><div style="display:flex;justify-content:space-between;align-items:center"><div class="event-type ${cls}">${esc(e.event_type||tp)}</div>${!e.resolved?`<button class="act-btn secondary" style="padding:4px 10px;font-size:11px;flex:none" onclick="resolveEvent(${e.id||e.event_id})">✓ Resolve</button>`:'<span style="font-size:11px;color:var(--green)">✓ Resolved</span>'}</div><div class="event-msg" style="margin-top:4px">${esc((e.detail||e.message||'').slice(0,200))}</div><div class="event-time">${e.tenant_id?'Tenant #'+e.tenant_id+' · ':''}${timeAgo(e.created_at)}</div></div>`;
+  }).join('');
+}
+
+function setEventFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_eventFilter=el.dataset.ef;renderEvents()}
+async function resolveEvent(id){try{await fetch(API+'/events/'+id+'/resolve',{method:'POST',headers:hdrs()});toast('✅ Resolved');loadEvents()}catch(e){}}
+async function runAnomalyScan(){toast('🔍 Scanning...');try{const r=await fetch(API+'/anomaly-scan',{method:'POST',headers:hdrs()});const d=await r.json();toast('✅ '+(d.events_created||0)+' issues found');loadEvents()}catch(e){toast('❌ Failed')}}
+async function aiClassify(){toast('🤖 Classifying...');try{await fetch(API+'/ai-classify-events',{method:'POST',headers:hdrs()});toast('✅ Classified');loadEvents()}catch(e){toast('❌ Failed')}}
+async function autoRemediate(){if(!confirm('Run auto-fix?'))return;toast('🔧 Fixing...');try{const r=await fetch(API+'/auto-remediate',{method:'POST',headers:hdrs()});const d=await r.json();toast('✅ '+(d.total_fixes||0)+' fixed');loadEvents()}catch(e){toast('❌ Failed')}}
+
+/* ── Support Tickets ──────────────────────────────────────────── */
+async function loadTickets(){
+  try{
+    const[tr,sr]=await Promise.all([
+      fetch(API+'/tickets?limit=100',{headers:hdrs()}).then(r=>r.json()),
+      fetch(API+'/tickets/stats',{headers:hdrs()}).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]);
+    _tickets=tr.tickets||tr||[];
+    if(sr)$('ticketStats').innerHTML=Object.entries(sr).map(([k,v])=>`<div class="stat-chip">${k}: <b>${v}</b></div>`).join('');
+    renderTickets();
+  }catch(e){}
+}
+
+function renderTickets(){
+  let list=_tickets;if(_ticketFilter!=='all')list=list.filter(t=>(t.status||'').toLowerCase()===_ticketFilter);
+  if(!list.length){$('ticketList').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">🎫</div>No tickets</div></div>';return}
+  $('ticketList').innerHTML=list.map(t=>{
+    const pr=t.priority||'medium';
+    return`<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openTicket(${t.ticket_id||t.id})"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:14px">${esc((t.subject||t.title||'No subject').slice(0,50))}</b><span class="tkt-priority ${pr}">${pr}</span></div><div style="font-size:12px;color:var(--text2)">${esc(t.firm_name||'')} · ${esc(t.status||'')} · ${timeAgo(t.created_at)}</div></div>`;
+  }).join('');
+}
+
+function setTicketFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_ticketFilter=el.dataset.tf;renderTickets()}
+
+async function openTicket(id){
+  $('ovTicketTitle').textContent='Loading...';$('ovTicketBody').innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  openOverlay('ticketOverlay');
+  try{
+    const r=await fetch(API+'/tickets/'+id,{headers:hdrs()});const d=await r.json();
+    const t=d.ticket||d;const msgs=d.messages||d.replies||[];
+    $('ovTicketTitle').textContent='#'+id+' '+(t.subject||t.title||'');
+    let h=`<div class="stat-chips"><div class="stat-chip">Status: <b>${t.status||'—'}</b></div><div class="stat-chip tkt-priority ${t.priority||'medium'}">${t.priority||'—'}</div><div class="stat-chip">${esc(t.firm_name||'')} · ${esc(t.owner_name||'')}</div><div class="stat-chip">Category: <b>${t.category||'general'}</b></div></div>
+    <div class="card" style="margin:0 0 12px"><div style="font-size:14px;white-space:pre-wrap">${esc(t.description||t.body||'No description')}</div><div class="event-time">Created ${timeAgo(t.created_at)}</div></div>`;
+    if(msgs.length){h+=`<div class="card-title">💬 Messages (${msgs.length})</div>`;h+=msgs.map(m=>{const isAdmin=m.sender_type==='admin';return`<div class="card" style="margin:0 0 8px;${isAdmin?'background:var(--teal-bg,#f0fdfa);border-left:3px solid var(--teal)':'background:var(--bg);border-left:3px solid var(--indigo)'}"><div style="font-size:11px;font-weight:700;color:${isAdmin?'var(--teal)':'var(--indigo)'};margin-bottom:2px">${isAdmin?'🛡️ ':'👤 '}${esc(m.sender_name||m.sender_type||'User')}</div><div style="font-size:13px">${esc(m.message||m.body||'')}</div><div class="event-time">${timeAgo(m.created_at)}</div></div>`}).join('')}
+    h+=`<div style="margin-top:12px"><textarea id="ticketReply" rows="3" placeholder="Write a reply..." style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;resize:vertical"></textarea><div class="action-bar"><button class="act-btn primary" onclick="replyTicket(${id})">💬 Reply</button><button class="act-btn green" onclick="updateTicketStatus(${id},'resolved')">✅ Resolve</button><button class="act-btn secondary" onclick="updateTicketStatus(${id},'closed')">🔒 Close</button></div></div>`;
+    $('ovTicketBody').innerHTML=h;
+  }catch(e){$('ovTicketBody').innerHTML='<div class="empty">Error loading ticket</div>'}
+}
+
+async function replyTicket(id){const msg=document.getElementById('ticketReply').value.trim();if(!msg)return;try{await fetch(API+'/tickets/'+id+'/reply',{method:'POST',headers:hdrs(),body:JSON.stringify({message:msg})});toast('✅ Sent');openTicket(id)}catch(e){toast('❌ Failed')}}
+async function updateTicketStatus(id,status){try{await fetch(API+'/tickets/'+id,{method:'PUT',headers:hdrs(),body:JSON.stringify({status})});toast('✅ Updated');openTicket(id);loadTickets()}catch(e){toast('❌ Failed')}}
+
+/* ── Affiliates ───────────────────────────────────────────────── */
+async function loadAffiliates(){
+  try{
+    const[ar,sr,pq]=await Promise.all([
+      fetch(API+'/affiliates?limit=100',{headers:hdrs()}).then(r=>r.json()),
+      fetch(API+'/affiliates/stats',{headers:hdrs()}).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(API+'/affiliates/payout-queue',{headers:hdrs()}).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]);
+    _affiliates=ar.affiliates||ar||[];
+    if(sr)$('affStats').innerHTML=`<div class="aff-stat"><label>Total</label><span>${sr.total||0}</span></div><div class="aff-stat"><label>Active</label><span style="color:var(--green)">${sr.active||0}</span></div><div class="aff-stat"><label>Pending</label><span style="color:var(--amber)">${sr.pending||0}</span></div><div class="aff-stat"><label>Total Referrals</label><span>${sr.total_referrals||0}</span></div><div class="aff-stat"><label>Total Commission</label><span>₹${sr.total_commission||0}</span></div><div class="aff-stat"><label>Total Paid</label><span>₹${sr.total_paid||0}</span></div>`;
+    renderAffiliates();
+    const payouts=(pq&&pq.queue)||pq||[];
+    if(Array.isArray(payouts)&&payouts.length){$('payoutQueue').innerHTML=payouts.map(p=>`<div class="list-item"><div class="list-body"><div class="list-title">${esc(p.name||'Affiliate')}</div><div class="list-sub">₹${p.amount||0} via ${p.method||'UPI'}</div></div><button class="act-btn green" style="padding:6px 12px;font-size:12px;flex:none" onclick="processPayout(${p.affiliate_id},${p.amount||0})">💰 Pay</button></div>`).join('')}
+    else{$('payoutQueue').innerHTML='<div style="text-align:center;padding:16px;color:var(--text2);font-size:13px">No pending payouts</div>'}
+  }catch(e){console.error(e)}
+}
+
+let _affSelected=new Set();
+
+function renderAffiliates(){
+  let list=_affiliates;if(_affFilter!=='all')list=list.filter(a=>(a.status||'')==_affFilter);
+  _affSelected.clear();updateAffBulkBar();
+  if(!list.length){$('affList').innerHTML='<div class="empty">No affiliates</div>';return}
+  $('affList').innerHTML=list.map(a=>{
+    const pending=a.status==='pending_verification';
+    const stColor=a.status==='active'?'var(--green)':a.status==='inactive'?'var(--red)':'var(--amber)';
+    return`<div class="list-item" style="cursor:pointer"><input type="checkbox" style="margin-right:8px;cursor:pointer;width:16px;height:16px;flex:none" onchange="toggleAffSelect(${a.affiliate_id},this.checked)" onclick="event.stopPropagation()"><div class="list-avatar" style="background:${stColor}" onclick="openAffEdit(${a.affiliate_id})">🤝</div><div class="list-body" onclick="openAffEdit(${a.affiliate_id})"><div class="list-title">${esc(a.name||'')} <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${stColor};color:#fff">${a.status||'—'}</span></div><div class="list-sub">${esc(a.referral_code||'')} · 📧 ${esc(a.email||'—')} · 📱 ${esc(a.phone||'—')}</div><div class="list-sub">${a.total_referrals||0} refs · ₹${a.total_earned||0} earned · ${a.commission_pct||20}% commission</div></div><div style="display:flex;gap:4px;flex:none">${pending?`<button class="act-btn green" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();approveAffiliate(${a.affiliate_id})">✓</button>`:''}<button class="act-btn secondary" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();openAffEdit(${a.affiliate_id})" title="Edit">✏️</button><button class="act-btn danger" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();deleteAffiliate(${a.affiliate_id},'${esc(a.name||'')}')" title="Delete">🗑️</button></div></div>`;
+  }).join('');
+}
+
+function toggleAffSelect(id,checked){if(checked)_affSelected.add(id);else _affSelected.delete(id);updateAffBulkBar()}
+function updateAffBulkBar(){const bar=$('affBulkBar');const cnt=_affSelected.size;bar.style.display=cnt>0?'':'none';$('affSelCount').textContent=cnt+' selected'}
+
+async function deleteAffiliate(id,name){
+  if(!confirm(`Remove "${name}" from active affiliates?\n\nReferral data will be preserved.`))return;
+  try{await fetch(API+'/affiliates/'+id,{method:'DELETE',headers:hdrs()});toast('✅ Affiliate removed');loadAffiliates()}catch(e){toast('❌ Failed')}
+}
+
+async function bulkDeleteAffiliates(){
+  const ids=[..._affSelected];
+  if(!ids.length)return;
+  if(!confirm(`Remove ${ids.length} affiliate(s)?\n\nReferral data will be preserved.`))return;
+  try{await fetch(API+'/affiliates/bulk',{method:'DELETE',headers:hdrs(),body:JSON.stringify({ids})});toast('✅ '+ids.length+' affiliates removed');_affSelected.clear();loadAffiliates()}catch(e){toast('❌ Failed')}
+}
+
+async function openAffEdit(id){
+  const a=_affiliates.find(x=>x.affiliate_id===id);if(!a)return;
+  $('ovAffEditTitle').textContent='Edit: '+esc(a.name||'Affiliate');
+  let refs='';
+  try{const r=await fetch(API+'/affiliates/'+id+'/referrals',{headers:hdrs()});if(r.ok){const d=await r.json();const rl=d.referrals||[];
+  if(rl.length){refs=`<div style="margin-top:14px"><div style="font-size:13px;font-weight:700;margin-bottom:6px">📋 Referrals (${rl.length})</div>`+rl.map(r=>`<div class="list-item" style="padding:6px 0"><div class="list-body"><div class="list-title" style="font-size:13px">${esc(r.referred_name||r.referred_phone||'—')}</div><div class="list-sub">${r.status||'—'} · ₹${r.commission_amount||0} · ${r.converted_at?'Converted '+fmtDate(r.converted_at):'Pending'}</div></div></div>`).join('')+`</div>`}}}catch(e){}
+  $('ovAffEditBody').innerHTML=`
+  <div class="login-field" style="margin-bottom:10px"><span class="icon">👤</span><input id="aeN" value="${esc(a.name||'')}" placeholder="Name" style="padding-left:38px"></div>
+  <div class="login-field" style="margin-bottom:10px"><span class="icon">📧</span><input id="aeE" value="${esc(a.email||'')}" placeholder="Email" style="padding-left:38px"></div>
+  <div class="login-field" style="margin-bottom:10px"><span class="icon">📱</span><input id="aeP" value="${esc(a.phone||'')}" placeholder="Phone" maxlength="10" style="padding-left:38px"></div>
+  <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Status</label><select id="aeS" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:14px"><option value="active"${a.status==='active'?' selected':''}>Active</option><option value="inactive"${a.status==='inactive'?' selected':''}>Inactive</option><option value="pending_verification"${a.status==='pending_verification'?' selected':''}>Pending</option></select></div>
+  <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Commission %</label><input id="aeC" type="number" value="${a.commission_pct||20}" min="0" max="100" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:14px"></div>
+  <div class="card" style="margin:12px 0"><div class="aff-stat"><label>Referral Code</label><span>${esc(a.referral_code||'—')}</span></div><div class="aff-stat"><label>Total Referrals</label><span>${a.total_referrals||0}</span></div><div class="aff-stat"><label>Total Earned</label><span>₹${a.total_earned||0}</span></div><div class="aff-stat"><label>Total Paid</label><span>₹${a.total_paid||0}</span></div><div class="aff-stat"><label>Joined</label><span>${fmtDate(a.created_at)}</span></div></div>
+  <div class="action-bar"><button class="act-btn primary" onclick="saveAffEdit(${id})">💾 Save Changes</button><button class="act-btn secondary" onclick="impersonateAffiliate(${id})">👁️ Impersonate</button><button class="act-btn danger" onclick="deleteAffiliate(${id},'${esc(a.name||'')}');closeOverlay('affEditOverlay')">🗑️ Remove</button></div>
+  ${refs}`;
+  openOverlay('affEditOverlay');
+}
+
+async function saveAffEdit(id){
+  const name=$('aeN').value.trim();const email=$('aeE').value.trim();const phone=$('aeP').value.trim();
+  const status=$('aeS').value;const commission=parseFloat($('aeC').value);
+  if(!name||name.length<2){toast('❌ Name required');return}
+  const body={name,email:email||null,status,commission_pct:commission};
+  if(phone&&phone.length===10)body.phone=phone;
+  try{const r=await fetch(API+'/affiliates/'+id,{method:'PUT',headers:hdrs(),body:JSON.stringify(body)});
+  if(r.ok){toast('✅ Saved');closeOverlay('affEditOverlay');loadAffiliates()}else{const d=await r.json();toast('❌ '+(d.detail||'Failed'))}}catch(e){toast('❌ Network error')}
+}
+
+async function impersonateAffiliate(id){
+  try{
+    const r=await fetch(API+'/affiliate/'+id+'/impersonate',{method:'POST',headers:hdrs()});
+    if(!r.ok){const d=await r.json();toast('❌ '+(d.detail||'Failed'));return}
+    const d=await r.json();
+    if(d.token){
+      const imp=encodeURIComponent(d.token);
+      const name=encodeURIComponent(d.name||'');
+      window.open('/partner?_imp_token='+imp+'&_imp_name='+name,'_blank');
+      toast('👁️ Impersonating '+esc(d.name||'affiliate'));
+    }
+  }catch(e){toast('❌ Network error')}
+}
+
+function setAffFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_affFilter=el.dataset.af;renderAffiliates()}
+async function approveAffiliate(id){try{await fetch(API+'/affiliates/'+id+'/approve',{method:'POST',headers:hdrs()});toast('✅ Approved');loadAffiliates()}catch(e){toast('❌ Failed')}}
+async function processPayout(affId,amt){if(!confirm(`Process ₹${amt} payout?`))return;try{await fetch(API+'/affiliates/payout',{method:'POST',headers:hdrs(),body:JSON.stringify({affiliate_id:affId,amount:amt})});toast('✅ Payout initiated');loadAffiliates()}catch(e){toast('❌ Failed')}}
+
+/* ── Affiliate Support Tickets ────────────────────────────────── */
+let _affTickets=[];let _affTicketFilter='all';
+
+async function loadAffTickets(){
+  try{const r=await fetch(API+'/affiliate-tickets',{headers:hdrs()});if(!r.ok)return;const d=await r.json();
+  _affTickets=d.tickets||[];
+  const s=d.stats||{};
+  $('affTicketStats').innerHTML=`<div class="stat-chips"><div class="stat-chip">Open <b>${s.open||0}</b></div><div class="stat-chip">In Progress <b>${s.in_progress||0}</b></div><div class="stat-chip">Resolved <b>${s.resolved||0}</b></div><div class="stat-chip">Total <b>${s.total||0}</b></div></div>`;
+  renderAffTickets()}catch(e){$('affTicketList').innerHTML='<div class="empty">Error loading</div>'}
+}
+
+function renderAffTickets(){
+  let list=_affTickets;if(_affTicketFilter!=='all')list=list.filter(t=>t.status===_affTicketFilter);
+  if(!list.length){$('affTicketList').innerHTML='<div class="empty"><div class="empty-icon">🎫</div>No tickets</div>';return}
+  $('affTicketList').innerHTML=list.map(t=>{
+    const st=t.status||'open';const stCls=st==='open'?'amber':st==='in_progress'?'blue':'green';
+    return`<div class="list-item" onclick="openAffTicket(${t.ticket_id})"><div class="list-avatar" style="background:var(--${stCls})">🎫</div><div class="list-body"><div class="list-title">${esc(t.subject||'No subject')}</div><div class="list-sub">${esc(t.affiliate_name||'')} · ${esc(t.category||'')} · ${timeAgo(t.updated_at)}</div></div><div class="list-badge" style="background:var(--${stCls});color:#fff;font-size:10px;padding:2px 8px;border-radius:6px">${st==='in_progress'?'In Progress':st.charAt(0).toUpperCase()+st.slice(1)}</div></div>`;
+  }).join('');
+}
+
+function setAffTicketFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_affTicketFilter=el.dataset.atf;renderAffTickets()}
+
+async function openAffTicket(id){
+  $('ovAffTicketTitle').textContent='Loading...';$('ovAffTicketBody').innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  openOverlay('affTicketOverlay');
+  try{
+    const r=await fetch(API+'/affiliate-tickets/'+id,{headers:hdrs()});const t=await r.json();
+    $('ovAffTicketTitle').textContent='#'+t.ticket_id+' '+esc(t.subject||'');
+    const st=t.status||'open';const msgs=t.messages||[];
+    let h=`<div class="stat-chips"><div class="stat-chip">Status: <b>${st==='in_progress'?'In Progress':st}</b></div><div class="stat-chip">Category: <b>${t.category||'general'}</b></div><div class="stat-chip">Affiliate: <b>${esc(t.affiliate_name||'')}</b></div><div class="stat-chip">📱 ${esc(t.affiliate_phone||'')}</div></div>`;
+    h+='<div class="card" style="margin:12px 0">';
+    msgs.forEach(m=>{
+      const isAdmin=m.sender_type==='admin';
+      h+=`<div style="margin-bottom:10px;padding:10px;border-radius:10px;${isAdmin?'background:var(--teal-bg);border-left:3px solid var(--teal)':'background:var(--bg);border-left:3px solid var(--indigo)'}"><div style="font-size:11px;font-weight:700;color:${isAdmin?'var(--teal)':'var(--indigo)'};margin-bottom:2px">${isAdmin?'🛡️ ':'👤 '}${esc(m.sender_name||m.sender_type)}</div><div style="font-size:13px;white-space:pre-wrap">${esc(m.message)}</div><div class="event-time">${timeAgo(m.created_at)}</div></div>`;
+    });
+    h+='</div>';
+    h+=`<textarea id="affTicketReply" rows="2" placeholder="Reply to affiliate..." style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;resize:vertical;margin-bottom:8px"></textarea>`;
+    h+=`<div class="action-bar"><button class="act-btn primary" onclick="replyAffTicket(${id})">💬 Reply</button>`;
+    if(st!=='resolved')h+=`<button class="act-btn green" onclick="resolveAffTicket(${id})">✅ Resolve</button>`;
+    h+=`</div>`;
+    $('ovAffTicketBody').innerHTML=h;
+  }catch(e){$('ovAffTicketBody').innerHTML='<div class="empty">Error loading ticket</div>'}
+}
+
+async function replyAffTicket(id){const msg=document.getElementById('affTicketReply').value.trim();if(!msg)return;try{await fetch(API+'/affiliate-tickets/'+id+'/reply',{method:'POST',headers:hdrs(),body:JSON.stringify({message:msg})});toast('✅ Reply sent');openAffTicket(id);loadAffTickets()}catch(e){toast('❌ Failed')}}
+async function resolveAffTicket(id){try{await fetch(API+'/affiliate-tickets/'+id,{method:'PUT',headers:hdrs(),body:JSON.stringify({status:'resolved'})});toast('✅ Resolved');openAffTicket(id);loadAffTickets()}catch(e){toast('❌ Failed')}}
+
+/* ── Bots ─────────────────────────────────────────────────────── */
+async function loadBots(){
+  try{const r=await fetch(API+'/bots',{headers:hdrs()});if(!r.ok)return;const d=await r.json();const bots=d.tenant_bots||d.bots||[];
+  if(!bots.length){$('botList').innerHTML='<div class="empty">No bots</div>';return}
+  $('botList').innerHTML=bots.map(b=>`<div class="health-row"><div class="health-dot ${b.running||b.status==='running'?'ok':'err'}"></div><div class="health-name">${esc(b.firm_name||b.name||'Bot')}</div><div class="health-detail">${b.running||b.status==='running'?'Running':'Stopped'}</div></div>`).join('')}catch(e){$('botList').innerHTML='<div class="empty">Error</div>'}
+}
+
+/* ── Revenue ──────────────────────────────────────────────────── */
+async function loadRevenue(){
+  try{const r=await fetch(API+'/revenue',{headers:hdrs()});if(!r.ok)return;const d=await r.json();
+  let h='';const revBreakdown=d.breakdown||d.plans;if(revBreakdown)h+=Object.entries(revBreakdown).map(([p,v])=>`<div class="aff-stat"><label>${p}</label><span>${v.count||0} firms · ₹${v.revenue||0}</span></div>`).join('');
+  if(d.mrr)h+=`<div class="aff-stat" style="background:var(--teal-bg);border-radius:8px;padding:10px;margin-top:8px"><label style="font-weight:700">Monthly MRR</label><span style="color:var(--teal);font-size:18px">₹${d.mrr}</span></div>`;
+  $('revenueData').innerHTML=h||'<div class="empty">No revenue data</div>'}catch(e){$('revenueData').innerHTML='<div class="empty">Error</div>'}
+}
+
+/* ── Audit Log ────────────────────────────────────────────────── */
+async function loadAudit(){
+  try{const r=await fetch(API+'/audit?limit=100',{headers:hdrs()});if(!r.ok)return;const d=await r.json();_auditAll=d.entries||d||[];renderAudit()}catch(e){}
+}
+function renderAudit(){
+  let list=_auditAll;const q=$('auditSearch').value.toLowerCase();
+  if(q)list=list.filter(a=>(a.action||'').toLowerCase().includes(q)||(a.detail||'').toLowerCase().includes(q));
+  $('auditList').innerHTML=list.slice(0,50).map(a=>`<div class="event-row"><div class="event-type info">${esc(a.action||'')}</div><div class="event-msg">${esc((a.detail||'').slice(0,100))}</div><div class="event-time">${a.firm_name?esc(a.firm_name)+' · ':''}${timeAgo(a.created_at)}</div></div>`).join('')||'<div class="empty">No audit entries</div>';
+}
+function filterAudit(){renderAudit()}
+
+/* ── Duplicates ───────────────────────────────────────────────── */
+async function loadDuplicates(){
+  const card=document.getElementById('duplicatesCard');card.style.display='block';
+  card.innerHTML='<div class="card"><div class="card-title">🔍 Duplicates</div><div class="loading-center"><div class="spinner"></div></div></div>';
+  try{const r=await fetch(API+'/duplicates',{headers:hdrs()});const d=await r.json();
+  const totalIssues=d.total_issues||0;
+  if(!totalIssues){card.innerHTML='<div class="card"><div class="card-title">🔍 Duplicates</div><div class="empty">No duplicates ✓</div></div>';return}
+  card.innerHTML='<div class="card"><div class="card-title">🔍 Duplicates</div><pre style="font-size:11px;overflow:auto;max-height:300px">'+esc(JSON.stringify(d,null,2))+'</pre></div>'}catch(e){card.innerHTML='<div class="card"><div class="empty">Error</div></div>'}
+}
+
+/* ── Create Firm ──────────────────────────────────────────────── */
+function showCreateFirm(){openOverlay('createFirmOverlay')}
+async function createFirm(){
+  const firm=$('cfFirm').value.trim(),owner=$('cfOwner').value.trim(),phone=$('cfPhone').value.trim(),email=$('cfEmail').value.trim(),plan=$('cfPlan').value;
+  if(!firm||!owner||phone.length!==10){toast('❌ Fill all fields');return}
+  try{const r=await fetch(API+'/create-firm',{method:'POST',headers:hdrs(),body:JSON.stringify({firm_name:firm,owner_name:owner,phone,email,plan})});const d=await r.json();
+  if(r.ok){toast('✅ Firm created!');closeOverlay('createFirmOverlay');loadTenants();loadDashboard();['cfFirm','cfOwner','cfPhone','cfEmail'].forEach(id=>$(id).value='')}
+  else{toast('❌ '+(d.detail||'Failed'))}}catch(e){toast('❌ Network error')}
+}
+
+/* ── Health Monitor ────────────────────────────────────────────── */
+let _monitorLoaded=false;
+async function loadMonitor(){
+  try{
+    const[latest,hist,alerts]=await Promise.all([
+      fetch(API+'/health-monitor',{headers:hdrs()}).then(r=>r.ok?r.json():{checks:[]}),
+      fetch(API+'/health-monitor/history?limit=10',{headers:hdrs()}).then(r=>r.ok?r.json():{runs:[]}).catch(()=>({runs:[]})),
+      fetch(API+'/health-monitor/alerts?limit=20',{headers:hdrs()}).then(r=>r.ok?r.json():{alerts:[]}).catch(()=>({alerts:[]}))
+    ]);
+    _monitorLoaded=true;
+    const checks=latest.checks||[];const h=latest.healthy||0;const w=latest.warnings||0;const c=latest.critical||0;const f=latest.auto_fixed||0;
+
+    // Banner state
+    const banner=$('monitorBanner');const pulse=$('monitorPulse');
+    if(c>0){banner.style.background='linear-gradient(135deg,#dc2626,#ef4444)';pulse.textContent='🔴';$('monitorTitle').textContent='Critical Issues Detected'}
+    else if(w>0){banner.style.background='linear-gradient(135deg,#d97706,#f59e0b)';pulse.textContent='🟡';$('monitorTitle').textContent='Warnings Found'}
+    else if(checks.length>0){banner.style.background='linear-gradient(135deg,#0f766e,#0d9488)';pulse.textContent='💚';$('monitorTitle').textContent='All Systems Healthy'}
+    else{banner.style.background='linear-gradient(135deg,#475569,#64748b)';pulse.textContent='⏳';$('monitorTitle').textContent='No Data Yet — Run a Check'}
+    $('monitorSub').textContent=latest.created_at?'Last check: '+timeAgo(latest.created_at)+' · '+checks.length+' checks · Run '+latest.run_id:'Click "Run Now" to start monitoring';
+
+    // KPIs
+    $('mHealthy').textContent=h;$('mWarning').textContent=w;$('mCritical').textContent=c;$('mFixed').textContent=f;
+
+    // Checks list grouped by category
+    if(checks.length){
+      const grouped={};checks.forEach(ck=>{const cat=ck.category||'other';if(!grouped[cat])grouped[cat]=[];grouped[cat].push(ck)});
+      const catIcons={server:'🖥️',database:'🗄️',email:'📧',bots:'🤖',queue:'📨',disk:'💾',data:'📊',payments:'💳',auth:'🔐'};
+      let html='';
+      for(const[cat,items]of Object.entries(grouped)){
+        html+=`<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px">${catIcons[cat]||'📋'} ${cat}</div>`;
+        items.forEach(ck=>{
+          const st=ck.status;const dot=st==='healthy'?'ok':st==='warning'?'warn':'err';
+          const fixBadge=ck.fix_applied?'<span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 6px;border-radius:6px;margin-left:6px">🔧 Auto-fixed</span>':'';
+          const warnBadge=ck.auto_fixable&&!ck.fix_applied?'<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:6px;margin-left:6px">Fixable</span>':'';
+          html+=`<div class="health-row"><div class="health-dot ${dot}"></div><div class="health-name">${esc(ck.check_name)}${fixBadge}${warnBadge}</div><div class="health-detail">${esc(ck.detail||'')}</div></div>`;
+        });
+        html+=`</div>`;
+      }
+      $('monitorChecks').innerHTML=html;
+    }else{$('monitorChecks').innerHTML='<div class="empty"><div class="empty-icon">📡</div>No health check data yet.<br>Click <b>Run Now</b> to start.</div>'}
+
+    // History
+    const runs=hist.runs||[];
+    if(runs.length){
+      let hhtml='<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><tr style="background:var(--bg)"><th style="padding:8px;text-align:left">Time</th><th style="padding:8px;text-align:center">✅</th><th style="padding:8px;text-align:center">⚠️</th><th style="padding:8px;text-align:center">🔴</th><th style="padding:8px;text-align:center">🔧</th></tr>';
+      runs.forEach(r=>{
+        const rowBg=r.critical>0?'#fef2f2':r.warnings>0?'#fffbeb':'';
+        hhtml+=`<tr style="background:${rowBg}"><td style="padding:8px;border-top:1px solid var(--border)">${timeAgo(r.created_at)}</td><td style="padding:8px;text-align:center;border-top:1px solid var(--border);color:var(--green);font-weight:700">${r.healthy}</td><td style="padding:8px;text-align:center;border-top:1px solid var(--border);color:var(--amber);font-weight:700">${r.warnings}</td><td style="padding:8px;text-align:center;border-top:1px solid var(--border);color:var(--red);font-weight:700">${r.critical}</td><td style="padding:8px;text-align:center;border-top:1px solid var(--border);color:var(--teal);font-weight:700">${r.auto_fixed}</td></tr>`;
+      });
+      hhtml+='</table></div>';
+      $('monitorHistory').innerHTML=hhtml;
+    }else{$('monitorHistory').innerHTML='<div style="text-align:center;padding:16px;color:var(--text2);font-size:13px">No history yet</div>'}
+
+    // Alerts
+    const al=alerts.alerts||[];
+    if(al.length){
+      $('monitorAlerts').innerHTML=al.map(a=>{
+        const cls=a.severity==='critical'?'error':'warning';
+        return`<div class="event-row"><div class="event-type ${cls}">${a.severity==='critical'?'🔴':'🟡'} ${esc(a.title)}</div><div class="event-msg">${esc((a.detail||'').slice(0,150))}</div><div class="event-time">${a.emailed?'📧 Emailed · ':''}${timeAgo(a.created_at)}</div></div>`;
+      }).join('');
+    }else{$('monitorAlerts').innerHTML='<div style="text-align:center;padding:16px;color:var(--green);font-size:13px">✅ No alerts — all quiet</div>'}
+
+  }catch(e){console.error('Monitor load error',e);$('monitorChecks').innerHTML='<div class="empty">Error loading monitor data</div>'}
+}
+
+async function runHealthCheck(){
+  toast('📡 Running health check...');
+  try{const r=await fetch(API+'/health-monitor/run',{method:'POST',headers:hdrs()});const d=await r.json();
+  if(r.ok){toast(`✅ Done: ${d.healthy||0} healthy, ${d.warnings||0} warnings, ${d.critical||0} critical`);loadMonitor()}
+  else{toast('❌ '+(d.detail||'Failed'))}}
+  catch(e){toast('❌ Network error')}
+}
+
+/* ── Server Restart ───────────────────────────────────────────── */
+async function serverRestart(){
+  if(!confirm('⚠️ Restart server? Active connections will be interrupted.'))return;
+  toast('🔄 Restarting...');
+  try{await fetch(API+'/restart-server',{method:'POST',headers:hdrs()});toast('✅ Restart initiated — reloading in 10s');setTimeout(()=>location.reload(),10000)}catch(e){toast('⚠️ Restart sent')}
+}
+
+/* ── Export ────────────────────────────────────────────────────── */
+async function exportData(type){
+  try{const r=await fetch(API+'/export/'+type,{headers:hdrs()});if(!r.ok){toast('❌ Export failed');return}
+  const blob=await r.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=type+'_export.csv';a.click();URL.revokeObjectURL(url);toast('✅ Downloaded')}catch(e){toast('❌ Error')}
+}
+
+/* ── Overlay ──────────────────────────────────────────────────── */
+function openOverlay(id){document.getElementById(id).classList.add('open');document.body.style.overflow='hidden'}
+function closeOverlay(id){document.getElementById(id).classList.remove('open');document.body.style.overflow=''}
+
+/* ── Toast ────────────────────────────────────────────────────── */
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+
+/* ── Helpers ──────────────────────────────────────────────────── */
+function $(id){return document.getElementById(id)}
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function fmtK(n){return n>=100000?(n/100000).toFixed(1)+'L':n>=1000?(n/1000).toFixed(1)+'K':n}
+function fmtDate(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}catch(e){return d}}
+function timeAgo(d){if(!d)return'';try{const dt=new Date(d.includes('T')||d.includes('Z')?d:d+'Z');const ist=dt.toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',hour:'numeric',minute:'2-digit',hour12:true});const diff=Date.now()-dt.getTime();const m=Math.floor(diff/60000);let rel='just now';if(m>=1&&m<60)rel=m+'m ago';else if(m>=60&&m<1440){rel=Math.floor(m/60)+'h ago'}else if(m>=1440){rel=Math.floor(m/1440)+'d ago'}return ist+' · '+rel}catch(e){return d}}
+
+/* ── SW Registration ──────────────────────────────────────────── */
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;if(w)w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)w.postMessage({type:'SKIP_WAITING'})})})}).catch(()=>{})}
+if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# =============================================================================
+#  docker-compose.yml — Sarathi-AI Business Technologies
+# =============================================================================
+#  Deploy: docker compose up -d
+#  Logs:   docker compose logs -f
+#  Update: docker compose pull && docker compose up -d
+# =============================================================================
+
+services:
+  sarathi:
+    build: .
+    container_name: sarathi-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - sarathi-data:/app/data
+      - ./biz.env:/app/biz.env:ro
+      - ./static:/app/static:ro
+    working_dir: /app
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8001
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  sarathi-data:
+    driver: local

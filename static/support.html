@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Help & Support — Sarathi-AI Business Technologies</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Poppins',sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.7}
+
+.navbar{background:rgba(255,255,255,0.92);backdrop-filter:blur(16px) saturate(180%);border-bottom:1px solid #e2e8f0;padding:14px 24px;position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.navbar .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15em;text-decoration:none}
+.navbar .logo .brand-name{color:#312e81}
+.navbar .logo .ai-tag{color:#0d9488}
+.navbar nav a{margin-left:20px;color:#475569;text-decoration:none;font-weight:500;font-size:0.9em;transition:color .2s}
+.navbar nav a:hover{color:#0d9488}
+.navbar nav a.active{color:#0d9488}
+
+.hero{background:linear-gradient(135deg,#0d9488,#14b8a6);padding:56px 24px;text-align:center;color:#fff}
+.hero h1{font-size:2.2em;font-weight:800;margin-bottom:8px}
+.hero p{font-size:1.05em;opacity:0.9;max-width:600px;margin:0 auto}
+
+.container{max-width:1100px;margin:0 auto;padding:32px 24px}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;background:#e2e8f0;padding:4px;border-radius:14px;max-width:500px;margin:0 auto 32px}
+.tab-btn{flex:1;padding:10px 16px;border:none;background:transparent;border-radius:11px;font-family:inherit;
+  font-weight:600;font-size:0.9em;cursor:pointer;color:#64748b;transition:all .25s}
+.tab-btn.active{background:#fff;color:#0d9488;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Form */
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:32px;box-shadow:0 2px 12px rgba(0,0,0,0.04)}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-weight:600;font-size:0.88em;color:#475569;margin-bottom:6px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+  border-radius:10px;font-family:inherit;font-size:0.92em;outline:none;transition:border .2s;background:#fff}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#0d9488}
+.form-group textarea{min-height:120px;resize:vertical}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:12px;font-weight:600;
+  font-size:0.92em;cursor:pointer;border:none;font-family:inherit;transition:all .25s}
+.btn-primary{background:linear-gradient(135deg,#0d9488,#14b8a6);color:#fff}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(13,148,136,0.3)}
+.btn-primary:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+.btn-outline{background:transparent;color:#0d9488;border:2px solid #0d9488}
+.btn-outline:hover{background:#f0fdfa}
+.btn-small{padding:8px 16px;font-size:0.82em;border-radius:8px}
+
+.alert{padding:14px 18px;border-radius:10px;font-size:0.9em;margin-bottom:20px;display:none}
+.alert-success{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;display:block}
+.alert-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;display:block}
+
+/* Tickets list */
+.ticket-list{display:flex;flex-direction:column;gap:12px}
+.ticket-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px 24px;cursor:pointer;
+  transition:all .25s;display:flex;justify-content:space-between;align-items:center;gap:16px}
+.ticket-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.06);border-color:#cbd5e1}
+.ticket-info{flex:1}
+.ticket-info h3{font-size:0.95em;font-weight:600;color:#1e293b;margin-bottom:4px}
+.ticket-info p{font-size:0.82em;color:#64748b}
+.ticket-meta{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.badge{padding:4px 12px;border-radius:20px;font-size:0.72em;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+.badge-open{background:#dbeafe;color:#1d4ed8}
+.badge-in_progress{background:#fef3c7;color:#92400e}
+.badge-resolved{background:#dcfce7;color:#166534}
+.badge-closed{background:#f1f5f9;color:#64748b}
+.badge-high{background:#fef2f2;color:#991b1b}
+.badge-urgent{background:#fef2f2;color:#dc2626}
+.badge-normal{background:#f1f5f9;color:#475569}
+.badge-low{background:#f0fdf4;color:#15803d}
+
+.empty-state{text-align:center;padding:60px 24px;color:#94a3b8}
+.empty-state .icon{font-size:3em;margin-bottom:12px}
+.empty-state h3{font-size:1.1em;color:#64748b;margin-bottom:8px}
+
+/* Ticket detail modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;justify-content:center;align-items:flex-start;padding:40px 24px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:18px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 48px rgba(0,0,0,0.15)}
+.modal-header{padding:24px 28px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start}
+.modal-header h2{font-size:1.1em;font-weight:700;color:#1e293b;margin-bottom:4px}
+.modal-close{background:none;border:none;font-size:1.5em;cursor:pointer;color:#94a3b8;padding:0 4px;line-height:1}
+.modal-close:hover{color:#1e293b}
+.modal-body{padding:24px 28px}
+.modal-footer{padding:16px 28px 24px;border-top:1px solid #e2e8f0}
+
+/* Messages */
+.messages{display:flex;flex-direction:column;gap:12px;margin-bottom:20px;max-height:400px;overflow-y:auto;padding:4px}
+.msg{padding:12px 16px;border-radius:12px;max-width:85%;font-size:0.88em;line-height:1.6}
+.msg-customer{background:#f0fdfa;border:1px solid #ccfbf1;align-self:flex-end;border-bottom-right-radius:4px}
+.msg-admin{background:#eff6ff;border:1px solid #dbeafe;align-self:flex-start;border-bottom-left-radius:4px}
+.msg .sender{font-weight:600;font-size:0.78em;color:#64748b;margin-bottom:4px}
+.msg .time{font-size:0.72em;color:#94a3b8;margin-top:6px}
+
+.reply-box{display:flex;gap:8px}
+.reply-box textarea{flex:1;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-family:inherit;
+  font-size:0.88em;resize:none;min-height:48px;outline:none}
+.reply-box textarea:focus{border-color:#0d9488}
+
+/* FAQ Accordion */
+.faq-section{margin-top:20px}
+.faq-section h2{font-size:1.2em;color:#0d9488;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.faq{background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:8px;overflow:hidden}
+.faq:hover{box-shadow:0 2px 12px rgba(13,148,136,0.08)}
+.faq-q{padding:16px 20px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  font-size:0.92em;user-select:none;transition:background .2s}
+.faq-q:hover{background:#f8fafc}
+.faq-q .arrow{font-size:0.7em;color:#94a3b8;transition:transform .3s}
+.faq.open .arrow{transform:rotate(180deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .4s ease,padding .3s;padding:0 20px}
+.faq.open .faq-a{max-height:600px;padding:0 20px 20px}
+.faq-a p,.faq-a li{color:#475569;font-size:0.9em;margin-bottom:6px}
+
+.footer{background:#0f172a;color:#fff;text-align:center;padding:48px 24px;margin-top:40px}
+.footer .brand{display:flex;align-items:center;justify-content:center;gap:8px;font-size:1.15em;font-weight:800;margin-bottom:4px}
+.footer .brand .ai-tag{color:#14b8a6}
+.footer .tagline{color:#94a3b8;font-size:0.85em;margin-bottom:16px}
+.footer .links{margin-bottom:16px;display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+.footer .links a{color:#94a3b8;font-size:0.85em;transition:color .2s;text-decoration:none}
+.footer .links a:hover{color:#14b8a6}
+.footer .copy{color:#64748b;font-size:0.72em;opacity:0.6}
+
+@media(max-width:640px){
+  .hero h1{font-size:1.5em}
+  .container{padding:24px 16px}
+  .form-row{grid-template-columns:1fr}
+  .modal{border-radius:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/" class="logo">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:80px;vertical-align:middle;margin-right:8px;border-radius:6px" onerror="this.style.display='none'">
+    <span class="brand-name">Sarathi<span class="ai-tag">-AI</span></span>
+  </a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/help">Help</a>
+    <a href="/support" class="active">Support</a>
+    <a href="/partner">Partner</a>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+  </nav>
+</div>
+
+<div class="hero">
+  <h1>Help & Support</h1>
+  <p>Submit a ticket for technical issues, billing questions, or general inquiries. We're here to help!</p>
+</div>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('submit')">Submit Ticket</button>
+    <button class="tab-btn" onclick="switchTab('my-tickets')">My Tickets</button>
+    <button class="tab-btn" onclick="switchTab('faq')">FAQ</button>
+  </div>
+
+  <!-- ── Submit Ticket ── -->
+  <div id="tab-submit" class="tab-panel active">
+    <div class="card" style="max-width:700px;margin:0 auto">
+      <h2 style="font-size:1.15em;margin-bottom:4px">📝 Submit a Support Ticket</h2>
+      <p style="font-size:0.85em;color:#64748b;margin-bottom:24px">Describe your issue and we'll get back to you within 24 hours</p>
+
+      <div id="submit-alert"></div>
+
+      <form id="ticketForm" onsubmit="submitTicket(event)">
+        <div class="form-group">
+          <label>Subject *</label>
+          <input type="text" id="tk-subject" placeholder="Brief summary of your issue" required maxlength="200">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category</label>
+            <select id="tk-category">
+              <option value="general">General Inquiry</option>
+              <option value="technical">Technical Issue</option>
+              <option value="billing">Billing & Subscription</option>
+              <option value="onboarding">Onboarding Help</option>
+              <option value="feature">Feature Request</option>
+              <option value="bug">Bug Report</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="tk-priority">
+              <option value="low">Low</option>
+              <option value="normal" selected>Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="tk-description" placeholder="Please provide as much detail as possible about your issue..." required maxlength="5000"></textarea>
+        </div>
+
+        <div id="contact-fields">
+          <p style="font-size:0.82em;color:#94a3b8;margin-bottom:12px">Contact details (for non-logged-in users)</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Your Name</label>
+              <input type="text" id="tk-name" placeholder="Full name">
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" id="tk-phone" placeholder="+91 XXXXX XXXXX">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="tk-email" placeholder="you@example.com">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submitBtn">Submit Ticket →</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── My Tickets ── -->
+  <div id="tab-my-tickets" class="tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <h2 style="font-size:1.15em">My Tickets</h2>
+      <div style="display:flex;gap:8px">
+        <select id="filter-status" onchange="loadMyTickets()" style="padding:8px 14px;border:2px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:0.85em">
+          <option value="">All Status</option>
+          <option value="open">Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="tickets-container">
+      <div class="empty-state">
+        <div class="icon">🎫</div>
+        <h3>No tickets yet</h3>
+        <p>Submit a ticket if you need help. We'll respond within 24 hours.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FAQ ── -->
+  <div id="tab-faq" class="tab-panel">
+    <div class="faq-section">
+      <h2>📋 Common Questions</h2>
+
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How quickly will I get a response? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>We aim to respond to all tickets within 24 hours on business days. Priority and urgent tickets are handled first.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Can I submit a ticket without an account? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>Yes! Just fill in your contact details (name, phone, or email) when submitting the form. We'll reach out to you directly.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How do I check the status of my ticket? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>If you're logged in, go to the "My Tickets" tab to see all your tickets and their current status. You can also reply to tickets directly.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">What if my bot stops working? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>Submit a ticket with category "Technical Issue" and priority "High". Include your firm name and the error you're seeing. Our team will investigate and restart your bot if needed.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How do I upgrade or change my plan? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>Submit a ticket with category "Billing & Subscription" and mention the plan you want to switch to. We'll process the change and adjust your billing accordingly.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">I forgot my bot token — what do I do? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>Go to @BotFather on Telegram, use /mybots, select your bot, and click "API Token" to see it again. Then update it in your dashboard. If you still have trouble, submit a support ticket and we'll help.</p></div>
+      </div>
+      <div class="faq">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How do I contact support directly? <span class="arrow">▼</span></div>
+        <div class="faq-a"><p>You can reach us at <strong>support@sarathi-ai.com</strong> or message @SarathiBizBot on Telegram. For fastest response, submit a ticket here.</p></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Ticket Detail Modal ── -->
+<div class="modal-overlay" id="ticketModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-subject">Ticket Subject</h2>
+        <p style="font-size:0.82em;color:#64748b" id="modal-meta">Ticket #123 · Created Jan 1, 2026</p>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px" id="modal-badges"></div>
+      <div class="messages" id="modal-messages"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="reply-box">
+        <textarea id="reply-text" placeholder="Type your reply..." rows="2"></textarea>
+        <button class="btn btn-primary btn-small" onclick="sendReply()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="brand">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:64px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi<span class="ai-tag">-AI</span>&nbsp;Business Technologies
+  </div>
+  <div class="tagline">AI-Powered Financial Advisor CRM Platform · sarathi-ai.com</div>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/help">Help</a>
+    <a href="/support">Support</a>
+    <a href="/partner">Partner</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+  </div>
+  <p class="copy">© 2026 Sarathi-AI Business Technologies. All rights reserved. · sarathi-ai.com</p>
+</div>
+
+<script>
+const API = '';
+let currentTicketId = null;
+let isLoggedIn = false;
+
+// ── Tab switching ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', b.textContent.toLowerCase().includes(tab.split('-')[0])));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-' + tab);
+  if (panel) panel.classList.add('active');
+  if (tab === 'my-tickets') loadMyTickets();
+}
+
+// ── Check auth status ──
+async function checkAuth() {
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'include' });
+    if (r.ok) {
+      isLoggedIn = true;
+      document.getElementById('contact-fields').style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+// ── Submit ticket ──
+async function submitTicket(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+  const alertDiv = document.getElementById('submit-alert');
+  alertDiv.innerHTML = ''; alertDiv.className = 'alert';
+
+  const body = {
+    subject: document.getElementById('tk-subject').value.trim(),
+    description: document.getElementById('tk-description').value.trim(),
+    category: document.getElementById('tk-category').value,
+    priority: document.getElementById('tk-priority').value,
+    contact_name: document.getElementById('tk-name').value.trim(),
+    contact_phone: document.getElementById('tk-phone').value.trim(),
+    contact_email: document.getElementById('tk-email').value.trim()
+  };
+
+  if (!body.subject || !body.description) {
+    alertDiv.className = 'alert alert-error';
+    alertDiv.innerHTML = 'Please fill in the subject and description.';
+    btn.disabled = false; btn.textContent = 'Submit Ticket →';
+    return;
+  }
+
+  try {
+    const r = await fetch(API + '/api/support/tickets', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+
+    if (r.ok) {
+      let msg = `✅ Ticket #${data.ticket_id} submitted successfully!`;
+      if (data.ai_response && data.ai_response.ai_answer) {
+        msg += `<br><br>🤖 <b>Quick Answer from AI:</b><br>${esc(data.ai_response.ai_answer)}<br><br><i>If this didn't help, our team will respond within 24 hours.</i>`;
+      } else {
+        msg += ` We'll get back to you within 24 hours.`;
+      }
+      alertDiv.className = 'alert alert-success';
+      alertDiv.innerHTML = msg;
+      document.getElementById('ticketForm').reset();
+    } else {
+      throw new Error(data.detail || 'Failed to submit ticket');
+    }
+  } catch(err) {
+    alertDiv.className = 'alert alert-error';
+    alertDiv.innerHTML = '❌ ' + err.message;
+  }
+
+  btn.disabled = false; btn.textContent = 'Submit Ticket →';
+}
+
+// ── Load my tickets ──
+async function loadMyTickets() {
+  const container = document.getElementById('tickets-container');
+  const status = document.getElementById('filter-status').value;
+  let url = API + '/api/support/tickets?limit=50';
+  if (status) url += '&status=' + status;
+
+  try {
+    const r = await fetch(url, { credentials: 'include' });
+    if (r.status === 401) {
+      container.innerHTML = `<div class="empty-state"><div class="icon">🔒</div><h3>Login Required</h3>
+        <p>You need to be logged in to view your tickets. <a href="/login" style="color:#0d9488">Log in here</a></p></div>`;
+      return;
+    }
+    const data = await r.json();
+    if (!data.tickets || data.tickets.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="icon">🎫</div><h3>No tickets found</h3>
+        <p>You haven't submitted any tickets yet.</p></div>`;
+      return;
+    }
+
+    container.innerHTML = '<div class="ticket-list">' + data.tickets.map(t => `
+      <div class="ticket-card" onclick="openTicket(${t.ticket_id})">
+        <div class="ticket-info">
+          <h3>#${t.ticket_id} — ${esc(t.subject)}</h3>
+          <p>${esc(t.category)} · ${fmtDate(t.created_at)}</p>
+        </div>
+        <div class="ticket-meta">
+          <span class="badge badge-${t.priority}">${t.priority}</span>
+          <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+        </div>
+      </div>
+    `).join('') + '</div>';
+  } catch(err) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Error loading tickets</h3><p>${err.message}</p></div>`;
+  }
+}
+
+// ── Open ticket detail ──
+async function openTicket(id) {
+  currentTicketId = id;
+  try {
+    const r = await fetch(API + '/api/support/tickets/' + id, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail);
+
+    const t = data.ticket;
+    document.getElementById('modal-subject').textContent = t.subject;
+    document.getElementById('modal-meta').textContent = `Ticket #${t.ticket_id} · ${esc(t.category)} · Created ${fmtDate(t.created_at)}`;
+    document.getElementById('modal-badges').innerHTML = `
+      <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+      <span class="badge badge-${t.priority}">${t.priority}</span>`;
+
+    const msgs = data.messages || [];
+    document.getElementById('modal-messages').innerHTML = msgs.length ? msgs.map(m => `
+      <div class="msg msg-${m.sender_type}">
+        <div class="sender">${esc(m.sender_name)}</div>
+        <div>${esc(m.message)}</div>
+        <div class="time">${fmtDate(m.created_at)}</div>
+      </div>
+    `).join('') : '<p style="text-align:center;color:#94a3b8;padding:20px">No messages yet</p>';
+
+    document.getElementById('ticketModal').classList.add('open');
+    document.getElementById('reply-text').value = '';
+  } catch(err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+function closeModal() {
+  document.getElementById('ticketModal').classList.remove('open');
+  currentTicketId = null;
+}
+
+// ── Send reply ──
+async function sendReply() {
+  if (!currentTicketId) return;
+  const text = document.getElementById('reply-text').value.trim();
+  if (!text) return;
+
+  try {
+    const r = await fetch(API + '/api/support/tickets/' + currentTicketId + '/reply', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ message: text })
+    });
+    if (r.ok) {
+      openTicket(currentTicketId); // Refresh
+    } else {
+      const data = await r.json();
+      alert(data.detail || 'Failed to send reply');
+    }
+  } catch(err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ── Utilities ──
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Close modal on overlay click
+document.getElementById('ticketModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Init
+checkAuth();
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

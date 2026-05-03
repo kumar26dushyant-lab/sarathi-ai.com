@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sarathi-AI — Interactive Product Demo</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<meta name="description" content="Experience Sarathi-AI in action — see how the AI bot manages leads, pitches clients, and closes deals via Telegram, Voice AI, and web dashboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+/* ═══════════════════════════════════════════════════════════
+   SARATHI-AI DEMO PAGE — DESIGN SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+:root{
+  --teal:#0d9488;--teal-dark:#0f766e;--teal-50:#f0fdfa;--teal-100:#ccfbf1;
+  --saffron:#f59e0b;--saffron-dark:#d97706;
+  --green:#059669;--green-50:#ecfdf5;
+  --indigo:#4338ca;--indigo-50:#eef2ff;--indigo-light:#6366f1;
+  --red:#dc2626;
+  --g50:#f8fafc;--g100:#f1f5f9;--g200:#e2e8f0;--g300:#cbd5e1;--g400:#94a3b8;--g500:#64748b;--g600:#475569;--g700:#334155;--g800:#1e293b;--g900:#0f172a;
+  --r:12px;--r-xl:20px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 16px rgba(0,0,0,.1);--shadow-lg:0 8px 32px rgba(0,0,0,.12);--shadow-xl:0 16px 48px rgba(0,0,0,.16);
+  --font-sans:'Inter',system-ui,sans-serif;--font-head:'Poppins','Inter',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font-sans);color:var(--g700);background:var(--g50);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--font-head)}
+a{text-decoration:none;color:inherit}
+.container{max-width:1500px;margin:0 auto;padding:0 32px}
+
+/* ═══ NAVBAR ═══════════════════════════════════════════════ */
+.demo-nav{position:fixed;top:0;left:0;right:0;z-index:100;backdrop-filter:blur(16px);background:rgba(255,255,255,.88);border-bottom:1px solid var(--g200);transition:box-shadow .3s}
+.demo-nav.scrolled{box-shadow:var(--shadow-md)}
+.demo-nav-inner{max-width:1500px;margin:0 auto;padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:68px}
+.demo-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25em;color:var(--g800)}
+.demo-brand img{height:80px;width:auto;border-radius:8px}
+.demo-brand .ai{color:var(--teal);font-size:.85em}
+.demo-nav-links{display:flex;align-items:center;gap:16px}
+.demo-nav-links a{font-size:.95em;font-weight:600;color:var(--g500);padding:8px 16px;border-radius:8px;transition:all .2s}
+.demo-nav-links a:hover{color:var(--teal);background:var(--teal-50)}
+.demo-menu-toggle{display:none;background:none;border:none;font-size:1.5em;cursor:pointer;color:var(--g700);padding:4px}
+.lang-btn{display:inline-flex;gap:2px;background:var(--g100);border-radius:8px;padding:2px;font-size:.82em}
+.lang-btn span{padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:600;color:var(--g500);transition:all .2s}
+.lang-btn span.active{background:#fff;color:var(--teal);box-shadow:var(--shadow-sm)}
+.btn-cta{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:11px 26px;border-radius:12px;font-weight:800;font-size:.95em;transition:all .25s;box-shadow:0 4px 16px rgba(245,158,11,.35);text-shadow:0 1px 2px rgba(0,0,0,.15);letter-spacing:.3px;border:2px solid rgba(255,255,255,.2)}
+.btn-cta:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 8px 24px rgba(245,158,11,.45)}
+@keyframes ctaPulse{0%,100%{box-shadow:0 4px 16px rgba(245,158,11,.35)}50%{box-shadow:0 6px 24px rgba(245,158,11,.55)}}
+.btn-cta{animation:ctaPulse 2.5s ease-in-out infinite}
+
+/* ═══ HERO ═════════════════════════════════════════════════ */
+.demo-hero{padding:100px 0 60px;text-align:center;background:linear-gradient(135deg,#f0fdfa 0%,#fff 40%,#eef2ff 100%);position:relative;overflow:hidden}
+.demo-hero::before{content:'';position:absolute;top:-100px;right:-100px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(13,148,136,.08),transparent 70%);pointer-events:none}
+.demo-hero::after{content:'';position:absolute;bottom:-80px;left:-80px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(67,56,202,.06),transparent 70%);pointer-events:none}
+.demo-hero .pill{display:inline-flex;align-items:center;gap:6px;background:var(--teal-50);color:var(--teal-dark);padding:8px 20px;border-radius:50px;font-size:.88em;font-weight:700;border:1px solid var(--teal-100);margin-bottom:20px}
+.demo-hero h1{font-size:3.2em;font-weight:900;color:var(--g900);line-height:1.15;margin-bottom:18px}
+.demo-hero h1 .teal{color:var(--teal)}
+.demo-hero h1 .saffron{color:var(--saffron)}
+.demo-hero p{font-size:1.15em;color:var(--g500);max-width:780px;margin:0 auto;line-height:1.7}
+
+/* ═══ SECTION TABS (main view switcher) ════════════════════ */
+.view-tabs{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:24px 0;position:sticky;top:64px;z-index:50;background:rgba(248,250,252,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g200)}
+.view-tab{display:inline-flex;align-items:center;gap:8px;padding:12px 26px;border-radius:12px;font-size:.95em;font-weight:700;color:var(--g500);cursor:pointer;transition:all .25s;border:2px solid transparent;background:#fff;box-shadow:var(--shadow-sm)}
+.view-tab:hover{color:var(--teal);border-color:var(--teal-100);background:var(--teal-50)}
+.view-tab.active{color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-dark));border-color:var(--teal);box-shadow:0 4px 16px rgba(13,148,136,.3)}
+.view-tab .tab-icon{font-size:1.2em}
+
+/* ═══ VIEW PANELS ══════════════════════════════════════════ */
+.view-panel{display:none;padding:48px 0 60px;animation:fadeSlideUp .5s ease}
+.view-panel.active{display:block}
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.panel-header{text-align:center;margin-bottom:40px}
+.panel-header .badge{display:inline-block;padding:6px 16px;border-radius:50px;font-size:.82em;font-weight:700;margin-bottom:12px}
+.panel-header h2{font-size:2.4em;font-weight:800;color:var(--g800);margin-bottom:12px}
+.panel-header p{font-size:1.1em;color:var(--g500);max-width:720px;margin:0 auto}
+
+/* ═══ 3D DEVICE FRAMES ════════════════════════════════════ */
+/* Laptop */
+.device-laptop{perspective:1200px;display:flex;justify-content:center;margin:0 auto}
+.laptop-frame{position:relative;width:1060px;max-width:100%;transform:rotateX(2deg) rotateY(-2deg);transition:transform .6s cubic-bezier(.25,.46,.45,.94);transform-style:preserve-3d}
+.laptop-frame:hover{transform:rotateX(0) rotateY(0)}
+.laptop-screen{background:#1e293b;border-radius:12px 12px 0 0;padding:10px 10px 0;box-shadow:var(--shadow-xl);position:relative}
+.laptop-screen::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:8px;height:8px;background:#334155;border-radius:50%;margin-top:4px}
+.laptop-screen-inner{background:#fff;border-radius:8px 8px 0 0;overflow:hidden;aspect-ratio:16/10;position:relative}
+.laptop-base{height:18px;background:linear-gradient(180deg,#334155,#475569);border-radius:0 0 6px 6px;margin:0 -24px;position:relative}
+.laptop-base::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100px;height:5px;background:var(--g400);border-radius:4px 4px 0 0}
+.laptop-shadow{height:10px;background:radial-gradient(ellipse at center,rgba(0,0,0,.15),transparent 70%);margin:0 40px;border-radius:50%}
+
+/* Phone */
+.device-phone{perspective:800px;display:inline-flex;justify-content:center}
+.phone-frame{width:380px;background:#1e293b;border-radius:36px;padding:14px;box-shadow:var(--shadow-xl);transform:rotateY(5deg) rotateX(2deg);transition:transform .6s cubic-bezier(.25,.46,.45,.94);transform-style:preserve-3d;position:relative}
+.phone-frame:hover{transform:rotateY(0) rotateX(0)}
+.phone-frame::before{content:'';position:absolute;top:18px;left:50%;transform:translateX(-50%);width:60px;height:6px;background:#334155;border-radius:3px;z-index:2}
+.phone-screen{background:#fff;border-radius:22px;overflow:hidden;aspect-ratio:9/19.5;position:relative}
+.phone-screen-inner{width:100%;height:100%;overflow:hidden}
+.phone-shadow{height:8px;background:radial-gradient(ellipse at center,rgba(0,0,0,.12),transparent 70%);margin:4px 20px 0;border-radius:50%}
+
+/* Small phone (telegram/whatsapp chat) */
+.phone-frame-sm{width:420px;background:#1e293b;border-radius:40px;padding:16px;box-shadow:var(--shadow-xl);position:relative}
+.phone-frame-sm::before{content:'';position:absolute;top:20px;left:50%;transform:translateX(-50%);width:68px;height:7px;background:#334155;border-radius:3px;z-index:2}
+.phone-frame-sm .phone-screen{border-radius:24px;aspect-ratio:9/18}
+
+/* ═══ SCREEN CONTENT MOCKUP HELPERS ═══════════════════════ */
+.screen-bar{height:32px;background:linear-gradient(135deg,var(--teal),var(--teal-dark));display:flex;align-items:center;padding:0 12px;gap:8px}
+.screen-bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.4)}
+.screen-bar .dot.green{background:#4ade80}
+.screen-bar .dot.yellow{background:#facc15}
+.screen-bar .dot.red{background:#f87171}
+.screen-bar .bar-title{color:rgba(255,255,255,.9);font-size:.7em;font-weight:600;margin-left:8px}
+.screen-bar .bar-url{flex:1;background:rgba(255,255,255,.15);border-radius:4px;padding:3px 10px;font-size:.65em;color:rgba(255,255,255,.7);text-align:center;margin:0 8px}
+
+/* Chat mockup helpers */
+.chat-header{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#fff}
+.chat-header .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2em}
+.chat-header .name{font-size:.9em;font-weight:700}
+.chat-header .status{font-size:.72em;opacity:.7}
+.chat-bubble{padding:10px 14px;border-radius:14px;font-size:.88em;max-width:85%;line-height:1.5;margin-bottom:8px;position:relative}
+.chat-bubble.user{background:var(--teal);color:#fff;border-radius:14px 14px 4px 14px;margin-left:auto}
+.chat-bubble.bot{background:#fff;border:1px solid var(--g200);color:var(--g700);border-radius:14px 14px 14px 4px}
+.chat-bubble .time{font-size:.7em;opacity:.6;text-align:right;margin-top:4px}
+
+/* ═══ SIDE-BY-SIDE LAYOUT ═════════════════════════════════ */
+.demo-split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-bottom:48px}
+.demo-split.reverse{direction:rtl}
+.demo-split.reverse>*{direction:ltr}
+.demo-info h3{font-size:1.65em;font-weight:800;color:var(--g800);margin-bottom:14px}
+.demo-info p{color:var(--g500);line-height:1.7;margin-bottom:16px;font-size:1.05em}
+.demo-info .highlight-list{list-style:none;padding:0}
+.demo-info .highlight-list li{padding:9px 0;display:flex;align-items:flex-start;gap:10px;font-size:1em;color:var(--g600)}
+.demo-info .highlight-list li .icon{font-size:1.15em;flex-shrink:0}
+
+/* ═══ SCREEN GALLERY (calculator screens etc) ═════════════ */
+.screen-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.screen-card{background:#fff;border-radius:var(--r-xl);border:1px solid var(--g200);overflow:hidden;box-shadow:var(--shadow-sm);transition:all .3s}
+.screen-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.screen-card .screen-preview{padding:0;position:relative;overflow:hidden;min-height:200px;display:flex;flex-direction:column;justify-content:center}
+.screen-card .screen-label{padding:16px 20px;border-top:1px solid var(--g100)}
+.screen-card .screen-label h4{font-size:1.05em;font-weight:700;color:var(--g700);margin-bottom:4px}
+.screen-card .screen-label p{font-size:.92em;color:var(--g400)}
+
+/* ═══ WEBAPP INSTALL STEPS ════════════════════════════════ */
+.install-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-top:32px}
+.install-step{background:#fff;border-radius:var(--r-xl);padding:24px 20px;border:1px solid var(--g200);text-align:center;position:relative;box-shadow:var(--shadow-sm)}
+.install-step .step-num{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.9em;margin:0 auto 12px}
+.install-step h4{font-size:1em;font-weight:700;color:var(--g700);margin-bottom:6px}
+.install-step p{font-size:.9em;color:var(--g400);line-height:1.5}
+.install-step .step-icon{font-size:2em;margin-bottom:8px}
+
+/* ═══ AI SHOWCASE ═════════════════════════════════════════ */
+.ai-flow{display:flex;flex-direction:column;gap:16px;max-width:400px}
+.ai-flow-step{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;background:#fff;border-radius:var(--r);border:1px solid var(--g200);transition:all .3s;box-shadow:var(--shadow-sm)}
+.ai-flow-step:hover{border-color:var(--teal-100);box-shadow:var(--shadow-md)}
+.ai-flow-step .step-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3em;flex-shrink:0}
+.ai-flow-step .step-text h4{font-size:.95em;font-weight:700;color:var(--g700);margin-bottom:2px}
+.ai-flow-step .step-text p{font-size:.88em;color:var(--g400);line-height:1.5}
+
+/* ═══ CTA FOOTER ══════════════════════════════════════════ */
+.demo-cta{text-align:center;padding:60px 0;background:linear-gradient(135deg,var(--g900),#1a2332);color:#fff;margin-top:40px}
+.demo-cta h2{font-size:2.4em;font-weight:800;margin-bottom:14px}
+.demo-cta p{color:var(--g400);max-width:640px;margin:0 auto 24px;line-height:1.7;font-size:1.08em}
+.demo-cta .cta-buttons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.demo-cta .btn-primary{background:linear-gradient(135deg,var(--teal),var(--teal-dark));color:#fff;padding:14px 32px;border-radius:12px;font-weight:700;font-size:1em;box-shadow:0 4px 16px rgba(13,148,136,.3);transition:all .2s}
+.demo-cta .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(13,148,136,.4)}
+.demo-cta .btn-secondary{background:rgba(255,255,255,.1);color:#fff;padding:14px 32px;border-radius:12px;font-weight:700;font-size:1em;border:1px solid rgba(255,255,255,.2);transition:all .2s}
+.demo-cta .btn-secondary:hover{background:rgba(255,255,255,.15)}
+
+/* ═══ RESPONSIVE ══════════════════════════════════════════ */
+@media(max-width:1200px){
+  .laptop-frame{width:100%;max-width:960px}
+  .container{padding:0 20px}
+}
+@media(max-width:900px){
+  .demo-hero h1{font-size:2.2em}
+  .demo-split{grid-template-columns:1fr;gap:28px;text-align:center}
+  .demo-split.reverse{direction:ltr}
+  .demo-info{order:1}
+  .laptop-frame{width:100%}
+  .device-phone,.device-laptop{display:flex;justify-content:center;width:100%}
+  .phone-frame{width:340px;margin:0 auto}
+  .phone-frame-sm{width:360px;margin:0 auto}
+  .view-tabs{gap:6px;padding:16px 8px;overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start}
+  .view-tab{padding:8px 14px;font-size:.82em;white-space:nowrap;flex-shrink:0}
+  .screen-gallery{grid-template-columns:1fr}
+  .demo-info .highlight-list{text-align:left}
+  .panel-header h2{font-size:1.6em}
+  .demo-split>*{justify-self:center}
+}
+@media(max-width:600px){
+  .demo-hero{padding:80px 0 40px}
+  .demo-hero h1{font-size:1.5em}
+  .demo-hero p{font-size:.95em}
+  .phone-frame{width:calc(100vw - 48px);max-width:340px}
+  .phone-frame-sm{width:calc(100vw - 48px);max-width:360px}
+  .laptop-frame{width:100%}
+  .demo-nav-links a.hide-mobile{display:none}
+  .install-steps{grid-template-columns:1fr}
+  .demo-info h3{font-size:1.2em}
+  .chat-bubble{font-size:.78em;max-width:90%}
+  .demo-split{gap:20px;margin-bottom:32px}
+  .view-panel{padding:32px 0 40px}
+  .panel-header{margin-bottom:28px}
+  .screen-card{border-radius:var(--r)}
+  .btn-cta{padding:10px 20px;font-size:.85em}
+  .demo-cta h2{font-size:1.5em}
+  .demo-cta .btn-primary,.demo-cta .btn-secondary{padding:12px 24px;font-size:.9em}
+  /* Mobile navbar: hamburger layout */
+  .demo-menu-toggle{display:block}
+  .demo-nav-inner{height:58px;padding:0 14px}
+  .demo-brand img{height:44px}
+  .demo-brand{font-size:1.05em}
+  .demo-nav-links{
+    display:none;flex-direction:column;position:absolute;top:58px;left:0;right:0;
+    background:#fff;padding:16px 20px;gap:10px;border-bottom:1px solid var(--g200);box-shadow:var(--shadow-md);
+  }
+  .demo-nav-links.open{display:flex}
+  .demo-nav-links .btn-cta{width:100%;text-align:center;justify-content:center}
+}
+
+/* ═══ VOICE WAVE ANIMATION ════════════════════════════════ */
+.vw{width:3px;border-radius:2px;background:rgba(255,255,255,.7);animation:vwave .6s ease-in-out infinite alternate}
+.vw:nth-child(1){height:6px;animation-delay:0s}.vw:nth-child(2){height:12px;animation-delay:.1s}
+.vw:nth-child(3){height:8px;animation-delay:.2s}.vw:nth-child(4){height:16px;animation-delay:.15s}
+.vw:nth-child(5){height:10px;animation-delay:.25s}.vw:nth-child(6){height:14px;animation-delay:.05s}
+.vw:nth-child(7){height:7px;animation-delay:.3s}.vw:nth-child(8){height:18px;animation-delay:.12s}
+@keyframes vwave{to{height:4px}}
+
+/* ═══ TYPING INDICATOR ════════════════════════════════════ */
+.typing-dots{display:flex;gap:4px;padding:8px 14px}
+.typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--g400);animation:typingBounce .8s ease-in-out infinite}
+.typing-dots span:nth-child(2){animation-delay:.15s}
+.typing-dots span:nth-child(3){animation-delay:.3s}
+@keyframes typingBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+/* ═══ PULSE GLOW ══════════════════════════════════════════ */
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(13,148,136,.3)}50%{box-shadow:0 0 0 8px rgba(13,148,136,0)}}
+.glow-ring{animation:pulseGlow 2s ease-in-out infinite}
+
+/* ═══ BADGE VARIANTS ══════════════════════════════════════ */
+.badge-telegram{background:#e0f2fe;color:#0369a1}
+.badge-calc{background:#fef3c7;color:#92400e}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- NAVBAR                                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<nav class="demo-nav" id="demoNav">
+  <div class="demo-nav-inner">
+    <a href="/" class="demo-brand">
+      <img src="/static/logo.png?v=3" alt="Sarathi-AI" onerror="this.style.display='none'">
+      <span data-i18n-html="brand_name">Sarathi<span class="ai">-AI</span></span>
+    </a>
+    <button class="demo-menu-toggle" onclick="document.querySelector('.demo-nav-links').classList.toggle('open')">☰</button>
+    <div class="demo-nav-links">
+      <a href="/" class="hide-mobile" data-i18n="nav_home">← Home</a>
+      <div class="lang-btn" id="langToggle">
+        <span class="active" onclick="setLang('en')">EN</span>
+        <span onclick="setLang('hi')">हिं</span>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+      <a href="/#pricing" class="btn-cta" data-i18n="nav_trial">Start Free Trial →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- HERO                                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section class="demo-hero">
+  <div class="container">
+    <div class="pill" data-i18n="hero_pill">🎬 Interactive Product Demo</div>
+    <h1>
+      <span data-i18n="hero_t1">Experience</span> <span class="teal" data-i18n="hero_t2">Sarathi-AI</span><br>
+      <span data-i18n="hero_t3">Like Your Clients Will</span>
+    </h1>
+    <p data-i18n="hero_desc">Explore every screen, every bot conversation, every calculator — exactly as it works in production. See how AI closes deals while you sleep.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- VIEW TABS                                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-tabs" id="viewTabs">
+  <div class="view-tab active" onclick="showView('telegram')" data-i18n="tab_telegram"><span class="tab-icon">🤖</span> Telegram Bot</div>
+  <div class="view-tab" onclick="showView('laptop')" data-i18n="tab_laptop"><span class="tab-icon">💻</span> Web on Laptop</div>
+  <div class="view-tab" onclick="showView('mobile')" data-i18n="tab_mobile"><span class="tab-icon">📱</span> Web on Mobile</div>
+  <div class="view-tab" onclick="showView('pwa')" data-i18n="tab_pwa"><span class="tab-icon">📲</span> Install as App</div>
+  <!-- WhatsApp tab hidden — using Voice AI + personal messaging instead -->
+  <div class="view-tab" onclick="showView('whatsapp')" data-i18n="tab_whatsapp" style="display:none!important"><span class="tab-icon">💬</span> WhatsApp Bot</div>
+  <div class="view-tab" onclick="showView('calculators')" data-i18n="tab_calc"><span class="tab-icon">📊</span> Calculators</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 4: TELEGRAM BOT                                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel active" id="view-telegram">
+  <div class="container">
+    <div class="panel-header">
+      <div class="badge badge-telegram" data-i18n="tg_badge">🤖 Telegram Bot Experience</div>
+      <h2 data-i18n="tg_title">Your AI Sales Assistant on Telegram</h2>
+      <p data-i18n="tg_desc">Add leads with voice, get AI pitches, track pipeline, smart follow-ups with reminders & accountability — all through simple chat commands.</p>
+    </div>
+    <div style="display:flex;gap:40px;justify-content:center;flex-wrap:wrap;align-items:flex-start">
+
+      <!-- Chat 1: Voice-to-Action -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-voice-creating.jpeg" alt="Telegram Bot - Voice to Action" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🎙️ Voice-to-Action AI</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Speak → AI creates lead automatically</div>
+      </div>
+
+      <!-- Chat 2: AI Pitch Assistant -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-ai-tools.jpeg" alt="Telegram Bot - AI Tools" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🤖 AI Tools</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">12 AI-powered sales tools</div>
+      </div>
+
+      <!-- Chat 3: Claims Helper -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-help.jpeg" alt="Telegram Bot - Help Topics" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">❓ Help Topics</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Listen to help topics on any feature</div>
+      </div>
+
+      <!-- Chat 4: ☰ Menu Grid -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-menu.jpeg" alt="Telegram Bot - Menu" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">☰ Full Menu Grid</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">One-tap access to every CRM feature</div>
+      </div>
+
+      <!-- Chat 5: Dashboard / Pipeline -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-leads.jpeg" alt="Telegram Bot - Leads" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">� My Leads</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Pipeline, portfolio & daily stats in-chat</div>
+      </div>
+
+      <!-- Chat 6: Voice Created -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-voice-created.jpeg" alt="Telegram Bot - Lead Created via Voice" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">✅ Lead Created</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Voice AI creates lead automatically</div>
+      </div>
+
+      <!-- Chat 7: Language Selection -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-language.jpeg" alt="Telegram Bot - Language Selection" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🌐 Language</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Full Hindi & English support</div>
+      </div>
+
+      <!-- Chat 8: Partner & Earn -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="background:#000">
+              <img src="/static/demo-screenshots/tg-partner.jpeg" alt="Telegram Bot - Partner and Earn" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🤝 Partner & Earn</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Refer advisors, earn commissions</div>
+      </div>
+    </div>
+
+    <!-- Telegram bot commands overview -->
+    <div style="margin-top:48px;background:#fff;border-radius:var(--r-xl);padding:32px;border:1px solid var(--g200);box-shadow:var(--shadow-sm)">
+      <h3 style="text-align:center;font-size:1.2em;font-weight:800;color:var(--g800);margin-bottom:20px" data-i18n="tg_cmds_title">🤖 All Bot Commands at Your Fingertips</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🎙️</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/addlead</div><div style="font-size:.72em;color:var(--g400)">Add lead via text or voice</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">📋</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/leads</div><div style="font-size:.72em;color:var(--g400)">Search & list all leads</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🎯</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/pitch</div><div style="font-size:.72em;color:var(--g400)">AI pitch for any lead</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">📊</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/calc</div><div style="font-size:.72em;color:var(--g400)">12 financial calculators</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🏥</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/claim</div><div style="font-size:.72em;color:var(--g400)">Claims helper with checklists</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">📈</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/dashboard</div><div style="font-size:.72em;color:var(--g400)">Business dashboard & pipeline</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🤖</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/ai</div><div style="font-size:.72em;color:var(--g400)">12 AI sales tools</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🔄</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/renewals</div><div style="font-size:.72em;color:var(--g400)">Upcoming policy renewals</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">🎂</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/greet</div><div style="font-size:.72em;color:var(--g400)">Send client greetings via WA</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">📱</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/wacalc</div><div style="font-size:.72em;color:var(--g400)">Share calculator report via WA</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">📄</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/policy</div><div style="font-size:.72em;color:var(--g400)">Record a new policy</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--g50);border-radius:10px">
+          <span style="font-size:1.2em">👥</span>
+          <div><div style="font-size:.85em;font-weight:700;color:var(--teal)">/team</div><div style="font-size:.72em;color:var(--g400)">Manage team agents</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 1: WEB ON LAPTOP                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel" id="view-laptop">
+  <div class="container">
+    <!-- PLACEHOLDER — filled in Part 2 -->
+    <div class="panel-header">
+      <div class="badge" style="background:var(--teal-50);color:var(--teal-dark)" data-i18n="laptop_badge">💻 Desktop Experience</div>
+      <h2 data-i18n="laptop_title">Full-Screen Dashboard & CRM</h2>
+      <p data-i18n="laptop_desc">Your complete business command center — pipeline, metrics, follow-ups, and AI insights on a wide screen.</p>
+    </div>
+    <!-- ── Dashboard in Laptop ── -->
+    <div class="demo-split">
+      <div class="demo-info">
+        <h3 data-i18n="ld_h1">📈 AI Sales Dashboard</h3>
+        <p data-i18n="ld_p1">See your complete business health at a glance. Real-time pipeline tracking, premium metrics, follow-up alerts, and AI-driven insights — all in one view.</p>
+        <ul class="highlight-list">
+          <li><span class="icon">📊</span> <span data-i18n="ld_f1">6 KPI summary cards — leads, policies, premiums, conversions</span></li>
+          <li><span class="icon">🎯</span> <span data-i18n="ld_f2">7-stage sales pipeline funnel with live deal count</span></li>
+          <li><span class="icon">🔔</span> <span data-i18n="ld_f3">Today's follow-ups with 30-min pre-reminders & Done/Snooze</span></li>
+          <li><span class="icon">📋</span> <span data-i18n="ld_f3b">Lead Timeline — full interaction history, notes & follow-up trail</span></li>
+          <li><span class="icon">⚡</span> <span data-i18n="ld_f4">Quick actions — add lead, run calculator, send greeting</span></li>
+          <li><span class="icon">🤖</span> <span data-i18n="ld_f5">AI deal scoring — know which leads to call first</span></li>
+          <li><span class="icon">🌙</span> <span data-i18n="ld_f6">Dark mode toggle — easy on the eyes, day or night</span></li>
+          <li><span class="icon">📤</span> <span data-i18n="ld_f7">CSV import — bulk upload leads in seconds</span></li>
+        </ul>
+      </div>
+      <div class="device-laptop">
+        <div class="laptop-frame">
+          <div class="laptop-screen">
+            <div class="laptop-screen-inner">
+              <div class="screen-bar">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                <span class="bar-url">sarathi-ai.com/dashboard</span>
+              </div>
+              <img src="/static/demo-screenshots/dash-overview.png" alt="Sarathi-AI Dashboard" style="width:100%;height:calc(100% - 32px);object-fit:contain;object-position:top left;display:block;background:#f8fafc">
+            </div>
+          </div>
+          <div class="laptop-base"></div>
+          <div class="laptop-shadow"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Calculators in Laptop ── -->
+    <div class="demo-split">
+      <div class="demo-info">
+        <h3 data-i18n="lc_h1">📊 Financial Calculators Suite</h3>
+        <p data-i18n="lc_p1">12 professional calculators with interactive charts and branded PDF generation. Show clients exactly what they need to close the deal.</p>
+        <ul class="highlight-list">
+          <li><span class="icon">📉</span> <span data-i18n="lc_f1">Inflation Eraser — show how inflation kills savings</span></li>
+          <li><span class="icon">👤</span> <span data-i18n="lc_f2">Human Life Value — exact insurance cover needed</span></li>
+          <li><span class="icon">🏖️</span> <span data-i18n="lc_f3">Retirement Planner — monthly SIP goals for dream retirement</span></li>
+          <li><span class="icon">💳</span> <span data-i18n="lc_f4">EMI/Premium Calculator — compare loan options at a glance</span></li>
+          <li><span class="icon">🏥</span> <span data-i18n="lc_f5">Health Cover — ideal mediclaim based on age & city</span></li>
+          <li><span class="icon">📈</span> <span data-i18n="lc_f6">SIP vs Lumpsum — visual investment comparison</span></li>
+          <li><span class="icon">📊</span> <span data-i18n="lc_f7">MF SIP Planner — goal-based mutual fund planning</span></li>
+          <li><span class="icon">⚖️</span> <span data-i18n="lc_f8">ULIP vs Mutual Fund — compare where charges eat returns</span></li>
+          <li><span class="icon">🏛️</span> <span data-i18n="lc_f9">NPS Planner — retirement + tax benefit calculator</span></li>
+          <li><span class="icon">📈</span> <span data-i18n="lc_f10">Step-Up SIP — annual increase for accelerated wealth</span></li>
+          <li><span class="icon">💰</span> <span data-i18n="lc_f11">SWP Planner — systematic withdrawal for retirement income</span></li>
+          <li><span class="icon">⏰</span> <span data-i18n="lc_f12">Delay Cost — show the real cost of waiting to invest</span></li>
+        </ul>
+      </div>
+      <div class="device-laptop">
+        <div class="laptop-frame">
+          <div class="laptop-screen">
+            <div class="laptop-screen-inner">
+              <div class="screen-bar">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                <span class="bar-url">sarathi-ai.com/calculators</span>
+              </div>
+              <img src="/static/demo-screenshots/dash-sip-calc.png" alt="Sarathi-AI Financial Calculator" style="width:100%;height:calc(100% - 32px);object-fit:contain;object-position:top left;display:block;background:#f8fafc">
+            </div>
+          </div>
+          <div class="laptop-base"></div>
+          <div class="laptop-shadow"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI Tools in Laptop ── -->
+    <div class="demo-split reverse">
+      <div class="demo-info">
+        <h3>🤖 AI-Powered Sales Tools</h3>
+        <p>12 AI tools that turn your CRM into an intelligent sales machine — AI pitch generator, objection handler, follow-up writer, and more.</p>
+        <ul class="highlight-list">
+          <li><span class="icon">🎯</span> <span>AI Pitch — personalized talking points for every lead</span></li>
+          <li><span class="icon">🎙️</span> <span>Voice AI assistant — talk naturally to manage your CRM</span></li>
+          <li><span class="icon">🛡️</span> <span>Objection handler — smart rebuttals for common objections</span></li>
+          <li><span class="icon">📧</span> <span>Follow-up writer — never miss a touchpoint</span></li>
+          <li><span class="icon">🎂</span> <span>Greeting generator — birthday & anniversary wishes</span></li>
+          <li><span class="icon">📊</span> <span>Needs analyzer — understand client requirements</span></li>
+        </ul>
+      </div>
+      <div class="device-laptop">
+        <div class="laptop-frame">
+          <div class="laptop-screen">
+            <div class="laptop-screen-inner">
+              <div class="screen-bar">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                <span class="bar-url">sarathi-ai.com/dashboard#ai</span>
+              </div>
+              <img src="/static/demo-screenshots/dash-ai-tools.png" alt="Sarathi-AI AI Tools" style="width:100%;height:calc(100% - 32px);object-fit:contain;object-position:top left;display:block;background:#f8fafc">
+            </div>
+          </div>
+          <div class="laptop-base"></div>
+          <div class="laptop-shadow"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Team Management in Laptop ── -->
+    <div class="demo-split">
+      <div class="demo-info">
+        <h3>👥 Team Management</h3>
+        <p>Build and manage your team of agents. Assign tasks, set follow-up reminders, track performance — with automatic nudges and accountability built in.</p>
+        <ul class="highlight-list">
+          <li><span class="icon">👤</span> <span>Add/edit team members with role-based access</span></li>
+          <li><span class="icon">📋</span> <span>Assign tasks to team members — "create task for Neha" via voice</span></li>
+          <li><span class="icon">🔔</span> <span>Automatic follow-up reminders with 30-min pre-alerts</span></li>
+          <li><span class="icon">🤖</span> <span>AI nudges — proactive momentum & celebration alerts</span></li>
+          <li><span class="icon">📊</span> <span>Individual agent performance metrics & KPIs</span></li>
+          <li><span class="icon">🔄</span> <span>Lead assignment & transfer between agents</span></li>
+          <li><span class="icon">🔐</span> <span>Owner/Admin/Agent role hierarchy</span></li>
+        </ul>
+      </div>
+      <div class="device-laptop">
+        <div class="laptop-frame">
+          <div class="laptop-screen">
+            <div class="laptop-screen-inner">
+              <div class="screen-bar">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                <span class="bar-url">sarathi-ai.com/dashboard#team</span>
+              </div>
+              <img src="/static/demo-screenshots/dash-team.png" alt="Sarathi-AI Team Management" style="width:100%;height:calc(100% - 32px);object-fit:contain;object-position:top left;display:block;background:#f8fafc">
+            </div>
+          </div>
+          <div class="laptop-base"></div>
+          <div class="laptop-shadow"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 2: WEB ON MOBILE                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel" id="view-mobile">
+  <div class="container">
+    <div class="panel-header">
+      <div class="badge" style="background:var(--indigo-50);color:var(--indigo)" data-i18n="mobile_badge">📱 Mobile Web</div>
+      <h2 data-i18n="mobile_title">Your CRM — Always in Your Pocket</h2>
+      <p data-i18n="mobile_desc">Every feature works perfectly on mobile browsers. Check pipeline, run calculators, review dashboard — all on the go.</p>
+    </div>
+    <div style="display:flex;gap:40px;justify-content:center;flex-wrap:wrap;align-items:flex-start">
+      <!-- Phone: Dashboard mobile -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-dashboard.jpeg" alt="Mobile Dashboard" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)" data-i18n="mob_label1">📈 Dashboard</div>
+      </div>
+
+      <!-- Phone: Calculator mobile -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-sip-vs-lump.jpeg" alt="Mobile Calculator - SIP vs Lumpsum" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)" data-i18n="mob_label2">📊 Calculator</div>
+      </div>
+
+      <!-- Phone: Homepage mobile -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-admin.jpeg" alt="Mobile App - Admin Options" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)" data-i18n="mob_label3">⚙️ Admin Options</div>
+      </div>
+
+      <!-- Phone: AI Message -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-ai-message.jpeg" alt="Mobile App - AI Generated Message" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🤖 AI Message</div>
+      </div>
+
+      <!-- Phone: Calculator Hindi -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-calc-hindi.jpeg" alt="Mobile App - Calculator Results in Hindi" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">📊 Calculator (हिंदी)</div>
+      </div>
+
+      <!-- Phone: SIP Dark Mode -->
+      <div>
+        <div class="device-phone">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-screen-inner" style="background:#000">
+                <img src="/static/demo-screenshots/mob-sip-dark-en.jpeg" alt="Mobile App - SIP Planner Dark Mode" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block">
+              </div>
+            </div>
+          </div>
+          <div class="phone-shadow"></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🌙 Dark Mode</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 3: INSTALL AS WEBAPP                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel" id="view-pwa">
+  <div class="container">
+    <div class="panel-header">
+      <div class="badge" style="background:var(--green-50);color:var(--green)" data-i18n="pwa_badge">📲 Install as App</div>
+      <h2 data-i18n="pwa_title">One Tap — App on Your Phone</h2>
+      <p data-i18n="pwa_desc">No app store needed. Add Sarathi-AI to your home screen and use it like a native app — instant access, full features.</p>
+    </div>
+    <!-- Install steps -->
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="step-icon">🌐</div>
+        <div class="step-num">1</div>
+        <h4 data-i18n="pwa_s1_t">Open in Chrome</h4>
+        <p data-i18n="pwa_s1_d">Visit sarathi-ai.com on Chrome browser on your phone. Login to your account.</p>
+      </div>
+      <div class="install-step">
+        <div class="step-icon">⋮</div>
+        <div class="step-num">2</div>
+        <h4 data-i18n="pwa_s2_t">Tap Menu (⋮)</h4>
+        <p data-i18n="pwa_s2_d">Tap the three-dot menu in Chrome's top right corner.</p>
+      </div>
+      <div class="install-step">
+        <div class="step-icon">📲</div>
+        <div class="step-num">3</div>
+        <h4 data-i18n="pwa_s3_t">"Add to Home Screen"</h4>
+        <p data-i18n="pwa_s3_d">Select "Add to Home Screen" or "Install App" from the menu.</p>
+      </div>
+      <div class="install-step">
+        <div class="step-icon">✅</div>
+        <div class="step-num">4</div>
+        <h4 data-i18n="pwa_s4_t">Done! Use Like an App</h4>
+        <p data-i18n="pwa_s4_d">Sarathi-AI icon appears on your home screen. Tap to open — full screen, no browser bars.</p>
+      </div>
+    </div>
+
+    <!-- PWA visual demo -->
+    <div style="display:flex;gap:32px;justify-content:center;flex-wrap:wrap;align-items:flex-start;margin-top:40px">
+      <!-- Step 1: Browser -->
+      <div style="text-align:center">
+        <div class="device-phone">
+          <div class="phone-frame" style="width:240px">
+            <div class="phone-screen" style="aspect-ratio:9/16">
+              <div class="phone-screen-inner" style="background:#fff;font-family:var(--font-sans)">
+                <div style="display:flex;justify-content:space-between;padding:5px 10px;font-size:.45em;color:var(--g500);background:var(--g50)">
+                  <span>9:41</span><span>📶 🔋</span>
+                </div>
+                <!-- Chrome bar -->
+                <div style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--g100);border-bottom:1px solid var(--g200)">
+                  <span style="font-size:.4em;color:var(--g400)">🔒</span>
+                  <div style="flex:1;background:#fff;border-radius:12px;padding:3px 8px;font-size:.38em;color:var(--g500)">sarathi-ai.com</div>
+                  <span style="font-size:.55em;color:var(--g500);font-weight:700;background:var(--saffron);color:#fff;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.4em">⋮</span>
+                </div>
+                <!-- Menu dropdown -->
+                <div style="position:relative">
+                  <div style="position:absolute;right:6px;top:2px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);padding:4px 0;z-index:2;width:120px">
+                    <div style="padding:5px 10px;font-size:.38em;color:var(--g500)">New tab</div>
+                    <div style="padding:5px 10px;font-size:.38em;color:var(--g500)">Bookmarks</div>
+                    <div style="padding:5px 10px;font-size:.38em;color:var(--g800);font-weight:700;background:var(--teal-50);border-left:2px solid var(--teal)">📲 Add to Home Screen</div>
+                    <div style="padding:5px 10px;font-size:.38em;color:var(--g500)">Settings</div>
+                  </div>
+                </div>
+                <div style="padding:16px 10px;text-align:center;margin-top:60px">
+                  <div style="font-size:.9em;font-weight:900;color:var(--g900)">Sarathi<span style="color:var(--teal)">-AI</span></div>
+                  <div style="font-size:.4em;color:var(--g500);margin-top:4px">Login to continue...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:.78em;font-weight:700;color:var(--g600);margin-top:10px" data-i18n="pwa_v1">Step 1: Tap ⋮ Menu</div>
+      </div>
+
+      <!-- Step 2: Install prompt -->
+      <div style="text-align:center">
+        <div class="device-phone">
+          <div class="phone-frame" style="width:240px">
+            <div class="phone-screen" style="aspect-ratio:9/16">
+              <div class="phone-screen-inner" style="background:#fff;font-family:var(--font-sans)">
+                <div style="display:flex;justify-content:space-between;padding:5px 10px;font-size:.45em;color:var(--g500);background:var(--g50)">
+                  <span>9:41</span><span>📶 🔋</span>
+                </div>
+                <div style="background:rgba(0,0,0,.4);height:100%;display:flex;align-items:end;padding:8px">
+                  <!-- Install dialog -->
+                  <div style="background:#fff;border-radius:12px;padding:14px;width:100%;box-shadow:0 -4px 20px rgba(0,0,0,.15)">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                      <div style="width:32px;height:32px;background:var(--teal);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.8em">🤖</div>
+                      <div>
+                        <div style="font-size:.5em;font-weight:700;color:var(--g800)">Sarathi-AI.com</div>
+                        <div style="font-size:.38em;color:var(--g400)">sarathi-ai.com</div>
+                      </div>
+                    </div>
+                    <div style="font-size:.42em;color:var(--g500);margin-bottom:10px">Add this website to your home screen for quick access?</div>
+                    <div style="display:flex;gap:8px">
+                      <div style="flex:1;text-align:center;padding:6px;border-radius:6px;font-size:.42em;color:var(--g500);border:1px solid var(--g200)">Cancel</div>
+                      <div style="flex:1;text-align:center;padding:6px;border-radius:6px;font-size:.42em;color:#fff;background:var(--teal);font-weight:700">Add</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:.78em;font-weight:700;color:var(--g600);margin-top:10px" data-i18n="pwa_v2">Step 2: Tap "Add"</div>
+      </div>
+
+      <!-- Step 3: Home screen -->
+      <div style="text-align:center">
+        <div class="device-phone">
+          <div class="phone-frame" style="width:240px">
+            <div class="phone-screen" style="aspect-ratio:9/16">
+              <div class="phone-screen-inner" style="background:linear-gradient(180deg,#0f172a 0%,#1e3a5f 50%,#0f172a 100%);font-family:var(--font-sans)">
+                <div style="display:flex;justify-content:space-between;padding:5px 10px;font-size:.45em;color:rgba(255,255,255,.7)">
+                  <span>9:41</span><span>📶 🔋</span>
+                </div>
+                <!-- Home screen icons -->
+                <div style="padding:20px 16px 10px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#25D366,#128C7E);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">💬</div>
+                    <div style="font-size:.32em;color:#fff">WhatsApp</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#2AABEE,#229ED9);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">✈️</div>
+                    <div style="font-size:.32em;color:#fff">Telegram</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#4285f4,#34a853);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">📧</div>
+                    <div style="font-size:.32em;color:#fff">Gmail</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#ff5722,#e91e63);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">📷</div>
+                    <div style="font-size:.32em;color:#fff">Camera</div>
+                  </div>
+                  <!-- Sarathi-AI icon - highlighted -->
+                  <div style="text-align:center;position:relative">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,var(--teal),var(--teal-dark));border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em;box-shadow:0 0 20px rgba(13,148,136,.6);animation:pulseGlow 2s ease-in-out infinite">🤖</div>
+                    <div style="font-size:.32em;color:#fff;font-weight:700">Sarathi-AI</div>
+                    <div style="position:absolute;top:-6px;right:-2px;font-size:.6em">✨</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#fbbc05,#ea4335);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">📅</div>
+                    <div style="font-size:.32em;color:#fff">Calendar</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:#333;border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">⚙️</div>
+                    <div style="font-size:.32em;color:#fff">Settings</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="width:36px;height:36px;background:linear-gradient(135deg,#007AFF,#5856D6);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">🎵</div>
+                    <div style="font-size:.32em;color:#fff">Music</div>
+                  </div>
+                </div>
+                <!-- Arrow pointing to icon -->
+                <div style="text-align:center;padding:10px">
+                  <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px;display:inline-block">
+                    <div style="font-size:.45em;color:#fff;font-weight:700">✅ Installed! Tap to open →</div>
+                    <div style="font-size:.35em;color:rgba(255,255,255,.6)">Full screen • No browser bars</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:.78em;font-weight:700;color:var(--g600);margin-top:10px" data-i18n="pwa_v3">Step 3: App on Home Screen!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 5: WHATSAPP BOT (hidden — Voice AI replaces)    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel" id="view-whatsapp" style="display:none!important">
+  <div class="container">
+    <div class="panel-header">
+      <div class="badge" style="background:#dcfce7;color:#15803d" data-i18n="wa_badge">💬 WhatsApp Automation</div>
+      <h2 data-i18n="wa_title">Impress Clients on WhatsApp</h2>
+      <p data-i18n="wa_desc">Auto birthday wishes, branded reports, policy reminders — all sent from YOUR number with YOUR firm branding.</p>
+    </div>
+    <div style="display:flex;gap:40px;justify-content:center;flex-wrap:wrap;align-items:flex-start">
+
+      <!-- WA Chat 1: Birthday Greeting -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="font-family:var(--font-sans);display:flex;flex-direction:column">
+              <div class="chat-header" style="background:#075E54">
+                <div class="avatar" style="background:#25D366">🏢</div>
+                <div>
+                  <div class="name">Sharma Insurance</div>
+                  <div class="status">Business Account</div>
+                </div>
+              </div>
+              <div style="flex:1;background:#ece5dd;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22><rect fill=%22%23d7cfc2%22 width=%2220%22 height=%2220%22 opacity=%22.15%22/></svg>');padding:12px;overflow:hidden">
+                <!-- Date chip -->
+                <div style="text-align:center;margin-bottom:10px">
+                  <span style="background:rgba(255,255,255,.8);padding:3px 12px;border-radius:8px;font-size:.68em;color:var(--g500)">Today</span>
+                </div>
+                <!-- Birthday message -->
+                <div class="chat-bubble bot" style="background:#fff;border:none;max-width:90%">
+                  <div style="font-size:1.8em;text-align:center;margin-bottom:4px">🎂🎉</div>
+                  <b>Happy Birthday, Rajesh ji! 🎊</b><br><br>
+                  Wishing you a wonderful year full of health, happiness, and prosperity!<br><br>
+                  As your financial advisor, I ensure your family's future is always protected. 🛡️<br><br>
+                  <div style="background:var(--teal-50);border-radius:8px;padding:8px;margin:6px 0">
+                    <div style="font-size:.85em;font-weight:700;color:var(--teal-dark)">🏢 Sharma Insurance</div>
+                    <div style="font-size:.75em;color:var(--g500)">📞 98765-43210</div>
+                    <div style="font-size:.75em;color:var(--g500)">IRDAI Lic: LI1234567</div>
+                  </div>
+                  <i style="font-size:.85em;color:var(--g400)">— Your trusted advisor, always!</i>
+                  <div class="time" style="color:var(--g300)">8:00 AM ✓✓</div>
+                </div>
+
+                <!-- Client replies -->
+                <div class="chat-bubble user" style="background:#dcf8c6;color:var(--g800);border-radius:14px 14px 4px 14px;border:none">
+                  Thank you so much Sharma ji! 🙏 Always appreciate your care.
+                  <div class="time" style="color:var(--g400)">8:15 AM</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🎂 Auto Birthday Wishes</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Sent automatically with your branding</div>
+      </div>
+
+      <!-- WA Chat 2: Calculator Report Share -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="font-family:var(--font-sans);display:flex;flex-direction:column">
+              <div class="chat-header" style="background:#075E54">
+                <div class="avatar" style="background:#25D366">🏢</div>
+                <div>
+                  <div class="name">Sharma Insurance</div>
+                  <div class="status">Business Account</div>
+                </div>
+              </div>
+              <div style="flex:1;background:#ece5dd;padding:12px;overflow:hidden">
+                <div style="text-align:center;margin-bottom:10px">
+                  <span style="background:rgba(255,255,255,.8);padding:3px 12px;border-radius:8px;font-size:.68em;color:var(--g500)">Today</span>
+                </div>
+                <!-- Report message -->
+                <div class="chat-bubble bot" style="background:#fff;border:none;max-width:90%">
+                  <b>📊 Your Financial Report</b><br><br>
+                  Hi Rajesh ji, here's the Inflation Eraser analysis we discussed:<br><br>
+                  <!-- PDF preview mockup -->
+                  <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:10px;margin:6px 0">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                      <div style="width:28px;height:34px;background:#dc2626;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.5em;font-weight:700">PDF</div>
+                      <div>
+                        <div style="font-size:.78em;font-weight:600;color:var(--g700)">Inflation_Eraser_Report.pdf</div>
+                        <div style="font-size:.65em;color:var(--g400)">324 KB • Branded Report</div>
+                      </div>
+                    </div>
+                    <div style="font-size:.72em;color:var(--g500);line-height:1.4">
+                      ⚠️ ₹10L today = ₹3.1L in 20 years<br>
+                      📈 You need ₹32L to maintain today's lifestyle<br>
+                      💡 Monthly SIP of ₹8,500 can bridge this gap
+                    </div>
+                  </div>
+                  This shows why starting early really matters. Shall I prepare a plan for you?<br><br>
+                  <div style="background:var(--teal-50);border-radius:6px;padding:6px;text-align:center;font-size:.8em;color:var(--teal-dark);font-weight:600">🏢 Sharma Insurance • IRDAI #LI1234567</div>
+                  <div class="time" style="color:var(--g300)">11:30 AM ✓✓</div>
+                </div>
+
+                <!-- Client reply -->
+                <div class="chat-bubble user" style="background:#dcf8c6;color:var(--g800);border-radius:14px 14px 4px 14px;border:none">
+                  This is very eye-opening! 😮 Yes please, let's discuss a plan.
+                  <div class="time" style="color:var(--g400)">11:45 AM</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">📊 Branded Report Sharing</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">PDF with your firm name & IRDAI badge</div>
+      </div>
+
+      <!-- WA Chat 3: Renewal Reminder -->
+      <div>
+        <div class="phone-frame-sm" style="margin:0 auto">
+          <div class="phone-screen">
+            <div class="phone-screen-inner" style="font-family:var(--font-sans);display:flex;flex-direction:column">
+              <div class="chat-header" style="background:#075E54">
+                <div class="avatar" style="background:#25D366">🏢</div>
+                <div>
+                  <div class="name">Sharma Insurance</div>
+                  <div class="status">Business Account</div>
+                </div>
+              </div>
+              <div style="flex:1;background:#ece5dd;padding:12px;overflow:hidden">
+                <div style="text-align:center;margin-bottom:10px">
+                  <span style="background:rgba(255,255,255,.8);padding:3px 12px;border-radius:8px;font-size:.68em;color:var(--g500)">Today</span>
+                </div>
+                <!-- Renewal reminder -->
+                <div class="chat-bubble bot" style="background:#fff;border:none;max-width:90%">
+                  <b>🔔 Policy Renewal Reminder</b><br><br>
+                  Dear Priya ji,<br><br>
+                  Your Health Insurance policy is due for renewal:<br><br>
+                  <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px;margin:6px 0">
+                    <div style="font-size:.85em;font-weight:700;color:#92400e">📋 Policy Details</div>
+                    <div style="font-size:.78em;color:var(--g600);margin-top:4px">
+                      🛡️ Star Health — Family Floater<br>
+                      📅 Due: March 5, 2026<br>
+                      💰 Premium: ₹12,450/year<br>
+                      👨‍👩‍👧 Cover: ₹5L (4 members)
+                    </div>
+                  </div>
+                  <br>
+                  Renewing on time ensures no break in coverage. I can help with the renewal process — just reply "Yes"! 👍<br><br>
+                  <div style="background:var(--teal-50);border-radius:6px;padding:6px;text-align:center;font-size:.8em;color:var(--teal-dark);font-weight:600">🏢 Sharma Insurance</div>
+                  <div class="time" style="color:var(--g300)">9:00 AM ✓✓</div>
+                </div>
+
+                <div class="chat-bubble user" style="background:#dcf8c6;color:var(--g800);border-radius:14px 14px 4px 14px;border:none">
+                  Yes, please help with renewal 👍
+                  <div class="time" style="color:var(--g400)">9:12 AM</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:.85em;font-weight:700;color:var(--g600)">🔔 Renewal Reminders</div>
+        <div style="text-align:center;font-size:.75em;color:var(--g400)">Auto-sent before policy expiry</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PANEL 6: CALCULATORS                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="view-panel" id="view-calculators">
+  <div class="container">
+    <div class="panel-header">
+      <div class="badge badge-calc" data-i18n="calc_badge">📊 Financial Calculators</div>
+      <h2 data-i18n="calc_title">12 Pro Calculators That Close Deals</h2>
+      <p data-i18n="calc_desc">Show clients exactly what they need — generate branded PDF reports and share with clients in seconds.</p>
+    </div>
+    <div class="screen-gallery">
+
+      <!-- Calc 1: Inflation Eraser -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#fef2f2,#fff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">📉</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Inflation Eraser</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Current Amount</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹10,00,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Years</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">20</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#fecaca" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="58 131" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="38" text-anchor="middle" font-size="9" font-weight="800" fill="#dc2626">₹3.1L</text>
+                <text x="40" y="48" text-anchor="middle" font-size="5.5" fill="#94a3b8">Real Value</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--red);font-weight:600">69% wealth lost!</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>📉 Inflation Eraser</h4>
+          <p data-i18n="c1_desc">Show how inflation silently destroys savings over time</p>
+        </div>
+      </div>
+
+      <!-- Calc 2: HLV -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#f0fdfa,#fff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">👤</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Human Life Value</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Annual Income</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹12,00,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Years to Retire</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">25</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#ccfbf1" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#0d9488" stroke-width="8" stroke-dasharray="150 39" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="38" text-anchor="middle" font-size="8" font-weight="800" fill="#0d9488">₹2.1Cr</text>
+                <text x="40" y="48" text-anchor="middle" font-size="5.5" fill="#94a3b8">Cover Needed</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--teal);font-weight:600">Minimum cover</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>👤 Human Life Value (HLV)</h4>
+          <p data-i18n="c2_desc">Calculate exact insurance cover a family needs</p>
+        </div>
+      </div>
+
+      <!-- Calc 3: Retirement Planner -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#eef2ff,#fff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">🏖️</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Retirement Planner</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Monthly Expenses</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹50,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Retire at Age</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">60</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#c7d2fe" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#4338ca" stroke-width="8" stroke-dasharray="140 49" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="38" text-anchor="middle" font-size="8" font-weight="800" fill="#4338ca">₹3.2Cr</text>
+                <text x="40" y="48" text-anchor="middle" font-size="5.5" fill="#94a3b8">Corpus</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--indigo);font-weight:600">SIP: ₹18K/mo</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>🏖️ Retirement Planner</h4>
+          <p data-i18n="c3_desc">Calculate retirement corpus and monthly SIP needed</p>
+        </div>
+      </div>
+
+      <!-- Calc 4: EMI/Premium -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#fef3c7,#fff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">💳</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">EMI / Premium Calculator</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Loan Amount</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹50,00,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Rate / Tenure</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">8.5% / 20 yrs</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#fde68a" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#f59e0b" stroke-width="8" stroke-dasharray="100 89" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="36" text-anchor="middle" font-size="7" font-weight="800" fill="#d97706">₹43.4K</text>
+                <text x="40" y="46" text-anchor="middle" font-size="5.5" fill="#94a3b8">Monthly EMI</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--saffron-dark);font-weight:600">Total: ₹1.04Cr</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>💳 EMI / Premium Calculator</h4>
+          <p data-i18n="c4_desc">Compare loan EMIs and insurance premiums instantly</p>
+        </div>
+      </div>
+
+      <!-- Calc 5: Health Cover -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#ecfdf5,#fff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">🏥</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Health Cover Estimator</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Age / City</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">35 / Mumbai</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Family Size</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">4 members</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#bbf7d0" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#059669" stroke-width="8" stroke-dasharray="130 59" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="36" text-anchor="middle" font-size="8" font-weight="800" fill="#059669">₹10L</text>
+                <text x="40" y="46" text-anchor="middle" font-size="5.5" fill="#94a3b8">Ideal Cover</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--green);font-weight:600">~₹18K/year</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>🏥 Health Cover Estimator</h4>
+          <p data-i18n="c5_desc">Find ideal mediclaim cover based on age, city & family</p>
+        </div>
+      </div>
+
+      <!-- Calc 6: SIP vs Lumpsum -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#f0fdfa,#eef2ff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">📈</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">SIP vs Lumpsum</div>
+          </div>
+          <div style="text-align:center">
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
+              <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;text-align:center">
+                <div style="font-size:.65em;color:var(--green);font-weight:600">SIP: ₹5K/mo</div>
+                <div style="font-size:1em;font-weight:800;color:var(--green)">₹25.1L</div>
+              </div>
+              <div style="display:flex;align-items:center;font-size:.75em;color:var(--g400);font-weight:700">VS</div>
+              <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 14px;text-align:center">
+                <div style="font-size:.65em;color:var(--indigo);font-weight:600">Lump: ₹5L</div>
+                <div style="font-size:1em;font-weight:800;color:var(--indigo)">₹27.4L</div>
+              </div>
+            </div>
+            <!-- Mini bar chart -->
+            <div style="display:flex;gap:6px;align-items:end;justify-content:center;height:50px">
+              <div style="width:40px;background:linear-gradient(180deg,var(--green),#34d399);height:44px;border-radius:6px 6px 0 0"></div>
+              <div style="width:40px;background:linear-gradient(180deg,var(--indigo),#818cf8);height:48px;border-radius:6px 6px 0 0"></div>
+            </div>
+            <div style="display:flex;gap:6px;justify-content:center;font-size:.6em;color:var(--g400)">
+              <span style="width:40px;text-align:center">SIP</span>
+              <span style="width:40px;text-align:center">Lump</span>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>📈 SIP vs Lumpsum</h4>
+          <p data-i18n="c6_desc">Visual comparison — which investment strategy wins?</p>
+        </div>
+      </div>
+
+      <!-- Calc 7: MF SIP Planner -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">📊</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">MF SIP Planner</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Goal Amount</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹50,00,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Time Horizon</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">15 years</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#bbf7d0" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#059669" stroke-width="8" stroke-dasharray="135 54" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="36" text-anchor="middle" font-size="7" font-weight="800" fill="#059669">₹9.8K</text>
+                <text x="40" y="46" text-anchor="middle" font-size="5.5" fill="#94a3b8">Monthly SIP</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--green);font-weight:600">Goal: ₹50L in 15Y</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>📊 MF SIP Planner</h4>
+          <p data-i18n="c7_desc">Goal-based Mutual Fund SIP planning with growth projection</p>
+        </div>
+      </div>
+
+      <!-- Calc 8: ULIP vs MF -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#fef3c7,#fefce8);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">⚖️</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">ULIP vs Mutual Fund</div>
+          </div>
+          <div style="text-align:center">
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 14px;text-align:center">
+                <div style="font-size:.65em;color:#dc2626;font-weight:600">ULIP</div>
+                <div style="font-size:1em;font-weight:800;color:#dc2626">₹18.2L</div>
+              </div>
+              <div style="display:flex;align-items:center;font-size:.75em;color:var(--g400);font-weight:700">VS</div>
+              <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;text-align:center">
+                <div style="font-size:.65em;color:var(--green);font-weight:600">Mutual Fund</div>
+                <div style="font-size:1em;font-weight:800;color:var(--green)">₹24.7L</div>
+              </div>
+            </div>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px;font-size:.65em;text-align:center;color:#dc2626;font-weight:600">
+              ⚠️ ULIP charges eat ~35% of returns!
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>⚖️ ULIP vs Mutual Fund</h4>
+          <p data-i18n="c8_desc">Compare ULIP vs MF — see where charges eat your returns</p>
+        </div>
+      </div>
+
+      <!-- Calc 9: NPS Planner -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#eef2ff,#f0f9ff);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">🏛️</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">NPS Planner</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Monthly Contribution</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹5,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Retirement Age</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">60</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#c7d2fe" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#4338ca" stroke-width="8" stroke-dasharray="113 76" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="36" text-anchor="middle" font-size="7" font-weight="800" fill="#4338ca">₹1.1Cr</text>
+                <text x="40" y="46" text-anchor="middle" font-size="5.5" fill="#94a3b8">NPS Corpus</text>
+              </svg>
+              <div style="font-size:.65em;color:var(--indigo);font-weight:600">Tax saved: ₹50K/yr</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>🏛️ NPS Planner</h4>
+          <p data-i18n="c9_desc">NPS retirement planning with tax benefit calculator</p>
+        </div>
+      </div>
+
+      <!-- Calc 10: Step-Up SIP -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#ecfdf5,#f0fdf4);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">📈</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Step-Up SIP</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Monthly SIP</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹10,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Annual Step-Up</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">10%</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <rect x="10" y="55" width="12" height="15" rx="2" fill="#86efac"/>
+                <rect x="25" y="42" width="12" height="28" rx="2" fill="#4ade80"/>
+                <rect x="40" y="28" width="12" height="42" rx="2" fill="#22c55e"/>
+                <rect x="55" y="12" width="12" height="58" rx="2" fill="#16a34a"/>
+                <text x="40" y="78" text-anchor="middle" font-size="6" fill="#94a3b8">Growing SIP</text>
+              </svg>
+              <div style="font-size:.65em;color:#16a34a;font-weight:600">₹1.2Cr corpus</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>📈 Step-Up SIP</h4>
+          <p data-i18n="c10_desc">Annual SIP increase for accelerated wealth building</p>
+        </div>
+      </div>
+
+      <!-- Calc 11: SWP Planner -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#fff7ed,#fffbeb);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">💰</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">SWP Planner</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Corpus</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹50L</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Monthly Withdrawal</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">₹30,000</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#fed7aa" stroke-width="8"/>
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="140 48" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="36" text-anchor="middle" font-size="7" font-weight="800" fill="#ea580c">22 yrs</text>
+                <text x="40" y="46" text-anchor="middle" font-size="5.5" fill="#94a3b8">Corpus lasts</text>
+              </svg>
+              <div style="font-size:.65em;color:#ea580c;font-weight:600">₹30K/mo income</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>💰 SWP Planner</h4>
+          <p data-i18n="c11_desc">Systematic withdrawal planning for retirement income</p>
+        </div>
+      </div>
+
+      <!-- Calc 12: Delay Cost -->
+      <div class="screen-card">
+        <div class="screen-preview" style="background:linear-gradient(135deg,#fef2f2,#fff1f2);padding:20px">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:2em">⏰</div>
+            <div style="font-size:.85em;font-weight:800;color:var(--g800)">Delay Cost</div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Monthly SIP</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600;margin-bottom:6px">₹10,000</div>
+              <div style="font-size:.68em;color:var(--g500);margin-bottom:3px">Delay</div>
+              <div style="background:var(--g100);border-radius:6px;padding:6px 10px;font-size:.78em;font-weight:600">5 years</div>
+            </div>
+            <div style="flex:1;text-align:center">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <rect x="8" y="20" width="28" height="45" rx="4" fill="#fecaca" stroke="#ef4444" stroke-width="1"/>
+                <text x="22" y="38" text-anchor="middle" font-size="6" font-weight="700" fill="#ef4444">₹45L</text>
+                <text x="22" y="48" text-anchor="middle" font-size="5" fill="#94a3b8">Delayed</text>
+                <rect x="44" y="10" width="28" height="55" rx="4" fill="#bbf7d0" stroke="#22c55e" stroke-width="1"/>
+                <text x="58" y="32" text-anchor="middle" font-size="6" font-weight="700" fill="#16a34a">₹1Cr</text>
+                <text x="58" y="42" text-anchor="middle" font-size="5" fill="#94a3b8">On time</text>
+              </svg>
+              <div style="font-size:.65em;color:#ef4444;font-weight:600">₹55L lost!</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-label">
+          <h4>⏰ Delay Cost</h4>
+          <p data-i18n="c12_desc">Show clients the real cost of waiting to invest</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF report CTA -->
+    <div style="margin-top:32px;background:linear-gradient(135deg,var(--teal-50),#fff);border:2px solid var(--teal-100);border-radius:var(--r-xl);padding:24px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <h3 style="font-size:1.1em;font-weight:800;color:var(--teal-dark);margin-bottom:6px" data-i18n="pdf_title">📄 Every Calculation → Branded PDF Report</h3>
+        <p style="font-size:.88em;color:var(--g500);line-height:1.6" data-i18n="pdf_desc">Each calculator generates a beautiful PDF with your photo, firm name, IRDAI license, contact details, and professional charts. Share with clients in one tap — they remember YOU, not the tool.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:50px;height:64px;background:#dc2626;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8em;font-weight:700;box-shadow:0 4px 12px rgba(220,38,38,.25)">PDF</div>
+        <div style="font-size:1.5em">→</div>
+        <div style="width:50px;height:64px;background:var(--teal);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4em;box-shadow:0 4px 12px rgba(13,148,136,.25)">📤</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- CTA FOOTER                                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section class="demo-cta">
+  <div class="container">
+    <h2 data-i18n="cta_title">Ready to Let AI Sell For You?</h2>
+    <p data-i18n="cta_desc">Join thousands of Indian financial advisors who close more deals with less effort. 14-day free trial — no card required.</p>
+    <div class="cta-buttons">
+      <a href="/#pricing" class="btn-primary" data-i18n="cta_btn1">Start Free Trial — ₹0 for 14 Days →</a>
+      <a href="https://t.me/SarathiBizBot" class="btn-secondary" data-i18n="cta_btn2">Open Telegram Bot</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SCRIPTS                                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════
+   VIEW TAB SWITCHER
+   ══════════════════════════════════════════════════════════ */
+function showView(id){
+  document.querySelectorAll('.view-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.view-tab').forEach(t=>t.classList.remove('active'));
+  const panel=document.getElementById('view-'+id);
+  if(panel) panel.classList.add('active');
+  const tabs=document.querySelectorAll('.view-tab');
+  const map={telegram:0,laptop:1,mobile:2,pwa:3,whatsapp:4,calculators:5};
+  if(tabs[map[id]]) tabs[map[id]].classList.add('active');
+}
+
+/* ══════════════════════════════════════════════════════════
+   NAVBAR SCROLL EFFECT
+   ══════════════════════════════════════════════════════════ */
+window.addEventListener('scroll',()=>{
+  document.getElementById('demoNav').classList.toggle('scrolled',window.scrollY>10);
+});
+
+/* ══════════════════════════════════════════════════════════
+   LANGUAGE SYSTEM
+   ══════════════════════════════════════════════════════════ */
+const _T={
+  brand_name:{en:'Sarathi<span class="ai">-AI</span>',hi:'सारथी<span class="ai">-AI</span>'},
+  nav_home:{en:'← Home',hi:'← होम'},
+  nav_trial:{en:'Start Free Trial →',hi:'फ्री ट्रायल →'},
+  hero_pill:{en:'🎬 Interactive Product Demo',hi:'🎬 इंटरैक्टिव प्रोडक्ट डेमो'},
+  hero_t1:{en:'Experience',hi:'अनुभव करें'},
+  hero_t2:{en:'Sarathi-AI',hi:'Sarathi-AI'},
+  hero_t3:{en:'Like Your Clients Will',hi:'जैसा आपके ग्राहक देखेंगे'},
+  hero_desc:{en:'Explore every screen, every bot conversation, every calculator — exactly as it works in production. See how AI closes deals while you sleep.',hi:'हर स्क्रीन, हर बोट बातचीत, हर कैलकुलेटर — ठीक वैसे ही जैसे प्रोडक्शन में काम करता है। देखें कैसे AI आपके सोते समय डील क्लोज़ करता है।'},
+  tab_laptop:{en:'💻 Web on Laptop',hi:'💻 लैपटॉप पर वेब'},
+  tab_mobile:{en:'📱 Web on Mobile',hi:'📱 मोबाइल पर वेब'},
+  tab_pwa:{en:'📲 Install as App',hi:'📲 ऐप इंस्टॉल करें'},
+  tab_telegram:{en:'🤖 Telegram Bot',hi:'🤖 Telegram बोट'},
+  tab_whatsapp:{en:'💬 WhatsApp Bot',hi:'💬 WhatsApp बोट'},
+  tab_calc:{en:'📊 Calculators',hi:'📊 कैलकुलेटर'},
+  laptop_badge:{en:'💻 Desktop Experience',hi:'💻 डेस्कटॉप अनुभव'},
+  laptop_title:{en:'Full-Screen Dashboard & CRM',hi:'फुल-स्क्रीन डैशबोर्ड और CRM'},
+  laptop_desc:{en:'Your complete business command center — pipeline, metrics, follow-ups, and AI insights on a wide screen.',hi:'आपका पूरा बिज़नेस कमांड सेंटर — पाइपलाइन, मेट्रिक्स, फॉलो-अप, और AI इनसाइट्स बड़ी स्क्रीन पर।'},
+  mobile_badge:{en:'📱 Mobile Web',hi:'📱 मोबाइल वेब'},
+  mobile_title:{en:'Your CRM — Always in Your Pocket',hi:'आपका CRM — हमेशा आपकी जेब में'},
+  mobile_desc:{en:'Every feature works perfectly on mobile browsers. Check pipeline, run calculators, review dashboard — all on the go.',hi:'हर फीचर मोबाइल ब्राउज़र पर बेहतरीन काम करता है। पाइपलाइन चेक करें, कैलकुलेटर चलाएं, डैशबोर्ड देखें — चलते-फिरते।'},
+  pwa_badge:{en:'📲 Install as App',hi:'📲 ऐप इंस्टॉल करें'},
+  pwa_title:{en:'One Tap — App on Your Phone',hi:'एक टैप — फ़ोन पर ऐप'},
+  pwa_desc:{en:'No app store needed. Add Sarathi-AI to your home screen and use it like a native app — instant access, full features.',hi:'ऐप स्टोर की ज़रूरत नहीं। Sarathi-AI को होम स्क्रीन पर जोड़ें और नेटिव ऐप की तरह इस्तेमाल करें।'},
+  tg_badge:{en:'🤖 Telegram Bot Experience',hi:'🤖 Telegram बोट अनुभव'},
+  tg_title:{en:'Your AI Sales Assistant on Telegram',hi:'Telegram पर आपका AI सेल्स असिस्टेंट'},
+  tg_desc:{en:'Add leads with voice, get AI pitches, track pipeline, smart follow-ups with reminders & accountability — all through simple chat commands.',hi:'वॉयस से लीड जोड़ें, AI पिच पाएं, पाइपलाइन ट्रैक करें, स्मार्ट फॉलो-अप रिमाइंडर और एकाउंटेबिलिटी — सिंपल चैट कमांड से।'},
+  wa_badge:{en:'💬 WhatsApp Automation',hi:'💬 WhatsApp ऑटोमेशन'},
+  wa_title:{en:'Impress Clients on WhatsApp',hi:'WhatsApp पर ग्राहकों को प्रभावित करें'},
+  wa_desc:{en:'Auto birthday wishes, branded reports, policy reminders — all sent from YOUR number with YOUR firm branding.',hi:'ऑटो जन्मदिन शुभकामनाएं, ब्रांडेड रिपोर्ट, पॉलिसी रिमाइंडर — आपके नंबर से आपकी ब्रांडिंग के साथ।'},
+  calc_badge:{en:'📊 Financial Calculators',hi:'📊 वित्तीय कैलकुलेटर'},
+  calc_title:{en:'12 Pro Calculators That Close Deals',hi:'12 प्रो कैलकुलेटर जो डील क्लोज़ करते हैं'},
+  calc_desc:{en:'Show clients exactly what they need — generate branded PDF reports and share with clients in seconds.',hi:'ग्राहकों को दिखाएं उन्हें क्या चाहिए — ब्रांडेड PDF रिपोर्ट बनाएं और सेकंड में ग्राहकों से शेयर करें।'},
+  cta_title:{en:'Ready to Let AI Sell For You?',hi:'AI को अपने लिए बेचने देने के लिए तैयार?'},
+  cta_desc:{en:'Join thousands of Indian financial advisors who close more deals with less effort. 14-day free trial — no card required.',hi:'हज़ारों भारतीय वित्तीय सलाहकारों से जुड़ें जो कम मेहनत में ज़्यादा डील क्लोज़ करते हैं। 14 दिन फ्री ट्रायल — कार्ड नहीं चाहिए।'},
+  cta_btn1:{en:'Start Free Trial — ₹0 for 14 Days →',hi:'फ्री ट्रायल शुरू करें — 14 दिन ₹0 →'},
+  cta_btn2:{en:'Open Telegram Bot',hi:'Telegram बोट खोलें'},
+  // Laptop screens
+  ld_h1:{en:'📈 AI Sales Dashboard',hi:'📈 AI सेल्स डैशबोर्ड'},
+  ld_p1:{en:'See your complete business health at a glance. Real-time pipeline tracking, premium metrics, follow-up alerts, and AI-driven insights — all in one view.',hi:'एक नज़र में अपने बिज़नेस की पूरी सेहत देखें। रीयल-टाइम पाइपलाइन, प्रीमियम मेट्रिक्स, फॉलो-अप अलर्ट, और AI इनसाइट्स — सब एक ही व्यू में।'},
+  ld_f1:{en:'6 KPI summary cards — leads, policies, premiums, conversions',hi:'6 KPI कार्ड — लीड, पॉलिसी, प्रीमियम, कन्वर्ज़न'},
+  ld_f2:{en:'7-stage sales pipeline funnel with live deal count',hi:'7-स्टेज सेल्स पाइपलाइन फ़नल लाइव डील काउंट के साथ'},
+  ld_f3:{en:"Today's follow-ups with 30-min pre-reminders & Done/Snooze",hi:'आज के फॉलो-अप — 30 मिनट पहले रिमाइंडर, Done/Snooze'},
+  ld_f3b:{en:'Lead Timeline — full interaction history, notes & follow-up trail',hi:'लीड टाइमलाइन — पूरा इंटरैक्शन इतिहास, नोट्स और फॉलो-अप ट्रेल'},
+  ld_f4:{en:'Quick actions — add lead, run calculator, send greeting',hi:'क्विक एक्शन — लीड जोड़ें, कैलकुलेटर चलाएं, शुभकामनाएं भेजें'},
+  ld_f5:{en:'AI deal scoring — know which leads to call first',hi:'AI डील स्कोरिंग — जानें किसे पहले कॉल करें'},
+  ld_f6:{en:'Dark mode toggle — easy on the eyes, day or night',hi:'डार्क मोड टॉगल — दिन हो या रात, आंखों को आराम'},
+  ld_f7:{en:'CSV import — bulk upload leads in seconds',hi:'CSV इम्पोर्ट — सेकंडों में बल्क लीड अपलोड'},
+  lh_h1:{en:'🌐 Professional Homepage',hi:'🌐 प्रोफेशनल होमपेज'},
+  lh_p1:{en:'Your branded online presence — showcase features, pricing, and trust signals. Bilingual (Hindi + English) with one-click language switch.',hi:'आपकी ब्रांडेड ऑनलाइन प्रेज़ेंस — फ़ीचर्स, प्राइसिंग और ट्रस्ट सिग्नल दिखाएं। हिन्दी + English एक क्लिक में।'},
+  lh_f1:{en:'Modern design with trust-building social proof',hi:'ट्रस्ट-बिल्डिंग सोशल प्रूफ के साथ मॉडर्न डिज़ाइन'},
+  lh_f2:{en:'Transparent pricing with Razorpay-powered payments',hi:'Razorpay पेमेंट के साथ ट्रांसपेरेंट प्राइसिंग'},
+  lh_f3:{en:'Before/After comparison — shows client the value',hi:'पहले/बाद तुलना — ग्राहक को वैल्यू दिखाएं'},
+  lh_f4:{en:'Fully bilingual — Hindi & English with one click',hi:'पूरी तरह द्विभाषी — हिन्दी और English एक क्लिक में'},
+  lh_f5:{en:'Responsive design — perfect on every device',hi:'रिस्पॉन्सिव डिज़ाइन — हर डिवाइस पर परफेक्ट'},
+  lh_f6:{en:'Partner & Earn program — refer advisors, earn commissions',hi:'पार्टनर & अर्न प्रोग्राम — एडवाइज़र रेफर करें, कमीशन कमाएं'},
+  lc_h1:{en:'📊 Financial Calculators Suite',hi:'📊 फाइनेंशियल कैलकुलेटर सूट'},
+  lc_p1:{en:'12 professional calculators with interactive charts and branded PDF generation. Show clients exactly what they need to close the deal.',hi:'12 प्रोफेशनल कैलकुलेटर इंटरैक्टिव चार्ट और ब्रांडेड PDF के साथ। ग्राहकों को दिखाएं क्या चाहिए।'},
+  lc_f1:{en:'Inflation Eraser — show how inflation kills savings',hi:'इन्फ्लेशन इरेज़र — दिखाएं कैसे महंगाई बचत खाती है'},
+  lc_f2:{en:'Human Life Value — exact insurance cover needed',hi:'ह्यूमन लाइफ वैल्यू — सही बीमा कवर'},
+  lc_f3:{en:'Retirement Planner — monthly SIP goals for dream retirement',hi:'रिटायरमेंट प्लानर — सपनों की रिटायरमेंट के लिए मासिक SIP'},
+  lc_f4:{en:'EMI/Premium Calculator — compare loan options at a glance',hi:'EMI/प्रीमियम कैलकुलेटर — लोन ऑप्शन्स एक नज़र में'},
+  lc_f5:{en:'Health Cover — ideal mediclaim based on age & city',hi:'हेल्थ कवर — उम्र और शहर के हिसाब से सही मेडिक्लेम'},
+  lc_f6:{en:'SIP vs Lumpsum — visual investment comparison',hi:'SIP vs लम्पसम — विज़ुअल निवेश तुलना'},
+  // Mobile labels
+  mob_label1:{en:'📈 Dashboard',hi:'📈 डैशबोर्ड'},
+  mob_label2:{en:'📊 Calculator',hi:'📊 कैलकुलेटर'},
+  mob_label3:{en:'🌐 Homepage',hi:'🌐 होमपेज'},
+  // PWA steps
+  pwa_s1_t:{en:'Open in Chrome',hi:'Chrome में खोलें'},
+  pwa_s1_d:{en:'Visit sarathi-ai.com on Chrome browser on your phone. Login to your account.',hi:'Chrome ब्राउज़र में sarathi-ai.com खोलें। अपने अकाउंट में लॉगिन करें।'},
+  pwa_s2_t:{en:'Tap Menu (⋮)',hi:'मेन्यू (⋮) दबाएं'},
+  pwa_s2_d:{en:"Tap the three-dot menu in Chrome's top right corner.",hi:'Chrome के ऊपर दाईं तरफ़ तीन-डॉट मेन्यू दबाएं।'},
+  pwa_s3_t:{en:'"Add to Home Screen"',hi:'"होम स्क्रीन पर जोड़ें"'},
+  pwa_s3_d:{en:'Select "Add to Home Screen" or "Install App" from the menu.',hi:'मेन्यू से "होम स्क्रीन पर जोड़ें" या "ऐप इंस्टॉल करें" चुनें।'},
+  pwa_s4_t:{en:'Done! Use Like an App',hi:'हो गया! ऐप की तरह इस्तेमाल करें'},
+  pwa_s4_d:{en:'Sarathi-AI icon appears on your home screen. Tap to open — full screen, no browser bars.',hi:'होम स्क्रीन पर Sarathi-AI आइकन दिखेगा। टैप करें — फ़ुल स्क्रीन, ब्राउज़र बार नहीं।'},
+  pwa_v1:{en:'Step 1: Tap ⋮ Menu',hi:'स्टेप 1: ⋮ मेन्यू दबाएं'},
+  pwa_v2:{en:'Step 2: Tap "Add"',hi:'स्टेप 2: "Add" दबाएं'},
+  pwa_v3:{en:'Step 3: App on Home Screen!',hi:'स्टेप 3: होम स्क्रीन पर ऐप!'},
+  // Telegram commands
+  tg_cmds_title:{en:'🤖 All Bot Commands at Your Fingertips',hi:'🤖 सभी बोट कमांड आपकी उंगलियों पर'},
+  // Calculator labels
+  c1_desc:{en:'Show how inflation silently destroys savings over time',hi:'दिखाएं कैसे महंगाई चुपचाप बचत खत्म करती है'},
+  c2_desc:{en:'Calculate exact insurance cover a family needs',hi:'परिवार को कितने बीमा कवर की ज़रूरत है, कैलकुलेट करें'},
+  c3_desc:{en:'Calculate retirement corpus and monthly SIP needed',hi:'रिटायरमेंट कॉर्पस और मासिक SIP कैलकुलेट करें'},
+  c4_desc:{en:'Compare loan EMIs and insurance premiums instantly',hi:'लोन EMI और बीमा प्रीमियम तुरंत तुलना करें'},
+  c5_desc:{en:'Find ideal mediclaim cover based on age, city & family',hi:'उम्र, शहर और परिवार के हिसाब से सही मेडिक्लेम कवर खोजें'},
+  c6_desc:{en:'Visual comparison — which investment strategy wins?',hi:'विज़ुअल तुलना — कौन सी निवेश रणनीति जीतती है?'},
+  c7_desc:{en:'Goal-based Mutual Fund SIP planning with growth projection',hi:'गोल-बेस्ड म्यूचुअल फंड SIP प्लानिंग ग्रोथ प्रोजेक्शन के साथ'},
+  c8_desc:{en:'Compare ULIP vs MF — see where charges eat your returns',hi:'ULIP vs MF तुलना — देखें चार्जेज़ कहाँ रिटर्न खाते हैं'},
+  c9_desc:{en:'NPS retirement planning with tax benefit calculator',hi:'NPS रिटायरमेंट प्लानिंग टैक्स बेनिफिट कैलकुलेटर के साथ'},
+  c10_desc:{en:'Annual SIP increase for accelerated wealth building',hi:'तेज़ी से संपत्ति बनाने के लिए सालाना SIP बढ़ोतरी'},
+  c11_desc:{en:'Systematic withdrawal planning for retirement income',hi:'रिटायरमेंट आय के लिए व्यवस्थित निकासी योजना'},
+  c12_desc:{en:'Show clients the real cost of waiting to invest',hi:'ग्राहकों को दिखाएं देरी से निवेश करने की असली कीमत'},
+  pdf_title:{en:'📄 Every Calculation → Branded PDF Report',hi:'📄 हर गणना → ब्रांडेड PDF रिपोर्ट'},
+  pdf_desc:{en:'Each calculator generates a beautiful PDF with your photo, firm name, IRDAI license, contact details, and professional charts. Share with clients in one tap — they remember YOU, not the tool.',hi:'हर कैलकुलेटर आपकी फोटो, फर्म के नाम, IRDAI लाइसेंस, संपर्क, और प्रोफेशनल चार्ट के साथ PDF बनाता है। एक टैप में शेयर करें — ग्राहक आपको याद रखते हैं।'},
+};
+
+/* ══════════════════════════════════════════════════════════
+   SCREEN MOCKUP TRANSLATIONS (TreeWalker-based)
+   Maps exact English text → Hindi for inside-device screens
+   ══════════════════════════════════════════════════════════ */
+const _S={
+  // ── Dashboard (laptop + mobile) ──
+  'Sharma Insurance • Dashboard':'शर्मा इंश्योरेंस • डैशबोर्ड',
+  'Sharma Insurance':'शर्मा इंश्योरेंस',
+  'Dashboard • 28 Feb 2026':'डैशबोर्ड • 28 फ़रवरी 2026',
+  'Total Leads':'कुल लीड',
+  'Active Policies':'एक्टिव पॉलिसी',
+  'Premium (₹)':'प्रीमियम (₹)',
+  'Win Rate':'विन रेट',
+  'Sales Pipeline':'सेल्स पाइपलाइन',
+  'New':'नए',
+  'Contacted':'संपर्क',
+  'Pitched':'प्रस्ताव',
+  'Negotiation':'बातचीत',
+  'Won':'जीत',
+  "Today's Follow-ups":'आज के फॉलो-अप',
+  'Upcoming Renewals':'आगामी रिन्यूअल',
+  'Rajesh Sharma — Child Plan call':'राजेश शर्मा — चाइल्ड प्लान कॉल',
+  'Priya Patel — Proposal review':'प्रिया पटेल — प्रपोज़ल रिव्यू',
+  'Amit Gupta — Birthday wish':'अमित गुप्ता — जन्मदिन शुभकामना',
+  'Sunita Devi — Health ₹12K (Mar 5)':'सुनीता देवी — हेल्थ ₹12K (5 मार्च)',
+  'Vikram Singh — Term ₹8K (Mar 8)':'विक्रम सिंह — टर्म ₹8K (8 मार्च)',
+  'Rohit Jain — Motor ₹6K (Mar 12)':'रोहित जैन — मोटर ₹6K (12 मार्च)',
+  '↑ 12% this month':'↑ इस महीने 12%',
+  '↑ 8 new':'↑ 8 नए',
+  '↑ ₹2.1L this Q':'↑ इस तिमाही ₹2.1L',
+  '↑ 4% improved':'↑ 4% सुधार',
+  'Leads':'लीड',
+  'Policies':'पॉलिसी',
+  'Premium':'प्रीमियम',
+  'Pipeline':'पाइपलाइन',
+  'Rajesh Sharma — Child Plan':'राजेश शर्मा — चाइल्ड प्लान',
+  'Priya Patel — Review':'प्रिया पटेल — रिव्यू',
+  'Amit Gupta — Birthday':'अमित गुप्ता — जन्मदिन',
+  // ── Homepage mockup (laptop + mobile) ──
+  'Features':'फ़ीचर्स',
+  'Demo':'डेमो',
+  'Pricing':'प्राइसिंग',
+  'Start Free Trial':'फ्री ट्रायल शुरू करें',
+  'AI Sales Assistant for Financial Advisors':'वित्तीय सलाहकारों के लिए AI सेल्स असिस्टेंट',
+  'Your AI Bot Sells':'AI बोट बेचता है',
+  'While You Sleep':'जब आप सोते हैं',
+  'Sarathi-AI follows up with leads, pitches via AI, sends birthday wishes, and closes deals automatically.':'Sarathi-AI लीड फॉलो करता है, AI से पिच करता है, जन्मदिन शुभकामनाएं भेजता है, और डील ऑटो क्लोज़ करता है।',
+  'Start Free — ₹0 for 14 Days':'फ्री शुरू करें — 14 दिन ₹0',
+  'Start Free — ₹0 for 14 Days →':'फ्री शुरू करें — 14 दिन ₹0 →',
+  'See The Difference':'फ़र्क देखें',
+  'One AI Bot. Complete Sales CRM.':'एक AI बोट। पूरा सेल्स CRM।',
+  'Voice AI':'वॉयस AI',
+  'Claims':'क्लेम्स',
+  'Calculators':'कैलकुलेटर',
+  'AI Pitch':'AI पिच',
+  'AI Sales Assistant':'AI सेल्स असिस्टेंट',
+  'AI follows up, pitches, sends wishes, closes deals — from Telegram & WhatsApp.':'AI फॉलो-अप, पिच, शुभकामनाएं, डील क्लोज़ — Telegram और WhatsApp से।',
+  'Voice-to-Action':'वॉयस-टू-एक्शन',
+  'Claims Helper':'क्लेम्स हेल्पर',
+  '12 Calculators':'12 कैलकुलेटर',
+  '12 Calculators':'12 कैलकुलेटर',
+  // ── Calculator mockup (laptop + mobile) ──
+  'Financial Calculators':'वित्तीय कैलकुलेटर',
+  'Sharma Insurance — IRDAI #LI1234567':'शर्मा इंश्योरेंस — IRDAI #LI1234567',
+  'Inflation Eraser':'इन्फ्लेशन इरेज़र',
+  'HLV':'HLV',
+  'Retirement':'रिटायरमेंट',
+  'EMI':'EMI',
+  'Health':'हेल्थ',
+  'SIP vs Lump':'SIP vs लम्प',
+  'Current Savings':'वर्तमान बचत',
+  'Years to Track':'ट्रैक करने के वर्ष',
+  'Inflation Rate':'महंगाई दर',
+  'Calculate →':'गणना करें →',
+  'Results':'परिणाम',
+  'Real Value':'वास्तविक मूल्य',
+  'Inflation erodes 69% of your wealth':'महंगाई आपकी 69% संपत्ति खा जाती है',
+  'PDF':'PDF',
+  'WhatsApp':'WhatsApp',
+  'SIP vs Lumpsum':'SIP vs लम्पसम',
+  'Compare investment strategies':'निवेश रणनीतियों की तुलना करें',
+  'Investment Amount':'निवेश राशि',
+  'Period (Years)':'अवधि (वर्ष)',
+  'Expected Return':'अपेक्षित रिटर्न',
+  'Compare →':'तुलना करें →',
+  'SIP Returns':'SIP रिटर्न',
+  'Lumpsum':'लम्पसम',
+  'PDF Report':'PDF रिपोर्ट',
+  'Share WA':'WA शेयर',
+  // ── Telegram chat ──
+  'Voice-to-Action AI':'वॉयस-टू-एक्शन AI',
+  'Rajesh Sharma':'राजेश शर्मा',
+  'Need: Child Education Plan':'ज़रूरत: चाइल्ड एजुकेशन प्लान',
+  'City: Mumbai':'शहर: मुम्बई',
+  'Budget: ₹5,000/month':'बजट: ₹5,000/माह',
+  'Follow-up: Friday 3 PM':'फॉलो-अप: शुक्रवार दोपहर 3 बजे',
+  'Create Lead':'लीड बनाएं',
+  'Edit':'एडिट',
+  'Lead #47 Created!':'लीड #47 बना दी!',
+  'Reminder set: Friday 3 PM':'रिमाइंडर सेट: शुक्रवार दोपहर 3 बजे',
+  'AI Pitch ready — tap /pitch':'AI पिच तैयार — /pitch दबाएं',
+  '/pitch Rajesh Sharma':'/pitch राजेश शर्मा',
+  'AI Pitch for Rajesh Sharma':'राजेश शर्मा के लिए AI पिच',
+  'Suggest Calculator:':'कैलकुलेटर सुझाव:',
+  'Run Calculator':'कैलकुलेटर चलाएं',
+  'Share via WA':'WA पर शेयर करें',
+  'Health Claim Helper':'हेल्थ क्लेम हेल्पर',
+  'Copy Checklist':'चेकलिस्ट कॉपी करें',
+  'Send to Client':'ग्राहक को भेजें',
+  'Speak → AI creates lead automatically':'बोलें → AI ऑटो लीड बनाता है',
+  'AI prepares talking points for every call':'AI हर कॉल के लिए बात के पॉइंट तैयार करता है',
+  'One-tap claim filing with checklist':'एक-टैप क्लेम फाइलिंग चेकलिस्ट के साथ',
+  'AI Pitch Assistant':'AI पिच असिस्टेंट',
+  // ── WhatsApp chat ──
+  'Today':'आज',
+  'Business Account':'बिज़नेस अकाउंट',
+  'Happy Birthday, Rajesh ji!':'जन्मदिन मुबारक, राजेश जी!',
+  'Wishing you a wonderful year full of health, happiness, and prosperity!':'सेहत, खुशी और समृद्धि से भरे शानदार साल की शुभकामनाएं!',
+  'As your financial advisor, I ensure your family\'s future is always protected. 🛡️':'आपके फाइनेंशियल एडवाइज़र के रूप में, मैं सुनिश्चित करता हूं कि आपके परिवार का भविष्य सुरक्षित रहे। 🛡️',
+  '— Your trusted advisor, always!':'— आपका विश्वसनीय सलाहकार, हमेशा!',
+  'Thank you so much Sharma ji! 🙏 Always appreciate your care.':'बहुत धन्यवाद शर्मा जी! 🙏 आपकी देखभाल की सराहना करते हैं।',
+  'Your Financial Report':'आपकी वित्तीय रिपोर्ट',
+  'Branded Report':'ब्रांडेड रिपोर्ट',
+  'This shows why starting early really matters. Shall I prepare a plan for you?':'यह दिखाता है कि जल्दी शुरू करना क्यों ज़रूरी है। क्या आपके लिए प्लान बनाऊं?',
+  'This is very eye-opening! 😮 Yes please, let\'s discuss a plan.':'यह बहुत ज्ञानवर्धक है! 😮 हां प्लीज़, प्लान पर बात करते हैं।',
+  'Policy Renewal Reminder':'पॉलिसी रिन्यूअल रिमाइंडर',
+  'Policy Details':'पॉलिसी विवरण',
+  'Renewing on time ensures no break in coverage.':'समय पर रिन्यूअल से कवरेज में कोई ब्रेक नहीं आता।',
+  'Yes, please help with renewal 👍':'हां, रिन्यूअल में मदद करें 👍',
+  'Auto Birthday Wishes':'ऑटो जन्मदिन शुभकामनाएं',
+  'Sent automatically with your branding':'आपकी ब्रांडिंग के साथ ऑटो भेजी जाती हैं',
+  'Branded Report Sharing':'ब्रांडेड रिपोर्ट शेयरिंग',
+  'PDF with your firm name & IRDAI badge':'आपकी फर्म के नाम और IRDAI बैज के साथ PDF',
+  'Renewal Reminders':'रिन्यूअल रिमाइंडर',
+  'Auto-sent before policy expiry':'पॉलिसी एक्सपायरी से पहले ऑटो भेजा जाता है',
+  // ── Calculator cards (View 6) ──
+  'Inflation Eraser':'इन्फ्लेशन इरेज़र',
+  'Human Life Value (HLV)':'ह्यूमन लाइफ वैल्यू (HLV)',
+  'Retirement Planner':'रिटायरमेंट प्लानर',
+  'EMI / Premium Calculator':'EMI / प्रीमियम कैलकुलेटर',
+  'Health Cover Estimator':'हेल्थ कवर एस्टिमेटर',
+  'Human Life Value':'ह्यूमन लाइफ वैल्यू',
+  'Current Amount':'वर्तमान राशि',
+  'Years':'वर्ष',
+  'Annual Income':'वार्षिक आय',
+  'Years to Retire':'रिटायर तक वर्ष',
+  'Monthly Expenses':'मासिक खर्च',
+  'Retire at Age':'रिटायर उम्र',
+  'Loan Amount':'लोन राशि',
+  'Rate / Tenure':'दर / अवधि',
+  'Age / City':'उम्र / शहर',
+  'Family Size':'परिवार का आकार',
+  '69% wealth lost!':'69% संपत्ति खोई!',
+  'Minimum cover':'न्यूनतम कवर',
+  'Cover Needed':'कवर ज़रूरी',
+  'Corpus':'कॉर्पस',
+  'Monthly EMI':'मासिक EMI',
+  'Ideal Cover':'आदर्श कवर',
+  // ── Bot commands ──
+  'Add new lead via voice or text':'वॉयस या टेक्स्ट से नई लीड जोड़ें',
+  'View & manage your pipeline':'पाइपलाइन देखें और मैनेज करें',
+  'AI-generated sales pitch':'AI-जनित सेल्स पिच',
+  'Financial calculators':'वित्तीय कैलकुलेटर',
+  'Claims filing assistant':'क्लेम फाइलिंग असिस्टेंट',
+  'View analytics dashboard':'एनालिटिक्स डैशबोर्ड देखें',
+  'Setup WhatsApp sharing':'WhatsApp शेयरिंग सेटअप',
+  'Bot preferences':'बोट सेटिंग्स',
+  'All Bot Commands at Your Fingertips':'सभी बोट कमांड आपकी उंगलियों पर',
+  // ── New calculator card text ──
+  'MF SIP Planner':'MF SIP प्लानर',
+  'Goal Amount':'लक्ष्य राशि',
+  'Time Horizon':'समय अवधि',
+  'Monthly SIP':'मासिक SIP',
+  'ULIP vs Mutual Fund':'ULIP vs म्यूचुअल फंड',
+  'ULIP':'ULIP',
+  'Mutual Fund':'म्यूचुअल फंड',
+  'ULIP charges eat ~35% of returns!':'ULIP चार्जेज़ ~35% रिटर्न खा जाते हैं!',
+  'NPS Planner':'NPS प्लानर',
+  'Monthly Contribution':'मासिक योगदान',
+  'Retirement Age':'रिटायरमेंट उम्र',
+  'NPS Corpus':'NPS कॉर्पस',
+  // ── PWA screens ──
+  'Open in Chrome':'Chrome में खोलें',
+  'New tab':'नई टैब',
+  'Bookmarks':'बुकमार्क्स',
+  'Add to Home Screen':'होम स्क्रीन पर जोड़ें',
+  'Settings':'सेटिंग्स',
+  'Login to continue...':'लॉगिन करें...',
+  'Add this website to your home screen for quick access?':'क्विक एक्सेस के लिए इस वेबसाइट को होम स्क्रीन पर जोड़ें?',
+  'Cancel':'रद्द करें',
+  'Add':'जोड़ें',
+  'Installed! Tap to open →':'इंस्टॉल हो गया! खोलने के लिए टैप करें →',
+  'Full screen • No browser bars':'फ़ुल स्क्रीन • ब्राउज़र बार नहीं',
+  // ── Missing: Dashboard date ──
+  '28 Feb 2026':'28 फ़रवरी 2026',
+  'Dashboard':'डैशबोर्ड',
+  // ── Missing: Calculator warning ──
+  '₹10L today = ₹3.1L in 20 years!':'₹10L आज = ₹3.1L 20 साल में!',
+  // ── Missing: Telegram pitch details ──
+  'Client Profile:':'ग्राहक प्रोफ़ाइल:',
+  'Age 34, Mumbai, IT Manager':'उम्र 34, मुम्बई, IT मैनेजर',
+  'Monthly budget: ₹5,000':'मासिक बजट: ₹5,000',
+  'Talking Points:':'बात के पॉइंट:',
+  'Education cost doubles every 8 yrs — ₹20L today = ₹80L when child turns 18':'एजुकेशन की लागत हर 8 साल में दोगुनी — ₹20L आज = ₹80L जब बच्चा 18 का हो',
+  '₹5K/mo SIP at 12% = ₹25L in 15 yrs':'₹5K/माह SIP 12% पर = ₹25L 15 साल में',
+  'Insurance + investment combo protects even if something happens to you':'इंश्योरेंस + निवेश कॉम्बो आपको कुछ होने पर भी सुरक्षित रखता है',
+  '→ Inflation Eraser (show real cost)':'→ इन्फ्लेशन इरेज़र (असली लागत दिखाएं)',
+  '→ SIP vs Lumpsum (growth comparison)':'→ SIP vs लम्पसम (ग्रोथ तुलना)',
+  '/claim health':'/claim health',
+  // ── Missing: Claims checklist ──
+  'Document Checklist:':'डॉक्यूमेंट चेकलिस्ट:',
+  'Claim form (signed)':'क्लेम फॉर्म (साइन किया हुआ)',
+  'Hospital discharge summary':'अस्पताल डिस्चार्ज सारांश',
+  'All medical bills (original)':'सभी मेडिकल बिल (ओरिजिनल)',
+  'Investigation reports':'जांच रिपोर्ट',
+  'Pharmacy bills':'फार्मेसी बिल',
+  'Photo ID & policy copy':'फोटो ID और पॉलिसी कॉपी',
+  'Bank details (cancelled cheque)':'बैंक विवरण (कैंसल्ड चेक)',
+  'Timeline:':'समयरेखा:',
+  'File within 30 days of discharge':'डिस्चार्ज के 30 दिन के अंदर फाइल करें',
+  'Company responds in 15 working days':'कंपनी 15 कार्यदिवसों में जवाब देती है',
+  // ── Missing: WhatsApp report details ──
+  "Hi Rajesh ji, here's the Inflation Eraser analysis we discussed:":'राजेश जी, यह इन्फ्लेशन इरेज़र एनालिसिस है जो हमने चर्चा की थी:',
+  'Inflation_Eraser_Report.pdf':'इन्फ्लेशन_इरेज़र_रिपोर्ट.pdf',
+  '324 KB • Branded Report':'324 KB • ब्रांडेड रिपोर्ट',
+  '₹10L today = ₹3.1L in 20 years':'₹10L आज = ₹3.1L 20 साल में',
+  'You need ₹32L to maintain today\'s lifestyle':'आज की जीवनशैली बनाए रखने के लिए ₹32L चाहिए',
+  'Monthly SIP of ₹8,500 can bridge this gap':'₹8,500/माह SIP से यह अंतर पूरा हो सकता है',
+  'Sharma Insurance • IRDAI #LI1234567':'शर्मा इंश्योरेंस • IRDAI #LI1234567',
+  // ── Missing: WhatsApp birthday card ──
+  'Happy Birthday, Rajesh ji! 🎊':'जन्मदिन मुबारक, राजेश जी! 🎊',
+  '98765-43210':'98765-43210',
+  'IRDAI Lic: LI1234567':'IRDAI Lic: LI1234567',
+  // ── Missing: WhatsApp renewal details ──
+  'Dear Priya ji,':'प्रिय प्रिया जी,',
+  'Your Health Insurance policy is due for renewal:':'आपकी हेल्थ इंश्योरेंस पॉलिसी का रिन्यूअल आने वाला है:',
+  'Star Health — Family Floater':'स्टार हेल्थ — फैमिली फ्लोटर',
+  'Due: March 5, 2026':'ड्यू: 5 मार्च 2026',
+  'Premium: ₹12,450/year':'प्रीमियम: ₹12,450/वर्ष',
+  'Cover: ₹5L (4 members)':'कवर: ₹5L (4 सदस्य)',
+  'Renewing on time ensures no break in coverage. I can help with the renewal process — just reply "Yes"! 👍':'समय पर रिन्यूअल से कवरेज में ब्रेक नहीं आता। मैं रिन्यूअल में मदद कर सकता हूं — बस "हां" लिखें! 👍',
+  // ── Missing: PWA & misc ──
+  'Sarathi-AI.com':'Sarathi-AI.com',
+  'online':'ऑनलाइन',
+  '9876543210':'9876543210',
+};
+
+const _origTexts=new WeakMap();
+/* Strip leading emoji/symbol characters to match _S keys */
+const _emojiPfx=/^([\p{Emoji_Presentation}\p{Extended_Pictographic}\u200d\ufe0f\u20e3\u2600-\u27bf][\ufe00-\ufe0f\u200d\u20e3\p{Emoji_Presentation}\p{Extended_Pictographic}\udc00-\udfff]*[\s]*)+/u;
+function _stripEmoji(s){const m=s.match(_emojiPfx);return m?{pfx:m[0],txt:s.slice(m[0].length)}:{pfx:'',txt:s}}
+function translateScreens(lang){
+  const containers=document.querySelectorAll('.laptop-screen-inner,.phone-screen-inner');
+  containers.forEach(c=>{
+    const walker=document.createTreeWalker(c,NodeFilter.SHOW_TEXT,null);
+    while(walker.nextNode()){
+      const node=walker.currentNode;
+      if(!_origTexts.has(node)) _origTexts.set(node,node.textContent);
+      if(lang==='en'){
+        node.textContent=_origTexts.get(node);
+      } else {
+        const orig=_origTexts.get(node);
+        const t=orig.trim();
+        if(_S[t]){
+          node.textContent=orig.replace(t,_S[t]);
+        } else {
+          /* Try stripping leading emoji prefix */
+          const {pfx,txt}=_stripEmoji(t);
+          if(pfx&&_S[txt]){
+            node.textContent=orig.replace(t,pfx+_S[txt]);
+          }
+        }
+      }
+    }
+    /* SVG <text> elements need separate handling */
+    c.querySelectorAll('svg text').forEach(txt=>{
+      if(!txt.dataset.orig) txt.dataset.orig=txt.textContent;
+      if(lang==='en'){
+        txt.textContent=txt.dataset.orig;
+      } else {
+        const t=txt.dataset.orig.trim();
+        if(_S[t]) txt.textContent=_S[t];
+        else{const{pfx,txt:st}=_stripEmoji(t);if(pfx&&_S[st])txt.textContent=pfx+_S[st];}
+      }
+    });
+  });
+}
+
+let _lang='en';
+function setLang(l){
+  _lang=l;
+  document.querySelectorAll('#langToggle span').forEach(s=>{
+    s.classList.toggle('active',s.textContent.trim()===(l==='en'?'EN':'हिं'));
+  });
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n');
+    if(_T[k]&&_T[k][l]) el.textContent=_T[k][l];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const k=el.getAttribute('data-i18n-html');
+    if(_T[k]&&_T[k][l]) el.innerHTML=_T[k][l];
+  });
+  translateScreens(l);
+}
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Your Team — Sarathi-AI Business Technologies</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Poppins',sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.6;min-height:100vh}
+:root{--blue:#0d9488;--blue-dark:#0f766e;--blue-light:#ccfbf1;--saffron:#f59e0b;--green:#059669;--green-light:#d1fae5;--red:#dc2626;--bg:#f1f5f9;--muted:#64748b;--border:#e2e8f0}
+
+.header{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+  color:#fff;padding:24px 24px 32px;text-align:center;position:relative;overflow:hidden;
+}
+.header::before{content:'';position:absolute;top:-50%;right:-15%;width:300px;height:300px;border-radius:50%;background:rgba(13,148,136,0.1)}
+.header .brand{font-weight:800;font-size:1em;margin-bottom:4px;display:inline-flex;align-items:center;gap:8px;position:relative;z-index:1}
+.header h1{font-size:1.5em;font-weight:700;margin:8px 0 4px;position:relative;z-index:1}
+.header p{color:rgba(255,255,255,0.75);font-size:0.9em;position:relative;z-index:1}
+
+.container{max-width:520px;margin:-20px auto 40px;padding:0 16px}
+
+.card{
+  background:#fff;border-radius:16px;padding:32px;
+  border:1px solid var(--border);
+  box-shadow:0 1px 4px rgba(0,0,0,0.05);
+}
+.card h2{font-size:1.15em;margin-bottom:4px;color:var(--blue-dark);display:flex;align-items:center;gap:10px}
+.card .subtitle{color:var(--muted);font-size:0.88em;margin-bottom:20px}
+
+.firm-badge{
+  background:var(--blue-light);border:1px solid #99f6e4;border-radius:12px;
+  padding:16px;margin-bottom:20px;text-align:center;
+}
+.firm-badge .firm-name{font-size:1.1em;font-weight:700;color:var(--blue-dark)}
+.firm-badge .firm-plan{font-size:0.82em;color:var(--muted);margin-top:2px}
+.firm-badge .slots{font-size:0.82em;color:var(--green);margin-top:4px;font-weight:600}
+
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-weight:600;font-size:0.83em;margin-bottom:6px;color:#333}
+.form-group input{
+  width:100%;padding:12px 16px;border:2px solid var(--border);border-radius:10px;
+  font-size:0.92em;font-family:inherit;transition:border-color .2s;outline:none;
+}
+.form-group input:focus{border-color:var(--blue)}
+.form-group .hint{font-size:0.78em;color:var(--muted);margin-top:4px}
+.form-group .error{font-size:0.78em;color:var(--red);margin-top:4px;display:none}
+
+.btn{
+  display:inline-block;padding:14px 28px;border-radius:10px;
+  font-weight:600;font-size:0.95em;cursor:pointer;border:none;
+  transition:all .2s;font-family:'Poppins',sans-serif;width:100%;text-align:center;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;
+  box-shadow:0 4px 16px rgba(13,148,136,0.2);
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(13,148,136,0.3)}
+.btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+
+.success-card{display:none;text-align:center;padding:40px 32px}
+.success-card .icon{font-size:3em;margin-bottom:12px}
+.success-card h2{color:var(--green);margin-bottom:8px}
+.success-card p{color:var(--muted);font-size:0.92em;margin-bottom:16px}
+.success-card .next-step{
+  background:var(--blue-light);border-radius:12px;padding:16px;
+  border-left:4px solid var(--blue);text-align:left;margin-top:16px;
+}
+.success-card .next-step h3{font-size:0.88em;color:var(--blue-dark);margin-bottom:4px}
+.success-card .next-step p{font-size:0.82em;color:#555}
+
+.error-card{display:none;text-align:center;padding:40px 32px}
+.error-card .icon{font-size:3em;margin-bottom:12px}
+.error-card h2{color:var(--red);margin-bottom:8px}
+.error-card p{color:var(--muted);font-size:0.92em}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:#334155;color:#fff;padding:12px 24px;border-radius:10px;
+  font-size:0.88em;opacity:0;transition:all .3s;z-index:1000;
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.error{background:var(--red)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+  <div class="brand">🚀 Sarathi-AI <span>Business</span></div>
+  <h1>Join Your Team</h1>
+  <p>You've been invited to join a firm on Sarathi-AI CRM</p>
+</div>
+
+<div class="container">
+
+  <!-- Loading state -->
+  <div class="card" id="loading-card" style="text-align:center;padding:48px 32px">
+    <div style="font-size:2em;margin-bottom:12px">⏳</div>
+    <p style="color:var(--muted)">Validating invite code...</p>
+  </div>
+
+  <!-- Error state (invalid code) -->
+  <div class="card error-card" id="error-card">
+    <div class="icon">❌</div>
+    <h2>Invalid Invite</h2>
+    <p id="error-msg">This invite code is invalid, expired, or has already been used.</p>
+    <p style="margin-top:16px"><a href="/" style="color:var(--blue);font-weight:600">← Back to Sarathi-AI</a></p>
+  </div>
+
+  <!-- Join form -->
+  <div class="card" id="join-card" style="display:none">
+    <h2>👋 Join as Agent</h2>
+    <div class="subtitle">Fill in your details to join the team</div>
+
+    <div class="firm-badge" id="firm-info">
+      <div class="firm-name" id="disp-firm">—</div>
+      <div class="firm-plan" id="disp-plan">—</div>
+      <div class="slots" id="disp-slots">—</div>
+    </div>
+
+    <form id="join-form" onsubmit="return submitJoin(event)">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="inp-name" placeholder="Your full name" required minlength="2" maxlength="100" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label>Email *</label>
+        <input type="email" id="inp-email" placeholder="name@example.com" required maxlength="200" autocomplete="email">
+        <div class="hint">This will be your login email for the dashboard</div>
+      </div>
+      <div class="form-group">
+        <label>Phone Number (optional)</label>
+        <input type="tel" id="inp-phone" placeholder="10-digit mobile number" pattern="[6-9]\d{9}" maxlength="10" autocomplete="tel">
+        <div class="hint">Indian 10-digit mobile number starting with 6-9</div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="btn-submit">Join Team</button>
+    </form>
+  </div>
+
+  <!-- Success state -->
+  <div class="card success-card" id="success-card">
+    <div class="icon">🎉</div>
+    <h2>Welcome Aboard!</h2>
+    <p id="success-msg">You've successfully joined the team.</p>
+    <div class="next-step" id="login-step">
+      <h3>🔐 Login to Dashboard</h3>
+      <p style="margin-bottom:12px">We'll send an OTP to your email to log you in.</p>
+      <div id="otp-step1">
+        <button class="btn btn-primary" id="btn-send-otp" onclick="sendJoinOTP()" style="font-size:.9em">📧 Send Login OTP</button>
+      </div>
+      <div id="otp-step2" style="display:none">
+        <p style="font-size:.82em;color:var(--muted);margin-bottom:8px" id="otp-sent-msg">OTP sent!</p>
+        <input type="text" id="inp-otp" placeholder="6-digit OTP" maxlength="6" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:1.1em;text-align:center;letter-spacing:6px;font-family:inherit;margin-bottom:8px">
+        <button class="btn btn-primary" id="btn-verify-otp" onclick="verifyJoinOTP()" style="font-size:.9em">✅ Verify & Login</button>
+        <p style="text-align:center;margin-top:8px"><a href="javascript:void(0)" onclick="document.getElementById('otp-step1').style.display='';document.getElementById('otp-step2').style.display='none'" style="color:var(--muted);font-size:.82em">← Resend OTP</a></p>
+      </div>
+    </div>
+    <div class="next-step" style="margin-top:12px;border-left-color:var(--saffron)">
+      <h3>📱 Also: Connect Telegram (optional)</h3>
+      <p>Open your firm's Telegram bot and send <strong>/start</strong> to enable voice AI and mobile notifications.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+let inviteCode = '';
+let _joinEmail = '';
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  inviteCode = (params.get('code') || '').trim().toUpperCase();
+
+  if (!inviteCode) {
+    showError('No invite code provided. Please use the link shared by your firm owner.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/invite/validate/${encodeURIComponent(inviteCode)}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.valid) {
+      showError(data.error || 'This invite code is invalid or expired.');
+      return;
+    }
+
+    document.getElementById('disp-firm').textContent = data.firm_name || 'Unknown Firm';
+    document.getElementById('disp-plan').textContent = (data.plan || '').charAt(0).toUpperCase() + (data.plan || '').slice(1) + ' Plan';
+    document.getElementById('disp-slots').textContent = data.slots_available > 0
+      ? `${data.slots_available} slot${data.slots_available > 1 ? 's' : ''} available`
+      : 'No slots available';
+
+    document.getElementById('loading-card').style.display = 'none';
+    document.getElementById('join-card').style.display = 'block';
+
+    if (data.slots_available <= 0) {
+      document.getElementById('btn-submit').disabled = true;
+      document.getElementById('btn-submit').textContent = 'Team is Full';
+    }
+  } catch (e) {
+    showError('Unable to validate invite code. Please try again later.');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('loading-card').style.display = 'none';
+  document.getElementById('error-card').style.display = 'block';
+  document.getElementById('error-msg').textContent = msg;
+}
+
+async function submitJoin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.textContent = 'Joining...';
+
+  const name = document.getElementById('inp-name').value.trim();
+  const phone = document.getElementById('inp-phone').value.trim().replace(/\D/g, '');
+  const email = document.getElementById('inp-email').value.trim().toLowerCase();
+
+  if (!email || !email.includes('@') || !email.includes('.')) {
+    toast('Please enter a valid email address', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Join Team';
+    return false;
+  }
+
+  if (phone && !/^[6-9]\d{9}$/.test(phone)) {
+    toast('Please enter a valid 10-digit Indian phone number', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Join Team';
+    return false;
+  }
+
+  try {
+    const res = await fetch(`${API}/invite/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: inviteCode, name, phone, email }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast(data.error || data.detail || 'Failed to join. Please try again.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Join Team';
+      return false;
+    }
+
+    document.getElementById('join-card').style.display = 'none';
+    document.getElementById('success-card').style.display = 'block';
+    document.getElementById('success-msg').textContent = data.message || 'You have successfully joined the team!';
+    _joinEmail = email;
+  } catch (err) {
+    toast('Network error. Please check your connection and try again.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Join Team';
+  }
+  return false;
+}
+
+init();
+
+async function sendJoinOTP() {
+  if (!_joinEmail) { toast('No email found', 'error'); return; }
+  const btn = document.getElementById('btn-send-otp');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    const res = await fetch('/api/auth/send-email-otp', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: _joinEmail})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('otp-step1').style.display = 'none';
+      document.getElementById('otp-step2').style.display = '';
+      let msg = 'OTP sent to ' + _joinEmail;
+      if (data._dev_otp) msg += ' (Dev: ' + data._dev_otp + ')';
+      document.getElementById('otp-sent-msg').textContent = msg;
+      document.getElementById('inp-otp').focus();
+    } else {
+      toast(data.detail || data.error || 'Failed to send OTP', 'error');
+    }
+  } catch(e) {
+    toast('Network error', 'error');
+  }
+  btn.disabled = false; btn.textContent = '\ud83d\udce7 Send Login OTP';
+}
+
+async function verifyJoinOTP() {
+  const otp = document.getElementById('inp-otp').value.trim();
+  if (!/^\d{4,6}$/.test(otp)) { toast('Enter the 6-digit OTP', 'error'); return; }
+  const btn = document.getElementById('btn-verify-otp');
+  btn.disabled = true; btn.textContent = 'Verifying...';
+  try {
+    const res = await fetch('/api/auth/verify-email-otp', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: _joinEmail, otp})
+    });
+    const data = await res.json();
+    if (res.ok && data.access_token) {
+      localStorage.setItem('sarathi_token', data.access_token);
+      document.cookie = 'sarathi_token=' + data.access_token + ';path=/;max-age=86400;SameSite=Lax';
+      if (data.refresh_token) localStorage.setItem('sarathi_refresh', data.refresh_token);
+      localStorage.setItem('sarathi_tenant_id', data.tenant_id || '');
+      localStorage.setItem('sarathi_firm', data.firm_name || '');
+      localStorage.setItem('sarathi_role', data.role || 'agent');
+      toast('\u2705 Login successful! Redirecting...', 'success');
+      setTimeout(() => { window.location.href = '/dashboard'; }, 1000);
+    } else {
+      toast(data.detail || data.error || 'Invalid OTP', 'error');
+      btn.disabled = false; btn.textContent = '\u2705 Verify & Login';
+    }
+  } catch(e) {
+    toast('Network error', 'error');
+    btn.disabled = false; btn.textContent = '\u2705 Verify & Login';
+  }
+}
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+# ── Secrets & Environment ─────────────────────────────────────────────────────
+biz.env
+*.env
+.env
+*.env.local
+wa_env_append.txt
+
+# ── Database ──────────────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── SSH Keys & Certificates ───────────────────────────────────────────────────
+*.key
+*.pem
+*.p12
+*.pfx
+gdrive_tokens/
+
+# ── Generated / Runtime Outputs ───────────────────────────────────────────────
+generated_pdfs/
+uploads/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual Environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Logs & Temp ───────────────────────────────────────────────────────────────
+*.log
+*.log.*
+_*.py
+_*.txt
+_*.json
+_*.sql
+_*.sh
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Test Artifacts ────────────────────────────────────────────────────────────
+test_output*.txt
+test_results*.txt
+test_run*.txt
+test_final*.txt
+prelaunch_output*.txt
+prelaunch_results*.txt
+prelaunch_run*.txt

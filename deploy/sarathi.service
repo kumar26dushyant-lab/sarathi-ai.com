@@ -1,0 +1,48 @@
+# =============================================================================
+#  Systemd Service — Sarathi-AI Business CRM
+# =============================================================================
+#  Install: sudo cp deploy/sarathi.service /etc/systemd/system/sarathi.service
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable sarathi
+#           sudo systemctl start sarathi
+#
+#  Logs:    sudo journalctl -u sarathi -f
+#  Status:  sudo systemctl status sarathi
+# =============================================================================
+
+[Unit]
+Description=Sarathi-AI Business CRM
+Documentation=https://sarathi-ai.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
+Restart=always
+RestartSec=5
+
+# Environment
+EnvironmentFile=/opt/sarathi/biz.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sarathi
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65535
+MemoryMax=800M
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sarathi
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup Your CRM — Sarathi-AI Business Technologies</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Poppins',sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.6;min-height:100vh}
+:root{--blue:#0d9488;--blue-dark:#0f766e;--blue-light:#ccfbf1;--saffron:#f59e0b;--saffron-light:#fffbeb;--green:#059669;--green-light:#d1fae5;--bg:#f1f5f9;--muted:#64748b;--border:#e2e8f0}
+a{text-decoration:none;color:inherit}
+
+/* ── Header ─────────────────────────────────────────────── */
+.header{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+  color:#fff;padding:24px 24px 32px;text-align:center;position:relative;overflow:hidden;
+}
+.header::before{content:'';position:absolute;top:-50%;right:-15%;width:300px;height:300px;border-radius:50%;background:rgba(13,148,136,0.1)}
+.header .brand{font-weight:800;font-size:1em;margin-bottom:4px;display:inline-flex;align-items:center;gap:8px;position:relative;z-index:1}
+.header .brand svg{width:24px;height:24px}
+.header .brand span{color:#5eead4}
+.header h1{font-size:1.5em;font-weight:700;margin:8px 0 4px;position:relative;z-index:1}
+.header p{color:rgba(255,255,255,0.75);font-size:0.9em;position:relative;z-index:1}
+
+/* ── Progress Bar ───────────────────────────────────────── */
+.progress-bar{
+  display:flex;align-items:center;justify-content:center;gap:0;
+  max-width:600px;margin:-20px auto 32px;position:relative;z-index:2;
+}
+.prog-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
+.prog-step .dot{
+  width:40px;height:40px;border-radius:50%;background:#fff;border:3px solid #ddd;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:0.9em;color:#999;transition:all .3s;position:relative;z-index:2;
+}
+.prog-step.active .dot{border-color:var(--blue);color:var(--blue);box-shadow:0 0 0 4px rgba(13,148,136,0.15)}
+.prog-step.done .dot{background:var(--green);border-color:var(--green);color:#fff}
+.prog-step .label{font-size:0.72em;color:#999;margin-top:6px;font-weight:500;text-align:center}
+.prog-step.active .label{color:var(--blue);font-weight:600}
+.prog-step.done .label{color:var(--green)}
+.prog-line{height:3px;flex:1;background:#ddd;margin:0 -10px;position:relative;top:-12px}
+.prog-line.done{background:var(--green)}
+
+/* ── Container ──────────────────────────────────────────── */
+.container{max-width:800px;margin:0 auto;padding:0 16px 60px}
+
+/* ── Step Cards ─────────────────────────────────────────── */
+.step-card{
+  background:#fff;border-radius:16px;padding:32px;
+  border:1px solid var(--border);margin-bottom:24px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.05);display:none;
+}
+.step-card.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.step-card h2{font-size:1.2em;margin-bottom:4px;color:var(--blue-dark);display:flex;align-items:center;gap:10px}
+.step-card .subtitle{color:var(--muted);font-size:0.88em;margin-bottom:24px}
+
+.instruction{
+  background:var(--bg);border-radius:12px;padding:20px;margin-bottom:16px;
+  border-left:4px solid var(--blue);
+}
+.instruction h3{font-size:0.92em;margin-bottom:8px;color:var(--blue-dark)}
+.instruction p{font-size:0.88em;color:#555;margin-bottom:6px}
+.instruction code{
+  background:rgba(13,148,136,0.08);padding:2px 8px;border-radius:4px;
+  font-family:'Courier New',monospace;font-size:0.85em;color:var(--blue);
+}
+.instruction a{color:var(--blue);font-weight:600;text-decoration:underline}
+
+.deep-link{
+  display:block;text-align:center;margin:20px 0;
+  padding:16px 32px;background:linear-gradient(135deg,#0088cc,#006699);
+  color:#fff;font-weight:700;font-size:1em;border-radius:12px;
+  transition:all .2s;
+}
+.deep-link:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,136,204,0.3)}
+.deep-link::before{content:'✈️ ';font-size:1.1em}
+
+.video-link{
+  display:inline-flex;align-items:center;gap:8px;
+  background:#ff0000;color:#fff;padding:10px 20px;border-radius:8px;
+  font-weight:600;font-size:0.88em;margin-top:8px;transition:all .2s;
+}
+.video-link:hover{background:#cc0000;transform:translateY(-1px)}
+
+.btn{display:inline-block;padding:12px 28px;border-radius:10px;font-weight:600;font-size:0.92em;cursor:pointer;border:none;transition:all .2s;font-family:'Poppins',sans-serif}
+.btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;box-shadow:0 4px 16px rgba(13,148,136,0.2)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(13,148,136,0.3)}
+.btn-saffron{background:var(--saffron);color:#fff}
+.btn-saffron:hover{background:#c2410c}
+.btn-outline{border:2px solid var(--blue);color:var(--blue);background:transparent}
+.btn-outline:hover{background:var(--blue);color:#fff}
+.btn-lg{padding:14px 36px;font-size:0.95em;border-radius:12px;width:100%;text-align:center}
+.btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-weight:600;font-size:0.83em;margin-bottom:6px;color:#333}
+.form-group input,.form-group select,.form-group textarea{
+  width:100%;padding:12px 16px;border:2px solid var(--border);border-radius:10px;
+  font-size:0.92em;font-family:'Poppins',sans-serif;transition:border-color .2s;
+}
+.form-group input:focus,.form-group textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(13,148,136,0.1)}
+.form-note{font-size:0.78em;color:var(--muted);margin-top:4px}
+.form-error{color:#dc2626;font-size:0.83em;margin-top:8px;display:none}
+.form-success{color:var(--green);font-size:0.83em;margin-top:8px;display:none}
+
+.skip-link{text-align:center;margin-top:16px}
+.skip-link a{color:var(--muted);font-size:0.83em;text-decoration:underline;cursor:pointer}
+
+.status-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border-radius:20px;font-size:0.78em;font-weight:600;
+}
+.status-badge.pending{background:#fef3c7;color:#92400e}
+.status-badge.connected{background:var(--green-light);color:#166534}
+
+/* ── Done Card ──────────────────────────────────────────── */
+.done-card{
+  text-align:center;background:#fff;border-radius:16px;padding:48px 32px;
+  border:2px solid var(--green);display:none;
+}
+.done-card.active{display:block;animation:fadeIn .3s ease}
+.done-card .big-check{font-size:4em;margin-bottom:12px}
+.done-card h2{color:var(--blue-dark);font-size:1.4em;margin-bottom:8px}
+.done-card p{color:var(--muted);font-size:0.92em;margin-bottom:24px}
+.done-card .tip{
+  background:var(--bg);border-radius:12px;padding:20px;text-align:left;
+  margin-bottom:24px;font-size:0.88em;color:#555;border-left:4px solid var(--blue);
+}
+.done-card .tip strong{color:var(--blue-dark)}
+.next-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media(max-width:600px){
+  .step-card{padding:20px}
+  .prog-step .label{font-size:0.64em}
+  .next-actions{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────── -->
+<div class="header">
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" style="position:absolute;top:16px;right:16px;border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.85)">🌙</button>
+  <div class="brand">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:80px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi-<span>AI</span>
+  </div>
+  <h1>Set Up Your CRM</h1>
+  <p>3 quick steps and you're ready to grow your business</p>
+</div>
+
+<!-- ── Progress ─────────────────────────────────────────── -->
+<div class="progress-bar" id="progressBar">
+  <div class="prog-step active" id="ps1"><div class="dot">1</div><div class="label">Telegram Bot</div></div>
+  <div class="prog-line" id="pl1"></div>
+  <!-- WhatsApp step removed — using Voice AI + personal messaging -->
+  <div class="prog-step" id="ps2" style="display:none"><div class="dot">2</div><div class="label">WhatsApp</div></div>
+  <div class="prog-line" id="pl2" style="display:none"></div>
+  <div class="prog-step" id="ps3"><div class="dot">2</div><div class="label">Branding</div></div>
+</div>
+
+<div class="container">
+
+<!-- ────────────────────────────────────────────────────── -->
+<!-- STEP 1: Create & Connect Your Own Telegram Bot        -->
+<!-- ────────────────────────────────────────────────────── -->
+<div class="step-card active" id="step1">
+  <h2>🤖 Step 1: Create Your Telegram CRM Bot</h2>
+  <p class="subtitle">Your firm gets its own branded Telegram bot — your agents use it daily to manage leads, pipeline, and follow-ups.</p>
+
+  <div class="instruction">
+    <h3>📋 How to create your bot (2 minutes)</h3>
+    <p><strong>1.</strong> Open Telegram and search for <a href="https://t.me/BotFather" target="_blank" style="color:var(--blue);font-weight:600">@BotFather</a></p>
+    <p><strong>2.</strong> Send <code>/newbot</code> to BotFather</p>
+    <p><strong>3.</strong> Choose a <strong>display name</strong> for your bot (e.g., <em>Acme Financial CRM</em>)</p>
+    <p><strong>4.</strong> Choose a <strong>username</strong> ending in "bot" (e.g., <em>AcmeInsuranceBot</em>)</p>
+    <p><strong>5.</strong> BotFather will give you an <strong>API Token</strong> — copy it and paste below</p>
+  </div>
+
+  <div style="text-align:center;margin:16px 0">
+    <a class="deep-link" href="https://t.me/BotFather" target="_blank" style="background:linear-gradient(135deg,#229ED9,#1a8bc7)">
+      Open @BotFather on Telegram
+    </a>
+  </div>
+
+  <div class="instruction" style="background:#fff7ed;border-left-color:#f59e0b">
+    <h3>💡 Pro Tips</h3>
+    <p>• Use your <strong>firm name</strong> as the bot name — your clients will see it in WhatsApp-style notifications</p>
+    <p>• Example: "<em>Krishna Insurance Advisor</em>" or "<em>Sharma Financial Services Bot</em>"</p>
+    <p>• You can change the bot name, description, and profile photo anytime via @BotFather</p>
+  </div>
+
+  <form id="tgBotForm" onsubmit="saveTelegramBot(event)">
+    <div class="form-group">
+      <label>Telegram Bot Token</label>
+      <input type="text" id="tgBotToken" placeholder="e.g., 1234567890:ABCdefGHIjklMNOpqrSTUvwxyz">
+      <p class="form-note">The token looks like <code>1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code>. Paste the full token from BotFather.</p>
+    </div>
+
+    <div id="tgError" class="form-error"></div>
+    <div id="tgSuccess" class="form-success"></div>
+
+    <div style="text-align:center;margin:20px 0">
+      <span class="status-badge pending" id="tgStatus">⏳ Waiting for bot token...</span>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button type="submit" class="btn btn-primary" style="flex:1" id="tgSaveBtn">Connect My Bot ✓</button>
+      <button type="button" class="btn btn-outline" style="flex:1" onclick="goToStep(3)">Next Step →</button>
+    </div>
+  </form>
+
+  <div class="skip-link"><a onclick="goToStep(3)">I'll create a bot later → <small>(you can use @SarathiBizBot temporarily)</small></a></div>
+</div>
+
+<!-- ────────────────────────────────────────────────────── -->
+<!-- STEP 2: WhatsApp Business API — HIDDEN                -->
+<!-- ────────────────────────────────────────────────────── -->
+<div class="step-card" id="step2" style="display:none!important">
+  <h2>💬 Step 2: Connect WhatsApp (Optional)</h2>
+  <p class="subtitle">Send auto-greetings, calculator reports, and policy reminders directly to client WhatsApp.</p>
+
+  <div class="instruction">
+    <h3>📋 What you need</h3>
+    <p>WhatsApp Cloud API requires a <strong>Meta Business Account</strong> and a <strong>WhatsApp Business App</strong>. If you don't have these yet, follow the setup guide below.</p>
+  </div>
+
+  <div style="text-align:center;margin:16px 0">
+    <a class="video-link" href="https://www.youtube.com/results?search_query=WhatsApp+Cloud+API+setup+Meta+Business+2024+tutorial" target="_blank">
+      ▶️ Watch Setup Guide on YouTube
+    </a>
+  </div>
+
+  <div class="instruction">
+    <h3>Once you have your credentials, enter them below:</h3>
+    <p>You'll find these in the <a href="https://developers.facebook.com/" target="_blank">Meta Developer Portal</a> → Your App → WhatsApp → API Setup.</p>
+  </div>
+
+  <form id="waForm" onsubmit="saveWhatsApp(event)">
+    <div class="form-group">
+      <label>WhatsApp Phone Number ID</label>
+      <input type="text" id="waPhoneId" placeholder="e.g., 123456789012345">
+      <p class="form-note">Found in Meta Developer Portal → WhatsApp → API Setup → Phone Number ID</p>
+    </div>
+    <div class="form-group">
+      <label>Permanent Access Token</label>
+      <input type="text" id="waAccessToken" placeholder="Starts with EAA...">
+      <p class="form-note">Generate a permanent token in Meta Developer Portal → System Users</p>
+    </div>
+    <div class="form-group">
+      <label>Webhook Verify Token</label>
+      <input type="text" id="waVerifyToken" placeholder="Any secret string you choose">
+      <p class="form-note">A secret string you set; must match what you configure in Meta webhook settings</p>
+    </div>
+
+    <div id="waError" class="form-error"></div>
+    <div id="waSuccess" class="form-success"></div>
+
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button type="submit" class="btn btn-primary" style="flex:1" id="waSaveBtn">Save WhatsApp Config ✓</button>
+      <button type="button" class="btn btn-outline" style="flex:1" onclick="goToStep(3)">Skip for Now →</button>
+    </div>
+  </form>
+
+  <div class="skip-link"><a onclick="goToStep(3)">I'll set up WhatsApp later →</a></div>
+</div>
+
+<!-- ────────────────────────────────────────────────────── -->
+<!-- STEP 3: Branding                                      -->
+<!-- ────────────────────────────────────────────────────── -->
+<div class="step-card" id="step3">
+  <h2>🎨 Step 3: Customize Your Branding</h2>
+  <p class="subtitle">Your brand identity on PDF reports, WhatsApp messages, and client communications.</p>
+
+  <form id="brandForm" onsubmit="saveBranding(event)">
+    <div class="form-group">
+      <label>Tagline</label>
+      <input type="text" id="brandTagline" placeholder="e.g., Securing Your Future with Smart Planning">
+      <p class="form-note">Shown on PDF report headers and WhatsApp messages</p>
+    </div>
+
+    <div class="form-group">
+      <label>Call to Action (CTA)</label>
+      <input type="text" id="brandCta" placeholder="e.g., Start your financial journey today!">
+      <p class="form-note">Shown at the bottom of PDF reports and WhatsApp messages</p>
+    </div>
+
+    <div class="form-group">
+      <label>Business Phone (for reports)</label>
+      <input type="tel" id="brandPhone" placeholder="e.g., 9876543210">
+    </div>
+
+    <div class="form-group">
+      <label>Business Email (for reports)</label>
+      <input type="email" id="brandEmail" placeholder="e.g., info@yourfirm.com">
+    </div>
+
+    <div class="form-group">
+      <label>Website (for reports)</label>
+      <input type="url" id="brandWebsite" placeholder="e.g., www.yourfirm.com">
+      <p class="form-note">Shown on PDF report headers and footers</p>
+    </div>
+
+    <div class="form-group">
+      <label>Credentials / Certifications</label>
+      <input type="text" id="brandCredentials" placeholder="e.g., IRDAI Licensed | MDRT Member">
+      <p class="form-note">Displayed on PDF footers</p>
+    </div>
+
+    <div id="brandError" class="form-error"></div>
+    <div id="brandSuccess" class="form-success"></div>
+
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button type="submit" class="btn btn-primary" style="flex:1" id="brandSaveBtn">Save Branding ✓</button>
+      <button type="button" class="btn btn-outline" style="flex:1" onclick="completeOnboarding()">Skip → Go to Dashboard</button>
+    </div>
+  </form>
+</div>
+
+<!-- ────────────────────────────────────────────────────── -->
+<!-- DONE Card                                             -->
+<!-- ────────────────────────────────────────────────────── -->
+<div class="done-card" id="doneCard">
+  <div class="big-check">🎉</div>
+  <h2>You're All Set!</h2>
+  <p>Your CRM is ready. Start adding leads and growing your business.</p>
+  
+  <div class="tip">
+    <strong>Quick Start Tips:</strong>
+    <ol style="margin-top:8px;padding-left:20px">
+      <li>Open <strong>your CRM bot</strong> on Telegram (the one you just created)</li>
+      <li>Send <code>/start</code> to register as the firm owner</li>
+      <li>Tap <strong>"➕ Add Lead"</strong> to add your first prospect</li>
+      <li>Use <strong>"🧮 Calculators"</strong> to run financial analyses for clients</li>
+      <li>Add DOB + Anniversary → <strong>auto greetings</strong> will fire on those dates!</li>
+      <li>Record a policy → <strong>renewal reminders</strong> sent automatically before expiry</li>
+    </ol>
+  </div>
+
+  <div class="next-actions">
+    <a id="botDeepLink" href="#" target="_blank" class="btn btn-primary">Open Your CRM Bot →</a>
+    <a class="btn btn-saffron" id="dashboardLink" href="/dashboard">View Dashboard</a>
+    <a href="/calculators" class="btn btn-outline" id="calcLink">Try Calculators</a>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+/* ── State ──────────────────────────────────────────────── */
+const params = new URLSearchParams(window.location.search);
+const tenantId = params.get('tenant_id') || '';
+const phone = params.get('phone') || '';
+let currentStep = 1;
+let botUsername = ''; // stored after successful token validation
+
+/* Build links with tenant_id */
+if (tenantId) {
+  document.getElementById('dashboardLink').href = '/dashboard?tenant_id=' + tenantId;
+  document.getElementById('calcLink').href = '/calculators?tenant_id=' + tenantId;
+}
+
+/* ── Step Navigation ────────────────────────────────────── */
+function goToStep(n) {
+  for (let i = 1; i < n; i++) {
+    document.getElementById('ps' + i).classList.remove('active');
+    document.getElementById('ps' + i).classList.add('done');
+    document.getElementById('ps' + i).querySelector('.dot').textContent = '✓';
+    if (document.getElementById('pl' + i)) document.getElementById('pl' + i).classList.add('done');
+  }
+  document.getElementById('ps' + n).classList.add('active');
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('step' + i).classList.toggle('active', i === n);
+  }
+  currentStep = n;
+  window.scrollTo({top: 200, behavior: 'smooth'});
+}
+
+/* ── Telegram Bot Token Save ────────────────────────────── */
+async function saveTelegramBot(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('tgError');
+  const sucEl = document.getElementById('tgSuccess');
+  const badge = document.getElementById('tgStatus');
+  const btn = document.getElementById('tgSaveBtn');
+  errEl.style.display = 'none'; sucEl.style.display = 'none';
+
+  const token = document.getElementById('tgBotToken').value.trim();
+  if (!token) {
+    errEl.textContent = 'Please paste the bot token from @BotFather.';
+    errEl.style.display = 'block'; return;
+  }
+  // Basic format validation
+  if (!token.match(/^\d+:[A-Za-z0-9_-]+$/)) {
+    errEl.textContent = 'Invalid token format. It should look like: 1234567890:ABCdefGHIjkl...';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Validating & connecting...';
+  badge.className = 'status-badge pending';
+  badge.textContent = '⏳ Validating token with Telegram...';
+
+  try {
+    const res = await fetch('/api/onboarding/telegram-bot', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ tenant_id: parseInt(tenantId), tg_bot_token: token }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.detail || 'Failed to validate token.';
+      errEl.style.display = 'block';
+      badge.className = 'status-badge pending';
+      badge.textContent = '❌ Token validation failed';
+    } else {
+      botUsername = data.bot_username || '';
+      sucEl.textContent = '✅ Bot connected! @' + botUsername + ' is now your CRM bot.';
+      sucEl.style.display = 'block';
+      badge.className = 'status-badge connected';
+      badge.textContent = '✅ @' + botUsername + ' connected!';
+      // Update the done card deep link
+      if (botUsername) {
+        const deepLink = document.getElementById('botDeepLink');
+        deepLink.href = 'https://t.me/' + botUsername + '?start=web_' + tenantId;
+        deepLink.textContent = 'Open @' + botUsername + ' →';
+      }
+      setTimeout(() => goToStep(3), 1200);
+    }
+  } catch {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+    badge.textContent = '❌ Connection error';
+  }
+  btn.disabled = false; btn.textContent = 'Connect My Bot ✓';
+}
+
+/* ── WhatsApp Config Save ───────────────────────────────── */
+async function saveWhatsApp(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('waError');
+  const sucEl = document.getElementById('waSuccess');
+  const btn = document.getElementById('waSaveBtn');
+  errEl.style.display = 'none'; sucEl.style.display = 'none';
+
+  const phoneId = document.getElementById('waPhoneId').value.trim();
+  const token = document.getElementById('waAccessToken').value.trim();
+  const verify = document.getElementById('waVerifyToken').value.trim();
+
+  if (!phoneId || !token) {
+    errEl.textContent = 'Phone Number ID and Access Token are required.';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const res = await fetch('/api/onboarding/whatsapp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ tenant_id: tenantId, wa_phone_id: phoneId, wa_access_token: token, wa_verify_token: verify }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.detail || 'Failed to save.'; errEl.style.display = 'block'; }
+    else { sucEl.textContent = '✅ WhatsApp configured!'; sucEl.style.display = 'block'; setTimeout(() => goToStep(3), 1000); }
+  } catch { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+  btn.disabled = false; btn.textContent = 'Save WhatsApp Config ✓';
+}
+
+/* ── Branding Save ──────────────────────────────────────── */
+async function saveBranding(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('brandError');
+  const sucEl = document.getElementById('brandSuccess');
+  const btn = document.getElementById('brandSaveBtn');
+  errEl.style.display = 'none'; sucEl.style.display = 'none';
+
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const res = await fetch('/api/onboarding/branding', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        tagline: document.getElementById('brandTagline').value.trim(),
+        cta: document.getElementById('brandCta').value.trim(),
+        phone: document.getElementById('brandPhone').value.trim(),
+        email: document.getElementById('brandEmail').value.trim(),
+        website: document.getElementById('brandWebsite').value.trim(),
+        credentials: document.getElementById('brandCredentials').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.detail || 'Failed to save.'; errEl.style.display = 'block'; }
+    else { sucEl.textContent = '✅ Branding saved!'; sucEl.style.display = 'block'; setTimeout(() => completeOnboarding(), 800); }
+  } catch { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+  btn.disabled = false; btn.textContent = 'Save Branding ✓';
+}
+
+/* ── Complete Onboarding ────────────────────────────────── */
+function completeOnboarding() {
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('ps' + i).classList.remove('active');
+    document.getElementById('ps' + i).classList.add('done');
+    document.getElementById('ps' + i).querySelector('.dot').textContent = '✓';
+    if (document.getElementById('pl' + i)) document.getElementById('pl' + i).classList.add('done');
+    document.getElementById('step' + i).classList.remove('active');
+  }
+  document.getElementById('doneCard').classList.add('active');
+  // If no bot username set, fallback to master bot
+  const deepLink = document.getElementById('botDeepLink');
+  if (!botUsername) {
+    deepLink.href = 'https://t.me/SarathiBizBot?start=web_' + tenantId;
+    deepLink.textContent = 'Open Sarathi-AI.com Bot →';
+  }
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+</script>
+
+<!-- ── Footer ──────────────────────────────────────────── -->
+<div style="background:#0f172a;color:#fff;text-align:center;padding:32px 24px;margin-top:40px">
+  <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;font-size:1.1em;margin-bottom:4px">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:64px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi-<span style="color:#14b8a6">AI</span>&nbsp;Business Technologies
+  </div>
+  <p style="color:#94a3b8;font-size:0.85em;margin-bottom:12px">AI-Powered Financial Advisor CRM Platform · sarathi-ai.com</p>
+  <p style="color:#64748b;font-size:0.72em;opacity:0.6">© 2026 Sarathi-AI Business Technologies. All rights reserved.</p>
+</div>
+
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

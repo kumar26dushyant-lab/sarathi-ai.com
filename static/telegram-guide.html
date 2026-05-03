@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram CRM Guide — Sarathi-AI Business Technologies</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<meta name="description" content="Master your Sarathi-AI CRM through Telegram. Complete step-by-step guide covering lead management, pipeline tracking, calculators, WhatsApp sharing, AI tools, team management, and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Inter','Poppins',system-ui,-apple-system,sans-serif;color:#1e293b;line-height:1.7;background:#fff}
+a{text-decoration:none;color:inherit}
+
+:root{
+  --blue:#0d9488;--blue-dark:#0f766e;--blue-light:#14b8a6;--blue-50:#f0fdfa;--blue-100:#ccfbf1;
+  --saffron:#f59e0b;--saffron-light:#fbbf24;--saffron-50:#fffbeb;
+  --green:#059669;--green-light:#10b981;--green-50:#ecfdf5;
+  --indigo:#4338ca;--indigo-50:#eef2ff;--indigo-100:#e0e7ff;
+  --white:#ffffff;--gray-50:#f8fafc;--gray-100:#f1f5f9;--gray-200:#e2e8f0;--gray-300:#cbd5e1;
+  --gray-400:#94a3b8;--gray-500:#64748b;--gray-600:#475569;--gray-700:#334155;--gray-800:#1e293b;--gray-900:#0f172a;
+  --grad-blue:linear-gradient(135deg,#0d9488,#14b8a6);--grad-saffron:linear-gradient(135deg,#f59e0b,#fbbf24);
+  --grad-hero:linear-gradient(135deg,#f0fdfa 0%,#fffbeb 50%,#ecfdf5 100%);
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 16px rgba(0,0,0,0.08);--shadow-lg:0 8px 32px rgba(0,0,0,0.1);
+  --shadow-blue:0 4px 20px rgba(13,148,136,0.25);
+  --radius:12px;--radius-lg:16px;--radius-xl:20px;
+}
+
+/* ═══ NAVBAR ═══════════════════════════════════════════════ */
+.navbar{
+  position:sticky;top:0;width:100%;z-index:100;
+  background:rgba(255,255,255,0.92);backdrop-filter:blur(16px) saturate(180%);
+  border-bottom:1px solid var(--gray-200);
+}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:68px;padding:0 24px}
+.nav-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15em}
+.nav-brand .logo-svg{width:auto;height:80px}
+.nav-brand .wordmark{color:#312e81;font-weight:800}
+.nav-brand .wordmark .ai-tag{color:#0d9488}
+.nav-links{display:flex;gap:20px;align-items:center}
+.nav-links a{font-size:0.88em;font-weight:500;color:var(--gray-600);transition:color .2s}
+.nav-links a:hover{color:var(--blue)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;border-radius:var(--radius);font-weight:600;font-size:0.9em;transition:all .25s;cursor:pointer;border:none;white-space:nowrap;font-family:inherit}
+.btn-blue{background:var(--grad-blue);color:#fff;box-shadow:var(--shadow-blue)}
+.btn-blue:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(13,148,136,0.35)}
+.btn-saffron{background:var(--grad-saffron);color:#fff}
+.btn-saffron:hover{transform:translateY(-2px)}
+.btn-outline{background:transparent;color:var(--blue);border:2px solid var(--blue)}
+.btn-outline:hover{background:var(--blue);color:#fff}
+.btn-lg{padding:14px 36px;font-size:0.95em;border-radius:var(--radius-lg)}
+
+/* ═══ LANG TOGGLE ══════════════════════════════════════════ */
+.lang-toggle{display:inline-flex;align-items:center;gap:0;border:1.5px solid var(--gray-200);border-radius:100px;overflow:hidden;font-size:.82em;cursor:pointer;margin:0 4px}
+.lang-toggle span{padding:6px 12px;font-weight:600;transition:all .2s;cursor:pointer}
+.lang-toggle span.active{background:var(--blue);color:#fff}
+.lang-toggle span:not(.active){color:var(--gray-500)}
+.lang-toggle span:not(.active):hover{background:var(--blue-50)}
+
+/* ═══ HERO ═════════════════════════════════════════════════ */
+.tg-hero{
+  background:var(--grad-hero);padding:120px 24px 80px;text-align:center;
+  position:relative;overflow:hidden;
+}
+.tg-hero::before{
+  content:'';position:absolute;inset:0;opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231a56db' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.tg-hero-inner{max-width:750px;margin:0 auto;position:relative;z-index:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:100px;font-size:0.78em;font-weight:600;background:var(--blue-50);color:var(--blue);border:1px solid rgba(13,148,136,0.2);margin-bottom:16px}
+.tg-hero h1{font-size:2.6em;font-weight:900;color:var(--gray-900);letter-spacing:-0.02em;margin-bottom:16px;line-height:1.15}
+.tg-hero h1 .blue{color:var(--blue)}
+.tg-hero h1 .saffron{color:var(--saffron)}
+.tg-hero p.subtitle{font-size:1.1em;color:var(--gray-500);max-width:600px;margin:0 auto 32px}
+
+/* ═══ HOW-IT-WORKS VISUAL ══════════════════════════════════ */
+.architecture{background:#fff;padding:64px 24px;border-bottom:1px solid var(--gray-100)}
+.arch-inner{max-width:900px;margin:0 auto;text-align:center}
+.arch-inner h2{font-size:1.8em;font-weight:800;color:var(--gray-900);margin-bottom:8px}
+.arch-inner .arch-sub{font-size:0.95em;color:var(--gray-500);margin-bottom:40px}
+.arch-flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:32px}
+.arch-node{display:flex;flex-direction:column;align-items:center;gap:8px;padding:24px 20px;min-width:150px}
+.arch-icon{width:64px;height:64px;border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;font-size:1.8em}
+.arch-icon.tg-bg{background:linear-gradient(135deg,#0088cc,#229ED9);color:#fff}
+.arch-icon.server-bg{background:var(--grad-blue);color:#fff}
+.arch-icon.wa-bg{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff}
+.arch-icon.client-bg{background:var(--grad-saffron);color:#fff}
+.arch-label{font-size:0.82em;font-weight:700;color:var(--gray-700)}
+.arch-desc{font-size:0.72em;color:var(--gray-400);max-width:130px;line-height:1.4}
+.arch-arrow{font-size:1.8em;color:var(--gray-300);padding:0 4px;flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;text-align:left}
+.arch-callout{padding:16px 20px;border:1px solid var(--gray-200);border-radius:var(--radius);background:var(--gray-50)}
+.arch-callout strong{font-size:0.85em;color:var(--gray-800);display:block;margin-bottom:4px}
+.arch-callout p{font-size:0.78em;color:var(--gray-500);line-height:1.55}
+
+/* ═══ TOC ══════════════════════════════════════════════════ */
+.toc{background:var(--gray-50);padding:48px 24px;border-bottom:1px solid var(--gray-100)}
+.toc-inner{max-width:900px;margin:0 auto}
+.toc-inner h2{font-size:1.3em;font-weight:800;color:var(--gray-900);margin-bottom:20px;text-align:center}
+.toc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.toc-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:var(--radius);transition:all .2s;cursor:pointer}
+.toc-item:hover{background:var(--blue-50);color:var(--blue)}
+.toc-num{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.72em;font-weight:800;background:var(--blue-50);color:var(--blue);flex-shrink:0}
+.toc-label{font-size:0.85em;font-weight:600;color:var(--gray-700)}
+.toc-item:hover .toc-label{color:var(--blue)}
+
+/* ═══ SECTION CONTAINER ════════════════════════════════════ */
+.guide{padding:0 24px}
+.guide-sec{max-width:900px;margin:0 auto;padding:64px 0;border-bottom:1px solid var(--gray-100)}
+.guide-sec:last-child{border-bottom:none}
+.sec-header{display:flex;align-items:center;gap:16px;margin-bottom:28px}
+.sec-num{width:52px;height:52px;border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.15em;color:#fff;flex-shrink:0}
+.sec-header-text h2{font-size:1.5em;font-weight:800;color:var(--gray-900);letter-spacing:-0.01em}
+.sec-header-text p{font-size:0.85em;color:var(--gray-400);margin-top:2px}
+.sec-body{padding-left:68px}
+@media(max-width:640px){.sec-body{padding-left:0}}
+
+/* Command cards */
+.cmd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:24px}
+.cmd-card{padding:20px;background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius-lg);transition:all .3s}
+.cmd-card:hover{box-shadow:var(--shadow-md);border-color:var(--blue-light)}
+.cmd-name{font-family:'Poppins',monospace;font-size:0.95em;font-weight:700;color:var(--blue);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.cmd-name .cmd-icon{font-size:1.1em}
+.cmd-desc{font-size:0.82em;color:var(--gray-500);line-height:1.6}
+.cmd-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.68em;font-weight:700;margin-left:4px}
+.cmd-badge.wa{background:#dcfce7;color:#166534}
+.cmd-badge.ai{background:var(--indigo-50);color:var(--indigo)}
+.cmd-badge.owner{background:var(--saffron-50);color:#92400e}
+
+/* Flow steps */
+.flow{display:flex;flex-direction:column;gap:16px;margin:20px 0}
+.flow-step{display:flex;gap:16px;align-items:flex-start}
+.flow-dot{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.85em;font-weight:800;flex-shrink:0;border:2px solid}
+.flow-dot.teal{background:var(--blue-50);border-color:var(--blue);color:var(--blue)}
+.flow-dot.saffron{background:var(--saffron-50);border-color:var(--saffron);color:#92400e}
+.flow-dot.green{background:var(--green-50);border-color:var(--green);color:var(--green)}
+.flow-text h4{font-size:0.9em;font-weight:700;color:var(--gray-800);margin-bottom:2px}
+.flow-text p{font-size:0.82em;color:var(--gray-500);line-height:1.55}
+
+/* Chat mockup */
+.chat-mock{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:20px;margin:20px 0;max-width:440px}
+.chat-mock-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-200)}
+.chat-mock-header .avatar{width:36px;height:36px;border-radius:50%;background:var(--grad-blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.85em;font-weight:700}
+.chat-mock-header .chat-name{font-size:0.85em;font-weight:700;color:var(--gray-800)}
+.chat-mock-header .chat-status{font-size:0.7em;color:var(--green)}
+.msg{padding:10px 14px;border-radius:12px;margin-bottom:8px;max-width:85%;font-size:0.8em;line-height:1.5}
+.msg-user{background:var(--blue-50);color:var(--gray-800);margin-left:auto;border-bottom-right-radius:4px}
+.msg-bot{background:#fff;border:1px solid var(--gray-200);color:var(--gray-700);border-bottom-left-radius:4px}
+.msg-bot .btn-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.msg-bot .btn-row .inline-btn{padding:4px 10px;border-radius:6px;font-size:0.75em;font-weight:600;background:var(--blue-50);color:var(--blue);border:1px solid var(--blue-100)}
+
+/* Tip box */
+.tip{display:flex;align-items:flex-start;gap:10px;padding:14px 18px;border-radius:var(--radius);margin:16px 0;font-size:0.82em;line-height:1.6}
+.tip.green{background:var(--green-50);border:1px solid rgba(5,150,105,0.15);color:var(--green)}
+.tip.blue{background:var(--blue-50);border:1px solid rgba(13,148,136,0.15);color:var(--blue-dark)}
+.tip.saffron{background:var(--saffron-50);border:1px solid rgba(245,158,11,0.2);color:#92400e}
+.tip .tip-icon{font-size:1.2em;flex-shrink:0;margin-top:1px}
+
+/* Comparison table */
+.comp-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--gray-200);border-radius:var(--radius);overflow:hidden;margin:20px 0;font-size:0.82em}
+.comp-table th{background:var(--gray-50);padding:12px 16px;text-align:left;font-weight:700;color:var(--gray-700);border-bottom:1px solid var(--gray-200)}
+.comp-table td{padding:10px 16px;border-bottom:1px solid var(--gray-100);color:var(--gray-600);vertical-align:top}
+.comp-table tr:last-child td{border-bottom:none}
+.comp-table .emoji-col{text-align:center;width:40px}
+
+/* Plan badge */
+.plan-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:100px;font-size:0.72em;font-weight:700}
+.plan-tag.solo{background:#dbeafe;color:#1e40af}
+.plan-tag.team{background:#ede9fe;color:#5b21b6}
+.plan-tag.enterprise{background:#fce7f3;color:#9d174d}
+.plan-tag.all{background:var(--green-50);color:var(--green)}
+
+/* Accordion */
+.accordion{margin:20px 0}
+.accordion-item{border:1px solid var(--gray-200);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;transition:all .3s}
+.accordion-item.open{box-shadow:var(--shadow-sm)}
+.accordion-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;background:#fff;transition:background .2s}
+.accordion-header:hover{background:var(--gray-50)}
+.accordion-header h4{font-size:0.88em;font-weight:700;color:var(--gray-800);display:flex;align-items:center;gap:8px}
+.accordion-header .chevron{font-size:0.8em;color:var(--gray-400);transition:transform .3s}
+.accordion-item.open .chevron{transform:rotate(180deg)}
+.accordion-body{padding:0 18px 16px;font-size:0.82em;color:var(--gray-500);line-height:1.65;display:none}
+.accordion-item.open .accordion-body{display:block}
+
+/* ═══ CTA ══════════════════════════════════════════════════ */
+.tg-cta{background:linear-gradient(135deg,#0f766e,#0d9488,#14b8a6);padding:64px 24px;text-align:center}
+.tg-cta h2{font-size:1.8em;font-weight:800;color:#fff;margin-bottom:12px}
+.tg-cta p{font-size:0.95em;color:rgba(255,255,255,0.8);max-width:500px;margin:0 auto 28px}
+
+/* ═══ FOOTER ═══════════════════════════════════════════════ */
+.footer{background:var(--gray-900);color:rgba(255,255,255,0.5);padding:48px 24px;text-align:center;font-size:0.82em}
+.footer .brand{display:flex;align-items:center;justify-content:center;gap:8px;font-size:1.15em;font-weight:800;color:#fff;margin-bottom:8px}
+.footer .brand .ai-tag{color:var(--blue-light)}
+.footer .tagline{margin-bottom:20px}
+.footer .links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.footer .links a{color:rgba(255,255,255,0.5);transition:color .2s}
+.footer .links a:hover{color:var(--blue-light)}
+
+/* ═══ RESPONSIVE ═══════════════════════════════════════════ */
+@media(max-width:768px){
+  .tg-hero h1{font-size:1.8em}
+  .arch-flow{flex-direction:column;gap:4px}
+  .arch-arrow{transform:rotate(90deg)}
+  .cmd-grid{grid-template-columns:1fr}
+  .toc-grid{grid-template-columns:1fr}
+  .comp-table{font-size:0.75em}
+  .comp-table th,.comp-table td{padding:8px 10px}
+  .nav-links{display:none}
+  .sec-body{padding-left:0}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═════════════════════════════════════════════ -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/static/logo.png?v=3" alt="Sarathi-AI" class="logo-svg" style="border-radius:6px" onerror="this.style.display='none'">
+      <span class="wordmark">Sarathi<span class="ai-tag">-AI</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/demo">Demo</a>
+      <a href="/getting-started">Setup Guide</a>
+      <a href="/calculators">Calculators</a>
+      <div class="lang-toggle" id="langToggle">
+        <span class="active" onclick="setLang('en')">EN</span>
+        <span onclick="setLang('hi')">हिं</span>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+      <a href="/#pricing" class="btn btn-blue">Start Free Trial</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ HERO ═══════════════════════════════════════════════ -->
+<section class="tg-hero">
+  <div class="tg-hero-inner">
+    <div class="pill">📘 Complete CRM Guide</div>
+    <h1>Your <span class="blue">Entire Business CRM</span> on <span class="saffron">Telegram</span></h1>
+    <p class="subtitle">No apps to install. No dashboards to learn. Just open Telegram and run your entire business — leads, pipeline, calculators, claims, AI tools, and WhatsApp sharing — all from one chat window.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+      <a href="#architecture" class="btn btn-blue btn-lg">See How It Works ↓</a>
+      <a href="#sec-leads" class="btn btn-outline btn-lg">Jump to Commands →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ARCHITECTURE — HOW TELEGRAM + WHATSAPP WORK TOGETHER ═══ -->
+<section class="architecture" id="architecture">
+  <div class="arch-inner">
+    <h2>How Telegram + WhatsApp Work Together</h2>
+    <p class="arch-sub">Telegram is your cockpit. WhatsApp is your client channel. They stay perfectly in sync.</p>
+
+    <div class="arch-flow">
+      <div class="arch-node">
+        <div class="arch-icon tg-bg">✈️</div>
+        <div class="arch-label">Telegram Bot</div>
+        <div class="arch-desc">You give commands here. Your private CRM cockpit.</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="arch-icon server-bg">⚙️</div>
+        <div class="arch-label">Sarathi-AI Server</div>
+        <div class="arch-desc">Processes commands, stores data, runs AI.</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="arch-icon wa-bg">💬</div>
+        <div class="arch-label">WhatsApp</div>
+        <div class="arch-desc">Messages reach your client's phone instantly.</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="arch-icon client-bg">👤</div>
+        <div class="arch-label">Your Client</div>
+        <div class="arch-desc">Sees a professional branded message on WhatsApp.</div>
+      </div>
+    </div>
+
+    <div class="arch-callouts">
+      <div class="arch-callout">
+        <strong>🎯 Why Telegram for You?</strong>
+        <p>Free, unlimited messages, no 24-hour window, rich buttons, instant bot responses. It's your private command center that costs ₹0.</p>
+      </div>
+      <div class="arch-callout">
+        <strong>💬 Why WhatsApp for Clients?</strong>
+        <p>Your clients are already on WhatsApp. They see branded, professional messages — calculator reports, greetings, policy updates — right where they chat daily.</p>
+      </div>
+      <div class="arch-callout">
+        <strong>🔄 Always in Sync</strong>
+        <p>Add a lead on Telegram → send a calculator via WhatsApp → log a follow-up → everything is tracked in one database. No copy-pasting, no spreadsheets.</p>
+      </div>
+      <div class="arch-callout">
+        <strong>📱 Works on Any Device</strong>
+        <p>Telegram works on phone, tablet, desktop, and web browser — all simultaneously. Your CRM goes wherever you go.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ TABLE OF CONTENTS ══════════════════════════════════ -->
+<section class="toc" id="toc">
+  <div class="toc-inner">
+    <h2>What You'll Learn</h2>
+    <div class="toc-grid">
+      <a href="#sec-start" class="toc-item"><span class="toc-num">1</span><span class="toc-label">Getting Started &amp; Registration</span></a>
+      <a href="#sec-leads" class="toc-item"><span class="toc-num">2</span><span class="toc-label">Lead Management</span></a>
+      <a href="#sec-pipeline" class="toc-item"><span class="toc-num">3</span><span class="toc-label">Pipeline &amp; Follow-ups</span></a>
+      <a href="#sec-policy" class="toc-item"><span class="toc-num">4</span><span class="toc-label">Policy &amp; Renewals</span></a>
+      <a href="#sec-calc" class="toc-item"><span class="toc-num">5</span><span class="toc-label">Financial Calculators</span></a>
+      <a href="#sec-whatsapp" class="toc-item"><span class="toc-num">6</span><span class="toc-label">WhatsApp Sharing &amp; Messages</span></a>
+      <a href="#sec-claims" class="toc-item"><span class="toc-num">7</span><span class="toc-label">Claims Helper</span></a>
+      <a href="#sec-ai" class="toc-item"><span class="toc-num">8</span><span class="toc-label">AI Sales Intelligence</span></a>
+      <a href="#sec-voice" class="toc-item"><span class="toc-num">9</span><span class="toc-label">Voice-to-Action</span></a>
+      <a href="#sec-team" class="toc-item"><span class="toc-num">10</span><span class="toc-label">Team &amp; Agent Management</span></a>
+      <a href="#sec-csv" class="toc-item"><span class="toc-num">11</span><span class="toc-label">Bulk CSV Import</span></a>
+      <a href="#sec-settings" class="toc-item"><span class="toc-num">12</span><span class="toc-label">Settings &amp; Language</span></a>
+    </div>
+  </div>
+</section>
+
+<div class="guide">
+
+<!-- ═══ SECTION 1 — GETTING STARTED ═══════════════════════ -->
+<section class="guide-sec" id="sec-start">
+  <div class="sec-header">
+    <div class="sec-num" style="background:var(--grad-blue)">1</div>
+    <div class="sec-header-text">
+      <h2>Getting Started &amp; Registration</h2>
+      <p>First-time setup takes under 5 minutes</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.9em;color:var(--gray-600);margin-bottom:20px">After you sign up on our website and connect your Telegram bot, here's what happens when you first open the bot:</p>
+
+    <div class="chat-mock">
+      <div class="chat-mock-header">
+        <div class="avatar">S</div>
+        <div>
+          <div class="chat-name">Sarathi-AI CRM</div>
+          <div class="chat-status">● online</div>
+        </div>
+      </div>
+      <div class="msg msg-user">/start</div>
+      <div class="msg msg-bot">
+        🏢 Welcome to <strong>Sarathi-AI CRM!</strong><br><br>
+        How would you like to proceed?
+        <div class="btn-row">
+          <span class="inline-btn">🏢 Register my Firm</span>
+          <span class="inline-btn">🔗 I have an Invite Code</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot teal">1</div>
+        <div class="flow-text">
+          <h4>Type <code>/start</code> in your bot</h4>
+          <p>If you signed up via the website, click the deep link you received — it will auto-fill your details.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot teal">2</div>
+        <div class="flow-text">
+          <h4>Choose "Register my Firm" or "I have an Invite Code"</h4>
+          <p><strong>Firm owners / solo advisors:</strong> Register a new firm. <strong>Agents joining a team:</strong> Use the invite code shared by your manager.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot teal">3</div>
+        <div class="flow-text">
+          <h4>Enter your details</h4>
+          <p>Firm name (owner only) → Your name → Phone → Email. The bot guides you step by step.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot green">✓</div>
+        <div class="flow-text">
+          <h4>You're in! Persistent menu appears</h4>
+          <p>A button menu appears at the bottom of your chat with quick actions: ➕ Add Lead, 📊 Pipeline, 📋 Leads, 🧮 Calculator, and more.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip green">
+      <span class="tip-icon">💡</span>
+      <span><strong>Pro Tip:</strong> The persistent button menu at the bottom changes based on your role (owner sees "👥 Team") and plan (AI Tools button appears for Team/Enterprise plans).</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 2 — LEAD MANAGEMENT ═══════════════════════ -->
+<section class="guide-sec" id="sec-leads">
+  <div class="sec-header">
+    <div class="sec-num" style="background:var(--grad-saffron)">2</div>
+    <div class="sec-header-text">
+      <h2>Lead Management</h2>
+      <p>Add, view, search, and edit leads — all in chat</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">➕</span> /addlead</div>
+        <div class="cmd-desc">Start a guided wizard to add a new lead. The bot asks for: name, phone (with duplicate detection), DOB, anniversary, city, insurance need type (Life/Health/Motor/etc.), and notes. Takes ~60 seconds.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📋</span> /leads</div>
+        <div class="cmd-desc">View all your leads with stage emoji, phone, and need type. Shows up to 15 leads. Tap any lead's button to see full details.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔍</span> /leads Ramesh</div>
+        <div class="cmd-desc">Search leads by name or phone. Type <code>/leads</code> followed by a search term to instantly find matching leads.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">👤</span> /lead 5</div>
+        <div class="cmd-desc">View full detail for lead #5: all personal info, pipeline stage, recent interactions (last 5), policies, greetings sent. Action buttons appear below.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">✏️</span> /editlead 5</div>
+        <div class="cmd-desc">Edit any field of lead #5: name, phone, email, DOB, anniversary, city, notes, or need type. Pick the field → enter the new value.</div>
+      </div>
+    </div>
+
+    <div class="chat-mock">
+      <div class="chat-mock-header">
+        <div class="avatar">S</div>
+        <div>
+          <div class="chat-name">Sarathi-AI CRM</div>
+          <div class="chat-status">● online</div>
+        </div>
+      </div>
+      <div class="msg msg-user">/addlead</div>
+      <div class="msg msg-bot">📝 Let's add a new lead!<br><br>What is the <strong>client's full name</strong>?</div>
+      <div class="msg msg-user">Rajesh Kumar</div>
+      <div class="msg msg-bot">📱 What is <strong>Rajesh Kumar's phone number</strong>?<br><span style="color:var(--gray-400);font-size:0.85em">(10 digits, or type "skip")</span></div>
+      <div class="msg msg-user">9876543210</div>
+      <div class="msg msg-bot">
+        ✅ <strong>Lead created!</strong> #42 — Rajesh Kumar<br>
+        📞 9876543210 | 🏷️ Prospect<br><br>
+        What's next?
+        <div class="btn-row">
+          <span class="inline-btn">📝 Log Follow-up</span>
+          <span class="inline-btn">🔄 Move Stage</span>
+          <span class="inline-btn">📊 Open Calculator</span>
+          <span class="inline-btn">👤 View Detail</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip blue">
+      <span class="tip-icon">🔍</span>
+      <span><strong>Duplicate Detection:</strong> If you enter a phone number that already exists in your leads, the bot warns you and shows the existing lead. This prevents accidentally adding the same person twice.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 3 — PIPELINE & FOLLOW-UPS ═════════════════ -->
+<section class="guide-sec" id="sec-pipeline">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#4338ca,#6366f1)">3</div>
+    <div class="sec-header-text">
+      <h2>Pipeline &amp; Follow-ups</h2>
+      <p>Track every lead through your sales funnel</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:16px">Your pipeline has 7 stages. Every lead moves through them as you work:</p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px">
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#dbeafe;color:#1e40af">🔵 Prospect</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#e0e7ff;color:#4338ca">📞 Contacted</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#fce7f3;color:#9d174d">📊 Pitched</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#fef3c7;color:#92400e">📄 Proposal Sent</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#fed7aa;color:#9a3412">🤝 Negotiation</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#dcfce7;color:#166534">✅ Closed Won</span>
+      <span style="padding:6px 14px;border-radius:100px;font-size:0.78em;font-weight:600;background:#fee2e2;color:#991b1b">❌ Closed Lost</span>
+    </div>
+
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📊</span> /pipeline</div>
+        <div class="cmd-desc">Visual pipeline overview with bar charts showing lead count per stage. See conversion rate, Won/Lost counts, active policies, and total premium at a glance.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔄</span> /convert 5</div>
+        <div class="cmd-desc">Move lead #5 to a new stage. The bot shows buttons for each stage — tap one to move. Auto-logs the stage change.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📝</span> /followup</div>
+        <div class="cmd-desc">Log a sales interaction: Call, WhatsApp chat, Meeting, Email, Pitch, or Proposal. The bot records the type, notes, and optional next follow-up date.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📈</span> /dashboard</div>
+        <div class="cmd-desc">Full business dashboard: pipeline breakdown, portfolio stats (active policies, total premium, commission), today's activity, pending follow-ups, renewal alerts.</div>
+      </div>
+    </div>
+
+    <div class="chat-mock">
+      <div class="chat-mock-header">
+        <div class="avatar">S</div>
+        <div>
+          <div class="chat-name">Sarathi-AI CRM</div>
+          <div class="chat-status">● online</div>
+        </div>
+      </div>
+      <div class="msg msg-user">/pipeline</div>
+      <div class="msg msg-bot">
+        📊 <strong>Sales Pipeline</strong><br><br>
+        🔵 Prospect &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████████ 12<br>
+        📞 Contacted &nbsp;&nbsp;██████ 8<br>
+        📊 Pitched &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████ 5<br>
+        📄 Proposal &nbsp;&nbsp;&nbsp;&nbsp;██ 3<br>
+        🤝 Negotiation &nbsp;█ 2<br><br>
+        ✅ Won: 15 &nbsp;|&nbsp; ❌ Lost: 4<br>
+        📈 Conversion: 28.8%<br>
+        🛡️ Active Policies: 15 | ₹4.2L Premium
+        <div class="btn-row">
+          <span class="inline-btn">📋 View Prospects</span>
+          <span class="inline-btn">📊 View Pitched</span>
+          <span class="inline-btn">📄 Proposals</span>
+          <span class="inline-btn">🏆 Closed Won</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip green">
+      <span class="tip-icon">⏰</span>
+      <span><strong>Auto Reminders:</strong> When you log a follow-up with a future date, Sarathi-AI sends you a reminder on that date via Telegram. Never miss a follow-up again.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 4 — POLICY & RENEWALS ═════════════════════ -->
+<section class="guide-sec" id="sec-policy">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#059669,#10b981)">4</div>
+    <div class="sec-header-text">
+      <h2>Policy &amp; Renewals</h2>
+      <p>Record sold policies and track upcoming renewals</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🛡️</span> /policy 5</div>
+        <div class="cmd-desc">Record a sold policy for lead #5. The bot asks for: insurer name, plan name, sum insured, premium, start date, and renewal date. Automatically marks the lead as "Closed Won".</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔄</span> /renewals</div>
+        <div class="cmd-desc">View all upcoming policy renewals in the next 60 days. Color-coded urgency: 🔴 ≤7 days, 🟡 ≤30 days, 🟢 &gt;30 days. Never miss a renewal opportunity.</div>
+      </div>
+    </div>
+
+    <div class="chat-mock">
+      <div class="chat-mock-header">
+        <div class="avatar">S</div>
+        <div>
+          <div class="chat-name">Sarathi-AI CRM</div>
+          <div class="chat-status">● online</div>
+        </div>
+      </div>
+      <div class="msg msg-user">/renewals</div>
+      <div class="msg msg-bot">
+        🔄 <strong>Upcoming Renewals</strong> (next 60 days)<br><br>
+        🔴 <strong>Rajesh Kumar</strong> — LIC Jeevan Anand<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;₹18,000 premium · Expires in <strong>3 days</strong><br><br>
+        🟡 <strong>Priya Sharma</strong> — Star Health Family<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;₹12,500 premium · Expires in <strong>22 days</strong><br><br>
+        🟢 <strong>Amit Patel</strong> — HDFC Click2Protect<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;₹8,200 premium · Expires in <strong>45 days</strong>
+      </div>
+    </div>
+
+    <div class="tip saffron">
+      <span class="tip-icon">💰</span>
+      <span><strong>Revenue Tracking:</strong> Every policy you record builds your portfolio dashboard. See total premium, commission estimates, and portfolio growth — all from <code>/dashboard</code>.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 5 — CALCULATORS ════════════════════════════ -->
+<section class="guide-sec" id="sec-calc">
+  <div class="sec-header">
+    <div class="sec-num" style="background:var(--grad-saffron)">5</div>
+    <div class="sec-header-text">
+      <h2>Financial Calculators</h2>
+      <p>12 professional calculators, right inside Telegram</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:16px">Type <code>/calc</code> to open the calculator menu. Each calculator runs step-by-step with quick-select buttons — no typing needed for common values.</p>
+
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th class="emoji-col"></th>
+          <th>Calculator</th>
+          <th>What It Shows</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="emoji-col">📉</td><td><strong>Inflation Eraser</strong></td><td>How much your ₹50K/month expense will become in 10-20 years</td></tr>
+        <tr><td class="emoji-col">🛡️</td><td><strong>Human Life Value</strong></td><td>How much life cover you actually need (expenses + loans + children)</td></tr>
+        <tr><td class="emoji-col">🏖️</td><td><strong>Retirement Planner</strong></td><td>How much corpus you need and monthly SIP to get there</td></tr>
+        <tr><td class="emoji-col">💳</td><td><strong>Premium EMI</strong></td><td>Break annual premium into monthly EMIs with GST and CIBIL discount</td></tr>
+        <tr><td class="emoji-col">🏥</td><td><strong>Health Cover Estimator</strong></td><td>Recommended health cover based on age, family, city tier, income</td></tr>
+        <tr><td class="emoji-col">📈</td><td><strong>SIP vs Lumpsum</strong></td><td>Side-by-side comparison of growth paths for the same amount</td></tr>
+        <tr><td class="emoji-col">📊</td><td><strong>MF SIP Planner</strong></td><td>Required monthly SIP to reach your financial goal</td></tr>
+        <tr><td class="emoji-col">⚖️</td><td><strong>ULIP vs Mutual Fund</strong></td><td>Head-to-head comparison factoring in charges and returns</td></tr>
+        <tr><td class="emoji-col">🏛️</td><td><strong>NPS Planner</strong></td><td>NPS corpus at retirement + monthly pension + tax savings</td></tr>
+      </tbody>
+    </table>
+
+    <div class="chat-mock">
+      <div class="chat-mock-header">
+        <div class="avatar">S</div>
+        <div>
+          <div class="chat-name">Sarathi-AI CRM</div>
+          <div class="chat-status">● online</div>
+        </div>
+      </div>
+      <div class="msg msg-user">/calc</div>
+      <div class="msg msg-bot">
+        🧮 <strong>Choose a Calculator:</strong>
+        <div class="btn-row">
+          <span class="inline-btn">📉 Inflation</span>
+          <span class="inline-btn">🛡️ HLV</span>
+          <span class="inline-btn">🏖️ Retirement</span>
+          <span class="inline-btn">💳 EMI</span>
+          <span class="inline-btn">🏥 Health</span>
+          <span class="inline-btn">📈 SIP</span>
+          <span class="inline-btn">📊 MF SIP</span>
+          <span class="inline-btn">⚖️ ULIP</span>
+          <span class="inline-btn">🏛️ NPS</span>
+        </div>
+      </div>
+      <div class="msg msg-bot">
+        📉 <strong>Inflation Impact Result</strong><br><br>
+        Your ₹50,000/month today =<br>
+        ₹1,34,253/month in 15 years!<br><br>
+        You need ₹1.6 Cr corpus to maintain lifestyle.
+        <div class="btn-row">
+          <span class="inline-btn">🔄 Recalculate</span>
+          <span class="inline-btn">📱 Share WhatsApp</span>
+          <span class="inline-btn">🧮 Other Calculator</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip green">
+      <span class="tip-icon">📱</span>
+      <span><strong>Share via WhatsApp:</strong> Every calculator result has a "Share WhatsApp" button. Enter the client's phone number and a pre-filled WhatsApp message opens with the result, branded with your firm name. Also see <a href="#sec-whatsapp" style="color:var(--green);text-decoration:underline">Section 6: WhatsApp Sharing</a>.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 6 — WHATSAPP SHARING ══════════════════════ -->
+<section class="guide-sec" id="sec-whatsapp">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#25D366,#128C7E)">6</div>
+    <div class="sec-header-text">
+      <h2>WhatsApp Sharing &amp; Messages</h2>
+      <p>Send professional messages to clients — from Telegram</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:16px">This is where Telegram and WhatsApp work together beautifully. You type commands in Telegram, your client receives polished messages on WhatsApp.</p>
+
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">💬</span> /wa 5 Hello Rajesh! <span class="cmd-badge wa">WhatsApp</span></div>
+        <div class="cmd-desc">Send a direct WhatsApp message to lead #5. Just type the lead ID and your message. The bot sends it via WhatsApp API and logs it as an interaction.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📊</span> /wacalc 5 <span class="cmd-badge wa">WhatsApp</span></div>
+        <div class="cmd-desc">Send a calculator report directly to lead #5's WhatsApp. Pick a calculator type, and a personalized "Dear Rajesh…" report is sent with your firm branding.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📋</span> /wadash 5 <span class="cmd-badge wa">WhatsApp</span></div>
+        <div class="cmd-desc">Send the client's full policy portfolio summary to their WhatsApp — all policies with insurer, plan, cover, premium, and renewal dates.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🎉</span> /greet 5 <span class="cmd-badge wa">WhatsApp</span></div>
+        <div class="cmd-desc">Send a branded greeting: 🎂 Birthday, 💍 Anniversary, 🙏 Thank You, or 🎉 Festival wishes — with your firm branding, directly on WhatsApp.</div>
+      </div>
+    </div>
+
+    <h3 style="font-size:1em;font-weight:700;color:var(--gray-800);margin:28px 0 16px">How the Telegram → WhatsApp Flow Works</h3>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot teal">1</div>
+        <div class="flow-text">
+          <h4>You type a command in Telegram</h4>
+          <p>Example: <code>/wacalc 5</code> to send a calculator report to lead Rajesh.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot teal">2</div>
+        <div class="flow-text">
+          <h4>Bot runs the calculator and prepares the message</h4>
+          <p>The report is personalized: "Dear Rajesh, here's your Inflation Impact analysis from [Your Firm Name]…"</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot saffron">3</div>
+        <div class="flow-text">
+          <h4>Message sent via WhatsApp API</h4>
+          <p>Rajesh receives a professional, branded message on WhatsApp — instantly.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot green">4</div>
+        <div class="flow-text">
+          <h4>Interaction logged automatically</h4>
+          <p>The CRM records this as a "WhatsApp" interaction on Rajesh's lead card. No manual logging needed.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip saffron">
+      <span class="tip-icon">⚡</span>
+      <span><strong>Zero-Setup Option:</strong> Even without WhatsApp API, the "Share WhatsApp" button on calculators generates a pre-filled <code>wa.me</code> link that opens WhatsApp with the message ready to send. Perfect for Solo plan users.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 7 — CLAIMS HELPER ═════════════════════════ -->
+<section class="guide-sec" id="sec-claims">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#dc2626,#ef4444)">7</div>
+    <div class="sec-header-text">
+      <h2>Claims Helper</h2>
+      <p>Guide clients through the claim process with document checklists</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🏥</span> /claim</div>
+        <div class="cmd-desc">Start a claim wizard: select client → select their policy → choose claim type (Health, Term Life, Motor, General) → get auto-generated document checklist → describe claim → submit.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📋</span> /claims</div>
+        <div class="cmd-desc">View all your claims with status: 🟡 Initiated → 🟠 Docs Pending → 🔵 Submitted → 🟣 Under Review → 🟢 Approved → 🔴 Rejected → ✅ Settled.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔍</span> /claimstatus 3</div>
+        <div class="cmd-desc">Full claim detail: client name, claim type, status, insurer, policy, hospital (for health claims), description, and per-document checklist with ✅/⬜ status.</div>
+      </div>
+    </div>
+
+    <h3 style="font-size:0.95em;font-weight:700;color:var(--gray-800);margin:24px 0 12px">Auto-Generated Document Checklists</h3>
+    <table class="comp-table">
+      <thead><tr><th>Claim Type</th><th>Documents Auto-Listed</th></tr></thead>
+      <tbody>
+        <tr><td><strong>🏥 Health / Mediclaim</strong></td><td>Claim Form, Discharge Summary, Hospital Bills, Lab Reports, Pre-auth Letter, ID Proof, Bank Details, Prescriptions</td></tr>
+        <tr><td><strong>🛡️ Term Life / Death</strong></td><td>Death Certificate, Claim Form, Policy Bond, ID Proof, FIR (if applicable), Bank Details, Nominee Proof</td></tr>
+        <tr><td><strong>🚗 Motor / Accident</strong></td><td>Claim Form, FIR/Police Report, RC Book, Driving License, Repair Estimate, Photos, Insurance Copy, Bank Details</td></tr>
+        <tr><td><strong>📦 Other / General</strong></td><td>Claim Form, Policy Copy, Incident Report, Supporting Documents, ID Proof, Bank Details</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══ SECTION 8 — AI SALES INTELLIGENCE ═════════════════ -->
+<section class="guide-sec" id="sec-ai">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#4338ca,#7c3aed)">8</div>
+    <div class="sec-header-text">
+      <h2>AI Sales Intelligence <span class="plan-tag team">Team &amp; Enterprise</span></h2>
+      <p>12 Gemini AI-powered tools to close more deals</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:16px">Type <code>/ai</code> to open the AI tools menu. Each tool uses Google Gemini AI trained on insurance sales best practices.</p>
+
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🎯</span> Lead Scoring <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">AI grades your leads A/B/C/D with conversion probability (0-100%). Score one lead or batch-score all. Tells you exactly who to call first and why.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">💡</span> Pitch Generator <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Creates a personalized sales pitch based on the lead's profile: opening hook, main pitch, key selling points, WhatsApp-ready message. Tap to share on WhatsApp.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📅</span> Smart Follow-up <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">AI analyzes interaction history and suggests: urgency level, best channel (call/WhatsApp/meeting), ideal timing, draft message, and follow-up tips.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">📋</span> Policy Recommender <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Gap analysis: what cover the client has vs. what they need. Prioritized recommendations (must-have / recommended / nice-to-have) with specific product suggestions.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">✉️</span> Communication Templates <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">12 template types (Introduction, Follow-up, Proposal, Thank You, Referral Ask, Birthday, Anniversary, Festival, Renewal, Premium Due, Cross-sell, Reactivation). Each gives WhatsApp + Email + SMS versions.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🛡️</span> Objection Handler <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Client says "insurance is too expensive"? AI gives empathy statement + counter-arguments + reframe + closing question + real-world examples. 6 presets + custom objections.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔄</span> Renewal Intelligence <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Per-policy analysis: retention risk score, upsell opportunity, competitor comparison, coverage gap, talking points, and a ready-to-send renewal reminder message.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">💬</span> Ask AI Anything <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Free-form Q&amp;A on any insurance topic: IRDAI regulations, tax benefits, product comparisons, claim procedures, underwriting tips — ask anything.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🎙️</span> Voice Summary <span class="cmd-badge ai">AI</span></div>
+        <div class="cmd-desc">Instructions for voice-to-action feature. Record a voice note, AI transcribes and creates a lead automatically. See <a href="#sec-voice" style="color:var(--indigo);text-decoration:underline">Section 9</a>.</div>
+      </div>
+    </div>
+
+    <div class="tip blue">
+      <span class="tip-icon">🔒</span>
+      <span><strong>Plan Requirement:</strong> AI tools require <strong>Team</strong> (₹799/mo) or <strong>Enterprise</strong> (₹1,999/mo) plan. Solo Advisor users see a friendly upgrade prompt when they try <code>/ai</code>.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 9 — VOICE-TO-ACTION ═══════════════════════ -->
+<section class="guide-sec" id="sec-voice">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)">9</div>
+    <div class="sec-header-text">
+      <h2>Voice-to-Action</h2>
+      <p>Record a voice note → AI creates a lead with follow-up</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:20px">Just finished a meeting? Record a quick voice note in Hindi, English, or Hinglish. Gemini AI transcribes it, extracts details, and creates a lead — hands-free.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot teal">1</div>
+        <div class="flow-text">
+          <h4>Hold the mic button in Telegram</h4>
+          <p>Record up to 2 minutes: "Met Rajesh Kumar today at his shop in Andheri, phone 98765-43210, interested in health insurance for family of 4, budget around 15000, follow up next Tuesday"</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot teal">2</div>
+        <div class="flow-text">
+          <h4>AI transcribes and extracts entities</h4>
+          <p>Name: Rajesh Kumar, Phone: 9876543210, City: Andheri, Need: Health Insurance, Budget: ₹15,000, Follow-up: Next Tuesday.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot saffron">3</div>
+        <div class="flow-text">
+          <h4>Confirmation card appears</h4>
+          <p>Review the extracted data and tap ✅ Create Lead or ❌ Discard.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot green">4</div>
+        <div class="flow-text">
+          <h4>Lead created + follow-up scheduled</h4>
+          <p>The lead is added to your pipeline and a reminder is set for Tuesday. Zero typing required.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip green">
+      <span class="tip-icon">🗣️</span>
+      <span><strong>Multilingual:</strong> Speak in Hindi, English, or mixed Hinglish — the AI understands all three. Relative dates like "kal" (tomorrow), "agle hafte" (next week), or "Friday" are automatically converted to exact dates.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 10 — TEAM MANAGEMENT ══════════════════════ -->
+<section class="guide-sec" id="sec-team">
+  <div class="sec-header">
+    <div class="sec-num" style="background:var(--grad-saffron)">10</div>
+    <div class="sec-header-text">
+      <h2>Team &amp; Agent Management <span class="plan-tag owner">Owner / Admin</span></h2>
+      <p>Invite agents, manage roles, transfer data</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">👥</span> /team</div>
+        <div class="cmd-desc">List all agents in your firm with roles (👑 Owner / 👤 Agent), active status (✅/❌), lead count, and policy count. Deactivate, reactivate, or transfer data.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🔗</span> Settings → Team → Generate Invite</div>
+        <div class="cmd-desc">Generate a time-limited (7 days, 5 uses) invite code. Share it with your agents. They type <code>/start</code> → "I have an Invite Code" → enter code → they're in your firm.</div>
+      </div>
+    </div>
+
+    <h3 style="font-size:0.95em;font-weight:700;color:var(--gray-800);margin:24px 0 12px">Team Actions</h3>
+    <table class="comp-table">
+      <thead><tr><th>Action</th><th>What Happens</th></tr></thead>
+      <tbody>
+        <tr><td><strong>❌ Deactivate Agent</strong></td><td>Agent is blocked from using the bot. Their data is preserved but they cannot access it.</td></tr>
+        <tr><td><strong>✅ Reactivate Agent</strong></td><td>Restores full bot access for the agent.</td></tr>
+        <tr><td><strong>🔄 Transfer Data</strong></td><td>Moves all leads, policies, interactions, claims, and reminders from one agent to another. Use when an agent leaves.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:0.95em;font-weight:700;color:var(--gray-800);margin:24px 0 12px">Agent Capacity by Plan</h3>
+    <table class="comp-table">
+      <thead><tr><th>Plan</th><th>Max Agents</th><th>Price</th></tr></thead>
+      <tbody>
+        <tr><td><span class="plan-tag solo">Solo Advisor</span></td><td>1 (just you)</td><td>₹199/mo</td></tr>
+        <tr><td><span class="plan-tag team">Team</span></td><td>Up to 5</td><td>₹799/mo</td></tr>
+        <tr><td><span class="plan-tag enterprise">Enterprise</span></td><td>Up to 25</td><td>₹1,999/mo</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══ SECTION 11 — CSV IMPORT ════════════════════════════ -->
+<section class="guide-sec" id="sec-csv">
+  <div class="sec-header">
+    <div class="sec-num" style="background:linear-gradient(135deg,#6366f1,#818cf8)">11</div>
+    <div class="sec-header-text">
+      <h2>Bulk CSV Import</h2>
+      <p>Import hundreds of leads at once from a spreadsheet</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <p style="font-size:0.88em;color:var(--gray-600);margin-bottom:16px">Already have leads in Excel or Google Sheets? Export as CSV and upload directly to Telegram.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot teal">1</div>
+        <div class="flow-text">
+          <h4>Prepare your CSV file</h4>
+          <p>Columns: <code>name, phone, email, city, need_type, notes, dob, anniversary, occupation</code>. Only <code>name</code> is required.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot teal">2</div>
+        <div class="flow-text">
+          <h4>Upload the .csv file in the bot chat</h4>
+          <p>Just drag-and-drop or attach the file. The bot detects it as a CSV import automatically.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot green">3</div>
+        <div class="flow-text">
+          <h4>Leads are created in bulk</h4>
+          <p>Up to 500 leads per upload. The bot reports how many were imported successfully and skips duplicates.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip blue">
+      <span class="tip-icon">📄</span>
+      <span><strong>Sample CSV format:</strong><br><code>name,phone,email,city,need_type,notes<br>Rajesh Kumar,9876543210,rajesh@email.com,Mumbai,Health Insurance,Family of 4<br>Priya Sharma,8765432109,,Delhi,Term Life,Working professional</code></span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SECTION 12 — SETTINGS & LANGUAGE ══════════════════ -->
+<section class="guide-sec" id="sec-settings">
+  <div class="sec-header">
+    <div class="sec-num" style="background:var(--grad-blue)">12</div>
+    <div class="sec-header-text">
+      <h2>Settings &amp; Language</h2>
+      <p>Customize your profile and switch to Hindi</p>
+    </div>
+  </div>
+  <div class="sec-body">
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">⚙️</span> /settings</div>
+        <div class="cmd-desc">Open settings menu: Edit Profile, Language preference, Team management (owners), and Help reference.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">🌐</span> /lang</div>
+        <div class="cmd-desc">Switch between 🇬🇧 English and 🇮🇳 हिन्दी. All bot messages, menu buttons, and calculator results switch to your chosen language.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">✏️</span> /editprofile</div>
+        <div class="cmd-desc">Edit your name, phone, email, or firm name (owner only). Pick the field and enter the new value.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-name"><span class="cmd-icon">💳</span> /plans</div>
+        <div class="cmd-desc">View current subscription status, trial days remaining, and upgrade options with pricing. Subscribe directly from Telegram.</div>
+      </div>
+    </div>
+
+    <div class="tip green">
+      <span class="tip-icon">❓</span>
+      <span><strong>Need Help?</strong> Type <code>/help</code> anytime for a role-aware, plan-aware command reference. It shows exactly the commands available to YOU based on your role and subscription.</span>
+    </div>
+  </div>
+</section>
+
+</div><!-- /guide -->
+
+<!-- ═══ QUICK REFERENCE — ALL COMMANDS ════════════════════ -->
+<section style="background:var(--gray-50);padding:64px 24px;border-top:1px solid var(--gray-100)">
+  <div style="max-width:900px;margin:0 auto">
+    <h2 style="font-size:1.5em;font-weight:800;color:var(--gray-900);text-align:center;margin-bottom:8px">Quick Reference — All Commands</h2>
+    <p style="font-size:0.88em;color:var(--gray-500);text-align:center;margin-bottom:32px">Bookmark this page. Print it. Keep it handy.</p>
+
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>What It Does</th>
+          <th>Plan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/start</code></td><td>Register / restart the bot</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/addlead</code></td><td>Add a new lead (guided wizard)</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/leads</code></td><td>List all leads or search by name/phone</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/lead &lt;id&gt;</code></td><td>View full lead detail with actions</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/editlead &lt;id&gt;</code></td><td>Edit a lead's fields</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/pipeline</code></td><td>Visual pipeline overview with stats</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/convert &lt;id&gt;</code></td><td>Move a lead to a new pipeline stage</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/followup</code></td><td>Log a sales interaction (call/meeting/etc.)</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/policy &lt;id&gt;</code></td><td>Record a sold policy</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/renewals</code></td><td>View upcoming renewals (60-day window)</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/calc</code></td><td>Open financial calculator menu (12 types)</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/dashboard</code></td><td>Full business dashboard</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/wa &lt;id&gt; &lt;msg&gt;</code></td><td>Send WhatsApp message to a lead</td><td><span class="plan-tag all">All*</span></td></tr>
+        <tr><td><code>/wacalc &lt;id&gt;</code></td><td>Send calculator report via WhatsApp</td><td><span class="plan-tag all">All*</span></td></tr>
+        <tr><td><code>/wadash &lt;id&gt;</code></td><td>Send portfolio summary via WhatsApp</td><td><span class="plan-tag all">All*</span></td></tr>
+        <tr><td><code>/greet &lt;id&gt;</code></td><td>Send branded greeting via WhatsApp</td><td><span class="plan-tag all">All*</span></td></tr>
+        <tr><td><code>/claim</code></td><td>Start claim wizard with doc checklists</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/claims</code></td><td>View all claims with status</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/claimstatus &lt;id&gt;</code></td><td>Detailed claim view per documents</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/ai</code></td><td>AI Sales Intelligence menu (12 tools)</td><td><span class="plan-tag team">Team+</span></td></tr>
+        <tr><td><code>/team</code></td><td>Manage agents (owner/admin only)</td><td><span class="plan-tag team">Team+</span></td></tr>
+        <tr><td><code>/createbot</code></td><td>Create custom branded bot</td><td><span class="plan-tag enterprise">Enterprise</span></td></tr>
+        <tr><td><code>/settings</code></td><td>Profile, language, team settings</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/lang</code></td><td>Switch English / Hindi</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/plans</code></td><td>View/change subscription plan</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/help</code></td><td>Show all available commands</td><td><span class="plan-tag all">All</span></td></tr>
+        <tr><td><code>/cancel</code></td><td>Cancel any active wizard</td><td><span class="plan-tag all">All</span></td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:0.78em;color:var(--gray-400);margin-top:12px">* WhatsApp API commands (<code>/wa</code>, <code>/wacalc</code>, <code>/wadash</code>, <code>/greet</code>) require WhatsApp Business API configuration. Solo plan users can use the "Share WhatsApp" link method instead.</p>
+  </div>
+</section>
+
+<!-- ═══ FAQ ════════════════════════════════════════════════ -->
+<section style="padding:64px 24px;background:#fff">
+  <div style="max-width:900px;margin:0 auto">
+    <h2 style="font-size:1.5em;font-weight:800;color:var(--gray-900);text-align:center;margin-bottom:28px">Frequently Asked Questions</h2>
+
+    <div class="accordion">
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>🤔 Do my clients need to install Telegram?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          <strong>No!</strong> Your clients never see Telegram. They receive all messages on <strong>WhatsApp</strong>, which they already use daily. Telegram is only your private command center — like a cockpit that only the pilot sees.
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>💰 Is Telegram free to use?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Yes, completely free. Telegram has no per-message charges, no 24-hour window rules, and no template approvals. You can send unlimited commands to your bot at zero cost. (WhatsApp API incurs Meta's per-conversation charges, but the Telegram side is always free.)
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>📱 Can I use Telegram on my computer?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Yes! Telegram works on <strong>phone, tablet, Windows/Mac desktop app, and web browser</strong> — all simultaneously. Your CRM chat syncs across every device. Many advisors prefer the desktop app for faster typing.
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>🔒 Is my data safe on Telegram?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Your data is stored on our secure servers, not on Telegram. The bot is just the interface — like a remote control for your CRM. Messages between you and the bot are encrypted. Each firm's data is completely isolated (multi-tenant).
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>🌐 Does it work in Hindi?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Yes! Type <code>/lang</code> to switch to Hindi (हिन्दी). All bot messages, menu buttons, and calculator results switch to Hindi. Voice-to-action also understands Hindi and Hinglish.
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>⚡ What if I'm in the middle of something and get interrupted?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          All wizards (add lead, follow-up, claim, etc.) have a 30-minute timeout. You can resume anytime within that window. Type <code>/cancel</code> to abort any wizard and start fresh.
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>📊 Can I see everything on a web dashboard too?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Absolutely. Type <code>/dashboard</code> in Telegram and it shows a summary + link to the full web dashboard. The web dashboard gives you charts, tables, and exportable reports. Telegram and web always show the same data.
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          <h4>🏢 Can each agent in my firm use the bot independently?</h4>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="accordion-body">
+          Yes. Each agent joins via an invite code and gets their own isolated workspace within your firm. They see only their own leads and pipeline. Owners/admins can view all agents' data and transfer data if an agent leaves.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ════════════════════════════════════════════════ -->
+<section class="tg-cta">
+  <h2>Ready to Run Your CRM on Telegram? 🚀</h2>
+  <p>Sign up, connect your bot in 5 minutes, and manage your entire business from one chat window.</p>
+  <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <a href="/#pricing" class="btn btn-saffron btn-lg">Start 14-Day Free Trial →</a>
+    <a href="/getting-started" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:#fff;border:2px solid rgba(255,255,255,0.3)">📖 Setup Guide</a>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═════════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="brand">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:64px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi<span class="ai-tag">-AI</span>&nbsp;Business Technologies
+  </div>
+  <div class="tagline">AI-Powered Financial Advisor CRM Platform · sarathi-ai.com</div>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/demo">Demo</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/getting-started">Setup Guide</a>
+    <a href="/telegram-guide">Telegram Guide</a>
+    <a href="/help">Help</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="mailto:support@sarathi-ai.com">Contact</a>
+  </div>
+  <p class="copy">© 2026 Sarathi-AI Business Technologies. All rights reserved. · sarathi-ai.com</p>
+</footer>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   FULL HINDI TRANSLATION — Telegram CRM Guide
+   Every visible text on the page is translated.
+   Uses element-level textContent matching + innerHTML replacement.
+   ══════════════════════════════════════════════════════════════ */
+
+const _origMap = new WeakMap();
+function _nw(s){ return s.replace(/\s+/g,' ').trim(); }
+
+/* ── Page element translations: normalizedTextContent → Hindi innerHTML ── */
+const _T = {
+/* ═══ NAVBAR ═══ */
+'Home':'होम',
+'Demo':'डेमो',
+'Setup Guide':'सेटअप गाइड',
+'Calculators':'कैलकुलेटर',
+'Start Free Trial':'फ्री ट्रायल शुरू करें',
+
+/* ═══ HERO ═══ */
+'📘 Complete CRM Guide':'📘 संपूर्ण CRM गाइड',
+'See How It Works ↓':'कैसे काम करता है देखें ↓',
+'Jump to Commands →':'कमांड्स पर जाएं →',
+
+/* ═══ ARCHITECTURE ═══ */
+'How Telegram + WhatsApp Work Together':'Telegram + WhatsApp एक साथ कैसे काम करते हैं',
+'Telegram is your cockpit. WhatsApp is your client channel. They stay perfectly in sync.':'Telegram आपका कॉकपिट है। WhatsApp आपका क्लाइंट चैनल है। दोनों पूरी तरह सिंक में रहते हैं।',
+'Telegram Bot':'Telegram बोट',
+'You give commands here. Your private CRM cockpit.':'आप यहां कमांड देते हैं। आपका प्राइवेट CRM कॉकपिट।',
+'Sarathi-AI Server':'Sarathi-AI सर्वर',
+'Processes commands, stores data, runs AI.':'कमांड प्रोसेस करता है, डेटा स्टोर करता है, AI चलाता है।',
+'Messages reach your client\'s phone instantly.':'मैसेज तुरंत आपके क्लाइंट के फोन पर पहुंचते हैं।',
+'Your Client':'आपका क्लाइंट',
+'Sees a professional branded message on WhatsApp.':'WhatsApp पर एक प्रोफेशनल ब्रांडेड मैसेज दिखता है।',
+'🎯 Why Telegram for You?':'🎯 आपके लिए Telegram क्यों?',
+'Free, unlimited messages, no 24-hour window, rich buttons, instant bot responses. It\'s your private command center that costs ₹0.':'फ्री, अनलिमिटेड मैसेज, कोई 24-घंटे विंडो नहीं, रिच बटन, तुरंत बोट रिस्पॉन्स। यह आपका प्राइवेट कमांड सेंटर है — ₹0 में।',
+'💬 Why WhatsApp for Clients?':'💬 क्लाइंट्स के लिए WhatsApp क्यों?',
+'Your clients are already on WhatsApp. They see branded, professional messages — calculator reports, greetings, policy updates — right where they chat daily.':'आपके क्लाइंट पहले से WhatsApp पर हैं। ब्रांडेड प्रोफेशनल मैसेज — कैलकुलेटर रिपोर्ट, ग्रीटिंग, पॉलिसी अपडेट — वहीं जहां वे रोज़ चैट करते हैं।',
+'🔄 Always in Sync':'🔄 हमेशा सिंक में',
+'Add a lead on Telegram → send a calculator via WhatsApp → log a follow-up → everything is tracked in one database. No copy-pasting, no spreadsheets.':'Telegram पर लीड जोड़ें → WhatsApp से कैलकुलेटर भेजें → फॉलो-अप लॉग करें → सबकुछ एक डेटाबेस में ट्रैक होता है। कोई कॉपी-पेस्ट नहीं, कोई स्प्रेडशीट नहीं।',
+'📱 Works on Any Device':'📱 किसी भी डिवाइस पर',
+'Telegram works on phone, tablet, desktop, and web browser — all simultaneously. Your CRM goes wherever you go.':'Telegram फोन, टैबलेट, डेस्कटॉप, और वेब ब्राउज़र पर काम करता है — सब एक साथ। आपका CRM आपके साथ हर जगह।',
+
+/* ═══ TABLE OF CONTENTS ═══ */
+'What You\'ll Learn':'आप क्या सीखेंगे',
+'Getting Started & Registration':'शुरुआत और रजिस्ट्रेशन',
+'Lead Management':'लीड मैनेजमेंट',
+'Pipeline & Follow-ups':'पाइपलाइन और फॉलो-अप्स',
+'Policy & Renewals':'पॉलिसी और रिन्यूअल',
+'Financial Calculators':'वित्तीय कैलकुलेटर',
+'WhatsApp Sharing & Messages':'WhatsApp शेयरिंग और मैसेज',
+'Claims Helper':'क्लेम्स हेल्पर',
+'AI Sales Intelligence':'AI सेल्स इंटेलिजेंस',
+'Voice-to-Action':'वॉयस-टू-एक्शन',
+'Team & Agent Management':'टीम और एजेंट मैनेजमेंट',
+'Bulk CSV Import':'बल्क CSV इम्पोर्ट',
+'Settings & Language':'सेटिंग्स और भाषा',
+
+/* ═══ SECTION 1 — GETTING STARTED ═══ */
+'First-time setup takes under 5 minutes':'पहली बार सेटअप में 5 मिनट से कम लगते हैं',
+'After you sign up on our website and connect your Telegram bot, here\'s what happens when you first open the bot:':'जब आप हमारी वेबसाइट पर साइनअप करके अपना Telegram बोट कनेक्ट करते हैं, तो बोट पहली बार खोलने पर यह होता है:',
+'Type /start in your bot':'अपने बोट में <code>/start</code> टाइप करें',
+'If you signed up via the website, click the deep link you received — it will auto-fill your details.':'अगर आपने वेबसाइट से साइनअप किया है, तो मिले हुए डीप लिंक पर क्लिक करें — डिटेल्स ऑटो-फिल हो जाएंगी।',
+'Choose "Register my Firm" or "I have an Invite Code"':'"मेरी फर्म रजिस्टर करें" या "मेरे पास इनवाइट कोड है" चुनें',
+'Firm owners / solo advisors: Register a new firm. Agents joining a team: Use the invite code shared by your manager.':'<strong>फर्म मालिक / सोलो एडवाइज़र:</strong> नई फर्म रजिस्टर करें। <strong>टीम में शामिल होने वाले एजेंट:</strong> अपने मैनेजर का इनवाइट कोड इस्तेमाल करें।',
+'Enter your details':'अपनी जानकारी दर्ज करें',
+'Firm name (owner only) → Your name → Phone → Email. The bot guides you step by step.':'फर्म का नाम (केवल मालिक) → आपका नाम → फोन → ईमेल। बोट स्टेप बाय स्टेप गाइड करता है।',
+'You\'re in! Persistent menu appears':'आप अंदर हैं! मेनू दिखता है',
+'A button menu appears at the bottom of your chat with quick actions: ➕ Add Lead, 📊 Pipeline, 📋 Leads, 🧮 Calculator, and more.':'चैट के नीचे बटन मेनू दिखाई देता है: ➕ लीड जोड़ें, 📊 पाइपलाइन, 📋 लीड्स, 🧮 कैलकुलेटर, और बहुत कुछ।',
+'Pro Tip: The persistent button menu at the bottom changes based on your role (owner sees "👥 Team") and plan (AI Tools button appears for Team/Enterprise plans).':'<strong>प्रो टिप:</strong> नीचे का बटन मेनू आपकी भूमिका (मालिक को "👥 टीम" दिखता है) और प्लान (Team/Enterprise में AI Tools बटन) के अनुसार बदलता है।',
+
+/* ═══ SECTION 2 — LEAD MANAGEMENT ═══ */
+'Add, view, search, and edit leads — all in chat':'लीड जोड़ें, देखें, खोजें, और एडिट करें — सब चैट में',
+'Start a guided wizard to add a new lead. The bot asks for: name, phone (with duplicate detection), DOB, anniversary, city, insurance need type (Life/Health/Motor/etc.), and notes. Takes ~60 seconds.':'नई लीड जोड़ने का गाइडेड विज़ार्ड। बोट पूछता है: नाम, फोन (डुप्लिकेट डिटेक्शन), जन्मतिथि, सालगिरह, शहर, ज़रूरत (लाइफ/हेल्थ/मोटर/आदि), और नोट्स। ~60 सेकंड।',
+'View all your leads with stage emoji, phone, and need type. Shows up to 15 leads. Tap any lead\'s button to see full details.':'स्टेज इमोजी, फोन, और ज़रूरत के साथ सभी लीड देखें। 15 तक लीड दिखाता है। पूरी डिटेल के लिए लीड के बटन पर टैप करें।',
+'Search leads by name or phone. Type /leads followed by a search term to instantly find matching leads.':'नाम या फोन से लीड खोजें। <code>/leads</code> के बाद सर्च टर्म लिखें — तुरंत मैचिंग लीड मिलेंगी।',
+'View full detail for lead #5: all personal info, pipeline stage, recent interactions (last 5), policies, greetings sent. Action buttons appear below.':'लीड #5 की पूरी डिटेल: सभी व्यक्तिगत जानकारी, पाइपलाइन स्टेज, हाल की इंटरेक्शन (आखिरी 5), पॉलिसी, भेजी गई ग्रीटिंग। एक्शन बटन नीचे दिखते हैं।',
+'Edit any field of lead #5: name, phone, email, DOB, anniversary, city, notes, or need type. Pick the field → enter the new value.':'लीड #5 का कोई भी फील्ड एडिट करें: नाम, फोन, ईमेल, जन्मतिथि, सालगिरह, शहर, नोट्स, या ज़रूरत। फील्ड चुनें → नई वैल्यू डालें।',
+'Duplicate Detection: If you enter a phone number that already exists in your leads, the bot warns you and shows the existing lead. This prevents accidentally adding the same person twice.':'<strong>डुप्लिकेट डिटेक्शन:</strong> अगर आप ऐसा फोन नंबर डालते हैं जो पहले से लीड में है, तो बोट आपको चेतावनी देता है और मौजूदा लीड दिखाता है। इससे एक ही व्यक्ति दोबारा नहीं जुड़ता।',
+
+/* ═══ SECTION 3 — PIPELINE & FOLLOW-UPS ═══ */
+'Track every lead through your sales funnel':'हर लीड को अपने सेल्स फनल में ट्रैक करें',
+'Your pipeline has 7 stages. Every lead moves through them as you work:':'आपकी पाइपलाइन में 7 स्टेज हैं। हर लीड आपके काम के साथ इनमें आगे बढ़ती है:',
+'🔵 Prospect':'🔵 प्रॉस्पेक्ट',
+'📞 Contacted':'📞 संपर्क',
+'📊 Pitched':'📊 प्रस्ताव',
+'📄 Proposal Sent':'📄 प्रपोज़ल भेजा',
+'🤝 Negotiation':'🤝 बातचीत',
+'✅ Closed Won':'✅ जीत',
+'❌ Closed Lost':'❌ हार',
+'Visual pipeline overview with bar charts showing lead count per stage. See conversion rate, Won/Lost counts, active policies, and total premium at a glance.':'बार चार्ट के साथ पाइपलाइन ओवरव्यू — हर स्टेज में कितनी लीड हैं। कन्वर्ज़न रेट, जीत/हार, एक्टिव पॉलिसी, और कुल प्रीमियम एक नज़र में।',
+'Move lead #5 to a new stage. The bot shows buttons for each stage — tap one to move. Auto-logs the stage change.':'लीड #5 को नए स्टेज पर ले जाएं। बोट हर स्टेज का बटन दिखाता है — टैप करें। स्टेज चेंज ऑटो-लॉग होता है।',
+'Log a sales interaction: Call, WhatsApp chat, Meeting, Email, Pitch, or Proposal. The bot records the type, notes, and optional next follow-up date.':'सेल्स इंटरेक्शन लॉग करें: कॉल, WhatsApp चैट, मीटिंग, ईमेल, पिच, या प्रपोज़ल। बोट टाइप, नोट्स, और अगले फॉलो-अप की तारीख रिकॉर्ड करता है।',
+'Full business dashboard: pipeline breakdown, portfolio stats (active policies, total premium, commission), today\'s activity, pending follow-ups, renewal alerts.':'पूरा बिज़नेस डैशबोर्ड: पाइपलाइन ब्रेकडाउन, पोर्टफोलियो (एक्टिव पॉलिसी, कुल प्रीमियम, कमीशन), आज की गतिविधि, पेंडिंग फॉलो-अप, रिन्यूअल अलर्ट।',
+'Auto Reminders: When you log a follow-up with a future date, Sarathi-AI sends you a reminder on that date via Telegram. Never miss a follow-up again.':'<strong>ऑटो रिमाइंडर:</strong> जब आप भविष्य की तारीख वाला फॉलो-अप लॉग करते हैं, Sarathi-AI उस दिन Telegram पर रिमाइंडर भेजता है। कोई फॉलो-अप मिस नहीं होगा।',
+
+/* ═══ SECTION 4 — POLICY & RENEWALS ═══ */
+'Record sold policies and track upcoming renewals':'बेची गई पॉलिसी रिकॉर्ड करें और आगामी रिन्यूअल ट्रैक करें',
+'Record a sold policy for lead #5. The bot asks for: insurer name, plan name, sum insured, premium, start date, and renewal date. Automatically marks the lead as "Closed Won".':'लीड #5 के लिए पॉलिसी रिकॉर्ड करें। बोट पूछता है: बीमाकर्ता, प्लान, सम इंश्योर्ड, प्रीमियम, शुरू तारीख, और रिन्यूअल तारीख। लीड ऑटो "Closed Won" हो जाती है।',
+'View all upcoming policy renewals in the next 60 days. Color-coded urgency: 🔴 ≤7 days, 🟡 ≤30 days, 🟢 >30 days. Never miss a renewal opportunity.':'अगले 60 दिनों के रिन्यूअल देखें। रंग-कोडित: 🔴 ≤7 दिन, 🟡 ≤30 दिन, 🟢 >30 दिन। कोई रिन्यूअल मिस नहीं होगा।',
+'Revenue Tracking: Every policy you record builds your portfolio dashboard. See total premium, commission estimates, and portfolio growth — all from /dashboard.':'<strong>रेवेन्यू ट्रैकिंग:</strong> हर रिकॉर्ड की गई पॉलिसी आपका पोर्टफोलियो डैशबोर्ड बनाती है। कुल प्रीमियम, कमीशन अनुमान, और पोर्टफोलियो ग्रोथ — सब <code>/dashboard</code> से।',
+
+/* ═══ SECTION 5 — CALCULATORS ═══ */
+'12 professional calculators, right inside Telegram':'12 प्रोफेशनल कैलकुलेटर, Telegram के अंदर',
+'Type /calc to open the calculator menu. Each calculator runs step-by-step with quick-select buttons — no typing needed for common values.':'<code>/calc</code> टाइप करें कैलकुलेटर मेनू खोलने के लिए। हर कैलकुलेटर स्टेप-बाय-स्टेप चलता है क्विक-सिलेक्ट बटन के साथ — सामान्य वैल्यू के लिए टाइपिंग ज़रूरी नहीं।',
+'Calculator':'कैलकुलेटर',
+'What It Shows':'क्या दिखाता है',
+'Inflation Eraser':'इन्फ्लेशन इरेज़र',
+'How much your ₹50K/month expense will become in 10-20 years':'आपका ₹50K/माह का खर्च 10-20 साल में कितना होगा',
+'Human Life Value':'ह्यूमन लाइफ वैल्यू',
+'How much life cover you actually need (expenses + loans + children)':'वास्तव में कितना लाइफ कवर चाहिए (खर्च + लोन + बच्चे)',
+'Retirement Planner':'रिटायरमेंट प्लानर',
+'How much corpus you need and monthly SIP to get there':'कितना कॉर्पस चाहिए और वहां पहुंचने के लिए मासिक SIP',
+'Premium EMI':'प्रीमियम EMI',
+'Break annual premium into monthly EMIs with GST and CIBIL discount':'वार्षिक प्रीमियम को मासिक EMI में बांटें — GST और CIBIL डिस्काउंट सहित',
+'Health Cover Estimator':'हेल्थ कवर एस्टिमेटर',
+'Recommended health cover based on age, family, city tier, income':'उम्र, परिवार, शहर टियर, आय के आधार पर अनुशंसित हेल्थ कवर',
+'SIP vs Lumpsum':'SIP vs लम्पसम',
+'Side-by-side comparison of growth paths for the same amount':'एक ही राशि के लिए ग्रोथ पाथ की साइड-बाय-साइड तुलना',
+'MF SIP Planner':'MF SIP प्लानर',
+'Required monthly SIP to reach your financial goal':'अपने फाइनेंशियल गोल तक पहुंचने के लिए ज़रूरी मासिक SIP',
+'ULIP vs Mutual Fund':'ULIP vs म्यूचुअल फंड',
+'Head-to-head comparison factoring in charges and returns':'चार्जेज और रिटर्न को शामिल करते हुए आमने-सामने तुलना',
+'NPS Planner':'NPS प्लानर',
+'NPS corpus at retirement + monthly pension + tax savings':'रिटायरमेंट पर NPS कॉर्पस + मासिक पेंशन + टैक्स बचत',
+'Share via WhatsApp: Every calculator result has a "Share WhatsApp" button. Enter the client\'s phone number and a pre-filled WhatsApp message opens with the result, branded with your firm name. Also see Section 6: WhatsApp Sharing.':'<strong>WhatsApp पर शेयर:</strong> हर कैलकुलेटर रिज़ल्ट में "Share WhatsApp" बटन है। क्लाइंट का फोन नंबर डालें और प्री-फिल्ड WhatsApp मैसेज खुलता है, आपकी फर्म की ब्रांडिंग के साथ। <a href="#sec-whatsapp" style="color:var(--green);text-decoration:underline">सेक्शन 6: WhatsApp शेयरिंग</a> भी देखें।',
+
+/* ═══ SECTION 6 — WHATSAPP SHARING ═══ */
+'Send professional messages to clients — from Telegram':'क्लाइंट्स को प्रोफेशनल मैसेज भेजें — Telegram से',
+'This is where Telegram and WhatsApp work together beautifully. You type commands in Telegram, your client receives polished messages on WhatsApp.':'यहां Telegram और WhatsApp एक साथ खूबसूरती से काम करते हैं। आप Telegram में कमांड टाइप करें, क्लाइंट को WhatsApp पर पॉलिश्ड मैसेज मिलता है।',
+'Send a direct WhatsApp message to lead #5. Just type the lead ID and your message. The bot sends it via WhatsApp API and logs it as an interaction.':'लीड #5 को डायरेक्ट WhatsApp मैसेज भेजें। बस लीड ID और मैसेज टाइप करें। बोट WhatsApp API से भेजता है और इंटरेक्शन लॉग करता है।',
+'Send a calculator report directly to lead #5\'s WhatsApp. Pick a calculator type, and a personalized "Dear Rajesh…" report is sent with your firm branding.':'लीड #5 के WhatsApp पर कैलकुलेटर रिपोर्ट भेजें। कैलकुलेटर टाइप चुनें, और "प्रिय राजेश…" पर्सनलाइज़ड रिपोर्ट आपकी फर्म ब्रांडिंग के साथ भेजी जाती है।',
+'Send the client\'s full policy portfolio summary to their WhatsApp — all policies with insurer, plan, cover, premium, and renewal dates.':'क्लाइंट की पूरी पॉलिसी पोर्टफोलियो समरी WhatsApp पर भेजें — सभी पॉलिसी, बीमाकर्ता, प्लान, कवर, प्रीमियम, और रिन्यूअल तारीख।',
+'Send a branded greeting: 🎂 Birthday, 💍 Anniversary, 🙏 Thank You, or 🎉 Festival wishes — with your firm branding, directly on WhatsApp.':'ब्रांडेड ग्रीटिंग भेजें: 🎂 जन्मदिन, 💍 सालगिरह, 🙏 धन्यवाद, या 🎉 त्योहार — आपकी फर्म ब्रांडिंग के साथ, सीधे WhatsApp पर।',
+'How the Telegram → WhatsApp Flow Works':'Telegram → WhatsApp फ्लो कैसे काम करता है',
+'You type a command in Telegram':'आप Telegram में कमांड टाइप करते हैं',
+'Example: /wacalc 5 to send a calculator report to lead Rajesh.':'उदाहरण: <code>/wacalc 5</code> — लीड राजेश को कैलकुलेटर रिपोर्ट भेजने के लिए।',
+'Bot runs the calculator and prepares the message':'बोट कैलकुलेटर चलाता है और मैसेज तैयार करता है',
+'The report is personalized: "Dear Rajesh, here\'s your Inflation Impact analysis from [Your Firm Name]…"':'रिपोर्ट पर्सनलाइज़ होती है: "प्रिय राजेश, यह आपकी इन्फ्लेशन इम्पैक्ट एनालिसिस है [आपकी फर्म] की ओर से…"',
+'Message sent via WhatsApp API':'मैसेज WhatsApp API से भेजा गया',
+'Rajesh receives a professional, branded message on WhatsApp — instantly.':'राजेश को WhatsApp पर तुरंत प्रोफेशनल, ब्रांडेड मैसेज मिलता है।',
+'Interaction logged automatically':'इंटरेक्शन ऑटो लॉग',
+'The CRM records this as a "WhatsApp" interaction on Rajesh\'s lead card. No manual logging needed.':'CRM इसे राजेश के लीड कार्ड पर "WhatsApp" इंटरेक्शन के रूप में रिकॉर्ड करता है। मैन्युअल लॉगिंग नहीं चाहिए।',
+'Zero-Setup Option: Even without WhatsApp API, the "Share WhatsApp" button on calculators generates a pre-filled wa.me link that opens WhatsApp with the message ready to send. Perfect for Solo plan users.':'<strong>ज़ीरो-सेटअप विकल्प:</strong> WhatsApp API के बिना भी, कैलकुलेटर पर "Share WhatsApp" बटन एक प्री-फिल्ड <code>wa.me</code> लिंक बनाता है जो WhatsApp खोलता है मैसेज भेजने के लिए तैयार। Solo प्लान यूज़र्स के लिए परफेक्ट।',
+
+/* ═══ SECTION 7 — CLAIMS HELPER ═══ */
+'Guide clients through the claim process with document checklists':'डॉक्यूमेंट चेकलिस्ट के साथ क्लाइंट्स को क्लेम प्रोसेस में गाइड करें',
+'Start a claim wizard: select client → select their policy → choose claim type (Health, Term Life, Motor, General) → get auto-generated document checklist → describe claim → submit.':'क्लेम विज़ार्ड शुरू करें: क्लाइंट चुनें → पॉलिसी चुनें → क्लेम टाइप (हेल्थ, टर्म लाइफ, मोटर, जनरल) → ऑटो डॉक्यूमेंट चेकलिस्ट → क्लेम बताएं → सबमिट।',
+'View all your claims with status: 🟡 Initiated → 🟠 Docs Pending → 🔵 Submitted → 🟣 Under Review → 🟢 Approved → 🔴 Rejected → ✅ Settled.':'सभी क्लेम स्टेटस के साथ देखें: 🟡 शुरू → 🟠 डॉक्स पेंडिंग → 🔵 सबमिटेड → 🟣 रिव्यू में → 🟢 अप्रूव्ड → 🔴 रिजेक्टेड → ✅ सेटल्ड।',
+'Full claim detail: client name, claim type, status, insurer, policy, hospital (for health claims), description, and per-document checklist with ✅/⬜ status.':'पूरी क्लेम डिटेल: क्लाइंट नाम, क्लेम टाइप, स्टेटस, बीमाकर्ता, पॉलिसी, हॉस्पिटल (हेल्थ क्लेम के लिए), विवरण, और प्रति-डॉक्यूमेंट चेकलिस्ट ✅/⬜ स्टेटस के साथ।',
+'Auto-Generated Document Checklists':'ऑटो-जनरेटेड डॉक्यूमेंट चेकलिस्ट',
+'Claim Type':'क्लेम टाइप',
+'Documents Auto-Listed':'ऑटो-लिस्टेड डॉक्यूमेंट',
+'🏥 Health / Mediclaim':'🏥 हेल्थ / मेडिक्लेम',
+'Claim Form, Discharge Summary, Hospital Bills, Lab Reports, Pre-auth Letter, ID Proof, Bank Details, Prescriptions':'क्लेम फॉर्म, डिस्चार्ज सारांश, अस्पताल बिल, लैब रिपोर्ट, प्री-ऑथ लेटर, ID प्रूफ, बैंक डिटेल्स, प्रिस्क्रिप्शन',
+'🛡️ Term Life / Death':'🛡️ टर्म लाइफ / डेथ',
+'Death Certificate, Claim Form, Policy Bond, ID Proof, FIR (if applicable), Bank Details, Nominee Proof':'मृत्यु प्रमाणपत्र, क्लेम फॉर्म, पॉलिसी बॉन्ड, ID प्रूफ, FIR (अगर लागू हो), बैंक डिटेल्स, नॉमिनी प्रूफ',
+'🚗 Motor / Accident':'🚗 मोटर / दुर्घटना',
+'Claim Form, FIR/Police Report, RC Book, Driving License, Repair Estimate, Photos, Insurance Copy, Bank Details':'क्लेम फॉर्म, FIR/पुलिस रिपोर्ट, RC बुक, ड्राइविंग लाइसेंस, रिपेयर एस्टिमेट, फोटो, बीमा कॉपी, बैंक डिटेल्स',
+'📦 Other / General':'📦 अन्य / जनरल',
+'Claim Form, Policy Copy, Incident Report, Supporting Documents, ID Proof, Bank Details':'क्लेम फॉर्म, पॉलिसी कॉपी, इंसिडेंट रिपोर्ट, सहायक दस्तावेज़, ID प्रूफ, बैंक डिटेल्स',
+
+/* ═══ SECTION 8 — AI SALES INTELLIGENCE ═══ */
+'AI Sales Intelligence Team & Enterprise':'AI सेल्स इंटेलिजेंस <span class="plan-tag team">टीम और एंटरप्राइज़</span>',
+'12 Gemini AI-powered tools to close more deals':'ज़्यादा डील क्लोज़ करने के 12 Gemini AI-पावर्ड टूल्स',
+'Type /ai to open the AI tools menu. Each tool uses Google Gemini AI trained on insurance sales best practices.':'<code>/ai</code> टाइप करें AI टूल्स मेनू खोलने के लिए। हर टूल Google Gemini AI का उपयोग करता है जो सेल्स बेस्ट प्रैक्टिसेज़ पर ट्रेंड है।',
+'Lead Scoring AI':'लीड स्कोरिंग <span class="cmd-badge ai">AI</span>',
+'AI grades your leads A/B/C/D with conversion probability (0-100%). Score one lead or batch-score all. Tells you exactly who to call first and why.':'AI आपकी लीड्स को A/B/C/D ग्रेड देता है कन्वर्ज़न प्रोबेबिलिटी (0-100%) के साथ। एक लीड स्कोर करें या सब एक साथ। बताता है कि पहले किसे कॉल करें और क्यों।',
+'Pitch Generator AI':'पिच जनरेटर <span class="cmd-badge ai">AI</span>',
+'Creates a personalized sales pitch based on the lead\'s profile: opening hook, main pitch, key selling points, WhatsApp-ready message. Tap to share on WhatsApp.':'लीड की प्रोफाइल पर आधारित पर्सनलाइज़ड सेल्स पिच: ओपनिंग हुक, मेन पिच, प्रमुख सेलिंग पॉइंट, WhatsApp-रेडी मैसेज। WhatsApp पर शेयर करने के लिए टैप करें।',
+'Smart Follow-up AI':'स्मार्ट फॉलो-अप <span class="cmd-badge ai">AI</span>',
+'AI analyzes interaction history and suggests: urgency level, best channel (call/WhatsApp/meeting), ideal timing, draft message, and follow-up tips.':'AI इंटरेक्शन हिस्ट्री एनालाइज़ करता है और सुझाव देता है: अर्जेंसी लेवल, बेस्ट चैनल (कॉल/WhatsApp/मीटिंग), आदर्श समय, ड्राफ्ट मैसेज, और फॉलो-अप टिप्स।',
+'Policy Recommender AI':'पॉलिसी रिकमेंडर <span class="cmd-badge ai">AI</span>',
+'Gap analysis: what cover the client has vs. what they need. Prioritized recommendations (must-have / recommended / nice-to-have) with specific product suggestions.':'गैप एनालिसिस: क्लाइंट के पास क्या कवर है vs. क्या चाहिए। प्राथमिकता अनुसार सिफारिशें (ज़रूरी / अनुशंसित / अच्छा हो) विशिष्ट प्रोडक्ट सुझाव के साथ।',
+'Communication Templates AI':'कम्युनिकेशन टेम्प्लेट <span class="cmd-badge ai">AI</span>',
+'12 template types (Introduction, Follow-up, Proposal, Thank You, Referral Ask, Birthday, Anniversary, Festival, Renewal, Premium Due, Cross-sell, Reactivation). Each gives WhatsApp + Email + SMS versions.':'12 टेम्प्लेट टाइप (परिचय, फॉलो-अप, प्रपोज़ल, धन्यवाद, रेफरल, जन्मदिन, सालगिरह, त्योहार, रिन्यूअल, प्रीमियम ड्यू, क्रॉस-सेल, रीएक्टिवेशन)। हर एक WhatsApp + ईमेल + SMS वर्ज़न देता है।',
+'Objection Handler AI':'ऑब्जेक्शन हैंडलर <span class="cmd-badge ai">AI</span>',
+'Client says "insurance is too expensive"? AI gives empathy statement + counter-arguments + reframe + closing question + real-world examples. 6 presets + custom objections.':'क्लाइंट कहता है "बीमा बहुत महंगा है"? AI एम्पैथी स्टेटमेंट + काउंटर आर्गुमेंट + रीफ्रेम + क्लोज़िंग प्रश्न + रियल-वर्ल्ड उदाहरण देता है। 6 प्रीसेट + कस्टम ऑब्जेक्शन।',
+'Renewal Intelligence AI':'रिन्यूअल इंटेलिजेंस <span class="cmd-badge ai">AI</span>',
+'Per-policy analysis: retention risk score, upsell opportunity, competitor comparison, coverage gap, talking points, and a ready-to-send renewal reminder message.':'हर पॉलिसी का एनालिसिस: रिटेंशन रिस्क स्कोर, अपसेल अवसर, प्रतिस्पर्धी तुलना, कवरेज गैप, बात के पॉइंट, और भेजने के लिए तैयार रिन्यूअल रिमाइंडर मैसेज।',
+'Ask AI Anything AI':'AI से कुछ भी पूछें <span class="cmd-badge ai">AI</span>',
+'Free-form Q&A on any insurance topic: IRDAI regulations, tax benefits, product comparisons, claim procedures, underwriting tips — ask anything.':'किसी भी बीमा विषय पर Q&A: IRDAI नियम, टैक्स लाभ, प्रोडक्ट तुलना, क्लेम प्रक्रिया, अंडरराइटिंग टिप्स — कुछ भी पूछें।',
+'Voice Summary AI':'वॉयस समरी <span class="cmd-badge ai">AI</span>',
+'Instructions for voice-to-action feature. Record a voice note, AI transcribes and creates a lead automatically. See Section 9.':'वॉयस-टू-एक्शन फीचर। वॉयस नोट रिकॉर्ड करें, AI ट्रांसक्राइब करता है और ऑटो लीड बनाता है। <a href="#sec-voice" style="color:var(--indigo);text-decoration:underline">सेक्शन 9</a> देखें।',
+'Plan Requirement: AI tools require Team (₹799/mo) or Enterprise (₹1,999/mo) plan. Solo Advisor users see a friendly upgrade prompt when they try /ai.':'<strong>प्लान ज़रूरत:</strong> AI टूल्स के लिए <strong>Team</strong> (₹799/माह) या <strong>Enterprise</strong> (₹1,999/माह) प्लान चाहिए। Solo Advisor यूज़र्स को <code>/ai</code> पर अपग्रेड प्रॉम्प्ट दिखता है।',
+
+/* ═══ SECTION 9 — VOICE-TO-ACTION ═══ */
+'Record a voice note → AI creates a lead with follow-up':'वॉयस नोट रिकॉर्ड करें → AI लीड + फॉलो-अप बनाता है',
+'Just finished a meeting? Record a quick voice note in Hindi, English, or Hinglish. Gemini AI transcribes it, extracts details, and creates a lead — hands-free.':'अभी मीटिंग खत्म हुई? हिंदी, इंग्लिश, या हिंग्लिश में क्विक वॉयस नोट रिकॉर्ड करें। Gemini AI ट्रांसक्राइब करता है, डिटेल्स निकालता है, और लीड बनाता है — हैंड्स-फ्री।',
+'Hold the mic button in Telegram':'Telegram में माइक बटन दबाएं',
+'Record up to 2 minutes: "Met Rajesh Kumar today at his shop in Andheri, phone 98765-43210, interested in health insurance for family of 4, budget around 15000, follow up next Tuesday"':'2 मिनट तक रिकॉर्ड करें: "आज राजेश कुमार से उनकी दुकान पर अंधेरी में मिले, फोन 98765-43210, 4 लोगों के परिवार के लिए हेल्थ इंश्योरेंस में रुचि, बजट 15000 के आसपास, अगले मंगलवार फॉलो-अप"',
+'AI transcribes and extracts entities':'AI ट्रांसक्राइब और एंटिटी एक्सट्रैक्ट करता है',
+'Name: Rajesh Kumar, Phone: 9876543210, City: Andheri, Need: Health Insurance, Budget: ₹15,000, Follow-up: Next Tuesday.':'नाम: राजेश कुमार, फोन: 9876543210, शहर: अंधेरी, ज़रूरत: हेल्थ इंश्योरेंस, बजट: ₹15,000, फॉलो-अप: अगले मंगलवार।',
+'Confirmation card appears':'कन्फर्मेशन कार्ड दिखता है',
+'Review the extracted data and tap ✅ Create Lead or ❌ Discard.':'एक्सट्रैक्ट किया गया डेटा रिव्यू करें और ✅ लीड बनाएं या ❌ रद्द करें टैप करें।',
+'Lead created + follow-up scheduled':'लीड बन गई + फॉलो-अप शेड्यूल',
+'The lead is added to your pipeline and a reminder is set for Tuesday. Zero typing required.':'लीड आपकी पाइपलाइन में जुड़ गई और मंगलवार का रिमाइंडर सेट हो गया। ज़ीरो टाइपिंग।',
+'Multilingual: Speak in Hindi, English, or mixed Hinglish — the AI understands all three. Relative dates like "kal" (tomorrow), "agle hafte" (next week), or "Friday" are automatically converted to exact dates.':'<strong>मल्टीलिंगुअल:</strong> हिंदी, इंग्लिश, या मिक्स्ड हिंग्लिश में बोलें — AI तीनों समझता है। "कल", "अगले हफ्ते", या "Friday" जैसी तारीखें ऑटो एक्ज़ैक्ट डेट में बदल जाती हैं।',
+
+/* ═══ SECTION 10 — TEAM MANAGEMENT ═══ */
+'Team & Agent Management Owner / Admin':'टीम और एजेंट मैनेजमेंट <span class="plan-tag owner">मालिक / एडमिन</span>',
+'Invite agents, manage roles, transfer data':'एजेंट इनवाइट करें, रोल मैनेज करें, डेटा ट्रांसफर करें',
+'List all agents in your firm with roles (👑 Owner / 👤 Agent), active status (✅/❌), lead count, and policy count. Deactivate, reactivate, or transfer data.':'आपकी फर्म के सभी एजेंट लिस्ट करें — रोल (👑 मालिक / 👤 एजेंट), एक्टिव स्टेटस (✅/❌), लीड काउंट, और पॉलिसी काउंट। डीएक्टिवेट, रीएक्टिवेट, या डेटा ट्रांसफर।',
+'Generate a time-limited (7 days, 5 uses) invite code. Share it with your agents. They type /start → "I have an Invite Code" → enter code → they\'re in your firm.':'समय-सीमित (7 दिन, 5 बार) इनवाइट कोड बनाएं। एजेंट्स के साथ शेयर करें। वे <code>/start</code> → "मेरे पास इनवाइट कोड है" → कोड डालें → आपकी फर्म में शामिल।',
+'Team Actions':'टीम एक्शन',
+'Action':'एक्शन',
+'What Happens':'क्या होता है',
+'❌ Deactivate Agent':'❌ एजेंट डीएक्टिवेट',
+'Agent is blocked from using the bot. Their data is preserved but they cannot access it.':'एजेंट बोट से ब्लॉक होता है। उनका डेटा सुरक्षित रहता है लेकिन एक्सेस नहीं कर सकते।',
+'✅ Reactivate Agent':'✅ एजेंट रीएक्टिवेट',
+'Restores full bot access for the agent.':'एजेंट का पूरा बोट एक्सेस बहाल होता है।',
+'🔄 Transfer Data':'🔄 डेटा ट्रांसफर',
+'Moves all leads, policies, interactions, claims, and reminders from one agent to another. Use when an agent leaves.':'एक एजेंट से दूसरे को सभी लीड, पॉलिसी, इंटरेक्शन, क्लेम, और रिमाइंडर ट्रांसफर। एजेंट के जाने पर उपयोग करें।',
+'Agent Capacity by Plan':'प्लान के अनुसार एजेंट क्षमता',
+'Plan':'प्लान',
+'Max Agents':'अधिकतम एजेंट',
+'Price':'कीमत',
+'Solo Advisor':'सोलो एडवाइज़र',
+'1 (just you)':'1 (सिर्फ आप)',
+'₹199/mo':'₹199/माह',
+'Team':'टीम',
+'Up to 5':'5 तक',
+'₹799/mo':'₹799/माह',
+'Enterprise':'एंटरप्राइज़',
+'Up to 25':'25 तक',
+'₹1,999/mo':'₹1,999/माह',
+
+/* ═══ SECTION 11 — CSV IMPORT ═══ */
+'Import hundreds of leads at once from a spreadsheet':'स्प्रेडशीट से एक बार में सैकड़ों लीड इम्पोर्ट करें',
+'Already have leads in Excel or Google Sheets? Export as CSV and upload directly to Telegram.':'Excel या Google Sheets में पहले से लीड हैं? CSV में एक्सपोर्ट करें और Telegram पर सीधे अपलोड करें।',
+'Prepare your CSV file':'अपनी CSV फ़ाइल तैयार करें',
+'Columns: name, phone, email, city, need_type, notes, dob, anniversary, occupation. Only name is required.':'कॉलम: <code>name, phone, email, city, need_type, notes, dob, anniversary, occupation</code>। सिर्फ <code>name</code> ज़रूरी है।',
+'Upload the .csv file in the bot chat':'बोट चैट में .csv फ़ाइल अपलोड करें',
+'Just drag-and-drop or attach the file. The bot detects it as a CSV import automatically.':'बस ड्रैग-एंड-ड्रॉप या फ़ाइल अटैच करें। बोट ऑटो CSV इम्पोर्ट डिटेक्ट करता है।',
+'Leads are created in bulk':'बल्क में लीड बनती हैं',
+'Up to 500 leads per upload. The bot reports how many were imported successfully and skips duplicates.':'प्रति अपलोड 500 लीड तक। बोट बताता है कितनी सफलतापूर्वक इम्पोर्ट हुईं और डुप्लिकेट स्किप होते हैं।',
+'Sample CSV format:':'<strong>सैम्पल CSV फ़ॉर्मेट:</strong><br>',
+
+/* ═══ SECTION 12 — SETTINGS & LANGUAGE ═══ */
+'Customize your profile and switch to Hindi':'अपनी प्रोफाइल कस्टमाइज़ करें और हिंदी में स्विच करें',
+'Open settings menu: Edit Profile, Language preference, Team management (owners), and Help reference.':'सेटिंग्स मेनू खोलें: प्रोफाइल एडिट, भाषा प्राथमिकता, टीम मैनेजमेंट (मालिक), और हेल्प।',
+'Switch between 🇬🇧 English and 🇮🇳 हिन्दी. All bot messages, menu buttons, and calculator results switch to your chosen language.':'🇬🇧 English और 🇮🇳 हिन्दी के बीच स्विच करें। सभी बोट मैसेज, मेनू बटन, और कैलकुलेटर रिज़ल्ट आपकी चुनी भाषा में बदलते हैं।',
+'Edit your name, phone, email, or firm name (owner only). Pick the field and enter the new value.':'अपना नाम, फोन, ईमेल, या फर्म का नाम (केवल मालिक) एडिट करें। फील्ड चुनें और नई वैल्यू डालें।',
+'View current subscription status, trial days remaining, and upgrade options with pricing. Subscribe directly from Telegram.':'मौजूदा सब्सक्रिप्शन स्टेटस, बचे ट्रायल दिन, और अपग्रेड विकल्प प्राइसिंग के साथ देखें। Telegram से सीधे सब्सक्राइब करें।',
+'Need Help? Type /help anytime for a role-aware, plan-aware command reference. It shows exactly the commands available to YOU based on your role and subscription.':'<strong>मदद चाहिए?</strong> कभी भी <code>/help</code> टाइप करें — आपकी भूमिका और प्लान के अनुसार कमांड रेफरेंस मिलेगा। बस वही कमांड दिखाता है जो आपके लिए उपलब्ध हैं।',
+
+/* ═══ QUICK REFERENCE TABLE ═══ */
+'Quick Reference — All Commands':'क्विक रेफरेंस — सभी कमांड',
+'Bookmark this page. Print it. Keep it handy.':'इस पेज को बुकमार्क करें। प्रिंट करें। हाथ में रखें।',
+'Command':'कमांड',
+'What It Does':'क्या करता है',
+'Register / restart the bot':'बोट रजिस्टर / रीस्टार्ट करें',
+'Add a new lead (guided wizard)':'नई लीड जोड़ें (गाइडेड विज़ार्ड)',
+'List all leads or search by name/phone':'सभी लीड लिस्ट करें या नाम/फोन से खोजें',
+'View full lead detail with actions':'एक्शन्स के साथ पूरी लीड डिटेल',
+'Edit a lead\'s fields':'लीड के फील्ड एडिट करें',
+'Visual pipeline overview with stats':'स्टैट्स के साथ विज़ुअल पाइपलाइन ओवरव्यू',
+'Move a lead to a new pipeline stage':'लीड को नए पाइपलाइन स्टेज पर ले जाएं',
+'Log a sales interaction (call/meeting/etc.)':'सेल्स इंटरेक्शन लॉग करें (कॉल/मीटिंग/आदि)',
+'Record a sold policy':'बेची गई पॉलिसी रिकॉर्ड करें',
+'View upcoming renewals (60-day window)':'आगामी रिन्यूअल देखें (60-दिन विंडो)',
+'Open financial calculator menu (12 types)':'वित्तीय कैलकुलेटर मेनू खोलें (12 प्रकार)',
+'Full business dashboard':'पूरा बिज़नेस डैशबोर्ड',
+'Send WhatsApp message to a lead':'लीड को WhatsApp मैसेज भेजें',
+'Send calculator report via WhatsApp':'WhatsApp से कैलकुलेटर रिपोर्ट भेजें',
+'Send portfolio summary via WhatsApp':'WhatsApp से पोर्टफोलियो समरी भेजें',
+'Send branded greeting via WhatsApp':'WhatsApp से ब्रांडेड ग्रीटिंग भेजें',
+'Start claim wizard with doc checklists':'डॉक चेकलिस्ट के साथ क्लेम विज़ार्ड शुरू करें',
+'View all claims with status':'सभी क्लेम स्टेटस के साथ देखें',
+'Detailed claim view per documents':'प्रति डॉक्यूमेंट डिटेल क्लेम व्यू',
+'AI Sales Intelligence menu (12 tools)':'AI सेल्स इंटेलिजेंस मेनू (12 टूल्स)',
+'Manage agents (owner/admin only)':'एजेंट मैनेज करें (केवल मालिक/एडमिन)',
+'Create custom branded bot':'कस्टम ब्रांडेड बोट बनाएं',
+'Profile, language, team settings':'प्रोफाइल, भाषा, टीम सेटिंग्स',
+'Switch English / Hindi':'English / हिन्दी स्विच करें',
+'View/change subscription plan':'सब्सक्रिप्शन प्लान देखें/बदलें',
+'Show all available commands':'सभी उपलब्ध कमांड दिखाएं',
+'Cancel any active wizard':'कोई भी एक्टिव विज़ार्ड रद्द करें',
+'All':'सभी',
+'All*':'सभी*',
+'Team+':'टीम+',
+'* WhatsApp API commands (/wa, /wacalc, /wadash, /greet) require WhatsApp Business API configuration. Solo plan users can use the "Share WhatsApp" link method instead.':'* WhatsApp API कमांड (<code>/wa</code>, <code>/wacalc</code>, <code>/wadash</code>, <code>/greet</code>) के लिए WhatsApp Business API कॉन्फ़िगरेशन चाहिए। Solo प्लान यूज़र्स इसके बजाय "Share WhatsApp" लिंक मेथड इस्तेमाल कर सकते हैं।',
+
+/* ═══ FAQ ═══ */
+'Frequently Asked Questions':'अक्सर पूछे जाने वाले प्रश्न',
+'🤔 Do my clients need to install Telegram?':'🤔 क्या मेरे क्लाइंट्स को Telegram इंस्टॉल करना होगा?',
+'No! Your clients never see Telegram. They receive all messages on WhatsApp, which they already use daily. Telegram is only your private command center — like a cockpit that only the pilot sees.':'<strong>नहीं!</strong> आपके क्लाइंट कभी Telegram नहीं देखते। सभी मैसेज <strong>WhatsApp</strong> पर मिलते हैं, जो वे पहले से रोज़ इस्तेमाल करते हैं। Telegram सिर्फ आपका प्राइवेट कमांड सेंटर है — जैसे कॉकपिट जो सिर्फ पायलट देखता है।',
+'💰 Is Telegram free to use?':'💰 क्या Telegram फ्री है?',
+'Yes, completely free. Telegram has no per-message charges, no 24-hour window rules, and no template approvals. You can send unlimited commands to your bot at zero cost. (WhatsApp API incurs Meta\'s per-conversation charges, but the Telegram side is always free.)':'हां, पूरी तरह फ्री। Telegram में कोई प्रति-मैसेज चार्ज नहीं, कोई 24-घंटे विंडो नहीं, कोई टेम्प्लेट अप्रूवल नहीं। अपने बोट को अनलिमिटेड कमांड भेजें ज़ीरो कॉस्ट पर। (WhatsApp API पर Meta का प्रति-कन्वर्सेशन चार्ज लगता है, लेकिन Telegram हमेशा फ्री है।)',
+'📱 Can I use Telegram on my computer?':'📱 क्या मैं कंप्यूटर पर Telegram इस्तेमाल कर सकता हूं?',
+'Yes! Telegram works on phone, tablet, Windows/Mac desktop app, and web browser — all simultaneously. Your CRM chat syncs across every device. Many advisors prefer the desktop app for faster typing.':'हां! Telegram <strong>फोन, टैबलेट, Windows/Mac डेस्कटॉप ऐप, और वेब ब्राउज़र</strong> पर काम करता है — सब एक साथ। आपकी CRM चैट हर डिवाइस पर सिंक रहती है। कई एडवाइज़र तेज़ टाइपिंग के लिए डेस्कटॉप ऐप पसंद करते हैं।',
+'🔒 Is my data safe on Telegram?':'🔒 क्या Telegram पर मेरा डेटा सुरक्षित है?',
+'Your data is stored on our secure servers, not on Telegram. The bot is just the interface — like a remote control for your CRM. Messages between you and the bot are encrypted. Each firm\'s data is completely isolated (multi-tenant).':'आपका डेटा हमारे सिक्योर सर्वर पर स्टोर है, Telegram पर नहीं। बोट सिर्फ इंटरफेस है — आपके CRM का रिमोट कंट्रोल। आपके और बोट के बीच मैसेज एन्क्रिप्टेड हैं। हर फर्म का डेटा पूरी तरह अलग है (मल्टी-टेनेंट)।',
+'🌐 Does it work in Hindi?':'🌐 क्या यह हिंदी में काम करता है?',
+'Yes! Type /lang to switch to Hindi (हिन्दी). All bot messages, menu buttons, and calculator results switch to Hindi. Voice-to-action also understands Hindi and Hinglish.':'हां! <code>/lang</code> टाइप करें हिंदी में स्विच करने के लिए। सभी बोट मैसेज, मेनू बटन, और कैलकुलेटर रिज़ल्ट हिंदी में बदल जाते हैं। वॉयस-टू-एक्शन भी हिंदी और हिंग्लिश समझता है।',
+'⚡ What if I\'m in the middle of something and get interrupted?':'⚡ अगर बीच में काम छूट जाए तो?',
+'All wizards (add lead, follow-up, claim, etc.) have a 30-minute timeout. You can resume anytime within that window. Type /cancel to abort any wizard and start fresh.':'सभी विज़ार्ड (लीड जोड़ना, फॉलो-अप, क्लेम, आदि) में 30 मिनट का टाइमआउट है। उस विंडो में कभी भी रिज़्यूम करें। <code>/cancel</code> टाइप करें किसी भी विज़ार्ड को रद्द करने और नए सिरे से शुरू करने के लिए।',
+'📊 Can I see everything on a web dashboard too?':'📊 क्या वेब डैशबोर्ड पर भी सब देख सकता हूं?',
+'Absolutely. Type /dashboard in Telegram and it shows a summary + link to the full web dashboard. The web dashboard gives you charts, tables, and exportable reports. Telegram and web always show the same data.':'बिल्कुल। Telegram में <code>/dashboard</code> टाइप करें — समरी + वेब डैशबोर्ड का लिंक मिलता है। वेब डैशबोर्ड चार्ट, टेबल, और एक्सपोर्टेबल रिपोर्ट देता है। Telegram और वेब हमेशा एक ही डेटा दिखाते हैं।',
+'🏢 Can each agent in my firm use the bot independently?':'🏢 क्या मेरी फर्म का हर एजेंट बोट अलग से इस्तेमाल कर सकता है?',
+'Yes. Each agent joins via an invite code and gets their own isolated workspace within your firm. They see only their own leads and pipeline. Owners/admins can view all agents\' data and transfer data if an agent leaves.':'हां। हर एजेंट इनवाइट कोड से जुड़ता है और आपकी फर्म में अपना अलग वर्कस्पेस पाता है। वे सिर्फ अपनी लीड और पाइपलाइन देखते हैं। मालिक/एडमिन सभी एजेंट्स का डेटा देख सकते हैं और एजेंट के जाने पर डेटा ट्रांसफर कर सकते हैं।',
+
+/* ═══ CTA ═══ */
+'Ready to Run Your CRM on Telegram? 🚀':'Telegram पर CRM चलाने के लिए तैयार हैं? 🚀',
+'Sign up, connect your bot in 5 minutes, and manage your entire business from one chat window.':'साइनअप करें, 5 मिनट में बोट कनेक्ट करें, और एक चैट विंडो से अपना पूरा बिज़नेस मैनेज करें।',
+'Start 14-Day Free Trial →':'14-दिन फ्री ट्रायल शुरू करें →',
+'📖 Setup Guide':'📖 सेटअप गाइड',
+
+/* ═══ FOOTER ═══ */
+'AI-Powered Financial Advisor CRM Platform · sarathi-ai.com':'वित्तीय सलाहकार AI-पावर्ड CRM प्लेटफ़ॉर्म · sarathi-ai.com',
+'Pricing':'प्राइसिंग',
+'Telegram Guide':'Telegram गाइड',
+'Help':'सहायता',
+'Privacy':'गोपनीयता',
+'Terms':'शर्तें',
+'Contact':'संपर्क',
+'© 2026 Sarathi-AI Business Technologies. All rights reserved. · sarathi-ai.com':'© 2026 Sarathi-AI Business Technologies। सर्वाधिकार सुरक्षित। · sarathi-ai.com',
+
+/* ═══ CHAT MOCKUP UI ELEMENTS ═══ */
+'● online':'● ऑनलाइन',
+'Register my Firm':'मेरी फर्म रजिस्टर करें',
+'I have an Invite Code':'मेरे पास इनवाइट कोड है',
+'Log Follow-up':'फॉलो-अप लॉग करें',
+'Move Stage':'स्टेज बदलें',
+'Open Calculator':'कैलकुलेटर खोलें',
+'View Detail':'डिटेल देखें',
+'View Prospects':'प्रॉस्पेक्ट देखें',
+'View Pitched':'पिच्ड देखें',
+'Proposals':'प्रपोज़ल',
+'Closed Won':'क्लोज़्ड जीत',
+'Inflation':'इन्फ्लेशन',
+'HLV':'HLV',
+'Retirement':'रिटायरमेंट',
+'EMI':'EMI',
+'Health':'हेल्थ',
+'SIP':'SIP',
+'MF SIP':'MF SIP',
+'ULIP':'ULIP',
+'NPS':'NPS',
+'Recalculate':'दोबारा गणना',
+'Share WhatsApp':'WhatsApp शेयर',
+'Other Calculator':'अन्य कैलकुलेटर',
+
+/* ═══ CHAT MOCKUP BOT TEXT ═══ */
+'Welcome to':'में आपका स्वागत है,',
+'Sarathi-AI CRM!':'Sarathi-AI CRM!',
+'How would you like to proceed?':'आप कैसे आगे बढ़ना चाहेंगे?',
+'Let\'s add a new lead!':'नई लीड जोड़ते हैं!',
+'What is the':'बताइए —',
+'client\'s full name':'क्लाइंट का पूरा नाम',
+'What is':'बताइए',
+'Rajesh Kumar\'s phone number':'राजेश कुमार का फोन नंबर',
+'(10 digits, or type "skip")':'(10 अंक, या "skip" टाइप करें)',
+'Lead created!':'लीड बन गई!',
+'#42 — Rajesh Kumar':'#42 — राजेश कुमार',
+'9876543210 | 🏷️ Prospect':'9876543210 | 🏷️ प्रॉस्पेक्ट',
+'What\'s next?':'अब क्या करें?',
+'Sales Pipeline':'सेल्स पाइपलाइन',
+'Won: 15':'जीत: 15',
+'Lost: 4':'हार: 4',
+'Conversion: 28.8%':'कन्वर्ज़न: 28.8%',
+'Active Policies: 15 | ₹4.2L Premium':'एक्टिव पॉलिसी: 15 | ₹4.2L प्रीमियम',
+'Upcoming Renewals':'आगामी रिन्यूअल',
+'(next 60 days)':'(अगले 60 दिन)',
+'Rajesh Kumar':'राजेश कुमार',
+'— LIC Jeevan Anand':'— LIC जीवन आनंद',
+'₹18,000 premium · Expires in':'₹18,000 प्रीमियम · समाप्ति',
+'3 days':'3 दिन में',
+'Priya Sharma':'प्रिया शर्मा',
+'— Star Health Family':'— स्टार हेल्थ फैमिली',
+'₹12,500 premium · Expires in':'₹12,500 प्रीमियम · समाप्ति',
+'22 days':'22 दिन में',
+'Amit Patel':'अमित पटेल',
+'— HDFC Click2Protect':'— HDFC Click2Protect',
+'₹8,200 premium · Expires in':'₹8,200 प्रीमियम · समाप्ति',
+'45 days':'45 दिन में',
+'Choose a Calculator:':'कैलकुलेटर चुनें:',
+'Inflation Impact Result':'इन्फ्लेशन इम्पैक्ट रिज़ल्ट',
+'Your ₹50,000/month today =':'आपका ₹50,000/माह आज =',
+'₹1,34,253/month in 15 years!':'15 साल में ₹1,34,253/माह!',
+'You need ₹1.6 Cr corpus to maintain lifestyle.':'जीवनशैली बनाए रखने के लिए ₹1.6 करोड़ कॉर्पस चाहिए।',
+
+/* ═══ MISC LABELS ═══ */
+'Settings → Team → Generate Invite':'सेटिंग्स → टीम → इनवाइट जनरेट करें',
+'WhatsApp':'WhatsApp',
+};
+
+/* ── Hero h1 special translation (word order changes) ── */
+const _HERO_HI = 'आपका <span class="blue">पूरा बिज़नेस CRM</span> <span class="saffron">Telegram</span> पर';
+
+/* ── Page subtitle special translation ── */
+const _SUBTITLE_HI = 'कोई ऐप इंस्टॉल नहीं। कोई डैशबोर्ड सीखना नहीं। बस Telegram खोलें और अपना पूरा बिज़नेस चलाएं — लीड, पाइपलाइन, कैलकुलेटर, क्लेम, AI टूल्स, और WhatsApp शेयरिंग — सब एक चैट विंडो से।';
+
+const _origTexts = new WeakMap();
+const _emRx = /^([\p{Emoji_Presentation}\p{Extended_Pictographic}\u200d\ufe0f\u20e3\u2600-\u27bf][\ufe00-\ufe0f\u200d\u20e3\p{Emoji_Presentation}\p{Extended_Pictographic}\udc00-\udfff]*[\s]*)+/u;
+function _stripE(s){ const m = s.match(_emRx); return m ? { pfx: m[0], txt: s.slice(m[0].length) } : { pfx: '', txt: s }; }
+
+function translateNodes(lang) {
+  const skip = new Set(['SCRIPT','STYLE','CODE','PRE']);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      if (skip.has(n.parentElement?.tagName)) return NodeFilter.FILTER_REJECT;
+      if (n.parentElement?.closest('#langToggle')) return NodeFilter.FILTER_REJECT;
+      if (n.textContent.trim().length === 0) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!_origTexts.has(node)) _origTexts.set(node, node.textContent);
+    if (lang === 'en') {
+      node.textContent = _origTexts.get(node);
+    } else {
+      const orig = _origTexts.get(node);
+      const t = orig.trim();
+      if (_T[t]) {
+        node.textContent = orig.replace(t, _T[t]);
+      } else {
+        const { pfx, txt } = _stripE(t);
+        if (pfx && _T[txt]) {
+          node.textContent = orig.replace(t, pfx + _T[txt]);
+        }
+      }
+    }
+  }
+}
+
+/* ── Element-level innerHTML replacement for complex elements ── */
+const _elOrig = new WeakMap();
+function translateElements(lang) {
+  /* Hero h1 */
+  const h1 = document.querySelector('.tg-hero h1');
+  if (h1) {
+    if (!_elOrig.has(h1)) _elOrig.set(h1, h1.innerHTML);
+    h1.innerHTML = lang === 'en' ? _elOrig.get(h1) : _HERO_HI;
+  }
+  /* Subtitle */
+  const sub = document.querySelector('.tg-hero p.subtitle');
+  if (sub) {
+    if (!_elOrig.has(sub)) _elOrig.set(sub, sub.innerHTML);
+    sub.innerHTML = lang === 'en' ? _elOrig.get(sub) : _SUBTITLE_HI;
+  }
+  /* Elements whose textContent contains text from _T but have inline markup */
+  const richSels = '.cmd-desc, .flow-text p, .tip > span, .accordion-body, .sec-body > p';
+  document.querySelectorAll(richSels).forEach(el => {
+    if (!_elOrig.has(el)) _elOrig.set(el, el.innerHTML);
+    if (lang === 'en') {
+      el.innerHTML = _elOrig.get(el);
+      return;
+    }
+    const key = _nw(el.textContent);
+    if (_T[key]) el.innerHTML = _T[key];
+  });
+  /* Page title */
+  if (!document._origTitle) document._origTitle = document.title;
+  document.title = lang === 'en' ? document._origTitle : 'Telegram CRM गाइड — Sarathi-AI Business Technologies';
+}
+
+let _curLang = 'en';
+function setLang(l) {
+  _curLang = l;
+  document.querySelectorAll('#langToggle span').forEach(s => {
+    s.classList.toggle('active', s.textContent.trim() === (l === 'en' ? 'EN' : 'हिं'));
+  });
+  translateElements(l);
+  translateNodes(l);
+}
+</script>
+
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

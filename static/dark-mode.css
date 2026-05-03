@@ -1,0 +1,1316 @@
+/* ═══════════════════════════════════════════════════════════
+   SARATHI-AI — Dark Mode Overrides
+   Applied when html[data-theme="dark"] is set.
+   Shared across ALL pages via <link>.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Theme Toggle Button ─────────────────────────────────── */
+.theme-toggle {
+  background: none; border: 1.5px solid rgba(148,163,184,.35);
+  border-radius: 50%; width: 34px; height: 34px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.1em; transition: all .25s; padding: 0; line-height: 1;
+  color: #64748b; flex-shrink: 0;
+}
+.theme-toggle:hover { background: rgba(13,148,136,.1); border-color: #0d9488; transform: scale(1.08); }
+html[data-theme="dark"] .theme-toggle { border-color: rgba(148,163,184,.3); color: #fbbf24; }
+html[data-theme="dark"] .theme-toggle:hover { background: rgba(251,191,36,.12); border-color: #fbbf24; }
+
+/* ═══════════════════════════════════════════════════════════
+   CSS VARIABLE OVERRIDES
+   One block covers all variable patterns used across pages:
+   dashboard (--bg/--card/--text), admin (--gray-*),
+   superadmin (--text/--text2/--slate), index (--g*),
+   calculators (--text-muted), etc.
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] {
+  /* ── Core structural ── */
+  --bg: #0f172a;
+  --card: #1e293b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --text-muted: #94a3b8;
+  --text2: #94a3b8;
+  --slate: #94a3b8;
+  --border: #334155;
+  --shadow: 0 2px 12px rgba(0,0,0,.3);
+
+  /* ── Admin --gray-* scale ── */
+  --gray-50: #0f172a;
+  --gray-100: #1e293b;
+  --gray-200: #334155;
+  --gray-400: #94a3b8;
+  --gray-600: #cbd5e1;
+  --gray-800: #e2e8f0;
+  --gray-900: #f1f5f9;
+
+  /* ── Index --g* gray scale ── */
+  --g50: #0f172a;
+  --g100: #1e293b;
+  --g200: #334155;
+  --g300: #475569;
+  --g400: #64748b;
+  --g500: #94a3b8;
+  --g600: #cbd5e1;
+  --g700: #e2e8f0;
+  --g800: #f1f5f9;
+  --g900: #f8fafc;
+  --white: #0f172a;
+
+  /* ── Missing gray scale ── */
+  --gray-500: #94a3b8;
+
+  /* ── Accent color overrides for readable text on dark ── */
+  --teal-light: #134e4a;
+  --teal-dark: #5eead4;
+  --indigo: #a5b4fc;
+  --indigo-light: #818cf8;
+
+  /* ── Tint / light accent overrides ── */
+  --blue-light: #134e4a;
+  --teal-l: #134e4a;
+  --teal-50: #042f2e;
+  --teal-100: #134e4a;
+  --saffron-light: #451a03;
+  --amber-50: #451a03;
+  --green-light: #064e3b;
+  --green-50: #064e3b;
+  --red-light: #450a0a;
+  --yellow-light: #422006;
+  --purple-light: #2e1065;
+  --indigo-50: #1e1b4b;
+
+  /* ── Gradients ── */
+  --grad-hero: linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #1c1917 100%);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.25);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.3);
+  --shadow-xl: 0 20px 60px rgba(0,0,0,.35);
+  --shadow-teal: 0 4px 20px rgba(13,148,136,.3);
+  --shadow-indigo: 0 4px 20px rgba(49,46,129,.3);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BODY & GLOBAL
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DASHBOARD-SPECIFIC — topbar, modal, forms, tables
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .topbar {
+  background: #1e293b;
+  border-bottom-color: #334155;
+}
+html[data-theme="dark"] .topbar .right button {
+  background: #334155; color: #e2e8f0; border-color: #475569;
+}
+html[data-theme="dark"] .topbar .right button:hover {
+  background: #475569;
+}
+
+/* Modal */
+html[data-theme="dark"] .modal {
+  background: #1e293b; color: #e2e8f0;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+html[data-theme="dark"] .modal-overlay {
+  background: rgba(0,0,0,.6);
+}
+html[data-theme="dark"] .modal-header {
+  border-bottom-color: #334155;
+}
+html[data-theme="dark"] .modal-footer {
+  border-top-color: #334155;
+}
+
+/* Forms */
+html[data-theme="dark"] .form-group input,
+html[data-theme="dark"] .form-group select,
+html[data-theme="dark"] .form-group textarea,
+html[data-theme="dark"] .toolbar .search-box,
+html[data-theme="dark"] .toolbar .filters select,
+html[data-theme="dark"] .search-box input {
+  background: #0f172a; color: #e2e8f0; border-color: #334155;
+}
+html[data-theme="dark"] .form-group input::placeholder,
+html[data-theme="dark"] .toolbar .search-box input::placeholder,
+html[data-theme="dark"] .search-box input::placeholder {
+  color: #64748b;
+}
+html[data-theme="dark"] .form-group input:focus,
+html[data-theme="dark"] .form-group select:focus,
+html[data-theme="dark"] .form-group textarea:focus {
+  border-color: #0d9488;
+}
+
+/* Tables */
+html[data-theme="dark"] .data-table th {
+  background: #0f172a; color: #94a3b8; border-bottom-color: #334155;
+}
+html[data-theme="dark"] .data-table td {
+  border-bottom-color: #1e293b;
+}
+html[data-theme="dark"] .data-table tr:hover td {
+  background: rgba(13,148,136,.06);
+}
+
+/* Alerts */
+html[data-theme="dark"] .alert-info  { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; }
+html[data-theme="dark"] .alert-warn  { background: #422006; border-color: #d97706; color: #fbbf24; }
+html[data-theme="dark"] .alert-success { background: #064e3b; border-color: #059669; color: #6ee7b7; }
+
+/* Stat Cards & Badges */
+html[data-theme="dark"] .stat-card {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .badge {
+  border-color: #334155;
+}
+html[data-theme="dark"] .plan-badge {
+  background: rgba(94,234,212,0.06); border-color: rgba(94,234,212,0.15);
+}
+
+/* Toolbar */
+html[data-theme="dark"] .toolbar .search-box {
+  background: #0f172a; border-color: #334155;
+}
+html[data-theme="dark"] .toolbar .search-box input {
+  background: transparent; color: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN PAGE
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .header {
+  /* Keep teal gradient header — just darken slightly */
+  background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%) !important;
+}
+html[data-theme="dark"] .login-card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+  box-shadow: 0 8px 40px rgba(0,0,0,.3);
+}
+html[data-theme="dark"] .login-card h1 { color: #f1f5f9; }
+html[data-theme="dark"] .login-card p { color: #94a3b8; }
+html[data-theme="dark"] .login-card input {
+  background: #0f172a; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .login-card input:focus {
+  border-color: #0d9488;
+}
+html[data-theme="dark"] .login-card .error-msg { color: #f87171; }
+
+html[data-theme="dark"] .admin-card,
+html[data-theme="dark"] .card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+/* Admin tables */
+html[data-theme="dark"] table th {
+  background: #0f172a; color: #94a3b8; border-color: #334155;
+}
+html[data-theme="dark"] table td {
+  border-color: #1e293b; color: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SUPER ADMIN
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .topbar {
+  background: linear-gradient(135deg, #0f766e, #134e4a);
+}
+html[data-theme="dark"] .nav-tabs {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .nav-tab {
+  color: #94a3b8;
+}
+html[data-theme="dark"] .nav-tab.active {
+  color: #0d9488; border-color: #0d9488;
+}
+html[data-theme="dark"] .section-card,
+html[data-theme="dark"] .detail-panel {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .btn-outline {
+  border-color: #475569; color: #94a3b8;
+}
+html[data-theme="dark"] .btn-outline:hover {
+  border-color: #0d9488; color: #0d9488;
+}
+html[data-theme="dark"] .form-group label { color: #94a3b8; }
+html[data-theme="dark"] .form-group input {
+  background: #0f172a; border-color: #334155; color: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INDEX / LANDING PAGE
+   ═══════════════════════════════════════════════════════════ */
+/* Navbar */
+html[data-theme="dark"] .navbar {
+  background: rgba(15,23,42,.92); border-bottom-color: #334155;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+html[data-theme="dark"] .navbar .nav-links a {
+  color: #94a3b8;
+}
+html[data-theme="dark"] .navbar .nav-links a:hover {
+  color: #5eead4; background: rgba(13,148,136,.1);
+}
+/* Demo glow link — dark mode override */
+html[data-theme="dark"] .nav-demo-glow {
+  color: #fbbf24 !important;
+  background: rgba(245,158,11,.12) !important;
+  border-color: rgba(245,158,11,.35) !important;
+}
+html[data-theme="dark"] .nav-demo-glow:hover {
+  color: #fde68a !important;
+  background: rgba(245,158,11,.2) !important;
+}
+/* AI tag in brand */
+html[data-theme="dark"] .nav-brand .ai-tag { color: #5eead4; }
+/* Hamburger menu toggle */
+html[data-theme="dark"] .menu-toggle { color: #e2e8f0; }
+/* Mobile quick toggles */
+html[data-theme="dark"] .mqt-btn {
+  border-color: rgba(148,163,184,.25);
+  background: rgba(30,41,59,.5);
+  color: #e2e8f0;
+}
+html[data-theme="dark"] .btn-ghost {
+  color: #94a3b8 !important; border-color: #475569 !important;
+}
+html[data-theme="dark"] .btn-ghost:hover {
+  background: rgba(148,163,184,.08) !important;
+}
+html[data-theme="dark"] .partner-btn {
+  color: #a5b4fc !important; border-color: #6366f1 !important; background: rgba(99,102,241,.1) !important;
+}
+html[data-theme="dark"] .partner-btn:hover {
+  color: #c7d2fe !important; background: rgba(99,102,241,.2) !important;
+}
+
+/* Glass morphism in dark */
+html[data-theme="dark"] .glass {
+  background: rgba(30,41,59,.7);
+  border-color: rgba(51,65,85,.5);
+}
+
+/* Hero section */
+html[data-theme="dark"] .hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #1c1917 100%);
+}
+/* Logo: brighten in dark mode */
+html[data-theme="dark"] .hero-logo img,
+html[data-theme="dark"] .nav-brand .logo-img,
+html[data-theme="dark"] .footer .logo-img {
+  filter: brightness(1.5) contrast(1.05) drop-shadow(0 2px 14px rgba(20,184,166,0.4));
+}
+
+/* Feature cards, pricing cards, etc */
+html[data-theme="dark"] .feature-card,
+html[data-theme="dark"] .pricing-card,
+html[data-theme="dark"] .step-card,
+html[data-theme="dark"] .calc-card,
+html[data-theme="dark"] .demo-card,
+html[data-theme="dark"] .testimonial-card,
+html[data-theme="dark"] .value-card,
+html[data-theme="dark"] .use-case-card {
+  background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0;
+}
+html[data-theme="dark"] .feature-card:hover,
+html[data-theme="dark"] .pricing-card:hover {
+  border-color: #0d9488;
+}
+
+/* Section backgrounds that use light colors */
+html[data-theme="dark"] section {
+  background-color: transparent;
+}
+html[data-theme="dark"] .section-alt {
+  background: #1e293b;
+}
+
+/* Hero pill badge — teal-dark text on teal-50 bg is invisible in dark */
+html[data-theme="dark"] .pill {
+  background: rgba(94,234,212,.1); border-color: rgba(94,234,212,.2); color: #5eead4;
+}
+
+/* Before-After verdict */
+html[data-theme="dark"] .ba-verdict p { color: #5eead4; }
+html[data-theme="dark"] .ba-card.after h3 { color: #6ee7b7; }
+
+/* Comparison table — sarathi column header */
+html[data-theme="dark"] .cmp-table thead th.sarathi-col { color: #5eead4; }
+html[data-theme="dark"] .cmp-footer { color: #5eead4; }
+html[data-theme="dark"] .cmp-yes { color: #6ee7b7; }
+html[data-theme="dark"] .cmp-no { color: #f87171; opacity: 1; }
+
+/* Feature badge boxes (inline style uses var(--teal-dark), var(--indigo)) */
+html[data-theme="dark"] .feature-card [style*="--teal-dark"] { color: #5eead4 !important; }
+html[data-theme="dark"] .feature-card [style*="--indigo"] { color: #a5b4fc !important; }
+
+/* Navbar brand wordmark */
+html[data-theme="dark"] .nav-brand .wordmark { color: #e2e8f0 !important; }
+
+/* Demo mockup cards — keep white bg as "screenshots" but override inner text */
+html[data-theme="dark"] .dm-card,
+html[data-theme="dark"] .dm-chart,
+html[data-theme="dark"] .journey-stage,
+html[data-theme="dark"] .calc-field {
+  background: #1e293b !important; border-color: #334155;
+}
+html[data-theme="dark"] .dm-card .dm-val { color: #5eead4 !important; }
+html[data-theme="dark"] .report-mock { background: #1e293b; border-color: #334155; }
+html[data-theme="dark"] .report-body { background: #1e293b !important; color: #e2e8f0; }
+
+/* Telegram demo messages */
+html[data-theme="dark"] .tg-msg.bot {
+  background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .tg-msg.user {
+  color: #e2e8f0;
+}
+
+/* Logo splash — darken in dark mode */
+html[data-theme="dark"] #logo-splash {
+  background: linear-gradient(135deg, #0f172a, #1e1b4b, #1c1917) !important;
+}
+html[data-theme="dark"] .splash-tagline { color: #a5b4fc !important; }
+
+/* Form error — light pink bg is jarring in dark */
+html[data-theme="dark"] .form-error {
+  background: #450a0a; border-color: #dc2626; color: #fca5a5;
+}
+
+/* Partner nav button inline !important fix */
+html[data-theme="dark"] .navbar .nav-links a[href*="partner"] {
+  color: #a5b4fc !important;
+}
+
+/* Journey count badge */
+html[data-theme="dark"] .journey-count {
+  background: #2e1065 !important; color: #e879f9 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CALCULATORS
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .calc-header {
+  background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%);
+}
+html[data-theme="dark"] .tab {
+  background: #1e293b; border-color: #334155; color: #94a3b8;
+}
+html[data-theme="dark"] .tab:hover {
+  background: #134e4a; color: #5eead4;
+}
+html[data-theme="dark"] .tab.active {
+  background: #0d9488; color: #fff; border-color: #0d9488;
+}
+html[data-theme="dark"] .calc-card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .calc-panel,
+html[data-theme="dark"] .result-box {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .result-box h3 { color: #5eead4; }
+html[data-theme="dark"] .result-box .big-number { color: #5eead4; }
+html[data-theme="dark"] .result-box .detail { color: #94a3b8; }
+html[data-theme="dark"] .result-box .val { color: #5eead4; }
+/* Number & range inputs inside calculators */
+html[data-theme="dark"] .input-group input[type="number"] {
+  background: #0f172a; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .input-group input[type="number"]:focus {
+  border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.15);
+}
+html[data-theme="dark"] .input-group label { color: #e2e8f0; }
+html[data-theme="dark"] .input-group label span { background: #134e4a; color: #5eead4; }
+/* Range slider track (unfilled portion) */
+html[data-theme="dark"] .input-group input[type="range"] { --slider-track: #334155; }
+html[data-theme="dark"] .input-group input[type="range"]::-webkit-slider-thumb { border-color: #1e293b; }
+html[data-theme="dark"] .input-group input[type="range"]::-moz-range-thumb { border-color: #1e293b; }
+/* Stat card highlight variant */
+html[data-theme="dark"] .stat-card.highlight {
+  background: linear-gradient(135deg, #451a03, #422006); border-color: rgba(245,158,11,.25);
+}
+html[data-theme="dark"] .stat-card .value { color: #5eead4; }
+/* Warning box */
+html[data-theme="dark"] .warning-box {
+  background: #422006; border-color: rgba(245,158,11,.3); border-left-color: #f59e0b;
+}
+html[data-theme="dark"] .warning-box h4 { color: #fbbf24; }
+html[data-theme="dark"] .warning-box p { color: #fcd34d; }
+/* Chart container */
+html[data-theme="dark"] .chart-wrap {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .chart-wrap h4 { color: #e2e8f0; }
+/* CTA bar already uses gradient — just ensure text readability */
+html[data-theme="dark"] .cta-bar { border-color: #334155; }
+/* Calculator description text */
+html[data-theme="dark"] .calc-card > p { color: #94a3b8; }
+/* Footer */
+html[data-theme="dark"] .footer {
+  background: #0f172a; border-top-color: #334155; color: #94a3b8;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PARTNER / HELP / SUPPORT (hardcoded colors)
+   ═══════════════════════════════════════════════════════════ */
+/* Navbar glass override */
+html[data-theme="dark"] .navbar {
+  background: rgba(15,23,42,.92);
+  border-bottom-color: #334155;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+html[data-theme="dark"] .navbar .logo .brand-name { color: #e2e8f0; }
+html[data-theme="dark"] .navbar nav a { color: #94a3b8; }
+html[data-theme="dark"] .navbar nav a:hover,
+html[data-theme="dark"] .navbar nav a.active { color: #5eead4; }
+
+/* Cards & containers */
+html[data-theme="dark"] .stat-card .label { color: #94a3b8; }
+html[data-theme="dark"] .empty-state { color: #64748b; }
+
+/* Tabs */
+html[data-theme="dark"] .tabs {
+  background: #334155;
+}
+html[data-theme="dark"] .tab-btn {
+  color: #94a3b8;
+}
+html[data-theme="dark"] .tab-btn.active {
+  background: #1e293b; color: #5eead4;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+
+/* Partner page referral box */
+html[data-theme="dark"] .referral-code-box {
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border-color: #4338ca;
+}
+html[data-theme="dark"] .referral-code-box p { color: #a5b4fc; }
+
+/* Partner table */
+html[data-theme="dark"] .ref-table th {
+  background: #0f172a; color: #94a3b8; border-bottom-color: #334155;
+}
+html[data-theme="dark"] .ref-table td {
+  border-bottom-color: #1e293b;
+}
+
+/* Help page */
+html[data-theme="dark"] .search-box input {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0,0,0,.2);
+}
+html[data-theme="dark"] .section h2 {
+  border-bottom-color: #334155;
+}
+html[data-theme="dark"] .acc-item {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .acc-head { color: #e2e8f0; }
+html[data-theme="dark"] .acc-body { color: #94a3b8; }
+
+/* Support form */
+html[data-theme="dark"] .form-group input,
+html[data-theme="dark"] .form-group select,
+html[data-theme="dark"] .form-group textarea {
+  background: #0f172a; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .form-group label { color: #94a3b8; }
+
+/* ═══════════════════════════════════════════════════════════
+   ONBOARDING / GETTING-STARTED
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .prog-step .dot {
+  background: #334155; color: #94a3b8;
+}
+html[data-theme="dark"] .prog-step.active .dot {
+  background: #0d9488; color: #fff;
+}
+html[data-theme="dark"] .prog-step .label { color: #94a3b8; }
+html[data-theme="dark"] .prog-line { background: #334155; }
+html[data-theme="dark"] .step-card {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .step-card h2 { color: #e2e8f0; }
+html[data-theme="dark"] .tip-box,
+html[data-theme="dark"] .info-box,
+html[data-theme="dark"] .note-box {
+  background: #0f172a; border-color: #334155;
+}
+html[data-theme="dark"] code {
+  background: #0f172a; color: #5eead4;
+}
+
+/* Getting-started cards */
+html[data-theme="dark"] .gs-step-card {
+  background: #1e293b; border-color: #334155;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FOOTER (already dark — keep or lighten subtly)
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .footer {
+  background: #020617;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] ::-webkit-scrollbar { width: 8px; }
+html[data-theme="dark"] ::-webkit-scrollbar-track { background: #0f172a; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ═══════════════════════════════════════════════════════════
+   MISC OVERRIDES
+   ═══════════════════════════════════════════════════════════ */
+/* Badge variants */
+html[data-theme="dark"] .badge-pending  { background: #422006; color: #fbbf24; }
+html[data-theme="dark"] .badge-converted { background: #064e3b; color: #6ee7b7; }
+html[data-theme="dark"] .badge-active   { background: #064e3b; color: #6ee7b7; }
+html[data-theme="dark"] .badge-expired  { background: #450a0a; color: #fca5a5; }
+
+/* Links */
+html[data-theme="dark"] a { color: inherit; }
+
+/* Button primary hover stays the same */
+html[data-theme="dark"] .btn-primary,
+html[data-theme="dark"] .btn-teal {
+  background: #0d9488; color: #fff;
+}
+
+/* Copy button / special buttons */
+html[data-theme="dark"] .copy-btn { background: #4338ca; }
+html[data-theme="dark"] .copy-btn:hover { background: #3730a3; }
+
+/* Chart.js canvas backgrounds */
+html[data-theme="dark"] canvas { filter: none; }
+
+/* Selection */
+html[data-theme="dark"] ::selection {
+  background: rgba(13,148,136,.3); color: #fff;
+}
+
+/* Sidebar (already dark) — keep as-is, just ensure consistency */
+html[data-theme="dark"] .sidebar {
+  background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+}
+
+/* Import modal */
+html[data-theme="dark"] .import-preview {
+  background: #0f172a; border-color: #334155;
+}
+html[data-theme="dark"] .import-preview th {
+  background: #1e293b; color: #94a3b8;
+}
+
+/* Agent photo upload area */
+html[data-theme="dark"] .agent-photo-area {
+  border-color: #334155;
+}
+
+/* Lang toggle (index + calculators) */
+html[data-theme="dark"] .lang-toggle {
+  background: #334155; border-color: #475569;
+}
+html[data-theme="dark"] .lang-toggle span:not(.active) {
+  color: #94a3b8;
+}
+html[data-theme="dark"] .lang-toggle span:not(.active):hover {
+  background: rgba(13,148,136,.1);
+}
+
+/* Demo section */
+html[data-theme="dark"] .demo-mockup {
+  background: #0f172a; border-color: #334155;
+}
+
+/* Demo page overrides */
+html[data-theme="dark"] .demo-hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #1c1917 100%); }
+html[data-theme="dark"] .demo-nav { background: rgba(15,23,42,.92); border-bottom-color: #334155; }
+html[data-theme="dark"] .demo-nav .brand-name { color: #e2e8f0; }
+html[data-theme="dark"] .view-tab { background: #1e293b; color: #cbd5e1; border-color: #334155; }
+html[data-theme="dark"] .view-tab.active { background: #0d9488; color: #fff; }
+html[data-theme="dark"] .panel-header h2 { color: #f1f5f9; }
+html[data-theme="dark"] .panel-header p { color: #cbd5e1; }
+html[data-theme="dark"] .demo-info h3 { color: #e2e8f0; }
+html[data-theme="dark"] .demo-info p { color: #cbd5e1; }
+html[data-theme="dark"] .highlight-list li { color: #cbd5e1; }
+html[data-theme="dark"] .screen-card { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+html[data-theme="dark"] .install-step { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+html[data-theme="dark"] .ai-flow-step { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+html[data-theme="dark"] .chat-bubble.bot { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+html[data-theme="dark"] .demo-cta { background: linear-gradient(135deg, #0f172a, #1e1b4b); }
+html[data-theme="dark"] .demo-cta h2 { color: #f1f5f9; }
+html[data-theme="dark"] .demo-cta p { color: #cbd5e1; }
+
+/* Pricing popular badge glow */
+html[data-theme="dark"] .pricing-card.popular {
+  border-color: #0d9488;
+  box-shadow: 0 0 30px rgba(13,148,136,.2);
+}
+
+/* Progress ring / indicator */
+html[data-theme="dark"] .progress-ring { color: #0d9488; }
+html[data-theme="dark"] .progress-bg { stroke: #334155; }
+
+/* ═══════════════════════════════════════════════════════════
+   INDEX PAGE — DARK MODE VISIBILITY FIXES
+   Class name corrections + missing background overrides
+   ═══════════════════════════════════════════════════════════ */
+
+/* Plan cards (index uses .plan-card, not .pricing-card) */
+html[data-theme="dark"] .plan-card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .plan-card:hover { border-color: #0d9488; }
+html[data-theme="dark"] .plan-card.popular {
+  border-color: #0d9488;
+  box-shadow: 0 0 30px rgba(13,148,136,.2);
+}
+
+/* Step/how-it-works cards (index uses .step-item, not .step-card) */
+html[data-theme="dark"] .step-item {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+/* Trust card */
+html[data-theme="dark"] .trust-card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+/* Section ID backgrounds (high specificity — override #id rules) */
+html[data-theme="dark"] #before-after { background: #0f172a !important; }
+html[data-theme="dark"] #demo { background: #0f172a !important; }
+html[data-theme="dark"] #pricing { background: #0f172a !important; }
+html[data-theme="dark"] .earn-section { background: linear-gradient(135deg, #0c0a1f, #1a1650) !important; }
+html[data-theme="dark"] .founding-panel { background: rgba(255,255,255,.06) !important; border-color: rgba(255,255,255,.1) !important; }
+html[data-theme="dark"] .earn-row { background: rgba(255,255,255,.04) !important; }
+html[data-theme="dark"] #features { background: transparent !important; }
+html[data-theme="dark"] #how-it-works { background: transparent !important; }
+
+/* Before/After cards */
+html[data-theme="dark"] .ba-card.before {
+  background: linear-gradient(135deg, #450a0a, #3b0a0a) !important;
+  border-color: #7f1d1d;
+}
+html[data-theme="dark"] .ba-card.after {
+  background: linear-gradient(135deg, #064e3b, #042f2e) !important;
+  border-color: #065f46;
+}
+html[data-theme="dark"] .ba-card h3 { color: #e2e8f0; }
+html[data-theme="dark"] .ba-card ul li { color: #cbd5e1; }
+
+/* Trust bar */
+html[data-theme="dark"] .trust-bar {
+  background: #1e293b !important;
+  border-color: #334155;
+}
+html[data-theme="dark"] .trust-item { color: #94a3b8; }
+
+/* Comparison table */
+html[data-theme="dark"] .cmp-table table {
+  background: #1e293b; border-color: #334155;
+}
+html[data-theme="dark"] .cmp-table th { background: #0f172a; color: #94a3b8; }
+html[data-theme="dark"] .cmp-table td { border-color: #334155; color: #e2e8f0; }
+
+/* Demo tabs + mockups */
+html[data-theme="dark"] .demo-tab {
+  background: #334155; color: #94a3b8;
+}
+html[data-theme="dark"] .demo-tab.active {
+  background: #0d9488; color: #fff;
+}
+html[data-theme="dark"] .browser-frame { background: #1e293b; border-color: #334155; }
+html[data-theme="dark"] .phone-frame { background: #1e293b; border-color: #334155; }
+html[data-theme="dark"] .wa-chat { background: #1a2e1a; }
+html[data-theme="dark"] .tg-chat { background: #1e293b; }
+
+/* Easy-step setup cards */
+html[data-theme="dark"] .easy-step {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+/* Report mock */
+html[data-theme="dark"] .report-mock {
+  background: #1e293b; border-color: #334155;
+}
+
+/* Gradient border inner fill (popular plan card) */
+html[data-theme="dark"] .gradient-border::after {
+  background: #1e293b !important;
+}
+
+/* Mobile nav dropdown */
+@media (max-width: 600px) {
+  html[data-theme="dark"] .nav-links {
+    background: #1e293b !important;
+    border-color: #334155;
+  }
+  html[data-theme="dark"] .nav-links a { color: #e2e8f0; }
+}
+/* Demo page mobile nav dropdown */
+@media (max-width: 600px) {
+  html[data-theme="dark"] .demo-nav-links {
+    background: #1e293b !important;
+    border-color: #334155;
+  }
+  html[data-theme="dark"] .demo-nav-links a { color: #e2e8f0; }
+}
+
+/* Modal */
+html[data-theme="dark"] .modal-content {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+/* Section headers & descriptions */
+html[data-theme="dark"] .section-header h2 { color: #f1f5f9; }
+html[data-theme="dark"] .section-header p { color: #94a3b8; }
+
+/* Amber/saffron buttons — keep dark text readable */
+html[data-theme="dark"] .btn-amber { color: #1e293b !important; }
+html[data-theme="dark"] .btn-saffron { color: #1e293b !important; }
+
+/* Partner link in navbar */
+html[data-theme="dark"] .nav-links a[href="/partner"] {
+  color: #a5b4fc !important; border-color: #6366f1 !important;
+}
+
+/* Hero bot screen — already dark, just subtle adjustments */
+html[data-theme="dark"] .hero-bot-screen,
+html[data-theme="dark"] .phone-frame-mobile {
+  box-shadow: 0 25px 80px rgba(0,0,0,.6), 0 0 0 2px rgba(94,234,212,.12);
+}
+
+/* Hero brand logo — invert-safe glow */
+html[data-theme="dark"] .hero-brand-logo {
+  filter: drop-shadow(0 0 24px rgba(94,234,212,.35));
+}
+html[data-theme="dark"] .hero-tagline { color: #f1f5f9; }
+html[data-theme="dark"] .hero-sub { color: #94a3b8; }
+
+/* Phone menu buttons — dark mode */
+html[data-theme="dark"] .pm-btn {
+  background: #1e293b; border-color: #334155; color: #cbd5e1;
+}
+html[data-theme="dark"] .pm-btn:hover {
+  border-color: #0d9488; color: #5eead4; background: rgba(13,148,136,.12);
+  box-shadow: 0 0 8px rgba(13,148,136,.2);
+}
+html[data-theme="dark"] .pm-btn.active {
+  background: rgba(13,148,136,.25); border-color: #0d9488; color: #5eead4;
+  box-shadow: 0 0 18px rgba(13,148,136,.45);
+}
+html[data-theme="dark"] .pm-btn:active {
+  background: rgba(13,148,136,.4) !important; border-color: #14b8a6 !important; color: #fff !important;
+  box-shadow: 0 0 28px rgba(13,148,136,.6) !important;
+}
+
+/* Bot menu & header dark */
+html[data-theme="dark"] .bot-menu { background: #1e293b; border-color: #334155; }
+html[data-theme="dark"] .bot-hint { color: rgba(148,163,184,.6); }
+html[data-theme="dark"] .phone-header { background: #0f172a; }
+html[data-theme="dark"] .phone-input-bar { background: #0f172a; border-color: #334155; }
+
+/* Hero tagline dynamic words */
+html[data-theme="dark"] .hero-tagline .ht-word { color: #f1f5f9; }
+
+/* Orbs — reduce in dark mode */
+html[data-theme="dark"] .orb { opacity: .15; }
+
+/* ── Hero Tabs — Dark Mode ─────────────────────────────── */
+html[data-theme="dark"] .hero-tab {
+  background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important;
+}
+html[data-theme="dark"] .hero-tab:hover {
+  background: #334155 !important; color: #fff !important;
+}
+html[data-theme="dark"] .hero-tab.active {
+  background: linear-gradient(135deg,#0d9488,#0f766e) !important; color: #fff !important;
+  border-color: #14b8a6 !important; box-shadow: 0 4px 24px rgba(13,148,136,.5) !important;
+}
+
+/* Web Dashboard — Dark Mode */
+html[data-theme="dark"] .web-dashboard-screen {
+  background: #0f172a;
+  box-shadow: 0 25px 80px rgba(0,0,0,.6), 0 0 0 2px rgba(94,234,212,.12);
+}
+html[data-theme="dark"] .web-titlebar { background: #1e293b; border-bottom-color: #334155; }
+html[data-theme="dark"] .web-url-bar { background: #334155; color: #94a3b8; border-color: #475569; }
+html[data-theme="dark"] .web-sidebar { background: #0c1222; }
+html[data-theme="dark"] .web-sidebar-item { color: #94a3b8; }
+html[data-theme="dark"] .web-sidebar-item:hover { background: rgba(94,234,212,.08); }
+html[data-theme="dark"] .web-sidebar-item.active {
+  background: rgba(13,148,136,.15); color: #5eead4;
+}
+html[data-theme="dark"] .web-main { background: #1e293b; }
+html[data-theme="dark"] .web-main-header h3 { color: #f1f5f9; }
+html[data-theme="dark"] .web-stat-card { background: #0f172a; border-color: #334155; }
+html[data-theme="dark"] .web-stat-card .ws-label { color: #94a3b8; }
+html[data-theme="dark"] .web-stat-card .ws-val { color: #f1f5f9; }
+html[data-theme="dark"] .web-stat-card .ws-val.teal { color: #5eead4; }
+html[data-theme="dark"] .web-stat-card .ws-val.amber { color: #fbbf24; }
+html[data-theme="dark"] .web-stat-card .ws-val.blue { color: #60a5fa; }
+html[data-theme="dark"] .web-stat-card .ws-val.green { color: #4ade80; }
+html[data-theme="dark"] .web-table { background: #1e293b; border-color: #334155; }
+html[data-theme="dark"] .web-table-head { background: #0f172a; color: #94a3b8; border-bottom-color: #334155; }
+html[data-theme="dark"] .web-table-row { border-color: #334155; color: #cbd5e1; }
+html[data-theme="dark"] .web-table-row.highlight { background: rgba(13,148,136,.08); }
+html[data-theme="dark"] .web-badge.hot { background: rgba(220,38,38,.15); color: #fca5a5; }
+html[data-theme="dark"] .web-badge.warm { background: rgba(217,119,6,.15); color: #fcd34d; }
+html[data-theme="dark"] .web-badge.new { background: rgba(22,163,74,.15); color: #86efac; }
+html[data-theme="dark"] .web-badge.won { background: rgba(5,150,105,.15); color: #6ee7b7; }
+html[data-theme="dark"] .web-ai-panel { background: #0f172a; border-color: #334155; }
+html[data-theme="dark"] .web-ai-header { color: #fbbf24; }
+html[data-theme="dark"] .web-ai-body { color: #e2e8f0; }
+
+/* Mobile App — Dark Mode */
+html[data-theme="dark"] .mobile-app-frame {
+  background: #1e293b;
+  box-shadow: 0 25px 80px rgba(0,0,0,.6), 0 0 0 2px rgba(94,234,212,.12);
+}
+html[data-theme="dark"] .mobile-app-inner { background: #1e293b; }
+html[data-theme="dark"] .mobile-statusbar { background: #0f172a; color: #94a3b8; }
+html[data-theme="dark"] .mobile-app-header { background: #0f172a; }
+html[data-theme="dark"] .mobile-app-header span { color: #f1f5f9; }
+html[data-theme="dark"] .mobile-app-body { background: #1e293b; }
+html[data-theme="dark"] .mobile-app-nav { background: #0f172a; border-color: #334155; }
+html[data-theme="dark"] .mobile-nav-item { color: #64748b; }
+html[data-theme="dark"] .mobile-nav-item.active { color: #5eead4; }
+html[data-theme="dark"] .ma-card { background: #0f172a; border-color: #334155; color: #cbd5e1; }
+html[data-theme="dark"] .ma-card.highlight { border-color: #0d9488; background: rgba(13,148,136,.08); }
+html[data-theme="dark"] .ma-card-title { color: #f1f5f9; }
+html[data-theme="dark"] .ma-stat { background: #0f172a; border-color: #334155; }
+html[data-theme="dark"] .ma-lead-item { background: #0f172a; border-color: #334155; color: #cbd5e1; }
+html[data-theme="dark"] .ma-lead-name { color: #f1f5f9; }
+html[data-theme="dark"] .ma-lead-det { color: #94a3b8; }
+html[data-theme="dark"] .ma-calc-result { background: rgba(13,148,136,.12); border-color: #0d9488; }
+html[data-theme="dark"] .mc-label { color: #94a3b8; }
+html[data-theme="dark"] .mc-val { color: #5eead4; }
+
+/* Animations — reduce contrast in dark */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="dark"] * { transition-duration: .01ms !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PARTNER PAGE — hardcoded colors fix
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .benefit h3,
+html[data-theme="dark"] .step h3 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .benefit p,
+html[data-theme="dark"] .step p { color: #94a3b8 !important; }
+html[data-theme="dark"] .benefit,
+html[data-theme="dark"] .step {
+  background: #1e293b; border-color: #334155;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DEMO PAGE — chat bubble text visibility
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .chat-bubble.user {
+  background: #134e4a !important; color: #e2e8f0 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DEMO PAGE — device mockup interior dark mode
+   Overrides inline styles on dashboard, calculator, chat mockups
+   ═══════════════════════════════════════════════════════════ */
+
+/* View tabs sticky bar */
+html[data-theme="dark"] .view-tabs {
+  background: rgba(15,23,42,.92) !important;
+  border-bottom-color: #334155 !important;
+}
+
+/* Laptop screen inner + phone screen inner — dark bg */
+html[data-theme="dark"] .laptop-screen-inner,
+html[data-theme="dark"] .phone-screen-inner {
+  background: #0f172a !important;
+}
+
+/* All white-background elements inside device screens */
+html[data-theme="dark"] .laptop-screen-inner [style*="background:#fff"],
+html[data-theme="dark"] .laptop-screen-inner [style*="background: #fff"],
+html[data-theme="dark"] .phone-screen-inner [style*="background:#fff"],
+html[data-theme="dark"] .phone-screen-inner [style*="background: #fff"] {
+  background: #1e293b !important;
+}
+
+/* Gray-100 backgrounds inside screens → dark slate */
+html[data-theme="dark"] .laptop-screen-inner [style*="background:var(--g100)"],
+html[data-theme="dark"] .phone-screen-inner [style*="background:var(--g100)"] {
+  background: #0f172a !important;
+}
+
+/* Text color overrides for g700/g800 text inside screens */
+html[data-theme="dark"] .laptop-screen-inner [style*="color:var(--g700)"],
+html[data-theme="dark"] .phone-screen-inner [style*="color:var(--g700)"] {
+  color: #cbd5e1 !important;
+}
+html[data-theme="dark"] .laptop-screen-inner [style*="color:var(--g800)"],
+html[data-theme="dark"] .phone-screen-inner [style*="color:var(--g800)"] {
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .laptop-screen-inner [style*="color:var(--g500)"],
+html[data-theme="dark"] .phone-screen-inner [style*="color:var(--g500)"] {
+  color: #94a3b8 !important;
+}
+html[data-theme="dark"] .laptop-screen-inner [style*="color:var(--g400)"],
+html[data-theme="dark"] .phone-screen-inner [style*="color:var(--g400)"] {
+  color: #64748b !important;
+}
+
+/* Border colors inside screens */
+html[data-theme="dark"] .laptop-screen-inner [style*="border-bottom:1px solid var(--g100)"],
+html[data-theme="dark"] .phone-screen-inner [style*="border-bottom:1px solid var(--g100)"] {
+  border-bottom-color: #334155 !important;
+}
+
+/* WhatsApp chat backgrounds */
+html[data-theme="dark"] .phone-screen-inner [style*="background:#e5ddd5"],
+html[data-theme="dark"] .phone-screen-inner [style*="background: #e5ddd5"] {
+  background: #1a2e1a !important;
+}
+html[data-theme="dark"] .phone-screen-inner [style*="background:#dcf8c6"],
+html[data-theme="dark"] .phone-screen-inner [style*="background: #dcf8c6"] {
+  background: #1a3a1a !important;
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .phone-screen-inner [style*="background:#fff5"] {
+  background: rgba(30,41,59,.5) !important;
+}
+
+/* Telegram chat backgrounds */
+html[data-theme="dark"] .phone-screen-inner [style*="background:#f5f5f5"],
+html[data-theme="dark"] .phone-screen-inner [style*="background: #f5f5f5"] {
+  background: #0f172a !important;
+}
+html[data-theme="dark"] .phone-screen-inner [style*="background:#e3f2fd"],
+html[data-theme="dark"] .phone-screen-inner [style*="background: #e3f2fd"],
+html[data-theme="dark"] .phone-screen-inner [style*="background:var(--teal-50)"] {
+  background: #1e293b !important;
+}
+
+/* Calculator screen cards (mini result panels) */
+html[data-theme="dark"] .screen-card .screen-preview [style*="background:#fff"],
+html[data-theme="dark"] .screen-card .screen-preview [style*="background: #fff"] {
+  background: #1e293b !important;
+}
+html[data-theme="dark"] .screen-card .screen-label {
+  border-top-color: #334155 !important;
+}
+html[data-theme="dark"] .screen-card .screen-label h4 {
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .screen-card .screen-label p {
+  color: #cbd5e1 !important;
+}
+
+/* Bot commands grid dark mode */
+html[data-theme="dark"] .phone-screen-inner [style*="background:var(--g50)"] {
+  background: #1e293b !important;
+}
+
+/* Telegram bot commands container (uses inline background:#fff) */
+html[data-theme="dark"] [style*="background:#fff"][style*="border-radius:var(--r-xl)"] {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+html[data-theme="dark"] [style*="background:var(--g50)"][style*="border-radius:10px"] {
+  background: #0f172a !important;
+}
+html[data-theme="dark"] [style*="color:var(--g400)"] {
+  color: #94a3b8 !important;
+}
+
+/* PDF report CTA — gradient & text visibility */
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,var(--teal-50),#fff)"] {
+  background: linear-gradient(135deg, #134e4a, #1e293b) !important;
+  border-color: #0d9488 !important;
+}
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,var(--teal-50),#fff)"] p {
+  color: #cbd5e1 !important;
+}
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,var(--teal-50),#fff)"] h3 {
+  color: #5eead4 !important;
+}
+
+/* Install step description text */
+html[data-theme="dark"] .install-step h4 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .install-step p { color: #94a3b8 !important; }
+
+/* AI flow step text */
+html[data-theme="dark"] .ai-flow-step .step-text h4 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .ai-flow-step .step-text p { color: #94a3b8 !important; }
+
+/* Lang toggle in demo nav */
+html[data-theme="dark"] .lang-btn { background: #334155 !important; }
+html[data-theme="dark"] .lang-btn span { color: #94a3b8 !important; }
+html[data-theme="dark"] .lang-btn span.active { background: #1e293b !important; color: #0d9488 !important; }
+
+/* Demo hero pill badge */
+html[data-theme="dark"] .demo-hero .pill {
+  background: #134e4a !important; color: #5eead4 !important; border-color: #115e59 !important;
+}
+html[data-theme="dark"] .demo-hero p { color: #94a3b8 !important; }
+html[data-theme="dark"] .demo-hero h1 { color: #f1f5f9 !important; }
+
+/* Panel badges (info badges) */
+html[data-theme="dark"] .panel-header .badge {
+  color: #e2e8f0 !important;
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+}
+html[data-theme="dark"] .badge-telegram {
+  background: #0c4a6e !important;
+  color: #7dd3fc !important;
+  border: 1px solid #075985 !important;
+}
+html[data-theme="dark"] .badge-calc {
+  background: #451a03 !important;
+  color: #fcd34d !important;
+  border: 1px solid #78350f !important;
+}
+
+/* Telegram & calculator phone captions below frames */
+html[data-theme="dark"] .view-panel [style*="color:var(--g600)"] { color: #cbd5e1 !important; }
+html[data-theme="dark"] .view-panel [style*="color:var(--g400)"] { color: #94a3b8 !important; }
+
+/* Bot commands card in telegram panel */
+html[data-theme="dark"] .view-panel [style*="background:#fff"] { background: #1e293b !important; border-color: #334155 !important; }
+html[data-theme="dark"] .view-panel [style*="color:var(--g800)"] { color: #e2e8f0 !important; }
+html[data-theme="dark"] .view-panel [style*="background:var(--g50)"] { background: #0f172a !important; }
+
+/* Screen cards text in dark mode */
+html[data-theme="dark"] .screen-card .screen-label h4 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .screen-card .screen-label p { color: #94a3b8 !important; }
+html[data-theme="dark"] .screen-card [style*="color:var(--g800)"] { color: #e2e8f0 !important; }
+html[data-theme="dark"] .screen-card [style*="color:var(--g500)"] { color: #94a3b8 !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   CALCULATORS — low visibility text fixes
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .calc-card [style*="color:#4338ca"] { color: #a5b4fc !important; }
+html[data-theme="dark"] .calc-card [style*="color:#64748b"] { color: #94a3b8 !important; }
+html[data-theme="dark"] [style*="opacity:0.6"][style*="color:#64748b"] { color: #64748b !important; opacity: 1 !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   ONBOARDING — hardcoded light backgrounds
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] [style*="background:#fff7ed"] {
+  background: #422006 !important; border-color: #92400e; color: #fcd34d;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GETTING-STARTED — gray-500 fallback already fixed via variable
+   ═══════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════
+   LOGO 3D EFFECTS — Universal
+   ═══════════════════════════════════════════════════════════ */
+/* Light mode — subtle depth shadow */
+img[src*="logo.png"] {
+  filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.12));
+  transition: filter 0.3s;
+}
+/* Dark mode — brighten + teal glow */
+html[data-theme="dark"] img[src*="logo.png"] {
+  filter: brightness(1.5) contrast(1.05) drop-shadow(0 2px 14px rgba(20,184,166,0.4));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE — COMPREHENSIVE VISIBILITY FIXES (v4)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Start Free Trial button (navbar) — amber on dark ──── */
+html[data-theme="dark"] #navTrialBtn,
+html[data-theme="dark"] .btn-teal {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #fff !important;
+  border-color: rgba(251,191,36,.4) !important;
+  box-shadow: 0 4px 18px rgba(245,158,11,.4) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+
+/* ── Listen & Learn — Audio Help section ─────────────────── */
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,#eef2ff,#faf5ff)"] {
+  background: linear-gradient(135deg, #1e1b4b, #2e1065) !important;
+  border-color: #4338ca !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FEATURES PAGE (/features) — dark mode overrides
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] .feat-card {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+html[data-theme="dark"] .feat-card:hover {
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+html[data-theme="dark"] .feat-title { color: #f1f5f9; }
+html[data-theme="dark"] .feat-sub { color: #64748b; }
+html[data-theme="dark"] .feat-desc { color: #94a3b8; }
+html[data-theme="dark"] .feat-use {
+  background: rgba(13,148,136,.08); border-color: rgba(13,148,136,.2);
+}
+html[data-theme="dark"] .feat-use p { color: #cbd5e1; }
+html[data-theme="dark"] .feat-use code {
+  background: rgba(13,148,136,.15); color: #5eead4;
+}
+html[data-theme="dark"] .feat-tag {
+  background: #134e4a; color: #5eead4;
+}
+html[data-theme="dark"] .feat-tag.bot { background: #1e3a5f; color: #93c5fd; }
+html[data-theme="dark"] .feat-tag.web { background: #451a03; color: #fbbf24; }
+html[data-theme="dark"] .feat-tag.all { background: #1e1b4b; color: #a5b4fc; }
+html[data-theme="dark"] .feat-plan { background: #064e3b; color: #6ee7b7; }
+html[data-theme="dark"] .feat-plan.team { background: #1e3a5f; color: #93c5fd; }
+html[data-theme="dark"] .feat-plan.enterprise { background: #4a1942; color: #f9a8d4; }
+html[data-theme="dark"] .feat-icon { background: #1e293b !important; border: 1px solid #334155; }
+html[data-theme="dark"] .cat-pill {
+  background: #1e293b; border-color: #334155; color: #94a3b8;
+}
+html[data-theme="dark"] .cat-pill:hover {
+  border-color: #0d9488; color: #5eead4;
+}
+html[data-theme="dark"] .cat-pill.active {
+  background: #0d9488; color: #fff; border-color: #0d9488;
+}
+html[data-theme="dark"] .lang-btn { color: #64748b; }
+html[data-theme="dark"] .lang-toggle { border-color: #334155; }
+html[data-theme="dark"] .lang-btn.active { background: #0d9488 !important; color: #fff !important; }
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,#eef2ff,#faf5ff)"] h4 {
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] [style*="background:linear-gradient(135deg,#eef2ff,#faf5ff)"] p {
+  color: #94a3b8 !important;
+}
+
+/* ── Voice AI demo panel — chat bubbles ─────────────────── */
+/* Blue bot message bubbles (#e3f2fd) */
+html[data-theme="dark"] #demo-voice [style*="background:#e3f2fd"] {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #334155;
+}
+/* Light blue response bubbles (#f0f9ff) */
+html[data-theme="dark"] #demo-voice [style*="background:#f0f9ff"] {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #334155;
+}
+/* Green AI tip box (#dcfce7) */
+html[data-theme="dark"] #demo-voice [style*="background:#dcfce7"] {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+}
+/* Voice message label gray text (color:#666) */
+html[data-theme="dark"] #demo-voice [style*="color:#666"] {
+  color: #94a3b8 !important;
+}
+/* All chat text inside Voice AI panel */
+html[data-theme="dark"] #demo-voice .phone-screen div {
+  color: #e2e8f0;
+}
+html[data-theme="dark"] #demo-voice em {
+  color: #cbd5e1;
+}
+
+/* ── Demo panel phone interior backgrounds ─────────────── */
+/* Telegram chat backgrounds in index.html demo panels */
+html[data-theme="dark"] .demo-panel [style*="background:#e3f2fd"] {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .demo-panel [style*="background:#f0f9ff"] {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .demo-panel [style*="background:#ecfdf5"] {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+}
+html[data-theme="dark"] .demo-panel [style*="background:#fef3c7"] {
+  background: #422006 !important;
+  color: #fcd34d !important;
+}
+html[data-theme="dark"] .demo-panel [style*="background:#fce7f3"] {
+  background: #4a0530 !important;
+  color: #fbcfe8 !important;
+}
+html[data-theme="dark"] .demo-panel [style*="background:#dcfce7"] {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+}
+html[data-theme="dark"] .demo-panel [style*="color:#666"] {
+  color: #94a3b8 !important;
+}
+
+/* ── Demo tab + section header text ────────────────────── */
+html[data-theme="dark"] .demo-info h3 {
+  color: #f1f5f9 !important;
+}
+html[data-theme="dark"] .demo-info p {
+  color: #cbd5e1 !important;
+}
+html[data-theme="dark"] .demo-highlights li {
+  color: #cbd5e1 !important;
+}
+
+/* ── Demo page: badge specificity override ─────────────── */
+html[data-theme="dark"] .badge.badge-telegram {
+  background: #0c4a6e !important;
+  color: #7dd3fc !important;
+  border: 1px solid #075985 !important;
+}
+html[data-theme="dark"] .badge.badge-calc {
+  background: #451a03 !important;
+  color: #fcd34d !important;
+  border: 1px solid #78350f !important;
+}
+
+/* ── Setup promo card ──────────────────────────────────── */
+html[data-theme="dark"] .setup-promo {
+  background: #134e4a !important;
+  border-color: #0d9488 !important;
+}
+html[data-theme="dark"] .setup-promo h4 {
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .setup-promo p {
+  color: #94a3b8 !important;
+}
+
+/* ── CTA section — keep readable ──────────────────────── */
+html[data-theme="dark"] .cta-section {
+  background: linear-gradient(135deg, #020617, #0f172a) !important;
+}
+
+/* ── Browser frame mock in demo panels ─────────────────── */
+html[data-theme="dark"] .browser-body {
+  background: #0f172a !important;
+}
+
+/* ── Demo banner ──────────────────────────────────────── */
+html[data-theme="dark"] .demo-banner {
+  background: linear-gradient(135deg, #0f172a, #1e1b4b) !important;
+  border-color: #334155 !important;
+}
+html[data-theme="dark"] .demo-banner h3 {
+  color: #f1f5f9 !important;
+}
+html[data-theme="dark"] .demo-banner p {
+  color: #94a3b8 !important;
+}

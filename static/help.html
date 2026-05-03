@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Help & Guide — Sarathi-AI Business Technologies</title>
+<meta name="theme-color" content="#0d9488">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180x180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dark-mode.css?v=4">
+<script src="/static/dark-mode.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Poppins',sans-serif;background:var(--bg,#f1f5f9);color:var(--text,#1e293b);line-height:1.7}
+
+/* ── Navbar ── */
+.navbar{background:rgba(255,255,255,0.92);backdrop-filter:blur(16px) saturate(180%);border-bottom:1px solid var(--border,#e2e8f0);padding:14px 24px;position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+html[data-theme="dark"] .navbar{background:rgba(15,23,42,0.95);border-bottom-color:#334155}
+.navbar .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15em;text-decoration:none}
+.navbar .logo .brand-name{color:var(--text,#312e81)}
+.navbar .logo .ai-tag{color:#0d9488}
+.navbar nav{display:flex;align-items:center;gap:6px}
+.navbar nav a{margin-left:14px;color:var(--muted,#475569);text-decoration:none;font-weight:500;font-size:0.9em;transition:color .2s}
+.navbar nav a:hover{color:#0d9488}
+
+/* ── Language Toggle ── */
+.lang-toggle{display:inline-flex;align-items:center;gap:0;border:1.5px solid var(--border,#e2e8f0);border-radius:8px;overflow:hidden;margin-left:10px}
+.lang-btn{padding:4px 10px;font-size:.82em;font-weight:600;cursor:pointer;background:transparent;border:none;color:var(--muted,#64748b);transition:all .2s;font-family:inherit}
+.lang-btn.active{background:#0d9488;color:#fff}
+.lang-btn:hover:not(.active){background:rgba(13,148,136,.1)}
+
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,#0d9488,#14b8a6);padding:64px 24px;text-align:center;color:#fff}
+.hero h1{font-size:2.2em;font-weight:800;margin-bottom:8px}
+.hero p{font-size:1.1em;opacity:0.9;max-width:600px;margin:0 auto}
+
+/* ── Container ── */
+.container{max-width:1100px;margin:0 auto;padding:40px 24px}
+
+/* ── Search ── */
+.search-box{position:relative;max-width:500px;margin:-28px auto 32px}
+.search-box input{width:100%;padding:14px 20px 14px 48px;border:2px solid var(--border,#e2e8f0);border-radius:14px;
+  font-size:1em;background:var(--card,#fff);color:var(--text,#1e293b);box-shadow:0 4px 20px rgba(0,0,0,0.08);outline:none;font-family:inherit}
+.search-box input:focus{border-color:#0d9488}
+.search-box::before{content:"🔍";position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:1.1em}
+
+/* ── Accordion ── */
+.section{margin-bottom:32px}
+.section h2{font-size:1.3em;color:#0d9488;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--border,#e2e8f0);
+  display:flex;align-items:center;gap:10px}
+.faq{background:var(--card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:14px;margin-bottom:8px;overflow:hidden;transition:box-shadow .25s}
+.faq:hover{box-shadow:0 2px 12px rgba(13,148,136,0.08)}
+.faq-q{padding:16px 20px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  font-size:0.95em;user-select:none;transition:background .2s;color:var(--text,#1e293b)}
+.faq-q:hover{background:rgba(13,148,136,0.04)}
+.faq-q .arrow{font-size:0.7em;color:var(--muted,#94a3b8);transition:transform .3s}
+.faq.open .arrow{transform:rotate(180deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .4s ease,padding .3s;padding:0 20px}
+.faq.open .faq-a{max-height:800px;padding:0 20px 20px}
+.faq-a p,.faq-a li{color:var(--muted,#475569);font-size:0.92em;margin-bottom:8px}
+.faq-a ol,.faq-a ul{padding-left:20px}
+.faq-a code{background:rgba(13,148,136,0.08);color:#0d9488;padding:2px 8px;border-radius:6px;font-size:0.88em}
+html[data-theme="dark"] .faq-a code{background:rgba(13,148,136,0.15);color:#5eead4}
+.faq-a .tip{background:rgba(245,158,11,0.08);border-left:4px solid #f59e0b;padding:10px 14px;border-radius:0 8px 8px 0;
+  font-size:0.88em;margin:12px 0;color:var(--text,#1e293b)}
+
+/* ── Steps ── */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0}
+.step{background:var(--card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:24px;text-align:center}
+.step .num{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0d9488,#14b8a6);
+  color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;margin-bottom:12px}
+.step h3{font-size:0.95em;margin-bottom:6px;color:var(--text,#1e293b)}
+.step p{font-size:0.85em;color:var(--muted,#64748b)}
+
+/* ── CTA ── */
+.cta-section{text-align:center;padding:48px 24px;background:linear-gradient(135deg,#0d9488,#14b8a6);
+  border-radius:20px;margin:40px 0}
+.cta-section h2{color:#fff;margin-bottom:8px;font-size:1.5em}
+.cta-section p{color:rgba(255,255,255,0.85);margin-bottom:24px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:12px;
+  font-weight:600;font-size:0.95em;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:all .25s}
+.btn-white{background:#fff;color:#0d9488;box-shadow:0 4px 20px rgba(0,0,0,0.15);font-weight:700}
+.btn-white:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(0,0,0,0.2)}
+html[data-theme="dark"] .cta-section{background:linear-gradient(135deg,#0f766e,#0d9488)}
+html[data-theme="dark"] .btn-white{background:#fff;color:#0d9488;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+html[data-theme="dark"] .cta-section h2{color:#fff}
+html[data-theme="dark"] .cta-section p{color:rgba(255,255,255,0.9)}
+
+.footer{background:#0f172a;color:#fff;text-align:center;padding:48px 24px;margin-top:40px}
+.footer .brand{display:flex;align-items:center;justify-content:center;gap:8px;font-size:1.15em;font-weight:800;margin-bottom:4px}
+.footer .brand .ai-tag{color:#14b8a6}
+.footer .tagline{color:#94a3b8;font-size:0.85em;margin-bottom:16px}
+.footer .links{margin-bottom:16px;display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+.footer .links a{color:#94a3b8;font-size:0.85em;transition:color .2s}
+.footer .links a:hover{color:#14b8a6}
+.footer .copy{color:#64748b;font-size:0.72em;opacity:0.6}
+
+/* ── Audio Player Btn ── */
+.audio-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:100px;
+  background:linear-gradient(135deg,#0d9488,#0f766e);border:2px solid #0d9488;color:#fff;font-size:0.85em;
+  font-weight:700;cursor:pointer;transition:all .3s;font-family:inherit;position:relative;
+  box-shadow:0 2px 12px rgba(13,148,136,0.3);letter-spacing:0.02em}
+.audio-btn:hover{background:linear-gradient(135deg,#0f766e,#115e59);transform:translateY(-2px);box-shadow:0 4px 20px rgba(13,148,136,0.4)}
+.audio-btn.playing{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#f59e0b;box-shadow:0 2px 16px rgba(245,158,11,0.4)}
+.audio-btn .audio-icon{font-size:1.15em}
+.audio-btn .audio-label{}
+.audio-btn::after{content:'';position:absolute;inset:-3px;border-radius:100px;border:2px solid rgba(13,148,136,0.3);animation:audioPulse 2s ease-in-out infinite;pointer-events:none}
+@keyframes audioPulse{0%,100%{opacity:0.4;transform:scale(1)}50%{opacity:0;transform:scale(1.08)}}
+html[data-theme="dark"] .audio-btn{background:linear-gradient(135deg,#14b8a6,#0d9488);border-color:#14b8a6;color:#fff;box-shadow:0 2px 12px rgba(20,184,166,0.3)}
+html[data-theme="dark"] .audio-btn:hover{background:linear-gradient(135deg,#0d9488,#0f766e);box-shadow:0 4px 20px rgba(20,184,166,0.4)}
+html[data-theme="dark"] .audio-btn.playing{background:linear-gradient(135deg,#f59e0b,#d97706);border-color:#f59e0b}
+
+/* ── Tooltip Bubble (positioned near first audio btn) ── */
+.audio-tooltip{position:absolute;top:-50px;left:50%;transform:translateX(-50%);background:#0d9488;color:#fff;padding:10px 16px;border-radius:12px;
+  font-size:0.82em;font-weight:600;box-shadow:0 8px 32px rgba(13,148,136,0.35);z-index:200;
+  display:flex;align-items:center;gap:8px;cursor:pointer;animation:tooltipBounce 1s ease-out both;
+  white-space:nowrap;line-height:1.3}
+.audio-tooltip::after{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
+  border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid #0d9488}
+.audio-tooltip .tt-icon{font-size:1.2em;flex-shrink:0}
+.audio-tooltip .tt-close{margin-left:6px;opacity:0.7;font-size:1em;cursor:pointer}
+.audio-tooltip .tt-close:hover{opacity:1}
+.audio-tooltip.hidden{display:none}
+@keyframes tooltipBounce{0%{opacity:0;transform:translateX(-50%) translateY(10px)}60%{transform:translateX(-50%) translateY(-4px)}100%{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+@media(max-width:640px){
+  .hero h1{font-size:1.5em}
+  .container{padding:24px 16px}
+  .audio-tooltip{white-space:normal;min-width:180px}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/" class="logo"><img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:80px;vertical-align:middle;margin-right:8px;border-radius:6px" onerror="this.style.display='none'"> <span class="brand-name">Sarathi<span class="ai-tag">-AI</span></span></a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/help" style="color:#0d9488">Help</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <div class="lang-toggle">
+      <button class="lang-btn active" id="lang-en" onclick="setHelpLang('en')">EN</button>
+      <button class="lang-btn" id="lang-hi" onclick="setHelpLang('hi')">हिं</button>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+  </nav>
+</div>
+
+<div class="hero">
+  <h1 data-en="Help & Guide" data-hi="सहायता और गाइड">Help & Guide</h1>
+  <p data-en="Everything you need to know about setting up and using Sarathi-AI for your insurance business" data-hi="अपने बीमा व्यवसाय के लिए Sarathi-AI सेटअप और उपयोग करने की पूरी जानकारी">Everything you need to know about setting up and using Sarathi-AI for your insurance business</p>
+</div>
+
+<div class="container">
+
+<div class="search-box">
+  <input type="text" id="searchInput" data-en-placeholder="Search help topics..." data-hi-placeholder="सहायता खोजें..." placeholder="Search help topics..." oninput="filterFAQs()">
+</div>
+
+<!-- ── Getting Started ── -->
+<div class="section" data-section="getting-started">
+  <h2>🚀 <span data-en="Getting Started" data-hi="शुरू करें">Getting Started</span>
+    <button class="audio-btn" onclick="playAudio(this,'getting_started')" title="Listen to this section"><span class="audio-icon">🔊</span> <span class="audio-label" data-en="Listen" data-hi="सुनें">Listen</span></button>
+  </h2>
+
+  <div class="steps">
+    <div class="step"><div class="num">1</div><h3 data-en="Sign Up" data-hi="साइन अप">Sign Up</h3><p data-en="Enter your firm details on the homepage. Your 14-day free trial starts instantly." data-hi="होमपेज पर अपनी फर्म की जानकारी दें। 14 दिन का फ्री ट्रायल तुरंत शुरू हो जाता है।">Enter your firm details on the homepage. Your 14-day free trial starts instantly.</p></div>
+    <div class="step"><div class="num">2</div><h3 data-en="Complete Onboarding" data-hi="ऑनबोर्डिंग पूरी करें">Complete Onboarding</h3><p data-en="Connect your Telegram bot and customize your branding." data-hi="अपना Telegram बॉट कनेक्ट करें और ब्रांडिंग कस्टमाइज़ करें।">Connect your Telegram bot and customize your branding.</p></div>
+    <div class="step"><div class="num">3</div><h3 data-en="Start Using CRM" data-hi="CRM इस्तेमाल शुरू करें">Start Using CRM</h3><p data-en="Add leads, manage policies, and use calculators via Telegram or web." data-hi="लीड जोड़ें, पॉलिसी मैनेज करें, और Telegram या वेब से कैलकुलेटर इस्तेमाल करें।">Add leads, manage policies, and use calculators via Telegram or web.</p></div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I sign up for Sarathi-AI?" data-hi="Sarathi-AI पर साइन अप कैसे करें?">How do I sign up for Sarathi-AI?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <ol>
+        <li data-en='Visit our <a href="/">homepage</a> and scroll to the pricing section' data-hi='हमारे <a href="/">होमपेज</a> पर जाएं और प्राइसिंग सेक्शन तक स्क्रॉल करें'>Visit our <a href="/">homepage</a> and scroll to the pricing section</li>
+        <li data-en='Click "Start Free Trial" on your preferred plan' data-hi='अपने पसंदीदा प्लान पर "Start Free Trial" पर क्लिक करें'>Click "Start Free Trial" on your preferred plan</li>
+        <li data-en="Fill in your firm name, your name, phone number, and email" data-hi="फर्म का नाम, अपना नाम, फोन नंबर और ईमेल भरें">Fill in your firm name, your name, phone number, and email</li>
+        <li data-en='Click "Start My Free Trial" — you&#39;ll get 14 days free, no credit card needed' data-hi='"Start My Free Trial" पर क्लिक करें — 14 दिन फ्री, कोई क्रेडिट कार्ड नहीं चाहिए'>Click "Start My Free Trial" — you'll get 14 days free, no credit card needed</li>
+        <li data-en="You'll be redirected to the onboarding page to complete setup" data-hi="सेटअप पूरा करने के लिए ऑनबोर्डिंग पेज पर रिडायरेक्ट होंगे">You'll be redirected to the onboarding page to complete setup</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What happens during onboarding?" data-hi="ऑनबोर्डिंग में क्या होता है?">What happens during onboarding?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Onboarding has 2 simple steps:" data-hi="ऑनबोर्डिंग में 2 आसान स्टेप हैं:">Onboarding has 2 simple steps:</p>
+      <ol>
+        <li data-en="<strong>Telegram Bot:</strong> Create a bot via @BotFather on Telegram, then paste the token in Sarathi-AI. This becomes your personal CRM bot." data-hi="<strong>Telegram बॉट:</strong> Telegram पर @BotFather से बॉट बनाएं, फिर टोकन Sarathi-AI में पेस्ट करें। यह आपका पर्सनल CRM बॉट बन जाता है।"><strong>Telegram Bot:</strong> Create a bot via @BotFather on Telegram, then paste the token in Sarathi-AI. This becomes your personal CRM bot.</li>
+        <li data-en="<strong>Branding:</strong> Add your tagline, contact details, and credentials. These appear on calculators and reports you share with clients." data-hi="<strong>ब्रांडिंग:</strong> अपनी टैगलाइन, कॉन्टैक्ट डिटेल्स और क्रेडेंशियल्स जोड़ें। ये कैलकुलेटर और रिपोर्ट्स पर दिखती हैं।"><strong>Branding:</strong> Add your tagline, contact details, and credentials. These appear on calculators and reports you share with clients.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I create a Telegram bot?" data-hi="Telegram बॉट कैसे बनाएं?">How do I create a Telegram bot?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <ol>
+        <li data-en="Open Telegram and search for <code>@BotFather</code>" data-hi="Telegram खोलें और <code>@BotFather</code> सर्च करें">Open Telegram and search for <code>@BotFather</code></li>
+        <li data-en="Send <code>/newbot</code>" data-hi="<code>/newbot</code> भेजें">Send <code>/newbot</code></li>
+        <li data-en='Give your bot a name (e.g., "MyFirm Insurance Bot")' data-hi='बॉट को नाम दें (जैसे "MyFirm Insurance Bot")'>Give your bot a name (e.g., "MyFirm Insurance Bot")</li>
+        <li data-en='Give it a username ending in "bot" (e.g., <code>myfirm_insurance_bot</code>)' data-hi='"bot" से खत्म होने वाला यूज़रनेम दें (जैसे <code>myfirm_insurance_bot</code>)'>Give it a username ending in "bot" (e.g., <code>myfirm_insurance_bot</code>)</li>
+        <li data-en="BotFather will give you a token like <code>1234567890:ABCdef...</code>" data-hi="BotFather आपको एक टोकन देगा जैसे <code>1234567890:ABCdef...</code>">BotFather will give you a token like <code>1234567890:ABCdef...</code></li>
+        <li data-en="Copy this token and paste it in the Sarathi-AI onboarding page" data-hi="इस टोकन को कॉपी करें और Sarathi-AI ऑनबोर्डिंग पेज पर पेस्ट करें">Copy this token and paste it in the Sarathi-AI onboarding page</li>
+      </ol>
+      <div class="tip" data-en="💡 Keep your bot token secret! Don't share it with anyone." data-hi="💡 अपना बॉट टोकन गुप्त रखें! किसी से शेयर न करें।">💡 Keep your bot token secret! Don't share it with anyone.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Voice-First CRM ── -->
+<div class="section" data-section="voice">
+  <h2>🎙️ <span data-en="Voice-First CRM (AI-Powered)" data-hi="वॉइस-फर्स्ट CRM (AI-पावर्ड)">Voice-First CRM (AI-Powered)</span>
+    <button class="audio-btn" onclick="playAudio(this,'voice_crm')" title="Listen to this section"><span class="audio-icon">🔊</span> <span class="audio-label" data-en="Listen" data-hi="सुनें">Listen</span></button>
+  </h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What is Voice-First CRM?" data-hi="वॉइस-फर्स्ट CRM क्या है?">What is Voice-First CRM?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Voice-First CRM lets you manage your entire business by just speaking into your Telegram bot. No typing needed! Just record a voice note and Sarathi-AI will understand what you want to do." data-hi="वॉइस-फर्स्ट CRM से आप सिर्फ बोलकर अपना पूरा बिज़नेस मैनेज कर सकते हैं। टाइपिंग की ज़रूरत नहीं! बस अपने Telegram बॉट पर वॉइस नोट भेजें और Sarathi-AI समझ लेगा।">Voice-First CRM lets you manage your entire business by just speaking into your Telegram bot. No typing needed! Just record a voice note and Sarathi-AI will understand what you want to do.</p>
+      <p data-en="<strong>6 Voice Actions Available:</strong>" data-hi="<strong>6 वॉइस एक्शन उपलब्ध:</strong>"><strong>6 Voice Actions Available:</strong></p>
+      <ul>
+        <li data-en="<strong>Create Lead:</strong> &quot;Naya client Priya, phone 9876543210, health insurance chahiye&quot;" data-hi="<strong>लीड बनाएं:</strong> &quot;नया क्लाइंट प्रिया, फोन 9876543210, हेल्थ इंश्योरेंस चाहिए&quot;"><strong>Create Lead:</strong> "Naya client Priya, phone 9876543210, health insurance chahiye"</li>
+        <li data-en="<strong>Log Meeting:</strong> &quot;Ramesh ji se mila, health insurance discuss kiya, next week follow up karna hai&quot;" data-hi="<strong>मीटिंग लॉग:</strong> &quot;रमेश जी से मिला, हेल्थ इंश्योरेंस डिस्कस किया, अगले हफ्ते फॉलो-अप करना है&quot;"><strong>Log Meeting:</strong> "Ramesh ji se mila, health insurance discuss kiya, next week follow up karna hai"</li>
+        <li data-en="<strong>Update Stage:</strong> &quot;Priya ka stage contacted pe update karo&quot;" data-hi="<strong>स्टेज अपडेट:</strong> &quot;प्रिया का स्टेज contacted पे अपडेट करो&quot;"><strong>Update Stage:</strong> "Priya ka stage contacted pe update karo"</li>
+        <li data-en="<strong>Create Reminder:</strong> &quot;Kal shaam ko Suresh ji ko call karna hai&quot;" data-hi="<strong>रिमाइंडर बनाएं:</strong> &quot;कल शाम को सुरेश जी को कॉल करना है&quot;"><strong>Create Reminder:</strong> "Kal shaam ko Suresh ji ko call karna hai"</li>
+        <li data-en="<strong>Add Note:</strong> &quot;Ramesh ji ne bola ki wife ke liye bhi policy chahiye&quot;" data-hi="<strong>नोट जोड़ें:</strong> &quot;रमेश जी ने बोला कि वाइफ के लिए भी पॉलिसी चाहिए&quot;"><strong>Add Note:</strong> "Ramesh ji ne bola ki wife ke liye bhi policy chahiye"</li>
+        <li data-en="<strong>General:</strong> Any other voice note — AI shows you options to create lead, log meeting, or set reminder" data-hi="<strong>जनरल:</strong> कोई भी वॉइस नोट — AI आपको लीड बनाने, मीटिंग लॉग या रिमाइंडर के ऑप्शन दिखाता है"><strong>General:</strong> Any other voice note — AI shows you options to create lead, log meeting, or set reminder</li>
+      </ul>
+      <div class="tip" data-en="💡 Speak naturally in Hindi, English, or Hinglish — the AI understands all three! Perfect for field advisors on the go." data-hi="💡 हिंदी, इंग्लिश या हिंगलिश में बात करें — AI तीनों समझता है! फील्ड एडवाइज़र के लिए बेस्ट।">💡 Speak naturally in Hindi, English, or Hinglish — the AI understands all three! Perfect for field advisors on the go.</div>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I use voice to create a lead?" data-hi="वॉइस से लीड कैसे बनाएं?">How do I use voice to create a lead?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <ol>
+        <li data-en="Open your Telegram CRM bot" data-hi="अपना Telegram CRM बॉट खोलें">Open your Telegram CRM bot</li>
+        <li data-en="Record a voice note saying something like: &quot;New client Mohan Kumar, phone 98765 43210, Delhi, health insurance chahiye, budget 500 per month&quot;" data-hi="वॉइस नोट रिकॉर्ड करें, जैसे: &quot;नया क्लाइंट मोहन कुमार, फोन 98765 43210, दिल्ली, हेल्थ इंश्योरेंस चाहिए, बजट 500 पर मंथ&quot;">Record a voice note saying something like: "New client Mohan Kumar, phone 98765 43210, Delhi, health insurance chahiye, budget 500 per month"</li>
+        <li data-en="AI extracts all details automatically — name, phone, city, need, budget, follow-up date" data-hi="AI सारी डिटेल्स ऑटोमैटिक निकालता है — नाम, फोन, शहर, ज़रूरत, बजट, फॉलो-अप डेट">AI extracts all details automatically — name, phone, city, need, budget, follow-up date</li>
+        <li data-en="You see a confirmation card — tap ✅ Create Lead or ✏️ Fill Missing to add any details the AI couldn't catch" data-hi="कन्फर्मेशन कार्ड दिखता है — ✅ लीड बनाएं या ✏️ जानकारी भरें पर टैप करें">You see a confirmation card — tap ✅ Create Lead or ✏️ Fill Missing to add any details the AI couldn't catch</li>
+      </ol>
+      <div class="tip" data-en="💡 You can also say dates and times naturally: &quot;kal follow up 4 baje&quot;, &quot;agle hafte subah 10 baje&quot;, &quot;next Monday at 3 PM&quot; — AI understands dates AND times!" data-hi="💡 तारीख और टाइम भी बोल सकते हैं: &quot;कल फॉलो-अप 4 बजे&quot;, &quot;अगले हफ्ते सुबह 10 बजे&quot;, &quot;next Monday at 3 PM&quot; — AI डेट और टाइम दोनों समझता है!">💡 You can also say dates and times naturally: "kal follow up 4 baje", "agle hafte subah 10 baje", "next Monday at 3 PM" — AI understands dates AND times!</div>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How does voice meeting logging work?" data-hi="वॉइस से मीटिंग लॉग कैसे होती है?">How does voice meeting logging work?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="After a client meeting, just record a voice note:" data-hi="क्लाइंट मीटिंग के बाद, बस वॉइस नोट रिकॉर्ड करें:">After a client meeting, just record a voice note:</p>
+      <p data-en="<em>&quot;Aaj Sharma ji se mila unke office mein, term plan discuss kiya 1 crore ka, interested hain, agle Tuesday ko follow up karna hai&quot;</em>" data-hi="<em>&quot;आज शर्मा जी से मिला उनके ऑफिस में, टर्म प्लान डिस्कस किया 1 करोड़ का, interested हैं, अगले Tuesday को फॉलो-अप करना है&quot;</em>"><em>"Aaj Sharma ji se mila unke office mein, term plan discuss kiya 1 crore ka, interested hain, agle Tuesday ko follow up karna hai"</em></p>
+      <p data-en="Sarathi-AI will automatically:" data-hi="Sarathi-AI ऑटोमैटिक:">Sarathi-AI will automatically:</p>
+      <ul>
+        <li data-en="Find &quot;Sharma ji&quot; in your lead database (fuzzy matching)" data-hi="आपकी लीड डेटाबेस में &quot;शर्मा जी&quot; खोजेगा (fuzzy matching)">Find "Sharma ji" in your lead database (fuzzy matching)</li>
+        <li data-en="Log the meeting with a summary" data-hi="मीटिंग लॉग करेगा समरी के साथ">Log the meeting with a summary</li>
+        <li data-en="Set a follow-up reminder for Tuesday" data-hi="Tuesday के लिए फॉलो-अप रिमाइंडर सेट करेगा">Set a follow-up reminder for Tuesday</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What happens if voice doesn't work well on slow network?" data-hi="स्लो नेटवर्क पर वॉइस काम नहीं करेगा तो?">What happens if voice doesn't work well on slow network?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Sarathi-AI is built for Indian networks! It automatically:" data-hi="Sarathi-AI Indian नेटवर्क्स के लिए बना है! यह ऑटोमैटिक:">Sarathi-AI is built for Indian networks! It automatically:</p>
+      <ul>
+        <li data-en="Shows &quot;Processing... might take a few seconds&quot; so you know it's working" data-hi="&quot;Processing... कुछ सेकंड और&quot; दिखाता है ताकि आपको पता रहे">Shows "Processing... might take a few seconds" so you know it's working</li>
+        <li data-en="Retries automatically if network drops — up to 2 retries" data-hi="नेटवर्क डिस्कनेक्ट हो तो ऑटो-रिट्राई — 2 बार तक">Retries automatically if network drops — up to 2 retries</li>
+        <li data-en="Keeps you updated: &quot;Network hiccup! Retrying...&quot;" data-hi="आपको अपडेट करता है: &quot;Network hiccup! Retrying...&quot;">Keeps you updated: "Network hiccup! Retrying..."</li>
+      </ul>
+      <div class="tip" data-en="💡 Voice notes work even on 2G-level connectivity. Just speak clearly and wait for the response." data-hi="💡 वॉइस नोट 2G जैसी कनेक्टिविटी पर भी चलता है। बस साफ बोलें और रिस्पॉन्स का इंतज़ार करें।">💡 Voice notes work even on 2G-level connectivity. Just speak clearly and wait for the response.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── AI Tools ── -->
+<div class="section" data-section="ai-tools">
+  <h2>🤖 <span data-en="AI Tools (via Telegram Bot)" data-hi="AI टूल्स (Telegram बॉट से)">AI Tools (via Telegram Bot)</span>
+    <button class="audio-btn" onclick="playAudio(this,'ai_tools')" title="Listen to this section"><span class="audio-icon">🔊</span> <span class="audio-label" data-en="Listen" data-hi="सुनें">Listen</span></button>
+  </h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What AI tools are available?" data-hi="कौन-कौन से AI टूल्स उपलब्ध हैं?">What AI tools are available?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Your Telegram bot includes 12 AI-powered tools:" data-hi="आपके Telegram बॉट में 12 AI-पावर्ड टूल्स हैं:">Your Telegram bot includes 12 AI-powered tools:</p>
+      <ul>
+        <li data-en="<strong>🎯 Sales Pitch:</strong> Generate personalized pitches for any need type" data-hi="<strong>🎯 सेल्स पिच:</strong> किसी भी ज़रूरत के लिए पर्सनलाइज़ पिच बनाएं"><strong>🎯 Sales Pitch:</strong> Generate personalized pitches for any need type</li>
+        <li data-en="<strong>❓ Objection Handler:</strong> AI responses to common client objections" data-hi="<strong>❓ ऑब्जेक्शन हैंडलर:</strong> क्लाइंट के आम बहानों के AI जवाब"><strong>❓ Objection Handler:</strong> AI responses to common client objections</li>
+        <li data-en="<strong>✉️ Follow-up Message:</strong> Auto-draft follow-up messages for leads" data-hi="<strong>✉️ फॉलो-अप मैसेज:</strong> लीड्स के लिए ऑटो-ड्राफ्ट फॉलो-अप मैसेज"><strong>✉️ Follow-up Message:</strong> Auto-draft follow-up messages for leads</li>
+        <li data-en="<strong>📊 Lead Summary:</strong> Get AI-powered analysis of any lead" data-hi="<strong>📊 लीड समरी:</strong> किसी भी लीड की AI-पावर्ड एनालिसिस लें"><strong>📊 Lead Summary:</strong> Get AI-powered analysis of any lead</li>
+        <li data-en="<strong>📋 Policy Explainer:</strong> Explain policy documents in simple language" data-hi="<strong>📋 पॉलिसी एक्सप्लेनर:</strong> पॉलिसी डॉक्यूमेंट्स को आसान भाषा में समझाएं"><strong>📋 Policy Explainer:</strong> Explain policy documents in simple language</li>
+        <li data-en="<strong>📑 Claim Assist:</strong> Help clients prepare claim documentation" data-hi="<strong>📑 क्लेम असिस्ट:</strong> क्लाइंट्स की क्लेम डॉक्यूमेंटेशन में मदद"><strong>📑 Claim Assist:</strong> Help clients prepare claim documentation</li>
+        <li data-en="<strong>💬 Client Greeting:</strong> Birthday, anniversary, and festive greetings" data-hi="<strong>💬 क्लाइंट ग्रीटिंग:</strong> बर्थडे, एनिवर्सरी और त्योहारों की शुभकामनाएं"><strong>💬 Client Greeting:</strong> Birthday, anniversary, and festive greetings</li>
+        <li data-en="<strong>📈 Market Update:</strong> Daily insurance market insights" data-hi="<strong>📈 मार्केट अपडेट:</strong> डेली इंश्योरेंस मार्केट इनसाइट्स"><strong>📈 Market Update:</strong> Daily insurance market insights</li>
+        <li data-en="<strong>🧠 Need Analyzer:</strong> Analyze client needs and recommend products" data-hi="<strong>🧠 नीड एनालाइज़र:</strong> क्लाइंट की ज़रूरतें एनालाइज़ करें और प्रोडक्ट रिकमेंड करें"><strong>🧠 Need Analyzer:</strong> Analyze client needs and recommend products</li>
+      </ul>
+      <div class="tip" data-en="💡 Access all AI tools via the 🤖 AI Tools button on your Telegram bot's main menu." data-hi="💡 सभी AI टूल्स Telegram बॉट के मेन मेनू पर 🤖 AI Tools बटन से एक्सेस करें।">💡 Access all AI tools via the 🤖 AI Tools button on your Telegram bot's main menu.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Using the CRM ── -->
+<div class="section" data-section="crm">
+  <h2>📋 <span data-en="Using the CRM (via Telegram)" data-hi="CRM का उपयोग (Telegram से)">Using the CRM (via Telegram)</span>
+    <button class="audio-btn" onclick="playAudio(this,'crm')" title="Listen to this section"><span class="audio-icon">🔊</span> <span class="audio-label" data-en="Listen" data-hi="सुनें">Listen</span></button>
+  </h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I add a new lead?" data-hi="नई लीड कैसे जोड़ें?">How do I add a new lead?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="You have multiple ways to add leads:" data-hi="लीड जोड़ने के कई तरीके हैं:">You have multiple ways to add leads:</p>
+      <ul>
+        <li data-en="<strong>Voice:</strong> Record a voice note with client details (fastest!)" data-hi="<strong>वॉइस:</strong> क्लाइंट डिटेल्स के साथ वॉइस नोट भेजें (सबसे तेज़!)"><strong>Voice:</strong> Record a voice note with client details (fastest!)</li>
+        <li data-en="<strong>Command:</strong> Type <code>/addlead</code> — the bot asks step-by-step for details" data-hi="<strong>कमांड:</strong> <code>/addlead</code> टाइप करें — बॉट स्टेप-बाय-स्टेप डिटेल्स पूछता है"><strong>Command:</strong> Type <code>/addlead</code> — the bot asks step-by-step for details</li>
+        <li data-en="<strong>Dashboard:</strong> Use the web dashboard to add leads via the &quot;+ Add Lead&quot; button" data-hi="<strong>डैशबोर्ड:</strong> वेब डैशबोर्ड पर &quot;+ Add Lead&quot; बटन से लीड जोड़ें"><strong>Dashboard:</strong> Use the web dashboard to add leads via the "+ Add Lead" button</li>
+        <li data-en="<strong>CSV Import:</strong> Upload a CSV file to import multiple leads at once (owners only)" data-hi="<strong>CSV इम्पोर्ट:</strong> एक बार में कई लीड इम्पोर्ट करने के लिए CSV फाइल अपलोड करें (ओनर्स के लिए)"><strong>CSV Import:</strong> Upload a CSV file to import multiple leads at once (owners only)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I log a policy?" data-hi="पॉलिसी कैसे लॉग करें?">How do I log a policy?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="When a lead converts to a customer, use:" data-hi="जब लीड कस्टमर बन जाए, यूज़ करें:">When a lead converts to a customer, use:</p>
+      <p><code>/addpolicy</code></p>
+      <p data-en="Enter the policy details: type (life/health/motor/etc.), premium amount, start date, and the lead's name. The bot will track renewals automatically." data-hi="पॉलिसी डिटेल्स दें: टाइप (लाइफ/हेल्थ/मोटर आदि), प्रीमियम, स्टार्ट डेट, और लीड का नाम। बॉट ऑटोमैटिक रिन्यूअल ट्रैक करेगा।">Enter the policy details: type (life/health/motor/etc.), premium amount, start date, and the lead's name. The bot will track renewals automatically.</p>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do follow-up reminders work?" data-hi="फॉलो-अप रिमाइंडर कैसे काम करते हैं?">How do follow-up reminders work?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Sarathi-AI has a complete follow-up accountability system:" data-hi="Sarathi-AI में एक पूरा फॉलो-अप एकाउंटेबिलिटी सिस्टम है:">Sarathi-AI has a complete follow-up accountability system:</p>
+      <ul>
+        <li data-en="<strong>⏰ 30-min Pre-Reminders:</strong> Set a follow-up with time (e.g. 'kal 4 baje Sharma ji ko call') and get a reminder 30 minutes before — with ✅ Done / 🕐 Snooze buttons" data-hi="<strong>⏰ 30 मिनट पहले रिमाइंडर:</strong> टाइम के साथ फॉलो-अप सेट करें (जैसे 'कल 4 बजे शर्मा जी को कॉल') और 30 मिनट पहले रिमाइंडर मिलेगा — ✅ Done / 🕐 Snooze बटन के साथ"><strong>⏰ 30-min Pre-Reminders:</strong> Set a follow-up with time (e.g. 'kal 4 baje Sharma ji ko call') and get a reminder 30 minutes before — with ✅ Done / 🕐 Snooze buttons</li>
+        <li data-en="<strong>📋 Post Follow-up Notes:</strong> After tapping Done, Sarathi-AI asks 'How did it go?' — send a voice note or text to record notes on the lead's timeline" data-hi="<strong>📋 फॉलो-अप के बाद नोट्स:</strong> Done टैप करने के बाद, Sarathi-AI पूछता है 'कैसा रहा?' — वॉइस नोट या टाइप करके लीड की टाइमलाइन पर नोट्स सेव करें"><strong>📋 Post Follow-up Notes:</strong> After tapping Done, Sarathi-AI asks 'How did it go?' — send a voice note or text to record notes on the lead's timeline</li>
+        <li data-en="<strong>📊 Lead Timeline:</strong> Every interaction, note, and follow-up is tracked on a visual timeline — visible on your dashboard" data-hi="<strong>📊 लीड टाइमलाइन:</strong> हर इंटरैक्शन, नोट, और फॉलो-अप एक विज़ुअल टाइमलाइन पर ट्रैक होता है — आपके डैशबोर्ड पर दिखता है"><strong>📊 Lead Timeline:</strong> Every interaction, note, and follow-up is tracked on a visual timeline — visible on your dashboard</li>
+        <li data-en="<strong>🔄 Smart Nudges:</strong> Morning agenda, afternoon reminders, and evening missed follow-up alerts — delivered to your Telegram" data-hi="<strong>🔄 स्मार्ट नज:</strong> सुबह एजेंडा, दोपहर रिमाइंडर, और शाम को मिस्ड फॉलो-अप अलर्ट — आपके Telegram पर"><strong>🔄 Smart Nudges:</strong> Morning agenda, afternoon reminders, and evening missed follow-up alerts — delivered to your Telegram</li>
+        <li data-en="<strong>🎂 Birthdays & Renewals:</strong> Auto birthday greetings and policy renewal reminders (30-day advance)" data-hi="<strong>🎂 बर्थडे और रिन्यूअल:</strong> ऑटो बर्थडे ग्रीटिंग्स और पॉलिसी रिन्यूअल रिमाइंडर (30 दिन पहले)"><strong>🎂 Birthdays & Renewals:</strong> Auto birthday greetings and policy renewal reminders (30-day advance)</li>
+        <li data-en="<strong>🎙️ Voice Reminders:</strong> Say &quot;kal Suresh ko call karna hai 4 baje&quot; — AI creates a timed reminder automatically!" data-hi="<strong>🎙️ वॉइस रिमाइंडर:</strong> बोलें &quot;कल सुरेश को कॉल करना है 4 बजे&quot; — AI ऑटोमैटिक टाइम्ड रिमाइंडर बना देता है!"><strong>🎙️ Voice Reminders:</strong> Say "kal Suresh ko call karna hai 4 baje" — AI creates a timed reminder automatically!</li>
+      </ul>
+      <div class="tip" data-en="💡 All reminders come to your Telegram bot with action buttons — no extra app needed! Team plan owners also get a daily accountability digest." data-hi="💡 सारे रिमाइंडर आपके Telegram बॉट पर एक्शन बटन के साथ आते हैं — कोई एक्स्ट्रा ऐप नहीं! टीम प्लान ओनर को डेली एकाउंटेबिलिटी डाइजेस्ट भी मिलता है।">💡 All reminders come to your Telegram bot with action buttons — no extra app needed! Team plan owners also get a daily accountability digest.</div>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I view my dashboard?" data-hi="डैशबोर्ड कैसे देखें?">How do I view my dashboard?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Your dashboard is available at the website. It shows:" data-hi="डैशबोर्ड वेबसाइट पर उपलब्ध है। इसमें दिखता है:">Your dashboard is available at the website. It shows:</p>
+      <ul>
+        <li data-en="Total leads, policies, and premium collected" data-hi="कुल लीड्स, पॉलिसीज़, और जमा प्रीमियम">Total leads, policies, and premium collected</li>
+        <li data-en="Today's follow-ups and upcoming renewals" data-hi="आज के फॉलो-अप और आने वाले रिन्यूअल">Today's follow-ups and upcoming renewals</li>
+        <li data-en="Pipeline breakdown by stage" data-hi="स्टेज वाइज़ पाइपलाइन ब्रेकडाउन">Pipeline breakdown by stage</li>
+        <li data-en="<strong>Lead Timeline:</strong> Click 📋 on any lead to see full activity history — interactions, notes, follow-up status" data-hi="<strong>लीड टाइमलाइन:</strong> किसी भी लीड पर 📋 क्लिक करें — पूरी एक्टिविटी हिस्ट्री देखें — इंटरैक्शन, नोट्स, फॉलो-अप स्टेटस"><strong>Lead Timeline:</strong> Click 📋 on any lead to see full activity history — interactions, notes, follow-up status</li>
+        <li data-en="AI tools, calculators, and team management (for owners)" data-hi="AI टूल्स, कैलकुलेटर और टीम मैनेजमेंट (ओनर के लिए)">AI tools, calculators, and team management (for owners)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Campaigns & Nudges ── -->
+<div class="section" data-section="campaigns">
+  <h2>📢 <span data-en="Smart Nudges & Campaigns" data-hi="स्मार्ट नज और कैम्पेन">Smart Nudges & Campaigns</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What are Smart Nudges?" data-hi="स्मार्ट नज क्या हैं?">What are Smart Nudges?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Smart Nudges are AI-powered follow-up suggestions. When you have leads that haven't been contacted in a while, Sarathi-AI:" data-hi="स्मार्ट नज AI-पावर्ड फॉलो-अप सुझाव हैं। जब आपकी कोई लीड काफी समय से कॉन्टैक्ट नहीं हुई होती, Sarathi-AI:">Smart Nudges are AI-powered follow-up suggestions. When you have leads that haven't been contacted in a while, Sarathi-AI:</p>
+      <ul>
+        <li data-en="Identifies stale leads automatically" data-hi="बासी लीड्स ऑटोमैटिक पहचानता है">Identifies stale leads automatically</li>
+        <li data-en="Generates personalized follow-up messages using AI" data-hi="AI से पर्सनलाइज़ फॉलो-अप मैसेज जेनरेट करता है">Generates personalized follow-up messages using AI</li>
+        <li data-en="You can send to one lead, multiple leads (bulk), or broadcast to all" data-hi="एक लीड, कई लीड्स (बल्क), या सभी को भेज सकते हैं (ब्रॉडकास्ट)">You can send to one lead, multiple leads (bulk), or broadcast to all</li>
+      </ul>
+      <div class="tip" data-en="💡 Nudges generate ready-to-send messages — copy and personally share with clients for a human touch." data-hi="💡 नज रेडी-टू-सेंड मैसेज बनाते हैं — कॉपी करें और क्लाइंट्स को पर्सनली शेयर करें।">💡 Nudges generate ready-to-send messages — copy and personally share with clients for a human touch.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Calculators ── -->
+<div class="section" data-section="calculators">
+  <h2>🧮 <span data-en="Insurance Calculators" data-hi="इंश्योरेंस कैलकुलेटर">Insurance Calculators</span>
+    <button class="audio-btn" onclick="playAudio(this,'calculators')" title="Listen to this section"><span class="audio-icon">🔊</span> <span class="audio-label" data-en="Listen" data-hi="सुनें">Listen</span></button>
+  </h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What calculators are available?" data-hi="कौन-कौन से कैलकुलेटर उपलब्ध हैं?">What calculators are available?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Sarathi-AI offers 12 branded insurance calculators:" data-hi="Sarathi-AI में 12 ब्रांडेड इंश्योरेंस कैलकुलेटर हैं:">Sarathi-AI offers 12 branded insurance calculators:</p>
+      <ul>
+        <li data-en="<strong>Inflation Eraser:</strong> Show clients how inflation affects their money over time" data-hi="<strong>इन्फ्लेशन इरेज़र:</strong> क्लाइंट्स को दिखाएं कि मुद्रास्फीति उनके पैसे पर कैसे असर करती है"><strong>Inflation Eraser:</strong> Show clients how inflation affects their money over time</li>
+        <li data-en="<strong>Human Life Value (HLV):</strong> Calculate the right life insurance coverage" data-hi="<strong>मानव जीवन मूल्य (HLV):</strong> सही लाइफ इंश्योरेंस कवर कैलकुलेट करें"><strong>Human Life Value (HLV):</strong> Calculate the right life insurance coverage</li>
+        <li data-en="<strong>Retirement Planner:</strong> Plan retirement corpus with SIP calculations" data-hi="<strong>रिटायरमेंट प्लानर:</strong> SIP कैलकुलेशन के साथ रिटायरमेंट कॉर्पस प्लान करें"><strong>Retirement Planner:</strong> Plan retirement corpus with SIP calculations</li>
+        <li data-en="<strong>EMI Calculator:</strong> Break down insurance premium EMI options" data-hi="<strong>EMI कैलकुलेटर:</strong> इंश्योरेंस प्रीमियम EMI ऑप्शन देखें"><strong>EMI Calculator:</strong> Break down insurance premium EMI options</li>
+        <li data-en="<strong>Health Cover Estimator:</strong> Recommend health insurance cover based on family" data-hi="<strong>हेल्थ कवर एस्टिमेटर:</strong> फैमिली के आधार पर हेल्थ इंश्योरेंस कवर रिकमेंडेशन"><strong>Health Cover Estimator:</strong> Recommend health insurance cover based on family</li>
+        <li data-en="<strong>SIP Calculator:</strong> Plan systematic investment returns" data-hi="<strong>SIP कैलकुलेटर:</strong> सिस्टमैटिक इन्वेस्टमेंट रिटर्न्स प्लान करें"><strong>SIP Calculator:</strong> Plan systematic investment returns</li>
+        <li data-en="<strong>MF SIP Comparison:</strong> Compare mutual fund SIP options" data-hi="<strong>MF SIP कम्पेरिज़न:</strong> म्यूचुअल फंड SIP ऑप्शन कम्पेयर करें"><strong>MF SIP Comparison:</strong> Compare mutual fund SIP options</li>
+        <li data-en="<strong>ULIP vs MF:</strong> Compare ULIP and mutual fund returns" data-hi="<strong>ULIP vs MF:</strong> ULIP और म्यूचुअल फंड रिटर्न्स कम्पेयर करें"><strong>ULIP vs MF:</strong> Compare ULIP and mutual fund returns</li>
+        <li data-en="<strong>NPS Calculator:</strong> Plan National Pension Scheme contributions" data-hi="<strong>NPS कैलकुलेटर:</strong> नेशनल पेंशन स्कीम कॉन्ट्रिब्यूशन प्लान करें"><strong>NPS Calculator:</strong> Plan National Pension Scheme contributions</li>
+        <li data-en="<strong>Step-Up SIP:</strong> Calculate returns with annually increasing SIP contributions" data-hi="<strong>स्टेप-अप SIP:</strong> सालाना बढ़ती SIP कॉन्ट्रिब्यूशन के साथ रिटर्न कैलकुलेट करें"><strong>Step-Up SIP:</strong> Calculate returns with annually increasing SIP contributions</li>
+        <li data-en="<strong>Systematic Withdrawal Plan (SWP):</strong> Plan regular withdrawals from your corpus" data-hi="<strong>सिस्टमैटिक विड्रॉअल प्लान (SWP):</strong> कॉर्पस से नियमित निकासी प्लान करें"><strong>Systematic Withdrawal Plan (SWP):</strong> Plan regular withdrawals from your corpus</li>
+        <li data-en="<strong>Delay Cost Calculator:</strong> Show clients the real cost of delaying insurance purchases" data-hi="<strong>देरी लागत कैलकुलेटर:</strong> क्लाइंट्स को दिखाएं कि इंश्योरेंस खरीदने में देरी का असली खर्च क्या है"><strong>Delay Cost Calculator:</strong> Show clients the real cost of delaying insurance purchases</li>
+      </ul>
+      <div class="tip" data-en="💡 All 12 calculators are also available via Telegram bot — type /calc or tap the 🧮 Calculators button!" data-hi="💡 सभी 12 कैलकुलेटर Telegram बॉट पर भी उपलब्ध हैं — /calc टाइप करें या 🧮 Calculators बटन दबाएं!">💡 All 12 calculators are also available via Telegram bot — type /calc or tap the 🧮 Calculators button!</div>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I share calculator results with clients?" data-hi="कैलकुलेटर रिज़ल्ट क्लाइंट्स को कैसे शेयर करें?">How do I share calculator results with clients?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="After running a calculation, you can:" data-hi="कैलकुलेशन के बाद, आप कर सकते हैं:">After running a calculation, you can:</p>
+      <ol>
+        <li data-en="Click &quot;Generate Report&quot; to create a branded PDF report" data-hi="ब्रांडेड PDF रिपोर्ट बनाने के लिए &quot;Generate Report&quot; पर क्लिक करें">Click "Generate Report" to create a branded PDF report</li>
+        <li data-en="Share the report link with your client via WhatsApp or any other channel" data-hi="WhatsApp या किसी अन्य चैनल से क्लाइंट को रिपोर्ट लिंक शेयर करें">Share the report link with your client via WhatsApp or any other channel</li>
+        <li data-en="The report is branded with your firm name, logo, contact details, website & email" data-hi="रिपोर्ट आपकी फर्म, लोगो, कॉन्टैक्ट डिटेल्स, वेबसाइट और ईमेल के साथ ब्रांडेड होती है">The report is branded with your firm name, logo, contact details, website & email</li>
+        <li data-en="WhatsApp share messages include your firm website & email — not Sarathi-AI.com" data-hi="WhatsApp शेयर मैसेज में आपकी फर्म की वेबसाइट और ईमेल आती है — Sarathi-AI.com नहीं">WhatsApp share messages include your firm website & email — not Sarathi-AI.com</li>
+      </ol>
+      <div class="tip" data-en="💡 Configure your firm branding (logo, website, email, colors) from Dashboard → ⚙️ Branding Settings for a fully professional look on all reports and share messages." data-hi="💡 सभी रिपोर्ट्स और शेयर मैसेज पर प्रोफेशनल लुक के लिए Dashboard → ⚙️ Branding Settings से अपनी फर्म ब्रांडिंग (लोगो, वेबसाइट, ईमेल, कलर) सेट करें।">💡 Configure your firm branding (logo, website, email, colors) from Dashboard → ⚙️ Branding Settings for a fully professional look on all reports and share messages.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Billing ── -->
+<div class="section" data-section="billing">
+  <h2>💳 <span data-en="Billing & Subscription" data-hi="बिलिंग और सब्सक्रिप्शन">Billing & Subscription</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How does the free trial work?" data-hi="फ्री ट्रायल कैसे काम करता है?">How does the free trial work?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Your free trial lasts <strong>14 days</strong> with full access to all features. No credit card is required to start." data-hi="आपका फ्री ट्रायल <strong>14 दिन</strong> का होता है सभी फीचर्स के साथ। कोई क्रेडिट कार्ड नहीं चाहिए।">Your free trial lasts <strong>14 days</strong> with full access to all features. No credit card is required to start.</p>
+      <p data-en="After 14 days, you need to subscribe to a paid plan to continue using Sarathi-AI. Your data is preserved for 30 days after trial expiry." data-hi="14 दिन के बाद, Sarathi-AI इस्तेमाल जारी रखने के लिए paid plan लेना होगा। ट्रायल खत्म होने के बाद 30 दिन तक डेटा सुरक्षित रहता है।">After 14 days, you need to subscribe to a paid plan to continue using Sarathi-AI. Your data is preserved for 30 days after trial expiry.</p>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What plans are available?" data-hi="कौन-कौन से प्लान उपलब्ध हैं?">What plans are available?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <ul>
+        <li data-en="<strong>Solo Advisor — ₹199/month:</strong> 1 agent, all calculators + CRM + reports" data-hi="<strong>Solo Advisor — ₹199/महीना:</strong> 1 एजेंट, सभी कैलकुलेटर + CRM + रिपोर्ट"><strong>Solo Advisor — ₹199/month:</strong> 1 agent, all calculators + CRM + reports</li>
+        <li data-en="<strong>Team — ₹799/month:</strong> Up to 5 agents, team dashboard, all features" data-hi="<strong>Team — ₹799/महीना:</strong> 5 एजेंट तक, टीम डैशबोर्ड, सभी फीचर्स"><strong>Team — ₹799/month:</strong> Up to 5 agents, team dashboard, all features</li>
+        <li data-en="<strong>Enterprise — ₹1,999/month:</strong> Up to 25 agents, priority support, all features" data-hi="<strong>Enterprise — ₹1,999/महीना:</strong> 25 एजेंट तक, प्राइऑरिटी सपोर्ट, सभी फीचर्स"><strong>Enterprise — ₹1,999/month:</strong> Up to 25 agents, priority support, all features</li>
+      </ul>
+      <p data-en="All plans include unlimited leads, policies, calculators, voice AI, and branded reports." data-hi="सभी प्लान में अनलिमिटेड लीड्स, पॉलिसीज़, कैलकुलेटर, वॉइस AI, और ब्रांडेड रिपोर्ट्स शामिल हैं।">All plans include unlimited leads, policies, calculators, voice AI, and branded reports.</p>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I cancel my subscription?" data-hi="सब्सक्रिप्शन कैसे रद्द करें?">How do I cancel my subscription?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="You can cancel anytime from your dashboard. After cancellation:" data-hi="डैशबोर्ड से कभी भी रद्द कर सकते हैं। रद्द करने के बाद:">You can cancel anytime from your dashboard. After cancellation:</p>
+      <ul>
+        <li data-en="Your data is retained for <strong>30 days</strong>" data-hi="आपका डेटा <strong>30 दिन</strong> तक सुरक्षित रहता है">Your data is retained for <strong>30 days</strong></li>
+        <li data-en="You can reactivate by subscribing to any plan within those 30 days" data-hi="उन 30 दिनों में कोई भी प्लान लेकर फिर से शुरू कर सकते हैं">You can reactivate by subscribing to any plan within those 30 days</li>
+        <li data-en="After 30 days, your data is permanently deleted" data-hi="30 दिन बाद आपका डेटा स्थायी रूप से डिलीट हो जाता है">After 30 days, your data is permanently deleted</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do payments work?" data-hi="पेमेंट कैसे काम करता है?">How do payments work?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="We use <strong>Razorpay</strong> for secure payments. You can pay via:" data-hi="हम <strong>Razorpay</strong> से सिक्योर पेमेंट लेते हैं। आप पे कर सकते हैं:">We use <strong>Razorpay</strong> for secure payments. You can pay via:</p>
+      <ul>
+        <li>UPI (Google Pay, PhonePe, Paytm)</li>
+        <li data-en="Debit/Credit cards" data-hi="डेबिट/क्रेडिट कार्ड">Debit/Credit cards</li>
+        <li data-en="Net banking" data-hi="नेट बैंकिंग">Net banking</li>
+      </ul>
+      <p data-en="Subscriptions auto-renew monthly. You'll receive an email receipt for every payment." data-hi="सब्सक्रिप्शन मंथली ऑटो-रिन्यू होता है। हर पेमेंट की ईमेल रसीद मिलेगी।">Subscriptions auto-renew monthly. You'll receive an email receipt for every payment.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Security ── -->
+<div class="section" data-section="security">
+  <h2>🔐 <span data-en="Security & Privacy" data-hi="सुरक्षा और गोपनीयता">Security & Privacy</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="Is my data secure?" data-hi="क्या मेरा डेटा सुरक्षित है?">Is my data secure?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Absolutely. Sarathi-AI uses multiple layers of security:" data-hi="बिल्कुल। Sarathi-AI कई सिक्योरिटी लेयर्स इस्तेमाल करता है:">Absolutely. Sarathi-AI uses multiple layers of security:</p>
+      <ul>
+        <li data-en="<strong>JWT Authentication:</strong> Secure token-based login with OTP verification" data-hi="<strong>JWT ऑथेंटिकेशन:</strong> OTP वेरिफिकेशन के साथ सिक्योर टोकन-बेस्ड लॉगिन"><strong>JWT Authentication:</strong> Secure token-based login with OTP verification</li>
+        <li data-en="<strong>Tenant Isolation:</strong> Each firm's data is completely isolated — no cross-access" data-hi="<strong>टेनेंट आइसोलेशन:</strong> हर फर्म का डेटा पूरी तरह अलग है — कोई क्रॉस-एक्सेस नहीं"><strong>Tenant Isolation:</strong> Each firm's data is completely isolated — no cross-access</li>
+        <li data-en="<strong>Encrypted Communication:</strong> All data in transit is encrypted via HTTPS" data-hi="<strong>एन्क्रिप्टेड कम्युनिकेशन:</strong> सारा डेटा HTTPS से एन्क्रिप्टेड"><strong>Encrypted Communication:</strong> All data in transit is encrypted via HTTPS</li>
+        <li data-en="<strong>Abuse Detection:</strong> Automated content filtering and progressive block system" data-hi="<strong>अब्यूज़ डिटेक्शन:</strong> ऑटोमेटेड कंटेंट फिल्टरिंग और प्रोग्रेसिव ब्लॉक सिस्टम"><strong>Abuse Detection:</strong> Automated content filtering and progressive block system</li>
+        <li data-en="<strong>Rate Limiting:</strong> Protection against brute-force and abuse" data-hi="<strong>रेट लिमिटिंग:</strong> ब्रूट-फोर्स और अब्यूज़ से सुरक्षा"><strong>Rate Limiting:</strong> Protection against brute-force and abuse</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How is my client data protected?" data-hi="मेरे क्लाइंट का डेटा कैसे सुरक्षित है?">How is my client data protected?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en='Client data (leads, policies) is stored in an encrypted database and is only accessible by your firm&#39;s authenticated users. We never share, sell, or access your client data. Read our full <a href="/privacy">Privacy Policy</a> for details.' data-hi='क्लाइंट डेटा (लीड्स, पॉलिसीज़) एन्क्रिप्टेड डेटाबेस में स्टोर होता है और सिर्फ आपकी फर्म के ऑथेंटिकेटेड यूज़र्स को एक्सेस मिलता है। हम कभी आपका डेटा शेयर, बेचते या एक्सेस नहीं करते। पूरी <a href="/privacy">प्राइवेसी पॉलिसी</a> देखें।'>Client data (leads, policies) is stored in an encrypted database and is only accessible by your firm's authenticated users. We never share, sell, or access your client data. Read our full <a href="/privacy">Privacy Policy</a> for details.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Partner Program ── -->
+<div class="section" data-section="partner-program">
+  <h2>🤝 <span data-en="Partner Program & Cross-Signup" data-hi="पार्टनर प्रोग्राम और क्रॉस-साइनअप">Partner Program & Cross-Signup</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I become an affiliate partner?" data-hi="मैं एफिलिएट पार्टनर कैसे बनूँ?">How do I become an affiliate partner?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="If you're already a Sarathi-AI customer, you can become an affiliate directly from your Dashboard:" data-hi="अगर आप पहले से Sarathi-AI कस्टमर हैं, तो आप अपने डैशबोर्ड से सीधे एफिलिएट बन सकते हैं:">If you're already a Sarathi-AI customer, you can become an affiliate directly from your Dashboard:</p>
+      <ol>
+        <li data-en="Go to your Dashboard and look for the &quot;Become a Partner&quot; card" data-hi="अपने डैशबोर्ड पर जाएँ और &quot;Become a Partner&quot; कार्ड देखें">Go to your Dashboard and look for the "Become a Partner" card</li>
+        <li data-en="Click it — your name, phone, and email are pre-filled from your account" data-hi="क्लिक करें — आपका नाम, फ़ोन और ईमेल अकाउंट से पहले से भरा रहेगा">Click it — your name, phone, and email are pre-filled from your account</li>
+        <li data-en="Submit to get your unique referral link and start earning commissions" data-hi="सबमिट करें और अपना यूनिक रेफ़रल लिंक पाएँ, कमीशन कमाना शुरू करें">Submit to get your unique referral link and start earning commissions</li>
+      </ol>
+      <div class="tip" data-en="💡 As a partner, you earn commissions for every paying customer who signs up through your referral link." data-hi="💡 पार्टनर के रूप में, आप अपने रेफ़रल लिंक से साइनअप करने वाले हर पेइंग कस्टमर पर कमीशन कमाते हैं।">💡 As a partner, you earn commissions for every paying customer who signs up through your referral link.</div>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="I'm an affiliate — can I also use Sarathi-AI for my own business?" data-hi="मैं एफिलिएट हूँ — क्या मैं अपने बिज़नेस के लिए भी Sarathi-AI इस्तेमाल कर सकता हूँ?">I'm an affiliate — can I also use Sarathi-AI for my own business?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Yes! From the Partner Dashboard, click the &quot;Try Sarathi-AI for Your Business&quot; card. Your details are pre-filled — just pick a plan and you're ready to go." data-hi="हाँ! पार्टनर डैशबोर्ड से &quot;Try Sarathi-AI for Your Business&quot; कार्ड पर क्लिक करें। आपकी डिटेल्स पहले से भरी रहेंगी — बस प्लान चुनें और शुरू करें।">Yes! From the Partner Dashboard, click the "Try Sarathi-AI for Your Business" card. Your details are pre-filled — just pick a plan and you're ready to go.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Interactive Demo ── -->
+<div class="section" data-section="interactive-demo">
+  <h2>🎙️ <span data-en="Interactive Demo & Try It Yourself" data-hi="इंटरैक्टिव डेमो और ख़ुद आज़माएँ">Interactive Demo & Try It Yourself</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="What is the Voice AI demo on the homepage?" data-hi="होमपेज पर Voice AI डेमो क्या है?">What is the Voice AI demo on the homepage?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="The homepage features a live voice demo that shows how the Telegram bot works. You can:" data-hi="होमपेज पर एक लाइव वॉइस डेमो है जो दिखाता है कि टेलीग्राम बॉट कैसे काम करता है। आप:">The homepage features a live voice demo that shows how the Telegram bot works. You can:</p>
+      <ul>
+        <li data-en="Watch the typewriter simulation showing real bot commands and responses" data-hi="टाइपराइटर सिमुलेशन देखें जो बॉट कमांड्स और रिस्पॉन्स दिखाता है">Watch the typewriter simulation showing real bot commands and responses</li>
+        <li data-en="Click category buttons (Lead, Policy, Reminder, Calculator, etc.) to see different demos" data-hi="अलग-अलग डेमो देखने के लिए कैटेगरी बटन (Lead, Policy, Reminder, Calculator, आदि) क्लिक करें">Click category buttons (Lead, Policy, Reminder, Calculator, etc.) to see different demos</li>
+        <li data-en="Try the &quot;Try It Yourself&quot; cards — tap a voice command card, hear the audio, and see what the bot does" data-hi="&quot;Try It Yourself&quot; कार्ड्स आज़माएँ — वॉइस कमांड कार्ड टैप करें, ऑडियो सुनें, और देखें बॉट क्या करता है">Try the "Try It Yourself" cards — tap a voice command card, hear the audio, and see what the bot does</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How does the Try It Yourself section work?" data-hi="&quot;Try It Yourself&quot; सेक्शन कैसे काम करता है?">How does the Try It Yourself section work?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="Each card represents a real voice command you can give to the Sarathi-AI Telegram bot:" data-hi="हर कार्ड एक असली वॉइस कमांड है जो आप Sarathi-AI टेलीग्राम बॉट को दे सकते हैं:">Each card represents a real voice command you can give to the Sarathi-AI Telegram bot:</p>
+      <ol>
+        <li data-en="Tap a card to expand it" data-hi="कार्ड को एक्सपैंड करने के लिए टैप करें">Tap a card to expand it</li>
+        <li data-en="Press the 🔊 button to hear the voice command in Hindi (the bot accepts both Hindi and English)" data-hi="🔊 बटन दबाकर हिंदी में वॉइस कमांड सुनें (बॉट हिंदी और अंग्रेज़ी दोनों स्वीकार करता है)">Press the 🔊 button to hear the voice command in Hindi (the bot accepts both Hindi and English)</li>
+        <li data-en="See the bot's response — exactly as it would appear in Telegram" data-hi="बॉट का रिस्पॉन्स देखें — ठीक वैसे ही जैसे टेलीग्राम में दिखता है">See the bot's response — exactly as it would appear in Telegram</li>
+      </ol>
+      <div class="tip" data-en="💡 The demo uses real examples — add a lead, set a reminder, run a calculator — so you know exactly what you'll get." data-hi="💡 डेमो में असली उदाहरण हैं — लीड जोड़ना, रिमाइंडर सेट करना, कैलकुलेटर चलाना — ताकि आपको पता रहे क्या मिलेगा।">💡 The demo uses real examples — add a lead, set a reminder, run a calculator — so you know exactly what you'll get.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Contact ── -->
+<div class="section" data-section="contact">
+  <h2>📞 <span data-en="Need More Help?" data-hi="और मदद चाहिए?">Need More Help?</span></h2>
+
+  <div class="faq">
+    <div class="faq-q" onclick="toggleFAQ(this)"><span data-en="How do I contact support?" data-hi="सपोर्ट से कैसे संपर्क करें?">How do I contact support?</span> <span class="arrow">▼</span></div>
+    <div class="faq-a">
+      <p data-en="You can reach us through:" data-hi="आप हमसे संपर्क कर सकते हैं:">You can reach us through:</p>
+      <ul>
+        <li><strong>Email:</strong> support@sarathi-ai.com</li>
+        <li data-en="<strong>Telegram:</strong> Message @SarathiBizBot with your query" data-hi="<strong>Telegram:</strong> @SarathiBizBot पर मैसेज करें"><strong>Telegram:</strong> Message @SarathiBizBot with your query</li>
+      </ul>
+      <p data-en="We typically respond within 24 hours on business days." data-hi="हम आमतौर पर बिज़नेस डेज़ में 24 घंटे के अंदर जवाब देते हैं।">We typically respond within 24 hours on business days.</p>
+    </div>
+  </div>
+</div>
+
+<div class="cta-section">
+  <h2 data-en="Ready to grow your insurance business?" data-hi="अपना बीमा व्यवसाय बढ़ाने के लिए तैयार हैं?">Ready to grow your insurance business?</h2>
+  <p data-en="Start your 14-day free trial today — no credit card required" data-hi="आज ही 14 दिन का फ्री ट्रायल शुरू करें — कोई क्रेडिट कार्ड नहीं चाहिए">Start your 14-day free trial today — no credit card required</p>
+  <a href="/#pricing" class="btn btn-white" data-en="Start Free Trial →" data-hi="फ्री ट्रायल शुरू करें →">Start Free Trial →</a>
+</div>
+
+</div>
+
+<div class="footer">
+  <div class="brand">
+    <img src="/static/logo.png?v=3" alt="Sarathi-AI" style="height:64px;border-radius:6px" onerror="this.style.display='none'">
+    Sarathi<span class="ai-tag">-AI</span>&nbsp;Business Technologies
+  </div>
+  <div class="tagline">AI-Powered Financial Advisor CRM Platform · sarathi-ai.com</div>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/getting-started">Setup Guide</a>
+    <a href="/help">Help</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="mailto:support@sarathi-ai.com">Contact</a>
+  </div>
+  <p class="copy">© 2026 Sarathi-AI Business Technologies. All rights reserved. · sarathi-ai.com</p>
+</div>
+
+<script>
+/* ── Language Toggle ── */
+let _hLang = localStorage.getItem('sarathi_lang') || 'en';
+
+function setHelpLang(lang) {
+  _hLang = lang;
+  localStorage.setItem('sarathi_lang', lang);
+  document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+  document.getElementById('lang-hi').classList.toggle('active', lang === 'hi');
+  applyHelpLang();
+}
+
+function applyHelpLang() {
+  document.querySelectorAll('[data-' + _hLang + ']').forEach(el => {
+    const val = el.getAttribute('data-' + _hLang);
+    if (val) el.innerHTML = val;
+  });
+  // Placeholders
+  document.querySelectorAll('[data-' + _hLang + '-placeholder]').forEach(el => {
+    el.placeholder = el.getAttribute('data-' + _hLang + '-placeholder');
+  });
+  // Update page title
+  document.title = (_hLang === 'hi' ? 'सहायता और गाइड' : 'Help & Guide') + ' — Sarathi-AI Business Technologies';
+}
+
+// ── Init language from localStorage ──
+(function() {
+  if (_hLang === 'hi') setHelpLang('hi');
+})();
+
+/* ── FAQ Accordion ── */
+function toggleFAQ(el) {
+  const faq = el.parentElement;
+  faq.classList.toggle('open');
+}
+
+/* ── Search Filter ── */
+function filterFAQs() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  document.querySelectorAll('.faq').forEach(f => {
+    const text = f.textContent.toLowerCase();
+    f.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+/* ── Audio Player ── */
+let _activeAudio = null;
+let _activeBtn = null;
+
+function playAudio(btn, clipName) {
+  // Stop current if playing
+  if (_activeAudio) {
+    _activeAudio.pause();
+    _activeAudio.currentTime = 0;
+    if (_activeBtn) _activeBtn.classList.remove('playing');
+  }
+  // If same button clicked while playing, just stop
+  if (_activeBtn === btn && !_activeAudio.paused === false) {
+    _activeBtn = null; _activeAudio = null; return;
+  }
+  const lang = _hLang || 'en';
+  const src = '/static/audio/' + clipName + '_' + lang + '.mp3';
+  _activeAudio = new Audio(src);
+  _activeBtn = btn;
+  btn.classList.add('playing');
+  btn.querySelector('.audio-icon').textContent = '⏸️';
+  _activeAudio.play().catch(() => { btn.classList.remove('playing'); });
+  _activeAudio.onended = function() {
+    btn.classList.remove('playing');
+    btn.querySelector('.audio-icon').textContent = '🔊';
+    _activeBtn = null; _activeAudio = null;
+  };
+  _activeAudio.onpause = function() {
+    btn.classList.remove('playing');
+    btn.querySelector('.audio-icon').textContent = '🔊';
+  };
+}
+
+/* ── Tooltip Bubble (shows once per session on first audio btn) ── */
+(function() {
+  if (sessionStorage.getItem('sarathi_audio_tip_seen')) return;
+  // Wait for DOM to find first audio btn
+  setTimeout(function() {
+    var firstBtn = document.querySelector('.audio-btn');
+    if (!firstBtn) return;
+    firstBtn.style.position = 'relative';
+    var tip = document.createElement('div');
+    tip.className = 'audio-tooltip';
+    tip.innerHTML = '<span class="tt-icon">🔊</span>' +
+      '<span>' + (_hLang === 'hi' ? 'नया! सुनने के लिए बटन दबाएं' : 'New! Tap to listen') + '</span>' +
+      '<span class="tt-close" onclick="event.stopPropagation();this.parentElement.classList.add(\'hidden\');sessionStorage.setItem(\'sarathi_audio_tip_seen\',\'1\')">✕</span>';
+    firstBtn.appendChild(tip);
+    setTimeout(function() {
+      tip.classList.add('hidden');
+      sessionStorage.setItem('sarathi_audio_tip_seen', '1');
+    }, 6000);
+  }, 500);
+})();
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>

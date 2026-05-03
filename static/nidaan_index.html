@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nidaan — The Legal Consultants | Insurance Claim Dispute Resolution India</title>
+<meta name="description" content="Nidaan – The Legal Consultants LLP helps insurance advisors and policyholders resolve rejected, underpaid or delayed insurance claims. 5000+ policyholders helped. 95%+ success rate. Free first consultation.">
+<link rel="canonical" href="https://nidaanpartner.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nidaanpartner.com/">
+<meta property="og:title" content="Nidaan — The Legal Consultants | Insurance Claim Dispute Resolution">
+<meta property="og:description" content="5000+ policyholders helped. 95%+ success rate. Subscribe once, sleep peacefully forever. Sarathi-AI CRM bundled FREE.">
+<meta property="og:image" content="https://nidaanpartner.com/static/nidaan_logo.png">
+<meta name="theme-color" content="#1e3a8a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════
+   NIDAAN — Deep Navy + Cyan palette
+   ══════════════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;line-height:1.7;overflow-x:hidden;background:#fff}
+a{text-decoration:none;color:inherit}
+img{max-width:100%}
+h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
+
+:root{
+  --navy:#1e3a8a;
+  --navy-dark:#1e3070;
+  --navy-light:#2563eb;
+  --cyan:#06b6d4;
+  --cyan-dark:#0891b2;
+  --cyan-light:#22d3ee;
+  --cyan-50:#ecfeff;
+  --gold:#f59e0b;
+  --slate:#64748b;
+  --slate-50:#f8fafc;
+}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:100;background:rgba(30,58,138,0.97);backdrop-filter:blur(10px);padding:0 1.5rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px;gap:1rem}
+.nav-brand{display:flex;align-items:center;gap:.6rem;color:#fff;font-family:'Poppins',sans-serif;font-size:1.1rem;font-weight:700}
+.nav-brand img{height:36px;border-radius:6px}
+.nav-brand .brand-sub{font-size:.65rem;font-weight:500;color:var(--cyan-light);letter-spacing:.04em;display:block;line-height:1.2}
+.nav-links{display:flex;align-items:center;gap:1.5rem}
+.nav-links a{color:rgba(255,255,255,.85);font-size:.88rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--cyan-light)}
+.lang-toggle{display:flex;gap:.25rem}
+.lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:600;border:1.5px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
+.lang-btn.active{background:var(--cyan);border-color:var(--cyan);color:#fff}
+.nav-cta{padding:.45rem 1.1rem;background:var(--cyan);color:#fff;border-radius:8px;font-weight:600;font-size:.88rem;transition:background .2s}
+.nav-cta:hover{background:var(--cyan-dark)}
+@media(max-width:768px){.nav-links a:not(.nav-cta){display:none}}
+
+/* HERO */
+.hero{background:linear-gradient(135deg,#0f1f5c 0%,#1e3a8a 50%,#164e63 100%);color:#fff;padding:5rem 1.5rem 4rem;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 30%,rgba(6,182,212,.15) 0%,transparent 60%)}
+.hero-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:var(--cyan-light);padding:.35rem .9rem;border-radius:20px;font-size:.8rem;font-weight:600;margin-bottom:1.5rem}
+.hero h1{font-size:clamp(1.9rem,5vw,3.2rem);font-weight:800;line-height:1.2;margin-bottom:1rem;max-width:820px;margin-left:auto;margin-right:auto}
+.hero h1 .hi{display:none}
+.hero .subline{font-size:clamp(1rem,2.5vw,1.25rem);color:rgba(255,255,255,.8);max-width:680px;margin:0 auto 1.5rem}
+.hero .tagline{font-size:1rem;color:var(--cyan-light);font-weight:600;margin-bottom:2rem;letter-spacing:.02em}
+.hero-ctas{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:2rem}
+.btn-primary{display:inline-flex;align-items:center;gap:.5rem;background:var(--cyan);color:#fff;padding:.9rem 2rem;border-radius:10px;font-weight:700;font-size:1rem;transition:all .2s;border:none;cursor:pointer}
+.btn-primary:hover{background:var(--cyan-dark);transform:translateY(-1px)}
+.btn-outline{display:inline-flex;align-items:center;gap:.5rem;background:transparent;border:2px solid rgba(255,255,255,.4);color:#fff;padding:.88rem 1.8rem;border-radius:10px;font-weight:600;font-size:.95rem;transition:all .2s;cursor:pointer}
+.btn-outline:hover{border-color:#fff;background:rgba(255,255,255,.08)}
+.bonus-banner{display:inline-flex;align-items:center;gap:.5rem;background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(6,182,212,.1));border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:.7rem 1.4rem;font-size:.88rem;color:rgba(255,255,255,.9);max-width:600px;margin:0 auto}
+.bonus-banner strong{color:var(--gold)}
+
+/* STATS STRIP */
+.stats-strip{background:#fff;border-bottom:1px solid #e2e8f0;padding:2.5rem 1.5rem}
+.stats-grid{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1.5rem;text-align:center}
+.stat-item .stat-num{font-size:2rem;font-weight:800;color:var(--navy);font-family:'Poppins',sans-serif}
+.stat-item .stat-label{font-size:.85rem;color:var(--slate);font-weight:500;margin-top:.15rem}
+
+/* SECTION SHARED */
+.section{padding:5rem 1.5rem}
+.section-inner{max-width:1100px;margin:0 auto}
+.section-title{font-size:clamp(1.5rem,3.5vw,2.2rem);font-weight:800;color:var(--navy);margin-bottom:.6rem}
+.section-sub{color:var(--slate);font-size:1rem;max-width:600px;margin-bottom:3rem}
+.tag{display:inline-block;background:var(--cyan-50);color:var(--cyan-dark);font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.25rem .7rem;border-radius:6px;margin-bottom:.8rem}
+
+/* PROBLEM SECTION */
+.problem{background:var(--slate-50)}
+.problem-story{max-width:720px;margin:0 auto;text-align:center}
+.problem-story p{font-size:1.1rem;color:#374151;line-height:1.9;margin-bottom:1rem}
+.problem-story p strong{color:var(--navy)}
+.problem-story .resolution{font-size:1.15rem;font-weight:600;color:var(--cyan-dark);margin-top:1rem}
+
+/* SOLUTION CARDS */
+.solution-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.5rem;margin-top:2rem}
+.sol-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.75rem;transition:all .25s}
+.sol-card:hover{box-shadow:0 8px 30px rgba(30,58,138,.1);transform:translateY(-3px);border-color:var(--cyan)}
+.sol-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:1rem}
+.sol-icon.navy{background:#dbeafe}
+.sol-icon.cyan{background:#cffafe}
+.sol-icon.gold{background:#fef3c7}
+.sol-icon.green{background:#d1fae5}
+.sol-card h3{font-size:1rem;font-weight:700;color:var(--navy);margin-bottom:.4rem}
+.sol-card p{font-size:.88rem;color:var(--slate);line-height:1.65}
+
+/* HOW IT WORKS */
+.hiw{background:linear-gradient(135deg,#0f1f5c,#1e3a8a);color:#fff}
+.hiw .section-title{color:#fff}
+.hiw .section-sub{color:rgba(255,255,255,.7)}
+.steps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2rem;margin-top:2rem}
+.step{text-align:center}
+.step-num{width:56px;height:56px;border-radius:50%;background:var(--cyan);color:#fff;font-size:1.4rem;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;font-family:'Poppins',sans-serif}
+.step h3{font-size:1.05rem;font-weight:700;margin-bottom:.5rem;color:#fff}
+.step p{font-size:.9rem;color:rgba(255,255,255,.75);line-height:1.7}
+
+/* PLANS */
+.plans-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:2rem}
+.plan-card{border:2px solid #e2e8f0;border-radius:16px;padding:2rem;position:relative;background:#fff;transition:all .25s}
+.plan-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(30,58,138,.1)}
+.plan-card.recommended{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(6,182,212,.15)}
+.plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--cyan);color:#fff;font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:20px;white-space:nowrap;letter-spacing:.05em}
+.plan-name{font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:.2rem}
+.plan-price{font-size:2.2rem;font-weight:800;color:var(--navy);font-family:'Poppins',sans-serif;line-height:1.1}
+.plan-price span{font-size:.9rem;font-weight:500;color:var(--slate)}
+.plan-annual{font-size:.8rem;color:var(--slate);margin:.25rem 0 1rem}
+.plan-features{list-style:none;margin-bottom:1.5rem}
+.plan-features li{font-size:.88rem;color:#374151;padding:.35rem 0;display:flex;align-items:flex-start;gap:.5rem;border-bottom:1px solid #f1f5f9}
+.plan-features li:last-child{border-bottom:none}
+.plan-features li::before{content:'✓';color:var(--cyan);font-weight:700;flex-shrink:0;margin-top:.05rem}
+.plan-cta{width:100%;padding:.8rem;background:var(--navy);color:#fff;border:none;border-radius:10px;font-weight:600;font-size:.95rem;cursor:pointer;transition:background .2s}
+.plan-card.recommended .plan-cta{background:var(--cyan)}
+.plan-cta:hover{opacity:.9}
+.plan-sarathi-badge{display:inline-flex;align-items:center;gap:.3rem;background:#eff6ff;border:1px solid #bfdbfe;color:var(--navy-light);font-size:.75rem;font-weight:600;padding:.2rem .55rem;border-radius:6px;margin-bottom:.9rem}
+
+/* SARATHI BUNDLE BANNER */
+.bundle-section{background:linear-gradient(135deg,#eff6ff,#ecfeff);border-top:1px solid #bfdbfe;border-bottom:1px solid #bfdbfe}
+.bundle-inner{max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
+@media(max-width:640px){.bundle-inner{grid-template-columns:1fr}}
+.bundle-text h2{font-size:1.7rem;font-weight:800;color:var(--navy);margin-bottom:.75rem}
+.bundle-text p{color:#374151;font-size:.95rem;line-height:1.8}
+.bundle-text .savings{font-size:1rem;color:var(--cyan-dark);font-weight:700;margin-top:.75rem}
+.bundle-features{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
+.bf-item{background:#fff;border:1px solid #e0f2fe;border-radius:10px;padding:.7rem .9rem;font-size:.82rem;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:.4rem}
+.bf-item::before{content:'✦';color:var(--cyan)}
+
+/* TRUST STRIP */
+.trust{background:var(--navy);color:#fff;padding:4rem 1.5rem}
+.trust-inner{max-width:1100px;margin:0 auto}
+.trust-heading{font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:2rem;text-align:center}
+.trust-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:2rem}
+.trust-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:1.5rem}
+.trust-card h4{font-size:.95rem;font-weight:700;color:var(--cyan-light);margin-bottom:.5rem}
+.trust-card p{font-size:.87rem;color:rgba(255,255,255,.75);line-height:1.7}
+
+/* TESTIMONIALS */
+.testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:2rem}
+.testi-card{background:var(--slate-50);border:1px solid #e2e8f0;border-radius:14px;padding:1.5rem}
+.testi-stars{color:var(--gold);font-size:1rem;margin-bottom:.5rem}
+.testi-text{font-size:.9rem;color:#374151;line-height:1.75;margin-bottom:1rem;font-style:italic}
+.testi-author{font-size:.82rem;font-weight:700;color:var(--navy)}
+.testi-role{font-size:.78rem;color:var(--slate)}
+
+/* PLATFORMS */
+.platforms-grid{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.5rem}
+.platform-chip{display:inline-flex;align-items:center;gap:.4rem;background:#fff;border:1.5px solid #bfdbfe;color:var(--navy);padding:.45rem 1rem;border-radius:20px;font-size:.85rem;font-weight:600}
+
+/* CLAIM TYPES */
+.claim-types-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin-top:1.5rem}
+.ct-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:1.2rem;text-align:center;transition:all .2s}
+.ct-card:hover{border-color:var(--cyan);box-shadow:0 4px 16px rgba(6,182,212,.12)}
+.ct-icon{font-size:1.8rem;margin-bottom:.5rem}
+.ct-name{font-size:.85rem;font-weight:700;color:var(--navy)}
+
+/* FAQ */
+.faq-list{max-width:760px;margin:2rem auto 0}
+.faq-item{border-bottom:1px solid #e2e8f0}
+.faq-q{width:100%;text-align:left;padding:1.1rem 0;background:none;border:none;font-size:.95rem;font-weight:600;color:var(--navy);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.faq-q .faq-arrow{font-size:1.1rem;transition:transform .25s;flex-shrink:0}
+.faq-a{font-size:.9rem;color:#374151;line-height:1.8;padding-bottom:1rem;display:none}
+.faq-item.open .faq-a{display:block}
+.faq-item.open .faq-arrow{transform:rotate(180deg)}
+
+/* DIRECT TO CONSUMER */
+.d2c{background:linear-gradient(135deg,#fef3c7,#ecfeff);border-top:2px dashed #fcd34d}
+.d2c-inner{max-width:700px;margin:0 auto;text-align:center}
+.d2c-price{font-size:3rem;font-weight:800;color:var(--navy);font-family:'Poppins',sans-serif;margin:.5rem 0}
+.d2c-desc{font-size:.95rem;color:#374151;margin-bottom:1.5rem;line-height:1.75}
+
+/* OFFICES */
+.offices-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;margin-top:1.5rem}
+.office-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem}
+.office-city{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--cyan-dark);margin-bottom:.3rem}
+.office-addr{font-size:.85rem;color:#374151;line-height:1.65}
+
+/* FOOTER */
+.footer{background:#0f172a;color:rgba(255,255,255,.7);padding:3rem 1.5rem 1.5rem}
+.footer-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr;gap:3rem;margin-bottom:2.5rem}
+@media(max-width:640px){.footer-grid{grid-template-columns:1fr}}
+.footer-brand h3{font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:.4rem}
+.footer-brand p{font-size:.82rem;line-height:1.7}
+.footer-col h4{font-size:.82rem;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.07em;margin-bottom.75rem}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:.5rem}
+.footer-col ul li a{font-size:.82rem;color:rgba(255,255,255,.6);transition:color .2s}
+.footer-col ul li a:hover{color:var(--cyan-light)}
+.footer-bottom{max-width:1100px;margin:0 auto;border-top:1px solid rgba(255,255,255,.1);padding-top:1.25rem;display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;font-size:.78rem;color:rgba(255,255,255,.4)}
+.footer-col h4{margin-bottom:.75rem}
+.footer-contact p{font-size:.82rem;line-height:2;color:rgba(255,255,255,.65)}
+.footer-contact a{color:var(--cyan-light)}
+
+/* HINDI show/hide */
+body.hi .en{display:none!important}
+body.hi .hi{display:block!important}
+body.hi .hi-inline{display:inline!important}
+body.en .hi{display:none!important}
+body.en .en{display:block!important}
+span.hi{display:none}
+span.hi-inline{display:none}
+
+/* STICKY CTA BAR */
+.sticky-cta{position:fixed;bottom:0;left:0;right:0;background:var(--navy);color:#fff;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;z-index:90;box-shadow:0 -4px 20px rgba(0,0,0,.2);transform:translateY(100%);transition:transform .3s}
+.sticky-cta.visible{transform:translateY(0)}
+.sticky-cta .sc-text{font-size:.88rem;font-weight:600}
+.sticky-cta .sc-sub{font-size:.75rem;color:rgba(255,255,255,.7);font-weight:400}
+.sticky-cta a{background:var(--cyan);color:#fff;padding:.55rem 1.3rem;border-radius:8px;font-weight:700;font-size:.88rem;white-space:nowrap}
+@media(max-width:480px){.sticky-cta .sc-sub{display:none}}
+</style>
+</head>
+<body class="en">
+
+<!-- ══════════ NAV ══════════ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/static/nidaan_logo.png" alt="Nidaan Logo" onerror="this.style.display='none'">
+      <div>
+        Nidaan
+        <span class="brand-sub">The Legal Consultants LLP</span>
+      </div>
+    </a>
+    <div class="nav-links">
+      <a href="#how-it-works" class="en">How It Works</a>
+      <a href="#how-it-works" class="hi" style="display:none">कैसे काम करता है</a>
+      <a href="#plans" class="en">Plans</a>
+      <a href="#plans" class="hi" style="display:none">प्लान</a>
+      <a href="#faq" class="en">FAQ</a>
+      <a href="#faq" class="hi" style="display:none">सवाल-जवाब</a>
+      <div class="lang-toggle">
+        <button class="lang-btn active" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" onclick="setLang('hi')">हिं</button>
+      </div>
+      <a href="/nidaan/login" class="nav-cta en">Login</a>
+      <a href="/nidaan/login" class="nav-cta hi" style="display:none">लॉगिन</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════ HERO ══════════ -->
+<section class="hero">
+  <div class="hero-badge">🛡️ <span class="en">India's #1 Insurance Claim Dispute Resolution</span><span class="hi" style="display:none">भारत की #1 बीमा क्लेम विवाद निवारण सेवा</span></div>
+  <h1>
+    <span class="en">Has your client's insurance claim been<br>rejected, underpaid, or stuck?</span>
+    <span class="hi" style="display:none">क्या आपके क्लाइंट का इंश्योरेंस क्लेम<br>रिजेक्ट, कम या अटका हुआ है?</span>
+  </h1>
+  <p class="subline">
+    <span class="en">You're not a lawyer. You shouldn't have to be.<br>Hand it to <strong>Nidaan</strong> — India's specialists in insurance dispute resolution. We fight your client's claim. You keep the trust.</span>
+    <span class="hi" style="display:none">आप वकील नहीं हैं। आपको होने की ज़रूरत भी नहीं।<br><strong>Nidaan</strong> को सौंपें — भारत के बीमा विवाद विशेषज्ञ। हम आपके क्लाइंट की लड़ाई लड़ते हैं। आप विश्वास बनाए रखें।</span>
+  </p>
+  <p class="tagline">
+    <span class="en">✦ Subscribe once. Sleep peacefully forever. ✦</span>
+    <span class="hi" style="display:none">✦ एक बार सब्सक्राइब करें। हमेशा के लिए निश्चिंत रहें। ✦</span>
+  </p>
+  <div class="hero-ctas">
+    <a href="#plans" class="btn-primary">🛡️ <span class="en">Start with Silver — ₹1,500/quarter</span><span class="hi" style="display:none">सिल्वर से शुरू करें — ₹1,500/तिमाही</span></a>
+    <a href="#how-it-works" class="btn-outline">▶ <span class="en">See how it works</span><span class="hi" style="display:none">कैसे काम करता है</span></a>
+  </div>
+  <div class="bonus-banner">
+    🎁 <span class="en"><strong>BONUS:</strong> Sarathi-AI CRM (worth ₹199–₹1,999/month) is <strong>FREE</strong> with every Nidaan plan</span>
+    <span class="hi" style="display:none"><strong>बोनस:</strong> Sarathi-AI CRM (₹199–₹1,999/माह की कीमत) हर Nidaan प्लान के साथ <strong>मुफ्त</strong></span>
+  </div>
+</section>
+
+<!-- ══════════ STATS ══════════ -->
+<div class="stats-strip">
+  <div class="stats-grid">
+    <div class="stat-item">
+      <div class="stat-num">5,000+</div>
+      <div class="stat-label en">Policyholders Helped</div>
+      <div class="stat-label hi" style="display:none">पॉलिसीधारकों की मदद</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">2,000+</div>
+      <div class="stat-label en">Claims Successfully Settled</div>
+      <div class="stat-label hi" style="display:none">क्लेम सफलतापूर्वक निपटाए</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">95%+</div>
+      <div class="stat-label en">Success Rate</div>
+      <div class="stat-label hi" style="display:none">सफलता दर</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">5–6 mo</div>
+      <div class="stat-label en">Avg. Resolution Time</div>
+      <div class="stat-label hi" style="display:none">औसत समाधान समय</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">100+</div>
+      <div class="stat-label en">Hospitals Assisted</div>
+      <div class="stat-label hi" style="display:none">अस्पतालों की सहायता</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PROBLEM ══════════ -->
+<section class="section problem">
+  <div class="section-inner" style="text-align:center">
+    <div class="tag en">The Problem</div>
+    <div class="tag hi" style="display:none">समस्या</div>
+    <h2 class="section-title en" style="max-width:600px;margin:0 auto .75rem">Your client trusts you. The insurer says no.</h2>
+    <h2 class="section-title hi" style="display:none;max-width:600px;margin:0 auto .75rem">आपके क्लाइंट का भरोसा आप पर है। बीमा कंपनी ने मना कर दिया।</h2>
+    <div class="problem-story">
+      <p class="en">A client you've known for years files a claim. The insurer rejects it — citing policy sub-limits, pre-existing conditions, or insufficient documentation. Your client is devastated. <strong>They look to you for answers you don't have.</strong></p>
+      <p class="hi" style="display:none">आपका एक पुराना क्लाइंट क्लेम दाखिल करता है। बीमा कंपनी अस्वीकार कर देती है — पॉलिसी सब-लिमिट, पहले से मौजूद बीमारी, या अपर्याप्त दस्तावेज़ का हवाला देकर। <strong>वो आपसे जवाब मांगता है जो आपके पास नहीं हैं।</strong></p>
+      <p class="en">You're not a lawyer. You're not a doctor. You can't audit TPA decisions or draft a legal rebuttal. <strong>You lose the relationship. They lose the claim.</strong></p>
+      <p class="hi" style="display:none">आप वकील नहीं हैं। डॉक्टर नहीं हैं। TPA के फैसले को चुनौती नहीं दे सकते। <strong>रिश्ता टूट जाता है। क्लेम भी।</strong></p>
+      <p class="resolution en">✦ That's exactly what Nidaan is built for. ✦</p>
+      <p class="resolution hi" style="display:none">✦ बस यही Nidaan के लिए बना है। ✦</p>
+    </div>
+
+    <!-- Common problems -->
+    <div style="display:flex;flex-wrap:wrap;gap:.65rem;justify-content:center;margin-top:2rem">
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">❌ Claim Rejected</span>
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">❌ क्लेम रिजेक्ट</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">⚠️ Partial Payment</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">⚠️ आंशिक भुगतान</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">⏳ Months of Delays</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">⏳ महीनों की देरी</span>
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">❌ Fraud Allegations</span>
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">❌ धोखाधड़ी के आरोप</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">⚠️ TPA Disputes</span>
+      <span style="background:#fef3c7;color:#92400e;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">⚠️ TPA विवाद</span>
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="en">❌ Policy Cancelled Unjustly</span>
+      <span style="background:#fee2e2;color:#991b1b;padding:.35rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600" class="hi" style="display:none">❌ अन्यायपूर्ण पॉलिसी रद्दीकरण</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ SOLUTION ══════════ -->
+<section class="section" id="solution">
+  <div class="section-inner">
+    <div class="tag en">The Nidaan Solution</div>
+    <div class="tag hi" style="display:none">Nidaan का समाधान</div>
+    <h2 class="section-title en">One call. Experts take over.</h2>
+    <h2 class="section-title hi" style="display:none">एक कॉल। विशेषज्ञ संभाल लेते हैं।</h2>
+    <p class="section-sub en">We bring together legal, medical, and insurance expertise under one roof — so you don't have to.</p>
+    <p class="section-sub hi" style="display:none">हम कानूनी, चिकित्सकीय और बीमा विशेषज्ञता एक ही छत के नीचे लाते हैं।</p>
+    <div class="solution-grid">
+      <div class="sol-card">
+        <div class="sol-icon navy">⚖️</div>
+        <h3 class="en">Experienced Lawyers</h3>
+        <h3 class="hi" style="display:none">अनुभवी वकील</h3>
+        <p class="en">Legal strategy crafted for each case — from IRDAI Ombudsman to High Court.</p>
+        <p class="hi" style="display:none">हर मामले के लिए कानूनी रणनीति — IRDAI लोकपाल से उच्च न्यायालय तक।</p>
+      </div>
+      <div class="sol-card">
+        <div class="sol-icon cyan">🩺</div>
+        <h3 class="en">Qualified Doctors</h3>
+        <h3 class="hi" style="display:none">योग्य डॉक्टर</h3>
+        <p class="en">Medical review of TPA decisions. We challenge wrong diagnoses used to deny claims.</p>
+        <p class="hi" style="display:none">TPA निर्णयों की चिकित्सकीय समीक्षा। गलत निदान को चुनौती देते हैं।</p>
+      </div>
+      <div class="sol-card">
+        <div class="sol-icon gold">🏆</div>
+        <h3 class="en">IRDAI / Ombudsman Experts</h3>
+        <h3 class="hi" style="display:none">IRDAI / लोकपाल विशेषज्ञ</h3>
+        <p class="en">Deep knowledge of all regulatory platforms. We know exactly where and how to escalate.</p>
+        <p class="hi" style="display:none">सभी नियामक मंचों की गहरी जानकारी। कहाँ और कैसे आगे बढ़ाना है — हम जानते हैं।</p>
+      </div>
+      <div class="sol-card">
+        <div class="sol-icon green">📋</div>
+        <h3 class="en">End-to-End Documentation</h3>
+        <h3 class="hi" style="display:none">एंड-टू-एंड दस्तावेज़ीकरण</h3>
+        <p class="en">We handle all drafting, filings, and follow-ups. You don't travel. You don't wait.</p>
+        <p class="hi" style="display:none">हम सब तैयार करते हैं — दाखिल करते हैं, पीछा करते हैं। आपको कहीं जाना नहीं।</p>
+      </div>
+    </div>
+
+    <!-- Claim types handled -->
+    <div style="margin-top:3rem">
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-bottom:.25rem" class="en">Claim types we handle</h3>
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-bottom:.25rem;display:none" class="hi">हम इन क्लेमों में मदद करते हैं</h3>
+      <p style="font-size:.85rem;color:var(--slate);margin-bottom:1rem" class="en">Health · Life · Motor · Fire · Property · Marine · Industrial · Labour · Travel</p>
+      <p style="font-size:.85rem;color:var(--slate);margin-bottom:1rem;display:none" class="hi">हेल्थ · लाइफ · मोटर · फायर · प्रॉपर्टी · मरीन · इंडस्ट्रियल · लेबर · ट्रैवल</p>
+      <div class="claim-types-grid">
+        <div class="ct-card"><div class="ct-icon">🏥</div><div class="ct-name en">Mediclaim / Health</div><div class="ct-name hi" style="display:none">मेडिक्लेम / हेल्थ</div></div>
+        <div class="ct-card"><div class="ct-icon">❤️</div><div class="ct-name en">Life Insurance</div><div class="ct-name hi" style="display:none">जीवन बीमा</div></div>
+        <div class="ct-card"><div class="ct-icon">🚗</div><div class="ct-name en">Motor / Vehicle</div><div class="ct-name hi" style="display:none">मोटर / वाहन</div></div>
+        <div class="ct-card"><div class="ct-icon">🏠</div><div class="ct-name en">Property / Fire</div><div class="ct-name hi" style="display:none">प्रॉपर्टी / फायर</div></div>
+        <div class="ct-card"><div class="ct-icon">✈️</div><div class="ct-name en">Travel</div><div class="ct-name hi" style="display:none">ट्रैवल</div></div>
+        <div class="ct-card"><div class="ct-icon">⚓</div><div class="ct-name en">Marine / Industrial</div><div class="ct-name hi" style="display:none">मरीन / इंडस्ट्रियल</div></div>
+      </div>
+    </div>
+
+    <!-- Legal platforms -->
+    <div style="margin-top:3rem">
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-bottom:.5rem" class="en">Platforms we work on</h3>
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-bottom:.5rem;display:none" class="hi">हम इन मंचों पर काम करते हैं</h3>
+      <div class="platforms-grid">
+        <span class="platform-chip">🏢 <span class="en">Insurer Internal Grievance</span><span class="hi" style="display:none">बीमा कंपनी शिकायत</span></span>
+        <span class="platform-chip">⚖️ <span class="en">IRDAI / Ombudsman</span><span class="hi" style="display:none">IRDAI / लोकपाल</span></span>
+        <span class="platform-chip">🏛️ <span class="en">Consumer Court</span><span class="hi" style="display:none">उपभोक्ता न्यायालय</span></span>
+        <span class="platform-chip">⚖️ <span class="en">High Court / DRT</span><span class="hi" style="display:none">उच्च न्यायालय / DRT</span></span>
+        <span class="platform-chip">🚑 <span class="en">Accident Claim Tribunal</span><span class="hi" style="display:none">दुर्घटना दावा अधिकरण</span></span>
+        <span class="platform-chip">🏥 <span class="en">Hospital & TPA Negotiation</span><span class="hi" style="display:none">अस्पताल और TPA वार्ता</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ HOW IT WORKS ══════════ -->
+<section class="section hiw" id="how-it-works">
+  <div class="section-inner">
+    <div class="tag" style="background:rgba(6,182,212,.2);color:var(--cyan-light)" class="en">How It Works</div>
+    <div class="tag" style="background:rgba(6,182,212,.2);color:var(--cyan-light);display:none" class="hi">कैसे काम करता है</div>
+    <h2 class="section-title en">Three steps. Then Nidaan handles everything.</h2>
+    <h2 class="section-title hi" style="display:none">तीन कदम। फिर Nidaan सब संभालता है।</h2>
+    <p class="section-sub en">No travel. No paperwork chasing. No shouting at call centres.</p>
+    <p class="section-sub hi" style="display:none">कोई यात्रा नहीं। कागज़ी पीछा नहीं। कॉल सेंटर पर चिल्लाना नहीं।</p>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3 class="en">Subscribe to a Nidaan Plan</h3>
+        <h3 class="hi" style="display:none">Nidaan प्लान सब्सक्राइब करें</h3>
+        <p class="en">Pick Silver, Gold, or Platinum. Get instant access to Nidaan Partner Dashboard and Sarathi-AI CRM bundled free.</p>
+        <p class="hi" style="display:none">सिल्वर, गोल्ड या प्लेटिनम चुनें। Nidaan Partner Dashboard और Sarathi-AI CRM तुरंत मिलता है — मुफ्त।</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3 class="en">File a Disputed Claim</h3>
+        <h3 class="hi" style="display:none">विवादित क्लेम दर्ज करें</h3>
+        <p class="en">Click "File Claim" in your dashboard. Fill in the insured's contact details and a brief summary. Takes under 3 minutes.</p>
+        <p class="hi" style="display:none">डैशबोर्ड में "क्लेम दर्ज करें" पर क्लिक करें। बीमित व्यक्ति की जानकारी और संक्षिप्त विवरण भरें। 3 मिनट से कम।</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3 class="en">Nidaan's Legal Team Takes Over</h3>
+        <h3 class="hi" style="display:none">Nidaan की कानूनी टीम संभाल लेती है</h3>
+        <p class="en">Our team contacts the insured within 24 hours. You get live status updates via SMS. Your client gets justice.</p>
+        <p class="hi" style="display:none">हमारी टीम 24 घंटे में बीमित व्यक्ति से संपर्क करती है। आपको SMS से लाइव अपडेट मिलते हैं। आपके क्लाइंट को न्याय मिलता है।</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PLANS ══════════ -->
+<section class="section" id="plans">
+  <div class="section-inner">
+    <div class="tag en">Pricing Plans</div>
+    <div class="tag hi" style="display:none">मूल्य योजनाएं</div>
+    <h2 class="section-title en">Choose your plan</h2>
+    <h2 class="section-title hi" style="display:none">अपना प्लान चुनें</h2>
+    <p class="section-sub en">All plans billed quarterly. Cancel anytime. Sarathi-AI CRM included free.</p>
+    <p class="section-sub hi" style="display:none">सभी प्लान तिमाही बिलिंग। कभी भी रद्द करें। Sarathi-AI CRM मुफ्त शामिल।</p>
+    <div class="plans-grid">
+
+      <!-- SILVER -->
+      <div class="plan-card">
+        <div class="plan-name en">🥈 Silver</div>
+        <div class="plan-name hi" style="display:none">🥈 सिल्वर</div>
+        <div class="plan-sarathi-badge">✦ <span class="en">Sarathi-AI Solo FREE</span><span class="hi" style="display:none">Sarathi-AI Solo मुफ्त</span></div>
+        <div class="plan-price">₹1,500 <span class="en">/quarter</span><span class="hi" style="display:none">/तिमाही</span></div>
+        <div class="plan-annual en">₹6,000/year — save ₹2,388 vs Sarathi solo</div>
+        <div class="plan-annual hi" style="display:none">₹6,000/वर्ष — Sarathi solo की तुलना में ₹2,388 बचत</div>
+        <ul class="plan-features">
+          <li class="en">3 disputed claims per month</li>
+          <li class="hi" style="display:none">3 विवादित क्लेम प्रति माह</li>
+          <li class="en">1 advisor login</li>
+          <li class="hi" style="display:none">1 एडवाइजर लॉगिन</li>
+          <li class="en">SMS status updates</li>
+          <li class="hi" style="display:none">SMS स्टेटस अपडेट</li>
+          <li class="en">Sarathi-AI CRM (Solo tier)</li>
+          <li class="hi" style="display:none">Sarathi-AI CRM (Solo स्तर)</li>
+          <li class="en">Free first consultation</li>
+          <li class="hi" style="display:none">पहली परामर्श मुफ्त</li>
+          <li class="en">Success fee only after resolution</li>
+          <li class="hi" style="display:none">समाधान के बाद ही सफलता शुल्क</li>
+        </ul>
+        <button class="plan-cta" onclick="window.location='/nidaan/signup?plan=silver'">
+          <span class="en">Get Started</span><span class="hi" style="display:none">शुरू करें</span>
+        </button>
+      </div>
+
+      <!-- GOLD (recommended) -->
+      <div class="plan-card recommended">
+        <div class="plan-badge en">MOST POPULAR</div>
+        <div class="plan-badge hi" style="display:none">सबसे लोकप्रिय</div>
+        <div class="plan-name en">🥇 Gold</div>
+        <div class="plan-name hi" style="display:none">🥇 गोल्ड</div>
+        <div class="plan-sarathi-badge">✦ <span class="en">Sarathi-AI Team FREE</span><span class="hi" style="display:none">Sarathi-AI Team मुफ्त</span></div>
+        <div class="plan-price">₹3,000 <span class="en">/quarter</span><span class="hi" style="display:none">/तिमाही</span></div>
+        <div class="plan-annual en">₹12,000/year — save ₹11,988 vs Sarathi team</div>
+        <div class="plan-annual hi" style="display:none">₹12,000/वर्ष — Sarathi team की तुलना में ₹11,988 बचत</div>
+        <ul class="plan-features">
+          <li class="en">6 disputed claims per month</li>
+          <li class="hi" style="display:none">6 विवादित क्लेम प्रति माह</li>
+          <li class="en">Up to 5 logins (advisor + agents)</li>
+          <li class="hi" style="display:none">5 लॉगिन तक (एडवाइजर + एजेंट)</li>
+          <li class="en">Priority SMS + email updates</li>
+          <li class="hi" style="display:none">प्राथमिकता SMS + ईमेल अपडेट</li>
+          <li class="en">Sarathi-AI CRM (Team tier)</li>
+          <li class="hi" style="display:none">Sarathi-AI CRM (Team स्तर)</li>
+          <li class="en">Free first consultation</li>
+          <li class="hi" style="display:none">पहली परामर्श मुफ्त</li>
+          <li class="en">Success fee only after resolution</li>
+          <li class="hi" style="display:none">समाधान के बाद ही सफलता शुल्क</li>
+        </ul>
+        <button class="plan-cta" onclick="window.location='/nidaan/signup?plan=gold'">
+          <span class="en">Get Started</span><span class="hi" style="display:none">शुरू करें</span>
+        </button>
+      </div>
+
+      <!-- PLATINUM -->
+      <div class="plan-card">
+        <div class="plan-name en">💎 Platinum</div>
+        <div class="plan-name hi" style="display:none">💎 प्लेटिनम</div>
+        <div class="plan-sarathi-badge">✦ <span class="en">Sarathi-AI Enterprise FREE</span><span class="hi" style="display:none">Sarathi-AI Enterprise मुफ्त</span></div>
+        <div class="plan-price">₹6,000 <span class="en">/quarter</span><span class="hi" style="display:none">/तिमाही</span></div>
+        <div class="plan-annual en">₹24,000/year — full enterprise value</div>
+        <div class="plan-annual hi" style="display:none">₹24,000/वर्ष — पूर्ण एंटरप्राइज़ मूल्य</div>
+        <ul class="plan-features">
+          <li class="en">Unlimited claims</li>
+          <li class="hi" style="display:none">असीमित क्लेम</li>
+          <li class="en">Unlimited logins</li>
+          <li class="hi" style="display:none">असीमित लॉगिन</li>
+          <li class="en">Dedicated legal point of contact</li>
+          <li class="hi" style="display:none">समर्पित कानूनी संपर्क</li>
+          <li class="en">Sarathi-AI CRM (Enterprise tier)</li>
+          <li class="hi" style="display:none">Sarathi-AI CRM (Enterprise स्तर)</li>
+          <li class="en">Free first consultation</li>
+          <li class="hi" style="display:none">पहली परामर्श मुफ्त</li>
+          <li class="en">Success fee only after resolution</li>
+          <li class="hi" style="display:none">समाधान के बाद ही सफलता शुल्क</li>
+        </ul>
+        <button class="plan-cta" onclick="window.location='/nidaan/signup?plan=platinum'">
+          <span class="en">Get Started</span><span class="hi" style="display:none">शुरू करें</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ SARATHI BUNDLE ══════════ -->
+<section class="section bundle-section">
+  <div class="section-inner">
+    <div class="bundle-inner">
+      <div class="bundle-text">
+        <div class="tag en">Why Sarathi-AI is Bundled Free</div>
+        <div class="tag hi" style="display:none">Sarathi-AI मुफ्त क्यों है</div>
+        <h2 class="en">India's #1 voice-first CRM — yours free with every plan</h2>
+        <h2 class="hi" style="display:none">भारत का #1 वॉइस-फर्स्ट CRM — हर प्लान के साथ मुफ्त</h2>
+        <p class="en">Sarathi-AI is a complete CRM for insurance advisors. Manage leads, policies, renewals, and client communication via Telegram voice notes in Hindi or English — all bundled free with your Nidaan subscription.</p>
+        <p class="hi" style="display:none">Sarathi-AI बीमा सलाहकारों के लिए पूर्ण CRM है। लीड, पॉलिसी, नवीनीकरण और क्लाइंट संचार Telegram वॉइस नोट्स के माध्यम से हिंदी या अंग्रेजी में — Nidaan सब्सक्रिप्शन के साथ मुफ्त।</p>
+        <p class="savings en">🎁 Silver saves you ₹2,388/yr · Gold saves ₹11,988/yr · Platinum saves ₹23,988/yr</p>
+        <p class="savings hi" style="display:none">🎁 सिल्वर ₹2,388/वर्ष · गोल्ड ₹11,988/वर्ष · प्लेटिनम ₹23,988/वर्ष की बचत</p>
+      </div>
+      <div class="bundle-features">
+        <div class="bf-item en">📞 Voice-first lead management</div>
+        <div class="bf-item hi" style="display:none">📞 वॉइस-फर्स्ट लीड मैनेजमेंट</div>
+        <div class="bf-item en">📊 12 financial calculators</div>
+        <div class="bf-item hi" style="display:none">📊 12 वित्तीय कैलकुलेटर</div>
+        <div class="bf-item en">📄 Branded PDF reports</div>
+        <div class="bf-item hi" style="display:none">📄 ब्रांडेड PDF रिपोर्ट</div>
+        <div class="bf-item en">🤖 AI-powered insights</div>
+        <div class="bf-item hi" style="display:none">🤖 AI-संचालित अंतर्दृष्टि</div>
+        <div class="bf-item en">🌐 Personal advisor microsite</div>
+        <div class="bf-item hi" style="display:none">🌐 व्यक्तिगत एडवाइजर माइक्रोसाइट</div>
+        <div class="bf-item en">🔔 Renewal reminders</div>
+        <div class="bf-item hi" style="display:none">🔔 नवीनीकरण अनुस्मारक</div>
+        <div class="bf-item en">💬 WhatsApp + Telegram</div>
+        <div class="bf-item hi" style="display:none">💬 WhatsApp + Telegram</div>
+        <div class="bf-item en">🇮🇳 Hindi + English</div>
+        <div class="bf-item hi" style="display:none">🇮🇳 हिंदी + अंग्रेजी</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ TRUST ══════════ -->
+<section class="trust" id="trust">
+  <div class="trust-inner">
+    <h2 class="trust-heading en">Trusted by advisors across India</h2>
+    <h2 class="trust-heading hi" style="display:none">भारत भर के सलाहकारों का भरोसा</h2>
+    <div class="trust-grid">
+      <div class="trust-card">
+        <h4 class="en">🏛️ Registered under Ministry of Corporate Affairs</h4>
+        <h4 class="hi" style="display:none">🏛️ कॉर्पोरेट कार्य मंत्रालय में पंजीकृत</h4>
+        <p class="en">Nidaan – The Legal Consultants LLP is officially registered under MCA (Government of India). Fully compliant and accountable.</p>
+        <p class="hi" style="display:none">Nidaan – The Legal Consultants LLP MCA (भारत सरकार) के तहत आधिकारिक रूप से पंजीकृत है।</p>
+      </div>
+      <div class="trust-card">
+        <h4 class="en">⚖️ IRDAI & Ombudsman Track Record</h4>
+        <h4 class="hi" style="display:none">⚖️ IRDAI और लोकपाल में सिद्ध रिकॉर्ड</h4>
+        <p class="en">2,000+ cases resolved. We've appeared before IRDAI Ombudsman, Consumer Courts, and High Courts across MP, Chhattisgarh, and Rajasthan.</p>
+        <p class="hi" style="display:none">2,000+ मामले सुलझाए। MP, छत्तीसगढ़ और राजस्थान में IRDAI लोकपाल, उपभोक्ता न्यायालय और उच्च न्यायालय में।</p>
+      </div>
+      <div class="trust-card">
+        <h4 class="en">🤝 Success-Fee Model — Zero Risk for You</h4>
+        <h4 class="hi" style="display:none">🤝 सफलता-शुल्क मॉडल — आपके लिए शून्य जोखिम</h4>
+        <p class="en">First consultation is free. We only charge a consultancy fee after your client receives their claim amount. No win, no charge.</p>
+        <p class="hi" style="display:none">पहली परामर्श मुफ्त। परामर्श शुल्क तभी जब क्लाइंट को राशि मिले। जीत नहीं तो शुल्क नहीं।</p>
+      </div>
+      <div class="trust-card">
+        <h4 class="en">🏙️ 4 Offices Across Madhya Pradesh & Bhopal</h4>
+        <h4 class="hi" style="display:none">🏙️ मध्य प्रदेश और भोपाल में 4 कार्यालय</h4>
+        <p class="en">Physical presence in Indore (3 offices) and Bhopal. Real people, real accountability, real results.</p>
+        <p class="hi" style="display:none">इंदौर (3 कार्यालय) और भोपाल में भौतिक उपस्थिति। वास्तविक लोग, वास्तविक जिम्मेदारी, वास्तविक परिणाम।</p>
+      </div>
+      <div class="trust-card">
+        <h4 class="en">👥 Multi-disciplinary Expert Panel</h4>
+        <h4 class="hi" style="display:none">👥 बहु-विषयक विशेषज्ञ पैनल</h4>
+        <p class="en">Claim experts, qualified doctors (medical analysis), senior advocates, and licensed insurance surveyors — all under one roof.</p>
+        <p class="hi" style="display:none">क्लेम विशेषज्ञ, योग्य डॉक्टर, वरिष्ठ अधिवक्ता और लाइसेंसी बीमा सर्वेक्षक — एक ही छत के नीचे।</p>
+      </div>
+      <div class="trust-card">
+        <h4 class="en">📈 95%+ Success Rate</h4>
+        <h4 class="hi" style="display:none">📈 95%+ सफलता दर</h4>
+        <p class="en">5,000+ policyholders helped. Average resolution in 5–6 months. 100+ hospitals assisted with TPA deduction disputes.</p>
+        <p class="hi" style="display:none">5,000+ पॉलिसीधारकों की मदद। औसत समाधान 5–6 माह। 100+ अस्पतालों की TPA कटौती विवादों में सहायता।</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ TESTIMONIALS ══════════ -->
+<section class="section" id="testimonials">
+  <div class="section-inner">
+    <div class="tag en">What Advisors Say</div>
+    <div class="tag hi" style="display:none">सलाहकार क्या कहते हैं</div>
+    <h2 class="section-title en">Peace of mind. Every single time.</h2>
+    <h2 class="section-title hi" style="display:none">मन की शांति। हर बार।</h2>
+    <div class="testi-grid">
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text en">"My client's ₹4.8L mediclaim was rejected for 'non-disclosure'. Nidaan's team had it resolved at the Ombudsman level in 4 months. My client cried with relief. I've never felt more proud as an advisor."</p>
+        <p class="testi-text hi" style="display:none">"मेरे क्लाइंट का ₹4.8L मेडिक्लेम 'non-disclosure' के आधार पर रिजेक्ट हुआ था। Nidaan की टीम ने 4 महीने में लोकपाल स्तर पर हल कर दिया। क्लाइंट की आंखों में आंसू थे। मुझे सलाहकार होने पर गर्व हुआ।"</p>
+        <div class="testi-author en">Rajesh Sharma</div>
+        <div class="testi-author hi" style="display:none">राजेश शर्मा</div>
+        <div class="testi-role en">LIC Advisor, Indore</div>
+        <div class="testi-role hi" style="display:none">LIC एडवाइजर, इंदौर</div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text en">"Three clients, three claims, all resolved within 6 months. The SMS updates kept everyone informed — I didn't have to chase anything. Gold plan is worth every rupee."</p>
+        <p class="testi-text hi" style="display:none">"तीन क्लाइंट, तीन क्लेम, सभी 6 महीने के भीतर हल। SMS अपडेट ने सबको जानकारी रखी — मुझे कुछ पीछा नहीं करना पड़ा। Gold प्लान हर रुपए के लायक है।"</p>
+        <div class="testi-author en">Priya Malhotra</div>
+        <div class="testi-author hi" style="display:none">प्रिया मल्होत्रा</div>
+        <div class="testi-role en">HDFC Life Advisor, Bhopal</div>
+        <div class="testi-role hi" style="display:none">HDFC Life एडवाइजर, भोपाल</div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text en">"I used to dread client calls about rejected claims. Now I just say 'I'll connect you with our legal team' and it's done. Nidaan changed how I handle the hardest part of this job."</p>
+        <p class="testi-text hi" style="display:none">"पहले रिजेक्ट क्लेम के फोन से डर लगता था। अब बस कहता हूं 'हमारी कानूनी टीम से जोड़ता हूं' और हो जाता है। Nidaan ने इस काम का सबसे मुश्किल हिस्सा बदल दिया।"</p>
+        <div class="testi-author en">Suresh Patel</div>
+        <div class="testi-author hi" style="display:none">सुरेश पटेल</div>
+        <div class="testi-role en">Star Health Advisor, Raipur</div>
+        <div class="testi-role hi" style="display:none">Star Health एडवाइजर, रायपुर</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FAQ ══════════ -->
+<section class="section" id="faq" style="background:var(--slate-50)">
+  <div class="section-inner">
+    <div class="tag en">FAQ</div>
+    <div class="tag hi" style="display:none">अक्सर पूछे जाने वाले सवाल</div>
+    <h2 class="section-title en">Questions &amp; Answers</h2>
+    <h2 class="section-title hi" style="display:none">सवाल और जवाब</h2>
+    <div class="faq-list">
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Is the first consultation free?</span>
+          <span class="hi" style="display:none">क्या पहली परामर्श मुफ्त है?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Yes — absolutely free. In the first meeting, we listen to the problem and give expert advice at no cost.</div>
+        <div class="faq-a hi" style="display:none">हाँ — बिल्कुल मुफ्त। पहली बैठक में हम समस्या सुनते हैं और विशेषज्ञ सलाह देते हैं — कोई शुल्क नहीं।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Do I pay the full consultancy fee at registration?</span>
+          <span class="hi" style="display:none">क्या रजिस्ट्रेशन पर पूरी फीस देनी होती है?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">No. Only a registration fee for legal documentation is charged upfront. The consultancy fee is due only after successful resolution.</div>
+        <div class="faq-a hi" style="display:none">नहीं। केवल कानूनी दस्तावेज़ीकरण की रजिस्ट्रेशन फीस अग्रिम ली जाती है। परामर्श शुल्क केवल सफल समाधान के बाद।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Does my client need to travel or take time off work?</span>
+          <span class="hi" style="display:none">क्या क्लाइंट को यात्रा या छुट्टी लेनी होगी?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">No. All drafting and follow-ups are handled by Nidaan. Your client only needs to provide document copies. No travel required.</div>
+        <div class="faq-a hi" style="display:none">नहीं। सभी ड्राफ्टिंग और फॉलो-अप Nidaan करता है। क्लाइंट को केवल दस्तावेज़ की प्रतियां देनी होती हैं। कोई यात्रा नहीं।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">What claim types do you handle?</span>
+          <span class="hi" style="display:none">आप किस प्रकार के क्लेम संभालते हैं?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Health/Mediclaim, Life, Motor/Vehicle, Property, Fire, Marine, Industrial, Labour, and Travel insurance claims. We also handle hospital and TPA disputes.</div>
+        <div class="faq-a hi" style="display:none">हेल्थ/मेडिक्लेम, लाइफ, मोटर/वाहन, प्रॉपर्टी, फायर, मरीन, इंडस्ट्रियल, लेबर और ट्रैवल बीमा क्लेम। अस्पताल और TPA विवाद भी।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">What is the success rate and average resolution time?</span>
+          <span class="hi" style="display:none">सफलता दर और औसत समाधान समय क्या है?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Our success rate is 95%+, and the average resolution time is 5–6 months from the date of case registration.</div>
+        <div class="faq-a hi" style="display:none">हमारी सफलता दर 95%+ है और मामला दर्ज होने के बाद औसत समाधान समय 5–6 महीने है।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">What is the subscription quota? What happens if I exceed it?</span>
+          <span class="hi" style="display:none">सब्सक्रिप्शन कोटा क्या है? अधिक होने पर क्या?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Silver = 3 claims/month, Gold = 6 claims/month, Platinum = unlimited. If you hit your limit, you'll see an upgrade prompt in your dashboard — or you can purchase a single-claim review for ₹999.</div>
+        <div class="faq-a hi" style="display:none">सिल्वर = 3 क्लेम/माह, गोल्ड = 6 क्लेम/माह, प्लेटिनम = असीमित। सीमा पहुंचने पर डैशबोर्ड में अपग्रेड का संकेत मिलेगा — या ₹999 में एकल क्लेम समीक्षा।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Is there any financial risk for my client?</span>
+          <span class="hi" style="display:none">क्या क्लाइंट के लिए कोई वित्तीय जोखिम है?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">No. Since the consultancy fee is payable only after successful claim recovery, there is no financial risk for the client.</div>
+        <div class="faq-a hi" style="display:none">नहीं। परामर्श शुल्क केवल सफल क्लेम वसूली के बाद देय होता है — क्लाइंट के लिए कोई वित्तीय जोखिम नहीं।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">What documents does my client need to provide?</span>
+          <span class="hi" style="display:none">क्लाइंट को कौन से दस्तावेज़ देने होंगे?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Copies of claim documents (rejection letter, policy copy, discharge summary for mediclaim, etc.). Our team will guide them on exactly what's needed for their specific case.</div>
+        <div class="faq-a hi" style="display:none">क्लेम दस्तावेज़ों की प्रतियां (अस्वीकृति पत्र, पॉलिसी कॉपी, मेडिक्लेम के लिए डिस्चार्ज सारांश आदि)। हमारी टीम उनके मामले के अनुसार बताएगी।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Can I use this service for my own rejected claim (as an insured, not an advisor)?</span>
+          <span class="hi" style="display:none">क्या मैं अपने खुद के रिजेक्ट क्लेम के लिए इसका उपयोग कर सकता/सकती हूं?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">Yes — scroll down to our "Get Your Claim Reviewed" section for a one-time ₹999 legal review, with no subscription required.</div>
+        <div class="faq-a hi" style="display:none">हाँ — "अपना क्लेम समीक्षा कराएं" सेक्शन में जाएं। एकमुश्त ₹999 में कानूनी समीक्षा, कोई सब्सक्रिप्शन नहीं।</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span class="en">Where are Nidaan's offices?</span>
+          <span class="hi" style="display:none">Nidaan के कार्यालय कहां हैं?</span>
+          <span class="faq-arrow">▾</span>
+        </button>
+        <div class="faq-a en">We have 3 offices in Indore and 1 in Bhopal. The registered office is at 79-A, Dravid Nagar, Indore – 452009. See footer for all addresses.</div>
+        <div class="faq-a hi" style="display:none">इंदौर में 3 और भोपाल में 1 कार्यालय। पंजीकृत कार्यालय: 79-A, द्रविड़ नगर, इंदौर – 452009। सभी पते Footer में।</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ DIRECT TO CONSUMER ══════════ -->
+<section class="section d2c" id="get-reviewed">
+  <div class="d2c-inner">
+    <div class="tag en" style="background:#fef3c7;color:#92400e">For Insurance Customers</div>
+    <div class="tag hi" style="display:none;background:#fef3c7;color:#92400e">बीमा ग्राहकों के लिए</div>
+    <h2 class="section-title en">Your claim was rejected. We'll review it.</h2>
+    <h2 class="section-title hi" style="display:none">आपका क्लेम रिजेक्ट हुआ। हम समीक्षा करेंगे।</h2>
+    <div class="d2c-price">₹999</div>
+    <p class="d2c-desc en">No advisor? No subscription? No problem.<br>Get a <strong>one-time legal review</strong> of your rejected or underpaid insurance claim by Nidaan's experts.<br>We'll tell you if you have a case — and if you do, our team will take it forward.</p>
+    <p class="d2c-desc hi" style="display:none">कोई एडवाइजर नहीं? कोई सब्सक्रिप्शन नहीं? कोई बात नहीं।<br>Nidaan के विशेषज्ञों से अपने रिजेक्ट या कम भुगतान किए गए बीमा क्लेम की <strong>एकमुश्त कानूनी समीक्षा</strong> करवाएं।<br>हम बताएंगे — अगर मामला बनता है तो टीम आगे बढ़ाएगी।</p>
+    <a href="/nidaan/get-reviewed" class="btn-primary" style="margin:0 auto;display:inline-flex">
+      <span class="en">Get My Claim Reviewed — ₹999</span>
+      <span class="hi" style="display:none">मेरा क्लेम समीक्षा करवाएं — ₹999</span>
+    </a>
+  </div>
+</section>
+
+<!-- ══════════ OFFICES ══════════ -->
+<section class="section" style="padding-top:3rem;padding-bottom:3rem">
+  <div class="section-inner">
+    <h2 class="section-title en">Our Offices</h2>
+    <h2 class="section-title hi" style="display:none">हमारे कार्यालय</h2>
+    <div class="offices-grid">
+      <div class="office-card">
+        <div class="office-city en">Indore — Registered Office</div>
+        <div class="office-city hi" style="display:none">इंदौर — पंजीकृत कार्यालय</div>
+        <div class="office-addr">79-A, Dravid Nagar, Ranjit Hanuman Mandir Road, Indore – 452009</div>
+      </div>
+      <div class="office-card">
+        <div class="office-city en">Indore — Office 2</div>
+        <div class="office-city hi" style="display:none">इंदौर — कार्यालय 2</div>
+        <div class="office-addr">509, Girnar Plaza, MIG Square, Atal Dwar, Indore – 452010</div>
+      </div>
+      <div class="office-card">
+        <div class="office-city en">Indore — Office 3 (Vijay Nagar)</div>
+        <div class="office-city hi" style="display:none">इंदौर — कार्यालय 3 (विजय नगर)</div>
+        <div class="office-addr">401, Sanskar Apartment, Apollo Hospital Road, Scheme No. 54, Indore – 452010</div>
+      </div>
+      <div class="office-card">
+        <div class="office-city en">Bhopal</div>
+        <div class="office-city hi" style="display:none">भोपाल</div>
+        <div class="office-addr">244, BDA Complex – 7 No. Stop, Near SBI Bank, Shivaji Nagar, Bhopal – 462016</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="footer-brand footer-contact">
+      <h3>Nidaan – The Legal Consultants LLP</h3>
+      <p class="en">Registered under the Ministry of Corporate Affairs (MCA), Government of India.<br>Serving MP · Chhattisgarh · Rajasthan</p>
+      <p class="hi" style="display:none">भारत सरकार के कॉर्पोरेट कार्य मंत्रालय (MCA) के तहत पंजीकृत।<br>सेवा क्षेत्र: MP · छत्तीसगढ़ · राजस्थान</p>
+      <p style="margin-top:.75rem">
+        📞 +91-88892-96179 · 79878-56486<br>
+        📧 <a href="mailto:nidaanhelp@gmail.com">nidaanhelp@gmail.com</a><br>
+        🌐 <a href="https://www.claimsexpert.in" target="_blank" rel="noopener">www.claimsexpert.in</a>
+      </p>
+      <p style="margin-top:.5rem;font-size:.78rem">
+        <a href="https://instagram.com/nidaantheclaimsexpert" target="_blank" rel="noopener">Instagram</a> ·
+        <a href="https://www.linkedin.com/company/nidaan-the-claims-expert" target="_blank" rel="noopener">LinkedIn</a> ·
+        <a href="https://youtube.com/@claimsexpert" target="_blank" rel="noopener">YouTube</a>
+      </p>
+    </div>
+    <div class="footer-col">
+      <h4 class="en">Quick Links</h4>
+      <h4 class="hi" style="display:none">त्वरित लिंक</h4>
+      <ul>
+        <li><a href="#how-it-works" class="en">How It Works</a><a href="#how-it-works" class="hi" style="display:none">कैसे काम करता है</a></li>
+        <li><a href="#plans" class="en">Plans &amp; Pricing</a><a href="#plans" class="hi" style="display:none">प्लान और मूल्य</a></li>
+        <li><a href="#faq" class="en">FAQ</a><a href="#faq" class="hi" style="display:none">FAQ</a></li>
+        <li><a href="#get-reviewed" class="en">Get Claim Reviewed</a><a href="#get-reviewed" class="hi" style="display:none">क्लेम समीक्षा</a></li>
+        <li><a href="/nidaan/login" class="en">Login</a><a href="/nidaan/login" class="hi" style="display:none">लॉगिन</a></li>
+        <li><a href="https://sarathi-ai.com" target="_blank" rel="noopener">Sarathi-AI CRM</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 class="en">Legal</h4>
+      <h4 class="hi" style="display:none">कानूनी</h4>
+      <ul>
+        <li><a href="/nidaan/privacy" class="en">Privacy Policy</a><a href="/nidaan/privacy" class="hi" style="display:none">गोपनीयता नीति</a></li>
+        <li><a href="/nidaan/terms" class="en">Terms of Service</a><a href="/nidaan/terms" class="hi" style="display:none">सेवा शर्तें</a></li>
+      </ul>
+      <div style="margin-top:1.5rem">
+        <h4 class="en">Leadership</h4>
+        <h4 class="hi" style="display:none">नेतृत्व</h4>
+        <p style="font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.9;margin-top:.5rem">
+          <strong style="color:#fff">Ashwin Kaushal</strong><br>
+          <span class="en">Managing Director</span><span class="hi" style="display:none">प्रबंध निदेशक</span><br><br>
+          <strong style="color:#fff">Robin Mehkali</strong><br>
+          <span class="en">Director, Business &amp; Promotions</span><span class="hi" style="display:none">निदेशक, व्यापार एवं प्रचार</span>
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Nidaan – The Legal Consultants LLP. All rights reserved.</span>
+    <span class="en">Insurance is the subject matter of solicitation. IRDAI Reg. applicable.</span>
+    <span class="hi" style="display:none">बीमा आग्रह का विषय है। IRDAI पंजीकरण लागू।</span>
+  </div>
+</footer>
+
+<!-- ══════════ STICKY CTA ══════════ -->
+<div class="sticky-cta" id="stickyCta">
+  <div>
+    <div class="sc-text en">🛡️ Get Nidaan Partner Plan</div>
+    <div class="sc-text hi" style="display:none">🛡️ Nidaan Partner प्लान लें</div>
+    <div class="sc-sub en">Sarathi-AI CRM bundled free · from ₹1,500/quarter</div>
+    <div class="sc-sub hi" style="display:none">Sarathi-AI CRM मुफ्त · ₹1,500/तिमाही से</div>
+  </div>
+  <a href="#plans" class="en">View Plans</a>
+  <a href="#plans" class="hi" style="display:none">प्लान देखें</a>
+</div>
+
+<script>
+// ── Language switch ──
+function setLang(l) {
+  document.body.className = l;
+  localStorage.setItem('nidaan_lang', l);
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l === 'hi' ? 'हिं' : 'EN')));
+  // Sync nav link visibility
+  document.querySelectorAll('.nav-links a.en, .nav-links a.hi').forEach(a => {
+    a.style.display = '';
+  });
+}
+(function(){
+  var saved = localStorage.getItem('nidaan_lang');
+  var sys = (navigator.language || '').startsWith('hi') ? 'hi' : 'en';
+  setLang(saved || sys);
+})();
+
+// ── FAQ toggle ──
+function toggleFaq(btn) {
+  var item = btn.closest('.faq-item');
+  item.classList.toggle('open');
+}
+
+// ── Sticky CTA ──
+var hero = document.querySelector('.hero');
+var cta = document.getElementById('stickyCta');
+var io = new IntersectionObserver(function(entries){
+  cta.classList.toggle('visible', !entries[0].isIntersecting);
+}, {threshold: 0});
+io.observe(hero);
+
+// ── Smooth scroll for anchors ──
+document.querySelectorAll('a[href^="#"]').forEach(function(a){
+  a.addEventListener('click', function(e){
+    var t = document.querySelector(this.getAttribute('href'));
+    if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'}); }
+  });
+});
+</script>
+</body>
+</html>

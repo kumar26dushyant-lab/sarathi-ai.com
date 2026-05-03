@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Tools</title>
+    <meta name="theme-color" content="#0d9488">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/static/favicon.ico">
+    <link rel="apple-touch-icon" href="/static/icon-180x180.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/dark-mode.css?v=4">
+    <script src="/static/dark-mode.js?v=3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --blue: #0d9488;
+            --blue-dark: #0f766e;
+            --blue-light: #ccfbf1;
+            --saffron: #f59e0b;
+            --saffron-light: #fffbeb;
+            --green: #059669;
+            --green-light: #d1fae5;
+            --red: #dc2626;
+            --red-light: #fef2f2;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --radius: 16px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+            color: white;
+            padding: 28px 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -60%;
+            right: -15%;
+            width: 350px;
+            height: 350px;
+            border-radius: 50%;
+            background: rgba(13,148,136, 0.12);
+            pointer-events: none;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -40%;
+            left: -10%;
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.06);
+            pointer-events: none;
+        }
+        .header .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 1.1em;
+            margin-bottom: 6px;
+            position: relative;
+            z-index: 1;
+        }
+        .header .logo svg {
+            width: 28px;
+            height: 28px;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            position: relative;
+            z-index: 1;
+        }
+        .header h1 span {
+            color: #5eead4;
+        }
+        .header .subtitle {
+            font-size: 13px;
+            opacity: 0.8;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── Tabs ───────────────────────────────────────── */
+        .tabs {
+            display: flex;
+            overflow-x: auto;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            flex: 1;
+            min-width: 90px;
+            padding: 14px 8px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.25s;
+            white-space: nowrap;
+            color: var(--text-muted);
+            font-family: 'Poppins', sans-serif;
+        }
+        .tab:hover { background: var(--blue-light); color: var(--blue); }
+        .tab.active {
+            color: var(--blue);
+            border-bottom-color: var(--saffron);
+            background: var(--blue-light);
+        }
+        .tab .icon { font-size: 18px; display: block; margin-bottom: 3px; }
+
+        /* ── Panels ─────────────────────────────────────── */
+        .panel { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; }
+        .panel.active { display: block; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .calc-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .calc-card h2 {
+            font-size: 1.15em;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: var(--blue-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .calc-card .desc {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        /* ── Inputs ─────────────────────────────────────── */
+        .input-group {
+            margin-bottom: 18px;
+        }
+        .input-group label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        .input-group label span {
+            color: var(--blue);
+            font-weight: 700;
+            background: var(--blue-light);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .input-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, var(--blue) 0%, var(--blue) 50%, var(--border) 50%);
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+        .input-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--blue);
+            border: 3px solid var(--card);
+            box-shadow: 0 2px 8px rgba(26, 86, 219, 0.35);
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .input-group input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        .input-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--blue);
+            border: 3px solid var(--card);
+            box-shadow: 0 2px 8px rgba(26, 86, 219, 0.35);
+            cursor: pointer;
+        }
+        .input-group input[type="number"] {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.95em;
+            font-family: 'Poppins', sans-serif;
+            transition: border-color 0.2s;
+        }
+        .input-group input[type="number"]:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+        }
+        .inputs-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        /* ── Calculate Button ───────────────────────────── */
+        .calc-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: 700;
+            font-family: 'Poppins', sans-serif;
+            cursor: pointer;
+            transition: all 0.25s;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .calc-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(26, 86, 219, 0.35);
+        }
+        .calc-btn:active { transform: translateY(0); }
+
+        /* ── Result Box ─────────────────────────────────── */
+        .result-box {
+            display: none;
+            margin-top: 24px;
+            background: linear-gradient(135deg, var(--blue-light), var(--card));
+            border: 2px solid rgba(26, 86, 219, 0.15);
+            border-radius: var(--radius);
+            padding: 24px;
+            animation: fadeIn 0.4s ease;
+        }
+        .result-box.active { display: block; }
+        .result-box h3 {
+            font-size: 1em;
+            font-weight: 700;
+            color: var(--blue-dark);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .result-box .big-number {
+            font-size: 2em;
+            font-weight: 800;
+            color: var(--blue);
+            margin: 8px 0;
+        }
+        .result-box .detail {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* ── Warning Box ────────────────────────────────── */
+        .warning-box {
+            display: none;
+            margin-top: 16px;
+            background: var(--saffron-light);
+            border: 2px solid rgba(234, 88, 12, 0.2);
+            border-left: 5px solid var(--saffron);
+            border-radius: 12px;
+            padding: 18px 20px;
+            animation: fadeIn 0.4s ease;
+        }
+        .warning-box.active { display: block; }
+        .warning-box h4 {
+            font-size: 0.95em;
+            font-weight: 700;
+            color: var(--saffron);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .warning-box p {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* ── Stat Grid ──────────────────────────────────── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-card .label {
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .stat-card .value {
+            font-size: 1.2em;
+            font-weight: 800;
+            color: var(--blue-dark);
+        }
+        .stat-card.highlight {
+            background: linear-gradient(135deg, var(--saffron-light), var(--card));
+            border-color: rgba(234, 88, 12, 0.2);
+        }
+        .stat-card.highlight .value {
+            color: var(--saffron);
+        }
+
+        /* ── Chart ──────────────────────────────────────── */
+        .chart-wrap {
+            margin-top: 20px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .chart-wrap h4 {
+            font-size: 0.9em;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+        .chart-wrap canvas {
+            max-height: 280px;
+        }
+
+        /* ── CTA Bar ────────────────────────────────────── */
+        .cta-bar {
+            margin-top: 20px;
+            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .cta-bar .cta-text h4 {
+            font-size: 1em;
+            font-weight: 700;
+        }
+        .cta-bar .cta-text p {
+            font-size: 0.8em;
+            opacity: 0.85;
+            margin-top: 2px;
+        }
+        .cta-bar .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 16px;
+            background: var(--saffron);
+            color: #fff;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.8em;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.25s;
+        }
+        .cta-bar .cta-btn:hover {
+            background: #c2410c;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 12px rgba(234, 88, 12, 0.3);
+        }
+        .cta-bar .share-btn {
+            background: #25d366;
+            border: none;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+        }
+        .cta-bar .share-btn:hover { background: #1da851; }
+        .cta-bar .contact-btn { background: var(--saffron); }
+        .cta-bar .pdf-btn { background: #6366f1; border:none; cursor:pointer; font-family:'Poppins',sans-serif; }
+        .cta-bar .pdf-btn:hover { background: #4f46e5; }
+        .cta-bar .wa-pdf-btn { background: #128C7E; border:none; cursor:pointer; font-family:'Poppins',sans-serif; }
+        .cta-bar .wa-pdf-btn:hover { background: #075E54; }
+
+        /* ── Footer ─────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 24px 20px;
+            color: var(--text-muted);
+            font-size: 0.8em;
+            border-top: 1px solid var(--border);
+            background: var(--card);
+            margin-top: 40px;
+        }
+        .footer a { color: var(--blue); text-decoration: none; font-weight: 600; }
+
+        /* ── Responsive ─────────────────────────────────── */
+        @media (max-width: 600px) {
+            .header h1 { font-size: 18px; }
+            .header { padding: 14px 16px 10px; }
+            .header .subtitle { font-size: 0.75em; }
+            .header .logo { font-size: 0.95em; }
+            .header .logo img { height: 40px !important; }
+            .inputs-row { grid-template-columns: 1fr; }
+            .stat-grid { grid-template-columns: 1fr 1fr; }
+            .stat-card { padding: 10px; }
+            .stat-card .value { font-size: 1em; }
+            .stat-card .label { font-size: 0.7em; }
+            .cta-bar { flex-direction: column; text-align: center; padding: 14px 12px; gap: 8px; }
+            .cta-bar .cta-text h4 { font-size: 0.85em; }
+            .cta-bar .cta-text p { font-size: 0.72em; }
+            .cta-bar .cta-btn, .cta-bar .share-btn, .cta-bar .pdf-btn, .cta-bar .wa-pdf-btn {
+                font-size: 0.75em; padding: 6px 12px;
+            }
+            .result-box .big-number { font-size: 1.5em; }
+            .result-box { padding: 16px; }
+            .calc-card { padding: 16px; margin-bottom: 14px; }
+            .calc-card h2 { font-size: 1em; }
+            .calc-card .desc { font-size: 0.78em; margin-bottom: 14px; }
+            .calc-btn { padding: 12px; font-size: 0.9em; }
+            .input-group { margin-bottom: 14px; }
+            .input-group label { font-size: 0.8em; flex-wrap: wrap; gap: 4px; }
+            .input-group label span { font-size: 0.82em; padding: 1px 8px; }
+            .input-group input[type="number"] { padding: 8px 10px; font-size: 0.88em; }
+            .chart-wrap { padding: 12px; }
+            .chart-wrap canvas { max-height: 220px; }
+            .panel { padding: 12px; }
+            /* Tabs: scrollable, compact, no overlap */
+            .tabs { gap: 0; padding: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .tab { min-width: 60px; max-width: 80px; font-size: 0.62em; padding: 8px 4px; flex: 0 0 auto; line-height: 1.2; word-break: break-word; }
+            .tab .icon { font-size: 14px; margin-bottom: 1px; }
+            .warning-box { padding: 12px 14px; }
+            .warning-box h4 { font-size: 0.85em; }
+            .warning-box p { font-size: 0.78em; }
+            .footer { padding: 16px 12px; font-size: 0.72em; }
+            .header::before, .header::after { display: none; }
+            .header { display: flex; flex-direction: column; align-items: center; padding: 12px 16px 10px !important; }
+            .header .logo { display: block; font-size: 0.85em; padding: 0; }
+            .header .logo img { height: 36px !important; }
+            .header h1 { font-size: 16px; margin-top: 2px; }
+            .header-controls {
+                position: static !important;
+                margin-top: 8px;
+                display: inline-flex !important;
+                justify-content: center;
+                z-index: 3;
+                gap: 6px !important;
+            }
+            .header-controls .theme-toggle { width: 32px; height: 32px; font-size: 15px; padding: 0; }
+        }
+        @media (max-width: 380px) {
+            .header h1 { font-size: 16px; }
+            .tab { min-width: 56px; font-size: 0.64em; padding: 6px 3px; }
+            .tab .icon { font-size: 14px; }
+            .stat-grid { grid-template-columns: 1fr; }
+            .calc-card { padding: 12px; }
+            .result-box .big-number { font-size: 1.3em; }
+            .input-group label { font-size: 0.75em; }
+            .cta-bar { padding: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────── -->
+<div class="header">
+    <a href="/dashboard" style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:4px;color:rgba(255,255,255,.9);text-decoration:none;font-size:.82em;font-weight:600;background:rgba(255,255,255,.15);padding:6px 12px;border-radius:100px;z-index:3;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)" title="Back to Dashboard">
+        ← <span class="calc-back-full">Dashboard</span>
+    </a>
+    <div class="logo">
+        <img id="brand-logo" src="" alt="" style="height:60px;border-radius:6px;display:none">
+        <span id="brand-name" data-i18n-html="c_brand"></span>
+    </div>
+    <h1>🧮 <span data-i18n="c_title">Financial Tools</span></h1>
+    <div class="subtitle" id="brand-tagline" data-i18n="c_sub"></div>
+    <div class="header-controls" style="position:absolute;top:12px;right:12px;display:inline-flex;gap:6px;align-items:center;z-index:3">
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.85)">🌙</button>
+      <div style="display:inline-flex;gap:0;border:1.5px solid rgba(255,255,255,.4);border-radius:100px;overflow:hidden;font-size:.78em">
+        <span class="clt-en" onclick="setCalcLang('en')" style="padding:4px 10px;cursor:pointer;font-weight:600;background:rgba(255,255,255,.3);color:#fff">EN</span>
+        <span class="clt-hi" onclick="setCalcLang('hi')" style="padding:4px 10px;cursor:pointer;font-weight:600;color:rgba(255,255,255,.7)">हिं</span>
+      </div>
+    </div>
+</div>
+
+<!-- ── Tabs ─────────────────────────────────────────────── -->
+<div class="tabs" id="tabsBar">
+    <div class="tab active" onclick="showTab('inflation')">
+        <span class="icon">📈</span><span data-i18n="tab_inflation">Inflation</span>
+    </div>
+    <div class="tab" onclick="showTab('hlv')">
+        <span class="icon">🛡️</span><span data-i18n="tab_hlv">HLV</span>
+    </div>
+    <div class="tab" onclick="showTab('retirement')">
+        <span class="icon">🏖️</span><span data-i18n="tab_retirement">Retirement</span>
+    </div>
+    <div class="tab" onclick="showTab('emi')">
+        <span class="icon">💳</span><span data-i18n="tab_emi">EMI</span>
+    </div>
+    <div class="tab" onclick="showTab('health')">
+        <span class="icon">🏥</span><span data-i18n="tab_health">Health</span>
+    </div>
+    <div class="tab" onclick="showTab('sip')">
+        <span class="icon">📊</span><span data-i18n="tab_sip">SIP</span>
+    </div>
+    <div class="tab" onclick="showTab('mfsip')">
+        <span class="icon">📊</span><span data-i18n="tab_mfsip">MF SIP</span>
+    </div>
+    <div class="tab" onclick="showTab('ulip')">
+        <span class="icon">⚖️</span><span data-i18n="tab_ulip">ULIP vs MF</span>
+    </div>
+    <div class="tab" onclick="showTab('nps')">
+        <span class="icon">🏛️</span><span data-i18n="tab_nps">NPS</span>
+    </div>
+    <div class="tab" onclick="showTab('stepupsip')">
+        <span class="icon">📈</span><span data-i18n="tab_stepupsip">Step-Up SIP</span>
+    </div>
+    <div class="tab" onclick="showTab('swp')">
+        <span class="icon">💸</span><span data-i18n="tab_swp">SWP</span>
+    </div>
+    <div class="tab" onclick="showTab('delaycost')">
+        <span class="icon">⏰</span><span data-i18n="tab_delaycost">Delay Cost</span>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  1. INFLATION ERASER                                   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel active" id="panel-inflation">
+    <div class="calc-card">
+        <h2>📈 <span data-i18n="inf_title">Inflation Eraser</span></h2>
+        <p class="desc" data-i18n="inf_desc">See how inflation silently eats your money. Show clients why acting today matters.</p>
+
+        <div class="input-group">
+            <label data-i18n="inf_monthly_exp">Monthly Expense</label> <span id="v-inf-amt">₹50,000</span>
+            <input type="range" id="inf-amt" min="5000" max="500000" step="5000" value="50000"
+                   oninput="document.getElementById('v-inf-amt').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="inf_rate">Inflation Rate %</span> <span id="v-inf-rate">6%</span></label>
+                <input type="range" id="inf-rate" min="2" max="15" step="0.5" value="6"
+                       oninput="document.getElementById('v-inf-rate').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_years">Years</span> <span id="v-inf-yrs">10</span></label>
+                <input type="range" id="inf-yrs" min="1" max="40" value="10"
+                       oninput="document.getElementById('v-inf-yrs').textContent=this.value">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcInflation()" data-i18n="inf_calc_btn">Calculate Impact ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-inflation">
+        <h3>📊 <span data-i18n="inf_impact">Inflation Impact</span></h3>
+        <div class="big-number" id="inf-future"></div>
+        <p class="detail" id="inf-detail"></p>
+        <div class="stat-grid" id="inf-stats"></div>
+    </div>
+
+    <div class="warning-box" id="warn-inflation">
+        <h4>⚠️ <span data-i18n="inf_warning_h">Reality Check</span></h4>
+        <p id="inf-warning"></p>
+    </div>
+
+    <div class="chart-wrap" id="chart-inflation" style="display:none">
+        <h4 data-i18n="inf_chart">Inflation Erosion Over Time</h4>
+        <canvas id="canvas-inflation"></canvas>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_inflation_h">Beat Inflation with Smart Planning</h4>
+            <p data-i18n="cta_inflation_p">Talk to your advisor for personalized solutions</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('inflation')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('inflation')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('inflation')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  2. HUMAN LIFE VALUE                                   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-hlv">
+    <div class="calc-card">
+        <h2>🛡️ <span data-i18n="hlv_title">Human Life Value Calculator</span></h2>
+        <p class="desc" data-i18n="hlv_desc">Calculate the financial value you bring to your family. This determines the ideal life cover amount.</p>
+
+        <div class="input-group">
+            <label data-i18n="hlv_household_exp">Monthly Household Expense</label> <span id="v-hlv-exp">₹50,000</span>
+            <input type="range" id="hlv-exp" min="10000" max="500000" step="5000" value="50000"
+                   oninput="document.getElementById('v-hlv-exp').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="input-group">
+            <label data-i18n="hlv_loans">Outstanding Loans</label> <span id="v-hlv-loan">₹0</span>
+            <input type="range" id="hlv-loan" min="0" max="10000000" step="100000" value="0"
+                   oninput="document.getElementById('v-hlv-loan').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="hlv_child_edu">Children Education</span> <span id="v-hlv-child">₹0</span></label>
+                <input type="range" id="hlv-child" min="0" max="5000000" step="100000" value="0"
+                       oninput="document.getElementById('v-hlv-child').textContent='₹'+fmt(this.value)">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="hlv_existing_cover">Existing Cover</span> <span id="v-hlv-cover">₹0</span></label>
+                <input type="range" id="hlv-cover" min="0" max="10000000" step="100000" value="0"
+                       oninput="document.getElementById('v-hlv-cover').textContent='₹'+fmt(this.value)">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="hlv_yrs_retire">Years to Retire</span> <span id="v-hlv-retire">25</span></label>
+                <input type="range" id="hlv-retire" min="5" max="40" value="25"
+                       oninput="document.getElementById('v-hlv-retire').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="inf_rate">Inflation Rate %</span> <span id="v-hlv-inf">6%</span></label>
+                <input type="range" id="hlv-inf" min="3" max="12" step="0.5" value="6"
+                       oninput="document.getElementById('v-hlv-inf').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcHLV()" data-i18n="hlv_calc_btn">Calculate HLV ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-hlv">
+        <h3>🛡️ <span data-i18n="hlv_result_h">Your Human Life Value</span></h3>
+        <div class="big-number" id="hlv-total"></div>
+        <p class="detail" id="hlv-detail"></p>
+        <div class="stat-grid" id="hlv-stats"></div>
+    </div>
+
+    <div class="warning-box" id="warn-hlv">
+        <h4>⚠️ <span data-i18n="hlv_warning_h">Coverage Gap Alert</span></h4>
+        <p id="hlv-warning"></p>
+    </div>
+
+    <div class="chart-wrap" id="chart-hlv" style="display:none">
+        <h4 data-i18n="hlv_chart">Coverage Breakdown</h4>
+        <canvas id="canvas-hlv"></canvas>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_hlv_h">Close the Coverage Gap</h4>
+            <p data-i18n="cta_hlv_p">Get the right term plan with expert guidance</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('hlv')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('hlv')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('hlv')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  3. RETIREMENT PLANNER                                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-retirement">
+    <div class="calc-card">
+        <h2>🏖️ <span data-i18n="ret_title">Retirement Planner</span></h2>
+        <p class="desc" data-i18n="ret_desc">Plan your golden years. Calculate the corpus needed and monthly SIP to retire comfortably.</p>
+
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_current_age">Current Age</span> <span id="v-ret-age">35</span></label>
+                <input type="range" id="ret-age" min="20" max="55" value="35"
+                       oninput="document.getElementById('v-ret-age').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_retirement_age">Retirement Age</span> <span id="v-ret-retire">60</span></label>
+                <input type="range" id="ret-retire" min="45" max="70" value="60"
+                       oninput="document.getElementById('v-ret-retire').textContent=this.value">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="ret_life_exp">Life Expectancy</span> <span id="v-ret-life">85</span></label>
+                <input type="range" id="ret-life" min="65" max="100" value="85"
+                       oninput="document.getElementById('v-ret-life').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_monthly_exp">Monthly Expense</span> <span id="v-ret-exp">₹40,000</span></label>
+                <input type="range" id="ret-exp" min="10000" max="500000" step="5000" value="40000"
+                       oninput="document.getElementById('v-ret-exp').textContent='₹'+fmt(this.value)">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_inflation_pct">Inflation %</span> <span id="v-ret-inf">7%</span></label>
+                <input type="range" id="ret-inf" min="3" max="12" step="0.5" value="7"
+                       oninput="document.getElementById('v-ret-inf').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="ret_pre_ret">Pre-Ret Return %</span> <span id="v-ret-pre">15%</span></label>
+                <input type="range" id="ret-pre" min="8" max="25" step="0.5" value="15"
+                       oninput="document.getElementById('v-ret-pre').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcRetirement()" data-i18n="ret_calc_btn">Plan Retirement ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-retirement">
+        <h3>🏖️ <span data-i18n="ret_result_h">Retirement Corpus Needed</span></h3>
+        <div class="big-number" id="ret-corpus"></div>
+        <p class="detail" id="ret-detail"></p>
+        <div class="stat-grid" id="ret-stats"></div>
+    </div>
+
+    <div class="warning-box" id="warn-retirement">
+        <h4>⚠️ <span data-i18n="ret_warning_h">Time Is Your Best Friend</span></h4>
+        <p id="ret-warning"></p>
+    </div>
+
+    <div class="chart-wrap" id="chart-retirement" style="display:none">
+        <h4 data-i18n="ret_chart">Retirement Savings Growth</h4>
+        <canvas id="canvas-retirement"></canvas>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_retire_h">Start Your Retirement Fund Today</h4>
+            <p data-i18n="cta_retire_p">Pension plans tailored to your lifestyle goals</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('retirement')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('retirement')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('retirement')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  4. EMI CALCULATOR                                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-emi">
+    <div class="calc-card">
+        <h2>💳 <span data-i18n="emi_title">Premium EMI Calculator</span></h2>
+        <p class="desc" data-i18n="emi_desc">Calculate monthly EMI for insurance premium financing. Includes GST & CIBIL-based discounts.</p>
+
+        <div class="input-group">
+            <label data-i18n="emi_annual_premium">Annual Premium</label> <span id="v-emi-premium">₹25,000</span>
+            <input type="range" id="emi-premium" min="5000" max="500000" step="5000" value="25000"
+                   oninput="document.getElementById('v-emi-premium').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="emi_period">EMI Period (Years)</span> <span id="v-emi-yrs">5</span></label>
+                <input type="range" id="emi-yrs" min="1" max="10" value="5"
+                       oninput="document.getElementById('v-emi-yrs').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_interest_rate">Interest Rate %</span> <span id="v-emi-int">14%</span></label>
+                <input type="range" id="emi-int" min="5" max="24" step="0.5" value="14"
+                       oninput="document.getElementById('v-emi-int').textContent=this.value+'%'">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="emi_gst">GST %</span> <span id="v-emi-gst">18%</span></label>
+                <input type="range" id="emi-gst" min="0" max="28" step="1" value="18"
+                       oninput="document.getElementById('v-emi-gst').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="emi_cibil">CIBIL Discount %</span> <span id="v-emi-cibil">10%</span></label>
+                <input type="range" id="emi-cibil" min="0" max="30" step="1" value="10"
+                       oninput="document.getElementById('v-emi-cibil').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcEMI()" data-i18n="emi_calc_btn">Calculate EMI ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-emi">
+        <h3>💳 <span data-i18n="emi_result_h">Monthly EMI Amount</span></h3>
+        <div class="big-number" id="emi-monthly"></div>
+        <p class="detail" id="emi-detail"></p>
+        <div class="stat-grid" id="emi-stats"></div>
+    </div>
+
+    <div class="chart-wrap" id="chart-emi" style="display:none">
+        <h4 data-i18n="emi_chart">Payment Breakdown</h4>
+        <canvas id="canvas-emi"></canvas>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_emi_h">Flexible Premium Financing</h4>
+            <p data-i18n="cta_emi_p">Pay your premium in easy monthly installments</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('emi')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('emi')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('emi')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  5. HEALTH COVER ESTIMATOR                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-health">
+    <div class="calc-card">
+        <h2>🏥 <span data-i18n="health_title">Health Cover Estimator</span></h2>
+        <p class="desc" data-i18n="health_desc">Estimate the ideal health insurance cover based on age, family size, city tier, and medical history.</p>
+
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_your_age">Your Age</span> <span id="v-health-age">35</span></label>
+                <input type="range" id="health-age" min="18" max="75" value="35"
+                       oninput="document.getElementById('v-health-age').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="health_city_tier">City Tier</span> <span id="v-health-city">Tier 1</span></label>
+                <input type="range" id="health-city" min="1" max="3" value="1"
+                       oninput="document.getElementById('v-health-city').textContent='Tier '+this.value">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label data-i18n="health_family_size">Family Size</label>
+                <select id="health-family" style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:10px;font-size:0.95em;font-family:'Poppins',sans-serif">
+                    <option value="1A" data-i18n="health_1a">Individual (1 Adult)</option>
+                    <option value="2A" selected data-i18n="health_2a">Couple (2 Adults)</option>
+                    <option value="2A+1C" data-i18n="health_2a1c">Family (2A + 1 Child)</option>
+                    <option value="2A+2C" data-i18n="health_2a2c">Family (2A + 2 Children)</option>
+                    <option value="2A+3C" data-i18n="health_2a3c">Large Family (2A + 3C)</option>
+                    <option value="1A+Parents" data-i18n="health_1ap">Self + Parents</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label data-i18n="health_pre_existing">Pre-existing Conditions?</label>
+                <select id="health-pre" style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:10px;font-size:0.95em;font-family:'Poppins',sans-serif">
+                    <option value="0" data-i18n="lbl_no">No</option>
+                    <option value="1" data-i18n="lbl_yes">Yes</option>
+                </select>
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcHealth()" data-i18n="health_calc_btn">Estimate Cover ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-health">
+        <h3>🏥 <span data-i18n="health_result_h">Recommended Health Cover</span></h3>
+        <div class="big-number" id="health-cover"></div>
+        <p class="detail" id="health-detail"></p>
+        <div class="stat-grid" id="health-stats"></div>
+    </div>
+
+    <div class="warning-box" id="warn-health">
+        <h4>⚠️ <span data-i18n="health_warning_h">Health Insurance Advisory</span></h4>
+        <p id="health-warning"></p>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_health_h">Compare Health Plans Instantly</h4>
+            <p data-i18n="cta_health_p">Get cashless coverage at 10,000+ network hospitals</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('health')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('health')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('health')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  6. SIP vs LUMPSUM                                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-sip">
+    <div class="calc-card">
+        <h2>📊 <span data-i18n="sip_title">SIP vs Lumpsum Analyzer</span></h2>
+        <p class="desc" data-i18n="sip_desc">Compare systematic investment (SIP) returns against a lump-sum investment over time.</p>
+
+        <div class="input-group">
+            <label data-i18n="sip_total_inv">Total Investment Amount</label> <span id="v-sip-amt">₹5,00,000</span>
+            <input type="range" id="sip-amt" min="50000" max="10000000" step="50000" value="500000"
+                   oninput="document.getElementById('v-sip-amt').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="sip_inv_period">Investment Period (Years)</span> <span id="v-sip-yrs">10</span></label>
+                <input type="range" id="sip-yrs" min="1" max="30" value="10"
+                       oninput="document.getElementById('v-sip-yrs').textContent=this.value">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_expected_return">Expected Return %</span> <span id="v-sip-ret">12%</span></label>
+                <input type="range" id="sip-ret" min="4" max="30" step="0.5" value="12"
+                       oninput="document.getElementById('v-sip-ret').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcSIP()" data-i18n="sip_calc_btn">Compare Returns ⚡</button>
+    </div>
+
+    <div class="result-box" id="res-sip">
+        <h3>📊 <span data-i18n="sip_result_h">Investment Comparison</span></h3>
+        <div class="big-number" id="sip-result"></div>
+        <p class="detail" id="sip-detail"></p>
+        <div class="stat-grid" id="sip-stats"></div>
+    </div>
+
+    <div class="chart-wrap" id="chart-sip" style="display:none">
+        <h4 data-i18n="sip_chart">SIP vs Lumpsum Growth</h4>
+        <canvas id="canvas-sip"></canvas>
+    </div>
+
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_sip_h">Start Investing with Confidence</h4>
+            <p data-i18n="cta_sip_p">ULIP, Mutual Funds, NPS — find your best fit</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('sip')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('sip')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('sip')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  7. MUTUAL FUND SIP PLANNER                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-mfsip">
+    <div class="calc-card">
+        <h2>📊 <span data-i18n="mfsip_title">Mutual Fund SIP Planner</span></h2>
+        <p class="desc" data-i18n="mfsip_desc">Find out how much monthly SIP you need to reach your financial goal. Works for equity, debt, or hybrid mutual funds.</p>
+        <div class="input-group">
+            <label data-i18n="mfsip_goal">Goal Amount</label> <span id="v-mf-goal">₹50,00,000</span>
+            <input type="range" id="mf-goal" min="500000" max="100000000" step="500000" value="5000000"
+                   oninput="document.getElementById('v-mf-goal').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="mfsip_horizon">Time Horizon</span> <span id="v-mf-yrs">15 years</span></label>
+                <input type="range" id="mf-yrs" min="1" max="30" value="15"
+                       oninput="document.getElementById('v-mf-yrs').textContent=this.value+' years'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_expected_return">Expected Return</span> <span id="v-mf-ret">12%</span></label>
+                <input type="range" id="mf-ret" min="6" max="18" step="0.5" value="12"
+                       oninput="document.getElementById('v-mf-ret').textContent=this.value+'%'">
+            </div>
+        </div>
+        <div class="input-group">
+            <label data-i18n="mfsip_existing">Existing Savings</label> <span id="v-mf-exist">₹0</span>
+            <input type="range" id="mf-exist" min="0" max="10000000" step="50000" value="0"
+                   oninput="document.getElementById('v-mf-exist').textContent='₹'+fmt(this.value)">
+        </div>
+        <button class="calc-btn" onclick="calcMFSIP()" data-i18n="mfsip_calc_btn">Calculate SIP ⚡</button>
+    </div>
+    <div class="result-box" id="res-mfsip">
+        <h3>📊 <span data-i18n="mfsip_result_h">SIP Plan Result</span></h3>
+        <div class="big-number" id="mfsip-result"></div>
+        <p class="detail" id="mfsip-detail"></p>
+        <div class="stat-grid" id="mfsip-stats"></div>
+    </div>
+    <div class="chart-wrap" id="chart-mfsip" style="display:none">
+        <h4 data-i18n="mfsip_chart">📈 Corpus Growth Over Time</h4>
+        <canvas id="canvas-mfsip"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_mfsip_h">Start Your SIP Journey Today</h4>
+            <p data-i18n="cta_mfsip_p">Get personalized mutual fund recommendations</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('mfsip')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('mfsip')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('mfsip')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  8. ULIP vs MUTUAL FUND                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-ulip">
+    <div class="calc-card">
+        <h2>⚖️ <span data-i18n="ulip_title">ULIP vs Mutual Fund Comparison</span></h2>
+        <p class="desc" data-i18n="ulip_desc">See the real cost and return difference between ULIPs and Mutual Funds over time. Transparent comparison with all charges included.</p>
+        <div class="input-group">
+            <label data-i18n="ulip_annual_inv">Annual Investment</label> <span id="v-ulip-amt">₹1,00,000</span>
+            <input type="range" id="ulip-amt" min="25000" max="1000000" step="25000" value="100000"
+                   oninput="document.getElementById('v-ulip-amt').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="input-group">
+            <label><span data-i18n="ulip_inv_period">Investment Period</span> <span id="v-ulip-yrs">15 years</span></label>
+            <input type="range" id="ulip-yrs" min="5" max="30" value="15"
+                   oninput="document.getElementById('v-ulip-yrs').textContent=this.value+' years'">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="ulip_fund_ret">ULIP Fund Return</span> <span id="v-ulip-ret">10%</span></label>
+                <input type="range" id="ulip-ret" min="6" max="16" step="0.5" value="10"
+                       oninput="document.getElementById('v-ulip-ret').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="ulip_mf_ret">MF Return</span> <span id="v-mf-ret2">12%</span></label>
+                <input type="range" id="mf-ret2" min="6" max="18" step="0.5" value="12"
+                       oninput="document.getElementById('v-mf-ret2').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcULIP()" data-i18n="ulip_calc_btn">Compare Now ⚡</button>
+    </div>
+    <div class="result-box" id="res-ulip">
+        <h3>⚖️ <span data-i18n="ulip_result_h">Comparison Result</span></h3>
+        <div class="big-number" id="ulip-result"></div>
+        <p class="detail" id="ulip-detail"></p>
+        <div class="stat-grid" id="ulip-stats"></div>
+    </div>
+    <div class="warning-box" id="warn-ulip" style="display:none">
+        <h4>💡 <span data-i18n="ulip_note_h">Important to Note</span></h4>
+        <p id="ulip-warning"></p>
+    </div>
+    <div class="chart-wrap" id="chart-ulip" style="display:none">
+        <h4 data-i18n="ulip_chart">📈 Growth Comparison</h4>
+        <canvas id="canvas-ulip"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_ulip_h">Need Help Choosing?</h4>
+            <p data-i18n="cta_ulip_p">Get the right product mix recommendation based on your goals</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('ulip')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('ulip')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('ulip')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  9. NPS PLANNER                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-nps">
+    <div class="calc-card">
+        <h2>🏛️ <span data-i18n="nps_title">NPS (National Pension) Planner</span></h2>
+        <p class="desc" data-i18n="nps_desc">Plan your retirement with NPS. See corpus, pension estimate, and tax benefits under Section 80CCD(1B).</p>
+        <div class="input-group">
+            <label data-i18n="nps_monthly_contrib">Monthly Contribution</label> <span id="v-nps-amt">₹5,000</span>
+            <input type="range" id="nps-amt" min="1000" max="50000" step="500" value="5000"
+                   oninput="document.getElementById('v-nps-amt').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_current_age">Current Age</span> <span id="v-nps-age">30 years</span></label>
+                <input type="range" id="nps-age" min="18" max="60" value="30"
+                       oninput="document.getElementById('v-nps-age').textContent=this.value+' years'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_retirement_age">Retirement Age</span> <span id="v-nps-retire">60 years</span></label>
+                <input type="range" id="nps-retire" min="50" max="75" value="60"
+                       oninput="document.getElementById('v-nps-retire').textContent=this.value+' years'">
+            </div>
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_expected_return">Expected Return</span> <span id="v-nps-ret">10%</span></label>
+                <input type="range" id="nps-ret" min="7" max="14" step="0.5" value="10"
+                       oninput="document.getElementById('v-nps-ret').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="nps_tax_bracket">Tax Bracket</span> <span id="v-nps-tax">30%</span></label>
+                <input type="range" id="nps-tax" min="0" max="30" step="5" value="30"
+                       oninput="document.getElementById('v-nps-tax').textContent=this.value+'%'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcNPS()" data-i18n="nps_calc_btn">Plan Pension ⚡</button>
+    </div>
+    <div class="result-box" id="res-nps">
+        <h3>🏛️ <span data-i18n="nps_result_h">NPS Projection</span></h3>
+        <div class="big-number" id="nps-result"></div>
+        <p class="detail" id="nps-detail"></p>
+        <div class="stat-grid" id="nps-stats"></div>
+    </div>
+    <div class="chart-wrap" id="chart-nps" style="display:none">
+        <h4 data-i18n="nps_chart">📈 NPS Corpus Growth</h4>
+        <canvas id="canvas-nps"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_nps_h">Optimize Your NPS Strategy</h4>
+            <p data-i18n="cta_nps_p">Get fund allocation advice — Equity, Corporate, Government</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('nps')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('nps')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('nps')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 10. STEP-UP SIP PLANNER                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-stepupsip">
+    <div class="calc-card">
+        <h2>📈 <span data-i18n="sus_title">Step-Up SIP Planner</span></h2>
+        <p class="desc" data-i18n="sus_desc">See how increasing your SIP annually can dramatically grow your wealth compared to a regular flat SIP.</p>
+        <div class="input-group">
+            <label data-i18n="sus_initial_sip">Initial Monthly SIP</label> <span id="v-sus-sip">₹10,000</span>
+            <input type="range" id="sus-sip" min="1000" max="100000" step="1000" value="10000"
+                   oninput="document.getElementById('v-sus-sip').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="sus_step_up">Annual Step-Up %</span> <span id="v-sus-step">10%</span></label>
+                <input type="range" id="sus-step" min="5" max="25" step="1" value="10"
+                       oninput="document.getElementById('v-sus-step').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_years">Years</span> <span id="v-sus-yrs">20 years</span></label>
+                <input type="range" id="sus-yrs" min="5" max="40" value="20"
+                       oninput="document.getElementById('v-sus-yrs').textContent=this.value+' years'">
+            </div>
+        </div>
+        <div class="input-group">
+            <label><span data-i18n="lbl_expected_return">Expected Return</span> <span id="v-sus-ret">12%</span></label>
+            <input type="range" id="sus-ret" min="6" max="18" step="0.5" value="12"
+                   oninput="document.getElementById('v-sus-ret').textContent=this.value+'%'">
+        </div>
+        <button class="calc-btn" onclick="calcStepUpSIP()" data-i18n="sus_calc_btn">Calculate Step-Up SIP ⚡</button>
+    </div>
+    <div class="result-box" id="res-stepupsip">
+        <h3>📈 <span data-i18n="sus_result_h">Step-Up SIP Projection</span></h3>
+        <div class="big-number" id="sus-result"></div>
+        <p class="detail" id="sus-detail"></p>
+        <div class="stat-grid" id="sus-stats"></div>
+    </div>
+    <div class="chart-wrap" id="chart-stepupsip" style="display:none">
+        <h4 data-i18n="sus_chart">📈 Step-Up vs Regular SIP</h4>
+        <canvas id="canvas-stepupsip"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_sus_h">Start Your Step-Up SIP Journey</h4>
+            <p data-i18n="cta_sus_p">Small annual increases lead to massive wealth creation</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('stepupsip')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('stepupsip')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('stepupsip')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 11. SWP (SYSTEMATIC WITHDRAWAL PLAN)                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-swp">
+    <div class="calc-card">
+        <h2>💸 <span data-i18n="swp_title">SWP (Withdrawal) Planner</span></h2>
+        <p class="desc" data-i18n="swp_desc">Plan systematic withdrawals from your corpus. See if your money lasts through retirement or any goal period.</p>
+        <div class="input-group">
+            <label data-i18n="swp_corpus">Initial Corpus</label> <span id="v-swp-corpus">₹50,00,000</span>
+            <input type="range" id="swp-corpus" min="500000" max="50000000" step="100000" value="5000000"
+                   oninput="document.getElementById('v-swp-corpus').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="input-group">
+            <label data-i18n="swp_monthly">Monthly Withdrawal</label> <span id="v-swp-wd">₹30,000</span>
+            <input type="range" id="swp-wd" min="5000" max="200000" step="1000" value="30000"
+                   oninput="document.getElementById('v-swp-wd').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_expected_return">Expected Return</span> <span id="v-swp-ret">8%</span></label>
+                <input type="range" id="swp-ret" min="4" max="14" step="0.5" value="8"
+                       oninput="document.getElementById('v-swp-ret').textContent=this.value+'%'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_years">Years</span> <span id="v-swp-yrs">20 years</span></label>
+                <input type="range" id="swp-yrs" min="5" max="40" value="20"
+                       oninput="document.getElementById('v-swp-yrs').textContent=this.value+' years'">
+            </div>
+        </div>
+        <button class="calc-btn" onclick="calcSWP()" data-i18n="swp_calc_btn">Plan Withdrawals ⚡</button>
+    </div>
+    <div class="result-box" id="res-swp">
+        <h3>💸 <span data-i18n="swp_result_h">SWP Projection</span></h3>
+        <div class="big-number" id="swp-result"></div>
+        <p class="detail" id="swp-detail"></p>
+        <div class="stat-grid" id="swp-stats"></div>
+    </div>
+    <div class="chart-wrap" id="chart-swp" style="display:none">
+        <h4 data-i18n="swp_chart">📉 Corpus Over Time</h4>
+        <canvas id="canvas-swp"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_swp_h">Optimize Your Withdrawal Strategy</h4>
+            <p data-i18n="cta_swp_p">Ensure your money outlasts your retirement years</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('swp')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('swp')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('swp')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 12. DELAY COST CALCULATOR                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-delaycost">
+    <div class="calc-card">
+        <h2>⏰ <span data-i18n="dc_title">Delay Cost Calculator</span></h2>
+        <p class="desc" data-i18n="dc_desc">See the real cost of delaying your investments. Every year of delay costs you lakhs in potential wealth.</p>
+        <div class="input-group">
+            <label data-i18n="dc_monthly_sip">Monthly SIP</label> <span id="v-dc-sip">₹10,000</span>
+            <input type="range" id="dc-sip" min="1000" max="100000" step="1000" value="10000"
+                   oninput="document.getElementById('v-dc-sip').textContent='₹'+fmt(this.value)">
+        </div>
+        <div class="inputs-row">
+            <div class="input-group">
+                <label><span data-i18n="lbl_years">Years</span> <span id="v-dc-yrs">25 years</span></label>
+                <input type="range" id="dc-yrs" min="10" max="40" value="25"
+                       oninput="document.getElementById('v-dc-yrs').textContent=this.value+' years'">
+            </div>
+            <div class="input-group">
+                <label><span data-i18n="lbl_expected_return">Expected Return</span> <span id="v-dc-ret">12%</span></label>
+                <input type="range" id="dc-ret" min="6" max="18" step="0.5" value="12"
+                       oninput="document.getElementById('v-dc-ret').textContent=this.value+'%'">
+            </div>
+        </div>
+        <div class="input-group">
+            <label><span data-i18n="dc_delay_years">Delay Years</span> <span id="v-dc-delay">5 years</span></label>
+            <input type="range" id="dc-delay" min="1" max="15" value="5"
+                   oninput="document.getElementById('v-dc-delay').textContent=this.value+' years'">
+        </div>
+        <button class="calc-btn" onclick="calcDelayCost()" data-i18n="dc_calc_btn">Show Delay Cost ⚡</button>
+    </div>
+    <div class="result-box" id="res-delaycost">
+        <h3>⏰ <span data-i18n="dc_result_h">Cost of Delay</span></h3>
+        <div class="big-number" id="dc-result"></div>
+        <p class="detail" id="dc-detail"></p>
+        <div class="stat-grid" id="dc-stats"></div>
+    </div>
+    <div class="chart-wrap" id="chart-delaycost" style="display:none">
+        <h4 data-i18n="dc_chart">📊 Impact of Delay</h4>
+        <canvas id="canvas-delaycost"></canvas>
+    </div>
+    <div class="cta-bar">
+        <div class="cta-text">
+            <h4 data-i18n="cta_dc_h">Don't Wait — Start Today!</h4>
+            <p data-i18n="cta_dc_p">Every year of delay costs you lakhs. Begin your investment journey now.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="cta-btn share-btn" onclick="shareOnWhatsApp('delaycost')" data-i18n="btn_share">📤 Share</button>
+            <button class="cta-btn pdf-btn" onclick="downloadPDF('delaycost')" data-i18n="btn_pdf">📄 PDF Report</button>
+            <button class="cta-btn wa-pdf-btn" onclick="shareWhatsAppPDF('delaycost')" data-i18n="btn_wa_pdf">📤 WhatsApp Report</button>
+            <a class="cta-btn contact-btn" href="#" target="_blank" data-i18n="btn_contact">📞 Contact Advisor</a>
+        </div>
+    </div>
+</div>
+
+<!-- ── Footer ──────────────────────────────────────────── -->
+<div class="footer">
+    <div id="footer-brand" style="display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;font-size:1.1em;margin-bottom:4px"></div>
+    <p id="footer-contact" style="margin-top:4px;font-size:0.9em;color:#cbd5e1"></p>
+    <p id="footer-tagline" style="margin-top:4px;font-size:0.85em;color:#94a3b8"></p>
+    <p style="margin-top:8px;font-size:0.72em;color:#64748b;opacity:0.6">Powered by <a href="https://sarathi-ai.com" target="_blank" style="color:inherit;text-decoration:underline">Sarathi-AI.com</a> · Calculators are for illustrative purposes only</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  JAVASCRIPT                                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+/* ── Helpers ────────────────────────────────────────────── */
+function fmt(n) {
+    return Number(n).toLocaleString('en-IN');
+}
+
+function fmtCr(n) {
+    if (n >= 10000000) return (n / 10000000).toFixed(2) + ' Cr';
+    if (n >= 100000) return (n / 100000).toFixed(2) + ' L';
+    return '₹' + fmt(Math.round(n));
+}
+
+/* ── Calculator i18n ─────────────────────────────────────── */
+const _CT = {
+  c_title:{en:'Financial Tools',hi:'वित्तीय उपकरण'},
+  c_sub:{en:'Financial Planning Calculators',hi:'वित्तीय योजना कैलकुलेटर'},
+  c_brand:{en:'',hi:''},
+  // Tabs
+  tab_inflation:{en:'Inflation',hi:'मुद्रास्फीति'},
+  tab_hlv:{en:'HLV',hi:'मानव जीवन मूल्य'},
+  tab_retirement:{en:'Retirement',hi:'सेवानिवृत्ति'},
+  tab_emi:{en:'EMI',hi:'ईएमआई'},
+  tab_health:{en:'Health',hi:'स्वास्थ्य'},
+  tab_sip:{en:'SIP',hi:'एसआईपी'},
+  tab_mfsip:{en:'MF SIP',hi:'एमएफ एसआईपी'},
+  tab_ulip:{en:'ULIP vs MF',hi:'यूलिप vs एमएफ'},
+  tab_nps:{en:'NPS',hi:'एनपीएस'},
+  tab_stepupsip:{en:'Step-Up SIP',hi:'स्टेप-अप SIP'},
+  tab_swp:{en:'SWP',hi:'एसडब्ल्यूपी'},
+  tab_delaycost:{en:'Delay Cost',hi:'देरी लागत'},
+  // Shared labels
+  lbl_years:{en:'Years',hi:'वर्ष'},
+  lbl_current_age:{en:'Current Age',hi:'वर्तमान आयु'},
+  lbl_retirement_age:{en:'Retirement Age',hi:'सेवानिवृत्ति आयु'},
+  lbl_monthly_exp:{en:'Monthly Expense',hi:'मासिक खर्च'},
+  lbl_inflation_pct:{en:'Inflation %',hi:'मुद्रास्फीति %'},
+  lbl_interest_rate:{en:'Interest Rate %',hi:'ब्याज दर %'},
+  lbl_expected_return:{en:'Expected Return %',hi:'अपेक्षित रिटर्न %'},
+  lbl_your_age:{en:'Your Age',hi:'आपकी आयु'},
+  lbl_yes:{en:'Yes',hi:'हाँ'},
+  lbl_no:{en:'No',hi:'नहीं'},
+  // Inflation
+  inf_title:{en:'Inflation Eraser',hi:'मुद्रास्फीति इरेज़र'},
+  inf_desc:{en:'See how inflation silently eats your money. Show clients why acting today matters.',hi:'देखें कि मुद्रास्फीति चुपचाप आपके पैसे कैसे खाती है।'},
+  inf_monthly_exp:{en:'Monthly Expense',hi:'मासिक खर्च'},
+  inf_rate:{en:'Inflation Rate %',hi:'मुद्रास्फीति दर %'},
+  inf_calc_btn:{en:'Calculate Impact ⚡',hi:'प्रभाव गणना करें ⚡'},
+  inf_impact:{en:'Inflation Impact',hi:'मुद्रास्फीति प्रभाव'},
+  inf_warning_h:{en:'Reality Check',hi:'वास्तविकता जांच'},
+  inf_chart:{en:'Inflation Erosion Over Time',hi:'समय के साथ मुद्रास्फीति का क्षरण'},
+  // HLV
+  hlv_title:{en:'Human Life Value Calculator',hi:'ह्यूमन लाइफ वैल्यू कैलकुलेटर'},
+  hlv_desc:{en:'Calculate the financial value you bring to your family. This determines the ideal life cover amount.',hi:'अपने परिवार के लिए अपनी वित्तीय कीमत जानें।'},
+  hlv_household_exp:{en:'Monthly Household Expense',hi:'मासिक घरेलू खर्च'},
+  hlv_loans:{en:'Outstanding Loans',hi:'बकाया ऋण'},
+  hlv_child_edu:{en:'Children Education',hi:'बच्चों की शिक्षा'},
+  hlv_existing_cover:{en:'Existing Cover',hi:'मौजूदा कवर'},
+  hlv_yrs_retire:{en:'Years to Retire',hi:'सेवानिवृत्ति में वर्ष'},
+  hlv_calc_btn:{en:'Calculate HLV ⚡',hi:'HLV गणना करें ⚡'},
+  hlv_result_h:{en:'Your Human Life Value',hi:'आपकी ह्यूमन लाइफ वैल्यू'},
+  hlv_warning_h:{en:'Coverage Gap Alert',hi:'कवरेज गैप अलर्ट'},
+  hlv_chart:{en:'Coverage Breakdown',hi:'कवरेज विवरण'},
+  // Retirement
+  ret_title:{en:'Retirement Planner',hi:'सेवानिवृत्ति प्लानर'},
+  ret_desc:{en:'Plan your golden years. Calculate the corpus needed and monthly SIP to retire comfortably.',hi:'अपने सुनहरे वर्षों की योजना बनाएं।'},
+  ret_life_exp:{en:'Life Expectancy',hi:'जीवन प्रत्याशा'},
+  ret_pre_ret:{en:'Pre-Ret Return %',hi:'प्री-रिटायरमेंट रिटर्न %'},
+  ret_calc_btn:{en:'Plan Retirement ⚡',hi:'रिटायरमेंट प्लान करें ⚡'},
+  ret_result_h:{en:'Retirement Corpus Needed',hi:'आवश्यक सेवानिवृत्ति कोष'},
+  ret_warning_h:{en:'Time Is Your Best Friend',hi:'समय आपका सबसे अच्छा दोस्त है'},
+  ret_chart:{en:'Retirement Savings Growth',hi:'रिटायरमेंट बचत वृद्धि'},
+  // EMI
+  emi_title:{en:'Premium EMI Calculator',hi:'प्रीमियम EMI कैलकुलेटर'},
+  emi_desc:{en:'Calculate monthly EMI for insurance premium financing. Includes GST & CIBIL-based discounts.',hi:'बीमा प्रीमियम फाइनेंसिंग के लिए मासिक EMI गणना करें।'},
+  emi_annual_premium:{en:'Annual Premium',hi:'वार्षिक प्रीमियम'},
+  emi_period:{en:'EMI Period (Years)',hi:'EMI अवधि (वर्ष)'},
+  emi_gst:{en:'GST %',hi:'GST %'},
+  emi_cibil:{en:'CIBIL Discount %',hi:'CIBIL छूट %'},
+  emi_calc_btn:{en:'Calculate EMI ⚡',hi:'EMI गणना करें ⚡'},
+  emi_result_h:{en:'Monthly EMI Amount',hi:'मासिक EMI राशि'},
+  emi_chart:{en:'Payment Breakdown',hi:'भुगतान विवरण'},
+  // Health
+  health_title:{en:'Health Cover Estimator',hi:'स्वास्थ्य कवर अनुमानक'},
+  health_desc:{en:'Estimate the ideal health insurance cover based on age, family size, city tier, and medical history.',hi:'आयु, परिवार, शहर और स्वास्थ्य इतिहास के आधार पर आदर्श स्वास्थ्य बीमा कवर का अनुमान लगाएं।'},
+  health_city_tier:{en:'City Tier',hi:'शहर का स्तर'},
+  health_family_size:{en:'Family Size',hi:'परिवार का आकार'},
+  health_1a:{en:'Individual (1 Adult)',hi:'व्यक्तिगत (1 वयस्क)'},
+  health_2a:{en:'Couple (2 Adults)',hi:'जोड़ा (2 वयस्क)'},
+  health_2a1c:{en:'Family (2A + 1 Child)',hi:'परिवार (2 वयस्क + 1 बच्चा)'},
+  health_2a2c:{en:'Family (2A + 2 Children)',hi:'परिवार (2 वयस्क + 2 बच्चे)'},
+  health_2a3c:{en:'Large Family (2A + 3C)',hi:'बड़ा परिवार (2 वयस्क + 3 बच्चे)'},
+  health_1ap:{en:'Self + Parents',hi:'स्वयं + माता-पिता'},
+  health_pre_existing:{en:'Pre-existing Conditions?',hi:'पहले से मौजूद बीमारियाँ?'},
+  health_calc_btn:{en:'Estimate Cover ⚡',hi:'कवर अनुमान लगाएं ⚡'},
+  health_result_h:{en:'Recommended Health Cover',hi:'अनुशंसित स्वास्थ्य कवर'},
+  health_warning_h:{en:'Health Insurance Advisory',hi:'स्वास्थ्य बीमा सलाह'},
+  // SIP
+  sip_title:{en:'SIP vs Lumpsum Analyzer',hi:'SIP vs एकमुश्त विश्लेषक'},
+  sip_desc:{en:'Compare systematic investment (SIP) returns against a lump-sum investment over time.',hi:'SIP और एकमुश्त निवेश के रिटर्न की तुलना करें।'},
+  sip_total_inv:{en:'Total Investment Amount',hi:'कुल निवेश राशि'},
+  sip_inv_period:{en:'Investment Period (Years)',hi:'निवेश अवधि (वर्ष)'},
+  sip_calc_btn:{en:'Compare Returns ⚡',hi:'रिटर्न तुलना करें ⚡'},
+  sip_result_h:{en:'Investment Comparison',hi:'निवेश तुलना'},
+  sip_chart:{en:'SIP vs Lumpsum Growth',hi:'SIP vs एकमुश्त वृद्धि'},
+  // MF SIP
+  mfsip_title:{en:'Mutual Fund SIP Planner',hi:'म्यूचुअल फंड SIP प्लानर'},
+  mfsip_desc:{en:'Find out how much monthly SIP you need to reach your financial goal.',hi:'जानें कि आपको अपने वित्तीय लक्ष्य तक पहुंचने के लिए कितनी मासिक SIP चाहिए।'},
+  mfsip_goal:{en:'Goal Amount',hi:'लक्ष्य राशि'},
+  mfsip_horizon:{en:'Time Horizon',hi:'समय सीमा'},
+  mfsip_existing:{en:'Existing Savings',hi:'मौजूदा बचत'},
+  mfsip_calc_btn:{en:'Calculate SIP ⚡',hi:'SIP गणना करें ⚡'},
+  mfsip_result_h:{en:'SIP Plan Result',hi:'SIP योजना परिणाम'},
+  mfsip_chart:{en:'📈 Corpus Growth Over Time',hi:'📈 समय के साथ कोष वृद्धि'},
+  // ULIP
+  ulip_title:{en:'ULIP vs Mutual Fund Comparison',hi:'ULIP vs म्यूचुअल फंड तुलना'},
+  ulip_desc:{en:'See the real cost and return difference between ULIPs and Mutual Funds over time.',hi:'ULIPs और म्यूचुअल फंड के बीच वास्तविक लागत और रिटर्न का अंतर देखें।'},
+  ulip_annual_inv:{en:'Annual Investment',hi:'वार्षिक निवेश'},
+  ulip_inv_period:{en:'Investment Period',hi:'निवेश अवधि'},
+  ulip_fund_ret:{en:'ULIP Fund Return',hi:'ULIP फंड रिटर्न'},
+  ulip_mf_ret:{en:'MF Return',hi:'MF रिटर्न'},
+  ulip_calc_btn:{en:'Compare Now ⚡',hi:'अभी तुलना करें ⚡'},
+  ulip_result_h:{en:'Comparison Result',hi:'तुलना परिणाम'},
+  ulip_note_h:{en:'Important to Note',hi:'ध्यान दें'},
+  ulip_chart:{en:'📈 Growth Comparison',hi:'📈 वृद्धि तुलना'},
+  // NPS
+  nps_title:{en:'NPS (National Pension) Planner',hi:'NPS (राष्ट्रीय पेंशन) प्लानर'},
+  nps_desc:{en:'Plan your retirement with NPS. See corpus, pension estimate, and tax benefits under Section 80CCD(1B).',hi:'NPS के साथ रिटायरमेंट की योजना बनाएं। धारा 80CCD(1B) के तहत कर लाभ देखें।'},
+  nps_monthly_contrib:{en:'Monthly Contribution',hi:'मासिक योगदान'},
+  nps_tax_bracket:{en:'Tax Bracket',hi:'टैक्स स्लैब'},
+  nps_calc_btn:{en:'Plan Pension ⚡',hi:'पेंशन प्लान करें ⚡'},
+  nps_result_h:{en:'NPS Projection',hi:'NPS अनुमान'},
+  nps_chart:{en:'📈 NPS Corpus Growth',hi:'📈 NPS कोष वृद्धि'},
+  // Step-Up SIP
+  sus_title:{en:'Step-Up SIP Planner',hi:'स्टेप-अप SIP प्लानर'},
+  sus_desc:{en:'See how increasing your SIP annually can dramatically grow your wealth compared to a regular flat SIP.',hi:'देखें कि सालाना SIP बढ़ाने से आपकी संपत्ति कैसे नाटकीय रूप से बढ़ सकती है।'},
+  sus_initial_sip:{en:'Initial Monthly SIP',hi:'शुरुआती मासिक SIP'},
+  sus_step_up:{en:'Annual Step-Up %',hi:'वार्षिक स्टेप-अप %'},
+  sus_calc_btn:{en:'Calculate Step-Up SIP ⚡',hi:'स्टेप-अप SIP गणना करें ⚡'},
+  sus_result_h:{en:'Step-Up SIP Projection',hi:'स्टेप-अप SIP अनुमान'},
+  sus_chart:{en:'📈 Step-Up vs Regular SIP',hi:'📈 स्टेप-अप vs सामान्य SIP'},
+  // SWP
+  swp_title:{en:'SWP (Withdrawal) Planner',hi:'SWP (निकासी) प्लानर'},
+  swp_desc:{en:'Plan systematic withdrawals from your corpus. See if your money lasts through retirement or any goal period.',hi:'अपने कोष से व्यवस्थित निकासी की योजना बनाएं। देखें कि आपका पैसा रिटायरमेंट के दौरान चलेगा या नहीं।'},
+  swp_corpus:{en:'Initial Corpus',hi:'प्रारंभिक कोष'},
+  swp_monthly:{en:'Monthly Withdrawal',hi:'मासिक निकासी'},
+  swp_calc_btn:{en:'Plan Withdrawals ⚡',hi:'निकासी प्लान करें ⚡'},
+  swp_result_h:{en:'SWP Projection',hi:'SWP अनुमान'},
+  swp_chart:{en:'📉 Corpus Over Time',hi:'📉 समय के साथ कोष'},
+  // Delay Cost
+  dc_title:{en:'Delay Cost Calculator',hi:'देरी लागत कैलकुलेटर'},
+  dc_desc:{en:'See the real cost of delaying your investments. Every year of delay costs you lakhs in potential wealth.',hi:'निवेश में देरी की वास्तविक लागत देखें। हर साल की देरी आपको लाखों रुपये की संभावित संपत्ति खोने पर मजबूर करती है।'},
+  dc_monthly_sip:{en:'Monthly SIP',hi:'मासिक SIP'},
+  dc_delay_years:{en:'Delay Years',hi:'देरी वर्ष'},
+  dc_calc_btn:{en:'Show Delay Cost ⚡',hi:'देरी लागत दिखाएं ⚡'},
+  dc_result_h:{en:'Cost of Delay',hi:'देरी की लागत'},
+  dc_chart:{en:'📊 Impact of Delay',hi:'📊 देरी का प्रभाव'},
+  // CTA bars
+  cta_inflation_h:{en:'Beat Inflation with Smart Planning',hi:'स्मार्ट प्लानिंग से मुद्रास्फीति को हराएं'},
+  cta_inflation_p:{en:'Talk to your advisor for personalized solutions',hi:'व्यक्तिगत समाधान के लिए अपने सलाहकार से बात करें'},
+  cta_hlv_h:{en:'Close the Coverage Gap',hi:'कवरेज गैप को बंद करें'},
+  cta_hlv_p:{en:'Get the right term plan with expert guidance',hi:'विशेषज्ञ मार्गदर्शन के साथ सही टर्म प्लान पाएं'},
+  cta_retire_h:{en:'Start Your Retirement Fund Today',hi:'आज ही अपना रिटायरमेंट फंड शुरू करें'},
+  cta_retire_p:{en:'Pension plans tailored to your lifestyle goals',hi:'आपकी जीवनशैली के अनुसार पेंशन योजनाएं'},
+  cta_emi_h:{en:'Flexible Premium Financing',hi:'लचीला प्रीमियम फाइनेंसिंग'},
+  cta_emi_p:{en:'Pay your premium in easy monthly installments',hi:'आसान मासिक किस्तों में प्रीमियम भुगतान करें'},
+  cta_health_h:{en:'Compare Health Plans Instantly',hi:'तुरंत स्वास्थ्य योजनाओं की तुलना करें'},
+  cta_health_p:{en:'Get cashless coverage at 10,000+ network hospitals',hi:'10,000+ नेटवर्क अस्पतालों में कैशलेस कवरेज पाएं'},
+  cta_sip_h:{en:'Start Investing with Confidence',hi:'आत्मविश्वास से निवेश शुरू करें'},
+  cta_sip_p:{en:'ULIP, Mutual Funds, NPS — find your best fit',hi:'ULIP, म्यूचुअल फंड, NPS — अपना सबसे अच्छा विकल्प खोजें'},
+  cta_mfsip_h:{en:'Start Your SIP Journey Today',hi:'आज ही अपनी SIP यात्रा शुरू करें'},
+  cta_mfsip_p:{en:'Get personalized mutual fund recommendations',hi:'व्यक्तिगत म्यूचुअल फंड सिफारिशें पाएं'},
+  cta_ulip_h:{en:'Need Help Choosing?',hi:'चुनने में मदद चाहिए?'},
+  cta_ulip_p:{en:'Get the right product mix recommendation based on your goals',hi:'अपने लक्ष्यों के आधार पर सही उत्पाद मिश्रण की सिफारिश पाएं'},
+  cta_nps_h:{en:'Optimize Your NPS Strategy',hi:'अपनी NPS रणनीति को अनुकूलित करें'},
+  cta_nps_p:{en:'Get fund allocation advice — Equity, Corporate, Government',hi:'फंड आवंटन सलाह पाएं — इक्विटी, कॉर्पोरेट, सरकारी'},
+  cta_sus_h:{en:'Start Your Step-Up SIP Journey',hi:'अपनी स्टेप-अप SIP यात्रा शुरू करें'},
+  cta_sus_p:{en:'Small annual increases lead to massive wealth creation',hi:'छोटी सालाना बढ़ोतरी से बड़ी संपत्ति बनती है'},
+  cta_swp_h:{en:'Optimize Your Withdrawal Strategy',hi:'अपनी निकासी रणनीति अनुकूलित करें'},
+  cta_swp_p:{en:'Ensure your money outlasts your retirement years',hi:'सुनिश्चित करें कि आपका पैसा रिटायरमेंट के बाद भी चले'},
+  cta_dc_h:{en:'Don\'t Wait — Start Today!',hi:'देरी न करें — आज ही शुरू करें!'},
+  cta_dc_p:{en:'Every year of delay costs you lakhs. Begin your investment journey now.',hi:'हर साल की देरी आपको लाखों का नुकसान पहुंचाती है। अभी निवेश शुरू करें।'},
+  // ── Result translations ──
+  r_todays_monthly:{en:"Today's Monthly",hi:'आज का मासिक'},
+  r_after_yrs:{en:'After {0} Years',hi:'{0} साल बाद'},
+  r_increase:{en:'Increase',hi:'वृद्धि'},
+  r_annual_extra:{en:'Annual Extra',hi:'वार्षिक अतिरिक्त'},
+  r_inf_detail:{en:'Your ₹{0}/month today will feel like ₹{1}/month after {2} years at {3}% inflation.',hi:'आपकी ₹{0}/महीने आज की राशि {2} साल बाद {3}% मुद्रास्फीति पर ₹{1}/महीने जैसी लगेगी।'},
+  r_inf_warn:{en:"Your expenses will more than DOUBLE! You'll need ₹{0} extra per year just to maintain the same lifestyle. Start planning today!",hi:'आपके खर्चे दोगुने से अधिक हो जाएंगे! समान जीवनशैली बनाए रखने के लिए आपको प्रति वर्ष ₹{0} अतिरिक्त चाहिए। आज ही योजना बनाएं!'},
+  r_monthly_expense:{en:'Monthly Expense (₹)',hi:'मासिक खर्च (₹)'},
+  r_year:{en:'Year',hi:'वर्ष'},
+  r_yr:{en:'Yr',hi:'वर्ष'},
+  // HLV results
+  r_income_replacement:{en:'Income Replacement',hi:'आय प्रतिस्थापन'},
+  r_loan_coverage:{en:'Loan Coverage',hi:'ऋण कवरेज'},
+  r_children_fund:{en:'Children Fund',hi:'बच्चों का फंड'},
+  r_coverage_gap:{en:'Coverage Gap',hi:'कवरेज गैप'},
+  r_hlv_detail:{en:'Based on your monthly expense of ₹{0}, outstanding loans of ₹{1}, and children\'s education fund of ₹{2}, your Human Life Value is ₹{3}.',hi:'आपके ₹{0} मासिक खर्च, ₹{1} बकाया ऋण, और ₹{2} बच्चों की शिक्षा निधि के आधार पर, आपकी ह्यूमन लाइफ वैल्यू ₹{3} है।'},
+  r_hlv_warn:{en:'You have a coverage gap of ₹{0}! Your existing cover of ₹{1} leaves your family underprotected. Consider increasing your term insurance immediately.',hi:'आपके पास ₹{0} का कवरेज गैप है! आपका मौजूदा कवर ₹{1} आपके परिवार को कम सुरक्षित रखता है। तुरंत अपना टर्म इंश्योरेंस बढ़ाने पर विचार करें।'},
+  r_loans:{en:'Loans',hi:'ऋण'},
+  r_education:{en:'Education',hi:'शिक्षा'},
+  r_existing_cover:{en:'Existing Cover',hi:'मौजूदा कवर'},
+  r_amount:{en:'Amount (₹)',hi:'राशि (₹)'},
+  // Retirement results
+  r_years_to_retire:{en:'Years to Retire',hi:'रिटायर होने में वर्ष'},
+  r_expense_at_ret:{en:'Expense at Retirement',hi:'रिटायरमेंट पर खर्च'},
+  r_corpus_needed:{en:'Corpus Needed',hi:'आवश्यक कोष'},
+  r_monthly_sip:{en:'Monthly SIP',hi:'मासिक SIP'},
+  r_ret_detail:{en:'To maintain your lifestyle of ₹{0}/month after retirement at age {1}, you need a corpus of ₹{2}. Start a SIP of ₹{3}/month now.',hi:'उम्र {1} में रिटायरमेंट के बाद ₹{0}/महीने की जीवनशैली बनाए रखने के लिए, आपको ₹{2} कोष चाहिए। अभी ₹{3}/महीने का SIP शुरू करें।'},
+  r_ret_warn:{en:"Your required SIP is more than 50% of your current expenses! The earlier you start, the less you need to save monthly. Every year of delay increases your SIP by ~15%.",hi:'आपकी आवश्यक SIP आपके वर्तमान खर्चों के 50% से अधिक है! जितना जल्दी शुरू करें, उतना कम बचत करनी होगी। हर साल की देरी आपकी SIP ~15% बढ़ा देती है।'},
+  r_accumulated_corpus:{en:'Accumulated Corpus (₹)',hi:'संचित कोष (₹)'},
+  // EMI results
+  r_premium_gst:{en:'Premium + GST',hi:'प्रीमियम + GST'},
+  r_effective_rate:{en:'Effective Rate',hi:'प्रभावी दर'},
+  r_total_payable:{en:'Total Payable',hi:'कुल भुगतान योग्य'},
+  r_total_interest:{en:'Total Interest',hi:'कुल ब्याज'},
+  r_emi_detail:{en:'Premium of ₹{0} + GST ({1}%) = ₹{2}. At {3}% effective rate over {4} years, your EMI is ₹{5}/month.',hi:'₹{0} प्रीमियम + GST ({1}%) = ₹{2}। {4} वर्षों में {3}% प्रभावी दर पर, आपकी EMI ₹{5}/महीने है।'},
+  r_principal_gst:{en:'Principal + GST',hi:'मूलधन + GST'},
+  r_interest:{en:'Interest',hi:'ब्याज'},
+  // Health results
+  r_base_cover:{en:'Base Cover',hi:'बेस कवर'},
+  r_super_topup:{en:'Super Top-Up',hi:'सुपर टॉप-अप'},
+  r_est_base_premium:{en:'Est. Base Premium',hi:'अनुमानित बेस प्रीमियम'},
+  r_topup_premium:{en:'Top-Up Premium',hi:'टॉप-अप प्रीमियम'},
+  r_health_detail:{en:'For a {0}-year-old in a Tier {1} city with {2} family composition, we recommend a base cover of ₹{3} with a Super Top-Up of ₹{4}.',hi:'{0} वर्षीय व्यक्ति के लिए टियर {1} शहर में {2} परिवार संरचना के साथ, हम ₹{3} बेस कवर और ₹{4} सुपर टॉप-अप की सिफारिश करते हैं।'},
+  r_health_warn_pre:{en:'Pre-existing conditions have a 2-4 year waiting period in most policies. Consider a policy with minimal waiting period. Your premium may be 30-50% higher but essential for coverage.',hi:'अधिकांश पॉलिसियों में पहले से मौजूद बीमारियों के लिए 2-4 साल की प्रतीक्षा अवधि होती है। न्यूनतम प्रतीक्षा अवधि वाली पॉलिसी पर विचार करें।'},
+  r_health_warn_age:{en:'At age {0}, health premiums increase significantly each year. Lock in your policy now to get better rates. Some insurers offer lower premiums for early enrollment.',hi:'उम्र {0} में, स्वास्थ्य प्रीमियम हर साल काफी बढ़ जाते हैं। बेहतर दरें पाने के लिए अभी अपनी पॉलिसी लॉक करें।'},
+  // SIP results
+  r_lumpsum_val:{en:'Lumpsum Value',hi:'एकमुश्त मूल्य'},
+  r_sip_val:{en:'SIP Value',hi:'SIP मूल्य'},
+  r_lumpsum_gain:{en:'Lumpsum Gain',hi:'एकमुश्त लाभ'},
+  r_sip_gain:{en:'SIP Gain',hi:'SIP लाभ'},
+  r_sip_detail:{en:'₹{0} invested for {1} years at {2}% returns: Lumpsum grows to ₹{3} vs SIP gives ₹{4}.',hi:'₹{0} {1} वर्षों के लिए {2}% रिटर्न पर निवेशित: एकमुश्त ₹{3} बनता है बनाम SIP ₹{4} देता है।'},
+  r_lumpsum:{en:'Lumpsum',hi:'एकमुश्त'},
+  r_sip_label:{en:'SIP',hi:'SIP'},
+  // MFSIP results
+  r_target_goal:{en:'Target Goal',hi:'लक्ष्य राशि'},
+  r_total_invested:{en:'Total Invested',hi:'कुल निवेशित'},
+  r_wealth_gained:{en:'Wealth Gained',hi:'प्राप्त संपत्ति'},
+  r_existing_growth:{en:'Existing Growth',hi:'मौजूदा वृद्धि'},
+  r_mfsip_detail:{en:'Monthly SIP needed to reach your ₹{0} goal in {1} years at {2}% return.',hi:'₹{0} लक्ष्य तक {1} वर्षों में {2}% रिटर्न पर पहुंचने के लिए मासिक SIP।'},
+  r_corpus:{en:'Corpus',hi:'कोष'},
+  r_invested:{en:'Invested',hi:'निवेशित'},
+  // ULIP results
+  r_ulip_maturity:{en:'ULIP Maturity',hi:'ULIP परिपक्वता'},
+  r_mf_maturity:{en:'MF Maturity',hi:'MF परिपक्वता'},
+  r_ulip_charges:{en:'ULIP Total Charges',hi:'ULIP कुल शुल्क'},
+  r_mf_expense:{en:'MF Expense Ratio',hi:'MF व्यय अनुपात'},
+  r_ulip_cover:{en:'ULIP Insurance Cover',hi:'ULIP बीमा कवर'},
+  r_difference:{en:'Difference',hi:'अंतर'},
+  r_winner:{en:'🏆 Winner:',hi:'🏆 विजेता:'},
+  r_ulip_detail:{en:'{0} gives ₹{1} more over {2} years.',hi:'{0} {2} वर्षों में ₹{1} अधिक देता है।'},
+  r_ulip_warn:{en:'ULIP provides insurance + investment. MF gives higher returns for pure investment. Consider separate term insurance + MF for optimal strategy.',hi:'ULIP बीमा + निवेश प्रदान करता है। MF शुद्ध निवेश के लिए अधिक रिटर्न देता है। इष्टतम रणनीति के लिए अलग टर्म इंश्योरेंस + MF पर विचार करें।'},
+  r_ulip_label:{en:'ULIP',hi:'ULIP'},
+  r_mutual_fund:{en:'Mutual Fund',hi:'म्यूचुअल फंड'},
+  // NPS results
+  r_lumpsum_60:{en:'Lumpsum (60%)',hi:'एकमुश्त (60%)'},
+  r_annuity_40:{en:'Annuity (40%)',hi:'एन्युटी (40%)'},
+  r_est_pension:{en:'Est. Pension',hi:'अनुमानित पेंशन'},
+  r_total_tax_saved:{en:'Total Tax Saved',hi:'कुल कर बचत'},
+  r_nps_detail:{en:'Monthly pension estimate: ₹{0}/month after retirement at age {1}',hi:'मासिक पेंशन अनुमान: ₹{0}/महीने उम्र {1} में रिटायरमेंट के बाद'},
+  r_nps_corpus:{en:'NPS Corpus',hi:'NPS कोष'},
+  // Step-Up SIP results
+  r_sus_corpus:{en:'Step-Up Corpus',hi:'स्टेप-अप कोष'},
+  r_sus_regular:{en:'Regular SIP Corpus',hi:'सामान्य SIP कोष'},
+  r_sus_advantage:{en:'Step-Up Advantage',hi:'स्टेप-अप लाभ'},
+  r_sus_final_sip:{en:'Final Monthly SIP',hi:'अंतिम मासिक SIP'},
+  r_sus_detail:{en:'Starting with ₹{0}/month and increasing {1}% yearly for {2} years at {3}% return, your corpus grows to ₹{4}.',hi:'₹{0}/महीने से शुरू करके {1}% सालाना बढ़ोतरी {2} वर्षों में {3}% रिटर्न पर, आपका कोष ₹{4} तक बढ़ता है।'},
+  // SWP results
+  r_swp_total_withdrawn:{en:'Total Withdrawn',hi:'कुल निकासी'},
+  r_swp_remaining:{en:'Remaining Corpus',hi:'शेष कोष'},
+  r_swp_lasted:{en:'Corpus Lasted',hi:'कोष चला'},
+  r_swp_months:{en:'months',hi:'महीने'},
+  r_swp_sustainable:{en:'✅ Sustainable',hi:'✅ टिकाऊ'},
+  r_swp_depleted:{en:'⚠️ Corpus Depleted',hi:'⚠️ कोष समाप्त'},
+  r_swp_detail:{en:'₹{0} corpus with ₹{1}/month withdrawal at {2}% return over {3} years.',hi:'₹{0} कोष से ₹{1}/महीने निकासी {2}% रिटर्न पर {3} वर्षों में।'},
+  r_swp_corpus_label:{en:'Remaining Corpus',hi:'शेष कोष'},
+  r_swp_withdrawn_label:{en:'Total Withdrawn',hi:'कुल निकाली गई राशि'},
+  // Delay Cost results
+  r_dc_on_time:{en:'If Started Today',hi:'आज शुरू करने पर'},
+  r_dc_delayed:{en:'If Delayed {0} Years',hi:'{0} साल देरी पर'},
+  r_dc_cost:{en:'Cost of Delay',hi:'देरी की लागत'},
+  r_dc_extra_sip:{en:'Extra SIP Needed',hi:'अतिरिक्त SIP आवश्यक'},
+  r_dc_detail:{en:'Delaying ₹{0}/month SIP by {1} years costs you ₹{2} in lost wealth!',hi:'₹{0}/महीने SIP में {1} साल की देरी आपको ₹{2} का नुकसान पहुंचाती है!'},
+  r_dc_on_time_label:{en:'Start Today',hi:'आज शुरू करें'},
+  r_dc_delayed_label:{en:'Delayed',hi:'देरी से'},
+  // WhatsApp share
+  r_share_calc:{en:'Calculated using Financial Tools',hi:'वित्तीय टूल्स से गणना'},
+  r_calc_first:{en:'Please calculate first!',hi:'पहले गणना करें!'},
+  btn_share:{en:'📤 Share',hi:'📤 शेयर'},
+  btn_pdf:{en:'📄 PDF Report',hi:'📄 PDF रिपोर्ट'},
+  btn_wa_pdf:{en:'📤 WhatsApp Report',hi:'📤 WhatsApp रिपोर्ट'},
+  btn_contact:{en:'📞 Contact Advisor',hi:'📞 सलाहकार से संपर्क'},
+};
+let _clang = localStorage.getItem('sarathi_lang')||'en';
+function _t(k){ return (_CT[k]&&_CT[k][_clang])||(_CT[k]&&_CT[k]['en'])||k; }
+function _tf(k,...a){ let s=_t(k); a.forEach((v,i)=>{ s=s.replace(new RegExp('\\{'+i+'\\}','g'),v); }); return s; }
+function setCalcLang(l){
+  _clang=l; localStorage.setItem('sarathi_lang',l);
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n');
+    if(_CT[k]&&_CT[k][l]) el.textContent=_CT[k][l];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const k=el.getAttribute('data-i18n-html');
+    if(_CT[k]&&_CT[k][l]) el.innerHTML=_CT[k][l];
+  });
+  document.querySelectorAll('.clt-en,.clt-hi').forEach(s=>{
+    s.style.background=(s.classList.contains('clt-'+l))?'rgba(255,255,255,.3)':'transparent';
+    s.style.color=(s.classList.contains('clt-'+l))?'#fff':'rgba(255,255,255,.7)';
+  });
+}
+if(_clang!=='en') setCalcLang(_clang);
+
+/* ── Tab Navigation ─────────────────────────────────────── */
+const tabNames = ['inflation', 'hlv', 'retirement', 'emi', 'health', 'sip', 'mfsip', 'ulip', 'nps', 'stepupsip', 'swp', 'delaycost'];
+let charts = {};
+
+function showTab(name) {
+    tabNames.forEach((t, i) => {
+        document.getElementById('panel-' + t).classList.toggle('active', t === name);
+        document.querySelectorAll('.tab')[i].classList.toggle('active', t === name);
+    });
+    window.location.hash = name;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Hash routing
+if (window.location.hash) {
+    const h = window.location.hash.slice(1);
+    if (tabNames.includes(h)) showTab(h);
+}
+
+/* ── Update Slider Track Fill ───────────────────────────── */
+function updateSliderFill(slider) {
+    const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+    const track = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#e2e8f0';
+    slider.style.background = `linear-gradient(to right, var(--blue) 0%, var(--blue) ${pct}%, ${track} ${pct}%)`;
+}
+
+document.querySelectorAll('input[type="range"]').forEach(s => {
+    updateSliderFill(s);
+    s.addEventListener('input', () => updateSliderFill(s));
+});
+
+/* ═══════════════════════════════════════════════════════
+   CALCULATOR FUNCTIONS
+   ═══════════════════════════════════════════════════════ */
+
+function calcInflation() {
+    const amt = +document.getElementById('inf-amt').value;
+    const rate = +document.getElementById('inf-rate').value / 100;
+    const yrs = +document.getElementById('inf-yrs').value;
+
+    const future = amt * Math.pow(1 + rate, yrs);
+    const totalToday = amt * 12 * yrs;
+    const totalFuture = future * 12;
+    const loss = totalFuture - (amt * 12);
+
+    document.getElementById('inf-future').textContent = '₹' + fmt(Math.round(future)) + (_clang==='hi'?'/महीने':'/month');
+    document.getElementById('inf-detail').textContent =
+        _tf('r_inf_detail', fmt(amt), fmt(Math.round(future)), yrs, document.getElementById('inf-rate').value);
+
+    document.getElementById('inf-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_todays_monthly')}</div><div class="value">₹${fmt(amt)}</div></div>
+        <div class="stat-card highlight"><div class="label">${_tf('r_after_yrs',yrs)}</div><div class="value">₹${fmt(Math.round(future))}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_increase')}</div><div class="value">${((future/amt - 1)*100).toFixed(0)}%</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_annual_extra')}</div><div class="value">₹${fmt(Math.round(loss/yrs))}</div></div>
+    `;
+
+    document.getElementById('res-inflation').classList.add('active');
+
+    // Warning
+    if (future > amt * 2) {
+        document.getElementById('inf-warning').textContent =
+            _tf('r_inf_warn', fmt(Math.round(loss)));
+        document.getElementById('warn-inflation').classList.add('active');
+    } else {
+        document.getElementById('warn-inflation').classList.remove('active');
+    }
+
+    // Chart
+    const labels = [];
+    const data = [];
+    for (let i = 0; i <= yrs; i++) {
+        labels.push(_t('r_year') + ' ' + i);
+        data.push(Math.round(amt * Math.pow(1 + rate, i)));
+    }
+    if (charts.inflation) charts.inflation.destroy();
+    document.getElementById('chart-inflation').style.display = 'block';
+    charts.inflation = new Chart(document.getElementById('canvas-inflation'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: _t('r_monthly_expense'),
+                data: data,
+                borderColor: '#0d9488',
+                backgroundColor: 'rgba(13,148,136,0.1)',
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#f59e0b',
+                pointRadius: 3,
+                borderWidth: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    ticks: { callback: v => '₹' + fmt(v) },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+function calcHLV() {
+    const exp = +document.getElementById('hlv-exp').value;
+    const loan = +document.getElementById('hlv-loan').value;
+    const child = +document.getElementById('hlv-child').value;
+    const cover = +document.getElementById('hlv-cover').value;
+    const yrs = +document.getElementById('hlv-retire').value;
+    const inf = +document.getElementById('hlv-inf').value / 100;
+    const disc = 0.08;
+
+    const annualExp = exp * 12;
+    let pvExpenses = 0;
+    for (let i = 1; i <= yrs; i++) {
+        pvExpenses += (annualExp * Math.pow(1 + inf, i)) / Math.pow(1 + disc, i);
+    }
+
+    const hlv = pvExpenses + loan + child;
+    const gap = hlv - cover;
+
+    document.getElementById('hlv-total').textContent = '₹' + fmtCr(Math.round(hlv));
+    document.getElementById('hlv-detail').textContent =
+        _tf('r_hlv_detail', fmt(exp), fmt(loan), fmt(child), fmtCr(Math.round(hlv)));
+
+    document.getElementById('hlv-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_income_replacement')}</div><div class="value">₹${fmtCr(Math.round(pvExpenses))}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_loan_coverage')}</div><div class="value">₹${fmtCr(loan)}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_children_fund')}</div><div class="value">₹${fmtCr(child)}</div></div>
+        <div class="stat-card ${gap > 0 ? 'highlight' : ''}"><div class="label">${_t('r_coverage_gap')}</div><div class="value">₹${fmtCr(Math.round(Math.abs(gap)))}</div></div>
+    `;
+
+    document.getElementById('res-hlv').classList.add('active');
+
+    if (gap > 0) {
+        document.getElementById('hlv-warning').textContent =
+            _tf('r_hlv_warn', fmtCr(Math.round(gap)), fmtCr(cover));
+        document.getElementById('warn-hlv').classList.add('active');
+    } else {
+        document.getElementById('warn-hlv').classList.remove('active');
+    }
+
+    // Chart
+    if (charts.hlv) charts.hlv.destroy();
+    document.getElementById('chart-hlv').style.display = 'block';
+    charts.hlv = new Chart(document.getElementById('canvas-hlv'), {
+        type: 'bar',
+        data: {
+            labels: [_t('r_income_replacement'), _t('r_loans'), _t('r_education'), _t('r_existing_cover')],
+            datasets: [{
+                label: _t('r_amount'),
+                data: [Math.round(pvExpenses), loan, child, cover],
+                backgroundColor: ['#0d9488', '#14b8a6', '#60a5fa', '#16a34a'],
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    ticks: { callback: v => fmtCr(v) },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+function calcRetirement() {
+    const age = +document.getElementById('ret-age').value;
+    const retAge = +document.getElementById('ret-retire').value;
+    const lifeExp = +document.getElementById('ret-life').value;
+    const exp = +document.getElementById('ret-exp').value;
+    const inf = +document.getElementById('ret-inf').value / 100;
+    const preRet = +document.getElementById('ret-pre').value / 100;
+    const postRet = 0.08;
+
+    const yearsToRetire = retAge - age;
+    const yearsInRetirement = lifeExp - retAge;
+
+    const expAtRetirement = exp * Math.pow(1 + inf, yearsToRetire);
+    const annualExpAtRet = expAtRetirement * 12;
+
+    let corpus = 0;
+    for (let i = 1; i <= yearsInRetirement; i++) {
+        corpus += (annualExpAtRet * Math.pow(1 + inf, i)) / Math.pow(1 + postRet, i);
+    }
+
+    const monthlySIP = corpus / (((Math.pow(1 + preRet/12, yearsToRetire*12) - 1) / (preRet/12)) * (1 + preRet/12));
+
+    document.getElementById('ret-corpus').textContent = '₹' + fmtCr(Math.round(corpus));
+    document.getElementById('ret-detail').textContent =
+        _tf('r_ret_detail', fmt(exp), retAge, fmtCr(Math.round(corpus)), fmt(Math.round(monthlySIP)));
+
+    document.getElementById('ret-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_years_to_retire')}</div><div class="value">${yearsToRetire} ${_clang==='hi'?'वर्ष':'yrs'}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_expense_at_ret')}</div><div class="value">₹${fmt(Math.round(expAtRetirement))}/${_clang==='hi'?'माह':'mo'}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_corpus_needed')}</div><div class="value">₹${fmtCr(Math.round(corpus))}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_monthly_sip')}</div><div class="value">₹${fmt(Math.round(monthlySIP))}</div></div>
+    `;
+
+    document.getElementById('res-retirement').classList.add('active');
+
+    if (monthlySIP > exp * 0.5) {
+        document.getElementById('ret-warning').textContent = _t('r_ret_warn');
+        document.getElementById('warn-retirement').classList.add('active');
+    } else {
+        document.getElementById('warn-retirement').classList.remove('active');
+    }
+
+    // Chart
+    const labels = [];
+    const data = [];
+    let accumulated = 0;
+    for (let i = 0; i <= yearsToRetire; i++) {
+        labels.push(_t('r_year') + ' ' + i);
+        data.push(Math.round(accumulated));
+        accumulated = (accumulated + monthlySIP * 12) * (1 + preRet);
+    }
+    if (charts.retirement) charts.retirement.destroy();
+    document.getElementById('chart-retirement').style.display = 'block';
+    charts.retirement = new Chart(document.getElementById('canvas-retirement'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: _t('r_accumulated_corpus'),
+                data: data,
+                borderColor: '#0d9488',
+                backgroundColor: 'rgba(13,148,136,0.08)',
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#f59e0b',
+                pointRadius: 2,
+                borderWidth: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    ticks: { callback: v => fmtCr(v) },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+function calcEMI() {
+    const premium = +document.getElementById('emi-premium').value;
+    const years = +document.getElementById('emi-yrs').value;
+    const interest = +document.getElementById('emi-int').value / 100;
+    const gst = +document.getElementById('emi-gst').value / 100;
+    const cibil = +document.getElementById('emi-cibil').value / 100;
+
+    const premiumWithGST = premium * (1 + gst);
+    const effectiveRate = interest * (1 - cibil);
+    const monthlyRate = effectiveRate / 12;
+    const months = years * 12;
+
+    const emi = (premiumWithGST * monthlyRate * Math.pow(1 + monthlyRate, months)) /
+                (Math.pow(1 + monthlyRate, months) - 1);
+
+    const totalPayable = emi * months;
+    const totalInterest = totalPayable - premiumWithGST;
+
+    document.getElementById('emi-monthly').textContent = '₹' + fmt(Math.round(emi)) + (_clang==='hi'?'/महीने':'/month');
+    document.getElementById('emi-detail').textContent =
+        _tf('r_emi_detail', fmt(premium), document.getElementById('emi-gst').value, fmt(Math.round(premiumWithGST)), (effectiveRate*100).toFixed(1), years, fmt(Math.round(emi)));
+
+    document.getElementById('emi-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_premium_gst')}</div><div class="value">₹${fmt(Math.round(premiumWithGST))}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_effective_rate')}</div><div class="value">${(effectiveRate*100).toFixed(1)}%</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_total_payable')}</div><div class="value">₹${fmt(Math.round(totalPayable))}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_total_interest')}</div><div class="value">₹${fmt(Math.round(totalInterest))}</div></div>
+    `;
+
+    document.getElementById('res-emi').classList.add('active');
+
+    // Chart
+    if (charts.emi) charts.emi.destroy();
+    document.getElementById('chart-emi').style.display = 'block';
+    charts.emi = new Chart(document.getElementById('canvas-emi'), {
+        type: 'doughnut',
+        data: {
+            labels: [_t('r_principal_gst'), _t('r_interest')],
+            datasets: [{
+                data: [Math.round(premiumWithGST), Math.round(totalInterest)],
+                backgroundColor: ['#0d9488', '#f59e0b'],
+                borderWidth: 0,
+                hoverOffset: 8,
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '55%',
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16, font: { family: 'Poppins', size: 12 } } },
+            }
+        }
+    });
+}
+
+function calcHealth() {
+    const age = +document.getElementById('health-age').value;
+    const family = document.getElementById('health-family').value;
+    const tier = +document.getElementById('health-city').value;
+    const preExist = document.getElementById('health-pre').value === '1';
+
+    // Base cover estimation
+    const familyMultiplier = { '1A': 1, '2A': 1.5, '2A+1C': 1.8, '2A+2C': 2, '2A+3C': 2.3, '1A+Parents': 2.5 };
+    const tierMultiplier = { 1: 1.5, 2: 1.2, 3: 1 };
+
+    let baseCover = 500000; // 5 Lakh base
+    if (age > 40) baseCover = 750000;
+    if (age > 50) baseCover = 1000000;
+    if (age > 60) baseCover = 1500000;
+
+    const recommended = baseCover * (familyMultiplier[family] || 1) * (tierMultiplier[tier] || 1) * (preExist ? 1.5 : 1);
+
+    // Premium estimation (rough)
+    let premiumBase = age * 200 + 3000;
+    premiumBase *= (familyMultiplier[family] || 1);
+    premiumBase *= (tierMultiplier[tier] || 1);
+    if (preExist) premiumBase *= 1.4;
+
+    const superTopUp = recommended * 2;
+    const superTopUpPremium = premiumBase * 0.4;
+
+    document.getElementById('health-cover').textContent = '₹' + fmtCr(Math.round(recommended));
+    document.getElementById('health-detail').textContent =
+        _tf('r_health_detail', age, tier, family, fmtCr(Math.round(recommended)), fmtCr(Math.round(superTopUp)));
+
+    document.getElementById('health-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_base_cover')}</div><div class="value">₹${fmtCr(Math.round(recommended))}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_super_topup')}</div><div class="value">₹${fmtCr(Math.round(superTopUp))}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_est_base_premium')}</div><div class="value">₹${fmt(Math.round(premiumBase))}/${_clang==='hi'?'वर्ष':'yr'}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_topup_premium')}</div><div class="value">₹${fmt(Math.round(superTopUpPremium))}/${_clang==='hi'?'वर्ष':'yr'}</div></div>
+    `;
+
+    document.getElementById('res-health').classList.add('active');
+
+    if (preExist) {
+        document.getElementById('health-warning').textContent = _t('r_health_warn_pre');
+        document.getElementById('warn-health').classList.add('active');
+    } else if (age > 45) {
+        document.getElementById('health-warning').textContent = _tf('r_health_warn_age', age);
+        document.getElementById('warn-health').classList.add('active');
+    } else {
+        document.getElementById('warn-health').classList.remove('active');
+    }
+}
+
+function calcSIP() {
+    const total = +document.getElementById('sip-amt').value;
+    const yrs = +document.getElementById('sip-yrs').value;
+    const ret = +document.getElementById('sip-ret').value / 100;
+
+    // Lumpsum
+    const lumpsumValue = total * Math.pow(1 + ret, yrs);
+
+    // SIP
+    const monthlySIP = total / (yrs * 12);
+    const monthlyRate = ret / 12;
+    const months = yrs * 12;
+    const sipValue = monthlySIP * (((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate) * (1 + monthlyRate));
+
+    const lumpsumGain = lumpsumValue - total;
+    const sipGain = sipValue - total;
+
+    document.getElementById('sip-result').textContent = (_clang==='hi'?'एकमुश्त: ':'Lumpsum: ') + '₹' + fmtCr(Math.round(lumpsumValue));
+    document.getElementById('sip-detail').textContent =
+        _tf('r_sip_detail', fmtCr(total), yrs, document.getElementById('sip-ret').value, fmtCr(Math.round(lumpsumValue)), fmtCr(Math.round(sipValue)));
+
+    document.getElementById('sip-stats').innerHTML = `
+        <div class="stat-card"><div class="label">${_t('r_lumpsum_val')}</div><div class="value">₹${fmtCr(Math.round(lumpsumValue))}</div></div>
+        <div class="stat-card"><div class="label">${_t('r_sip_val')}</div><div class="value">₹${fmtCr(Math.round(sipValue))}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_lumpsum_gain')}</div><div class="value">₹${fmtCr(Math.round(lumpsumGain))}</div></div>
+        <div class="stat-card highlight"><div class="label">${_t('r_sip_gain')}</div><div class="value">₹${fmtCr(Math.round(sipGain))}</div></div>
+    `;
+
+    document.getElementById('res-sip').classList.add('active');
+
+    // Chart
+    const labels = [];
+    const lData = [];
+    const sData = [];
+    for (let i = 0; i <= yrs; i++) {
+        labels.push(_t('r_year') + ' ' + i);
+        lData.push(Math.round(total * Math.pow(1 + ret, i)));
+        const m = i * 12;
+        const sv = monthlySIP * (((Math.pow(1 + monthlyRate, m) - 1) / monthlyRate) * (1 + monthlyRate));
+        sData.push(Math.round(sv || 0));
+    }
+    if (charts.sip) charts.sip.destroy();
+    document.getElementById('chart-sip').style.display = 'block';
+    charts.sip = new Chart(document.getElementById('canvas-sip'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: _t('r_lumpsum'),
+                    data: lData,
+                    borderColor: '#0d9488',
+                    backgroundColor: 'rgba(13,148,136,0.06)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 3,
+                    pointRadius: 2,
+                },
+                {
+                    label: _t('r_sip_label'),
+                    data: sData,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(234,88,12,0.06)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 3,
+                    pointRadius: 2,
+                    borderDash: [6, 3],
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top', labels: { font: { family: 'Poppins', size: 12 }, padding: 16 } }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: v => fmtCr(v) },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+/* ── 7. Mutual Fund SIP Planner ──────────────────────── */
+function calcMFSIP() {
+    const goal = +document.getElementById('mf-goal').value;
+    const years = +document.getElementById('mf-yrs').value;
+    const ret = +document.getElementById('mf-ret').value;
+    const existing = +document.getElementById('mf-exist').value;
+    const rate = ret / 100;
+    const mr = rate / 12;
+    const months = years * 12;
+
+    const fvExisting = existing * Math.pow(1 + rate, years);
+    const remaining = Math.max(goal - fvExisting, 0);
+    let monthlySIP = 0;
+    if (mr > 0 && remaining > 0) {
+        monthlySIP = remaining / ((Math.pow(1 + mr, months) - 1) / mr * (1 + mr));
+    } else {
+        monthlySIP = remaining / months;
+    }
+    const totalInvested = monthlySIP * months + existing;
+    const wealthGained = goal - totalInvested;
+
+    document.getElementById('mfsip-result').innerHTML =
+        '<b>₹' + fmt(Math.round(monthlySIP)) + (_clang==='hi'?'/महीने':'/month') + '</b>';
+    document.getElementById('mfsip-detail').textContent =
+        _tf('r_mfsip_detail', fmtCr(goal), years, ret);
+    document.getElementById('mfsip-stats').innerHTML =
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(goal) + '</div><div class="stat-label">' + _t('r_target_goal') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(totalInvested) + '</div><div class="stat-label">' + _t('r_total_invested') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(wealthGained) + '</div><div class="stat-label">' + _t('r_wealth_gained') + '</div></div>' +
+        (existing > 0 ? '<div class="stat"><div class="stat-val">₹' + fmtCr(fvExisting) + '</div><div class="stat-label">' + _t('r_existing_growth') + '</div></div>' : '');
+    document.getElementById('res-mfsip').classList.add('active');
+
+    // Chart
+    const labels = [], cData = [], iData = [];
+    for (let y = 1; y <= years; y++) {
+        labels.push(_t('r_year') + ' ' + y);
+        const m = y * 12;
+        let c = mr > 0 ? monthlySIP * ((Math.pow(1 + mr, m) - 1) / mr) * (1 + mr) : monthlySIP * m;
+        c += existing * Math.pow(1 + rate, y);
+        cData.push(Math.round(c));
+        iData.push(Math.round(monthlySIP * m + existing));
+    }
+    document.getElementById('chart-mfsip').style.display = 'block';
+    if (charts['mfsip']) charts['mfsip'].destroy();
+    charts['mfsip'] = new Chart(document.getElementById('canvas-mfsip'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: _t('r_corpus'), data: cData, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 },
+                { label: _t('r_invested'), data: iData, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 2, borderDash: [6,3] }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── 8. ULIP vs Mutual Fund ──────────────────────────── */
+function calcULIP() {
+    const annualInv = +document.getElementById('ulip-amt').value;
+    const years = +document.getElementById('ulip-yrs').value;
+    const uRet = +document.getElementById('ulip-ret').value / 100;
+    const mRet = +document.getElementById('mf-ret2').value / 100;
+
+    let uCorpus = 0, mCorpus = 0, uCharges = 0, mCharges = 0;
+    const uLabels = [], uData = [], mData = [];
+
+    for (let y = 1; y <= years; y++) {
+        // ULIP
+        let alloc = annualInv * (y === 1 ? 0.60 : y === 2 ? 0.80 : 0.95);
+        let premCharge = annualInv - alloc;
+        uCorpus = (uCorpus + alloc) * (1 + uRet);
+        let fmgmt = uCorpus * 0.0135, mort = uCorpus * 0.003;
+        uCorpus -= (fmgmt + mort);
+        uCharges += premCharge + fmgmt + mort;
+
+        // MF
+        mCorpus = (mCorpus + annualInv) * (1 + mRet);
+        let expC = mCorpus * 0.015;
+        mCorpus -= expC;
+        mCharges += expC;
+
+        uLabels.push(_t('r_yr') + ' ' + y);
+        uData.push(Math.round(uCorpus));
+        mData.push(Math.round(mCorpus));
+    }
+
+    const diff = Math.abs(mCorpus - uCorpus);
+    const winner = mCorpus > uCorpus ? _t('r_mutual_fund') : _t('r_ulip_label');
+    const insCover = annualInv * 10;
+
+    document.getElementById('ulip-result').innerHTML =
+        _t('r_winner') + ' <b>' + winner + '</b>';
+    document.getElementById('ulip-detail').textContent =
+        _tf('r_ulip_detail', winner, fmtCr(diff), years);
+    document.getElementById('ulip-stats').innerHTML =
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(uCorpus) + '</div><div class="stat-label">' + _t('r_ulip_maturity') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(mCorpus) + '</div><div class="stat-label">' + _t('r_mf_maturity') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#dc2626">₹' + fmtCr(uCharges) + '</div><div class="stat-label">' + _t('r_ulip_charges') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#f59e0b">₹' + fmtCr(mCharges) + '</div><div class="stat-label">' + _t('r_mf_expense') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(insCover) + '</div><div class="stat-label">' + _t('r_ulip_cover') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#4338ca">₹' + fmtCr(diff) + '</div><div class="stat-label">' + _t('r_difference') + '</div></div>';
+    document.getElementById('res-ulip').classList.add('active');
+
+    document.getElementById('warn-ulip').style.display = 'block';
+    document.getElementById('ulip-warning').textContent = _t('r_ulip_warn');
+
+    document.getElementById('chart-ulip').style.display = 'block';
+    if (charts['ulip']) charts['ulip'].destroy();
+    charts['ulip'] = new Chart(document.getElementById('canvas-ulip'), {
+        type: 'line',
+        data: {
+            labels: uLabels,
+            datasets: [
+                { label: _t('r_ulip_label'), data: uData, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.06)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 },
+                { label: _t('r_mutual_fund'), data: mData, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── 9. NPS Planner ──────────────────────────────────── */
+function calcNPS() {
+    const monthly = +document.getElementById('nps-amt').value;
+    const curAge = +document.getElementById('nps-age').value;
+    const retAge = +document.getElementById('nps-retire').value;
+    const ret = +document.getElementById('nps-ret').value;
+    const taxBracket = +document.getElementById('nps-tax').value;
+
+    const years = Math.max(retAge - curAge, 1);
+    const rate = ret / 100;
+    const mr = rate / 12;
+    const months = years * 12;
+
+    let corpus = 0;
+    if (mr > 0) {
+        corpus = monthly * ((Math.pow(1 + mr, months) - 1) / mr) * (1 + mr);
+    } else {
+        corpus = monthly * months;
+    }
+    const totalInv = monthly * months;
+    const wealth = corpus - totalInv;
+    const lumpsum = corpus * 0.60;
+    const annuity = corpus * 0.40;
+    const annRate = 0.06 / 12;
+    const pension = annRate > 0 ? annuity * annRate / (1 - Math.pow(1 + annRate, -240)) : annuity / 240;
+    const annual = monthly * 12;
+    const taxSave = Math.min(annual, 50000) * (taxBracket / 100);
+    const totalTax = taxSave * years;
+
+    document.getElementById('nps-result').innerHTML =
+        (_clang==='hi'?'कोष: ':'Corpus: ') + '<b>₹' + fmtCr(corpus) + '</b>';
+    document.getElementById('nps-detail').textContent =
+        _tf('r_nps_detail', fmt(Math.round(pension)), retAge);
+    document.getElementById('nps-stats').innerHTML =
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(totalInv) + '</div><div class="stat-label">' + _t('r_total_invested') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(wealth) + '</div><div class="stat-label">' + _t('r_wealth_gained') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(lumpsum) + '</div><div class="stat-label">' + _t('r_lumpsum_60') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(annuity) + '</div><div class="stat-label">' + _t('r_annuity_40') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#4338ca">₹' + fmt(Math.round(pension)) + (_clang==='hi'?'/माह':'/mo') + '</div><div class="stat-label">' + _t('r_est_pension') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#f59e0b">₹' + fmtCr(totalTax) + '</div><div class="stat-label">' + _t('r_total_tax_saved') + '</div></div>';
+    document.getElementById('res-nps').classList.add('active');
+
+    const labels = [], cData = [], iData = [];
+    for (let y = 1; y <= years; y++) {
+        labels.push(_t('r_yr') + ' ' + y);
+        const m = y * 12;
+        let c = mr > 0 ? monthly * ((Math.pow(1 + mr, m) - 1) / mr) * (1 + mr) : monthly * m;
+        cData.push(Math.round(c));
+        iData.push(Math.round(monthly * m));
+    }
+    document.getElementById('chart-nps').style.display = 'block';
+    if (charts['nps']) charts['nps'].destroy();
+    charts['nps'] = new Chart(document.getElementById('canvas-nps'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: _t('r_nps_corpus'), data: cData, borderColor: '#4338ca', backgroundColor: 'rgba(67,56,202,0.08)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 },
+                { label: _t('r_invested'), data: iData, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 2, borderDash: [6,3] }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── 10. Step-Up SIP Planner ──────────────────────────── */
+function calcStepUpSIP() {
+    const initialSip = +document.getElementById('sus-sip').value;
+    const stepUp = +document.getElementById('sus-step').value;
+    const years = +document.getElementById('sus-yrs').value;
+    const ret = +document.getElementById('sus-ret').value;
+
+    const mr = ret / 100 / 12;
+    const stepRate = stepUp / 100;
+
+    // Step-up SIP corpus
+    let corpus = 0, totalInv = 0;
+    for (let y = 1; y <= years; y++) {
+        const sip = initialSip * Math.pow(1 + stepRate, y - 1);
+        for (let m = 0; m < 12; m++) {
+            corpus = corpus * (1 + mr) + sip;
+        }
+        totalInv += sip * 12;
+    }
+
+    // Regular SIP corpus (no step-up)
+    let regCorpus = 0;
+    for (let m = 0; m < years * 12; m++) {
+        regCorpus = regCorpus * (1 + mr) + initialSip;
+    }
+
+    const wealth = corpus - totalInv;
+    const advantage = corpus - regCorpus;
+    const finalSip = initialSip * Math.pow(1 + stepRate, years - 1);
+
+    document.getElementById('sus-result').innerHTML =
+        (_clang==='hi'?'कोष: ':'Corpus: ') + '<b>₹' + fmtCr(corpus) + '</b>';
+    document.getElementById('sus-detail').textContent =
+        _tf('r_sus_detail', fmt(Math.round(initialSip)), stepUp, years, ret, fmtCr(corpus));
+    document.getElementById('sus-stats').innerHTML =
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(totalInv) + '</div><div class="stat-label">' + _t('r_total_invested') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(wealth) + '</div><div class="stat-label">' + _t('r_wealth_gained') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(regCorpus) + '</div><div class="stat-label">' + _t('r_sus_regular') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#4338ca">₹' + fmtCr(advantage) + '</div><div class="stat-label">' + _t('r_sus_advantage') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">₹' + fmt(Math.round(finalSip)) + '</div><div class="stat-label">' + _t('r_sus_final_sip') + '</div></div>';
+    document.getElementById('res-stepupsip').classList.add('active');
+
+    // Chart: step-up vs regular
+    const labels = [], suData = [], rgData = [];
+    let sc = 0, rc = 0;
+    for (let y = 1; y <= years; y++) {
+        const sip = initialSip * Math.pow(1 + stepRate, y - 1);
+        for (let m = 0; m < 12; m++) {
+            sc = sc * (1 + mr) + sip;
+            rc = rc * (1 + mr) + initialSip;
+        }
+        labels.push(_t('r_yr') + ' ' + y);
+        suData.push(Math.round(sc));
+        rgData.push(Math.round(rc));
+    }
+    document.getElementById('chart-stepupsip').style.display = 'block';
+    if (charts['stepupsip']) charts['stepupsip'].destroy();
+    charts['stepupsip'] = new Chart(document.getElementById('canvas-stepupsip'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: _t('r_sus_corpus'), data: suData, borderColor: '#4338ca', backgroundColor: 'rgba(67,56,202,0.08)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 },
+                { label: _t('r_sus_regular'), data: rgData, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 2, borderDash: [6,3] }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── 11. SWP (Withdrawal) Planner ────────────────────── */
+function calcSWP() {
+    const initCorpus = +document.getElementById('swp-corpus').value;
+    const monthlyWd = +document.getElementById('swp-wd').value;
+    const ret = +document.getElementById('swp-ret').value;
+    const years = +document.getElementById('swp-yrs').value;
+
+    const mr = ret / 100 / 12;
+    let corpus = initCorpus, totalWd = 0, lasted = 0;
+    const labels = [], cData = [], wData = [];
+
+    for (let y = 1; y <= years; y++) {
+        let yrWd = 0;
+        for (let m = 0; m < 12; m++) {
+            if (corpus <= 0) break;
+            corpus = corpus * (1 + mr);
+            const wd = Math.min(monthlyWd, corpus);
+            corpus -= wd;
+            totalWd += wd;
+            yrWd += wd;
+            lasted++;
+        }
+        labels.push(_t('r_yr') + ' ' + y);
+        cData.push(Math.round(Math.max(corpus, 0)));
+        wData.push(Math.round(totalWd));
+        if (corpus <= 0) break;
+    }
+
+    const sustainable = corpus > 0;
+    const statusText = sustainable ? _t('r_swp_sustainable') : _t('r_swp_depleted');
+
+    document.getElementById('swp-result').innerHTML = '<b>' + statusText + '</b>';
+    document.getElementById('swp-detail').textContent =
+        _tf('r_swp_detail', fmtCr(initCorpus), fmt(Math.round(monthlyWd)), ret, years);
+    document.getElementById('swp-stats').innerHTML =
+        '<div class="stat"><div class="stat-val">₹' + fmtCr(initCorpus) + '</div><div class="stat-label">' + _t('swp_corpus') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#dc2626">₹' + fmtCr(totalWd) + '</div><div class="stat-label">' + _t('r_swp_total_withdrawn') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(Math.max(corpus, 0)) + '</div><div class="stat-label">' + _t('r_swp_remaining') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">' + lasted + ' ' + _t('r_swp_months') + '</div><div class="stat-label">' + _t('r_swp_lasted') + '</div></div>';
+    document.getElementById('res-swp').classList.add('active');
+
+    document.getElementById('chart-swp').style.display = 'block';
+    if (charts['swp']) charts['swp'].destroy();
+    charts['swp'] = new Chart(document.getElementById('canvas-swp'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: _t('r_swp_corpus_label'), data: cData, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.08)', fill: true, tension: 0.4, borderWidth: 3, pointRadius: 2 },
+                { label: _t('r_swp_withdrawn_label'), data: wData, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 2, borderDash: [6,3] }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── 12. Delay Cost Calculator ───────────────────────── */
+function calcDelayCost() {
+    const monthlySip = +document.getElementById('dc-sip').value;
+    const years = +document.getElementById('dc-yrs').value;
+    const ret = +document.getElementById('dc-ret').value;
+    const delay = +document.getElementById('dc-delay').value;
+
+    const mr = ret / 100 / 12;
+
+    function sipCorpus(sip, months) {
+        if (mr > 0) return sip * ((Math.pow(1 + mr, months) - 1) / mr) * (1 + mr);
+        return sip * months;
+    }
+
+    const onTime = sipCorpus(monthlySip, years * 12);
+    const delayed = sipCorpus(monthlySip, Math.max((years - delay) * 12, 0));
+    const cost = onTime - delayed;
+
+    // Extra SIP needed if delayed
+    const delayedMonths = Math.max((years - delay) * 12, 0);
+    let extraSip = 0;
+    if (delayedMonths > 0 && mr > 0) {
+        const fvFactor = ((Math.pow(1 + mr, delayedMonths) - 1) / mr) * (1 + mr);
+        extraSip = fvFactor > 0 ? onTime / fvFactor : 0;
+    }
+
+    document.getElementById('dc-result').innerHTML =
+        (_clang==='hi'?'देरी की लागत: ':'Cost of Delay: ') + '<b style="color:#dc2626">₹' + fmtCr(cost) + '</b>';
+    document.getElementById('dc-detail').textContent =
+        _tf('r_dc_detail', fmt(Math.round(monthlySip)), delay, fmtCr(cost));
+    document.getElementById('dc-stats').innerHTML =
+        '<div class="stat"><div class="stat-val" style="color:#059669">₹' + fmtCr(onTime) + '</div><div class="stat-label">' + _t('r_dc_on_time') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#f59e0b">₹' + fmtCr(delayed) + '</div><div class="stat-label">' + _tf('r_dc_delayed', delay) + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#dc2626">₹' + fmtCr(cost) + '</div><div class="stat-label">' + _t('r_dc_cost') + '</div></div>' +
+        '<div class="stat"><div class="stat-val" style="color:#4338ca">₹' + fmt(Math.round(extraSip)) + (_clang==='hi'?'/माह':'/mo') + '</div><div class="stat-label">' + _t('r_dc_extra_sip') + '</div></div>';
+    document.getElementById('res-delaycost').classList.add('active');
+
+    // Chart: bar chart showing corpus at different delay periods
+    const labels = [], onTimeData = [], delayedData = [];
+    for (let d = 0; d <= delay; d++) {
+        labels.push(d === 0 ? _t('r_dc_on_time_label') : d + ' ' + _t('lbl_years'));
+        const m = Math.max((years - d) * 12, 0);
+        onTimeData.push(Math.round(onTime));
+        delayedData.push(Math.round(sipCorpus(monthlySip, m)));
+    }
+    document.getElementById('chart-delaycost').style.display = 'block';
+    if (charts['delaycost']) charts['delaycost'].destroy();
+    charts['delaycost'] = new Chart(document.getElementById('canvas-delaycost'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: _t('r_dc_on_time_label'), data: onTimeData, backgroundColor: 'rgba(5,150,105,0.7)', borderColor: '#059669', borderWidth: 2 },
+                { label: _t('r_dc_delayed_label'), data: delayedData, backgroundColor: 'rgba(220,38,38,0.7)', borderColor: '#dc2626', borderWidth: 2 }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => fmtCr(v) } }, x: { grid: { display: false } } } }
+    });
+}
+
+/* ── Branding Init ─────────────────────────────────────── */
+function initBranding() {
+    const B = window.__BRAND || {};
+    const name = B.firm_name || 'Financial Advisor';
+    const tagline = B.tagline || '';
+    const logo = B.logo_url || '';
+    const phone = B.phone || '';
+    const primaryColor = B.primary_color || '#1a56db';
+    const agentName = B.agent_name || '';
+
+    // Header
+    const brandName = document.getElementById('brand-name');
+    if (brandName) { brandName.textContent = agentName && agentName !== name ? name + ' — ' + agentName : name; brandName.removeAttribute('data-i18n-html'); }
+    const brandTagline = document.getElementById('brand-tagline');
+    if (brandTagline) { if (tagline) { brandTagline.textContent = tagline; brandTagline.removeAttribute('data-i18n'); } }
+    const brandLogo = document.getElementById('brand-logo');
+    if (brandLogo && logo) { brandLogo.src = logo; brandLogo.alt = name; brandLogo.style.display = ''; }
+
+    // Footer
+    const footerBrand = document.getElementById('footer-brand');
+    if (footerBrand) {
+        footerBrand.innerHTML = (logo ? '<img src="'+logo+'" alt="" style="height:32px;border-radius:6px"> ' : '') + name;
+    }
+    const footerContact = document.getElementById('footer-contact');
+    if (footerContact) {
+        let contactParts = [];
+        if (agentName) contactParts.push('\ud83d\udc64 ' + agentName);
+        if (phone) contactParts.push('\ud83d\udcde ' + phone + ' | WhatsApp Available Anytime');
+        footerContact.innerHTML = contactParts.join(' | ');
+    }
+    const footerTagline = document.getElementById('footer-tagline');
+    if (footerTagline) footerTagline.textContent = tagline;
+
+    // Title
+    document.title = name + ' — Financial Tools';
+
+    // Contact Advisor buttons
+    if (phone) {
+        const waLink = 'https://wa.me/' + phone.replace(/[^0-9]/g, '');
+        document.querySelectorAll('.contact-btn').forEach(a => {
+            a.href = waLink + '?text=' + encodeURIComponent('Hi, I need help with financial planning.');
+        });
+    }
+
+    // Primary color
+    if (primaryColor && primaryColor !== '#1a56db') {
+        document.documentElement.style.setProperty('--blue', primaryColor);
+    }
+
+    // Update i18n c_brand to firm name
+    _CT.c_brand.en = name;
+    _CT.c_brand.hi = name;
+    _CT.c_sub.en = tagline || 'Financial Planning Calculators';
+    _CT.c_sub.hi = tagline || 'वित्तीय योजना कैलकुलेटर';
+}
+
+/* ── WhatsApp Share ─────────────────────────────────────── */
+async function shareOnWhatsApp(calcName) {
+    const B = window.__BRAND || {};
+    const firmName = B.firm_name || (_clang==='hi'?'आपके वित्तीय सलाहकार':'Your Financial Advisor');
+    const agentName = B.agent_name || '';
+    const phone = B.phone || '';
+
+    const resBox = document.getElementById('res-' + calcName);
+    if (!resBox || !resBox.classList.contains('active')) {
+        alert(_t('r_calc_first'));
+        return;
+    }
+
+    const bigNum = resBox.querySelector('.big-number');
+    const detail = resBox.querySelector('.detail');
+
+    const calcTitles = {
+        inflation: _t('inf_title'), hlv: _t('hlv_title'), retirement: _t('ret_title'),
+        emi: _t('emi_title'), health: _t('health_title'), sip: _t('sip_title'),
+        mfsip: _t('mfsip_title'), ulip: _t('ulip_title'), nps: _t('nps_title'),
+        stepupsip: _t('sus_title'), swp: _t('swp_title'), delaycost: _t('dc_title')
+    };
+
+    let text = '📊 ' + (_clang==='hi'?'वित्तीय विश्लेषण':'Financial Analysis') + '\n';
+    text += '━━━━━━━━━━━━━━━━━\n\n';
+    text += (calcTitles[calcName] || calcName) + ' — ' + (_clang==='hi'?'परिणाम':'Results') + '\n';
+    text += '━━━━━━━━━━━━━━━━━━\n\n';
+    if (bigNum) text += bigNum.textContent.trim() + '\n';
+    if (detail) text += '\n' + detail.textContent.trim() + '\n';
+    text += '\n';
+    text += (_clang==='hi'?'तैयार कर्ता':'Prepared by') + ': ' + (agentName || firmName) + '\n';
+    if (firmName && firmName !== agentName) text += firmName + ' 🛡️\n';
+    const _bp1=[]; if(B.website)_bp1.push('🌐 '+B.website); if(B.email)_bp1.push('📧 '+B.email);
+    text += '\n' + (_bp1.length ? _bp1.join('\n') : '🌐 Powered by Sarathi-AI.com');
+
+    // Generate PDF report and include link
+    try {
+        const params = _calcParams(calcName);
+        const qs = new URLSearchParams(params).toString();
+        const res = await fetch('/api/report/' + _reportEndpoint(calcName) + '?' + qs);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.url) text += '\n\n📎 ' + (_clang==='hi'?'विस्तृत रिपोर्ट देखें':'View detailed report') + ': ' + data.url;
+        }
+    } catch(e) { /* PDF link optional — share text anyway */ }
+
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+/* ── PDF Report Download ───────────────────────────────── */
+function _reportEndpoint(calcName) {
+    const map = {stepupsip:'stepup', delaycost:'delay'};
+    return map[calcName] || calcName;
+}
+function _calcParams(calcName) {
+    const B = window.__BRAND || {};
+    const brand = {agent_name:B.agent_name||'',agent_phone:B.phone||'',company:B.firm_name||'',
+        brand_primary:B.primary_color||'',brand_accent:B.accent_color||'',
+        brand_logo:B.logo_url||'',brand_tagline:B.tagline||'',
+        brand_phone:B.phone||'',brand_email:B.email||'',brand_website:B.website||''};
+    const g = id => +(document.getElementById(id)||{}).value||0;
+    const p = {client_name:'Client', lang: _clang, ...brand};
+    switch(calcName){
+        case 'inflation': Object.assign(p,{amount:g('inf-amt'),inflation:g('inf-rate'),years:g('inf-yrs')}); break;
+        case 'hlv': Object.assign(p,{monthly_expense:g('hlv-exp'),loans:g('hlv-loan'),children_expense:g('hlv-child'),existing_cover:g('hlv-cover'),years_to_retire:g('hlv-retire')}); break;
+        case 'retirement': Object.assign(p,{current_age:g('ret-age'),retirement_age:g('ret-retire'),life_expectancy:g('ret-life'),monthly_expense:g('ret-exp')}); break;
+        case 'emi': Object.assign(p,{premium:g('emi-premium'),years:g('emi-yrs')}); break;
+        case 'health': {const ct=['metro','tier1','tier2'][g('health-city')-1]||'metro'; Object.assign(p,{age:g('health-age'),family:document.getElementById('health-family').value,city_tier:ct}); break;}
+        case 'sip': Object.assign(p,{amount:g('sip-amt'),years:g('sip-yrs'),expected_return:g('sip-ret')}); break;
+        case 'mfsip': Object.assign(p,{goal:g('mf-goal'),years:g('mf-yrs'),annual_return:g('mf-ret'),existing:g('mf-exist')}); break;
+        case 'ulip': Object.assign(p,{annual_investment:g('ulip-amt'),years:g('ulip-yrs'),ulip_return:g('ulip-ret'),mf_return:g('mf-ret2')}); break;
+        case 'nps': Object.assign(p,{monthly:g('nps-amt'),current_age:g('nps-age'),retire_age:g('nps-retire'),annual_return:g('nps-ret'),tax_bracket:g('nps-tax')}); break;
+        case 'stepupsip': Object.assign(p,{initial_sip:g('sus-sip'),annual_step_up:g('sus-step'),years:g('sus-yrs'),annual_return:g('sus-ret')}); break;
+        case 'swp': Object.assign(p,{initial_corpus:g('swp-corpus'),monthly_withdrawal:g('swp-wd'),annual_return:g('swp-ret'),years:g('swp-yrs')}); break;
+        case 'delaycost': Object.assign(p,{monthly_sip:g('dc-sip'),years:g('dc-yrs'),annual_return:g('dc-ret'),delay_years:g('dc-delay')}); break;
+    }
+    return p;
+}
+
+async function downloadPDF(calcName) {
+    const resBox = document.getElementById('res-' + calcName);
+    if (!resBox || !resBox.classList.contains('active')) {
+        alert(_t('r_calc_first'));
+        return;
+    }
+    const btn = event.currentTarget; btn.disabled = true; btn.textContent = '⏳...';
+    try {
+        const params = _calcParams(calcName);
+        const qs = new URLSearchParams(params).toString();
+        const res = await fetch('/api/report/' + _reportEndpoint(calcName) + '?' + qs);
+        if (!res.ok) throw new Error('Report generation failed');
+        const data = await res.json();
+        if (data.url) window.open(data.url, '_blank');
+    } catch(e) { alert(e.message||'Failed to generate report'); }
+    finally { btn.disabled = false; btn.textContent = '📄 ' + _t('btn_pdf'); }
+}
+
+async function shareWhatsAppPDF(calcName) {
+    const resBox = document.getElementById('res-' + calcName);
+    if (!resBox || !resBox.classList.contains('active')) {
+        alert(_t('r_calc_first'));
+        return;
+    }
+    const btn = event.currentTarget; btn.disabled = true; btn.textContent = '⏳...';
+    try {
+        const params = _calcParams(calcName);
+        const qs = new URLSearchParams(params).toString();
+        const res = await fetch('/api/report/' + _reportEndpoint(calcName) + '?' + qs);
+        if (!res.ok) throw new Error('Report generation failed');
+        const data = await res.json();
+        if (data.url) {
+            const B = window.__BRAND || {};
+            const firmName = B.firm_name || (_clang==='hi'?'आपके वित्तीय सलाहकार':'Your Financial Advisor');
+            const agentName = B.agent_name || '';
+            const calcTitles = {inflation:_t('inf_title'),hlv:_t('hlv_title'),retirement:_t('ret_title'),emi:_t('emi_title'),health:_t('health_title'),sip:_t('sip_title'),mfsip:_t('mfsip_title'),ulip:_t('ulip_title'),nps:_t('nps_title'),stepupsip:_t('sus_title'),swp:_t('swp_title'),delaycost:_t('dc_title')};
+            const resBox2 = document.getElementById('res-' + calcName);
+            const bigNum = resBox2 ? resBox2.querySelector('.big-number') : null;
+            const detailEl = resBox2 ? resBox2.querySelector('.detail') : null;
+            let text = '📊 ' + (_clang==='hi'?'वित्तीय विश्लेषण':'Financial Analysis') + '\n';
+            text += '━━━━━━━━━━━━━━━━━\n\n';
+            text += (calcTitles[calcName]||calcName) + ' — ' + (_clang==='hi'?'परिणाम':'Results') + '\n';
+            text += '━━━━━━━━━━━━━━━━━━\n\n';
+            if (bigNum) text += bigNum.textContent.trim() + '\n';
+            if (detailEl) text += '\n' + detailEl.textContent.trim() + '\n';
+            text += '\n';
+            text += (_clang==='hi'?'तैयार कर्ता':'Prepared by') + ': ' + (agentName || firmName) + '\n';
+            if (firmName && firmName !== agentName) text += firmName + ' 🛡️\n';
+            const _bp2=[]; if(B.website)_bp2.push('🌐 '+B.website); if(B.email)_bp2.push('📧 '+B.email);
+            text += '\n' + (_bp2.length ? _bp2.join('\n') : '🌐 Powered by Sarathi-AI.com');
+            text += '\n\n📎 ' + (_clang==='hi'?'विस्तृत रिपोर्ट देखें':'View detailed report') + ': ' + data.url;
+            window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+        }
+    } catch(e) { alert(e.message||'Failed'); }
+    finally { btn.disabled = false; btn.textContent = '📤 ' + _t('btn_wa_pdf'); }
+}
+
+/* ── Theme Toggle — handled by dark-mode.js (html[data-theme]) ── */
+/* toggleTheme() + init are in /static/dark-mode.js loaded in <head> */
+
+/* ── Init on load ──────────────────────────────────────── */
+initBranding();
+</script>
+
+<!-- Floating bottom nav for mobile -->
+<style>
+.calc-bottom-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--card, #fff); border-top: 1px solid var(--border, #e2e8f0); z-index: 200; padding: 6px 0; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+.calc-bottom-bar-inner { display: flex; justify-content: space-around; align-items: center; max-width: 400px; margin: 0 auto; }
+.calc-bnav-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 12px; border: none; background: none; color: var(--text-muted, #64748b); font-size: .68em; font-family: inherit; cursor: pointer; border-radius: 8px; text-decoration: none; font-weight: 600; }
+.calc-bnav-item .cbn-icon { font-size: 1.6em; }
+.calc-bnav-item.active { color: var(--blue, #0d9488); }
+.calc-bnav-item:active { background: rgba(13,148,136,.08); }
+@media (max-width: 768px) { .calc-bottom-bar { display: block; } body { padding-bottom: 64px; } }
+</style>
+<nav class="calc-bottom-bar">
+    <div class="calc-bottom-bar-inner">
+        <a href="/dashboard" class="calc-bnav-item"><span class="cbn-icon">📊</span><span>Dashboard</span></a>
+        <a href="/calculators" class="calc-bnav-item active"><span class="cbn-icon">🧮</span><span>Calculators</span></a>
+        <a href="/dashboard#voice" class="calc-bnav-item" onclick="sessionStorage.setItem('open_voice',1)"><span class="cbn-icon">🎙️</span><span>Voice AI</span></a>
+    </div>
+</nav>
+
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+</body>
+</html>
