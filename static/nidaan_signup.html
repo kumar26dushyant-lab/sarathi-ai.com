@@ -60,7 +60,22 @@
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
 
-  @media(max-width:480px){.row2{grid-template-columns:1fr}.plan-selector{grid-template-columns:1fr}}
+  /* Mobile — plan cards & form */
+  @media(max-width:640px){
+    main{margin:1.5rem auto}
+    .plan-selector{grid-template-columns:1fr;gap:.5rem}
+    .plan-card{display:flex;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;padding:.8rem 1rem}
+    .plan-name{font-size:.95rem;font-weight:700;flex:0 0 auto}
+    .plan-price{font-size:1rem;white-space:nowrap;margin-left:auto}
+    .plan-price span{font-size:.7rem}
+    .plan-features{display:none}
+    .row2{grid-template-columns:1fr}
+  }
+  @media(max-width:480px){
+    .card{padding:1.25rem}
+    main{padding:0 .85rem;margin:1.25rem auto}
+    h1{font-size:1.4rem}
+  }
 </style>
 </head>
 <body class="body en">

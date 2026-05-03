@@ -43,7 +43,19 @@
   .note{font-size:.8rem;color:rgba(255,255,255,.4);text-align:center;margin-top:.85rem;line-height:1.6}
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
-  @media(max-width:480px){.features{grid-template-columns:1fr}.row2{grid-template-columns:1fr}}
+  @media(max-width:640px){
+    main{padding:2rem .85rem}
+    h1{font-size:clamp(1.3rem,4vw,1.8rem)}
+    .card{padding:1.25rem}
+    .price{font-size:2rem}
+    .features{grid-template-columns:1fr 1fr;gap:.6rem}
+    .feat{font-size:.82rem;padding:.65rem .8rem}
+  }
+  @media(max-width:480px){
+    .features{grid-template-columns:1fr}
+    .row2{grid-template-columns:1fr}
+    nav{padding:.75rem .85rem}
+  }
 </style>
 </head>
 <body class="body en">

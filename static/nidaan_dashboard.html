@@ -86,7 +86,51 @@
 
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
-  @media(max-width:600px){th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){display:none}.row2{grid-template-columns:1fr}}
+
+  /* Mobile */
+  @media(max-width:767px){
+    /* Table: horizontal scroll */
+    .card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    table{min-width:420px;font-size:.82rem}
+    th,td{padding:.6rem .7rem}
+
+    /* Nav: condense */
+    nav{padding:.65rem .85rem;flex-wrap:wrap;gap:.4rem}
+    .nav-brand span{display:none}
+    .plan-badge{font-size:.7rem;padding:.2rem .5rem}
+    .btn-ghost{font-size:.75rem;padding:.28rem .6rem}
+
+    /* Stats */
+    .stats{grid-template-columns:repeat(2,1fr);gap:.75rem}
+    .stat{padding:.8rem 1rem}
+    .stat-val{font-size:1.4rem}
+
+    /* Container */
+    .container{padding:1.25rem .85rem}
+    .page-title{font-size:1.2rem}
+
+    /* Sub banner */
+    .sub-banner{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.9rem 1rem}
+
+    /* Modal */
+    .modal{padding:1.25rem;max-height:95vh}
+    .modal-footer{flex-direction:column-reverse;gap:.5rem}
+    .modal-footer .btn{width:100%}
+  }
+
+  @media(max-width:600px){
+    /* Hide insurer & filed columns to reduce table width */
+    th:nth-child(3),td:nth-child(3),
+    th:nth-child(4),td:nth-child(4),
+    th:nth-child(5),td:nth-child(5),
+    th:nth-child(6),td:nth-child(6){display:none}
+    .row2{grid-template-columns:1fr}
+  }
+
+  @media(max-width:400px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .nav-right .lang-toggle{display:none}
+  }
 </style>
 </head>
 <body class="body en">
