@@ -14,9 +14,10 @@
 
   /* NAV */
   nav{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;background:rgba(10,22,40,.95);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50}
-  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff}
-  .nav-brand img{height:36px;width:auto;border-radius:6px}
-  .nav-links{display:flex;gap:1.25rem;align-items:center;font-size:.9rem}
+  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff;min-width:0;overflow:hidden}
+  .nav-brand img{height:36px;width:auto;border-radius:6px;flex-shrink:0}
+  .nav-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav-links{display:flex;gap:1.25rem;align-items:center;font-size:.9rem;flex-shrink:0}
 
   /* MAIN */
   main{max-width:520px;margin:2.5rem auto;padding:0 1rem}
@@ -63,6 +64,10 @@
   /* Mobile — plan cards & form */
   @media(max-width:640px){
     main{margin:1.5rem auto}
+    nav{padding:.7rem .85rem}
+    .nav-brand span{display:none}
+    .nav-links{gap:.5rem}
+    .nav-links a{font-size:.82rem;white-space:nowrap}
     .plan-selector{grid-template-columns:1fr;gap:.5rem}
     .plan-card{display:flex;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;padding:.8rem 1rem}
     .plan-name{font-size:.95rem;font-weight:700;flex:0 0 auto}

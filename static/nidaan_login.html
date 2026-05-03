@@ -11,9 +11,10 @@
   a{color:#22d3ee;text-decoration:none}
   a:hover{text-decoration:underline}
   nav{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;background:rgba(10,22,40,.95);border-bottom:1px solid rgba(255,255,255,.07)}
-  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff}
-  .nav-brand img{height:36px;width:auto;border-radius:6px}
-  .lang-toggle{display:flex;gap:.4rem}
+  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff;min-width:0;overflow:hidden}
+  .nav-brand img{height:36px;width:auto;border-radius:6px;flex-shrink:0}
+  .nav-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lang-toggle{display:flex;gap:.4rem;flex-shrink:0}
   .lang-btn{padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);font-size:.78rem;cursor:pointer}
   .lang-btn.active{background:#22d3ee;color:#0a1628;border-color:#22d3ee;font-weight:700}
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
@@ -37,6 +38,8 @@
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
   @media(max-width:480px){
+    nav{padding:.7rem .85rem}
+    .nav-brand span{display:none}
     main{padding:1.5rem .85rem}
     .card{padding:1.25rem}
     .logo-wrap img{height:52px}
