@@ -11103,16 +11103,16 @@ _DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
 
 def _run_deploy():
     """Start deploy script fully detached so it survives when it kills this process."""
-    import os as _os
     try:
         log_path = "/tmp/sarathi-deploy.log"
-        with open(log_path, "a") as _lf:
-            _subprocess.Popen(
-                ["bash", str(_DEPLOY_SCRIPT)],
-                stdout=_lf, stderr=_lf,
-                start_new_session=True,  # detach from our process group
-                close_fds=True,
-            )
+        # Use shell redirect so the script's exec >> LOG writes correctly
+        _subprocess.Popen(
+            f"bash '{_DEPLOY_SCRIPT}' >> '{log_path}' 2>&1",
+            shell=True,
+            start_new_session=True,
+            close_fds=True,
+            stdin=_subprocess.DEVNULL,
+        )
         logger.info("🚀 deploy script started (detached), log: %s", log_path)
     except Exception as exc:
         logger.error("deploy script error: %s", exc)

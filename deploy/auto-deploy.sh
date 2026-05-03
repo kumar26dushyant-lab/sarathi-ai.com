@@ -6,10 +6,6 @@
 set -euo pipefail
 
 APP_DIR=/opt/sarathi
-LOG=/tmp/sarathi-deploy.log
-
-# Redirect all stdout+stderr to the log file from now on
-exec >> "$LOG" 2>&1
 
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') Deploy started ==="
 
