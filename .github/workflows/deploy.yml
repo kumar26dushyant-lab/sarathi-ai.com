@@ -13,46 +13,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.PROD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Deploy to Oracle Cloud VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
+        env:
+          HOST: ${{ secrets.PROD_HOST }}
+          USER: ${{ secrets.PROD_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=15 \
+              "${USER}@${HOST}" << 'ENDSSH'
+          set -e
 
-            # ── Pull latest code ──────────────────────────────────────────
-            cd /opt/sarathi
-            sudo git fetch origin master
-            sudo git reset --hard origin/master
+          # ── Pull latest code ──────────────────────────────────────────
+          sudo git -C /opt/sarathi fetch origin master
+          sudo git -C /opt/sarathi reset --hard origin/master
 
-            # ── Syntax check before restart ───────────────────────────────
-            /opt/sarathi/venv/bin/python -c "
-            import ast
-            with open('sarathi_biz.py', encoding='utf-8') as f:
-                ast.parse(f.read())
-            print('Syntax OK')
-            "
+          # ── Syntax check before restart ───────────────────────────────
+          /opt/sarathi/venv/bin/python -c "
+          import ast
+          with open('/opt/sarathi/sarathi_biz.py', encoding='utf-8') as f:
+              ast.parse(f.read())
+          print('Syntax OK')
+          "
 
-            # ── Run DB migrations (idempotent) ────────────────────────────
-            sudo /opt/sarathi/venv/bin/python -c "
-            import asyncio, sys
-            sys.path.insert(0, '.')
-            from biz_database import init_db
-            asyncio.run(init_db())
-            print('DB migration OK')
-            "
+          # ── Run DB migrations (idempotent) ────────────────────────────
+          sudo /opt/sarathi/venv/bin/python -c "
+          import asyncio, sys
+          sys.path.insert(0, '/opt/sarathi')
+          from biz_database import init_db
+          asyncio.run(init_db())
+          print('DB migration OK')
+          "
 
-            # ── Restart service ───────────────────────────────────────────
-            sudo systemctl restart sarathi
-            sleep 6
-            sudo systemctl is-active sarathi
+          # ── Restart service ───────────────────────────────────────────
+          sudo systemctl restart sarathi
+          sleep 8
+          sudo systemctl is-active sarathi
 
-            # ── Smoke test ────────────────────────────────────────────────
-            SARATHI=$(curl -sk -o /dev/null -w "%{http_code}" https://sarathi-ai.com/)
-            NIDAAN=$(curl -sk -o /dev/null -w "%{http_code}" https://nidaanpartner.com/)
-            echo "sarathi-ai.com: $SARATHI"
-            echo "nidaanpartner.com: $NIDAAN"
-            [ "$SARATHI" = "200" ] && [ "$NIDAAN" = "200" ] && echo "Both sites OK" || exit 1
+          # ── Smoke test ────────────────────────────────────────────────
+          SARATHI=$(curl -sk -o /dev/null -w "%{http_code}" https://sarathi-ai.com/)
+          NIDAAN=$(curl -sk -o /dev/null -w "%{http_code}" https://nidaanpartner.com/)
+          echo "sarathi-ai.com: $SARATHI  nidaanpartner.com: $NIDAAN"
+          [ "$SARATHI" = "200" ] && [ "$NIDAAN" = "200" ] && echo "Deploy OK" || exit 1
+          ENDSSH
