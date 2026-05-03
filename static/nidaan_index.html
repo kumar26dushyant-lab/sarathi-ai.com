@@ -42,7 +42,7 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .nav{position:sticky;top:0;z-index:100;background:rgba(30,58,138,0.97);backdrop-filter:blur(10px);padding:0 1.5rem}
 .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px;gap:1rem}
 .nav-brand{display:flex;align-items:center;gap:.6rem;color:#fff;font-family:'Poppins',sans-serif;font-size:1.1rem;font-weight:700}
-.nav-brand img{height:36px;border-radius:6px}
+.nav-brand img{height:56px;border-radius:8px}
 .nav-brand .brand-sub{font-size:.65rem;font-weight:500;color:var(--cyan-light);letter-spacing:.04em;display:block;line-height:1.2}
 .nav-links{display:flex;align-items:center;gap:1.5rem}
 .nav-links a{color:rgba(255,255,255,.85);font-size:.88rem;font-weight:500;transition:color .2s}
@@ -129,7 +129,7 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .plan-cta{width:100%;padding:.8rem;background:var(--navy);color:#fff;border:none;border-radius:10px;font-weight:600;font-size:.95rem;cursor:pointer;transition:background .2s}
 .plan-card.recommended .plan-cta{background:var(--cyan)}
 .plan-cta:hover{opacity:.9}
-.plan-sarathi-badge{display:inline-flex;align-items:center;gap:.3rem;background:#eff6ff;border:1px solid #bfdbfe;color:var(--navy-light);font-size:.75rem;font-weight:600;padding:.2rem .55rem;border-radius:6px;margin-bottom:.9rem}
+.plan-sarathi-badge{display:flex;align-items:center;justify-content:center;gap:.45rem;background:linear-gradient(135deg,#1e3a8a,#0891b2);color:#fff;font-size:.82rem;font-weight:700;padding:.55rem .75rem;border-radius:9px;margin-bottom:1rem;letter-spacing:.025em;box-shadow:0 3px 12px rgba(6,182,212,.35);text-align:center}
 
 /* SARATHI BUNDLE BANNER */
 .bundle-section{background:linear-gradient(135deg,#eff6ff,#ecfeff);border-top:1px solid #bfdbfe;border-bottom:1px solid #bfdbfe}
@@ -457,8 +457,8 @@ span.hi-inline{display:none}
     <div class="tag hi" style="display:none">मूल्य योजनाएं</div>
     <h2 class="section-title en">Choose your plan</h2>
     <h2 class="section-title hi" style="display:none">अपना प्लान चुनें</h2>
-    <p class="section-sub en">All plans billed quarterly. Cancel anytime. Sarathi-AI CRM included free.</p>
-    <p class="section-sub hi" style="display:none">सभी प्लान तिमाही बिलिंग। कभी भी रद्द करें। Sarathi-AI CRM मुफ्त शामिल।</p>
+    <p class="section-sub en">All plans billed quarterly. Cancel anytime. Sarathi-AI CRM included free. Or try a <strong>one-time ₹999 review</strong> — no subscription needed.</p>
+    <p class="section-sub hi" style="display:none">सभी प्लान तिमाही बिलिंग। कभी भी रद्द करें। Sarathi-AI CRM मुफ्त शामिल। या सिर्फ <strong>₹999 में एकमुश्त समीक्षा</strong> — कोई सब्सक्रिप्शन नहीं।</p>
     <div class="plans-grid">
 
       <!-- SILVER -->
@@ -542,6 +542,37 @@ span.hi-inline{display:none}
         <button class="plan-cta" onclick="window.location='/nidaan/signup?plan=platinum'">
           <span class="en">Get Started</span><span class="hi" style="display:none">शुरू करें</span>
         </button>
+      </div>
+
+      <!-- ₹999 ONE-TIME REVIEW — eye-catcher row -->
+      <div class="plan-card" style="grid-column:1/-1;border:2px solid #f59e0b;background:linear-gradient(135deg,#fffbeb,#fef3c7);padding:1.75rem 2rem;margin-top:.5rem;position:relative">
+        <div class="plan-badge" style="background:#f59e0b;color:#1c1917">⚡ <span class="en">NO SUBSCRIPTION NEEDED</span><span class="hi" style="display:none">बिना सब्सक्रिप्शन</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:1.5rem;align-items:center">
+          <div>
+            <div class="plan-name" style="font-size:1.2rem">⚡ <span class="en">One-Time Claim Review</span><span class="hi" style="display:none">एकमुश्त क्लेम समीक्षा</span></div>
+            <p style="font-size:.9rem;color:#92400e;margin:.4rem 0 .9rem;line-height:1.65">
+              <span class="en">Your claim was rejected or underpaid — but you don't need a full subscription. Get Nidaan's legal experts to review your case and tell you exactly where you stand. <strong>Also available for Sarathi-AI advisors for their clients.</strong></span>
+              <span class="hi" style="display:none">आपका क्लेम रिजेक्ट या कम भुगतान हुआ — पूरा सब्सक्रिप्शन ज़रूरी नहीं। Nidaan के कानूनी विशेषज्ञ आपके मामले की समीक्षा करेंगे। <strong>Sarathi-AI एडवाइजर भी अपने क्लाइंट के लिए ले सकते हैं।</strong></span>
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="en">✓ Full legal review</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="en">✓ 48-hr expert opinion</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="en">✓ No subscription needed</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="en">✓ Works for Sarathi-AI advisors too</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="hi" style="display:none">✓ पूरी कानूनी समीक्षा</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="hi" style="display:none">✓ 48 घंटे में राय</span>
+              <span style="background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:.3rem .7rem;border-radius:16px;font-size:.8rem;font-weight:600" class="hi" style="display:none">✓ Sarathi-AI एडवाइजर भी ले सकते हैं</span>
+            </div>
+          </div>
+          <div style="text-align:center;min-width:170px">
+            <div style="font-size:3rem;font-weight:800;color:#b45309;font-family:'Poppins',sans-serif;line-height:1">₹999</div>
+            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="en">one-time · no commitment</div>
+            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="hi" style="display:none">एकमुश्त · कोई वचनबद्धता नहीं</div>
+            <button class="plan-cta" style="background:#f59e0b;color:#1c1917;font-weight:700" onclick="window.location='/nidaan/get-reviewed'">
+              <span class="en">Get Reviewed Now →</span><span class="hi" style="display:none">समीक्षा करवाएं →</span>
+            </button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -796,6 +827,12 @@ span.hi-inline{display:none}
       <span class="en">Get My Claim Reviewed — ₹999</span>
       <span class="hi" style="display:none">मेरा क्लेम समीक्षा करवाएं — ₹999</span>
     </a>
+    <div style="margin-top:1.75rem;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:1rem 1.25rem;font-size:.88rem;color:#1e3a8a;line-height:1.7;text-align:left">
+      💡 <strong class="en">Already a Sarathi-AI.com advisor?</strong>
+      <strong class="hi" style="display:none">पहले से Sarathi-AI.com एडवाइजर हैं?</strong>
+      <span class="en"> You can use this ₹999 review for your clients too — no Nidaan subscription required. Share the link directly, or log in with your Sarathi credentials.</span>
+      <span class="hi" style="display:none"> आप भी अपने क्लाइंट के लिए ₹999 की यह समीक्षा ले सकते हैं — कोई Nidaan सब्सक्रिप्शन ज़रूरी नहीं। लिंक सीधे शेयर करें या Sarathi क्रेडेंशियल से लॉगिन करें।</span>
+    </div>
   </div>
 </section>
 
