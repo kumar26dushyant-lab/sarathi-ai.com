@@ -1044,6 +1044,13 @@ async def init_db():
         # Sarathi cross-promo column (which product source referred this tenant)
         nidaan_migrations = [
             "ALTER TABLE tenants ADD COLUMN plan_source TEXT DEFAULT 'sarathi'",
+            # Phase 2: advisor fields + status on per-claim review table
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN advisor_name TEXT",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN advisor_phone TEXT",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN advisor_email TEXT",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN claim_type TEXT",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN status TEXT DEFAULT 'pending_payment'",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN razorpay_subscription_id TEXT",
         ]
         for m in nidaan_migrations:
             try:

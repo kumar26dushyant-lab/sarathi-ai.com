@@ -378,6 +378,24 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     if account_id is None:
         raise HTTPException(status_code=409, detail="Email already registered")
     token = nidaan.create_nidaan_token(account_id, body.email.lower().strip(), body.plan)
+    # Fire-and-forget welcome email
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_email(
+        to_email=body.email.strip(),
+        subject="Welcome to Nidaan Partner! 🛡️",
+        html_body=(
+            f"<p>Hi {body.owner_name.strip()},</p>"
+            f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
+            f"<p>You've signed up for the <b>{body.plan.title()} Plan</b>. "
+            f"To activate your subscription and start submitting claims, complete your payment:</p>"
+            f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
+            f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
+            f"Go to Dashboard →</a></p>"
+            f"<p>If you have any questions, reply to this email — we respond within a few hours.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
     return {"access_token": token, "account_id": account_id, "plan": body.plan}
 
 
@@ -455,6 +473,265 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
     return {"claim_id": claim_id, "status": "intimated"}
+
+
+# ── Review Request (₹999 per-claim, no subscription) ──────────────────────────
+
+class NidaanReviewReq(BaseModel):
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    review_type: str = "per_claim_999"
+
+
+@app.post("/nidaan/api/review-request")
+async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import asyncio as _asyncio
+    purchase_id = await nidaan.create_review_request(
+        advisor_name=body.advisor_name.strip(),
+        advisor_phone=body.advisor_phone.strip(),
+        advisor_email=body.advisor_email.strip(),
+        insured_name=body.insured_name.strip(),
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name.strip(),
+        disputed_amount=body.disputed_amount,
+        notes=body.notes.strip(),
+    )
+    # Notify admin
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
+    if admin_email:
+        _asyncio.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] New ₹999 Review Request #{purchase_id}",
+            html_body=(
+                f"<p><b>Advisor:</b> {body.advisor_name} — {body.advisor_phone} — {body.advisor_email}</p>"
+                f"<p><b>Client:</b> {body.insured_name}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Notes:</b> {body.notes or '—'}</p>"
+                f"<p>Send payment link and proceed once ₹999 confirmed. Purchase ID: {purchase_id}</p>"
+            ),
+        ))
+    # Confirmation to advisor
+    _asyncio.create_task(email_svc.send_email(
+        to_email=body.advisor_email,
+        subject="Your review request received — Nidaan Partner",
+        html_body=(
+            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>We've received your ₹999 review request for client <b>{body.insured_name}</b> "
+            f"({body.claim_type} claim).</p>"
+            f"<p>Our team will send a payment link to this email within a few hours. "
+            f"Once payment is confirmed, the legal review will be delivered in 48–72 business hours.</p>"
+            f"<p>Reference ID: <b>#{purchase_id}</b></p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    return {"purchase_id": purchase_id, "status": "received"}
+
+
+# ── Razorpay Subscription (Nidaan) ────────────────────────────────────────────
+
+class NidaanSubscribeReq(BaseModel):
+    plan: str  # silver | gold | platinum
+
+
+@app.post("/nidaan/api/subscribe")
+async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
+    """Create a Razorpay subscription for an authenticated Nidaan account."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if body.plan not in ("silver", "gold", "platinum"):
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.create_nidaan_razorpay_subscription(
+        account_id=account["account_id"],
+        plan=body.plan,
+        rzp_key_id=rzp_key_id,
+        rzp_key_secret=rzp_key_secret,
+        email=account["email"],
+        phone=account["phone"],
+    )
+    if "error" in result:
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+# ── Nidaan Razorpay Webhook ────────────────────────────────────────────────────
+
+@app.post("/nidaan/api/webhook")
+async def nidaan_razorpay_webhook(request: Request):
+    """Razorpay webhook for Nidaan subscription events."""
+    import asyncio as _asyncio, json as _json, hmac as _hmac_mod, hashlib as _hs
+    body = await request.body()
+    sig = request.headers.get("X-Razorpay-Signature", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if rzp_secret and sig:
+        expected = _hmac_mod.new(rzp_secret.encode(), body, _hs.sha256).hexdigest()
+        if not _hmac_mod.compare_digest(expected, sig):
+            return JSONResponse({"detail": "Invalid signature"}, status_code=400)
+    try:
+        data = _json.loads(body)
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+    event = data.get("event", "")
+    sub_entity = data.get("payload", {}).get("subscription", {}).get("entity", {})
+    notes = sub_entity.get("notes", {})
+    if notes.get("product") != "nidaan":
+        return {"status": "ignored", "reason": "not_nidaan"}
+    account_id_str = notes.get("nidaan_account_id", "")
+    plan = notes.get("nidaan_plan", "")
+    if not account_id_str or not plan:
+        logger.warning("Nidaan webhook missing account_id/plan: %s", notes)
+        return {"status": "ignored"}
+    account_id = int(account_id_str)
+    rzp_sub_id = sub_entity.get("id", "")
+    if event in ("subscription.activated", "subscription.charged"):
+        payment_entity = data.get("payload", {}).get("payment", {}).get("entity", {})
+        amount_paise = payment_entity.get("amount", 0)
+        await nidaan.activate_from_razorpay_webhook(rzp_sub_id, account_id, plan, amount_paise)
+        # Email confirmation
+        account = await nidaan.get_account_by_email(
+            (await nidaan.get_all_accounts_admin(limit=1, offset=0) or [{}])[0].get("email", "")
+        )
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _row = await (await _c.execute(
+                "SELECT * FROM nidaan_accounts WHERE account_id=?", (account_id,)
+            )).fetchone()
+            if _row:
+                _row = dict(_row)
+                _asyncio.create_task(email_svc.send_email(
+                    to_email=_row["email"],
+                    subject=f"✅ Nidaan {plan.title()} Plan Activated!",
+                    html_body=(
+                        f"<p>Hi {_row['owner_name']},</p>"
+                        f"<p>Your <b>Nidaan {plan.title()} Plan</b> is now active. "
+                        f"You can start submitting insurance claims through your dashboard.</p>"
+                        f"<p><a href='https://nidaanpartner.com/nidaan/dashboard'>Open Dashboard →</a></p>"
+                        f"<p>— Nidaan Partner Team</p>"
+                    ),
+                    from_name="Nidaan Partner",
+                ))
+    elif event == "subscription.cancelled":
+        logger.info("Nidaan subscription cancelled: account=%d rzp=%s", account_id, rzp_sub_id)
+    return {"status": "ok", "event": event}
+
+
+# ── Admin helpers ──────────────────────────────────────────────────────────────
+
+def _nidaan_admin_auth(request: Request) -> bool:
+    """Check Nidaan admin token from Authorization header."""
+    token = os.getenv("NIDAAN_ADMIN_TOKEN", "")
+    if not token:
+        return False
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        import hmac as _h
+        return _h.compare_digest(h[7:], token)
+    return False
+
+
+@app.get("/nidaan/admin", response_class=HTMLResponse)
+async def nidaan_admin_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_admin.html")
+
+
+@app.get("/nidaan/api/admin/stats")
+async def nidaan_api_admin_stats(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    return await nidaan.get_admin_stats()
+
+
+@app.get("/nidaan/api/admin/claims")
+async def nidaan_api_admin_claims(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    claims = await nidaan.get_all_claims_admin(status=status, limit=limit, offset=offset)
+    return {"claims": claims, "count": len(claims)}
+
+
+@app.get("/nidaan/api/admin/accounts")
+async def nidaan_api_admin_accounts(
+    request: Request,
+    limit: int = 200,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    accounts = await nidaan.get_all_accounts_admin(limit=limit, offset=offset)
+    return {"accounts": accounts, "count": len(accounts)}
+
+
+@app.get("/nidaan/api/admin/review-requests")
+async def nidaan_api_admin_reviews(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    reviews = await nidaan.get_review_requests_admin(status=status, limit=limit)
+    return {"reviews": reviews, "count": len(reviews)}
+
+
+class NidaanClaimStatusUpdate(BaseModel):
+    new_status: str
+    note: str = ""
+
+
+@app.patch("/nidaan/api/admin/claims/{claim_id}/status")
+async def nidaan_api_admin_update_claim(
+    claim_id: int,
+    body: NidaanClaimStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    ok = await nidaan.update_claim_status(
+        claim_id=claim_id,
+        new_status=body.new_status,
+        changed_by_type="super_admin",
+        changed_by_id=0,
+        note=body.note,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {"claim_id": claim_id, "status": body.new_status}
 
 
 @app.get("/sitemap.xml")

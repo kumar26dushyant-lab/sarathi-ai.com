@@ -467,9 +467,265 @@ def create_nidaan_token(account_id: int, email: str, plan: str = "") -> str:
 def verify_nidaan_token(token: str) -> Optional[dict]:
     """Decode and verify a Nidaan JWT. Returns payload dict or None."""
     try:
-        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithm="HS256")
         if payload.get("typ") != "nidaan":
             return None
         return payload
     except Exception:
         return None
+
+
+# =============================================================================
+#  REVIEW REQUESTS (₹999 per-claim, no subscription needed)
+# =============================================================================
+
+async def create_review_request(
+    advisor_name: str,
+    advisor_phone: str,
+    advisor_email: str,
+    insured_name: str,
+    claim_type: str,
+    insurer_name: str = "",
+    disputed_amount: Optional[int] = None,
+    notes: str = "",
+) -> int:
+    """Save a ₹999 review request. Returns purchase_id."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """INSERT INTO nidaan_per_claim_purchase
+               (advisor_name, advisor_phone, advisor_email,
+                insured_name, insured_phone, insurer_name,
+                claim_type, disputed_amount, brief_description,
+                amount_paid, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 999, 'pending_payment')""",
+            (advisor_name, advisor_phone, advisor_email,
+             insured_name, advisor_phone, insurer_name,
+             claim_type, disputed_amount, notes),
+        )
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_review_requests_admin(
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    """Admin: list all ₹999 review requests."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        if status:
+            cur = await conn.execute(
+                "SELECT * FROM nidaan_per_claim_purchase WHERE status=? "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (status, limit, offset),
+            )
+        else:
+            cur = await conn.execute(
+                "SELECT * FROM nidaan_per_claim_purchase "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+# =============================================================================
+#  ADMIN QUERIES
+# =============================================================================
+
+async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict]:
+    """Admin: list all Nidaan accounts with their active plan."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """SELECT a.*, s.plan, s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s ON s.account_id = a.account_id
+                   AND s.status = 'active'
+               ORDER BY a.created_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_admin_stats() -> dict:
+    """Admin: quick dashboard numbers."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+
+        def _first(cur_result):
+            return cur_result[0] if cur_result else 0
+
+        total_accounts = _first(await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_accounts")).fetchone())
+        active_subs = _first(await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active'")).fetchone())
+        total_claims = _first(await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claims")).fetchone())
+        open_claims = _first(await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claims WHERE status NOT IN "
+            "('resolved_won','resolved_lost','closed','withdrawn')")).fetchone())
+        pending_reviews = _first(await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_per_claim_purchase WHERE status='pending_payment'")).fetchone())
+
+        plan_counts = {}
+        cur = await conn.execute(
+            "SELECT plan, COUNT(*) as cnt FROM nidaan_subscriptions "
+            "WHERE status='active' GROUP BY plan"
+        )
+        for row in await cur.fetchall():
+            plan_counts[row[0]] = row[1]
+
+        return {
+            "total_accounts": total_accounts,
+            "active_subscriptions": active_subs,
+            "total_claims": total_claims,
+            "open_claims": open_claims,
+            "pending_review_requests": pending_reviews,
+            "plans": plan_counts,
+        }
+
+
+# =============================================================================
+#  RAZORPAY SUBSCRIPTION (Nidaan-specific)
+# =============================================================================
+
+NIDAAN_RAZORPAY_PLANS = {
+    "silver":   {"amount_paise": 150000, "display": "₹1,500/quarter", "interval": 3},
+    "gold":     {"amount_paise": 300000, "display": "₹3,000/quarter", "interval": 3},
+    "platinum": {"amount_paise": 600000, "display": "₹6,000/quarter", "interval": 3},
+}
+
+# Cache: plan_key → razorpay_plan_id
+_nidaan_plan_ids: dict[str, str] = {}
+
+
+async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
+    """Create Razorpay plan objects for Nidaan if not already cached."""
+    import httpx
+    for plan_key, info in NIDAAN_RAZORPAY_PLANS.items():
+        if plan_key in _nidaan_plan_ids:
+            continue
+        # Try to find existing
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    "https://api.razorpay.com/v1/plans?count=100",
+                    auth=(rzp_key_id, rzp_key_secret), timeout=15.0,
+                )
+                for p in r.json().get("items", []):
+                    notes = p.get("notes", {})
+                    if notes.get("nidaan_plan") == plan_key:
+                        _nidaan_plan_ids[plan_key] = p["id"]
+                        break
+        except Exception as e:
+            logger.warning("Razorpay plan lookup failed for %s: %s", plan_key, e)
+        if plan_key in _nidaan_plan_ids:
+            continue
+        # Create new plan
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    "https://api.razorpay.com/v1/plans",
+                    auth=(rzp_key_id, rzp_key_secret),
+                    json={
+                        "period": "monthly",
+                        "interval": info["interval"],
+                        "item": {
+                            "name": f"Nidaan {plan_key.title()} Plan",
+                            "amount": info["amount_paise"],
+                            "currency": "INR",
+                            "description": info["display"],
+                        },
+                        "notes": {
+                            "nidaan_plan": plan_key,
+                            "product": "nidaan",
+                        },
+                    },
+                    timeout=15.0,
+                )
+                result = r.json()
+                if "id" in result:
+                    _nidaan_plan_ids[plan_key] = result["id"]
+                    logger.info("Created Nidaan Razorpay plan %s → %s", plan_key, result["id"])
+        except Exception as e:
+            logger.error("Failed to create Nidaan plan %s: %s", plan_key, e)
+
+
+async def create_nidaan_razorpay_subscription(
+    account_id: int,
+    plan: str,
+    rzp_key_id: str,
+    rzp_key_secret: str,
+    email: str,
+    phone: str,
+) -> dict:
+    """Create a Razorpay subscription for a Nidaan account. Returns sub details."""
+    import httpx
+    await ensure_nidaan_plans(rzp_key_id, rzp_key_secret)
+    plan_id = _nidaan_plan_ids.get(plan)
+    if not plan_id:
+        return {"error": f"Plan '{plan}' not available in Razorpay"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                "https://api.razorpay.com/v1/subscriptions",
+                auth=(rzp_key_id, rzp_key_secret),
+                json={
+                    "plan_id": plan_id,
+                    "total_count": 40,  # 10 years
+                    "quantity": 1,
+                    "notes": {
+                        "nidaan_account_id": str(account_id),
+                        "nidaan_plan": plan,
+                        "product": "nidaan",
+                    },
+                    "notify_info": {
+                        "notify_phone": phone,
+                        "notify_email": email,
+                    },
+                },
+                timeout=20.0,
+            )
+            result = r.json()
+            if "id" not in result:
+                return {"error": result.get("error", {}).get("description", "Failed")}
+            return {
+                "subscription_id": result["id"],
+                "short_url": result.get("short_url", ""),
+                "plan": plan,
+                "amount_display": NIDAAN_RAZORPAY_PLANS[plan]["display"],
+                "razorpay_key_id": rzp_key_id,
+            }
+    except Exception as e:
+        logger.error("Nidaan Razorpay subscription error: %s", e)
+        return {"error": str(e)}
+
+
+async def activate_from_razorpay_webhook(
+    razorpay_sub_id: str,
+    nidaan_account_id: int,
+    plan: str,
+    amount_paise: int,
+) -> bool:
+    """Activate / renew a Nidaan subscription from Razorpay webhook. Idempotent."""
+    # Check not already recorded
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT sub_id FROM nidaan_subscriptions "
+            "WHERE razorpay_subscription_id=? AND plan=?",
+            (razorpay_sub_id, plan),
+        )
+        existing = await cur.fetchone()
+    if existing:
+        logger.info("Nidaan sub already recorded for rzp_sub %s", razorpay_sub_id)
+        return True
+    sub_id = await create_subscription(
+        account_id=nidaan_account_id,
+        plan=plan,
+        amount_paid=amount_paise // 100,
+        razorpay_subscription_id=razorpay_sub_id,
+        period_days=92,
+    )
+    logger.info("✅ Nidaan sub activated: account=%d plan=%s sub_id=%d", nidaan_account_id, plan, sub_id)
+    return True
