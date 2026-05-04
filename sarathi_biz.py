@@ -358,6 +358,20 @@ class NidaanClaimReq(BaseModel):
     notes_from_agent: str = ""
 
 
+class NidaanSendOTPReq(BaseModel):
+    email: str
+
+
+class NidaanVerifyOTPReq(BaseModel):
+    email: str
+    otp: str
+
+
+class NidaanGoogleReq(BaseModel):
+    credential: str = Field(..., min_length=10)
+    plan: str = "silver"  # only used during signup
+
+
 # ── API routes ────────────────────────────────────────────────────────────────
 
 @app.post("/nidaan/api/signup")
@@ -419,6 +433,169 @@ async def nidaan_api_login(body: NidaanLoginReq, request: Request):
             "plan": plan,
         },
     }
+
+
+# ── Email OTP login (Nidaan) ──────────────────────────────────────────────────
+
+@app.post("/nidaan/api/send-email-otp")
+@limiter.limit("5/minute")
+async def nidaan_api_send_email_otp(req: NidaanSendOTPReq, request: Request):
+    """Send a 6-digit OTP to the registered Nidaan account email."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse(
+            {"detail": "No Nidaan account found with this email. Please sign up first."},
+            status_code=404)
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)
+    otp_code = result["otp"]
+    logger.info("📧 Nidaan Email OTP for %s***", email[:3])
+    sent = await email_svc.send_otp_email(email, otp_code, account.get("owner_name", ""))
+    if not sent:
+        return JSONResponse({"detail": "Failed to send OTP email. Please try again."}, status_code=503)
+    resp = {
+        "status": "otp_sent",
+        "email": email[:3] + "***" + email[email.index("@"):],
+        "expires_in": result["expires_in"],
+    }
+    if os.getenv("ENVIRONMENT", "").lower() == "development":
+        resp["_dev_otp"] = otp_code
+    return resp
+
+
+@app.post("/nidaan/api/verify-email-otp")
+@limiter.limit("10/minute")
+async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request):
+    """Verify OTP and return Nidaan JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    if not auth.verify_email_otp(email, req.otp):
+        auth.record_failed_login(client_ip)
+        return JSONResponse({"detail": "Invalid or expired OTP. Please try again."}, status_code=401)
+    auth.clear_failed_logins(client_ip)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse({"detail": "Account not found"}, status_code=404)
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Email OTP Login: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+# ── Google Sign-In / Sign-Up (Nidaan) ────────────────────────────────────────
+
+@app.get("/nidaan/api/google-client-id")
+async def nidaan_google_client_id(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    return {"client_id": client_id if client_id else None}
+
+
+@app.post("/nidaan/api/google")
+@limiter.limit("10/minute")
+async def nidaan_api_google_signin(req: NidaanGoogleReq, request: Request):
+    """Sign in existing Nidaan account with Google ID token."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    google_user = await auth.verify_google_id_token(req.credential)
+    if not google_user:
+        return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
+    email = google_user["email"]
+    name = google_user.get("name", "")
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse({
+            "detail": "No Nidaan account found with this Google email. Please sign up first.",
+            "email": email, "name": name,
+        }, status_code=404)
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Google Login: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+@app.post("/nidaan/api/signup/google")
+@limiter.limit("5/minute")
+async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
+    """Sign up for a new Nidaan account using Google. If email already registered, signs in instead."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if req.plan not in ("silver", "gold", "platinum"):
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    google_user = await auth.verify_google_id_token(req.credential)
+    if not google_user:
+        return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
+    email = google_user["email"].lower().strip()
+    name = google_user.get("name", "")
+    # If already registered, sign them in
+    existing = await nidaan.get_account_by_email(email)
+    if existing:
+        sub = await nidaan.get_active_subscription(existing["account_id"])
+        plan = sub["plan"] if sub else ""
+        token = nidaan.create_nidaan_token(existing["account_id"], existing["email"], plan)
+        return {"access_token": token, "account_id": existing["account_id"], "plan": plan, "existing": True}
+    account_id = await nidaan.create_account_google(
+        owner_name=name or email.split("@")[0],
+        email=email,
+        plan=req.plan,
+    )
+    if account_id is None:
+        return JSONResponse({"detail": "Email already registered"}, status_code=409)
+    token = nidaan.create_nidaan_token(account_id, email, req.plan)
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Welcome to Nidaan Partner! 🛡️",
+        html_body=(
+            f"<p>Hi {name or 'there'},</p>"
+            f"<p>Welcome to <b>Nidaan Partner</b> — signed in with Google.</p>"
+            f"<p>You've signed up for the <b>{req.plan.title()} Plan</b>. "
+            f"Complete your subscription payment from your dashboard:</p>"
+            f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
+            f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
+            f"Go to Dashboard →</a></p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    logger.info("🆕 Nidaan Google Signup: account %d (%s) plan=%s", account_id, email, req.plan)
+    return {"access_token": token, "account_id": account_id, "plan": req.plan}
 
 
 @app.get("/nidaan/api/me")

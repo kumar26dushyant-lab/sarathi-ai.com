@@ -8,8 +8,7 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh;display:flex;flex-direction:column}
-  a{color:#22d3ee;text-decoration:none}
-  a:hover{text-decoration:underline}
+  a{color:#22d3ee;text-decoration:none}a:hover{text-decoration:underline}
   nav{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;background:rgba(10,22,40,.95);border-bottom:1px solid rgba(255,255,255,.07)}
   .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.05rem;color:#fff;min-width:0;overflow:hidden}
   .nav-brand img{height:36px;width:auto;border-radius:6px;flex-shrink:0}
@@ -19,31 +18,56 @@
   .lang-btn.active{background:#22d3ee;color:#0a1628;border-color:#22d3ee;font-weight:700}
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
   .box{width:100%;max-width:420px}
-  .logo-wrap{text-align:center;margin-bottom:1.75rem}
-  .logo-wrap img{height:64px;width:auto;border-radius:10px}
-  h1{font-size:1.55rem;font-weight:800;text-align:center;margin-bottom:.35rem}
-  .sub{text-align:center;color:rgba(255,255,255,.55);font-size:.9rem;margin-bottom:1.75rem}
-  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.75rem}
-  .field{margin-bottom:1.1rem}
+  .logo-wrap{text-align:center;margin-bottom:1.5rem}
+  .logo-wrap img{height:60px;width:auto;border-radius:10px}
+  h1{font-size:1.5rem;font-weight:800;text-align:center;margin-bottom:.3rem}
+  .sub{text-align:center;color:rgba(255,255,255,.55);font-size:.9rem;margin-bottom:1.5rem}
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.65rem}
+  /* Google button */
+  .google-area{margin-bottom:.25rem}
+  .google-stub{text-align:center;padding:.75rem;color:rgba(255,255,255,.35);font-size:.82rem;border:1.5px dashed rgba(255,255,255,.1);border-radius:10px}
+  #googleBtnContainer{width:100%;min-height:44px;display:flex;justify-content:center}
+  /* Divider */
+  .divider{display:flex;align-items:center;gap:.75rem;margin:1.1rem 0}
+  .divider span{font-size:.78rem;color:rgba(255,255,255,.35);white-space:nowrap}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1)}
+  /* Tabs */
+  .tabs{display:flex;background:rgba(255,255,255,.05);border-radius:9px;padding:3px;margin-bottom:1.1rem}
+  .tab{flex:1;padding:.48rem;text-align:center;font-size:.83rem;font-weight:600;color:rgba(255,255,255,.5);cursor:pointer;border-radius:7px;transition:all .15s}
+  .tab.active{background:rgba(6,182,212,.2);color:#22d3ee}
+  /* Fields */
+  .field{margin-bottom:1rem}
   label{display:block;font-size:.82rem;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:.4rem}
   input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:.7rem .95rem;color:#fff;font-size:.95rem;outline:none;transition:border .15s}
   input:focus{border-color:#22d3ee}
   input::placeholder{color:rgba(255,255,255,.3)}
-  .btn{width:100%;background:#06b6d4;color:#fff;border:none;border-radius:10px;padding:.85rem;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s;margin-top:.4rem}
+  input[readonly]{opacity:.65;cursor:default}
+  /* OTP row */
+  .otp-row{display:flex;gap:.6rem;margin-bottom:1rem}
+  .otp-row input{flex:1;letter-spacing:.2em;font-size:1.05rem;text-align:center}
+  .btn-resend{flex-shrink:0;background:rgba(6,182,212,.15);border:1.5px solid #06b6d4;border-radius:8px;padding:.7rem .9rem;color:#22d3ee;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
+  .btn-resend:hover{background:rgba(6,182,212,.28)}
+  .btn-resend:disabled{opacity:.4;cursor:not-allowed}
+  /* Buttons */
+  .btn{width:100%;background:#06b6d4;color:#fff;border:none;border-radius:10px;padding:.82rem;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s}
   .btn:hover{background:#0891b2}
   .btn:disabled{background:#1e4a5c;cursor:not-allowed}
-  .msg{font-size:.85rem;padding:.6rem .9rem;border-radius:8px;margin-top:.9rem;display:none}
+  /* Messages */
+  .msg{font-size:.84rem;padding:.55rem .85rem;border-radius:8px;margin-top:.85rem;display:none}
   .msg.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
+  .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#86efac;display:block}
+  .otp-hint{font-size:.78rem;color:rgba(255,255,255,.4);margin-bottom:.9rem;text-align:center}
+  /* Footer */
   .footer-links{text-align:center;margin-top:1.25rem;font-size:.88rem;color:rgba(255,255,255,.5)}
+  /* Lang */
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
   @media(max-width:480px){
     nav{padding:.7rem .85rem}
     .nav-brand span{display:none}
-    main{padding:1.5rem .85rem}
-    .card{padding:1.25rem}
-    .logo-wrap img{height:52px}
-    h1{font-size:1.35rem}
+    main{padding:1.25rem .85rem}
+    .card{padding:1.2rem}
+    h1{font-size:1.3rem}
   }
 </style>
 </head>
@@ -58,6 +82,7 @@
     <button class="lang-btn" onclick="setLang('hi')">हिं</button>
   </div>
 </nav>
+
 <main>
   <div class="box">
     <div class="logo-wrap">
@@ -69,23 +94,66 @@
     <p class="sub hi">अपने Nidaan Partner खाते में लॉग इन करें</p>
 
     <div class="card">
-      <form id="loginForm" onsubmit="doLogin(event)">
+      <!-- ① Google Sign-In -->
+      <div class="google-area" id="googleArea">
+        <p class="google-stub" id="googleStub">
+          <span class="en">Loading Google Sign-In…</span>
+          <span class="hi">Google Sign-In लोड हो रहा है…</span>
+        </p>
+        <div id="googleBtnContainer"></div>
+      </div>
+
+      <div class="divider"><span class="en">or continue with email</span><span class="hi">या ईमेल से जारी रखें</span></div>
+
+      <!-- ② Method tabs -->
+      <div class="tabs">
+        <div class="tab active" id="tabOtp" onclick="switchTab('otp')">
+          <span class="en">Email OTP</span><span class="hi">ईमेल OTP</span>
+        </div>
+        <div class="tab" id="tabPwd" onclick="switchTab('pwd')">
+          <span class="en">Password</span><span class="hi">पासवर्ड</span>
+        </div>
+      </div>
+
+      <!-- Email OTP panel -->
+      <div id="panelOtp">
         <div class="field">
           <label class="en">Email Address</label>
           <label class="hi">ईमेल पता</label>
-          <input type="email" id="email" placeholder="you@example.com" required autofocus>
+          <input type="email" id="otpEmail" placeholder="you@example.com" autocomplete="email">
         </div>
-        <div class="field">
-          <label class="en">Password</label>
-          <label class="hi">पासवर्ड</label>
-          <input type="password" id="password" placeholder="••••••••" required>
+        <div class="otp-row" id="otpRow" style="display:none">
+          <input type="text" id="otpCode" placeholder="------" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          <button class="btn-resend" id="resendBtn" onclick="sendOTP(true)" disabled>
+            <span class="en">Resend</span><span class="hi">फिर भेजें</span>
+          </button>
         </div>
-        <button type="submit" class="btn" id="submitBtn">
-          <span class="en">Log In →</span>
-          <span class="hi">लॉग इन करें →</span>
+        <p class="otp-hint" id="otpHint" style="display:none"></p>
+        <button class="btn" id="otpBtn" onclick="otpAction()">
+          <span class="en">Send OTP →</span><span class="hi">OTP भेजें →</span>
         </button>
-        <div class="msg" id="msg"></div>
-      </form>
+        <div class="msg" id="otpMsg"></div>
+      </div>
+
+      <!-- Password panel -->
+      <div id="panelPwd" style="display:none">
+        <form onsubmit="doPasswordLogin(event)">
+          <div class="field">
+            <label class="en">Email Address</label>
+            <label class="hi">ईमेल पता</label>
+            <input type="email" id="pwdEmail" placeholder="you@example.com" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label class="en">Password</label>
+            <label class="hi">पासवर्ड</label>
+            <input type="password" id="pwdPass" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn" id="pwdBtn">
+            <span class="en">Log In →</span><span class="hi">लॉग इन करें →</span>
+          </button>
+          <div class="msg" id="pwdMsg"></div>
+        </form>
+      </div>
     </div>
 
     <div class="footer-links">
@@ -95,45 +163,194 @@
   </div>
 </main>
 
+<script src="https://accounts.google.com/gsi/client" async onload="_initGoogleLogin()"></script>
 <script>
-  // If already logged in, redirect to dashboard
-  if (localStorage.getItem('nidaan_token')) location.href = '/nidaan/dashboard';
+if (localStorage.getItem('nidaan_token')) location.href = '/nidaan/dashboard';
 
-  async function doLogin(e) {
-    e.preventDefault();
-    const btn = document.getElementById('submitBtn');
-    const msg = document.getElementById('msg');
-    btn.disabled = true;
-    msg.className = 'msg';
-    msg.textContent = '';
-    try {
-      const res = await fetch('/nidaan/api/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          email: document.getElementById('email').value.trim(),
-          password: document.getElementById('password').value
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Login failed');
-      localStorage.setItem('nidaan_token', data.access_token);
-      localStorage.setItem('nidaan_plan', data.account.plan || '');
-      location.href = '/nidaan/dashboard';
-    } catch(err) {
-      msg.className = 'msg err';
-      msg.textContent = err.message;
-      btn.disabled = false;
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  const otp = tab === 'otp';
+  document.getElementById('panelOtp').style.display = otp ? '' : 'none';
+  document.getElementById('panelPwd').style.display = otp ? 'none' : '';
+  document.getElementById('tabOtp').classList.toggle('active', otp);
+  document.getElementById('tabPwd').classList.toggle('active', !otp);
+}
+
+// ── OTP flow ──────────────────────────────────────────────────────────────
+let _otpSent = false, _resendTimer = null;
+
+async function sendOTP(isResend) {
+  const email = document.getElementById('otpEmail').value.trim();
+  const otpMsg = document.getElementById('otpMsg');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showMsg(otpMsg, 'err', isHi() ? 'कृपया एक वैध ईमेल दर्ज करें' : 'Please enter a valid email address');
+    return;
+  }
+  const btn = isResend ? document.getElementById('resendBtn') : document.getElementById('otpBtn');
+  btn.disabled = true;
+  if (!isResend) setHTML(btn, '<span class="en">Sending…</span><span class="hi">भेज रहे हैं…</span>');
+  try {
+    const res = await fetch('/nidaan/api/send-email-otp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    _otpSent = true;
+    document.getElementById('otpEmail').readOnly = true;
+    document.getElementById('otpRow').style.display = 'flex';
+    const hint = document.getElementById('otpHint');
+    hint.style.display = 'block';
+    hint.textContent = isHi()
+      ? `OTP ${data.email} पर भेजा गया — 5 मिनट में एक्सपायर`
+      : `OTP sent to ${data.email} — expires in 5 min`;
+    const otpBtn = document.getElementById('otpBtn');
+    setHTML(otpBtn, '<span class="en">Verify OTP →</span><span class="hi">OTP सत्यापित करें →</span>');
+    otpBtn.disabled = false;
+    showMsg(otpMsg, 'ok', isHi() ? 'OTP भेज दिया गया!' : 'OTP sent! Check your email.');
+    startCountdown(60);
+    document.getElementById('otpCode').focus();
+  } catch(err) {
+    showMsg(otpMsg, 'err', err.message);
+    if (!isResend) {
+      setHTML(document.getElementById('otpBtn'), '<span class="en">Send OTP →</span><span class="hi">OTP भेजें →</span>');
     }
+    btn.disabled = false;
   }
+}
 
-  function setLang(l) {
-    document.body.className = 'body ' + l;
-    localStorage.setItem('nidaan_lang', l);
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
+function otpAction() {
+  if (!_otpSent) { sendOTP(false); return; }
+  verifyOTP();
+}
+
+async function verifyOTP() {
+  const email = document.getElementById('otpEmail').value.trim();
+  const otp = document.getElementById('otpCode').value.trim();
+  const otpMsg = document.getElementById('otpMsg');
+  const btn = document.getElementById('otpBtn');
+  if (otp.length !== 6) {
+    showMsg(otpMsg, 'err', isHi() ? '6 अंकों का OTP दर्ज करें' : 'Enter the 6-digit OTP'); return;
   }
-  const saved = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
-  setLang(saved);
+  btn.disabled = true;
+  setHTML(btn, '<span class="en">Verifying…</span><span class="hi">सत्यापित कर रहे हैं…</span>');
+  try {
+    const res = await fetch('/nidaan/api/verify-email-otp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, otp})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Invalid OTP');
+    _loginSuccess(data);
+  } catch(err) {
+    showMsg(otpMsg, 'err', err.message);
+    setHTML(btn, '<span class="en">Verify OTP →</span><span class="hi">OTP सत्यापित करें →</span>');
+    btn.disabled = false;
+  }
+}
+
+function startCountdown(sec) {
+  const btn = document.getElementById('resendBtn');
+  if (_resendTimer) clearInterval(_resendTimer);
+  let rem = sec;
+  btn.disabled = true;
+  const upd = () => {
+    btn.querySelector('.en').textContent = `Resend (${rem}s)`;
+    btn.querySelector('.hi').textContent = `फिर भेजें (${rem}s)`;
+  };
+  upd();
+  _resendTimer = setInterval(() => {
+    if (--rem <= 0) {
+      clearInterval(_resendTimer);
+      btn.querySelector('.en').textContent = 'Resend';
+      btn.querySelector('.hi').textContent = 'फिर भेजें';
+      btn.disabled = false;
+    } else upd();
+  }, 1000);
+}
+
+// ── Password login ────────────────────────────────────────────────────────
+async function doPasswordLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('pwdBtn');
+  const msg = document.getElementById('pwdMsg');
+  btn.disabled = true; msg.className = 'msg';
+  try {
+    const res = await fetch('/nidaan/api/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        email: document.getElementById('pwdEmail').value.trim(),
+        password: document.getElementById('pwdPass').value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login failed');
+    _loginSuccess(data);
+  } catch(err) {
+    showMsg(msg, 'err', err.message);
+    btn.disabled = false;
+  }
+}
+
+// ── Google Sign-In ────────────────────────────────────────────────────────
+async function _initGoogleLogin() {
+  try {
+    const r = await fetch('/nidaan/api/google-client-id');
+    const {client_id} = await r.json();
+    if (!client_id) { document.getElementById('googleArea').style.display = 'none'; return; }
+    google.accounts.id.initialize({client_id, callback: _handleGoogleCb, ux_mode: 'popup'});
+    document.getElementById('googleStub').style.display = 'none';
+    google.accounts.id.renderButton(document.getElementById('googleBtnContainer'), {
+      theme:'filled_black', size:'large', width:380, text:'signin_with', shape:'rectangular'
+    });
+  } catch(e) {
+    document.getElementById('googleArea').style.display = 'none';
+  }
+}
+// Retry after 3s in case SDK loads after DOMContentLoaded
+setTimeout(() => {
+  if (typeof google !== 'undefined' && !document.getElementById('googleBtnContainer').childElementCount)
+    _initGoogleLogin();
+}, 3000);
+
+async function _handleGoogleCb(response) {
+  const msg = document.getElementById('otpMsg');
+  try {
+    const res = await fetch('/nidaan/api/google', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({credential: response.credential})
+    });
+    const data = await res.json();
+    if (res.status === 404) {
+      showMsg(msg, 'err',
+        (isHi() ? 'इस Google ईमेल से कोई Nidaan खाता नहीं मिला। ' : 'No Nidaan account with this Google email. ') +
+        `<a href="/nidaan/signup" style="color:#22d3ee">${isHi() ? 'साइन अप करें →' : 'Sign up →'}</a>`);
+      return;
+    }
+    if (!res.ok) throw new Error(data.detail || 'Google sign-in failed');
+    _loginSuccess(data);
+  } catch(err) {
+    showMsg(document.getElementById('otpMsg'), 'err', err.message);
+  }
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────
+function _loginSuccess(data) {
+  localStorage.setItem('nidaan_token', data.access_token);
+  localStorage.setItem('nidaan_plan', (data.account && data.account.plan) || data.plan || '');
+  location.href = '/nidaan/dashboard';
+}
+function showMsg(el, type, html) { el.className = 'msg ' + type; el.innerHTML = html; }
+function setHTML(el, html) { el.innerHTML = html; }
+function isHi() { return document.body.classList.contains('hi'); }
+
+// ── Language ──────────────────────────────────────────────────────────────
+function setLang(l) {
+  document.body.className = 'body ' + l;
+  localStorage.setItem('nidaan_lang', l);
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
+}
+setLang(localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en'));
 </script>
 </body>
 </html>

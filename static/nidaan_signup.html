@@ -53,6 +53,14 @@
   .terms{font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-top:.9rem;line-height:1.6}
   .already{text-align:center;margin-top:1.1rem;font-size:.88rem;color:rgba(255,255,255,.55)}
 
+  /* Google */
+  .google-area{margin-bottom:.25rem}
+  .google-stub{text-align:center;padding:.75rem;color:rgba(255,255,255,.35);font-size:.82rem;border:1.5px dashed rgba(255,255,255,.1);border-radius:10px}
+  #googleBtnContainer{width:100%;min-height:44px;display:flex;justify-content:center}
+  .divider{display:flex;align-items:center;gap:.75rem;margin:1.1rem 0}
+  .divider span{font-size:.78rem;color:rgba(255,255,255,.35);white-space:nowrap}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1)}
+
   /* LANG TOGGLE */
   .lang-toggle{display:flex;gap:.4rem}
   .lang-btn{padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);font-size:.78rem;cursor:pointer}
@@ -132,6 +140,16 @@
   </div>
 
   <div class="card">
+    <!-- Google Sign-Up -->
+    <div class="google-area" id="googleArea">
+      <p class="google-stub" id="googleStub">
+        <span class="en">Loading Google Sign-In…</span>
+        <span class="hi">Google Sign-In लोड हो रहा है…</span>
+      </p>
+      <div id="googleBtnContainer"></div>
+    </div>
+    <div class="divider"><span class="en">or sign up with email</span><span class="hi">या ईमेल से साइन अप करें</span></div>
+
     <form id="signupForm" onsubmit="doSignup(event)">
       <div class="row2">
         <div class="field">
@@ -230,5 +248,51 @@
   const saved = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
   setLang(saved);
 </script>
-</body>
-</html>
+<script src="https://accounts.google.com/gsi/client" async onload="_initGoogleSignup()"></script>
+<script>
+  async function _initGoogleSignup() {
+    try {
+      const r = await fetch('/nidaan/api/google-client-id');
+      const {client_id} = await r.json();
+      if (!client_id) { document.getElementById('googleArea').style.display = 'none'; return; }
+      google.accounts.id.initialize({
+        client_id,
+        callback: _handleGoogleSignup,
+        ux_mode: 'popup',
+      });
+      document.getElementById('googleStub').style.display = 'none';
+      google.accounts.id.renderButton(document.getElementById('googleBtnContainer'), {
+        theme: 'filled_black', size: 'large', width: 380,
+        text: 'signup_with', shape: 'rectangular',
+      });
+    } catch(e) {
+      document.getElementById('googleArea').style.display = 'none';
+    }
+  }
+  setTimeout(() => {
+    if (typeof google !== 'undefined' && !document.getElementById('googleBtnContainer').childElementCount)
+      _initGoogleSignup();
+  }, 3000);
+
+  async function _handleGoogleSignup(response) {
+    const hi = document.body.classList.contains('hi');
+    try {
+      const res = await fetch('/nidaan/api/signup/google', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({credential: response.credential, plan: selectedPlan})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Google signup failed');
+      localStorage.setItem('nidaan_token', data.access_token);
+      localStorage.setItem('nidaan_plan', data.plan || '');
+      const msg = document.getElementById('msg');
+      msg.className = 'msg ok';
+      msg.textContent = hi ? 'Google से साइन अप हो गया! डैशबोर्ड पर जा रहे हैं…' : 'Signed up with Google! Redirecting…';
+      setTimeout(() => location.href = '/nidaan/dashboard', 900);
+    } catch(err) {
+      const msg = document.getElementById('msg');
+      msg.className = 'msg err';
+      msg.textContent = err.message;
+    }
+  }
+</script>

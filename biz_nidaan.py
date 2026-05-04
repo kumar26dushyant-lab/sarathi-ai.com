@@ -107,6 +107,31 @@ async def get_account_by_email(email: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+async def create_account_google(
+    owner_name: str,
+    email: str,
+    plan: str = "silver",
+    firm_name: str = "",
+) -> Optional[int]:
+    """Create a Nidaan account via Google Sign-In (no password).
+    Stores an unguessable pw_hash so password login is permanently disabled for these accounts.
+    Returns account_id or None on duplicate email."""
+    pw_hash = "google$" + secrets.token_hex(32)
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cur = await conn.execute(
+                """INSERT INTO nidaan_accounts
+                   (owner_name, email, phone, password_hash, firm_name)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (owner_name, email.lower().strip(), "", pw_hash, firm_name),
+            )
+            await conn.commit()
+            return cur.lastrowid
+    except aiosqlite.IntegrityError:
+        logger.warning("nidaan create_account_google: duplicate email %s", email)
+        return None
+
+
 async def authenticate_account(email: str, password: str) -> Optional[dict]:
     """Return account dict if credentials valid, else None."""
     account = await get_account_by_email(email)
