@@ -52,13 +52,21 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .lang-btn.active{background:var(--cyan);border-color:var(--cyan);color:#fff}
 .nav-cta{padding:.45rem 1.1rem;background:var(--cyan);color:#fff;border-radius:8px;font-weight:600;font-size:.88rem;transition:background .2s}
 .nav-cta:hover{background:var(--cyan-dark)}
-/* On mobile: hide all nav links except lang-toggle + login CTA */
+.nav-crm{padding:.4rem .95rem;background:rgba(6,182,212,.12);color:var(--cyan-light);border-radius:8px;font-weight:600;font-size:.85rem;border:1.5px solid rgba(6,182,212,.35);transition:all .2s;white-space:nowrap}
+.nav-crm:hover{background:rgba(6,182,212,.28);color:#fff}
+/* Mobile: two-row nav — row1=brand, row2=scrollable links */
 @media(max-width:768px){
-  .nav-links a:not(.nav-cta){display:none!important}
-  .nav-links{gap:.5rem}
-  .nav-cta{padding:.38rem .75rem;font-size:.8rem;white-space:nowrap}
+  .nav{padding:0 .85rem}
+  .nav-inner{flex-direction:column;height:auto;padding:.45rem 0;gap:0;align-items:stretch}
+  .nav-brand{padding:.1rem 0;font-size:.95rem}
+  .nav-brand img{height:36px;border-radius:6px}
+  .nav-brand .brand-sub{display:none}
+  .nav-links{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-wrap:nowrap;gap:.4rem;justify-content:flex-start;padding:.38rem 0 .3rem}
+  .nav-links::-webkit-scrollbar{display:none}
+  .nav-links a{font-size:.77rem!important;white-space:nowrap;padding:.28rem .65rem}
+  .nav-cta{padding:.3rem .75rem!important;font-size:.77rem!important}
+  .nav-crm{padding:.28rem .65rem;font-size:.77rem}
   .lang-btn{padding:.22rem .45rem;font-size:.74rem}
-  .nav-inner{height:52px}
 }
 
 /* HERO */
@@ -240,12 +248,7 @@ span.hi-inline{display:none}
    MOBILE RESPONSIVE — 768px and below
 ═══════════════════════════════════════════════ */
 @media(max-width:768px){
-  /* Nav */
-  .nav{padding:0 .85rem}
-  .nav-brand img{height:38px}
-  .nav-brand .brand-sub{display:none}
-  .nav-brand{font-size:.95rem}
-  .nav-inner{height:52px}
+  /* Nav — layout handled in dedicated @media(max-width:768px) block above */
 
   /* Hero */
   .hero{padding:2.25rem 1rem 2rem}
@@ -351,6 +354,7 @@ span.hi-inline{display:none}
         <button class="lang-btn active" onclick="setLang('en')">EN</button>
         <button class="lang-btn" onclick="setLang('hi')">हिं</button>
       </div>
+      <a href="https://sarathi-ai.com" id="navCrmBtn" class="nav-crm">Sarathi-AI CRM ↗</a>
       <a href="/nidaan/login" class="nav-cta en">Login</a>
       <a href="/nidaan/login" class="nav-cta hi" style="display:none">लॉगिन</a>
     </div>
@@ -1051,23 +1055,19 @@ function setLang(l) {
   document.body.className = l;
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l === 'hi' ? 'हिं' : 'EN')));
-  // Sync nav link visibility
-  var _mob = window.innerWidth <= 768;
+  // Show links matching current language; CSS handles mobile layout
   document.querySelectorAll('.nav-links a.en, .nav-links a.hi').forEach(a => {
-    var mine = a.classList.contains(l);
-    if (a.classList.contains('nav-cta')) {
-      // Login button: always show/hide by language
-      a.style.display = mine ? '' : 'none';
-    } else {
-      // Text links: hidden on mobile, language-gated on desktop
-      a.style.display = (!_mob && mine) ? '' : 'none';
-    }
+    a.style.display = a.classList.contains(l) ? '' : 'none';
   });
 }
 (function(){
   var saved = localStorage.getItem('nidaan_lang');
   var sys = (navigator.language || '').startsWith('hi') ? 'hi' : 'en';
   setLang(saved || sys);
+  // Sarathi-AI CRM button: deep-link to dashboard if already logged in
+  var token = localStorage.getItem('nidaan_token');
+  var crmBtn = document.getElementById('navCrmBtn');
+  if(crmBtn && token) crmBtn.href = 'https://sarathi-ai.com/dashboard';
 })();
 
 // ── FAQ toggle ──
