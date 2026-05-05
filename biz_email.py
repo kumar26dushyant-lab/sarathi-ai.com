@@ -253,6 +253,27 @@ async def send_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
     return await send_email(to_email, f"Sarathi-AI Login Code: {otp}", _wrap_template("Login Code", content))
 
 
+async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
+    """Send OTP login code branded as Nidaan Partner."""
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    content = f"""
+<h2 style="color:#06b6d4">Your Nidaan Partner Login Code</h2>
+<p>{greeting}</p>
+<p>Use this one-time code to sign in to your <strong>Nidaan Partner</strong> account:</p>
+<div class="otp-code" style="background:#0c4a6e;color:#7dd3fc;letter-spacing:.35em;font-size:2rem;
+  text-align:center;padding:1.25rem;border-radius:12px;font-weight:800;margin:1.5rem 0">{otp}</div>
+<p>This code expires in <strong>10 minutes</strong>. Never share it with anyone.</p>
+<p style="color:#94a3b8;font-size:13px;margin-top:24px">
+  If you did not request this code, ignore this email — your account is safe.
+</p>"""
+    return await send_email(
+        to_email,
+        f"Nidaan Partner Login Code: {otp}",
+        _wrap_template("Nidaan Partner OTP", content),
+        from_name="Nidaan Partner",
+    )
+
+
 async def send_nidaan_new_claim_admin_email(
     admin_email: str,
     claim_id: int,

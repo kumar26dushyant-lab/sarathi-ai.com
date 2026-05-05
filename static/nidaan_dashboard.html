@@ -42,6 +42,13 @@
   .sub-none{background:linear-gradient(90deg,rgba(234,179,8,.12),rgba(234,179,8,.04));border:1px solid rgba(234,179,8,.4);animation:pulse-border 3s ease infinite}
   @keyframes pulse-border{0%,100%{border-color:rgba(234,179,8,.4)}50%{border-color:rgba(234,179,8,.8)}}
   #newClaimBtn[disabled]{opacity:.55;cursor:not-allowed}
+
+  /* LOCKED OVERLAY on data sections */
+  .locked-section{pointer-events:none}
+  .lock-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:11;gap:.75rem;text-align:center;padding:1.5rem;background:rgba(6,15,30,.72);border-radius:14px;backdrop-filter:blur(4px)}
+  .lock-overlay-icon{font-size:2.5rem}
+  .lock-overlay-text{color:rgba(255,255,255,.85);font-size:.95rem;font-weight:700}
+  .lock-overlay-sub{color:rgba(255,255,255,.45);font-size:.82rem}
   @keyframes pulse-border{0%,100%{border-color:rgba(234,179,8,.4)}50%{border-color:rgba(234,179,8,.8)}}
   .sub-banner-text{font-size:.9rem}
   .sub-banner-text strong{display:block;font-size:1rem;margin-bottom:.15rem}
@@ -262,7 +269,17 @@
     </button>
   </div>
 
-  <div class="card">
+  <div class="card" id="claimsSectionCard" style="position:relative">
+    <!-- Lock overlay shown for unsubscribed users -->
+    <div class="lock-overlay" id="lockOverlay" style="display:none">
+      <div class="lock-overlay-icon">🔒</div>
+      <div class="lock-overlay-text en">Subscribe to manage claims</div>
+      <div class="lock-overlay-text hi" style="display:none">क्लेम प्रबंधित करने के लिए सब्सक्राइब करें</div>
+      <div class="lock-overlay-sub en">Choose a plan below to unlock all features</div>
+      <button class="btn-sm btn-cyan" onclick="openSubscribeModal()" style="z-index:12;pointer-events:all;margin-top:.5rem">
+        <span class="en">View Plans →</span><span class="hi">प्लान देखें →</span>
+      </button>
+    </div>
     <table id="claimsTable">
       <thead>
         <tr>
@@ -461,8 +478,10 @@ async function loadDashboard() {
   planEl.textContent = plan ? plan.toUpperCase() : 'NO PLAN';
   document.getElementById('statPlan').textContent = plan || '—';
 
-  // Subscription banner
+  // Subscription banner + locked state
   const banner = document.getElementById('subBanner');
+  const lockOverlay = document.getElementById('lockOverlay');
+  const claimCard = document.getElementById('claimsSectionCard');
   if (me.subscription) {
     banner.className = 'sub-banner sub-active';
     const end = me.subscription.current_period_end ? me.subscription.current_period_end.split('T')[0] : '—';
@@ -474,6 +493,16 @@ async function loadDashboard() {
         <span class="hi">${end} तक वैध</span>
       </div>`;
     document.getElementById('newClaimBtn').disabled = false;
+    lockOverlay.style.display = 'none';
+    claimCard.style.pointerEvents = '';
+  } else {
+    // Unsubscribed — lock the claims section visually
+    lockOverlay.style.display = 'flex';
+    claimCard.style.minHeight = '220px';
+    claimCard.classList.add('locked-section');
+    // Keep stats visible but grayed
+    document.querySelector('.stats').style.opacity = '.45';
+    document.querySelector('.stats').style.pointerEvents = 'none';
   }
 
   // Stats

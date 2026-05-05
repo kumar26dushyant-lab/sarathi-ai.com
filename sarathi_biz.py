@@ -483,7 +483,7 @@ async def nidaan_api_send_email_otp(req: NidaanSendOTPReq, request: Request):
         return JSONResponse({"detail": result["error"]}, status_code=429)
     otp_code = result["otp"]
     logger.info("📧 Nidaan Email OTP for %s***", email[:3])
-    sent = await email_svc.send_otp_email(email, otp_code, account.get("owner_name", ""))
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, account.get("owner_name", ""))
     if not sent:
         return JSONResponse({"detail": "Failed to send OTP email. Please try again."}, status_code=503)
     resp = {
@@ -519,6 +519,52 @@ async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request)
     plan = sub["plan"] if sub else ""
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Email OTP Login: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+# ── Password reset via OTP (Nidaan) ──────────────────────────────────────────
+
+class NidaanResetPasswordReq(BaseModel):
+    email: str
+    otp: str
+    new_password: str = Field(..., min_length=8)
+
+@app.post("/nidaan/api/reset-password")
+@limiter.limit("5/minute")
+async def nidaan_api_reset_password(req: NidaanResetPasswordReq, request: Request):
+    """Verify OTP then update password. The OTP is consumed on success."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+    if not auth.verify_email_otp(email, req.otp):
+        auth.record_failed_login(client_ip)
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP. Request a new one.")
+    auth.clear_failed_logins(client_ip)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ok = await nidaan.update_account_password(account["account_id"], req.new_password)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Password update failed")
+    # Auto sign-in after reset
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Password Reset: account %d (%s)", account["account_id"], email)
     return {
         "access_token": token,
         "account": {

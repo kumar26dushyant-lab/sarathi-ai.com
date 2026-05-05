@@ -148,6 +148,18 @@ async def authenticate_account(email: str, password: str) -> Optional[dict]:
     return account
 
 
+async def update_account_password(account_id: int, new_password: str) -> bool:
+    """Hash and store a new password for the given account."""
+    new_hash = _hash_password(new_password)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_accounts SET password_hash = ? WHERE account_id = ?",
+            (new_hash, account_id),
+        )
+        await conn.commit()
+    return True
+
+
 # =============================================================================
 #  SUBSCRIPTION OPERATIONS
 # =============================================================================
@@ -530,7 +542,7 @@ def create_nidaan_token(account_id: int, email: str, plan: str = "") -> str:
 def verify_nidaan_token(token: str) -> Optional[dict]:
     """Decode and verify a Nidaan JWT. Returns payload dict or None."""
     try:
-        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithm="HS256")
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
         if payload.get("typ") != "nidaan":
             return None
         return payload

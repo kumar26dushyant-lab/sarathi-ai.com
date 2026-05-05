@@ -145,10 +145,11 @@ input::placeholder{color:rgba(255,255,255,.25)}
 
       <div class="divider" id="divider2a"><span>or sign in with</span></div>
 
-      <!-- Tabs: OTP | Password -->
+      <!-- Tabs: OTP | Password | Reset -->
       <div class="tabs">
         <button class="tab active" id="tabOtp" onclick="switchTab('otp')">Email OTP</button>
         <button class="tab" id="tabPwd" onclick="switchTab('pwd')">Password</button>
+        <button class="tab" id="tabReset" onclick="switchTab('reset')">Reset</button>
       </div>
 
       <!-- OTP flow -->
@@ -162,7 +163,7 @@ input::placeholder{color:rgba(255,255,255,.25)}
             <input type="text" id="otpInput" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
           </div>
           <div class="otp-actions">
-            <button class="btn btn-cyan btn-sm" onclick="verifyOTP()">Verify OTP</button>
+            <button class="btn btn-cyan btn-sm" onclick="verifyOTP()">Verify &amp; Sign In</button>
             <span id="countdown" style="display:none"></span>
             <button class="btn btn-ghost btn-sm" id="resendBtn" onclick="sendOTP(true)" style="display:none">Resend</button>
           </div>
@@ -176,7 +177,32 @@ input::placeholder{color:rgba(255,255,255,.25)}
           <input type="password" id="pwdInput" placeholder="Your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doPasswordLogin()">
         </div>
         <button class="btn btn-cyan" onclick="doPasswordLogin()">Sign In &rarr;</button>
-        <p class="card-foot" style="margin-top:.75rem"><a href="#" onclick="forgotHint();return false">Forgot password?</a></p>
+        <p class="card-foot" style="margin-top:.75rem">
+          Forgot password? <a href="#" onclick="switchTab('reset');return false">Reset via OTP</a>
+        </p>
+      </div>
+
+      <!-- Reset password flow -->
+      <div id="resetFlow" style="display:none">
+        <p class="card-sub" style="margin-bottom:1rem">We'll send an OTP to your email. Enter it below with your new password.</p>
+        <div id="resetStep1">
+          <button class="btn btn-ghost" id="sendResetOtpBtn" onclick="sendResetOTP()">Send OTP to reset password</button>
+        </div>
+        <div id="resetStep2" style="display:none">
+          <div class="field">
+            <label>OTP from email</label>
+            <input type="text" id="resetOtpInput" placeholder="6-digit code" maxlength="6" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>New Password</label>
+            <input type="password" id="resetNewPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doResetPassword()">
+          </div>
+          <button class="btn btn-cyan" onclick="doResetPassword()">Set New Password &amp; Sign In</button>
+          <div class="otp-actions" style="margin-top:.5rem">
+            <span id="resetCountdown" style="display:none"></span>
+            <button class="btn btn-ghost btn-sm" id="resendResetBtn" onclick="sendResetOTP()" style="display:none">Resend OTP</button>
+          </div>
+        </div>
       </div>
 
       <div class="msg" id="msg2a"></div>
@@ -314,12 +340,14 @@ document.getElementById('emailInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') checkEmail();
 });
 
-// ── Tab switch (OTP / Password) ───────────────────────────────────────────────
+// ── Tab switch (OTP / Password / Reset) ──────────────────────────────────────
 function switchTab(tab) {
-  document.getElementById('otpFlow').style.display  = tab === 'otp' ? '' : 'none';
-  document.getElementById('pwdFlow').style.display  = tab === 'pwd' ? '' : 'none';
-  document.getElementById('tabOtp').classList.toggle('active', tab === 'otp');
-  document.getElementById('tabPwd').classList.toggle('active', tab === 'pwd');
+  document.getElementById('otpFlow').style.display   = tab === 'otp'   ? '' : 'none';
+  document.getElementById('pwdFlow').style.display   = tab === 'pwd'   ? '' : 'none';
+  document.getElementById('resetFlow').style.display = tab === 'reset' ? '' : 'none';
+  document.getElementById('tabOtp').classList.toggle('active',   tab === 'otp');
+  document.getElementById('tabPwd').classList.toggle('active',   tab === 'pwd');
+  document.getElementById('tabReset').classList.toggle('active', tab === 'reset');
 }
 
 // ── OTP flow ──────────────────────────────────────────────────────────────────
@@ -407,8 +435,60 @@ async function doPasswordLogin() {
   }
 }
 
-function forgotHint() {
-  showMsg('msg2a','info','Password reset is not yet automated. Please contact support@sarathi-ai.com and we\'ll reset it within a few hours.');
+// ── Forgot / Reset password (OTP-verified) ───────────────────────────────────
+let _resetCountdownTimer = null;
+
+async function sendResetOTP() {
+  clearMsg();
+  const sendBtn = document.getElementById('sendResetOtpBtn');
+  const resendBtn = document.getElementById('resendResetBtn');
+  sendBtn && (sendBtn.disabled = true, sendBtn.textContent = 'Sending…');
+  resendBtn && (resendBtn.style.display = 'none');
+
+  try {
+    const res = await fetch('/nidaan/api/send-email-otp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    document.getElementById('resetStep1').style.display = 'none';
+    document.getElementById('resetStep2').style.display = '';
+    document.getElementById('resetOtpInput').focus();
+    // Countdown
+    const el = document.getElementById('resetCountdown');
+    el.style.display = '';
+    if (_resetCountdownTimer) clearInterval(_resetCountdownTimer);
+    let t = 60;
+    el.textContent = `Resend in ${t}s`;
+    _resetCountdownTimer = setInterval(() => {
+      t--;
+      if (t <= 0) { clearInterval(_resetCountdownTimer); el.style.display = 'none'; resendBtn.style.display = ''; }
+      else el.textContent = `Resend in ${t}s`;
+    }, 1000);
+  } catch(e) {
+    showMsg('msg2a','err', e.message);
+    sendBtn && (sendBtn.disabled = false, sendBtn.textContent = 'Send OTP to reset password');
+  }
+}
+
+async function doResetPassword() {
+  clearMsg();
+  const otp = document.getElementById('resetOtpInput').value.trim();
+  const pwd = document.getElementById('resetNewPwd').value;
+  if (!otp || otp.length < 4) { showMsg('msg2a','err','Enter the OTP from your email.'); return; }
+  if (pwd.length < 8) { showMsg('msg2a','err','New password must be at least 8 characters.'); return; }
+  try {
+    const res = await fetch('/nidaan/api/reset-password', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email, otp, new_password: pwd})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Reset failed. Try again.');
+    _loginSuccess(data);
+  } catch(e) {
+    showMsg('msg2a','err', e.message);
+  }
 }
 
 // ── Registration ──────────────────────────────────────────────────────────────
