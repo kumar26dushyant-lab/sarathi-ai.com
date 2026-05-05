@@ -240,6 +240,7 @@ function showStep(id) {
 
 function goBack() {
   clearMsg();
+  _googleMode = 'step1';
   showStep('step1');
   _email = '';
   _otpSent = false;
@@ -282,6 +283,7 @@ async function checkEmail() {
 
     if (data.exists) {
       // Existing user → sign in
+      _googleMode = 'login';
       document.getElementById('emailChip2a').textContent = _email;
       document.getElementById('welcomeBack').textContent = 'Welcome back!';
       showStep('step2a');
@@ -291,6 +293,7 @@ async function checkEmail() {
       switchTab('otp');
     } else {
       // New user → register
+      _googleMode = 'signup';
       document.getElementById('emailChip2b').textContent = _email;
       document.getElementById('regName').value = '';
       document.getElementById('regPhone').value = '';
@@ -454,59 +457,65 @@ function _loginSuccess(data) {
 }
 
 // ── Google Sign-In / Sign-Up ──────────────────────────────────────────────────
+// Single initialize() — GSI only supports one call. Mode dispatch via _googleMode.
+let _googleMode = 'step1'; // 'step1' | 'login' | 'signup'
+let _googleReady = false;
+
 async function _initGoogle() {
   try {
     const r = await fetch('/nidaan/api/google-client-id');
     const {client_id} = await r.json();
     if (!client_id) {
-      ['googleStub1','googleAreaStep2a','googleAreaStep2b'].forEach(id => {
+      ['googleAreaStep1','googleAreaStep2a','googleAreaStep2b'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
-      document.getElementById('divider2a').querySelector('span').textContent = 'sign in with';
-      document.getElementById('divider2b').querySelector('span').textContent = 'register with email';
       return;
     }
     if (!window.google?.accounts?.id) {
-      // SDK not ready yet — retry once
-      setTimeout(_initGoogle, 1500);
+      setTimeout(_initGoogle, 800);
       return;
     }
+    if (_googleReady) return; // already initialized
+    _googleReady = true;
     document.getElementById('googleStub1').style.display = 'none';
 
-    // Step 1 button
-    google.accounts.id.initialize({ client_id, callback: _handleGoogleStep1 });
+    // ONE initialize call — callback routes by _googleMode
+    google.accounts.id.initialize({ client_id, callback: _googleDispatch });
+
+    // Render all three buttons (only visible one is shown at a time)
     google.accounts.id.renderButton(document.getElementById('googleBtn1'),
       { theme:'filled_black', size:'large', width:380, text:'continue_with' });
-    document.getElementById('googleBtn1').style.display = 'flex';
-
-    // Step 2a button (sign in)
-    google.accounts.id.initialize({ client_id, callback: _handleGoogleLogin });
     google.accounts.id.renderButton(document.getElementById('googleBtn2a'),
       { theme:'filled_black', size:'large', width:380, text:'signin_with' });
-    document.getElementById('googleBtn2a').style.display = 'flex';
-
-    // Step 2b button (sign up)
-    google.accounts.id.initialize({ client_id, callback: _handleGoogleSignup });
     google.accounts.id.renderButton(document.getElementById('googleBtn2b'),
       { theme:'filled_black', size:'large', width:380, text:'signup_with' });
+
+    document.getElementById('googleBtn1').style.display = 'flex';
+    document.getElementById('googleBtn2a').style.display = 'flex';
     document.getElementById('googleBtn2b').style.display = 'flex';
   } catch(e) {
     console.warn('Google init failed:', e);
   }
 }
 
-// Google on step 1 — smart: check if exists first, then sign in or sign up
+// Single dispatch — routes to the right handler based on current visible step
+async function _googleDispatch(response) {
+  if (_googleMode === 'login')  return _handleGoogleLogin(response);
+  if (_googleMode === 'signup') return _handleGoogleSignup(response);
+  // default: step1 smart flow
+  return _handleGoogleStep1(response);
+}
+
+// Google on step 1 — smart: try sign-in first, auto-register if new
 async function _handleGoogleStep1(response) {
   try {
-    // Try login first
     const res = await fetch('/nidaan/api/google', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({credential: response.credential})
     });
     if (res.ok) { _loginSuccess(await res.json()); return; }
     if (res.status === 404) {
-      // Not registered — do signup automatically
       const res2 = await fetch('/nidaan/api/signup/google', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({credential: response.credential, plan: _plan || 'free'})
@@ -559,12 +568,9 @@ if (localStorage.getItem('nidaan_token')) {
   s.defer = true;
   s.onload = _initGoogle;
   document.head.appendChild(s);
+  // Fallback: if SDK loads before onload fires
+  setTimeout(_initGoogle, 2500);
 })();
-// Also run after 2s in case onload already fired before script attached
-setTimeout(() => { if (!window._googleInitDone) _initGoogle(); }, 2000);
-window._googleInitDone = false;
-const _orig = _initGoogle;
-window._initGoogle = async function() { window._googleInitDone = true; return _orig(); };
 </script>
 </body>
 </html>
