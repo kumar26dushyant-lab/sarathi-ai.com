@@ -79,7 +79,7 @@ tr:hover td{background:#1a2744}
     </div>
     <div id="claimsPane"><div class="tbl-wrap"><table id="claimsTbl"><thead><tr><th>ID</th><th>Account</th><th>Firm</th><th>Client</th><th>Type</th><th>Insurer</th><th>Amount ₹</th><th>Status</th><th>Created</th><th>Update</th></tr></thead><tbody id="claimsTbody"></tbody></table></div></div>
     <div id="accountsPane" style="display:none"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Owner</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Sub Status</th><th>Period End</th><th>Joined</th></tr></thead><tbody id="accountsTbody"></tbody></table></div></div>
-    <div id="reviewsPane" style="display:none"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Advisor</th><th>Phone</th><th>Email</th><th>Client</th><th>Type</th><th>Insurer</th><th>Amt ₹</th><th>Notes</th><th>Status</th><th>Created</th></tr></thead><tbody id="reviewsTbody"></tbody></table></div></div>
+    <div id="reviewsPane" style="display:none"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Advisor</th><th>Phone</th><th>Email</th><th>Client</th><th>Type</th><th>Insurer</th><th>Amt ₹</th><th>Notes</th><th>Status</th><th>Created</th><th>Update</th></tr></thead><tbody id="reviewsTbody"></tbody></table></div></div>
   </div>
 </div>
 
@@ -174,6 +174,7 @@ function renderAccounts(accounts) {
 }
 
 function renderReviews(reviews) {
+  const REVIEW_STATUSES = ['pending_payment','paid','in_review','completed','cancelled'];
   document.getElementById('reviewsTbody').innerHTML = reviews.map(r => `
     <tr>
       <td>${r.purchase_id}</td>
@@ -187,14 +188,26 @@ function renderReviews(reviews) {
       <td style="max-width:180px;word-break:break-word">${r.brief_description||'—'}</td>
       <td>${badge(r.status||'pending_payment', r.status||'pending_payment')}</td>
       <td>${dateStr(r.created_at)}</td>
+      <td>
+        <select class="status-sel" id="rsel_${r.purchase_id}">
+          ${REVIEW_STATUSES.map(s => `<option value="${s}"${s===r.status?' selected':''}>${s.replace(/_/g,' ')}</option>`).join('')}
+        </select>
+        <button class="upd-btn" onclick="updateReviewStatus(${r.purchase_id})">Save</button>
+      </td>
     </tr>
-  `).join('') || '<tr><td colspan="11" style="text-align:center;padding:2rem;color:#475569">No review requests yet</td></tr>';
+  `).join('') || '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#475569">No review requests yet</td></tr>';
 }
 
 async function updateClaimStatus(claim_id) {
   const sel = document.getElementById('sel_' + claim_id);
   const result = await api(`/claims/${claim_id}/status`, 'PATCH', {new_status: sel.value});
   if(result && result.status) { showToast('Updated → ' + result.status); loadAll(); }
+}
+
+async function updateReviewStatus(purchase_id) {
+  const sel = document.getElementById('rsel_' + purchase_id);
+  const result = await api(`/review-requests/${purchase_id}/status`, 'PATCH', {new_status: sel.value});
+  if(result && result.status) { showToast('Review → ' + result.status); loadAll(); }
 }
 
 function showTab(tab) {

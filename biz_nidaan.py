@@ -571,6 +571,43 @@ async def get_review_requests_admin(
         return [dict(r) for r in await cur.fetchall()]
 
 
+REVIEW_STATUSES = (
+    "pending_payment", "paid", "in_review", "completed", "cancelled"
+)
+
+
+async def update_review_request_status(
+    purchase_id: int,
+    new_status: str,
+    note: str = "",
+) -> bool:
+    """Admin: update status (and optional note) of a ₹999 review request."""
+    if new_status not in REVIEW_STATUSES:
+        raise ValueError(f"Invalid review status: {new_status}")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
+            (purchase_id,),
+        )
+        if not await cur.fetchone():
+            return False
+        now = datetime.utcnow().isoformat()
+        if note:
+            await conn.execute(
+                "UPDATE nidaan_per_claim_purchase "
+                "SET status=?, review_note=?, reviewed_at=? WHERE purchase_id=?",
+                (new_status, note, now, purchase_id),
+            )
+        else:
+            await conn.execute(
+                "UPDATE nidaan_per_claim_purchase "
+                "SET status=?, reviewed_at=? WHERE purchase_id=?",
+                (new_status, now, purchase_id),
+            )
+        await conn.commit()
+    return True
+
+
 # =============================================================================
 #  ADMIN QUERIES
 # =============================================================================

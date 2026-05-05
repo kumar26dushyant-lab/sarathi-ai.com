@@ -884,6 +884,34 @@ async def nidaan_api_admin_reviews(
     return {"reviews": reviews, "count": len(reviews)}
 
 
+class NidaanReviewStatusUpdate(BaseModel):
+    new_status: str
+    note: str = ""
+
+
+@app.patch("/nidaan/api/admin/review-requests/{purchase_id}/status")
+async def nidaan_api_admin_update_review(
+    purchase_id: int,
+    body: NidaanReviewStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    try:
+        ok = await nidaan.update_review_request_status(
+            purchase_id=purchase_id,
+            new_status=body.new_status,
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Review request not found")
+    return {"purchase_id": purchase_id, "status": body.new_status}
+
+
 class NidaanClaimStatusUpdate(BaseModel):
     new_status: str
     note: str = ""
