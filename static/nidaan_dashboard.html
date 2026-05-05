@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — Nidaan Partner</title>
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh}
@@ -173,6 +174,41 @@
   /* PLAN CARDS */
   .plan-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-bottom:1.25rem}
   .plan-card{border:2px solid rgba(255,255,255,.12);border-radius:12px;padding:1rem .75rem;cursor:pointer;transition:border .18s,background .18s;text-align:center;background:rgba(255,255,255,.03)}
+
+  /* TABS */
+  .tab-nav{display:flex;gap:.25rem;margin-bottom:1.75rem;border-bottom:1px solid rgba(255,255,255,.08);overflow-x:auto}
+  .tab-btn{padding:.6rem 1.1rem;background:transparent;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,.45);font-size:.88rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;margin-bottom:-1px}
+  .tab-btn.active{color:#22d3ee;border-bottom-color:#22d3ee}
+  .tab-btn:hover:not(.active){color:rgba(255,255,255,.7)}
+  .tab-panel{display:none}.tab-panel.active{display:block}
+
+  /* PROFILE / SETTINGS */
+  .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+  .info-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1.4rem}
+  .info-card h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:1rem}
+  .info-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.86rem;gap:.5rem}
+  .info-row:last-child{border-bottom:none}
+  .info-label{color:rgba(255,255,255,.45);flex-shrink:0}
+  .info-val{color:#e2e8f0;text-align:right}
+  .edit-form .field{margin-bottom:.85rem}
+  .edit-form input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:.6rem .85rem;color:#fff;font-size:.88rem;outline:none;transition:border .15s;font-family:inherit}
+  .edit-form input:focus{border-color:#22d3ee}
+  .edit-form input::placeholder{color:rgba(255,255,255,.25)}
+  .edit-form label{display:block;font-size:.77rem;font-weight:600;color:rgba(255,255,255,.5);margin-bottom:.3rem}
+  .btn-danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:8px;padding:.6rem 1.2rem;font-size:.85rem;font-weight:600;cursor:pointer}
+  .btn-danger:hover{background:rgba(239,68,68,.3)}
+  .plan-upgrade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
+  .plan-opt{border:2px solid rgba(255,255,255,.1);border-radius:10px;padding:.85rem .65rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;background:rgba(255,255,255,.02)}
+  .plan-opt:hover{border-color:rgba(6,182,212,.4);background:rgba(6,182,212,.06)}
+  .plan-opt.current-plan{border-color:#22d3ee;background:rgba(6,182,212,.1)}
+  .plan-opt .po-name{font-weight:800;font-size:.88rem;color:#fff;margin-bottom:.3rem;text-transform:capitalize}
+  .plan-opt .po-price{font-size:1.15rem;font-weight:800;color:#22d3ee;line-height:1}
+  .plan-opt .po-period{font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.1rem}
+  .plan-opt .po-quota{font-size:.72rem;color:rgba(255,255,255,.45);margin-top:.45rem;line-height:1.35}
+  .plan-opt .po-badge{display:inline-block;background:#22d3ee;color:#0a1628;font-size:.62rem;font-weight:800;padding:.15rem .45rem;border-radius:10px;margin-bottom:.35rem}
+  .settings-section{margin-bottom:1.5rem}
+  .settings-section h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:.85rem}
+  @media(max-width:700px){.profile-grid{grid-template-columns:1fr}.plan-upgrade-grid{grid-template-columns:1fr}}
   .plan-card:hover{border-color:rgba(6,182,212,.5);background:rgba(6,182,212,.07)}
   .plan-card.selected{border-color:#06b6d4;background:rgba(6,182,212,.12)}
   .plan-card .pc-name{font-weight:800;font-size:.95rem;text-transform:capitalize;margin-bottom:.35rem;color:#fff}
@@ -213,7 +249,21 @@
   <div class="page-sub en">Manage your insurance claim disputes</div>
   <div class="page-sub hi">अपने बीमा दावा विवादों का प्रबंधन करें</div>
 
-  <!-- Subscription banner -->
+  <!-- Tab navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('dashboard')">
+      <span class="en">📋 Dashboard</span><span class="hi">📋 डैशबोर्ड</span>
+    </button>
+    <button class="tab-btn" onclick="showTab('profile')">
+      <span class="en">👤 Profile</span><span class="hi">👤 प्रोफ़ाइल</span>
+    </button>
+    <button class="tab-btn" onclick="showTab('settings')">
+      <span class="en">⚙️ Settings</span><span class="hi">⚙️ सेटिंग्स</span>
+    </button>
+  </div>
+
+  <!-- ── DASHBOARD TAB ─────────────────────────────────────────────── -->
+  <div class="tab-panel active" id="tab-dashboard">
   <div class="sub-banner sub-none" id="subBanner">
     <div class="sub-banner-text">
       <strong class="en">No active subscription</strong>
@@ -297,6 +347,157 @@
     </table>
   </div>
 </div>
+
+  </div><!-- /tab-dashboard -->
+
+  <!-- ── PROFILE TAB ──────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-profile">
+
+    <div class="profile-grid">
+      <!-- Account info card -->
+      <div class="info-card">
+        <h3 class="en">Account Details</h3>
+        <h3 class="hi">खाता विवरण</h3>
+        <div class="info-row"><span class="info-label en">Name</span><span class="info-label hi">नाम</span><span class="info-val" id="pf-name">—</span></div>
+        <div class="info-row"><span class="info-label en">Email</span><span class="info-label hi">ईमेल</span><span class="info-val" id="pf-email">—</span></div>
+        <div class="info-row"><span class="info-label en">Firm</span><span class="info-label hi">फर्म</span><span class="info-val" id="pf-firm">—</span></div>
+        <div class="info-row"><span class="info-label en">Phone</span><span class="info-label hi">फोन</span><span class="info-val" id="pf-phone">—</span></div>
+        <div class="info-row"><span class="info-label en">Status</span><span class="info-label hi">स्थिति</span><span class="info-val" id="pf-status">—</span></div>
+        <div style="margin-top:1rem">
+          <button class="btn-sm btn-cyan" onclick="toggleEditProfile()">
+            <span class="en">✏️ Edit Profile</span><span class="hi">✏️ प्रोफ़ाइल संपादित करें</span>
+          </button>
+        </div>
+        <!-- Edit form -->
+        <div id="editProfileForm" style="display:none;margin-top:1rem" class="edit-form">
+          <div class="field"><label class="en">Name</label><label class="hi">नाम</label><input id="ep-name" type="text" placeholder="Your name"></div>
+          <div class="field"><label class="en">Firm Name</label><label class="hi">फर्म का नाम</label><input id="ep-firm" type="text" placeholder="Firm / Company name"></div>
+          <div class="field"><label class="en">Phone</label><label class="hi">फोन</label><input id="ep-phone" type="tel" placeholder="10-digit mobile"></div>
+          <div class="msg" id="epMsg"></div>
+          <div style="display:flex;gap:.6rem;margin-top:.75rem">
+            <button class="btn btn-primary" style="font-size:.83rem;padding:.55rem 1.1rem" onclick="saveProfile()">
+              <span class="en">Save</span><span class="hi">सहेजें</span>
+            </button>
+            <button class="btn btn-cancel" style="font-size:.83rem;padding:.55rem 1.1rem" onclick="toggleEditProfile()">
+              <span class="en">Cancel</span><span class="hi">रद्द</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subscription card -->
+      <div class="info-card">
+        <h3 class="en">Subscription</h3>
+        <h3 class="hi">सदस्यता</h3>
+        <div id="subDetailsCard">
+          <div class="info-row"><span class="info-label en">Plan</span><span class="info-label hi">प्लान</span><span class="info-val" id="pf-plan">—</span></div>
+          <div class="info-row"><span class="info-label en">Status</span><span class="info-label hi">स्थिति</span><span class="info-val" id="pf-sub-status">—</span></div>
+          <div class="info-row"><span class="info-label en">Amount paid</span><span class="info-label hi">भुगतान</span><span class="info-val" id="pf-amount">—</span></div>
+          <div class="info-row"><span class="info-label en">Renews on</span><span class="info-label hi">नवीनीकरण</span><span class="info-val" id="pf-renew">—</span></div>
+          <div class="info-row"><span class="info-label en">Claims used</span><span class="info-label hi">उपयोग किए</span><span class="info-val" id="pf-quota">—</span></div>
+        </div>
+        <div style="margin-top:1.1rem;display:flex;gap:.65rem;flex-wrap:wrap" id="subActionsRow">
+          <button class="btn-sm btn-cyan" onclick="showTab('profile');document.getElementById('planChangeSection').scrollIntoView({behavior:'smooth'})">
+            <span class="en">Change Plan</span><span class="hi">प्लान बदलें</span>
+          </button>
+          <button class="btn-danger" id="cancelSubBtn" onclick="doCancelSub()">
+            <span class="en">Cancel Subscription</span><span class="hi">सदस्यता रद्द करें</span>
+          </button>
+        </div>
+        <div class="msg" id="subActionMsg"></div>
+      </div>
+    </div>
+
+    <!-- Plan change section -->
+    <div class="info-card" id="planChangeSection" style="margin-top:1.25rem">
+      <h3 class="en">Available Plans</h3>
+      <h3 class="hi">उपलब्ध प्लान</h3>
+      <div class="plan-upgrade-grid">
+        <div class="plan-opt" id="po-silver" onclick="switchPlan('silver')">
+          <div class="po-name">Silver</div>
+          <div class="po-price">₹1,500</div>
+          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
+          <div class="po-quota en">10 claims/quarter<br>Basic support</div>
+          <div class="po-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+        </div>
+        <div class="plan-opt" id="po-gold" onclick="switchPlan('gold')">
+          <div class="po-name">Gold</div>
+          <div class="po-price">₹3,000</div>
+          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
+          <div class="po-quota en">25 claims/quarter<br>Priority support</div>
+          <div class="po-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+        </div>
+        <div class="plan-opt" id="po-platinum" onclick="switchPlan('platinum')">
+          <div class="po-name">Platinum</div>
+          <div class="po-price">₹6,000</div>
+          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
+          <div class="po-quota en">Unlimited claims<br>Dedicated manager</div>
+          <div class="po-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="en">
+        Click a plan to subscribe or upgrade. You'll be taken through secure checkout.
+      </p>
+      <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="hi">
+        अपग्रेड करने के लिए किसी प्लान पर क्लिक करें।
+      </p>
+    </div>
+
+  </div><!-- /tab-profile -->
+
+  <!-- ── SETTINGS TAB ──────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-settings">
+
+    <!-- Change Password -->
+    <div class="info-card settings-section">
+      <h3 class="en">Change Password</h3>
+      <h3 class="hi">पासवर्ड बदलें</h3>
+      <div class="edit-form" style="max-width:420px">
+        <div class="field"><label class="en">Current Password</label><label class="hi">वर्तमान पासवर्ड</label><input type="password" id="cp-current" placeholder="Current password"></div>
+        <div class="field"><label class="en">New Password</label><label class="hi">नया पासवर्ड</label><input type="password" id="cp-new" placeholder="Min 8 characters"></div>
+        <div class="field"><label class="en">Confirm New Password</label><label class="hi">पासवर्ड की पुष्टि करें</label><input type="password" id="cp-confirm" placeholder="Repeat new password"></div>
+        <div class="msg" id="cpMsg"></div>
+        <button class="btn btn-primary" style="margin-top:.5rem;font-size:.88rem" onclick="doChangePassword()">
+          <span class="en">Update Password</span><span class="hi">पासवर्ड अपडेट करें</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Preferences -->
+    <div class="info-card settings-section">
+      <h3 class="en">Preferences</h3>
+      <h3 class="hi">प्राथमिकताएं</h3>
+      <div class="info-row">
+        <span>
+          <span class="en" style="color:#e2e8f0;font-size:.88rem">Interface Language</span>
+          <span class="hi" style="color:#e2e8f0;font-size:.88rem">इंटरफेस भाषा</span>
+        </span>
+        <div style="display:flex;gap:.4rem">
+          <button class="lang-btn active" onclick="setLang('en');this.classList.add('active');this.nextElementSibling.classList.remove('active')">EN</button>
+          <button class="lang-btn" onclick="setLang('hi');this.classList.add('active');this.previousElementSibling.classList.remove('active')">हिं</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account -->
+    <div class="info-card settings-section">
+      <h3 class="en">Account</h3>
+      <h3 class="hi">खाता</h3>
+      <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+        <div>
+          <span class="en" style="color:#e2e8f0;font-size:.88rem">Log out from all devices</span>
+          <span class="hi" style="color:#e2e8f0;font-size:.88rem">सभी डिवाइस से लॉग आउट करें</span>
+          <div style="font-size:.78rem;color:rgba(255,255,255,.35);margin-top:.15rem" class="en">Clears your session token.</div>
+        </div>
+        <button class="btn-danger" onclick="doLogout()">
+          <span class="en">Log Out</span><span class="hi">लॉग आउट</span>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /tab-settings -->
+
+</div><!-- /container -->
 
 <!-- Claim Detail Drawer -->
 <div class="drawer-bg" id="claimDrawer" onclick="_drawerBgClick(event)">
@@ -465,6 +666,7 @@ async function loadDashboard() {
   if (!meRes) return;
 
   const me = await meRes.json();
+  _meCache = me;  // cache for Razorpay prefill
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
 
   // Greeting
@@ -631,8 +833,21 @@ async function openClaimDrawer(claim_id) {
 function closeDrawer() { document.getElementById('claimDrawer').classList.remove('open'); }
 function _drawerBgClick(e) { if (e.target === document.getElementById('claimDrawer')) closeDrawer(); }
 
+// ── Tab navigation ────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + id + "'"))
+      b.classList.add('active');
+  });
+  if (id === 'profile') loadProfile();
+}
+
 // ── Subscribe modal ──────────────────────────────────────────────────────────
 let _selectedPlan = null;
+let _meCache = null;  // store /api/me result
 
 function openSubscribeModal() {
   _selectedPlan = null;
@@ -650,6 +865,7 @@ function selectPlan(plan) {
   document.getElementById('pc-' + plan).classList.add('selected');
   document.getElementById('subBtn').disabled = false;
 }
+
 async function doSubscribe() {
   if (!_selectedPlan) return;
   const btn = document.getElementById('subBtn');
@@ -664,18 +880,186 @@ async function doSubscribe() {
     if (!res) return;
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Subscription failed');
-    if (data.short_url) {
-      window.location.href = data.short_url;
-    } else {
-      msg.className = 'msg ok';
-      const isHi = document.body.classList.contains('hi');
-      msg.textContent = isHi ? 'सदस्यता बनाई गई! पृष्ठ रिफ्रेश हो रहा है…' : 'Subscription created! Refreshing…';
-      setTimeout(() => { closeSubscribeModal(); loadDashboard(); }, 1500);
-    }
+
+    // Use Razorpay inline checkout
+    const opts = {
+      key: data.razorpay_key_id,
+      subscription_id: data.subscription_id,
+      name: 'Nidaan Partner',
+      description: data.plan.charAt(0).toUpperCase() + data.plan.slice(1) + ' Plan — Insurance Claim Advisory',
+      image: '/static/nidaan_logo.png',
+      theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
+      prefill: {
+        email: _meCache ? _meCache.email : '',
+        contact: _meCache ? _meCache.phone : '',
+        name: _meCache ? _meCache.owner_name : '',
+      },
+      modal: { backdropclose: false },
+      handler: async function(response) {
+        msg.className = 'msg ok';
+        const isHi = document.body.classList.contains('hi');
+        msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment successful! Activating plan…';
+        try {
+          const vr = await fetch('/nidaan/api/subscribe/verify', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY), 'Content-Type': 'application/json' },
+            body: JSON.stringify(response),
+          });
+          const vd = await vr.json();
+          if (vr.ok && vd.token) {
+            localStorage.setItem(TOKEN_KEY, vd.token);
+            localStorage.setItem('nidaan_plan', vd.plan);
+          }
+        } catch(e) { /* token update best-effort */ }
+        closeSubscribeModal();
+        location.href = '/nidaan/dashboard?payment=success';
+      },
+    };
+    closeSubscribeModal();
+    const rzp = new Razorpay(opts);
+    rzp.open();
   } catch(err) {
     msg.className = 'msg err';
     msg.textContent = err.message;
     btn.disabled = false;
+  }
+}
+
+// ── Switch plan from profile ──────────────────────────────────────────────────
+function switchPlan(plan) {
+  // If same as current, no-op
+  const curPlan = localStorage.getItem('nidaan_plan') || '';
+  if (plan === curPlan) return;
+  // Open subscribe modal with plan pre-selected
+  openSubscribeModal();
+  selectPlan(plan);
+}
+
+// ── Cancel subscription ───────────────────────────────────────────────────────
+async function doCancelSub() {
+  const isHi = document.body.classList.contains('hi');
+  const msg = isHi ? 'क्या आप वाकई सदस्यता रद्द करना चाहते हैं?' : 'Cancel your subscription? Your plan remains active until the current period ends.';
+  if (!confirm(msg)) return;
+  const actionMsg = document.getElementById('subActionMsg');
+  const btn = document.getElementById('cancelSubBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/nidaan/api/subscribe/cancel', { method: 'POST' });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Cancellation failed');
+    if (data.token) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem('nidaan_plan', 'free');
+    }
+    actionMsg.className = 'msg ok';
+    actionMsg.textContent = isHi ? 'सदस्यता रद्द कर दी गई।' : 'Subscription cancelled. Refreshing…';
+    setTimeout(() => location.reload(), 1500);
+  } catch(err) {
+    actionMsg.className = 'msg err';
+    actionMsg.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+// ── Load profile tab ──────────────────────────────────────────────────────────
+async function loadProfile() {
+  const res = await api('/nidaan/api/me');
+  if (!res) return;
+  const data = await res.json();
+  _meCache = data;
+  document.getElementById('pf-name').textContent   = data.owner_name || '—';
+  document.getElementById('pf-email').textContent  = data.email || '—';
+  document.getElementById('pf-firm').textContent   = data.firm_name || '—';
+  document.getElementById('pf-phone').textContent  = data.phone || '—';
+  document.getElementById('pf-status').textContent = (data.status || '—').replace(/_/g,' ');
+  const sub = data.subscription;
+  if (sub) {
+    document.getElementById('pf-plan').textContent       = sub.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : '—';
+    document.getElementById('pf-sub-status').textContent = sub.status || '—';
+    document.getElementById('pf-amount').textContent     = sub.amount_paid ? '₹' + sub.amount_paid.toLocaleString('en-IN') : '—';
+    document.getElementById('pf-renew').textContent      = sub.current_period_end ? sub.current_period_end.split('T')[0] : '—';
+    // Update current plan indicator
+    document.querySelectorAll('.plan-opt').forEach(p => p.classList.remove('current-plan'));
+    const curOpt = document.getElementById('po-' + sub.plan);
+    if (curOpt) {
+      curOpt.classList.add('current-plan');
+      curOpt.querySelector('.po-name').innerHTML = '<span class="po-badge">Current</span><br>' + (sub.plan || '');
+    }
+  } else {
+    document.getElementById('pf-plan').textContent       = 'Free (no subscription)';
+    document.getElementById('pf-sub-status').textContent = '—';
+    document.getElementById('pf-amount').textContent     = '—';
+    document.getElementById('pf-renew').textContent      = '—';
+    document.getElementById('cancelSubBtn').style.display = 'none';
+  }
+  // Prefill edit form
+  document.getElementById('ep-name').value  = data.owner_name || '';
+  document.getElementById('ep-firm').value  = data.firm_name  || '';
+  document.getElementById('ep-phone').value = data.phone      || '';
+  // Claims quota from stats
+  const statTot = document.getElementById('statTotal');
+  document.getElementById('pf-quota').textContent = statTot ? statTot.textContent : '—';
+}
+
+// ── Toggle edit profile form ──────────────────────────────────────────────────
+function toggleEditProfile() {
+  const f = document.getElementById('editProfileForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveProfile() {
+  const name  = document.getElementById('ep-name').value.trim();
+  const firm  = document.getElementById('ep-firm').value.trim();
+  const phone = document.getElementById('ep-phone').value.trim();
+  const msg   = document.getElementById('epMsg');
+  msg.className = 'msg';
+  try {
+    const res = await api('/nidaan/api/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ owner_name: name || null, firm_name: firm || null, phone: phone || null }),
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Update failed');
+    msg.className = 'msg ok';
+    const isHi = document.body.classList.contains('hi');
+    msg.textContent = isHi ? 'प्रोफ़ाइल सहेजी गई!' : 'Profile saved!';
+    await loadProfile();
+    setTimeout(() => { toggleEditProfile(); msg.className = 'msg'; }, 1200);
+  } catch(e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  }
+}
+
+// ── Change password ────────────────────────────────────────────────────────────
+async function doChangePassword() {
+  const cur     = document.getElementById('cp-current').value;
+  const nw      = document.getElementById('cp-new').value;
+  const confirm = document.getElementById('cp-confirm').value;
+  const msg     = document.getElementById('cpMsg');
+  msg.className = 'msg';
+  const isHi = document.body.classList.contains('hi');
+  if (!cur || !nw || !confirm) { msg.className='msg err'; msg.textContent='All fields required.'; return; }
+  if (nw !== confirm) { msg.className='msg err'; msg.textContent='Passwords do not match.'; return; }
+  if (nw.length < 8)  { msg.className='msg err'; msg.textContent='Minimum 8 characters.'; return; }
+  try {
+    const res = await api('/nidaan/api/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: cur, new_password: nw }),
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    msg.className = 'msg ok';
+    msg.textContent = isHi ? 'पासवर्ड बदल दिया गया!' : 'Password updated successfully!';
+    document.getElementById('cp-current').value = '';
+    document.getElementById('cp-new').value = '';
+    document.getElementById('cp-confirm').value = '';
+  } catch(e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
   }
 }
 
@@ -697,13 +1081,21 @@ setLang(_lang);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadDashboard().then(() => {
-  // Auto-open subscribe modal if redirected from a plan card on homepage
-  const plan = new URLSearchParams(location.search).get('subscribe');
+  const params = new URLSearchParams(location.search);
+  const plan = params.get('subscribe');
   if (plan && ['silver','gold','platinum'].includes(plan)) {
     openSubscribeModal();
     selectPlan(plan);
-    history.replaceState(null, '', '/nidaan/dashboard');
   }
+  if (params.get('payment') === 'success') {
+    // Show a success banner briefly
+    const banner = document.getElementById('subBanner');
+    if (banner) {
+      banner.className = 'sub-banner sub-active';
+      banner.innerHTML = '<div class="sub-banner-text"><strong class="en">🎉 Payment successful! Your plan is now active.</strong><strong class="hi">🎉 भुगतान सफल! आपका प्लान सक्रिय है।</strong></div>';
+    }
+  }
+  history.replaceState(null, '', '/nidaan/dashboard');
 });
 </script>
 </body>

@@ -847,3 +847,37 @@ async def activate_from_razorpay_webhook(
     )
     logger.info("✅ Nidaan sub activated: account=%d plan=%s sub_id=%d", nidaan_account_id, plan, sub_id)
     return True
+
+
+async def cancel_nidaan_subscription(account_id: int) -> bool:
+    """Mark all active subscriptions for an account as cancelled."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_subscriptions SET status='cancelled' "
+            "WHERE account_id=? AND status='active'",
+            (account_id,),
+        )
+        await conn.commit()
+    logger.info("Nidaan sub cancelled: account=%d", account_id)
+    return True
+
+
+async def update_account_profile(account_id: int, owner_name: str = None,
+                                  firm_name: str = None, phone: str = None) -> bool:
+    """Update mutable profile fields on a Nidaan account."""
+    fields, vals = [], []
+    if owner_name is not None:
+        fields.append("owner_name=?"); vals.append(owner_name)
+    if firm_name is not None:
+        fields.append("firm_name=?"); vals.append(firm_name)
+    if phone is not None:
+        fields.append("phone=?"); vals.append(phone)
+    if not fields:
+        return False
+    vals.append(account_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_accounts SET {', '.join(fields)} WHERE account_id=?", vals
+        )
+        await conn.commit()
+    return True

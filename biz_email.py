@@ -310,6 +310,58 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
     )
 
 
+PLAN_FEATURES = {
+    "silver":   {"label": "Silver",   "quota": "10 claims / quarter", "support": "Basic email support"},
+    "gold":     {"label": "Gold",     "quota": "25 claims / quarter", "support": "Priority support"},
+    "platinum": {"label": "Platinum", "quota": "Unlimited claims",    "support": "Dedicated case manager"},
+}
+
+async def send_nidaan_subscription_email(
+    to_email: str,
+    owner_name: str,
+    plan: str,
+    amount_paid: int,
+    renewal_date: str,
+) -> bool:
+    """Send a subscription confirmation email with plan details and renewal date."""
+    info = PLAN_FEATURES.get(plan, {"label": plan.title(), "quota": "—", "support": "—"})
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    amount_str = f"₹{amount_paid:,}" if amount_paid else "—"
+    content = f"""
+<h2>🎉 Your {info['label']} Plan is Active!</h2>
+<p>{greeting}</p>
+<p>Thank you for subscribing to <strong>Nidaan Partner</strong>. Your payment was successful and your plan is now active.</p>
+
+<div style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.35);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0">
+  <p style="color:#22d3ee;font-size:1.1rem;font-weight:800;margin-bottom:.75rem">{info['label']} Plan</p>
+  <table style="width:100%;font-size:.88rem;border-collapse:collapse">
+    <tr><td style="color:#64748b;padding:.3rem 0;width:130px">Amount paid</td><td style="color:#e2e8f0;font-weight:700">{amount_str}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0">Claims quota</td><td style="color:#e2e8f0">{info['quota']}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0">Support</td><td style="color:#e2e8f0">{info['support']}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0">Next renewal</td><td style="color:#e2e8f0;font-weight:700">{renewal_date}</td></tr>
+  </table>
+</div>
+
+<p>You can now log in to your dashboard and start submitting insurance claim disputes.</p>
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="https://nidaanpartner.com/nidaan/dashboard"
+     style="display:inline-block;background:#06b6d4;color:#fff;padding:.75rem 2rem;
+            border-radius:8px;font-weight:700;text-decoration:none">
+    Go to Dashboard →
+  </a>
+</p>
+<p style="color:#475569;font-size:.82rem">
+  Your subscription auto-renews every quarter. You can manage or cancel your subscription
+  at any time from the Profile section of your dashboard.
+</p>"""
+    return await send_email(
+        to_email,
+        f"Nidaan Partner — {info['label']} Plan Activated!",
+        _wrap_nidaan_template("Subscription Activated", content),
+        from_name="Nidaan Partner",
+    )
+
+
 async def send_nidaan_new_claim_admin_email(
     admin_email: str,
     claim_id: int,

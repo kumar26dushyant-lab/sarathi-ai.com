@@ -893,21 +893,179 @@ async def nidaan_razorpay_webhook(request: Request):
             )).fetchone()
             if _row:
                 _row = dict(_row)
-                _asyncio.create_task(email_svc.send_email(
-                    to_email=_row["email"],
-                    subject=f"✅ Nidaan {plan.title()} Plan Activated!",
-                    html_body=(
-                        f"<p>Hi {_row['owner_name']},</p>"
-                        f"<p>Your <b>Nidaan {plan.title()} Plan</b> is now active. "
-                        f"You can start submitting insurance claims through your dashboard.</p>"
-                        f"<p><a href='https://nidaanpartner.com/nidaan/dashboard'>Open Dashboard →</a></p>"
-                        f"<p>— Nidaan Partner Team</p>"
-                    ),
-                    from_name="Nidaan Partner",
+                _sub = await nidaan.get_active_subscription(account_id)
+                _renewal = _sub["current_period_end"][:10] if _sub else ""
+                _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+                    _row["email"], _row["owner_name"], plan,
+                    amount_paise // 100, _renewal
                 ))
     elif event == "subscription.cancelled":
         logger.info("Nidaan subscription cancelled: account=%d rzp=%s", account_id, rzp_sub_id)
     return {"status": "ok", "event": event}
+
+
+# ── Nidaan: Verify inline-checkout payment ─────────────────────────────────────
+
+class NidaanVerifyPaymentReq(BaseModel):
+    razorpay_payment_id: str
+    razorpay_subscription_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/api/subscribe/verify")
+async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request):
+    """Verify Razorpay signature after inline checkout, activate subscription, return new JWT."""
+    import hmac as _hmac_mod, hashlib as _hs, httpx as _httpx
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+
+    # Verify HMAC signature
+    msg = f"{body.razorpay_payment_id}|{body.razorpay_subscription_id}".encode()
+    expected = _hmac_mod.new(rzp_secret.encode(), msg, _hs.sha256).hexdigest()
+    if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    # Fetch subscription details from Razorpay to get plan
+    async with _httpx.AsyncClient() as client:
+        sr = await client.get(
+            f"https://api.razorpay.com/v1/subscriptions/{body.razorpay_subscription_id}",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+        sub_data = sr.json()
+        pr = await client.get(
+            f"https://api.razorpay.com/v1/payments/{body.razorpay_payment_id}",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+        payment_data = pr.json()
+
+    notes = sub_data.get("notes", {})
+    plan = notes.get("nidaan_plan", "")
+    if not plan:
+        raise HTTPException(status_code=400, detail="Could not determine plan from subscription")
+
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    amount_paise = payment_data.get("amount", 0)
+    await nidaan.activate_from_razorpay_webhook(
+        body.razorpay_subscription_id, account["account_id"], plan, amount_paise
+    )
+
+    # Send subscription confirmation email
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    renewal_date = sub["current_period_end"][:10] if sub else ""
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+        account["email"], account["owner_name"], plan,
+        amount_paise // 100, renewal_date
+    ))
+
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("✅ Nidaan payment verified: account=%d plan=%s", account["account_id"], plan)
+    return {"token": new_token, "plan": plan, "status": "active"}
+
+
+# ── Nidaan: Cancel subscription ────────────────────────────────────────────────
+
+@app.post("/nidaan/api/subscribe/cancel")
+async def nidaan_subscribe_cancel(request: Request):
+    """Cancel current Nidaan subscription (Razorpay + DB)."""
+    import httpx as _httpx
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    if not sub:
+        raise HTTPException(status_code=404, detail="No active subscription to cancel")
+
+    rzp_sub_id = sub.get("razorpay_subscription_id", "")
+    if rzp_sub_id:
+        rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+        rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+        try:
+            async with _httpx.AsyncClient() as client:
+                await client.post(
+                    f"https://api.razorpay.com/v1/subscriptions/{rzp_sub_id}/cancel",
+                    auth=(rzp_key_id, rzp_secret),
+                    json={"cancel_at_cycle_end": 0},
+                    timeout=15.0,
+                )
+        except Exception as e:
+            logger.warning("Razorpay cancel failed (continuing): %s", e)
+
+    await nidaan.cancel_nidaan_subscription(account["account_id"])
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], "free")
+    logger.info("Nidaan sub cancelled: account=%d", account["account_id"])
+    return {"token": new_token, "plan": "free", "status": "cancelled"}
+
+
+# ── Nidaan: Update profile ─────────────────────────────────────────────────────
+
+class NidaanProfileUpdateReq(BaseModel):
+    owner_name: Optional[str] = None
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@app.patch("/nidaan/api/profile")
+async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
+    """Update mutable profile fields."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    await nidaan.update_account_profile(
+        account["account_id"],
+        owner_name=body.owner_name,
+        firm_name=body.firm_name,
+        phone=body.phone,
+    )
+    return {"status": "updated"}
+
+
+# ── Nidaan: Change password ────────────────────────────────────────────────────
+
+class NidaanChangePasswordReq(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+@app.post("/nidaan/api/change-password")
+async def nidaan_change_password(body: NidaanChangePasswordReq, request: Request):
+    """Change password after verifying current password."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # Verify current password
+    if not nidaan._verify_password(body.current_password, account.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    await nidaan.update_account_password(account["account_id"], body.new_password)
+    return {"status": "password_changed"}
 
 
 # ── Admin helpers ──────────────────────────────────────────────────────────────
