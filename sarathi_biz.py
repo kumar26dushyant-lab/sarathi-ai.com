@@ -295,18 +295,26 @@ def _nidaan_bearer(request: Request) -> Optional[dict]:
 
 # ── Page routes ───────────────────────────────────────────────────────────────
 
-@app.get("/nidaan/signup", response_class=HTMLResponse)
-async def nidaan_signup_page(request: Request):
+@app.get("/nidaan/start", response_class=HTMLResponse)
+async def nidaan_start_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_signup.html")
+    return _nidaan_page("nidaan_start.html")
 
 
-@app.get("/nidaan/login", response_class=HTMLResponse)
+@app.get("/nidaan/signup", response_class=RedirectResponse)
+async def nidaan_signup_page(request: Request, plan: str = ""):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    dest = "/nidaan/start" + (f"?plan={plan}" if plan else "")
+    return RedirectResponse(url=dest, status_code=302)
+
+
+@app.get("/nidaan/login", response_class=RedirectResponse)
 async def nidaan_login_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_login.html")
+    return RedirectResponse(url="/nidaan/start", status_code=302)
 
 
 @app.get("/nidaan/dashboard", response_class=HTMLResponse)
@@ -327,7 +335,7 @@ async def nidaan_review_page(request: Request):
 async def nidaan_logout(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return RedirectResponse("/nidaan/login")
+    return RedirectResponse("/nidaan/start")
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -369,17 +377,35 @@ class NidaanVerifyOTPReq(BaseModel):
 
 class NidaanGoogleReq(BaseModel):
     credential: str = Field(..., min_length=10)
-    plan: str = "silver"  # only used during signup
+    plan: str = "free"  # only used during signup
+
+
+class NidaanCheckEmailReq(BaseModel):
+    email: str
 
 
 # ── API routes ────────────────────────────────────────────────────────────────
+
+@app.post("/nidaan/api/check-email")
+@limiter.limit("10/minute")
+async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
+    """Check if an email exists in nidaan_accounts. Used by the smart auth flow."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    account = await nidaan.get_account_by_email(email)
+    return {"exists": account is not None}
+
 
 @app.post("/nidaan/api/signup")
 async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    if body.plan not in ("silver", "gold", "platinum"):
-        raise HTTPException(status_code=400, detail="Invalid plan")
+    # Plan is now optional at signup — advisors can subscribe later from dashboard
+    allowed_plans = ("silver", "gold", "platinum", "free", "")
+    plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     account_id = await nidaan.create_account(
@@ -391,8 +417,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     )
     if account_id is None:
         raise HTTPException(status_code=409, detail="Email already registered")
-    token = nidaan.create_nidaan_token(account_id, body.email.lower().strip(), body.plan)
-    # Fire-and-forget welcome email
+    token = nidaan.create_nidaan_token(account_id, body.email.lower().strip(), plan)
     import asyncio as _asyncio
     _asyncio.create_task(email_svc.send_email(
         to_email=body.email.strip(),
@@ -400,8 +425,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         html_body=(
             f"<p>Hi {body.owner_name.strip()},</p>"
             f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
-            f"<p>You've signed up for the <b>{body.plan.title()} Plan</b>. "
-            f"To activate your subscription and start submitting claims, complete your payment:</p>"
+            f"<p>Your account is ready. Subscribe to a plan from your dashboard to start submitting claims.</p>"
             f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
             f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
             f"Go to Dashboard →</a></p>"
@@ -410,7 +434,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         ),
         from_name="Nidaan Partner",
     ))
-    return {"access_token": token, "account_id": account_id, "plan": body.plan}
+    return {"access_token": token, "account_id": account_id, "plan": plan}
 
 
 @app.post("/nidaan/api/login")

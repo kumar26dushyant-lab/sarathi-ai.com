@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Get Started — Nidaan Partner</title>
+<meta name="description" content="Sign in or create your free Nidaan Partner account.">
+<link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060f1e;color:#fff;min-height:100vh;display:flex;flex-direction:column}
+
+/* ── NAV ── */
+nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:rgba(6,15,30,.95);border-bottom:1px solid rgba(255,255,255,.07)}
+.nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;text-decoration:none}
+.nav-brand img{height:32px;border-radius:5px}
+.nav-back{font-size:.85rem;color:rgba(255,255,255,.5);text-decoration:none;transition:color .15s}
+.nav-back:hover{color:#22d3ee}
+
+/* ── LAYOUT ── */
+.page{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:440px;position:relative}
+
+/* ── STEPS ── */
+.step{display:none}
+.step.active{display:block}
+
+/* ── HEADINGS ── */
+.card-icon{font-size:2rem;margin-bottom:.6rem}
+h1{font-size:1.45rem;font-weight:800;line-height:1.25;margin-bottom:.35rem}
+.card-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
+.email-chip{display:inline-flex;align-items:center;gap:.5rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .75rem .3rem .6rem;font-size:.85rem;color:#22d3ee;margin-bottom:1.25rem;cursor:pointer}
+.email-chip svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0}
+
+/* ── FORM FIELDS ── */
+.field{margin-bottom:1rem}
+label{display:block;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.6);margin-bottom:.35rem}
+input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;transition:border .15s;-webkit-appearance:none}
+input:focus{border-color:#22d3ee}
+input::placeholder{color:rgba(255,255,255,.25)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
+
+/* ── BUTTONS ── */
+.btn{width:100%;border:none;border-radius:10px;padding:.82rem 1rem;font-size:.98rem;font-weight:700;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.btn-cyan{background:#06b6d4;color:#fff}
+.btn-cyan:hover{background:#0891b2}
+.btn-cyan:disabled{background:#1e4a5c;cursor:not-allowed;opacity:.7}
+.btn-ghost{background:transparent;border:1.5px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7)}
+.btn-ghost:hover{border-color:rgba(255,255,255,.4);color:#fff}
+.btn-sm{font-size:.84rem;padding:.6rem 1rem;width:auto}
+
+/* ── DIVIDER ── */
+.divider{display:flex;align-items:center;gap:.75rem;margin:1.1rem 0}
+.divider span{font-size:.78rem;color:rgba(255,255,255,.35);white-space:nowrap}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.09)}
+
+/* ── GOOGLE BUTTON ── */
+.google-wrap{width:100%;min-height:44px;display:flex;justify-content:center;margin-bottom:.25rem}
+.google-stub{width:100%;text-align:center;padding:.75rem;color:rgba(255,255,255,.3);font-size:.8rem;border:1.5px dashed rgba(255,255,255,.1);border-radius:10px}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:.4rem;margin-bottom:1.1rem;background:rgba(255,255,255,.04);border-radius:10px;padding:.25rem}
+.tab{flex:1;padding:.45rem;border-radius:7px;border:none;background:transparent;color:rgba(255,255,255,.45);font-size:.84rem;font-weight:600;cursor:pointer;transition:all .15s}
+.tab.active{background:rgba(34,211,238,.15);color:#22d3ee}
+
+/* ── OTP ── */
+.otp-actions{display:flex;gap:.6rem;align-items:center;margin-top:.6rem}
+.otp-hint{font-size:.78rem;color:rgba(255,255,255,.4)}
+#countdown{font-size:.78rem;color:#22d3ee;font-weight:700}
+
+/* ── MESSAGES ── */
+.msg{font-size:.83rem;padding:.55rem .85rem;border-radius:8px;margin-top:.75rem;display:none;line-height:1.5}
+.msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
+.msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#86efac;display:block}
+.msg.info{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);color:#67e8f9;display:block}
+
+/* ── FOOTER LINKS ── */
+.card-foot{text-align:center;margin-top:1.25rem;font-size:.84rem;color:rgba(255,255,255,.4)}
+.card-foot a{color:#22d3ee}
+
+/* ── BACK ARROW ── */
+.back-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;color:rgba(255,255,255,.4);cursor:pointer;margin-bottom:1rem;background:none;border:none;padding:0;transition:color .15s}
+.back-link:hover{color:#22d3ee}
+
+/* ── RESPONSIVE ── */
+@media(max-width:480px){
+  .card{padding:1.6rem 1.25rem;border-radius:16px}
+  h1{font-size:1.25rem}
+  .row2{grid-template-columns:1fr}
+  nav{padding:.7rem .85rem}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-brand">
+    <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+    Nidaan Partner
+  </a>
+  <a href="/" class="nav-back">← Back to home</a>
+</nav>
+
+<div class="page">
+  <div class="card">
+
+    <!-- ══ STEP 1: Email entry ══ -->
+    <div class="step active" id="step1">
+      <div class="card-icon">🛡️</div>
+      <h1>Welcome to Nidaan Partner</h1>
+      <p class="card-sub">Enter your email to sign in or create a free account in seconds.</p>
+
+      <!-- Google first -->
+      <div id="googleAreaStep1">
+        <div class="google-stub" id="googleStub1">Loading Google Sign-In…</div>
+        <div class="google-wrap" id="googleBtn1" style="display:none"></div>
+      </div>
+
+      <div class="divider"><span>or continue with email</span></div>
+
+      <div class="field">
+        <label>Work email *</label>
+        <input type="email" id="emailInput" placeholder="advisor@example.com" autocomplete="email" inputmode="email">
+      </div>
+      <button class="btn btn-cyan" id="continueBtn" onclick="checkEmail()">
+        Continue &rarr;
+      </button>
+      <div class="msg" id="msg1"></div>
+    </div>
+
+    <!-- ══ STEP 2A: Existing user — sign in ══ -->
+    <div class="step" id="step2a">
+      <button class="back-link" onclick="goBack()">&#8592; Change email</button>
+      <div class="card-icon">👋</div>
+      <h1 id="welcomeBack">Welcome back!</h1>
+      <div class="email-chip" onclick="goBack()">
+        <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
+        <span id="emailChip2a"></span>
+      </div>
+
+      <!-- Google for returning user -->
+      <div id="googleAreaStep2a" style="margin-bottom:.5rem">
+        <div class="google-wrap" id="googleBtn2a" style="display:none"></div>
+      </div>
+
+      <div class="divider" id="divider2a"><span>or sign in with</span></div>
+
+      <!-- Tabs: OTP | Password -->
+      <div class="tabs">
+        <button class="tab active" id="tabOtp" onclick="switchTab('otp')">Email OTP</button>
+        <button class="tab" id="tabPwd" onclick="switchTab('pwd')">Password</button>
+      </div>
+
+      <!-- OTP flow -->
+      <div id="otpFlow">
+        <div id="otpStep1">
+          <button class="btn btn-cyan" id="sendOtpBtn" onclick="sendOTP(false)">Send OTP to my email</button>
+        </div>
+        <div id="otpStep2" style="display:none">
+          <div class="field">
+            <label>Enter OTP sent to your email</label>
+            <input type="text" id="otpInput" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          </div>
+          <div class="otp-actions">
+            <button class="btn btn-cyan btn-sm" onclick="verifyOTP()">Verify OTP</button>
+            <span id="countdown" style="display:none"></span>
+            <button class="btn btn-ghost btn-sm" id="resendBtn" onclick="sendOTP(true)" style="display:none">Resend</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Password flow -->
+      <div id="pwdFlow" style="display:none">
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="pwdInput" placeholder="Your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doPasswordLogin()">
+        </div>
+        <button class="btn btn-cyan" onclick="doPasswordLogin()">Sign In &rarr;</button>
+        <p class="card-foot" style="margin-top:.75rem"><a href="#" onclick="forgotHint();return false">Forgot password?</a></p>
+      </div>
+
+      <div class="msg" id="msg2a"></div>
+    </div>
+
+    <!-- ══ STEP 2B: New user — register ══ -->
+    <div class="step" id="step2b">
+      <button class="back-link" onclick="goBack()">&#8592; Change email</button>
+      <div class="card-icon">🚀</div>
+      <h1>Create your free account</h1>
+      <p class="card-sub">No credit card needed. Explore the dashboard, then subscribe when you're ready.</p>
+      <div class="email-chip" onclick="goBack()">
+        <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
+        <span id="emailChip2b"></span>
+      </div>
+
+      <!-- Google signup -->
+      <div id="googleAreaStep2b" style="margin-bottom:.5rem">
+        <div class="google-wrap" id="googleBtn2b" style="display:none"></div>
+      </div>
+      <div class="divider" id="divider2b"><span>or register with email</span></div>
+
+      <div class="row2">
+        <div class="field">
+          <label>Full name *</label>
+          <input type="text" id="regName" placeholder="Rahul Sharma" autocomplete="name">
+        </div>
+        <div class="field">
+          <label>Phone *</label>
+          <input type="tel" id="regPhone" placeholder="9876543210" inputmode="tel">
+        </div>
+      </div>
+      <div class="field">
+        <label>Firm / agency name</label>
+        <input type="text" id="regFirm" placeholder="Optional">
+      </div>
+      <div class="field">
+        <label>Password *</label>
+        <input type="password" id="regPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+      </div>
+      <button class="btn btn-cyan" id="registerBtn" onclick="doRegister()">Create free account &rarr;</button>
+      <div class="msg" id="msg2b"></div>
+      <p class="card-foot">By creating an account you agree to our <a href="/terms" target="_blank">Terms</a> &amp; <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── URL param: ?plan=silver etc. carried through to dashboard for post-signup subscribe prompt
+const _plan = new URLSearchParams(location.search).get('plan') || '';
+let _email = '';
+let _otpSent = false;
+let _countdownTimer = null;
+
+// ── State management ──────────────────────────────────────────────────────────
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goBack() {
+  clearMsg();
+  showStep('step1');
+  _email = '';
+  _otpSent = false;
+  document.getElementById('emailInput').value = '';
+  document.getElementById('emailInput').focus();
+}
+
+function clearMsg() {
+  ['msg1','msg2a','msg2b'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'msg';
+  });
+}
+
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  el.className = 'msg ' + type;
+  el.textContent = text;
+}
+
+// ── Step 1: check email ───────────────────────────────────────────────────────
+async function checkEmail() {
+  const raw = document.getElementById('emailInput').value.trim();
+  if (!raw || !raw.includes('@')) { showMsg('msg1','err','Please enter a valid email address.'); return; }
+  _email = raw.toLowerCase();
+
+  const btn = document.getElementById('continueBtn');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  clearMsg();
+
+  try {
+    const res = await fetch('/nidaan/api/check-email', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error checking email');
+
+    if (data.exists) {
+      // Existing user → sign in
+      document.getElementById('emailChip2a').textContent = _email;
+      document.getElementById('welcomeBack').textContent = 'Welcome back!';
+      showStep('step2a');
+      // Reset OTP state
+      document.getElementById('otpStep1').style.display = '';
+      document.getElementById('otpStep2').style.display = 'none';
+      switchTab('otp');
+    } else {
+      // New user → register
+      document.getElementById('emailChip2b').textContent = _email;
+      document.getElementById('regName').value = '';
+      document.getElementById('regPhone').value = '';
+      document.getElementById('regFirm').value = '';
+      document.getElementById('regPwd').value = '';
+      showStep('step2b');
+      document.getElementById('regName').focus();
+    }
+  } catch(e) {
+    showMsg('msg1','err', e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Continue &rarr;';
+  }
+}
+
+document.getElementById('emailInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkEmail();
+});
+
+// ── Tab switch (OTP / Password) ───────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('otpFlow').style.display  = tab === 'otp' ? '' : 'none';
+  document.getElementById('pwdFlow').style.display  = tab === 'pwd' ? '' : 'none';
+  document.getElementById('tabOtp').classList.toggle('active', tab === 'otp');
+  document.getElementById('tabPwd').classList.toggle('active', tab === 'pwd');
+}
+
+// ── OTP flow ──────────────────────────────────────────────────────────────────
+async function sendOTP(isResend) {
+  clearMsg();
+  const btn = document.getElementById('sendOtpBtn');
+  const resendBtn = document.getElementById('resendBtn');
+  if (!isResend) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  else { resendBtn.style.display = 'none'; }
+
+  try {
+    const res = await fetch('/nidaan/api/send-email-otp', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    // Show OTP input
+    document.getElementById('otpStep1').style.display = 'none';
+    document.getElementById('otpStep2').style.display = '';
+    document.getElementById('otpInput').focus();
+    startCountdown(60);
+  } catch(e) {
+    showMsg('msg2a','err', e.message);
+    if (!isResend) { btn.disabled = false; btn.textContent = 'Send OTP to my email'; }
+    else { resendBtn.style.display = ''; }
+  }
+}
+
+async function verifyOTP() {
+  clearMsg();
+  const otp = document.getElementById('otpInput').value.trim();
+  if (!otp || otp.length < 4) { showMsg('msg2a','err','Enter the OTP from your email.'); return; }
+  try {
+    const res = await fetch('/nidaan/api/verify-email-otp', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email, otp})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Invalid OTP');
+    _loginSuccess(data);
+  } catch(e) {
+    showMsg('msg2a','err', e.message);
+  }
+}
+
+function startCountdown(sec) {
+  const el = document.getElementById('countdown');
+  const resendBtn = document.getElementById('resendBtn');
+  el.style.display = '';
+  resendBtn.style.display = 'none';
+  if (_countdownTimer) clearInterval(_countdownTimer);
+  let remaining = sec;
+  el.textContent = `Resend in ${remaining}s`;
+  _countdownTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(_countdownTimer);
+      el.style.display = 'none';
+      resendBtn.style.display = '';
+    } else {
+      el.textContent = `Resend in ${remaining}s`;
+    }
+  }, 1000);
+}
+
+// ── Password login ────────────────────────────────────────────────────────────
+async function doPasswordLogin() {
+  clearMsg();
+  const pwd = document.getElementById('pwdInput').value;
+  if (!pwd) { showMsg('msg2a','err','Enter your password.'); return; }
+  try {
+    const res = await fetch('/nidaan/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email, password: pwd})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Invalid password');
+    _loginSuccess(data);
+  } catch(e) {
+    showMsg('msg2a','err', e.message);
+  }
+}
+
+function forgotHint() {
+  showMsg('msg2a','info','Password reset is not yet automated. Please contact support@sarathi-ai.com and we\'ll reset it within a few hours.');
+}
+
+// ── Registration ──────────────────────────────────────────────────────────────
+async function doRegister() {
+  clearMsg();
+  const name  = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const firm  = document.getElementById('regFirm').value.trim();
+  const pwd   = document.getElementById('regPwd').value;
+
+  if (!name)  { showMsg('msg2b','err','Full name is required.'); return; }
+  if (!phone || phone.replace(/\D/g,'').length < 10) { showMsg('msg2b','err','Enter a valid 10-digit phone number.'); return; }
+  if (pwd.length < 8) { showMsg('msg2b','err','Password must be at least 8 characters.'); return; }
+
+  const btn = document.getElementById('registerBtn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+
+  try {
+    const res = await fetch('/nidaan/api/signup', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        owner_name: name, email: _email, phone: phone.replace(/\D/g,''),
+        password: pwd, firm_name: firm,
+        plan: _plan || 'free'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+    _loginSuccess(data);
+  } catch(e) {
+    showMsg('msg2b','err', e.message);
+    btn.disabled = false; btn.innerHTML = 'Create free account &rarr;';
+  }
+}
+
+// ── Auth success ──────────────────────────────────────────────────────────────
+function _loginSuccess(data) {
+  const token = data.access_token || data.token;
+  const plan  = data.plan || data.account?.plan || '';
+  localStorage.setItem('nidaan_token', token);
+  localStorage.setItem('nidaan_plan',  plan);
+  // If they came from a plan card, go to dashboard and open subscribe modal
+  const dest = '/nidaan/dashboard' + (_plan ? '?subscribe=' + _plan : '');
+  window.location.href = dest;
+}
+
+// ── Google Sign-In / Sign-Up ──────────────────────────────────────────────────
+async function _initGoogle() {
+  try {
+    const r = await fetch('/nidaan/api/google-client-id');
+    const {client_id} = await r.json();
+    if (!client_id) {
+      ['googleStub1','googleAreaStep2a','googleAreaStep2b'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      document.getElementById('divider2a').querySelector('span').textContent = 'sign in with';
+      document.getElementById('divider2b').querySelector('span').textContent = 'register with email';
+      return;
+    }
+    if (!window.google?.accounts?.id) {
+      // SDK not ready yet — retry once
+      setTimeout(_initGoogle, 1500);
+      return;
+    }
+    document.getElementById('googleStub1').style.display = 'none';
+
+    // Step 1 button
+    google.accounts.id.initialize({ client_id, callback: _handleGoogleStep1 });
+    google.accounts.id.renderButton(document.getElementById('googleBtn1'),
+      { theme:'filled_black', size:'large', width:380, text:'continue_with' });
+    document.getElementById('googleBtn1').style.display = 'flex';
+
+    // Step 2a button (sign in)
+    google.accounts.id.initialize({ client_id, callback: _handleGoogleLogin });
+    google.accounts.id.renderButton(document.getElementById('googleBtn2a'),
+      { theme:'filled_black', size:'large', width:380, text:'signin_with' });
+    document.getElementById('googleBtn2a').style.display = 'flex';
+
+    // Step 2b button (sign up)
+    google.accounts.id.initialize({ client_id, callback: _handleGoogleSignup });
+    google.accounts.id.renderButton(document.getElementById('googleBtn2b'),
+      { theme:'filled_black', size:'large', width:380, text:'signup_with' });
+    document.getElementById('googleBtn2b').style.display = 'flex';
+  } catch(e) {
+    console.warn('Google init failed:', e);
+  }
+}
+
+// Google on step 1 — smart: check if exists first, then sign in or sign up
+async function _handleGoogleStep1(response) {
+  try {
+    // Try login first
+    const res = await fetch('/nidaan/api/google', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({credential: response.credential})
+    });
+    if (res.ok) { _loginSuccess(await res.json()); return; }
+    if (res.status === 404) {
+      // Not registered — do signup automatically
+      const res2 = await fetch('/nidaan/api/signup/google', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({credential: response.credential, plan: _plan || 'free'})
+      });
+      if (res2.ok) { _loginSuccess(await res2.json()); return; }
+      const d2 = await res2.json();
+      throw new Error(d2.detail || 'Google signup failed');
+    }
+    const d = await res.json();
+    throw new Error(d.detail || 'Google sign-in failed');
+  } catch(e) {
+    showMsg('msg1','err', e.message);
+  }
+}
+
+async function _handleGoogleLogin(response) {
+  try {
+    const res = await fetch('/nidaan/api/google', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({credential: response.credential})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Google sign-in failed');
+    _loginSuccess(data);
+  } catch(e) { showMsg('msg2a','err', e.message); }
+}
+
+async function _handleGoogleSignup(response) {
+  try {
+    const res = await fetch('/nidaan/api/signup/google', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({credential: response.credential, plan: _plan || 'free'})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Google sign-up failed');
+    _loginSuccess(data);
+  } catch(e) { showMsg('msg2b','err', e.message); }
+}
+
+// ── Auto-detect if already logged in ─────────────────────────────────────────
+if (localStorage.getItem('nidaan_token')) {
+  window.location.replace('/nidaan/dashboard');
+}
+
+// ── Load Google GSI SDK ───────────────────────────────────────────────────────
+(function() {
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.async = true;
+  s.defer = true;
+  s.onload = _initGoogle;
+  document.head.appendChild(s);
+})();
+// Also run after 2s in case onload already fired before script attached
+setTimeout(() => { if (!window._googleInitDone) _initGoogle(); }, 2000);
+window._googleInitDone = false;
+const _orig = _initGoogle;
+window._initGoogle = async function() { window._googleInitDone = true; return _orig(); };
+</script>
+</body>
+</html>
