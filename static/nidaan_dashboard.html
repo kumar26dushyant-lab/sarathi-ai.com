@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — Nidaan Partner</title>
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<link rel="manifest" href="/static/nidaan.webmanifest">
+<meta name="theme-color" content="#06b6d4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nidaan Partner">
+<link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh;min-height:100svh}
   a{color:#22d3ee;text-decoration:none}
 
   /* NAV */
@@ -208,7 +214,58 @@
   .plan-opt .po-badge{display:inline-block;background:#22d3ee;color:#0a1628;font-size:.62rem;font-weight:800;padding:.15rem .45rem;border-radius:10px;margin-bottom:.35rem}
   .settings-section{margin-bottom:1.5rem}
   .settings-section h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:.85rem}
-  @media(max-width:700px){.profile-grid{grid-template-columns:1fr}.plan-upgrade-grid{grid-template-columns:1fr}}
+  /* ── MOBILE ── */
+  @media(max-width:700px){
+    .profile-grid{grid-template-columns:1fr}
+    .plan-upgrade-grid{grid-template-columns:1fr}
+    .info-card{padding:1rem}
+    .info-row{font-size:.82rem}
+    .settings-section .edit-form{max-width:100%!important}
+    .tab-btn{padding:.55rem .9rem;font-size:.83rem;min-height:44px}
+    .container{padding:1.1rem .85rem}
+    .plan-upgrade-grid{gap:.55rem}
+  }
+  @media(max-width:500px){
+    .plan-cards{grid-template-columns:1fr;gap:.6rem}
+    .plan-card{display:flex;align-items:center;gap:1rem;text-align:left;padding:.8rem 1rem}
+    .plan-card .pc-quota{margin-top:0}
+  }
+  @media(max-width:480px){
+    /* Nav */
+    nav{padding:.55rem .75rem;gap:.3rem}
+    .plan-badge{max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.66rem;padding:.18rem .4rem}
+    .nav-right{gap:.3rem}
+    .btn-ghost{font-size:.72rem;padding:.25rem .5rem}
+    /* Tabs */
+    .tab-btn{padding:.5rem .65rem;font-size:.78rem}
+    /* Info rows */
+    .info-row{flex-direction:column;align-items:flex-start;gap:.1rem}
+    .info-val{text-align:left;font-size:.83rem;word-break:break-all}
+    /* Sub actions */
+    #subActionsRow{flex-direction:column;gap:.45rem}
+    #subActionsRow button{width:100%}
+    /* Plan upgrade grid 2-col */
+    .plan-upgrade-grid{grid-template-columns:repeat(2,1fr)}
+    /* Modal */
+    .modal{padding:1rem .9rem;max-height:96dvh;border-radius:14px}
+    .modal-footer{flex-direction:column-reverse;gap:.45rem}
+    .modal-footer .btn{width:100%}
+    /* Page title */
+    .page-title{font-size:1.1rem}
+    .page-sub{font-size:.8rem}
+    /* Stats */
+    .stats{grid-template-columns:repeat(2,1fr);gap:.6rem}
+    .stat{padding:.7rem .85rem}
+    .stat-val{font-size:1.3rem}
+    .stat-label{font-size:.68rem}
+    /* Edit form footer */
+    .edit-form-footer{flex-direction:column-reverse;gap:.45rem}
+    .edit-form-footer .btn{width:100%}
+    /* Section h3 */
+    .info-card h3{font-size:.72rem}
+    /* Settings edit form */
+    .settings-section{margin-bottom:1.2rem}
+  }
   .plan-card:hover{border-color:rgba(6,182,212,.5);background:rgba(6,182,212,.07)}
   .plan-card.selected{border-color:#06b6d4;background:rgba(6,182,212,.12)}
   .plan-card .pc-name{font-weight:800;font-size:.95rem;text-transform:capitalize;margin-bottom:.35rem;color:#fff}
@@ -216,11 +273,6 @@
   .plan-card .pc-period{font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem}
   .plan-card .pc-quota{font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.35}
   .sub-info{font-size:.82rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.9rem}
-  @media(max-width:500px){
-    .plan-cards{grid-template-columns:1fr;gap:.6rem}
-    .plan-card{display:flex;align-items:center;gap:1rem;text-align:left;padding:.8rem 1rem}
-    .plan-card .pc-quota{margin-top:0}
-  }
 </style>
 </head>
 <body class="body en">
@@ -243,6 +295,22 @@
 </nav>
 
 <div class="container">
+
+  <!-- PWA Install Banner -->
+  <div id="pwaInstallBanner" style="display:none;background:linear-gradient(90deg,#0c4a6e,#0891b2);border-radius:12px;padding:.75rem 1rem;margin-bottom:1.25rem;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid rgba(6,182,212,.3)">
+    <div style="display:flex;align-items:center;gap:.55rem;min-width:0;overflow:hidden">
+      <img src="/static/nidaan_logo.png" alt="" style="width:30px;height:30px;border-radius:6px;flex-shrink:0">
+      <div style="min-width:0;overflow:hidden">
+        <div style="font-weight:700;font-size:.83rem;color:#fff">📲 Install Nidaan Partner App</div>
+        <div style="font-size:.72rem;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Faster access · Works offline · Home screen icon</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.4rem;flex-shrink:0">
+      <button onclick="triggerDashboardInstall()" style="background:#fff;color:#0891b2;border:none;padding:.4rem .85rem;border-radius:7px;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap">Install</button>
+      <button onclick="document.getElementById('pwaInstallBanner').style.display='none'" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:.4rem .55rem;border-radius:7px;font-size:.8rem;cursor:pointer">✕</button>
+    </div>
+  </div>
+
   <!-- Page title -->
   <div class="page-title en" id="greet">Dashboard</div>
   <div class="page-title hi" id="greetHi">डैशबोर्ड</div>
@@ -452,7 +520,7 @@
     <div class="info-card settings-section">
       <h3 class="en">Change Password</h3>
       <h3 class="hi">पासवर्ड बदलें</h3>
-      <div class="edit-form" style="max-width:420px">
+      <div class="edit-form" style="max-width:min(420px,100%)">
         <div class="field"><label class="en">Current Password</label><label class="hi">वर्तमान पासवर्ड</label><input type="password" id="cp-current" placeholder="Current password"></div>
         <div class="field"><label class="en">New Password</label><label class="hi">नया पासवर्ड</label><input type="password" id="cp-new" placeholder="Min 8 characters"></div>
         <div class="field"><label class="en">Confirm New Password</label><label class="hi">पासवर्ड की पुष्टि करें</label><input type="password" id="cp-confirm" placeholder="Repeat new password"></div>
@@ -1097,6 +1165,34 @@ loadDashboard().then(() => {
   }
   history.replaceState(null, '', '/nidaan/dashboard');
 });
+
+// ── PWA Install Prompt ────────────────────────────────────────────────────────
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredInstall = e;
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'flex';
+});
+window.addEventListener('appinstalled', function() {
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'none';
+  _deferredInstall = null;
+});
+function triggerDashboardInstall() {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall.userChoice.then(function() {
+    _deferredInstall = null;
+    const banner = document.getElementById('pwaInstallBanner');
+    if (banner) banner.style.display = 'none';
+  });
+}
+
+// ── Service Worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/nidaan-sw.js').catch(function(){});
+}
 </script>
 </body>
 </html>

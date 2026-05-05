@@ -6,19 +6,25 @@
 <title>Get Started — Nidaan Partner</title>
 <meta name="description" content="Sign in or create your free Nidaan Partner account.">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<link rel="manifest" href="/static/nidaan.webmanifest">
+<meta name="theme-color" content="#060f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nidaan Partner">
+<link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060f1e;color:#fff;min-height:100vh;display:flex;flex-direction:column}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060f1e;color:#fff;min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
 
 /* ── NAV ── */
-nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:rgba(6,15,30,.95);border-bottom:1px solid rgba(255,255,255,.07)}
+nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:rgba(6,15,30,.95);border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
 .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;text-decoration:none}
 .nav-brand img{height:32px;border-radius:5px}
 .nav-back{font-size:.85rem;color:rgba(255,255,255,.5);text-decoration:none;transition:color .15s}
 .nav-back:hover{color:#22d3ee}
 
 /* ── LAYOUT ── */
-.page{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.page{flex:1;display:flex;align-items:center;justify-content:center;padding:1.5rem 1rem;overflow-y:auto}
 .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:440px;position:relative}
 
 /* ── STEPS ── */
@@ -84,10 +90,24 @@ input::placeholder{color:rgba(255,255,255,.25)}
 
 /* ── RESPONSIVE ── */
 @media(max-width:480px){
-  .card{padding:1.6rem 1.25rem;border-radius:16px}
-  h1{font-size:1.25rem}
+  .card{padding:1.5rem 1.1rem;border-radius:16px;margin:.5rem auto}
+  h1{font-size:1.2rem}
   .row2{grid-template-columns:1fr}
-  nav{padding:.7rem .85rem}
+  nav{padding:.65rem .85rem}
+  .nav-back{font-size:.78rem}
+  .card-icon{font-size:1.6rem;margin-bottom:.4rem}
+  .card-sub{font-size:.83rem;margin-bottom:1.2rem}
+  .btn{padding:.75rem 1rem;font-size:.92rem}
+  .tabs{gap:.25rem}
+  .tab{font-size:.78rem;padding:.4rem .3rem}
+  .otp-actions{flex-wrap:wrap;gap:.5rem}
+  .otp-actions .btn-sm{flex:1;min-width:0}
+  .page{padding:1rem .6rem;align-items:flex-start}
+}
+@media(max-width:360px){
+  .card{padding:1.2rem .85rem}
+  h1{font-size:1.1rem}
+  .btn{font-size:.87rem}
 }
 </style>
 </head>

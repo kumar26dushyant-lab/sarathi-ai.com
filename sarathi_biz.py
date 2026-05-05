@@ -35,7 +35,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
+import mimetypes
 import uvicorn
+
+# Register PWA MIME types that Python stdlib may not know about
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("application/javascript", ".js")
 
 import biz_database as db
 import biz_bot as bot

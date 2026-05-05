@@ -328,8 +328,24 @@ span.hi-inline{display:none}
   .footer-grid{grid-template-columns:1fr}
   .platforms-grid{gap:.5rem}
   .platform-chip{font-size:.8rem;padding:.4rem .75rem}
+  /* Ensure sticky CTA doesn't clip */
+  .sticky-cta{padding:.55rem .75rem}
+  .sticky-cta .sc-text{font-size:.75rem;max-width:calc(100vw - 130px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sticky-cta a{padding:.4rem .7rem;font-size:.76rem}
+  /* Bundle features 1 col */
+  .bundle-features{grid-template-columns:1fr}
+  /* D2C price */
+  .d2c-price{font-size:2rem}
+  /* Plan card padding */
+  .plan-card{padding:1.4rem 1.1rem}
+  .plan-price{font-size:1.8rem}
 }
 </style>
+<link rel="manifest" href="/static/nidaan.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nidaan Partner">
+<link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 </head>
 <body class="en">
 
@@ -1037,10 +1053,25 @@ span.hi-inline{display:none}
   </div>
 </footer>
 
+<!-- PWA Install Banner -->
+<div id="pwaInstallBanner" style="display:none;position:fixed;bottom:56px;left:0;right:0;z-index:91;
+  background:linear-gradient(90deg,#0e4d6a,#0891b2);color:#fff;padding:.65rem 1rem;
+  align-items:center;justify-content:space-between;gap:.6rem;box-shadow:0 -2px 12px rgba(0,0,0,.35)">
+  <div style="display:flex;align-items:center;gap:.55rem;min-width:0;overflow:hidden">
+    <img src="/static/nidaan_logo.png" alt="" style="width:30px;height:30px;border-radius:6px;flex-shrink:0">
+    <div style="min-width:0;overflow:hidden">
+      <div style="font-weight:700;font-size:.83rem">Install Nidaan Partner App</div>
+      <div style="font-size:.72rem;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Faster · Works offline · Home screen icon</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:.4rem;flex-shrink:0">
+    <button onclick="triggerInstall()" style="background:#fff;color:#0891b2;border:none;padding:.4rem .85rem;border-radius:7px;font-weight:700;font-size:.8rem;cursor:pointer">Install</button>
+    <button onclick="document.getElementById('pwaInstallBanner').style.display='none'" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:.4rem .6rem;border-radius:7px;font-size:.8rem;cursor:pointer">✕</button>
+  </div>
+</div>
+
 <!-- ══════════ STICKY CTA ══════════ -->
 <div class="sticky-cta" id="stickyCta">
-  <div style="min-width:0;overflow:hidden">
-    <div class="sc-text en">🛡️ Get Nidaan Partner Plan</div>
     <div class="sc-text hi" style="display:none">🛡️ Nidaan Partner प्लान लें</div>
     <div class="sc-sub en">Sarathi-AI CRM bundled free · from ₹1,500/quarter</div>
     <div class="sc-sub hi" style="display:none">Sarathi-AI CRM मुफ्त · ₹1,500/तिमाही से</div>
@@ -1091,6 +1122,34 @@ document.querySelectorAll('a[href^="#"]').forEach(function(a){
     if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'}); }
   });
 });
+
+// ── PWA install prompt ──
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredInstall = e;
+  var banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'flex';
+});
+window.addEventListener('appinstalled', function() {
+  var banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'none';
+  _deferredInstall = null;
+});
+function triggerInstall() {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall.userChoice.then(function(r) {
+    _deferredInstall = null;
+    var banner = document.getElementById('pwaInstallBanner');
+    if (banner) banner.style.display = 'none';
+  });
+}
+
+// ── Service Worker ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/nidaan-sw.js').catch(function(){});
+}
 </script>
 </body>
 </html>

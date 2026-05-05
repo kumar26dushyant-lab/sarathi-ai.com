@@ -1,0 +1,35 @@
+{
+  "name": "Nidaan Partner",
+  "short_name": "Nidaan",
+  "description": "Insurance Claim Advisory Platform for IRDAI Advisors",
+  "start_url": "/nidaan/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a1628",
+  "theme_color": "#06b6d4",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/static/nidaan_logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/nidaan_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/nidaan/dashboard",
+      "icons": [{"src": "/static/nidaan_logo.png", "sizes": "192x192"}]
+    }
+  ],
+  "categories": ["business", "finance"]
+}
