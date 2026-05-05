@@ -396,6 +396,27 @@ async def get_claims(
         return [dict(r) for r in rows]
 
 
+async def get_claim_detail(claim_id: int, account_id: int) -> Optional[dict]:
+    """Return a single claim (ownership-verified) plus its full status history."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        # Ownership check: claim must belong to this account
+        cur = await conn.execute(
+            "SELECT * FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        claim = dict(row)
+        log_cur = await conn.execute(
+            "SELECT * FROM nidaan_claim_status_log WHERE claim_id=? ORDER BY changed_at ASC",
+            (claim_id,),
+        )
+        claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
+        return claim
+
+
 # =============================================================================
 #  ADMIN OPERATIONS
 # =============================================================================

@@ -627,6 +627,17 @@ async def nidaan_api_claims(request: Request, status: Optional[str] = None, limi
     return {"claims": claims, "count": len(claims)}
 
 
+@app.get("/nidaan/api/claims/{claim_id}")
+async def nidaan_api_claim_detail(claim_id: int, request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    claim = await nidaan.get_claim_detail(claim_id, account_id=payload["sub"])
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return claim
+
+
 @app.post("/nidaan/api/claims/submit")
 async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
