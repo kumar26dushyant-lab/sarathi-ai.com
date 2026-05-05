@@ -649,6 +649,24 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
+    # Notify admin of new claim (non-blocking)
+    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if _admin_email:
+        import asyncio as _asyncio_nc
+        account = await nidaan.get_account_by_email(payload["email"])
+        _asyncio_nc.ensure_future(
+            email_svc.send_nidaan_new_claim_admin_email(
+                admin_email=_admin_email,
+                claim_id=claim_id,
+                advisor_name=account["owner_name"] if account else payload.get("email", ""),
+                advisor_email=payload["email"],
+                insured_name=body.insured_name,
+                claim_type=body.claim_type,
+                insurer_name=body.insurer_name or "",
+                disputed_amount=body.disputed_amount,
+                notes=body.notes_from_agent or "",
+            )
+        )
     return {"claim_id": claim_id, "status": "intimated"}
 
 

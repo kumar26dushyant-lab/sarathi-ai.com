@@ -253,6 +253,65 @@ async def send_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
     return await send_email(to_email, f"Sarathi-AI Login Code: {otp}", _wrap_template("Login Code", content))
 
 
+async def send_nidaan_new_claim_admin_email(
+    admin_email: str,
+    claim_id: int,
+    advisor_name: str,
+    advisor_email: str,
+    insured_name: str,
+    claim_type: str,
+    insurer_name: str = "",
+    disputed_amount: Optional[int] = None,
+    notes: str = "",
+) -> bool:
+    """Notify admin when a new Nidaan claim is submitted."""
+    amt_str = f"₹{disputed_amount:,}" if disputed_amount else "—"
+    notes_section = ""
+    if notes and notes.strip():
+        notes_section = f"""
+<div class="highlight">
+  <strong>Agent notes:</strong><br>{notes.strip()}
+</div>"""
+    content = f"""
+<h2>New Claim Submitted — #{claim_id}</h2>
+<p>A new claim has been submitted on <strong>Nidaan Partner</strong> and requires assignment.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+  <tr style="border-bottom:1px solid #e2e8f0">
+    <td style="padding:8px 0;color:#64748b;width:140px">Claim #</td>
+    <td style="padding:8px 0;font-weight:700;color:#1e293b">#{claim_id}</td>
+  </tr>
+  <tr style="border-bottom:1px solid #e2e8f0">
+    <td style="padding:8px 0;color:#64748b">Advisor</td>
+    <td style="padding:8px 0;color:#1e293b">{advisor_name} &lt;{advisor_email}&gt;</td>
+  </tr>
+  <tr style="border-bottom:1px solid #e2e8f0">
+    <td style="padding:8px 0;color:#64748b">Client</td>
+    <td style="padding:8px 0;color:#1e293b">{insured_name}</td>
+  </tr>
+  <tr style="border-bottom:1px solid #e2e8f0">
+    <td style="padding:8px 0;color:#64748b">Type</td>
+    <td style="padding:8px 0;color:#1e293b;text-transform:capitalize">{claim_type.replace('_',' ')}</td>
+  </tr>
+  <tr style="border-bottom:1px solid #e2e8f0">
+    <td style="padding:8px 0;color:#64748b">Insurer</td>
+    <td style="padding:8px 0;color:#1e293b">{insurer_name or '—'}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 0;color:#64748b">Disputed Amt</td>
+    <td style="padding:8px 0;font-weight:700;color:#1a56db">{amt_str}</td>
+  </tr>
+</table>
+{notes_section}
+<p style="text-align:center;margin-top:24px">
+  <a href="https://nidaanpartner.com/nidaan/admin" class="btn">Open Admin Panel</a>
+</p>"""
+    return await send_email(
+        admin_email,
+        f"New Claim #{claim_id} — {insured_name} | Nidaan Partner",
+        _wrap_template("New Claim", content),
+    )
+
+
 async def send_nidaan_claim_status_email(
     to_email: str,
     owner_name: str,
