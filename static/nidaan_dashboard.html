@@ -133,6 +133,22 @@
     .stats{grid-template-columns:repeat(2,1fr)}
     .nav-right .lang-toggle{display:none}
   }
+
+  /* PLAN CARDS */
+  .plan-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-bottom:1.25rem}
+  .plan-card{border:2px solid rgba(255,255,255,.12);border-radius:12px;padding:1rem .75rem;cursor:pointer;transition:border .18s,background .18s;text-align:center;background:rgba(255,255,255,.03)}
+  .plan-card:hover{border-color:rgba(6,182,212,.5);background:rgba(6,182,212,.07)}
+  .plan-card.selected{border-color:#06b6d4;background:rgba(6,182,212,.12)}
+  .plan-card .pc-name{font-weight:800;font-size:.95rem;text-transform:capitalize;margin-bottom:.35rem;color:#fff}
+  .plan-card .pc-price{font-size:1.35rem;font-weight:800;color:#22d3ee;line-height:1}
+  .plan-card .pc-period{font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem}
+  .plan-card .pc-quota{font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.35}
+  .sub-info{font-size:.82rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.9rem}
+  @media(max-width:500px){
+    .plan-cards{grid-template-columns:1fr;gap:.6rem}
+    .plan-card{display:flex;align-items:center;gap:1rem;text-align:left;padding:.8rem 1rem}
+    .plan-card .pc-quota{margin-top:0}
+  }
 </style>
 </head>
 <body class="body en">
@@ -169,8 +185,10 @@
       <span class="en">Subscribe to a plan to start submitting claims.</span>
       <span class="hi">क्लेम सबमिट करने के लिए प्लान सब्सक्राइब करें।</span>
     </div>
-    <a href="/nidaan/signup" class="btn-sm btn-cyan en" style="text-decoration:none;padding:.45rem 1rem">Subscribe →</a>
-    <a href="/nidaan/signup" class="btn-sm btn-cyan hi" style="text-decoration:none;padding:.45rem 1rem">सब्सक्राइब करें →</a>
+    <button class="btn-sm btn-cyan" onclick="openSubscribeModal()" style="padding:.45rem 1rem">
+      <span class="en">Choose a Plan →</span>
+      <span class="hi">प्लान चुनें →</span>
+    </button>
   </div>
 
   <!-- Stats -->
@@ -231,6 +249,54 @@
         <tr><td colspan="5" class="empty hi">क्लेम लोड हो रहे हैं…</td></tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<!-- Subscribe Plan Modal -->
+<div class="modal-bg" id="subscribeModal">
+  <div class="modal">
+    <h2 class="en">Choose a Subscription Plan</h2>
+    <h2 class="hi">सदस्यता प्लान चुनें</h2>
+
+    <div class="plan-cards">
+      <div class="plan-card" id="pc-silver" onclick="selectPlan('silver')">
+        <div class="pc-name">Silver</div>
+        <div class="pc-price">₹1,500</div>
+        <div class="pc-period en">per quarter</div>
+        <div class="pc-period hi">प्रति तिमाही</div>
+        <div class="pc-quota en">10 claims/quarter<br>Basic support</div>
+        <div class="pc-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+      </div>
+      <div class="plan-card" id="pc-gold" onclick="selectPlan('gold')">
+        <div class="pc-name">Gold</div>
+        <div class="pc-price">₹3,000</div>
+        <div class="pc-period en">per quarter</div>
+        <div class="pc-period hi">प्रति तिमाही</div>
+        <div class="pc-quota en">25 claims/quarter<br>Priority support</div>
+        <div class="pc-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+      </div>
+      <div class="plan-card" id="pc-platinum" onclick="selectPlan('platinum')">
+        <div class="pc-name">Platinum</div>
+        <div class="pc-price">₹6,000</div>
+        <div class="pc-period en">per quarter</div>
+        <div class="pc-period hi">प्रति तिमाही</div>
+        <div class="pc-quota en">Unlimited claims<br>Dedicated manager</div>
+        <div class="pc-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+      </div>
+    </div>
+
+    <p class="sub-info en">You'll be redirected to Razorpay to complete payment securely.</p>
+    <p class="sub-info hi">भुगतान पूरा करने के लिए आपको Razorpay पर रिडायरेक्ट किया जाएगा।</p>
+
+    <div class="msg" id="subMsg"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" onclick="closeSubscribeModal()">
+        <span class="en">Cancel</span><span class="hi">रद्द करें</span>
+      </button>
+      <button type="button" class="btn btn-primary" id="subBtn" onclick="doSubscribe()" disabled>
+        <span class="en">Subscribe →</span><span class="hi">सब्सक्राइब करें →</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -428,6 +494,54 @@ async function submitClaim(e) {
     msg.textContent = isHi ? `क्लेम #${data.claim_id} सफलतापूर्वक दर्ज हुआ!` : `Claim #${data.claim_id} submitted successfully!`;
     document.getElementById('claimForm').reset();
     setTimeout(() => { closeModal(); loadDashboard(); }, 1500);
+  } catch(err) {
+    msg.className = 'msg err';
+    msg.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+// ── Subscribe modal ──────────────────────────────────────────────────────────
+let _selectedPlan = null;
+
+function openSubscribeModal() {
+  _selectedPlan = null;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('subBtn').disabled = true;
+  document.getElementById('subMsg').className = 'msg';
+  document.getElementById('subscribeModal').classList.add('open');
+}
+function closeSubscribeModal() {
+  document.getElementById('subscribeModal').classList.remove('open');
+}
+function selectPlan(plan) {
+  _selectedPlan = plan;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('pc-' + plan).classList.add('selected');
+  document.getElementById('subBtn').disabled = false;
+}
+async function doSubscribe() {
+  if (!_selectedPlan) return;
+  const btn = document.getElementById('subBtn');
+  const msg = document.getElementById('subMsg');
+  btn.disabled = true;
+  msg.className = 'msg';
+  try {
+    const res = await api('/nidaan/api/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ plan: _selectedPlan })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Subscription failed');
+    if (data.short_url) {
+      window.location.href = data.short_url;
+    } else {
+      msg.className = 'msg ok';
+      const isHi = document.body.classList.contains('hi');
+      msg.textContent = isHi ? 'सदस्यता बनाई गई! पृष्ठ रिफ्रेश हो रहा है…' : 'Subscription created! Refreshing…';
+      setTimeout(() => { closeSubscribeModal(); loadDashboard(); }, 1500);
+    }
   } catch(err) {
     msg.className = 'msg err';
     msg.textContent = err.message;
