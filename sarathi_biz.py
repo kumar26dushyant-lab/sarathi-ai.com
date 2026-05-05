@@ -908,6 +908,24 @@ async def nidaan_api_admin_update_claim(
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Claim not found")
+    # Fire status-update email to the advisor (non-blocking)
+    try:
+        claim = await nidaan.get_claim_with_account(claim_id)
+        if claim and claim.get("email"):
+            import asyncio as _asyncio_email
+            _asyncio_email.ensure_future(
+                email_svc.send_nidaan_claim_status_email(
+                    to_email=claim["email"],
+                    owner_name=claim.get("owner_name", ""),
+                    claim_id=claim_id,
+                    insured_name=claim.get("insured_name", ""),
+                    claim_type=claim.get("claim_type", ""),
+                    new_status=body.new_status,
+                    note=body.note or "",
+                )
+            )
+    except Exception:
+        pass  # email failure must never break the API response
     return {"claim_id": claim_id, "status": body.new_status}
 
 

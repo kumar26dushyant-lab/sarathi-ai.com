@@ -253,6 +253,69 @@ async def send_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
     return await send_email(to_email, f"Sarathi-AI Login Code: {otp}", _wrap_template("Login Code", content))
 
 
+async def send_nidaan_claim_status_email(
+    to_email: str,
+    owner_name: str,
+    claim_id: int,
+    insured_name: str,
+    claim_type: str,
+    new_status: str,
+    note: str = "",
+) -> bool:
+    """Notify a Nidaan advisor that their claim status has been updated."""
+    STATUS_LABELS = {
+        "intimated": "Intimated",
+        "assigned": "Assigned to Legal Team",
+        "in_review": "Under Review",
+        "in_negotiation": "In Negotiation",
+        "resolved_won": "Resolved — Won ✓",
+        "resolved_lost": "Resolved — Lost",
+        "closed": "Closed",
+        "withdrawn": "Withdrawn",
+    }
+    STATUS_COLORS = {
+        "intimated": "#d97706",
+        "assigned": "#2563eb",
+        "in_review": "#7c3aed",
+        "in_negotiation": "#ea580c",
+        "resolved_won": "#16a34a",
+        "resolved_lost": "#dc2626",
+        "closed": "#6b7280",
+        "withdrawn": "#6b7280",
+    }
+    label = STATUS_LABELS.get(new_status, new_status.replace("_", " ").title())
+    color = STATUS_COLORS.get(new_status, "#1a56db")
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    note_section = ""
+    if note and note.strip():
+        note_section = f"""
+<div class="highlight">
+  <strong>Note from our team:</strong><br>
+  {note.strip()}
+</div>"""
+    content = f"""
+<h2>Claim Status Update</h2>
+<p>{greeting}</p>
+<p>Your claim <strong>#{claim_id}</strong> for client <strong>{insured_name}</strong>
+({claim_type.replace('_', ' ').title()}) has been updated:</p>
+<div style="text-align:center;margin:24px 0">
+  <span style="display:inline-block;padding:10px 24px;border-radius:20px;
+    background:{color}1a;border:2px solid {color};color:{color};
+    font-weight:700;font-size:1rem;letter-spacing:.03em">{label}</span>
+</div>
+{note_section}
+<p>Log in to your dashboard to view the full status history and any documents.</p>
+<p style="text-align:center;margin-top:24px">
+  <a href="https://nidaanpartner.com/nidaan/dashboard" class="btn">View Dashboard</a>
+</p>
+<p style="color:#94a3b8;font-size:13px;margin-top:28px">
+  If you have questions, reply to this email or contact us at
+  <a href="mailto:support@sarathi-ai.com" style="color:#64748b">support@sarathi-ai.com</a>.
+</p>"""
+    subject = f"Claim #{claim_id} — {label} | Nidaan Partner"
+    return await send_email(to_email, subject, _wrap_template("Claim Status Update", content))
+
+
 async def send_trial_reminder(to_email: str, owner_name: str, firm_name: str,
                                days_left: int, tenant_id: int) -> bool:
     """Send trial expiry reminder."""

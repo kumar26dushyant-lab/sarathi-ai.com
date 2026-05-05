@@ -354,6 +354,23 @@ async def update_claim_status(
     return True
 
 
+async def get_claim_with_account(claim_id: int) -> Optional[dict]:
+    """Fetch a single claim joined with its account email and owner_name."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """
+            SELECT c.*, a.email, a.owner_name, a.phone AS advisor_phone
+            FROM nidaan_claims c
+            JOIN nidaan_accounts a ON a.account_id = c.account_id
+            WHERE c.claim_id = ?
+            """,
+            (claim_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
 async def get_claims(
     account_id: int,
     status: Optional[str] = None,
