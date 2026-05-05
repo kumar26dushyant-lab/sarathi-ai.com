@@ -530,7 +530,7 @@ def create_nidaan_token(account_id: int, email: str, plan: str = "") -> str:
     """Create a signed JWT for a Nidaan account session (valid 30 days)."""
     payload = {
         "typ": "nidaan",
-        "sub": account_id,
+        "sub": str(account_id),  # PyJWT v2.9+ requires sub to be a string
         "email": email,
         "plan": plan,
         "iat": int(datetime.utcnow().timestamp()),
@@ -542,11 +542,17 @@ def create_nidaan_token(account_id: int, email: str, plan: str = "") -> str:
 def verify_nidaan_token(token: str) -> Optional[dict]:
     """Decode and verify a Nidaan JWT. Returns payload dict or None."""
     try:
-        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        payload = _jwt_lib.decode(
+            token, _nidaan_secret(), algorithms=["HS256"],
+            options={"verify_sub": False}  # sub may be int (old tokens) or str (new)
+        )
         if payload.get("typ") != "nidaan":
             return None
+        # Normalise sub to int for all callers
+        payload["sub"] = int(payload["sub"])
         return payload
-    except Exception:
+    except Exception as e:
+        logger.debug("Nidaan token verify failed: %s", e)
         return None
 
 

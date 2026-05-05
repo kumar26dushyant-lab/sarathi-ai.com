@@ -430,7 +430,7 @@ const TOKEN_KEY = 'nidaan_token';
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 const token = localStorage.getItem(TOKEN_KEY);
-if (!token) { location.href = '/nidaan/login'; }
+if (!token) { location.href = '/nidaan/start'; }
 
 // ── API helper ────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
@@ -683,7 +683,7 @@ async function doSubscribe() {
 function doLogout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('nidaan_plan');
-  location.href = '/nidaan/login';
+  location.href = '/nidaan/start';
 }
 
 // ── Language ──────────────────────────────────────────────────────────────────

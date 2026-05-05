@@ -172,6 +172,41 @@ body{{margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,Geneva
 </div></body></html>"""
 
 
+def _wrap_nidaan_template(title: str, content: str) -> str:
+    """Wrap email content in Nidaan Partner branded HTML template."""
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{title}</title>
+<style>
+body{{margin:0;padding:0;background:#060f1e;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}}
+.container{{max-width:600px;margin:0 auto;background:#0c1a2e;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.4)}}
+.header{{background:linear-gradient(135deg,#0e7490,#06b6d4);padding:28px 24px;text-align:center}}
+.header-title{{color:#fff;margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px}}
+.header-sub{{color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px}}
+.body{{padding:32px 24px}}
+.body h2{{color:#22d3ee;font-size:20px;margin:0 0 16px}}
+.body p{{color:#94a3b8;font-size:15px;line-height:1.7;margin:0 0 16px}}
+.body strong{{color:#e2e8f0}}
+.footer{{background:#060f1e;padding:20px 24px;text-align:center;border-top:1px solid rgba(255,255,255,0.07)}}
+.footer p{{color:#475569;font-size:12px;margin:4px 0}}
+.footer a{{color:#475569}}
+</style></head>
+<body><div class="container">
+<div class="header">
+  <div class="header-title">🛡️ Nidaan Partner</div>
+  <div class="header-sub">Insurance Claim Dispute Management</div>
+</div>
+<div class="body">
+{content}
+</div>
+<div class="footer">
+  <p>Nidaan Partner — by Sarathi-AI Business Technologies</p>
+  <p><a href="mailto:support@nidaanpartner.com">support@nidaanpartner.com</a> &bull; <a href="https://nidaanpartner.com">nidaanpartner.com</a></p>
+  <p style="margin-top:8px;font-size:11px;color:#334155">This is an automated notification. Do not reply to this email.</p>
+</div>
+</div></body></html>"""
+
+
 # ── Email Templates ──────────────────────────────────────────────────────────
 
 async def send_welcome(to_email: str, owner_name: str, firm_name: str, tenant_id: int) -> bool:
@@ -257,19 +292,20 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
     """Send OTP login code branded as Nidaan Partner."""
     greeting = f"Hi {owner_name}," if owner_name else "Hi,"
     content = f"""
-<h2 style="color:#06b6d4">Your Nidaan Partner Login Code</h2>
+<h2>Your Nidaan Partner Login Code</h2>
 <p>{greeting}</p>
 <p>Use this one-time code to sign in to your <strong>Nidaan Partner</strong> account:</p>
-<div class="otp-code" style="background:#0c4a6e;color:#7dd3fc;letter-spacing:.35em;font-size:2rem;
-  text-align:center;padding:1.25rem;border-radius:12px;font-weight:800;margin:1.5rem 0">{otp}</div>
+<div style="background:#0e4863;color:#7dd3fc;letter-spacing:.35em;font-size:2.2rem;
+  text-align:center;padding:1.4rem 1rem;border-radius:12px;font-weight:800;margin:1.5rem 0;
+  font-family:monospace">{otp}</div>
 <p>This code expires in <strong>10 minutes</strong>. Never share it with anyone.</p>
-<p style="color:#94a3b8;font-size:13px;margin-top:24px">
+<p style="color:#64748b;font-size:13px;margin-top:24px">
   If you did not request this code, ignore this email — your account is safe.
 </p>"""
     return await send_email(
         to_email,
         f"Nidaan Partner Login Code: {otp}",
-        _wrap_template("Nidaan Partner OTP", content),
+        _wrap_nidaan_template("Nidaan Partner OTP", content),
         from_name="Nidaan Partner",
     )
 
@@ -329,7 +365,7 @@ async def send_nidaan_new_claim_admin_email(
     return await send_email(
         admin_email,
         f"New Claim #{claim_id} — {insured_name} | Nidaan Partner",
-        _wrap_template("New Claim", content),
+        _wrap_nidaan_template("New Claim", content),
     )
 
 
@@ -390,10 +426,10 @@ async def send_nidaan_claim_status_email(
 </p>
 <p style="color:#94a3b8;font-size:13px;margin-top:28px">
   If you have questions, reply to this email or contact us at
-  <a href="mailto:support@sarathi-ai.com" style="color:#64748b">support@sarathi-ai.com</a>.
+  <a href="mailto:support@nidaanpartner.com" style="color:#06b6d4">support@nidaanpartner.com</a>.
 </p>"""
     subject = f"Claim #{claim_id} — {label} | Nidaan Partner"
-    return await send_email(to_email, subject, _wrap_template("Claim Status Update", content))
+    return await send_email(to_email, subject, _wrap_nidaan_template("Claim Status Update", content), from_name="Nidaan Partner")
 
 
 async def send_trial_reminder(to_email: str, owner_name: str, firm_name: str,
