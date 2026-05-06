@@ -1148,7 +1148,7 @@ function triggerInstall() {
 
 // ── Service Worker ──
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/nidaan-sw.js').catch(function(){});
+  navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
 }
 </script>
 </body>

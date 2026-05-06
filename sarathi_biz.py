@@ -307,6 +307,17 @@ async def nidaan_start_page(request: Request):
     return _nidaan_page("nidaan_start.html")
 
 
+@app.get("/nidaan-sw.js")
+async def nidaan_service_worker():
+    """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""
+    sw_path = Path(__file__).parent / "static" / "nidaan-sw.js"
+    return FileResponse(
+        str(sw_path),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
 @app.get("/nidaan/signup", response_class=RedirectResponse)
 async def nidaan_signup_page(request: Request, plan: str = ""):
     if not _is_nidaan_host(request):

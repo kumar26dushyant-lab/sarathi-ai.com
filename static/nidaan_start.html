@@ -672,5 +672,10 @@ if (localStorage.getItem('nidaan_token')) {
   setTimeout(_initGoogle, 2500);
 })();
 </script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
+}
+</script>
 </body>
 </html>
