@@ -881,3 +881,523 @@ async def update_account_profile(account_id: int, owner_name: str = None,
         )
         await conn.commit()
     return True
+
+
+# =============================================================================
+#  STAFF AUTH & MANAGEMENT  (super_admin / sub_super_admin / team_member)
+# =============================================================================
+
+STAFF_ROLES = ("super_admin", "sub_super_admin", "team_member")
+_STAFF_JWT_SUFFIX = ":nidaan_staff"
+
+
+def _staff_jwt_secret() -> str:
+    base = os.environ.get("JWT_SECRET", "change-me-in-production")
+    return base + _STAFF_JWT_SUFFIX
+
+
+def create_staff_token(staff_id: int, role: str, name: str) -> str:
+    import jwt as _jwt
+    payload = {
+        "sub": str(staff_id),
+        "role": role,
+        "name": name,
+        "typ": "nidaan_staff",
+        "iat": datetime.utcnow(),
+    }
+    return _jwt.encode(payload, _staff_jwt_secret(), algorithm="HS256")
+
+
+def verify_staff_token(token: str) -> Optional[dict]:
+    """Return payload dict or None."""
+    import jwt as _jwt
+    try:
+        payload = _jwt.decode(
+            token,
+            _staff_jwt_secret(),
+            algorithms=["HS256"],
+            options={"verify_sub": False},
+        )
+        if payload.get("typ") != "nidaan_staff":
+            return None
+        payload["staff_id"] = int(payload["sub"])
+        return payload
+    except Exception:
+        return None
+
+
+async def create_staff(
+    name: str,
+    email: str,
+    password: str,
+    role: str,
+    created_by: Optional[int] = None,
+) -> Optional[int]:
+    """Create a staff account. Returns staff_id or None on duplicate email."""
+    if role not in STAFF_ROLES:
+        raise ValueError(f"Invalid role: {role}")
+    pw_hash = _hash_password(password)
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cur = await conn.execute(
+                """INSERT INTO nidaan_staff (name, email, password_hash, role, created_by)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, email.lower().strip(), pw_hash, role, created_by),
+            )
+            await conn.commit()
+            return cur.lastrowid
+    except aiosqlite.IntegrityError:
+        return None
+
+
+async def authenticate_staff(email: str, password: str) -> Optional[dict]:
+    """Return staff dict if credentials valid, else None."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM nidaan_staff WHERE email=? AND status='active'",
+            (email.lower().strip(),),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        staff = dict(row)
+    if not _verify_password(password, staff.get("password_hash", "")):
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_staff SET last_login_at=CURRENT_TIMESTAMP WHERE staff_id=?",
+            (staff["staff_id"],),
+        )
+        await conn.commit()
+    return staff
+
+
+async def get_staff_by_id(staff_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT staff_id,name,email,role,status,created_at,last_login_at "
+            "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def list_staff(include_inactive: bool = False) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        if include_inactive:
+            cur = await conn.execute(
+                "SELECT staff_id,name,email,role,status,created_at,last_login_at "
+                "FROM nidaan_staff ORDER BY created_at DESC"
+            )
+        else:
+            cur = await conn.execute(
+                "SELECT staff_id,name,email,role,status,created_at,last_login_at "
+                "FROM nidaan_staff WHERE status='active' ORDER BY created_at DESC"
+            )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def update_staff(staff_id: int, name: str = None, role: str = None,
+                       status: str = None, password: str = None) -> bool:
+    fields, vals = [], []
+    if name is not None:
+        fields.append("name=?"); vals.append(name)
+    if role is not None:
+        if role not in STAFF_ROLES:
+            raise ValueError(f"Invalid role: {role}")
+        fields.append("role=?"); vals.append(role)
+    if status is not None:
+        fields.append("status=?"); vals.append(status)
+    if password is not None:
+        fields.append("password_hash=?"); vals.append(_hash_password(password))
+    if not fields:
+        return False
+    vals.append(staff_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_staff SET {', '.join(fields)} WHERE staff_id=?", vals
+        )
+        await conn.commit()
+    return True
+
+
+# =============================================================================
+#  OPS: CLAIMS (with staff assignment & role-based filtering)
+# =============================================================================
+
+async def get_claims_ops(
+    staff_id: int,
+    role: str,
+    status: Optional[str] = None,
+    assigned_to: Optional[int] = None,
+    claim_type: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    """Fetch claims for ops portal. team_member sees only their assigned claims."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        conditions = []
+        params: list = []
+
+        if role == "team_member":
+            conditions.append("c.assigned_to_staff_id=?")
+            params.append(staff_id)
+        elif assigned_to is not None:
+            conditions.append("c.assigned_to_staff_id=?")
+            params.append(assigned_to)
+
+        if status:
+            conditions.append("c.status=?")
+            params.append(status)
+        if claim_type:
+            conditions.append("c.claim_type=?")
+            params.append(claim_type)
+        if search:
+            conditions.append(
+                "(c.insured_name LIKE ? OR c.insured_phone LIKE ? "
+                "OR c.insurer_name LIKE ? OR c.policy_no LIKE ? "
+                "OR a.owner_name LIKE ? OR a.firm_name LIKE ?)"
+            )
+            like = f"%{search}%"
+            params.extend([like, like, like, like, like, like])
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        cur = await conn.execute(
+            f"""SELECT c.*,
+                    a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
+                    s.name AS assigned_staff_name
+               FROM nidaan_claims c
+               JOIN nidaan_accounts a ON a.account_id = c.account_id
+               LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
+               {where}
+               ORDER BY c.created_at DESC LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def assign_claim_to_staff(
+    claim_id: int, staff_id: int, assigned_by_id: int, assigned_by_role: str
+) -> bool:
+    """Assign a claim to a staff member and log it."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE claim_id=?", (claim_id,)
+        )
+        if not await cur.fetchone():
+            return False
+        await conn.execute(
+            "UPDATE nidaan_claims SET assigned_to_staff_id=?, status='assigned', "
+            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=?",
+            (staff_id, claim_id),
+        )
+        await conn.execute(
+            """INSERT INTO nidaan_claim_status_log
+               (claim_id, from_status, to_status, note, changed_by_type, changed_by_id)
+               VALUES (?, NULL, 'assigned', 'Assigned to staff', ?, ?)""",
+            (claim_id, assigned_by_role, assigned_by_id),
+        )
+        await conn.commit()
+    return True
+
+
+# =============================================================================
+#  OPS: NOTES
+# =============================================================================
+
+async def add_claim_note(claim_id: int, staff_id: int, note: str) -> int:
+    """Add an internal note. Returns note_id."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_claim_notes (claim_id, staff_id, note) VALUES (?,?,?)",
+            (claim_id, staff_id, note),
+        )
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_claim_notes(claim_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """SELECT n.*, s.name AS staff_name, s.role AS staff_role
+               FROM nidaan_claim_notes n
+               JOIN nidaan_staff s ON s.staff_id = n.staff_id
+               WHERE n.claim_id=? ORDER BY n.created_at ASC""",
+            (claim_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+# =============================================================================
+#  OPS: FOLLOW-UPS
+# =============================================================================
+
+async def add_followup(claim_id: int, staff_id: int, due_date: str, note: str = "") -> int:
+    """Schedule a follow-up. Returns followup_id."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """INSERT INTO nidaan_followups (claim_id, staff_id, due_date, note)
+               VALUES (?,?,?,?)""",
+            (claim_id, staff_id, due_date, note),
+        )
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def complete_followup(followup_id: int, staff_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """UPDATE nidaan_followups SET status='done', completed_at=CURRENT_TIMESTAMP
+               WHERE followup_id=? AND staff_id=?""",
+            (followup_id, staff_id),
+        )
+        await conn.commit()
+    return True
+
+
+async def get_followups_for_staff(staff_id: int, status: str = "pending") -> list[dict]:
+    """Get follow-ups due for a staff member."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """SELECT f.*, c.insured_name, c.claim_type, c.status AS claim_status
+               FROM nidaan_followups f
+               JOIN nidaan_claims c ON c.claim_id = f.claim_id
+               WHERE f.staff_id=? AND f.status=?
+               ORDER BY f.due_date ASC""",
+            (staff_id, status),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_followups_for_claim(claim_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """SELECT f.*, s.name AS staff_name
+               FROM nidaan_followups f
+               JOIN nidaan_staff s ON s.staff_id = f.staff_id
+               WHERE f.claim_id=? ORDER BY f.due_date ASC""",
+            (claim_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def mark_overdue_followups() -> int:
+    """Mark pending follow-ups past due date as overdue. Returns count updated."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """UPDATE nidaan_followups SET status='overdue'
+               WHERE status='pending' AND due_date < DATE('now')"""
+        )
+        await conn.commit()
+        return cur.rowcount
+
+
+# =============================================================================
+#  OPS: REVENUE (super_admin only)
+# =============================================================================
+
+REVENUE_SPLIT = {"ashwin": 80, "dushyant": 20}  # percentage
+
+
+async def get_revenue_stats() -> dict:
+    """Full revenue breakdown for super admin."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+
+        # Total collected from subscriptions
+        cur = await conn.execute(
+            "SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_subscriptions "
+            "WHERE status IN ('active','cancelled')"
+        )
+        total_sub = (await cur.fetchone())[0]
+
+        # Per-plan breakdown
+        cur = await conn.execute(
+            "SELECT plan, COUNT(*) as count, COALESCE(SUM(amount_paid),0) as revenue "
+            "FROM nidaan_subscriptions WHERE status IN ('active','cancelled') "
+            "GROUP BY plan"
+        )
+        by_plan = {r["plan"]: {"count": r["count"], "revenue": r["revenue"]}
+                   for r in await cur.fetchall()}
+
+        # Monthly trend (last 12 months)
+        cur = await conn.execute(
+            """SELECT strftime('%Y-%m', started_at) as month,
+                      COUNT(*) as new_subs,
+                      COALESCE(SUM(amount_paid),0) as revenue
+               FROM nidaan_subscriptions
+               WHERE started_at >= DATE('now','-12 months')
+               GROUP BY month ORDER BY month ASC"""
+        )
+        monthly = [dict(r) for r in await cur.fetchall()]
+
+        # Per-claim ₹999 revenue
+        cur = await conn.execute(
+            "SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_per_claim_purchase "
+            "WHERE status NOT IN ('failed','refunded','pending_payment')"
+        )
+        total_d2c = (await cur.fetchone())[0]
+
+        # Active vs churned
+        cur = await conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM nidaan_subscriptions GROUP BY status"
+        )
+        sub_by_status = {r["status"]: r["cnt"] for r in await cur.fetchall()}
+
+        total_all = total_sub + total_d2c
+        return {
+            "total_subscription_revenue": total_sub,
+            "total_d2c_revenue": total_d2c,
+            "total_revenue": total_all,
+            "by_plan": by_plan,
+            "monthly_trend": monthly,
+            "subscriptions_by_status": sub_by_status,
+            "revenue_split": {
+                "ashwin": {"pct": 80, "amount": round(total_all * 0.80)},
+                "dushyant": {"pct": 20, "amount": round(total_all * 0.20)},
+            },
+        }
+
+
+# =============================================================================
+#  OPS: APP HEALTH (super_admin only)
+# =============================================================================
+
+async def get_app_health() -> dict:
+    """Application health snapshot for super admin."""
+    import time
+    t0 = time.monotonic()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+
+        def _c(row): return row[0] if row else 0
+
+        tables = {}
+        for tbl in [
+            "nidaan_accounts", "nidaan_claims", "nidaan_subscriptions",
+            "nidaan_staff", "nidaan_followups", "nidaan_claim_notes",
+            "nidaan_per_claim_purchase", "nidaan_claim_status_log",
+        ]:
+            try:
+                row = await (await conn.execute(f"SELECT COUNT(*) FROM {tbl}")).fetchone()
+                tables[tbl] = _c(row)
+            except Exception:
+                tables[tbl] = -1
+
+        # Claim status breakdown
+        cur = await conn.execute(
+            "SELECT status, COUNT(*) cnt FROM nidaan_claims GROUP BY status"
+        )
+        claims_by_status = {r["status"]: r["cnt"] for r in await cur.fetchall()}
+
+        # Overdue followups
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_followups WHERE status='overdue'"
+        )
+        overdue = _c(await cur.fetchone())
+
+        # Unassigned open claims
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claims "
+            "WHERE assigned_to_staff_id IS NULL "
+            "AND status NOT IN ('resolved_won','resolved_lost','closed','withdrawn')"
+        )
+        unassigned = _c(await cur.fetchone())
+
+        # Recent signups (last 7 days)
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_accounts "
+            "WHERE created_at >= DATE('now','-7 days')"
+        )
+        new_accounts_7d = _c(await cur.fetchone())
+
+    db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
+
+    return {
+        "db_latency_ms": db_latency_ms,
+        "table_counts": tables,
+        "claims_by_status": claims_by_status,
+        "overdue_followups": overdue,
+        "unassigned_open_claims": unassigned,
+        "new_accounts_last_7d": new_accounts_7d,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# =============================================================================
+#  OPS: IMPERSONATION (super_admin only)
+# =============================================================================
+
+async def impersonate_account(account_id: int) -> Optional[str]:
+    """Generate an advisor JWT for a given account_id (for troubleshooting)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT account_id, owner_name, email FROM nidaan_accounts WHERE account_id=?",
+            (account_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+    token = create_nidaan_token(int(row["account_id"]))
+    logger.warning(
+        "IMPERSONATION: super_admin generated advisor token for account_id=%d email=%s",
+        account_id, row["email"],
+    )
+    return token
+
+
+# =============================================================================
+#  OPS: ADMIN ACCOUNT MANAGEMENT (super_admin only)
+# =============================================================================
+
+async def create_account_by_admin(
+    owner_name: str,
+    email: str,
+    phone: str,
+    firm_name: str = "",
+    plan: str = "free",
+) -> Optional[int]:
+    """Create a new advisor account directly (no password — invite flow or set later)."""
+    tmp_pw = secrets.token_hex(16)  # random unguessable password — admin must reset
+    return await create_account(owner_name, email, phone, tmp_pw, firm_name)
+
+
+async def admin_set_account_password(account_id: int, new_password: str) -> bool:
+    return await update_account_password(account_id, new_password)
+
+
+async def admin_update_account(
+    account_id: int,
+    owner_name: str = None,
+    firm_name: str = None,
+    phone: str = None,
+    status: str = None,
+) -> bool:
+    fields, vals = [], []
+    if owner_name is not None:
+        fields.append("owner_name=?"); vals.append(owner_name)
+    if firm_name is not None:
+        fields.append("firm_name=?"); vals.append(firm_name)
+    if phone is not None:
+        fields.append("phone=?"); vals.append(phone)
+    if status is not None:
+        fields.append("status=?"); vals.append(status)
+    if not fields:
+        return False
+    vals.append(account_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_accounts SET {', '.join(fields)} WHERE account_id=?", vals
+        )
+        await conn.commit()
+    return True
+

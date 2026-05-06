@@ -1230,6 +1230,404 @@ async def nidaan_api_admin_update_claim(
     return {"claim_id": claim_id, "status": body.new_status}
 
 
+# =============================================================================
+#  NIDAAN OPS PORTAL  (/nidaan/ops/*)
+# =============================================================================
+
+def _get_staff_from_request(request: Request) -> Optional[dict]:
+    """Extract and verify staff JWT from Authorization header."""
+    h = request.headers.get("Authorization", "")
+    if not h.startswith("Bearer "):
+        return None
+    return nidaan.verify_staff_token(h[7:])
+
+
+def _require_staff(request: Request, min_role: str = "team_member") -> dict:
+    """Dependency-style helper: returns staff payload or raises 401/403."""
+    role_rank = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
+    staff = _get_staff_from_request(request)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff authentication required")
+    if role_rank.get(staff.get("role"), -1) < role_rank.get(min_role, 99):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return staff
+
+
+@app.get("/nidaan/ops", response_class=HTMLResponse)
+async def nidaan_ops_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_ops.html")
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+class OpsLoginReq(BaseModel):
+    email: str
+    password: str
+
+@app.post("/nidaan/ops/api/login")
+async def ops_login(body: OpsLoginReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await nidaan.authenticate_staff(body.email, body.password)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = nidaan.create_staff_token(staff["staff_id"], staff["role"], staff["name"])
+    return {"token": token, "staff_id": staff["staff_id"],
+            "role": staff["role"], "name": staff["name"]}
+
+
+@app.get("/nidaan/ops/api/me")
+async def ops_me(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    record = await nidaan.get_staff_by_id(staff["staff_id"])
+    if not record:
+        raise HTTPException(status_code=404)
+    return record
+
+
+# ── Staff management (super_admin only) ───────────────────────────────────────
+
+class CreateStaffReq(BaseModel):
+    name: str
+    email: str
+    password: str = Field(min_length=8)
+    role: str
+
+class UpdateStaffReq(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    password: Optional[str] = None
+
+@app.get("/nidaan/ops/api/staff")
+async def ops_list_staff(request: Request, include_inactive: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    staff_list = await nidaan.list_staff(include_inactive=include_inactive)
+    return {"staff": staff_list, "count": len(staff_list)}
+
+
+@app.post("/nidaan/ops/api/staff")
+async def ops_create_staff(body: CreateStaffReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    try:
+        staff_id = await nidaan.create_staff(
+            name=body.name, email=body.email,
+            password=body.password, role=body.role,
+            created_by=caller["staff_id"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not staff_id:
+        raise HTTPException(status_code=409, detail="Email already exists")
+    return {"staff_id": staff_id, "name": body.name, "role": body.role}
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}")
+async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        ok = await nidaan.update_staff(
+            staff_id=staff_id, name=body.name, role=body.role,
+            status=body.status, password=body.password,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    return {"staff_id": staff_id, "updated": True}
+
+
+# ── Claims ops ────────────────────────────────────────────────────────────────
+
+@app.get("/nidaan/ops/api/claims")
+async def ops_list_claims(
+    request: Request,
+    status: Optional[str] = None,
+    assigned_to: Optional[int] = None,
+    claim_type: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    claims = await nidaan.get_claims_ops(
+        staff_id=staff["staff_id"], role=staff["role"],
+        status=status, assigned_to=assigned_to,
+        claim_type=claim_type, search=search,
+        limit=limit, offset=offset,
+    )
+    return {"claims": claims, "count": len(claims)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}")
+async def ops_get_claim(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    # Build full detail
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = __import__("aiosqlite").Row
+        cur = await conn.execute(
+            """SELECT c.*,
+                    a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
+                    s.name AS assigned_staff_name
+               FROM nidaan_claims c
+               JOIN nidaan_accounts a ON a.account_id = c.account_id
+               LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
+               WHERE c.claim_id=?""",
+            (claim_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404)
+        claim = dict(row)
+        # team_member can only see their assigned claims
+        if staff["role"] == "team_member" and claim.get("assigned_to_staff_id") != staff["staff_id"]:
+            raise HTTPException(status_code=403)
+        # Status log
+        log_cur = await conn.execute(
+            "SELECT * FROM nidaan_claim_status_log WHERE claim_id=? ORDER BY changed_at ASC",
+            (claim_id,),
+        )
+        claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
+    claim["notes"] = await nidaan.get_claim_notes(claim_id)
+    claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
+    return claim
+
+
+class OpsClaimAssign(BaseModel):
+    staff_id: int
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/assign")
+async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    ok = await nidaan.assign_claim_to_staff(
+        claim_id=claim_id, staff_id=body.staff_id,
+        assigned_by_id=caller["staff_id"], assigned_by_role=caller["role"],
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {"claim_id": claim_id, "assigned_to": body.staff_id}
+
+
+class OpsClaimStatusUpdate(BaseModel):
+    new_status: str
+    note: str = ""
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/status")
+async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    # team_member: verify they are assigned to this claim
+    if staff["role"] == "team_member":
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
+            cur = await conn.execute(
+                "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,)
+            )
+            row = await cur.fetchone()
+            if not row or row[0] != staff["staff_id"]:
+                raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    try:
+        ok = await nidaan.update_claim_status(
+            claim_id=claim_id, new_status=body.new_status,
+            changed_by_type=staff["role"], changed_by_id=staff["staff_id"],
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    # Non-blocking advisor email
+    try:
+        claim = await nidaan.get_claim_with_account(claim_id)
+        if claim and claim.get("email"):
+            import asyncio as _ae2
+            _ae2.ensure_future(
+                email_svc.send_nidaan_claim_status_email(
+                    to_email=claim["email"],
+                    owner_name=claim.get("owner_name", ""),
+                    claim_id=claim_id,
+                    insured_name=claim.get("insured_name", ""),
+                    claim_type=claim.get("claim_type", ""),
+                    new_status=body.new_status,
+                    note=body.note,
+                )
+            )
+    except Exception:
+        pass
+    return {"claim_id": claim_id, "status": body.new_status}
+
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+
+class OpsAddNote(BaseModel):
+    note: str
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes")
+async def ops_add_note(claim_id: int, body: OpsAddNote, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    note_id = await nidaan.add_claim_note(claim_id, staff["staff_id"], body.note)
+    return {"note_id": note_id, "claim_id": claim_id}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/notes")
+async def ops_get_notes(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"notes": await nidaan.get_claim_notes(claim_id)}
+
+
+# ── Follow-ups ────────────────────────────────────────────────────────────────
+
+class OpsAddFollowup(BaseModel):
+    due_date: str        # YYYY-MM-DD
+    note: str = ""
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/followups")
+async def ops_add_followup(claim_id: int, body: OpsAddFollowup, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    fid = await nidaan.add_followup(claim_id, staff["staff_id"], body.due_date, body.note)
+    return {"followup_id": fid, "claim_id": claim_id}
+
+
+@app.patch("/nidaan/ops/api/followups/{followup_id}/done")
+async def ops_complete_followup(followup_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    await nidaan.complete_followup(followup_id, staff["staff_id"])
+    return {"followup_id": followup_id, "status": "done"}
+
+
+@app.get("/nidaan/ops/api/my-followups")
+async def ops_my_followups(request: Request, status: str = "pending"):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    items = await nidaan.get_followups_for_staff(staff["staff_id"], status=status)
+    return {"followups": items}
+
+
+# ── Advisor accounts (super_admin) ────────────────────────────────────────────
+
+class OpsCreateAccount(BaseModel):
+    owner_name: str
+    email: str
+    phone: str
+    firm_name: str = ""
+
+class OpsUpdateAccount(BaseModel):
+    owner_name: Optional[str] = None
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    new_password: Optional[str] = None
+
+@app.get("/nidaan/ops/api/accounts")
+async def ops_list_accounts(request: Request, limit: int = 200, offset: int = 0):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    accounts = await nidaan.get_all_accounts_admin(limit=limit, offset=offset)
+    return {"accounts": accounts, "count": len(accounts)}
+
+
+@app.post("/nidaan/ops/api/accounts")
+async def ops_create_account(body: OpsCreateAccount, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    account_id = await nidaan.create_account_by_admin(
+        body.owner_name, body.email, body.phone, body.firm_name
+    )
+    if not account_id:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    return {"account_id": account_id, "email": body.email}
+
+
+@app.patch("/nidaan/ops/api/accounts/{account_id}")
+async def ops_update_account(account_id: int, body: OpsUpdateAccount, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.admin_update_account(
+        account_id=account_id,
+        owner_name=body.owner_name,
+        firm_name=body.firm_name,
+        phone=body.phone,
+        status=body.status,
+    )
+    if body.new_password:
+        if len(body.new_password) < 8:
+            raise HTTPException(status_code=400, detail="Password min 8 characters")
+        await nidaan.admin_set_account_password(account_id, body.new_password)
+    return {"account_id": account_id, "updated": True}
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/impersonate")
+async def ops_impersonate(account_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    token = await nidaan.impersonate_account(account_id)
+    if not token:
+        raise HTTPException(status_code=404, detail="Account not found")
+    logger.warning("IMPERSONATE: staff_id=%d impersonating account_id=%d",
+                   caller["staff_id"], account_id)
+    return {"advisor_token": token, "account_id": account_id,
+            "dashboard_url": "/nidaan/dashboard"}
+
+
+# ── Revenue (super_admin only) ────────────────────────────────────────────────
+
+@app.get("/nidaan/ops/api/revenue")
+async def ops_revenue(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return await nidaan.get_revenue_stats()
+
+
+# ── App health (super_admin only) ─────────────────────────────────────────────
+
+@app.get("/nidaan/ops/api/health")
+async def ops_health(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return await nidaan.get_app_health()
+
+
+# ── Stats (super_admin + sub_super_admin) ─────────────────────────────────────
+
+@app.get("/nidaan/ops/api/stats")
+async def ops_stats(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await nidaan.get_admin_stats()
+
+
 @app.get("/sitemap.xml")
 async def sitemap_xml():
     """XML sitemap for Google Search Console. Lists public, indexable pages."""

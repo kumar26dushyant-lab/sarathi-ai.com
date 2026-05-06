@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nidaan Ops — Internal Portal</title>
+<link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060d1a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column}
+a{color:#22d3ee;text-decoration:none}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit}
+
+/* ── TOPBAR ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1.5rem;background:rgba(6,13,26,.97);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:80;gap:.75rem}
+.topbar-brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:.95rem;color:#fff}
+.topbar-brand img{height:28px;border-radius:5px}
+.topbar-brand .pill{background:rgba(220,38,38,.18);color:#fca5a5;border:1px solid rgba(220,38,38,.3);border-radius:6px;font-size:.65rem;font-weight:800;padding:.15rem .45rem;letter-spacing:.04em;text-transform:uppercase}
+.topbar-right{display:flex;align-items:center;gap:.75rem;font-size:.83rem}
+.role-badge{background:rgba(6,182,212,.12);color:#22d3ee;border:1px solid rgba(6,182,212,.25);border-radius:6px;padding:.2rem .55rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.btn-sm{padding:.35rem .8rem;border-radius:7px;font-size:.8rem;font-weight:600;border:none}
+.btn-ghost{background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.1)}
+.btn-ghost:hover{background:rgba(255,255,255,.1);color:#fff}
+
+/* ── LAYOUT ── */
+.app-shell{display:flex;flex:1;overflow:hidden}
+.sidebar{width:220px;flex-shrink:0;background:rgba(255,255,255,.025);border-right:1px solid rgba(255,255,255,.06);padding:1rem 0;display:flex;flex-direction:column;gap:.15rem;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.6rem 1.25rem;font-size:.84rem;font-weight:600;color:rgba(255,255,255,.45);cursor:pointer;transition:background .12s,color .12s;border-left:3px solid transparent;user-select:none}
+.nav-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.8)}
+.nav-item.active{background:rgba(6,182,212,.09);color:#22d3ee;border-left-color:#22d3ee}
+.nav-item .badge{margin-left:auto;background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;font-size:.68rem;font-weight:700;padding:.1rem .4rem;min-width:18px;text-align:center}
+.nav-divider{height:1px;background:rgba(255,255,255,.06);margin:.5rem 1.25rem}
+.main{flex:1;overflow-y:auto;padding:1.5rem 1.75rem}
+
+/* ── SECTION HEADER ── */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem}
+.section-title{font-size:1.15rem;font-weight:800;color:#fff}
+.section-sub{font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.15rem}
+
+/* ── STAT CARDS ── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1.1rem 1.25rem}
+.stat-card .sv{font-size:1.9rem;font-weight:800;color:#22d3ee;line-height:1}
+.stat-card .sl{font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.3rem;text-transform:uppercase;letter-spacing:.06em}
+.stat-card.warn .sv{color:#fbbf24}
+.stat-card.danger .sv{color:#f87171}
+.stat-card.ok .sv{color:#4ade80}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid rgba(255,255,255,.07)}
+table{width:100%;border-collapse:collapse;font-size:.83rem}
+thead tr{background:rgba(255,255,255,.04)}
+th{padding:.7rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.35);white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.07)}
+td{padding:.65rem 1rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;color:#cbd5e1}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.025)}
+
+/* ── STATUS PILLS ── */
+.pill-status{display:inline-block;border-radius:6px;padding:.2rem .55rem;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:capitalize}
+.s-intimated{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+.s-assigned{background:rgba(59,130,246,.12);color:#93c5fd;border:1px solid rgba(59,130,246,.25)}
+.s-in_review{background:rgba(139,92,246,.12);color:#c4b5fd;border:1px solid rgba(139,92,246,.25)}
+.s-in_negotiation{background:rgba(234,179,8,.12);color:#fde047;border:1px solid rgba(234,179,8,.25)}
+.s-resolved_won{background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.25)}
+.s-resolved_lost{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+.s-closed,.s-withdrawn{background:rgba(255,255,255,.06);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1)}
+.s-active{background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.25)}
+.s-inactive,.s-suspended{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+.s-pending,.s-overdue{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+.s-done{background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.25)}
+
+/* ── BUTTONS ── */
+.btn{padding:.55rem 1.1rem;border-radius:8px;font-size:.84rem;font-weight:700;border:none;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:#0891b2;color:#fff}
+.btn-danger{background:rgba(220,38,38,.15);color:#fca5a5;border:1px solid rgba(220,38,38,.35)}
+.btn-warn{background:rgba(217,119,6,.15);color:#fcd34d;border:1px solid rgba(217,119,6,.35)}
+.btn-success{background:rgba(21,128,61,.2);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+.btn-icon{padding:.35rem .5rem;font-size:.82rem;border-radius:7px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.1)}
+.btn-icon:hover{background:rgba(255,255,255,.12);color:#fff}
+
+/* ── FILTER BAR ── */
+.filter-bar{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1.1rem;align-items:center}
+.filter-bar input,.filter-bar select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.45rem .75rem;color:#fff;font-size:.82rem;outline:none}
+.filter-bar input::placeholder{color:rgba(255,255,255,.25)}
+.filter-bar select option{background:#1e293b;color:#fff}
+.filter-bar input:focus,.filter-bar select:focus{border-color:#22d3ee}
+
+/* ── DETAIL PANEL (slide-in drawer) ── */
+.drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;justify-content:flex-end}
+.drawer-bg.open{display:flex}
+.drawer{background:#0c1a2e;width:100%;max-width:600px;height:100%;overflow-y:auto;box-shadow:-4px 0 40px rgba(0,0,0,.5);padding:0;display:flex;flex-direction:column}
+.drawer-top{padding:1.25rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.drawer-top h2{font-size:1.05rem;font-weight:800;color:#fff}
+.drawer-body{flex:1;overflow-y:auto;padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1.25rem}
+.drawer-section{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:1rem}
+.drawer-section h4{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.35);margin-bottom:.75rem}
+.kv{display:flex;justify-content:space-between;align-items:flex-start;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.83rem;gap:.5rem}
+.kv:last-child{border-bottom:none}
+.kv-label{color:rgba(255,255,255,.4);flex-shrink:0;min-width:120px}
+.kv-val{color:#e2e8f0;text-align:right;word-break:break-word}
+
+/* ── TIMELINE ── */
+.tl{display:flex;flex-direction:column;gap:0}
+.tl-item{display:flex;gap:.65rem;position:relative}
+.tl-item:not(:last-child)::before{content:'';position:absolute;left:9px;top:20px;width:2px;bottom:-8px;background:rgba(255,255,255,.08)}
+.tl-dot{width:20px;height:20px;border-radius:50%;border:2px solid rgba(34,211,238,.5);background:#0c1a2e;flex-shrink:0;margin-top:.15rem}
+.tl-content{flex:1;padding-bottom:.85rem}
+.tl-status{font-weight:700;font-size:.82rem;color:#22d3ee;text-transform:capitalize}
+.tl-meta{font-size:.72rem;color:rgba(255,255,255,.3);margin-top:.1rem}
+.tl-note{font-size:.79rem;color:rgba(255,255,255,.55);margin-top:.25rem;background:rgba(255,255,255,.03);border-radius:5px;padding:.3rem .5rem;border-left:2px solid rgba(34,211,238,.25)}
+
+/* ── NOTES ── */
+.note-item{background:rgba(255,255,255,.03);border-radius:8px;padding:.75rem;border-left:3px solid rgba(6,182,212,.3);margin-bottom:.5rem}
+.note-meta{font-size:.7rem;color:rgba(255,255,255,.3);margin-bottom:.3rem}
+.note-text{font-size:.83rem;color:#e2e8f0}
+.note-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.6rem .85rem;color:#fff;font-size:.84rem;resize:vertical;min-height:64px;outline:none}
+.note-input:focus{border-color:#22d3ee}
+
+/* ── FOLLOWUP ── */
+.fu-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.03);border-radius:8px;padding:.6rem .85rem;margin-bottom:.4rem;gap:.5rem;flex-wrap:wrap}
+.fu-due{font-weight:700;font-size:.8rem;color:#fbbf24;flex-shrink:0}
+.fu-due.overdue{color:#f87171}
+.fu-note{font-size:.8rem;color:rgba(255,255,255,.55);flex:1;min-width:0}
+.fu-who{font-size:.72rem;color:rgba(255,255,255,.3)}
+
+/* ── FORM ── */
+.form-field{margin-bottom:.85rem}
+.form-field label{display:block;font-size:.75rem;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.04em}
+.form-input{width:100%;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:8px;padding:.6rem .85rem;color:#fff;font-size:.88rem;outline:none;transition:border .15s}
+.form-input:focus{border-color:#22d3ee}
+.form-input::placeholder{color:rgba(255,255,255,.2)}
+select.form-input option{background:#1e293b}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-bg.open{display:flex}
+.modal{background:#0f1e3a;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:1.75rem;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:1rem;font-weight:800;color:#fff;margin-bottom:1.25rem}
+.modal-footer{display:flex;gap:.65rem;justify-content:flex-end;margin-top:1.25rem}
+
+/* ── REVENUE SPLIT ── */
+.split-card{background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(14,116,144,.06));border:1px solid rgba(6,182,212,.2);border-radius:12px;padding:1.25rem}
+.split-row{display:flex;align-items:center;gap:1rem;margin-bottom:.85rem}
+.split-row:last-child{margin-bottom:0}
+.split-name{font-weight:800;font-size:.95rem;width:90px;flex-shrink:0}
+.split-bar-bg{flex:1;height:10px;background:rgba(255,255,255,.08);border-radius:5px;overflow:hidden}
+.split-bar-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,#0891b2,#22d3ee)}
+.split-amount{font-weight:800;font-size:.95rem;color:#22d3ee;flex-shrink:0;width:100px;text-align:right}
+
+/* ── HEALTH ── */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin-bottom:1.25rem}
+.health-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:.9rem 1.1rem}
+.health-card .hc-val{font-size:1.5rem;font-weight:800;color:#22d3ee;line-height:1}
+.health-card .hc-label{font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.25rem}
+
+/* ── LOGIN SCREEN ── */
+.login-page{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.login-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.5rem 2.25rem;width:100%;max-width:400px}
+.login-logo{display:flex;align-items:center;gap:.65rem;margin-bottom:1.75rem}
+.login-logo img{height:40px;border-radius:8px}
+.login-logo span{font-weight:800;font-size:1.15rem;color:#fff}
+.login-card h2{font-size:1.3rem;font-weight:800;color:#fff;margin-bottom:.35rem}
+.login-card p{font-size:.85rem;color:rgba(255,255,255,.4);margin-bottom:1.5rem}
+.msg{font-size:.82rem;padding:.5rem .75rem;border-radius:7px;margin-bottom:.75rem;display:none}
+.msg.err{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.25);display:block}
+.msg.ok{background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.25);display:block}
+
+/* ── CHART (minimal bar) ── */
+.chart-bar-row{display:flex;align-items:center;gap:.65rem;margin-bottom:.5rem;font-size:.8rem}
+.chart-bar-label{width:80px;flex-shrink:0;color:rgba(255,255,255,.5);text-align:right}
+.chart-bar-bg{flex:1;height:18px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.chart-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#0e7490,#22d3ee);transition:width .4s}
+.chart-bar-val{width:60px;flex-shrink:0;color:#22d3ee;font-weight:700;text-align:left}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:3rem 1rem;color:rgba(255,255,255,.25)}
+.empty .ei{font-size:2.5rem;margin-bottom:.5rem}
+.empty p{font-size:.88rem}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .main{padding:1rem .85rem}
+  .topbar{padding:.6rem .85rem}
+}
+@media(max-width:480px){
+  .drawer{max-width:100%}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .modal{padding:1.25rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN SCREEN ══════════ -->
+<div id="loginScreen">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+      Nidaan Partner
+      <span class="pill">OPS</span>
+    </div>
+  </div>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/static/nidaan_logo.png" alt="">
+        <span>Internal Portal</span>
+      </div>
+      <h2>Staff Sign In</h2>
+      <p>Restricted access — Nidaan team only</p>
+      <div class="msg" id="loginMsg"></div>
+      <div class="form-field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" class="form-input" placeholder="you@nidaanpartner.com" autocomplete="username">
+      </div>
+      <div class="form-field">
+        <label>Password</label>
+        <input type="password" id="loginPwd" class="form-input" placeholder="Password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ APP SHELL ══════════ -->
+<div id="appShell" style="display:none;flex-direction:column;min-height:100vh">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+      Nidaan Partner
+      <span class="pill">OPS</span>
+    </div>
+    <div class="topbar-right">
+      <span id="staffName" style="color:rgba(255,255,255,.6)"></span>
+      <span class="role-badge" id="staffRoleBadge"></span>
+      <button class="btn-sm btn-ghost" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar"></nav>
+
+    <!-- Main content -->
+    <main class="main">
+      <div id="panel-overview" class="panel"></div>
+      <div id="panel-claims" class="panel" style="display:none"></div>
+      <div id="panel-followups" class="panel" style="display:none"></div>
+      <div id="panel-accounts" class="panel" style="display:none"></div>
+      <div id="panel-staff" class="panel" style="display:none"></div>
+      <div id="panel-revenue" class="panel" style="display:none"></div>
+      <div id="panel-health" class="panel" style="display:none"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ══════════ CLAIM DETAIL DRAWER ══════════ -->
+<div class="drawer-bg" id="drawerBg" onclick="closeDrawer(event)">
+  <div class="drawer" id="claimDrawer">
+    <div class="drawer-top">
+      <h2 id="drawerTitle">Claim Detail</h2>
+      <button class="btn-icon" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL ══════════ -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modal">
+    <h3 id="modalTitle">Modal</h3>
+    <div id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let _token = null, _role = null, _staffId = null, _staffName = null;
+let _currentPanel = 'overview';
+let _claimsCache = [];
+
+const API = (path, opts={}) => {
+  const headers = {'Content-Type':'application/json'};
+  if (_token) headers['Authorization'] = 'Bearer ' + _token;
+  return fetch('/nidaan/ops/api' + path, {headers, ...opts});
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pwd   = document.getElementById('loginPwd').value;
+  const msg   = document.getElementById('loginMsg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!email || !pwd) { msg.className='msg err'; msg.textContent='Enter email and password'; return; }
+  const r = await fetch('/nidaan/ops/api/login', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email, password: pwd}),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(()=>({}));
+    msg.className='msg err'; msg.textContent = d.detail || 'Login failed'; return;
+  }
+  const data = await r.json();
+  _token = data.token; _role = data.role;
+  _staffId = data.staff_id; _staffName = data.name;
+  localStorage.setItem('nidaan_ops_token', _token);
+  bootApp();
+}
+
+function doLogout() {
+  localStorage.removeItem('nidaan_ops_token');
+  _token = _role = _staffId = _staffName = null;
+  document.getElementById('loginScreen').style.display = '';
+  document.getElementById('appShell').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════
+async function bootApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  document.getElementById('staffName').textContent = _staffName;
+  document.getElementById('staffRoleBadge').textContent = _role.replace(/_/g,' ');
+  buildSidebar();
+  showPanel('overview');
+}
+
+function buildSidebar() {
+  const roleRank = {team_member:0, sub_super_admin:1, super_admin:2};
+  const myRank = roleRank[_role] ?? 0;
+  const items = [
+    {id:'overview',   label:'📊 Overview',    minRank:0},
+    {id:'claims',     label:'📋 Claims',       minRank:0},
+    {id:'followups',  label:'📅 My Follow-ups',minRank:0},
+    null,
+    {id:'accounts',   label:'👥 Accounts',     minRank:1},
+    {id:'staff',      label:'👤 Staff',         minRank:2},
+    null,
+    {id:'revenue',    label:'💰 Revenue',       minRank:2},
+    {id:'health',     label:'🖥️ App Health',   minRank:2},
+  ];
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML = '';
+  items.forEach(item => {
+    if (!item) { const d=document.createElement('div'); d.className='nav-divider'; sb.appendChild(d); return; }
+    if (myRank < item.minRank) return;
+    const el = document.createElement('div');
+    el.className = 'nav-item' + (item.id===_currentPanel?' active':'');
+    el.dataset.panel = item.id;
+    el.textContent = item.label;
+    el.onclick = () => showPanel(item.id);
+    sb.appendChild(el);
+  });
+}
+
+function showPanel(id) {
+  _currentPanel = id;
+  document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+  const el = document.getElementById('panel-'+id);
+  if (el) el.style.display = '';
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    n.classList.toggle('active', n.dataset.panel===id);
+  });
+  const loaders = {
+    overview: loadOverview,
+    claims: loadClaims,
+    followups: loadFollowups,
+    accounts: loadAccounts,
+    staff: loadStaff,
+    revenue: loadRevenue,
+    health: loadHealth,
+  };
+  if (loaders[id]) loaders[id]();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  OVERVIEW
+// ═══════════════════════════════════════════════════════════════
+async function loadOverview() {
+  const el = document.getElementById('panel-overview');
+  el.innerHTML = '<div class="section-hdr"><div><div class="section-title">Overview</div><div class="section-sub">Welcome back, '+esc(_staffName)+'</div></div></div><div class="stats-row" id="overviewStats"><div class="stat-card"><div class="sv">…</div><div class="sl">Loading</div></div></div>';
+
+  const r = await API('/stats');
+  if (!r.ok) return;
+  const d = await r.json();
+
+  let extraCards = '';
+  if (_role === 'super_admin') {
+    const rr = await API('/revenue');
+    if (rr.ok) {
+      const rv = await rr.json();
+      extraCards = `
+        <div class="stat-card ok"><div class="sv">₹${fmt(rv.total_revenue)}</div><div class="sl">Total Revenue</div></div>
+        <div class="stat-card"><div class="sv">${d.active_subscriptions||0}</div><div class="sl">Active Subs</div></div>`;
+    }
+  }
+
+  document.getElementById('overviewStats').innerHTML = `
+    <div class="stat-card"><div class="sv">${d.total_accounts||0}</div><div class="sl">Total Accounts</div></div>
+    <div class="stat-card"><div class="sv">${d.total_claims||0}</div><div class="sl">Total Claims</div></div>
+    <div class="stat-card warn"><div class="sv">${d.open_claims||0}</div><div class="sl">Open Claims</div></div>
+    <div class="stat-card"><div class="sv">${d.pending_review_requests||0}</div><div class="sl">Pending Reviews</div></div>
+    ${extraCards}
+  `;
+
+  // Quick plan breakdown
+  if (d.plans && Object.keys(d.plans).length) {
+    const rows = Object.entries(d.plans).map(([p,c])=>`
+      <div class="chart-bar-row">
+        <div class="chart-bar-label">${p}</div>
+        <div class="chart-bar-bg"><div class="chart-bar-fill" style="width:${Math.min(100,(c/Math.max(...Object.values(d.plans)))*100)}%"></div></div>
+        <div class="chart-bar-val">${c} subs</div>
+      </div>`).join('');
+    el.innerHTML += `<div class="section-hdr" style="margin-top:1.5rem"><div class="section-title">Plans Distribution</div></div>
+    <div class="drawer-section">${rows}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CLAIMS
+// ═══════════════════════════════════════════════════════════════
+function claimStatusClass(s){ return 's-' + (s||'').replace(' ','_'); }
+
+async function loadClaims(statusFilter='', search='') {
+  const el = document.getElementById('panel-claims');
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Claims</div><div class="section-sub">All claims across the platform</div></div>
+    </div>
+    <div class="filter-bar">
+      <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="loadClaims(document.getElementById('claimStatusFilter').value, this.value)" style="flex:1;min-width:160px">
+      <select id="claimStatusFilter" onchange="loadClaims(this.value, document.getElementById('claimSearch').value)">
+        <option value="">All Statuses</option>
+        <option value="intimated">Intimated</option>
+        <option value="assigned">Assigned</option>
+        <option value="in_review">In Review</option>
+        <option value="in_negotiation">In Negotiation</option>
+        <option value="resolved_won">Resolved Won</option>
+        <option value="resolved_lost">Resolved Lost</option>
+        <option value="closed">Closed</option>
+        <option value="withdrawn">Withdrawn</option>
+      </select>
+      ${_role!=='team_member'?'<select id="claimAssignFilter" onchange="loadClaims(document.getElementById(\'claimStatusFilter\').value,document.getElementById(\'claimSearch\').value)"><option value="">All Staff</option></select>':''}
+    </div>
+    <div id="claimTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading claims…</p></div></div>`;
+
+  if (statusFilter) document.getElementById('claimStatusFilter').value = statusFilter;
+
+  const params = new URLSearchParams();
+  if (statusFilter) params.set('status', statusFilter);
+  if (search) params.set('search', search);
+  params.set('limit','200');
+
+  const r = await API('/claims?' + params);
+  if (!r.ok) { document.getElementById('claimTableWrap').innerHTML='<div class="empty"><p>Failed to load claims</p></div>'; return; }
+  const d = await r.json();
+  _claimsCache = d.claims;
+
+  if (!d.claims.length) {
+    document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
+    return;
+  }
+
+  const rows = d.claims.map(c=>`
+    <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
+      <td><strong>#${c.claim_id}</strong></td>
+      <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.insured_phone)}</span></td>
+      <td>${esc(c.claim_type||'—')}</td>
+      <td>${esc(c.insurer_name||'—')}</td>
+      <td>₹${fmt(c.disputed_amount||0)}</td>
+      <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
+      <td>${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.firm_name||'')}</span></td>
+      <td>${esc(c.assigned_staff_name||'—')}</td>
+      <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(c.created_at)}</td>
+    </tr>`).join('');
+
+  document.getElementById('claimTableWrap').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Advisor</th><th>Assigned To</th><th>Date</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function openClaimDrawer(claimId) {
+  document.getElementById('drawerBg').classList.add('open');
+  document.getElementById('drawerTitle').textContent = 'Claim #' + claimId;
+  document.getElementById('drawerBody').innerHTML = '<div class="empty"><p>Loading…</p></div>';
+
+  const r = await API('/claims/' + claimId);
+  if (!r.ok) { document.getElementById('drawerBody').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
+  const c = await r.json();
+
+  const canAssign = _role==='super_admin'||_role==='sub_super_admin';
+  const canStatus = _role!=='team_member' || c.assigned_to_staff_id===_staffId;
+
+  const statusOptions = ['intimated','assigned','in_review','in_negotiation','resolved_won','resolved_lost','closed','withdrawn']
+    .map(s=>`<option value="${s}" ${c.status===s?'selected':''}>${s.replace(/_/g,' ')}</option>`).join('');
+
+  const notesHtml = (c.notes||[]).map(n=>`
+    <div class="note-item">
+      <div class="note-meta">${esc(n.staff_name)} · ${fmtDate(n.created_at)}</div>
+      <div class="note-text">${esc(n.note)}</div>
+    </div>`).join('') || '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No notes yet</div>';
+
+  const fuHtml = (c.followups||[]).map(f=>{
+    const isOver = f.status==='overdue';
+    return `<div class="fu-item">
+      <div class="fu-due ${isOver?'overdue':''}">${f.due_date}${isOver?' ⚠️':''}</div>
+      <div class="fu-note">${esc(f.note||'—')}</div>
+      <div class="fu-who">${esc(f.staff_name)}</div>
+      <span class="pill-status s-${f.status}">${f.status}</span>
+      ${f.status==='pending'?`<button class="btn-sm btn-success" onclick="markFollowupDone(${f.followup_id},${claimId})">Done</button>`:''}
+    </div>`;
+  }).join('') || '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No follow-ups</div>';
+
+  const tlHtml = (c.status_log||[]).reverse().map(l=>`
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <div class="tl-status">${(l.to_status||'').replace(/_/g,' ')}</div>
+        <div class="tl-meta">${l.changed_by_type} · ${fmtDate(l.changed_at)}</div>
+        ${l.note?`<div class="tl-note">${esc(l.note)}</div>`:''}
+      </div>
+    </div>`).join('') || '<div class="empty" style="padding:1rem"><p>No history</p></div>';
+
+  document.getElementById('drawerBody').innerHTML = `
+    <!-- Claim Info -->
+    <div class="drawer-section">
+      <h4>Claim Info</h4>
+      <div class="kv"><span class="kv-label">Claim ID</span><span class="kv-val">#${c.claim_id}</span></div>
+      <div class="kv"><span class="kv-label">Type</span><span class="kv-val">${esc(c.claim_type)}</span></div>
+      <div class="kv"><span class="kv-label">Status</span><span class="kv-val"><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></span></div>
+      <div class="kv"><span class="kv-label">Insured</span><span class="kv-val">${esc(c.insured_name)}</span></div>
+      <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.insured_phone)}</span></div>
+      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)}</span></div>`:''}
+      <div class="kv"><span class="kv-label">Insurer</span><span class="kv-val">${esc(c.insurer_name||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Disputed Amt</span><span class="kv-val">₹${fmt(c.disputed_amount||0)}</span></div>
+      <div class="kv"><span class="kv-label">Submitted</span><span class="kv-val">${fmtDate(c.created_at)}</span></div>
+    </div>
+    <!-- Advisor -->
+    <div class="drawer-section">
+      <h4>Advisor</h4>
+      <div class="kv"><span class="kv-label">Name</span><span class="kv-val">${esc(c.owner_name||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Firm</span><span class="kv-val">${esc(c.firm_name||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.advisor_phone||'—')}</span></div>
+    </div>
+    <!-- Actions -->
+    ${canStatus?`<div class="drawer-section">
+      <h4>Update Status</h4>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+        <select id="newStatusSel_${c.claim_id}" class="form-input" style="flex:1;min-width:140px">${statusOptions}</select>
+        <textarea id="statusNote_${c.claim_id}" class="note-input" style="min-height:48px;flex:2;min-width:160px" placeholder="Optional note (sent to advisor)"></textarea>
+        <button class="btn btn-primary" onclick="updateStatus(${c.claim_id})">Update</button>
+      </div>
+      <div class="msg" id="statusMsg_${c.claim_id}"></div>
+    </div>`:''}
+    ${canAssign?`<div class="drawer-section">
+      <h4>Assign To Staff</h4>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+        <select id="assignSel_${c.claim_id}" class="form-input" style="flex:1;min-width:160px">
+          <option value="">Loading staff…</option>
+        </select>
+        <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
+      </div>
+      <div class="msg" id="assignMsg_${c.claim_id}"></div>
+    </div>`:''}
+    <!-- Notes -->
+    <div class="drawer-section">
+      <h4>Internal Notes</h4>
+      <div id="notesArea_${c.claim_id}">${notesHtml}</div>
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
+        <textarea id="noteInput_${c.claim_id}" class="note-input" style="flex:1" placeholder="Add internal note…"></textarea>
+        <button class="btn btn-primary" onclick="addNote(${c.claim_id})">Add</button>
+      </div>
+    </div>
+    <!-- Follow-ups -->
+    <div class="drawer-section">
+      <h4>Follow-ups</h4>
+      <div id="fuArea_${c.claim_id}">${fuHtml}</div>
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input type="date" id="fuDate_${c.claim_id}" class="form-input" style="flex:1;min-width:130px" min="${new Date().toISOString().slice(0,10)}">
+        <input id="fuNote_${c.claim_id}" class="form-input" style="flex:2;min-width:120px" placeholder="Note">
+        <button class="btn btn-success" onclick="addFollowup(${c.claim_id})">Schedule</button>
+      </div>
+    </div>
+    <!-- Status Timeline -->
+    <div class="drawer-section">
+      <h4>Status History</h4>
+      <div class="tl">${tlHtml}</div>
+    </div>`;
+
+  // Load staff for assign dropdown
+  if (canAssign) {
+    const sr = await API('/staff');
+    if (sr.ok) {
+      const sd = await sr.json();
+      const sel = document.getElementById('assignSel_'+c.claim_id);
+      if (sel) sel.innerHTML = '<option value="">— Select staff —</option>' +
+        sd.staff.map(s=>`<option value="${s.staff_id}" ${c.assigned_to_staff_id===s.staff_id?'selected':''}>${esc(s.name)} (${s.role.replace(/_/g,' ')})</option>`).join('');
+    }
+  }
+}
+
+async function updateStatus(claimId) {
+  const sel = document.getElementById('newStatusSel_'+claimId);
+  const note = document.getElementById('statusNote_'+claimId).value.trim();
+  const msgEl = document.getElementById('statusMsg_'+claimId);
+  const r = await API('/claims/'+claimId+'/status', {
+    method:'PATCH', body: JSON.stringify({new_status: sel.value, note})
+  });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) {
+    msgEl.className='msg ok'; msgEl.textContent='Status updated ✓';
+    setTimeout(()=>openClaimDrawer(claimId),1000);
+  } else {
+    msgEl.className='msg err'; msgEl.textContent=d.detail||'Failed';
+  }
+}
+
+async function assignClaim(claimId) {
+  const sel = document.getElementById('assignSel_'+claimId);
+  const msgEl = document.getElementById('assignMsg_'+claimId);
+  if (!sel.value) { msgEl.className='msg err'; msgEl.textContent='Select a staff member'; return; }
+  const r = await API('/claims/'+claimId+'/assign', {
+    method:'POST', body: JSON.stringify({staff_id: parseInt(sel.value)})
+  });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) {
+    msgEl.className='msg ok'; msgEl.textContent='Assigned ✓';
+    setTimeout(()=>openClaimDrawer(claimId),1000);
+  } else {
+    msgEl.className='msg err'; msgEl.textContent=d.detail||'Failed';
+  }
+}
+
+async function addNote(claimId) {
+  const input = document.getElementById('noteInput_'+claimId);
+  const note = input.value.trim();
+  if (!note) return;
+  const r = await API('/claims/'+claimId+'/notes', {method:'POST', body:JSON.stringify({note})});
+  if (r.ok) {
+    input.value='';
+    // Refresh notes inline
+    const nr = await API('/claims/'+claimId+'/notes');
+    if (nr.ok) {
+      const nd = await nr.json();
+      document.getElementById('notesArea_'+claimId).innerHTML = nd.notes.map(n=>`
+        <div class="note-item">
+          <div class="note-meta">${esc(n.staff_name)} · ${fmtDate(n.created_at)}</div>
+          <div class="note-text">${esc(n.note)}</div>
+        </div>`).join('') || '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No notes yet</div>';
+    }
+  }
+}
+
+async function addFollowup(claimId) {
+  const due = document.getElementById('fuDate_'+claimId).value;
+  const note = document.getElementById('fuNote_'+claimId).value.trim();
+  if (!due) return;
+  const r = await API('/claims/'+claimId+'/followups', {method:'POST', body:JSON.stringify({due_date:due,note})});
+  if (r.ok) {
+    document.getElementById('fuDate_'+claimId).value='';
+    document.getElementById('fuNote_'+claimId).value='';
+    setTimeout(()=>openClaimDrawer(claimId),500);
+  }
+}
+
+async function markFollowupDone(fuId, claimId) {
+  await API('/followups/'+fuId+'/done', {method:'PATCH'});
+  setTimeout(()=>openClaimDrawer(claimId),400);
+}
+
+function closeDrawer(e) {
+  if (e && e.target !== document.getElementById('drawerBg')) return;
+  document.getElementById('drawerBg').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FOLLOW-UPS PANEL
+// ═══════════════════════════════════════════════════════════════
+async function loadFollowups() {
+  const el = document.getElementById('panel-followups');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">My Follow-ups</div><div class="section-sub">Tasks assigned to you</div></div><div id="fuList"><div class="empty"><p>Loading…</p></div></div>';
+  const r = await API('/my-followups?status=pending');
+  if (!r.ok) return;
+  const d = await r.json();
+  if (!d.followups.length) {
+    document.getElementById('fuList').innerHTML='<div class="empty"><div class="ei">✅</div><p>No pending follow-ups!</p></div>';
+    return;
+  }
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('fuList').innerHTML = d.followups.map(f=>`
+    <div class="fu-item" style="margin-bottom:.6rem;background:rgba(255,255,255,.04);border-radius:10px;padding:.85rem 1rem">
+      <div>
+        <div class="fu-due ${f.due_date<today?'overdue':''}" style="font-size:.85rem;margin-bottom:.2rem">📅 Due: ${f.due_date} ${f.due_date<today?'⚠️ OVERDUE':''}</div>
+        <div style="font-size:.88rem;color:#e2e8f0"><a href="#" onclick="openClaimDrawer(${f.claim_id})" style="color:#22d3ee">#${f.claim_id} ${esc(f.insured_name)}</a> — ${esc(f.claim_type)}</div>
+        <div class="fu-note" style="margin-top:.2rem">${esc(f.note||'')}</div>
+      </div>
+      <button class="btn btn-success" onclick="markFollowupDone(${f.followup_id},${f.claim_id});loadFollowups()">Mark Done</button>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ACCOUNTS
+// ═══════════════════════════════════════════════════════════════
+async function loadAccounts() {
+  const el = document.getElementById('panel-accounts');
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Advisor Accounts</div><div class="section-sub">All registered advisors</div></div>
+      ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
+    </div>
+    <div class="filter-bar">
+      <input id="accSearch" placeholder="🔍 Search name / email / firm…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
+    </div>
+    <div id="accTableWrap"><div class="empty"><p>Loading…</p></div></div>`;
+
+  const r = await API('/accounts?limit=500');
+  if (!r.ok) return;
+  const d = await r.json();
+  window._allAccounts = d.accounts;
+  renderAccounts(d.accounts);
+}
+
+function filterAccounts(q) {
+  const list = (window._allAccounts||[]).filter(a=>
+    !q || (a.owner_name||'').toLowerCase().includes(q.toLowerCase()) ||
+    (a.email||'').toLowerCase().includes(q.toLowerCase()) ||
+    (a.firm_name||'').toLowerCase().includes(q.toLowerCase())
+  );
+  renderAccounts(list);
+}
+
+function renderAccounts(accounts) {
+  if (!accounts.length) {
+    document.getElementById('accTableWrap').innerHTML='<div class="empty"><p>No accounts found</p></div>'; return;
+  }
+  const rows = accounts.map(a=>`
+    <tr>
+      <td><strong>#${a.account_id}</strong></td>
+      <td>${esc(a.owner_name)}</td>
+      <td>${esc(a.firm_name||'—')}</td>
+      <td>${esc(a.email)}</td>
+      <td>${esc(a.phone||'—')}</td>
+      <td><span class="pill-status s-${a.plan||'free'}">${a.plan||'free'}</span></td>
+      <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>
+      <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(a.created_at)}</td>
+      <td>
+        ${_role==='super_admin'?`
+        <button class="btn-icon" onclick="openEditAccountModal(${a.account_id})" title="Edit">✏️</button>
+        <button class="btn-icon" onclick="doImpersonate(${a.account_id})" title="Impersonate">🔑</button>`:''}
+      </td>
+    </tr>`).join('');
+  document.getElementById('accTableWrap').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function openCreateAccountModal() {
+  openModal('Create Advisor Account', `
+    <div class="form-field"><label>Owner Name</label><input id="na-name" class="form-input" placeholder="Full name"></div>
+    <div class="form-field"><label>Email</label><input id="na-email" class="form-input" type="email" placeholder="advisor@example.com"></div>
+    <div class="form-field"><label>Phone</label><input id="na-phone" class="form-input" placeholder="+91 9XXXXXXXXX"></div>
+    <div class="form-field"><label>Firm Name</label><input id="na-firm" class="form-input" placeholder="Optional"></div>
+    <div class="msg" id="na-msg"></div>`,
+    [{label:'Cancel', cls:'btn-ghost', fn: closeModal},
+     {label:'Create', cls:'btn-primary', fn: createAccount}]
+  );
+}
+
+async function createAccount() {
+  const body = {
+    owner_name: document.getElementById('na-name').value.trim(),
+    email: document.getElementById('na-email').value.trim(),
+    phone: document.getElementById('na-phone').value.trim(),
+    firm_name: document.getElementById('na-firm').value.trim(),
+  };
+  const msg = document.getElementById('na-msg');
+  if (!body.owner_name||!body.email||!body.phone){msg.className='msg err';msg.textContent='Name, email, phone required';return;}
+  const r = await API('/accounts', {method:'POST', body:JSON.stringify(body)});
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { msg.className='msg ok'; msg.textContent='Account created! A random password is set — edit to update.'; setTimeout(()=>{closeModal();loadAccounts();},1500); }
+  else { msg.className='msg err'; msg.textContent=d.detail||'Failed'; }
+}
+
+function openEditAccountModal(accountId) {
+  const a = (window._allAccounts||[]).find(x=>x.account_id===accountId);
+  if (!a) return;
+  openModal('Edit Account #'+accountId, `
+    <div class="form-field"><label>Owner Name</label><input id="ea-name" class="form-input" value="${esc(a.owner_name||'')}"></div>
+    <div class="form-field"><label>Firm</label><input id="ea-firm" class="form-input" value="${esc(a.firm_name||'')}"></div>
+    <div class="form-field"><label>Phone</label><input id="ea-phone" class="form-input" value="${esc(a.phone||'')}"></div>
+    <div class="form-field"><label>Status</label><select id="ea-status" class="form-input"><option value="active" ${a.status==='active'?'selected':''}>Active</option><option value="suspended" ${a.status==='suspended'?'selected':''}>Suspended</option></select></div>
+    <div class="form-field"><label>New Password (leave blank to keep)</label><input id="ea-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
+    <div class="msg" id="ea-msg"></div>`,
+    [{label:'Cancel', cls:'btn-ghost', fn:closeModal},
+     {label:'Save', cls:'btn-primary', fn:()=>saveAccount(accountId)}]
+  );
+}
+
+async function saveAccount(accountId) {
+  const pwd = document.getElementById('ea-pwd').value;
+  const body = {
+    owner_name: document.getElementById('ea-name').value.trim(),
+    firm_name: document.getElementById('ea-firm').value.trim(),
+    phone: document.getElementById('ea-phone').value.trim(),
+    status: document.getElementById('ea-status').value,
+  };
+  if (pwd) { if (pwd.length<8){document.getElementById('ea-msg').className='msg err';document.getElementById('ea-msg').textContent='Password min 8 chars';return;} body.new_password=pwd; }
+  const r = await API('/accounts/'+accountId, {method:'PATCH', body:JSON.stringify(body)});
+  if (r.ok) { setTimeout(()=>{closeModal();loadAccounts();},800); }
+  else { const d=await r.json().catch(()=>({})); document.getElementById('ea-msg').className='msg err'; document.getElementById('ea-msg').textContent=d.detail||'Failed'; }
+}
+
+async function doImpersonate(accountId) {
+  if (!confirm('Generate a login token for account #'+accountId+'?\n\nThis will be logged. Use only for troubleshooting.')) return;
+  const r = await API('/accounts/'+accountId+'/impersonate', {method:'POST'});
+  if (!r.ok) { alert('Failed to impersonate'); return; }
+  const d = await r.json();
+  // Open dashboard with advisor token
+  localStorage.setItem('nidaan_token', d.advisor_token);
+  window.open('/nidaan/dashboard', '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STAFF MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+async function loadStaff() {
+  const el = document.getElementById('panel-staff');
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Staff Management</div><div class="section-sub">Internal team access control</div></div>
+      <button class="btn btn-primary" onclick="openCreateStaffModal()">+ Add Staff</button>
+    </div>
+    <div id="staffTableWrap"><div class="empty"><p>Loading…</p></div></div>`;
+
+  const r = await API('/staff?include_inactive=true');
+  if (!r.ok) return;
+  const d = await r.json();
+  window._allStaff = d.staff;
+
+  if (!d.staff.length) { document.getElementById('staffTableWrap').innerHTML='<div class="empty"><p>No staff yet</p></div>'; return; }
+
+  const rows = d.staff.map(s=>`
+    <tr>
+      <td><strong>#${s.staff_id}</strong></td>
+      <td>${esc(s.name)}</td>
+      <td>${esc(s.email)}</td>
+      <td><span class="pill-status s-${s.role==='super_admin'?'assigned':s.role==='sub_super_admin'?'in_review':'intimated'}" style="font-size:.68rem">${s.role.replace(/_/g,' ')}</span></td>
+      <td><span class="pill-status s-${s.status}">${s.status}</span></td>
+      <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${s.last_login_at?fmtDate(s.last_login_at):'Never'}</td>
+      <td>${fmtDate(s.created_at)}</td>
+      <td>
+        <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
+        ${s.status==='active'?`<button class="btn-icon" style="color:#f87171" onclick="deactivateStaff(${s.staff_id})" title="Deactivate">🚫</button>`:'<button class="btn-icon" style="color:#4ade80" onclick="reactivateStaff('+s.staff_id+')" title="Reactivate">✅</button>'}
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('staffTableWrap').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function openCreateStaffModal() {
+  openModal('Add Staff Member', `
+    <div class="form-field"><label>Name</label><input id="ns-name" class="form-input" placeholder="Full name"></div>
+    <div class="form-field"><label>Email</label><input id="ns-email" class="form-input" type="email" placeholder="staff@nidaanpartner.com"></div>
+    <div class="form-field"><label>Password</label><input id="ns-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
+    <div class="form-field"><label>Role</label>
+      <select id="ns-role" class="form-input">
+        <option value="team_member">Team Member</option>
+        <option value="sub_super_admin">Sub Super Admin</option>
+        <option value="super_admin">Super Admin</option>
+      </select>
+    </div>
+    <div class="msg" id="ns-msg"></div>`,
+    [{label:'Cancel', cls:'btn-ghost', fn:closeModal},
+     {label:'Create', cls:'btn-primary', fn:createStaff}]
+  );
+}
+
+async function createStaff() {
+  const body={name:document.getElementById('ns-name').value.trim(),email:document.getElementById('ns-email').value.trim(),password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value};
+  const msg=document.getElementById('ns-msg');
+  if(!body.name||!body.email||!body.password){msg.className='msg err';msg.textContent='All fields required';return;}
+  const r=await API('/staff',{method:'POST',body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){msg.className='msg ok';msg.textContent='Staff created ✓';setTimeout(()=>{closeModal();loadStaff();},1200);}
+  else{msg.className='msg err';msg.textContent=d.detail||'Failed';}
+}
+
+function openEditStaffModal(staffId) {
+  const s=(window._allStaff||[]).find(x=>x.staff_id===staffId);
+  if(!s)return;
+  openModal('Edit Staff #'+staffId,`
+    <div class="form-field"><label>Name</label><input id="es-name" class="form-input" value="${esc(s.name)}"></div>
+    <div class="form-field"><label>Role</label><select id="es-role" class="form-input">
+      <option value="team_member" ${s.role==='team_member'?'selected':''}>Team Member</option>
+      <option value="sub_super_admin" ${s.role==='sub_super_admin'?'selected':''}>Sub Super Admin</option>
+      <option value="super_admin" ${s.role==='super_admin'?'selected':''}>Super Admin</option>
+    </select></div>
+    <div class="form-field"><label>New Password (leave blank)</label><input id="es-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
+    <div class="msg" id="es-msg"></div>`,
+    [{label:'Cancel',cls:'btn-ghost',fn:closeModal},{label:'Save',cls:'btn-primary',fn:()=>saveStaff(staffId)}]
+  );
+}
+
+async function saveStaff(staffId) {
+  const body={name:document.getElementById('es-name').value.trim(),role:document.getElementById('es-role').value};
+  const pwd=document.getElementById('es-pwd').value;
+  if(pwd){if(pwd.length<8){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Password min 8 chars';return;}body.password=pwd;}
+  const r=await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify(body)});
+  if(r.ok){setTimeout(()=>{closeModal();loadStaff();},800);}
+  else{const d=await r.json().catch(()=>({}));document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent=d.detail||'Failed';}
+}
+
+async function deactivateStaff(staffId) {
+  if(!confirm('Deactivate this staff member? They will lose portal access.'))return;
+  await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify({status:'inactive'})});
+  loadStaff();
+}
+
+async function reactivateStaff(staffId) {
+  await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify({status:'active'})});
+  loadStaff();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  REVENUE
+// ═══════════════════════════════════════════════════════════════
+async function loadRevenue() {
+  const el = document.getElementById('panel-revenue');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">Revenue Dashboard</div><div class="section-sub">All time • Confidential</div></div><div class="empty"><p>Loading…</p></div>';
+  const r = await API('/revenue');
+  if (!r.ok) { el.innerHTML += '<div class="empty"><p>Failed to load</p></div>'; return; }
+  const d = await r.json();
+
+  const byPlanRows = Object.entries(d.by_plan||{}).map(([plan,info])=>`
+    <div class="chart-bar-row">
+      <div class="chart-bar-label" style="text-transform:capitalize">${plan}</div>
+      <div class="chart-bar-bg"><div class="chart-bar-fill" style="width:${Math.min(100,(info.revenue/Math.max(d.total_subscription_revenue,1))*100)}%"></div></div>
+      <div class="chart-bar-val">₹${fmt(info.revenue)}</div>
+    </div>`).join('');
+
+  const monthlyRows = (d.monthly_trend||[]).map(m=>`
+    <div class="chart-bar-row">
+      <div class="chart-bar-label">${m.month}</div>
+      <div class="chart-bar-bg"><div class="chart-bar-fill" style="width:${Math.min(100,(m.revenue/Math.max(...(d.monthly_trend||[{revenue:1}]).map(x=>x.revenue)))*100)}%"></div></div>
+      <div class="chart-bar-val">₹${fmt(m.revenue)}</div>
+    </div>`).join('');
+
+  const subStatus = Object.entries(d.subscriptions_by_status||{}).map(([s,c])=>
+    `<span class="pill-status s-${s}" style="margin-right:.35rem">${s}: ${c}</span>`).join('');
+
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Revenue Dashboard</div><div class="section-sub">All time • Confidential</div></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card ok"><div class="sv">₹${fmt(d.total_revenue)}</div><div class="sl">Total Revenue</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_subscription_revenue)}</div><div class="sl">Subscription Revenue</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">D2C ₹999 Revenue</div></div>
+    </div>
+
+    <!-- Revenue Split -->
+    <div style="margin-bottom:1.25rem">
+      <div class="section-hdr" style="margin-bottom:.85rem"><div class="section-title" style="font-size:1rem">Revenue Split (80:20)</div></div>
+      <div class="split-card">
+        <div class="split-row">
+          <div class="split-name" style="color:#22d3ee">Ashwin</div>
+          <div class="split-bar-bg"><div class="split-bar-fill" style="width:80%"></div></div>
+          <div class="split-amount">₹${fmt(d.revenue_split.ashwin.amount)} <span style="font-size:.72rem;color:rgba(255,255,255,.4)">(80%)</span></div>
+        </div>
+        <div class="split-row">
+          <div class="split-name" style="color:#a78bfa">Dushyant</div>
+          <div class="split-bar-bg"><div class="split-bar-fill" style="width:20%;background:linear-gradient(90deg,#7c3aed,#a78bfa)"></div></div>
+          <div class="split-amount" style="color:#a78bfa">₹${fmt(d.revenue_split.dushyant.amount)} <span style="font-size:.72rem;color:rgba(255,255,255,.4)">(20%)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subscription Status -->
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Subscriptions by Status</div></div>
+      <div>${subStatus}</div>
+    </div>
+
+    <!-- By Plan -->
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Revenue by Plan</div></div>
+      <div class="drawer-section">${byPlanRows||'<div class="empty"><p>No data</p></div>'}</div>
+    </div>
+
+    <!-- Monthly -->
+    <div>
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Monthly Trend (Last 12 Months)</div></div>
+      <div class="drawer-section">${monthlyRows||'<div class="empty"><p>No data yet</p></div>'}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  APP HEALTH
+// ═══════════════════════════════════════════════════════════════
+async function loadHealth() {
+  const el = document.getElementById('panel-health');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">App Health</div><div class="section-sub">Live system diagnostics</div></div><div class="empty"><p>Loading…</p></div>';
+  const r = await API('/health');
+  if (!r.ok) { el.innerHTML += '<div class="empty"><p>Failed to load</p></div>'; return; }
+  const d = await r.json();
+
+  const tblRows = Object.entries(d.table_counts||{}).map(([t,c])=>
+    `<div class="chart-bar-row">
+      <div class="chart-bar-label" style="width:200px;text-align:left;font-size:.75rem;white-space:nowrap">${t}</div>
+      <div class="chart-bar-bg"><div class="chart-bar-fill" style="width:${Math.min(100,(c/Math.max(...Object.values(d.table_counts)))*100||0}%"></div></div>
+      <div class="chart-bar-val">${c}</div>
+    </div>`).join('');
+
+  const claimStatus = Object.entries(d.claims_by_status||{}).map(([s,c])=>
+    `<span class="pill-status s-${s}" style="margin:.15rem">${s.replace(/_/g,' ')}: ${c}</span>`).join('');
+
+  const latencyColor = d.db_latency_ms < 50 ? '#4ade80' : d.db_latency_ms < 200 ? '#fbbf24' : '#f87171';
+
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">App Health</div><div class="section-sub">Snapshot at ${d.timestamp}</div></div>
+      <button class="btn btn-ghost" onclick="loadHealth()">🔄 Refresh</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card ${d.db_latency_ms<50?'ok':d.db_latency_ms<200?'warn':'danger'}">
+        <div class="sv" style="color:${latencyColor}">${d.db_latency_ms}ms</div>
+        <div class="sl">DB Latency</div>
+      </div>
+      <div class="stat-card ${d.overdue_followups>0?'warn':'ok'}">
+        <div class="sv" style="color:${d.overdue_followups>0?'#fbbf24':'#4ade80'}">${d.overdue_followups}</div>
+        <div class="sl">Overdue Follow-ups</div>
+      </div>
+      <div class="stat-card ${d.unassigned_open_claims>0?'warn':'ok'}">
+        <div class="sv" style="color:${d.unassigned_open_claims>5?'#f87171':d.unassigned_open_claims>0?'#fbbf24':'#4ade80'}">${d.unassigned_open_claims}</div>
+        <div class="sl">Unassigned Open Claims</div>
+      </div>
+      <div class="stat-card">
+        <div class="sv" style="color:#22d3ee">${d.new_accounts_last_7d}</div>
+        <div class="sl">New Accounts (7d)</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Claims by Status</div></div>
+      <div>${claimStatus}</div>
+    </div>
+
+    <div>
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Database Table Sizes</div></div>
+      <div class="drawer-section">${tblRows}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODAL HELPER
+// ═══════════════════════════════════════════════════════════════
+function openModal(title, bodyHtml, buttons=[]) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFooter').innerHTML = buttons.map(b=>
+    `<button class="btn ${b.cls}">${b.label}</button>`).join('');
+  document.getElementById('modalFooter').querySelectorAll('button').forEach((btn,i)=>{
+    btn.onclick = buttons[i].fn;
+  });
+  document.getElementById('modalBg').classList.add('open');
+  // Close on backdrop click
+  document.getElementById('modalBg').onclick = e => { if(e.target===document.getElementById('modalBg')) closeModal(); };
+}
+
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════
+function esc(s){ if(!s&&s!==0)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt(n){ if(!n&&n!==0)return '0'; return Number(n).toLocaleString('en-IN'); }
+function fmtDate(s){ if(!s)return '—'; try{ const d=new Date(s); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }catch{return s;} }
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+(async function init() {
+  // Check for saved token
+  const saved = localStorage.getItem('nidaan_ops_token');
+  if (!saved) return;  // show login screen
+  // Validate token
+  const r = await fetch('/nidaan/ops/api/me', {
+    headers: {'Authorization':'Bearer '+saved}
+  });
+  if (!r.ok) { localStorage.removeItem('nidaan_ops_token'); return; }
+  const staff = await r.json();
+  _token = saved;
+  _role = staff.role;
+  _staffId = staff.staff_id;
+  _staffName = staff.name;
+  bootApp();
+})();
+
+// Enter key on login
+document.getElementById('loginPwd').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>

@@ -1039,6 +1039,51 @@ async def init_db():
                 ON product_link(nidaan_account_id);
             CREATE INDEX IF NOT EXISTS idx_product_link_sarathi
                 ON product_link(sarathi_tenant_id);
+
+            -- ── Nidaan Internal Staff ────────────────────────────────────────
+            -- Roles: super_admin, sub_super_admin, team_member
+            CREATE TABLE IF NOT EXISTS nidaan_staff (
+                staff_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL,
+                email         TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role          TEXT NOT NULL DEFAULT 'team_member',
+                status        TEXT NOT NULL DEFAULT 'active',
+                created_by    INTEGER REFERENCES nidaan_staff(staff_id),
+                last_login_at TIMESTAMP,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_staff_email
+                ON nidaan_staff(email);
+
+            -- Internal claim notes (staff-only, never visible to advisors)
+            CREATE TABLE IF NOT EXISTS nidaan_claim_notes (
+                note_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id   INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                staff_id   INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                note       TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_notes_claim
+                ON nidaan_claim_notes(claim_id);
+
+            -- Follow-up tasks per claim
+            CREATE TABLE IF NOT EXISTS nidaan_followups (
+                followup_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id     INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                staff_id     INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                due_date     DATE NOT NULL,
+                note         TEXT,
+                status       TEXT NOT NULL DEFAULT 'pending',
+                completed_at TIMESTAMP,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_followups_claim
+                ON nidaan_followups(claim_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_followups_staff
+                ON nidaan_followups(staff_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_followups_due
+                ON nidaan_followups(due_date, status);
         """)
 
         # Sarathi cross-promo column (which product source referred this tenant)
@@ -1051,6 +1096,8 @@ async def init_db():
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN claim_type TEXT",
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN status TEXT DEFAULT 'pending_payment'",
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN razorpay_subscription_id TEXT",
+            # Phase 3: staff assignment column on claims
+            "ALTER TABLE nidaan_claims ADD COLUMN assigned_to_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
         ]
         for m in nidaan_migrations:
             try:
