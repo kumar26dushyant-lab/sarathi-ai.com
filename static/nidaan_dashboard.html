@@ -52,6 +52,13 @@
 
   /* LOCKED OVERLAY on data sections */
   .locked-section{pointer-events:none}
+  /* TAB-LEVEL lock overlay for non-subscribers */
+  .tab-lock{position:relative;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;text-align:center;padding:3rem 1.5rem;background:rgba(6,15,30,.55);border:1px solid rgba(255,255,255,.07);border-radius:14px;backdrop-filter:blur(6px)}
+  .tab-lock-icon{font-size:3rem;line-height:1}
+  .tab-lock-title{font-size:1.05rem;font-weight:800;color:rgba(255,255,255,.85)}
+  .tab-lock-sub{font-size:.85rem;color:rgba(255,255,255,.4);max-width:320px}
+  .tab-btn[data-requires-sub].locked-tab{color:rgba(255,255,255,.3)}
+  .tab-btn[data-requires-sub].locked-tab::after{content:' 🔒';font-size:.72em}
   .lock-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:11;gap:.75rem;text-align:center;padding:1.5rem;background:rgba(6,15,30,.72);border-radius:14px;backdrop-filter:blur(4px)}
   .lock-overlay-icon{font-size:2.5rem}
   .lock-overlay-text{color:rgba(255,255,255,.85);font-size:.95rem;font-weight:700}
@@ -322,10 +329,10 @@
     <button class="tab-btn active" onclick="showTab('dashboard')">
       <span class="en">📋 Dashboard</span><span class="hi">📋 डैशबोर्ड</span>
     </button>
-    <button class="tab-btn" onclick="showTab('profile')">
+    <button class="tab-btn" onclick="showTab('profile')" data-requires-sub="true">
       <span class="en">👤 Profile</span><span class="hi">👤 प्रोफ़ाइल</span>
     </button>
-    <button class="tab-btn" onclick="showTab('settings')">
+    <button class="tab-btn" onclick="showTab('settings')" data-requires-sub="true">
       <span class="en">⚙️ Settings</span><span class="hi">⚙️ सेटिंग्स</span>
     </button>
   </div>
@@ -762,10 +769,16 @@ async function loadDashboard() {
         <span class="en">Valid until ${end}</span>
         <span class="hi">${end} तक वैध</span>
       </div>`;
+    _isSubscribed = true;
     document.getElementById('newClaimBtn').disabled = false;
     lockOverlay.style.display = 'none';
     claimCard.style.pointerEvents = '';
+    // Remove locked-tab styling from gated tabs
+    document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
   } else {
+    _isSubscribed = false;
+    // Mark gated tabs visually with lock icon
+    document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
     // Unsubscribed — lock the claims section visually
     lockOverlay.style.display = 'flex';
     claimCard.style.minHeight = '220px';
@@ -903,6 +916,31 @@ function _drawerBgClick(e) { if (e.target === document.getElementById('claimDraw
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 function showTab(id) {
+  // Gate: non-subscribers cannot access tabs marked data-requires-sub
+  if (!_isSubscribed && id !== 'dashboard') {
+    // Show paywall overlay inside the requested tab panel instead of real content
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const panel = document.getElementById('tab-' + id);
+    if (panel) {
+      // Inject lock overlay (idempotent)
+      if (!panel.querySelector('.tab-lock')) {
+        const isHi = document.body.classList.contains('hi');
+        panel.innerHTML = `<div class="tab-lock">
+          <div class="tab-lock-icon">🔒</div>
+          <div class="tab-lock-title">${isHi ? 'सब्सक्रिप्शन आवश्यक' : 'Subscription Required'}</div>
+          <div class="tab-lock-sub">${isHi ? 'इस सेक्शन को एक्सेस करने के लिए एक प्लान चुनें।' : 'Choose a plan to unlock your profile, settings, and all features.'}</div>
+          <button class="btn btn-primary" style="margin-top:.5rem" onclick="showTab('dashboard');document.getElementById('subBanner').scrollIntoView({behavior:'smooth'})">${isHi ? '📋 प्लान चुनें' : '📋 Choose a Plan'}</button>
+        </div>`;
+      }
+      panel.classList.add('active');
+    }
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + id + "'"))
+        b.classList.add('active');
+    });
+    return;
+  }
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
@@ -915,7 +953,8 @@ function showTab(id) {
 
 // ── Subscribe modal ──────────────────────────────────────────────────────────
 let _selectedPlan = null;
-let _meCache = null;  // store /api/me result
+let _meCache = null;      // store /api/me result
+let _isSubscribed = false; // set in loadDashboard; gates profile/settings tabs
 
 function openSubscribeModal() {
   _selectedPlan = null;
