@@ -180,14 +180,22 @@ async def update_heartbeat(device_id: int):
 
 
 async def revoke_device(tenant_id: int, agent_id: int) -> bool:
-    """Revoke the active device for an agent. Closes live connection if any."""
+    """Revoke the active device for an agent. Closes live connection if any.
+    If agent_id=0, revokes any active device for this tenant."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT device_id FROM wa_agent_devices "
-            "WHERE tenant_id=? AND agent_id=? AND status='active'",
-            (tenant_id, agent_id),
-        )
+        if agent_id:
+            cur = await conn.execute(
+                "SELECT device_id FROM wa_agent_devices "
+                "WHERE tenant_id=? AND agent_id=? AND status='active'",
+                (tenant_id, agent_id),
+            )
+        else:
+            cur = await conn.execute(
+                "SELECT device_id FROM wa_agent_devices "
+                "WHERE tenant_id=? AND status='active'",
+                (tenant_id,),
+            )
         row = await cur.fetchone()
         if not row:
             return False
@@ -210,19 +218,32 @@ async def revoke_device(tenant_id: int, agent_id: int) -> bool:
 
 
 async def get_device_status(tenant_id: int, agent_id: int) -> Optional[dict]:
-    """Get the active device for an agent with live connection status."""
+    """Get the active device for an agent with live connection status.
+    If agent_id=0 (owner without agent record), queries by tenant_id only."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT device_id, status, connected, device_model, android_version, "
-            "agent_name, agent_phone, auto_reply_enabled, business_hours, "
-            "max_daily_msgs, max_hourly_msgs, daily_msg_count, daily_msg_date, "
-            "last_seen_at, created_at "
-            "FROM wa_agent_devices "
-            "WHERE tenant_id=? AND agent_id=? AND status='active' "
-            "ORDER BY created_at DESC LIMIT 1",
-            (tenant_id, agent_id),
-        )
+        if agent_id:
+            cur = await conn.execute(
+                "SELECT device_id, status, connected, device_model, android_version, "
+                "agent_name, agent_phone, auto_reply_enabled, business_hours, "
+                "max_daily_msgs, max_hourly_msgs, daily_msg_count, daily_msg_date, "
+                "last_seen_at, created_at "
+                "FROM wa_agent_devices "
+                "WHERE tenant_id=? AND agent_id=? AND status='active' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (tenant_id, agent_id),
+            )
+        else:
+            cur = await conn.execute(
+                "SELECT device_id, status, connected, device_model, android_version, "
+                "agent_name, agent_phone, auto_reply_enabled, business_hours, "
+                "max_daily_msgs, max_hourly_msgs, daily_msg_count, daily_msg_date, "
+                "last_seen_at, created_at "
+                "FROM wa_agent_devices "
+                "WHERE tenant_id=? AND status='active' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (tenant_id,),
+            )
         row = await cur.fetchone()
         if row:
             d = dict(row)
@@ -633,16 +654,27 @@ async def get_recent_conversations(tenant_id: int, agent_id: int,
     try:
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
-            cur = await conn.execute(
-                """SELECT c.conv_id, c.sender_name, c.sender_phone, c.direction,
-                          c.msg_type, c.message, c.ai_reply, c.intent,
-                          c.auto_handled, c.takeover_triggered, c.created_at
-                   FROM wa_agent_conversations c
-                   JOIN wa_agent_devices d ON c.device_id = d.device_id
-                   WHERE c.tenant_id=? AND d.agent_id=?
-                   ORDER BY c.created_at DESC LIMIT ?""",
-                (tenant_id, agent_id, limit),
-            )
+            if agent_id:
+                cur = await conn.execute(
+                    """SELECT c.conv_id, c.sender_name, c.sender_phone, c.direction,
+                              c.msg_type, c.message, c.ai_reply, c.intent,
+                              c.auto_handled, c.takeover_triggered, c.created_at
+                       FROM wa_agent_conversations c
+                       JOIN wa_agent_devices d ON c.device_id = d.device_id
+                       WHERE c.tenant_id=? AND d.agent_id=?
+                       ORDER BY c.created_at DESC LIMIT ?""",
+                    (tenant_id, agent_id, limit),
+                )
+            else:
+                cur = await conn.execute(
+                    """SELECT c.conv_id, c.sender_name, c.sender_phone, c.direction,
+                              c.msg_type, c.message, c.ai_reply, c.intent,
+                              c.auto_handled, c.takeover_triggered, c.created_at
+                       FROM wa_agent_conversations c
+                       WHERE c.tenant_id=?
+                       ORDER BY c.created_at DESC LIMIT ?""",
+                    (tenant_id, limit),
+                )
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
     except Exception as e:
@@ -656,17 +688,29 @@ async def get_conversation_stats(tenant_id: int, agent_id: int) -> dict:
         today = date.today().isoformat()
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
-            cur = await conn.execute(
-                """SELECT
-                     COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.direction='in') AS incoming_today,
-                     COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.auto_handled=1) AS auto_replied_today,
-                     COUNT(*) FILTER (WHERE c.takeover_triggered=1) AS total_takeovers,
-                     COUNT(*) AS total_messages
-                   FROM wa_agent_conversations c
-                   JOIN wa_agent_devices d ON c.device_id = d.device_id
-                   WHERE c.tenant_id=? AND d.agent_id=?""",
-                (today, today, tenant_id, agent_id),
-            )
+            if agent_id:
+                cur = await conn.execute(
+                    """SELECT
+                         COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.direction='in') AS incoming_today,
+                         COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.auto_handled=1) AS auto_replied_today,
+                         COUNT(*) FILTER (WHERE c.takeover_triggered=1) AS total_takeovers,
+                         COUNT(*) AS total_messages
+                       FROM wa_agent_conversations c
+                       JOIN wa_agent_devices d ON c.device_id = d.device_id
+                       WHERE c.tenant_id=? AND d.agent_id=?""",
+                    (today, today, tenant_id, agent_id),
+                )
+            else:
+                cur = await conn.execute(
+                    """SELECT
+                         COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.direction='in') AS incoming_today,
+                         COUNT(*) FILTER (WHERE date(c.created_at)=? AND c.auto_handled=1) AS auto_replied_today,
+                         COUNT(*) FILTER (WHERE c.takeover_triggered=1) AS total_takeovers,
+                         COUNT(*) AS total_messages
+                       FROM wa_agent_conversations c
+                       WHERE c.tenant_id=?""",
+                    (today, today, tenant_id),
+                )
             row = await cur.fetchone()
             return dict(row) if row else {}
     except Exception as e:
@@ -878,8 +922,9 @@ async def handle_apk_event(device: dict, event: dict, ws,
 async def _get_agent_from_request(request) -> tuple:
     """
     Extract (tenant_id, agent_id) from a JWT bearer token.
-    Returns (0, 0) if unauthenticated.
-    Used by WA agent REST endpoints.
+    - Uses 'sub' for tenant_id and 'aid' for agent_id (correct JWT keys).
+    - Falls back to DB lookup if 'aid' not in token (owner logins via web).
+    - Returns (0, 0) if unauthenticated.
     """
     try:
         import biz_auth as auth
@@ -893,7 +938,28 @@ async def _get_agent_from_request(request) -> tuple:
             options={"verify_exp": True},
         )
         tenant_id = int(payload.get("sub", 0))
-        agent_id = int(payload.get("agent_id", 0))
+        if not tenant_id:
+            return 0, 0
+        # JWT uses 'aid', not 'agent_id'
+        agent_id = int(payload.get("aid") or 0)
+        # If owner login has no 'aid', look up their agent record by phone
+        if not agent_id:
+            phone = payload.get("phone", "")
+            if phone:
+                try:
+                    async with aiosqlite.connect(db.DB_PATH) as conn:
+                        conn.row_factory = aiosqlite.Row
+                        cur = await conn.execute(
+                            "SELECT agent_id FROM agents "
+                            "WHERE tenant_id=? AND phone=? AND is_active=1 "
+                            "ORDER BY agent_id ASC LIMIT 1",
+                            (tenant_id, phone),
+                        )
+                        row = await cur.fetchone()
+                        if row:
+                            agent_id = row["agent_id"]
+                except Exception:
+                    pass
         return tenant_id, agent_id
     except Exception:
         return 0, 0

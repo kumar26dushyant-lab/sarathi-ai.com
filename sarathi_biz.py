@@ -1779,7 +1779,7 @@ async def wa_agent_ws(websocket: WebSocket):
 async def wa_agent_connect(request: Request):
     """Generate QR credentials for a new APK connection. Revokes any existing device."""
     tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
-    if not tenant_id or not agent_id:
+    if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     creds = await wa_agent.generate_device_credentials(tenant_id, agent_id)
     return creds
@@ -1789,7 +1789,7 @@ async def wa_agent_connect(request: Request):
 async def wa_agent_status(request: Request):
     """Return the active device status and live-connection flag for the agent."""
     tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
-    if not tenant_id or not agent_id:
+    if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     device = await wa_agent.get_device_status(tenant_id, agent_id)
     if not device:
@@ -1802,7 +1802,7 @@ async def wa_agent_status(request: Request):
 async def wa_agent_disconnect(request: Request):
     """Revoke the active device — closes live WS connection and deletes credentials."""
     tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
-    if not tenant_id or not agent_id:
+    if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     revoked = await wa_agent.revoke_device(tenant_id, agent_id)
     return {"revoked": revoked}
@@ -1812,7 +1812,7 @@ async def wa_agent_disconnect(request: Request):
 async def wa_agent_settings(body: _WAAgentSettingsReq, request: Request):
     """Update per-device settings: auto_reply toggle, business hours, takeover keywords, caps."""
     tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
-    if not tenant_id or not agent_id:
+    if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     ok = await wa_agent.update_device_settings(
         tenant_id, agent_id,
@@ -1829,7 +1829,7 @@ async def wa_agent_settings(body: _WAAgentSettingsReq, request: Request):
 async def wa_agent_conversations(request: Request, limit: int = Query(100, le=500)):
     """Fetch recent conversation history for the agent's WA bridge."""
     tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
-    if not tenant_id or not agent_id:
+    if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     convs = await wa_agent.get_recent_conversations(tenant_id, agent_id, limit)
     return {"conversations": convs, "count": len(convs)}
