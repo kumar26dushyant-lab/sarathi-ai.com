@@ -3124,6 +3124,8 @@ function configurePlanUI() {
     // Hide Support tab for advisors (only owners/admins see it)
     const supportNav = document.querySelector('.nav-item[data-tab="support"]');
     if (supportNav) supportNav.classList.toggle('hidden', !isOwner);
+    // WhatsApp tab — always visible for all roles
+    document.querySelectorAll('[data-tab="whatsapp"]').forEach(el => el.style.display = '');
     // Hide partner CTA if already a partner
     const partnerCta = document.getElementById('nav-partner-cta');
     if (partnerCta) partnerCta.style.display = STATE.isPartner ? 'none' : '';
