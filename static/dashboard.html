@@ -1081,7 +1081,96 @@ function exitImpersonation() {
 
         <!-- ═══ WHATSAPP v2 TAB (Agent-Assist) ═══ -->
         <div class="tab-panel" id="tab-whatsapp">
-            <!-- Hero / Status card -->
+
+            <!-- ── SARATHI AGENT: APK Bridge (NEW) ─────────────────────────────── -->
+            <div class="card" style="margin-bottom:20px;border:2px solid rgba(37,211,102,0.35)">
+                <div class="card-header" style="background:linear-gradient(135deg,rgba(37,211,102,0.08),rgba(6,13,26,0))">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span style="font-size:1.5em">📱</span>
+                        <div>
+                            <h3 style="margin:0;font-size:1em;font-weight:700">Sarathi Agent — APK Bridge <span style="font-size:.7em;background:#10b981;color:white;padding:2px 8px;border-radius:8px;margin-left:6px;vertical-align:middle">NEW</span></h3>
+                            <div style="font-size:.78em;color:var(--muted);margin-top:2px">Install the APK on your phone → WhatsApp AI replies work directly from your number</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+
+                    <!-- Status row -->
+                    <div id="apk-status-row" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg);border-radius:10px;margin-bottom:16px">
+                        <div id="apk-status-icon" style="font-size:1.9em">⚪</div>
+                        <div style="flex:1">
+                            <div id="apk-status-text" style="font-weight:700;color:var(--text)">Checking...</div>
+                            <div id="apk-status-meta" style="font-size:.8em;color:var(--muted);margin-top:2px"></div>
+                        </div>
+                        <button id="apk-connect-btn" onclick="apkConnect()" style="display:none;padding:9px 18px;border-radius:9px;font-weight:700;background:#25D366;color:white;border:none;cursor:pointer;font-size:.9em">📱 Connect APK</button>
+                        <button id="apk-regen-btn" onclick="apkConnect()" style="display:none;padding:8px 14px;border-radius:8px;font-weight:600;background:none;color:#22d3ee;border:1px solid #22d3ee;cursor:pointer;font-size:.85em">🔄 New QR</button>
+                        <button id="apk-disconnect-btn" onclick="apkDisconnect()" style="display:none;padding:8px 14px;border-radius:8px;font-weight:600;background:none;color:#ef4444;border:1px solid #ef4444;cursor:pointer;font-size:.85em">Disconnect</button>
+                    </div>
+
+                    <!-- Today's stats (when connected) -->
+                    <div id="apk-stats" style="display:none;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #10b981">
+                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Auto-Replied Today</div>
+                            <div id="apk-stat-replied" style="font-size:1.4em;font-weight:700;color:#10b981">—</div>
+                        </div>
+                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid var(--primary)">
+                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Incoming Today</div>
+                            <div id="apk-stat-incoming" style="font-size:1.4em;font-weight:700">—</div>
+                        </div>
+                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #f59e0b">
+                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Escalations</div>
+                            <div id="apk-stat-takeover" style="font-size:1.4em;font-weight:700;color:#f59e0b">—</div>
+                        </div>
+                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #6366f1">
+                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Device</div>
+                            <div id="apk-stat-device" style="font-size:.82em;font-weight:600">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Quick settings (when connected) -->
+                    <div id="apk-settings" style="display:none;margin-bottom:16px">
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:10px">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88em;font-weight:600">
+                                <input type="checkbox" id="apk-toggle-autoreply" onchange="apkToggleAutoReply()" style="width:16px;height:16px;cursor:pointer">
+                                Auto-Reply ON
+                            </label>
+                            <div style="font-size:.82em;color:var(--muted)">Business hours: 9 AM – 8 PM IST (Mon–Sun)</div>
+                            <button onclick="apkShowConversations()" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid var(--primary);background:none;color:var(--primary);cursor:pointer;font-size:.83em;font-weight:600">💬 View Chats</button>
+                        </div>
+                    </div>
+
+                    <!-- QR Modal -->
+                    <div id="apk-qr-modal" style="display:none;text-align:center;padding:20px 16px;background:var(--bg);border-radius:12px;margin-bottom:16px">
+                        <div style="font-size:.92em;font-weight:700;margin-bottom:6px">📱 Scan this QR in the Sarathi Agent app</div>
+                        <div style="font-size:.8em;color:var(--muted);margin-bottom:14px">QR expires in 5 minutes. Download APK first if you haven't.</div>
+                        <div id="apk-qr-container" style="display:inline-block;background:white;padding:12px;border-radius:10px;margin-bottom:12px"></div>
+                        <div style="margin-top:10px">
+                            <a id="apk-download-link" href="/static/sarathi-agent.apk" download style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;background:#25D366;color:white;font-weight:700;font-size:.88em;text-decoration:none">⬇️ Download Sarathi Agent APK</a>
+                        </div>
+                        <div style="margin-top:8px;font-size:.75em;color:var(--muted)">APK size: ~4 MB · Requires Android 8.0+</div>
+                    </div>
+
+                    <!-- Risk disclaimer -->
+                    <div style="padding:12px 14px;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:10px;font-size:.8em;color:var(--muted);line-height:1.5">
+                        <strong style="color:#ef4444">⚠️ Important:</strong> Sarathi Agent works on your personal WhatsApp number.
+                        Built-in protections: human-like delays, 200-msg/day cap, 20-msg/hour cap, business hours filter, and keyword-based escalation.
+                        Use responsibly — avoid mass blasting. You remain in control at all times. All auto-replies carry a "Powered by Sarathi-AI" footer.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conversations panel (initially hidden) -->
+            <div id="apk-conversations-panel" style="display:none;margin-bottom:20px">
+                <div class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                        <h3 style="margin:0;font-size:.95em;font-weight:700">💬 Recent WA Conversations</h3>
+                        <button onclick="document.getElementById('apk-conversations-panel').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2em">✕</button>
+                    </div>
+                    <div id="apk-conv-list" style="max-height:420px;overflow-y:auto"></div>
+                </div>
+            </div>
+
+            <!-- Hero / Status card (Evolution API — existing) -->
             <div class="card" style="margin-bottom:20px">
                 <div class="card-header">
                     <h3 data-i18n="wa_title">💬 WhatsApp Automation</h3>
@@ -2984,7 +3073,7 @@ function switchTab(tab) {
     else if (tab==='subscription') loadSubscription();
     else if (tab==='profile') loadProfile();
     else if (tab==='support') loadTickets();
-    else if (tab==='whatsapp') loadWhatsAppStatus();
+    else if (tab==='whatsapp') { loadWhatsAppStatus(); apkLoadStatus(); }
     else if (tab==='drip') { loadDripSequences(); loadDripEnrollments('active');
         if (isOwnerRole && isOwnerRole()) document.getElementById('drip-test-btn').style.display='inline-block'; }
     else if (tab==='lapse') loadLapse();
@@ -6088,6 +6177,148 @@ async function loadProfile() {
     } catch(e) { console.error('loadProfile error:', e); }
     // Refresh GDrive section status
     if (typeof loadGdriveStatus === 'function') loadGdriveStatus();
+}
+
+// ═══════════ SARATHI AGENT — APK Bridge ═══════════
+let _apkQrInterval = null;
+let _apkStatusInterval = null;
+
+async function apkLoadStatus() {
+    const icon = document.getElementById('apk-status-icon');
+    const text = document.getElementById('apk-status-text');
+    const meta = document.getElementById('apk-status-meta');
+    const connectBtn = document.getElementById('apk-connect-btn');
+    const regenBtn = document.getElementById('apk-regen-btn');
+    const discBtn = document.getElementById('apk-disconnect-btn');
+    const statsDiv = document.getElementById('apk-stats');
+    const settingsDiv = document.getElementById('apk-settings');
+    const qrModal = document.getElementById('apk-qr-modal');
+    try {
+        const r = await api('/api/wa-agent/status');
+        if (!r || !r.ok) throw new Error('status_fail');
+        const d = await r.json();
+        if (!d.connected || !d.device) {
+            icon.textContent = '⚪'; text.textContent = 'Not connected';
+            meta.textContent = 'Install the Sarathi Agent APK and scan the QR code to activate';
+            connectBtn.style.display = 'inline-block';
+            regenBtn.style.display = discBtn.style.display = 'none';
+            statsDiv.style.display = settingsDiv.style.display = 'none';
+            return;
+        }
+        const dev = d.device;
+        const stats = d.stats || {};
+        if (dev.is_live) {
+            icon.textContent = '🟢'; text.textContent = 'Connected & Live';
+            meta.textContent = `Last seen: ${dev.last_seen_at ? new Date(dev.last_seen_at+'Z').toLocaleString() : '—'}`;
+        } else {
+            icon.textContent = '🟡'; text.textContent = 'Device offline';
+            meta.textContent = `Last seen: ${dev.last_seen_at ? new Date(dev.last_seen_at+'Z').toLocaleString() : 'Never'}`;
+        }
+        connectBtn.style.display = 'none';
+        regenBtn.style.display = discBtn.style.display = 'inline-block';
+        qrModal.style.display = 'none';
+        statsDiv.style.display = 'grid';
+        settingsDiv.style.display = 'block';
+        document.getElementById('apk-stat-replied').textContent = stats.auto_replied_today ?? '0';
+        document.getElementById('apk-stat-incoming').textContent = stats.incoming_today ?? '0';
+        document.getElementById('apk-stat-takeover').textContent = stats.total_takeovers ?? '0';
+        document.getElementById('apk-stat-device').textContent = dev.device_model || dev.android_version || 'Android';
+        const toggle = document.getElementById('apk-toggle-autoreply');
+        if (toggle) toggle.checked = !!dev.auto_reply_enabled;
+    } catch(e) {
+        icon.textContent = '⚠️'; text.textContent = 'Error checking status'; meta.textContent = '';
+    }
+}
+
+async function apkConnect() {
+    const qrModal = document.getElementById('apk-qr-modal');
+    const qrContainer = document.getElementById('apk-qr-container');
+    const connectBtn = document.getElementById('apk-connect-btn');
+    const regenBtn = document.getElementById('apk-regen-btn');
+    connectBtn.disabled = regenBtn.disabled = true;
+    try {
+        const r = await api('/api/wa-agent/connect', { method: 'POST' });
+        if (!r || !r.ok) { showToast('Failed to generate QR', 'error'); return; }
+        const d = await r.json();
+        // Render QR using qrcode.js (loaded lazily)
+        qrContainer.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(qrContainer, { text: d.qr_data, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+        } else {
+            // Fallback: load qrcode.js from CDN
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+            script.onload = () => {
+                new QRCode(qrContainer, { text: d.qr_data, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+            };
+            document.head.appendChild(script);
+        }
+        qrModal.style.display = 'block';
+        // Auto-poll status — QR valid 5 min
+        if (_apkQrInterval) clearInterval(_apkQrInterval);
+        let elapsed = 0;
+        _apkQrInterval = setInterval(async () => {
+            elapsed += 5;
+            if (elapsed >= 300) { clearInterval(_apkQrInterval); return; }
+            const sr = await api('/api/wa-agent/status');
+            if (!sr || !sr.ok) return;
+            const sd = await sr.json();
+            if (sd.connected && sd.device && sd.device.is_live) {
+                clearInterval(_apkQrInterval);
+                qrModal.style.display = 'none';
+                showToast('Sarathi Agent connected! 🎉', 'success');
+                await apkLoadStatus();
+            }
+        }, 5000);
+    } catch(e) {
+        showToast('Connection error', 'error');
+    } finally {
+        connectBtn.disabled = regenBtn.disabled = false;
+    }
+}
+
+async function apkDisconnect() {
+    if (!confirm('Disconnect the Sarathi Agent APK? The APK on your phone will be logged out.')) return;
+    try {
+        const r = await api('/api/wa-agent/disconnect', { method: 'DELETE' });
+        const d = await r.json();
+        if (d.revoked) { showToast('Agent disconnected', 'success'); await apkLoadStatus(); }
+    } catch(e) { showToast('Error disconnecting', 'error'); }
+}
+
+async function apkToggleAutoReply() {
+    const checked = document.getElementById('apk-toggle-autoreply').checked;
+    try {
+        await api('/api/wa-agent/settings', { method: 'PATCH', body: JSON.stringify({ auto_reply: checked }) });
+        showToast(checked ? 'Auto-reply enabled' : 'Auto-reply paused', 'success');
+    } catch(e) { showToast('Settings update failed', 'error'); }
+}
+
+async function apkShowConversations() {
+    const panel = document.getElementById('apk-conversations-panel');
+    const list = document.getElementById('apk-conv-list');
+    panel.style.display = 'block';
+    list.innerHTML = '<div style="padding:16px;color:var(--muted);text-align:center">Loading…</div>';
+    try {
+        const r = await api('/api/wa-agent/conversations?limit=50');
+        if (!r || !r.ok) throw new Error('failed');
+        const d = await r.json();
+        const convs = d.conversations || [];
+        if (!convs.length) { list.innerHTML = '<div style="padding:16px;color:var(--muted);text-align:center">No conversations yet.</div>'; return; }
+        const dirIcon = (dir) => dir === 'in' ? '📨' : dir === 'out' ? '📤' : '🔄';
+        list.innerHTML = convs.map(c => `
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <span style="font-size:1em">${dirIcon(c.direction)}</span>
+                    <strong style="font-size:.88em">${c.sender_name}</strong>
+                    ${c.takeover_triggered ? '<span style="font-size:.72em;background:#ef4444;color:white;padding:1px 6px;border-radius:6px">ESCALATED</span>' : ''}
+                    ${c.auto_handled ? '<span style="font-size:.72em;background:#10b981;color:white;padding:1px 6px;border-radius:6px">AI</span>' : ''}
+                    <span style="margin-left:auto;font-size:.75em;color:var(--muted)">${new Date(c.created_at+'Z').toLocaleString()}</span>
+                </div>
+                <div style="font-size:.83em;color:var(--text);margin-bottom:${c.ai_reply?'4px':'0'}">${(c.message||'').substring(0,120)}</div>
+                ${c.ai_reply ? `<div style="font-size:.8em;color:var(--muted);padding-left:10px;border-left:2px solid #22d3ee">${c.ai_reply.substring(0,120)}</div>` : ''}
+            </div>`).join('');
+    } catch(e) { list.innerHTML = '<div style="padding:16px;color:#ef4444">Error loading conversations.</div>'; }
 }
 
 // ═══════════ WHATSAPP v2 (Agent-Assist) ═══════════

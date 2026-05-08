@@ -26,7 +26,7 @@ from pathlib import Path
 import aiosqlite
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, Depends, HTTPException, Response, UploadFile, File, Form
+from fastapi import FastAPI, Request, Query, Depends, HTTPException, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -59,6 +59,7 @@ import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
+import biz_wa_agent as wa_agent
 
 # =============================================================================
 #  LOGGING
@@ -1626,6 +1627,212 @@ async def ops_stats(request: Request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
     return await nidaan.get_admin_stats()
+
+
+# =============================================================================
+#  SARATHI AGENT — APK-Bridge WhatsApp Automation
+# =============================================================================
+
+class _WAAgentSettingsReq(BaseModel):
+    auto_reply: Optional[bool] = None
+    business_hours: Optional[dict] = None
+    takeover_keywords: Optional[List[str]] = None
+    max_daily_msgs: Optional[int] = None
+    max_hourly_msgs: Optional[int] = None
+
+
+@app.websocket("/ws/agent")
+async def wa_agent_ws(websocket: WebSocket):
+    """
+    Persistent WebSocket endpoint for Sarathi Agent APK.
+    Protocol:
+      1. APK connects, sends AUTH frame: {"type":"AUTH","device_id":N,"token":"hex64"}
+      2. Server authenticates. On success: sends signed AUTH_OK.
+      3. All subsequent frames: {"p":"<payload_json>","s":"<hmac_sha256_hex>"}
+      4. Server verifies HMAC, dispatches to biz_wa_agent.handle_apk_event().
+      5. Server sends PING every 30 s. Device replies DEVICE_HEARTBEAT.
+      6. On disconnect: device marked offline, in-memory registry cleared.
+    """
+    await websocket.accept()
+    device_id = None
+    device = None
+    ping_task = None
+
+    try:
+        # ── Step 1: Authenticate (15-second window) ───────────────────────
+        try:
+            raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=15.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=4008)
+            return
+
+        try:
+            auth_msg = json.loads(raw_auth)
+        except json.JSONDecodeError:
+            await websocket.close(code=4002)
+            return
+
+        if auth_msg.get("type") != "AUTH":
+            await websocket.close(code=4002)
+            return
+
+        device_id_raw = auth_msg.get("device_id", 0)
+        token = auth_msg.get("token", "")
+        device_model = auth_msg.get("model", "")
+        android_ver = auth_msg.get("android", "")
+
+        try:
+            device_id = int(device_id_raw)
+        except (TypeError, ValueError):
+            await websocket.close(code=4002)
+            return
+
+        device = await wa_agent.authenticate_device(device_id, token)
+        if not device:
+            await websocket.close(code=4003)
+            return
+
+        # ── Step 2: Register connection ───────────────────────────────────
+        wa_agent._live_connections[device_id] = websocket
+        await wa_agent.mark_device_active(device_id, device_model, android_ver)
+        firm_name = await wa_agent._get_firm_name(device["tenant_id"])
+        logger.info("WA Agent connected: device=%d tenant=%d", device_id, device["tenant_id"])
+
+        # Flush any queued messages
+        await wa_agent.deliver_pending(device_id, websocket, device["hmac_key"])
+
+        # Send AUTH_OK
+        ok_payload = {"type": "AUTH_OK", "device_id": device_id}
+        await websocket.send_text(wa_agent._send_signed(ok_payload, device["hmac_key"]))
+
+        # ── Step 3: Periodic PING task ────────────────────────────────────
+        async def _ping_loop():
+            while True:
+                await asyncio.sleep(wa_agent.HEARTBEAT_INTERVAL)
+                try:
+                    ping = {"type": "PING", "ts": int(_time.time())}
+                    await websocket.send_text(
+                        wa_agent._send_signed(ping, device["hmac_key"])
+                    )
+                except Exception:
+                    break
+
+        ping_task = asyncio.create_task(_ping_loop())
+
+        # ── Step 4: Main message loop ─────────────────────────────────────
+        while True:
+            try:
+                raw = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=wa_agent.HEARTBEAT_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                # No message in 90 s — consider disconnected
+                logger.warning("WA Agent heartbeat timeout: device=%d", device_id)
+                break
+
+            try:
+                envelope = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            payload_str = envelope.get("p", "")
+            sig_received = envelope.get("s", "")
+
+            # AUTH frame is plain JSON — allow it for re-auth
+            if not payload_str:
+                continue
+
+            # ── HMAC verification ─────────────────────────────────────────
+            if not wa_agent.verify_message(payload_str, device["hmac_key"], sig_received):
+                logger.warning("Invalid HMAC from device %d — frame dropped", device_id)
+                continue
+
+            try:
+                event = json.loads(payload_str)
+            except json.JSONDecodeError:
+                continue
+
+            # Reload device settings (auto_reply, hours, keywords may change via dashboard)
+            device = await wa_agent.authenticate_device(device_id, token)
+            if not device:
+                break
+
+            await wa_agent.handle_apk_event(device, event, websocket, firm_name)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error("WA Agent WS error device=%s: %s", device_id, e)
+    finally:
+        if ping_task:
+            ping_task.cancel()
+        if device_id:
+            wa_agent._live_connections.pop(device_id, None)
+            wa_agent._rate_state.pop(device_id, None)
+            await wa_agent.mark_device_offline(device_id)
+            logger.info("WA Agent disconnected: device=%d", device_id)
+
+
+@app.post("/api/wa-agent/connect")
+@limiter.limit("5/minute")
+async def wa_agent_connect(request: Request):
+    """Generate QR credentials for a new APK connection. Revokes any existing device."""
+    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    if not tenant_id or not agent_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    creds = await wa_agent.generate_device_credentials(tenant_id, agent_id)
+    return creds
+
+
+@app.get("/api/wa-agent/status")
+async def wa_agent_status(request: Request):
+    """Return the active device status and live-connection flag for the agent."""
+    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    if not tenant_id or not agent_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    device = await wa_agent.get_device_status(tenant_id, agent_id)
+    if not device:
+        return {"connected": False, "device": None}
+    stats = await wa_agent.get_conversation_stats(tenant_id, agent_id)
+    return {"connected": True, "device": device, "stats": stats}
+
+
+@app.delete("/api/wa-agent/disconnect")
+async def wa_agent_disconnect(request: Request):
+    """Revoke the active device — closes live WS connection and deletes credentials."""
+    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    if not tenant_id or not agent_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    revoked = await wa_agent.revoke_device(tenant_id, agent_id)
+    return {"revoked": revoked}
+
+
+@app.patch("/api/wa-agent/settings")
+async def wa_agent_settings(body: _WAAgentSettingsReq, request: Request):
+    """Update per-device settings: auto_reply toggle, business hours, takeover keywords, caps."""
+    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    if not tenant_id or not agent_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    ok = await wa_agent.update_device_settings(
+        tenant_id, agent_id,
+        auto_reply=body.auto_reply,
+        business_hours=body.business_hours,
+        takeover_keywords=body.takeover_keywords,
+        max_daily=body.max_daily_msgs,
+        max_hourly=body.max_hourly_msgs,
+    )
+    return {"updated": ok}
+
+
+@app.get("/api/wa-agent/conversations")
+async def wa_agent_conversations(request: Request, limit: int = Query(100, le=500)):
+    """Fetch recent conversation history for the agent's WA bridge."""
+    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    if not tenant_id or not agent_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    convs = await wa_agent.get_recent_conversations(tenant_id, agent_id, limit)
+    return {"conversations": convs, "count": len(convs)}
 
 
 @app.get("/sitemap.xml")

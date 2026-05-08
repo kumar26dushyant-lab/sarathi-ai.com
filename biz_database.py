@@ -1105,6 +1105,88 @@ async def init_db():
             except Exception:
                 pass
 
+        # ─────────────────────────────────────────────────────────────────────
+        #  Sarathi Agent — APK-bridge WhatsApp automation (May 2026)
+        # ─────────────────────────────────────────────────────────────────────
+
+        # Registered APK devices (one per advisor phone)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS wa_agent_devices (
+                device_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id           INTEGER NOT NULL,
+                agent_id            INTEGER NOT NULL,
+                token_hash          TEXT NOT NULL,
+                hmac_key            TEXT NOT NULL,
+                device_model        TEXT,
+                android_version     TEXT,
+                agent_name          TEXT,
+                agent_phone         TEXT,
+                status              TEXT DEFAULT 'pending',
+                connected           INTEGER DEFAULT 0,
+                auto_reply_enabled  INTEGER DEFAULT 1,
+                business_hours      TEXT DEFAULT '{"start":9,"end":20,"days":[0,1,2,3,4,5,6]}',
+                takeover_keywords   TEXT DEFAULT '["complaint","refund","fraud","legal","police","court","irda","angry","scam","mislead","cancel policy","death claim","cheated","false claim"]',
+                max_daily_msgs      INTEGER DEFAULT 200,
+                max_hourly_msgs     INTEGER DEFAULT 20,
+                daily_msg_count     INTEGER DEFAULT 0,
+                daily_msg_date      TEXT,
+                hourly_msg_count    INTEGER DEFAULT 0,
+                hourly_msg_ts       TEXT,
+                last_seen_at        TEXT,
+                created_at          TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id),
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_agent_devices_agent "
+            "ON wa_agent_devices(agent_id, tenant_id)")
+
+        # Offline message queue — delivered when device reconnects
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS wa_agent_pending (
+                pending_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id           INTEGER NOT NULL,
+                event_type          TEXT NOT NULL,
+                payload_json        TEXT NOT NULL,
+                deliver_after       TEXT DEFAULT (datetime('now')),
+                attempts            INTEGER DEFAULT 0,
+                created_at          TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (device_id) REFERENCES wa_agent_devices(device_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_agent_pending_device "
+            "ON wa_agent_pending(device_id, deliver_after)")
+
+        # Conversation log (all messages in/out/self)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS wa_agent_conversations (
+                conv_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id           INTEGER NOT NULL,
+                tenant_id           INTEGER NOT NULL,
+                sender_name         TEXT NOT NULL,
+                sender_phone        TEXT,
+                direction           TEXT NOT NULL,
+                msg_type            TEXT DEFAULT 'text',
+                message             TEXT,
+                voice_transcript    TEXT,
+                ai_reply            TEXT,
+                intent              TEXT,
+                auto_handled        INTEGER DEFAULT 1,
+                takeover_triggered  INTEGER DEFAULT 0,
+                created_at          TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (device_id) REFERENCES wa_agent_devices(device_id),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_agent_conv_device "
+            "ON wa_agent_conversations(device_id, created_at DESC)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_agent_conv_tenant "
+            "ON wa_agent_conversations(tenant_id, created_at DESC)")
+
         await conn.commit()
     logger.info("Database initialized: %s", DB_PATH)
 

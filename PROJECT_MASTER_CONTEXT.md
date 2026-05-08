@@ -1166,6 +1166,10 @@ SA_ALERT_EMAIL=kumar26.dushyant@gmail.com  # Health monitor alert recipient
 GDRIVE_CLIENT_ID=                  # not configured
 GDRIVE_CLIENT_SECRET=
 GDRIVE_REDIRECT_URI=...
+# --- Nidaan Partner (add to /opt/sarathi/biz.env on server) ---
+NIDAAN_ADMIN_TOKEN=...             # random 32-byte hex; gates all /nidaan/api/admin/* routes
+NIDAAN_ADMIN_EMAIL=...             # email that receives ₹999 review-request notifications
+# NIDAAN_RAZORPAY_KEY_ID + NIDAAN_RAZORPAY_KEY_SECRET can share the Sarathi Razorpay account or be separate; if omitted, Sarathi Razorpay creds are used.
 ```
 
 ---
@@ -2106,7 +2110,7 @@ ssh -i "C:\Users\imdus\Downloads\ssh-key-2026-03-03.key" ubuntu@140.238.246.0
 
 ## 30. NIDAAN PARTNER — UPCOMING SEPARATE PRODUCT (PLAN LOCKED, MAY 2, 2026)
 
-> **Status:** Architecture v2 (plug-and-play) **LOCKED**. Detailed build plan lives in `NIDAAN_BUILD_PLAN.md`. **Phase 1a COMPLETE (May 3, 2026)** — homepage live at https://nidaanpartner.com, SSL active, host-header routing deployed. Phase 1b (DB scaffold) next.
+> **Status:** Architecture v2 (plug-and-play) **LOCKED**. Detailed build plan lives in `NIDAAN_BUILD_PLAN.md`. **Phase 1a COMPLETE (May 3, 2026)** — homepage live at https://nidaanpartner.com, SSL active, host-header routing deployed. **Phase 1b COMPLETE (May 3, 2026)** — DB tables, biz_nidaan.py skeleton deployed. **Phase 2 COMPLETE (May 4, 2026)** — Auth (signup/login), all 5 page routes, review-request endpoint, Razorpay subscriptions, admin panel, signup email, webhook. Current server commit: `0a27a5b`.
 > **Companion doc:** [NIDAAN_BUILD_PLAN.md](NIDAAN_BUILD_PLAN.md) — table DDLs, route specs, phased acceptance criteria.
 
 ### 30.1 Product overview
@@ -2203,12 +2207,12 @@ Sender ID: register `NIDAAN` (6-char transactional). DLT entity ID + per-templat
 
 ### 30.9 Phased build (acceptance criteria in `NIDAAN_BUILD_PLAN.md`)
 
-- **Phase 1a — Domain + bilingual homepage** (no DB changes; visible quick win for LLP validation).
-- **Phase 1b — DB schema + `biz_nidaan.py` skeleton** (parallel to 1a; additive migration only).
-- **Phase 2 — Auth + Razorpay subscriptions + cross-product SSO + bundling cron**.
-- **Phase 3 — Nidaan dashboard + dynamic claim form + quota + Fast2SMS automation + admin panels**.
-- **Phase 4 — ₹999 per-claim direct-to-consumer flow + revenue/funnel analytics**.
-- **Phase 5 — Sarathi cross-promo (Claims CTA on homepage + dashboard tab)**.
+- **Phase 1a — Domain + bilingual homepage** ✅ COMPLETE (May 3, 2026) — homepage live, SSL, host-header routing.
+- **Phase 1b — DB schema + `biz_nidaan.py` skeleton** ✅ COMPLETE (May 3, 2026) — 9 Nidaan tables, all helpers.
+- **Phase 2 — Auth + pages + Razorpay subscriptions + review endpoint + admin panel** ✅ COMPLETE (May 4, 2026). See §30.11.
+- **Phase 3 — Subscribe flow UI + Email OTP login + claim-status email + Nidaan domain nginx verify**.
+- **Phase 4 — ₹999 per-claim direct-to-consumer flow (full Razorpay payment) + admin review-status update**.
+- **Phase 5 — Fast2SMS automation + Sarathi cross-promo (Claims CTA on homepage + dashboard tab)**.
 
 ### 30.10 Sprint 9 follow-up — security header fix (May 1, 2026)
 
@@ -2216,6 +2220,390 @@ Root cause of dashboard live-preview iframe failure: Nginx was adding `X-Frame-O
 
 ---
 
+### 30.11 Phase 2 Implementation — May 3–4, 2026
+
+#### DB Tables (9 total, all in `nidaan_migrations` list in `biz_database.py`)
+
+| Table | Purpose |
+|-------|---------|
+| `nidaan_accounts` | Advisor accounts (email, pw_hash, phone, firm_name, created_at) |
+| `nidaan_subscriptions` | Active/cancelled sub per account (plan, razorpay_sub_id, status, period_start/end) |
+| `nidaan_claims` | Claims filed (account_id, insured_name, insurer_name, claim_type, disputed_amount, notes, status) |
+| `nidaan_claim_status_log` | Immutable audit trail of every claim status change |
+| `nidaan_per_claim_purchase` | ₹999 review leads (advisor_*, claim_type, insurer, amount, status, razorpay_sub_id) |
+| `nidaan_plan_quota` | Monthly quota tracking per account (claims_used, month) |
+| `product_link` | Bridge: `(nidaan_account_id, sarathi_tenant_id)` — enables bundled Sarathi access |
+| `nidaan_admins` | Nidaan staff accounts (email, role, pw_hash) |
+| `nidaan_users` | Sub-users under Gold/Platinum accounts |
+
+#### Static Pages (all served by host-header routing in `sarathi_biz.py`)
+
+| File | Route | Auth |
+|------|-------|------|
+| `static/nidaan_index.html` | `GET /` (nidaan host) | Public |
+| `static/nidaan_signup.html` | `GET /nidaan/signup` | Public |
+| `static/nidaan_login.html` | `GET /nidaan/login` | Public |
+| `static/nidaan_dashboard.html` | `GET /nidaan/dashboard` | Nidaan JWT |
+| `static/nidaan_review.html` | `GET /nidaan/review` | Public |
+| `static/nidaan_admin.html` | `GET /nidaan/admin` | Bearer NIDAAN_ADMIN_TOKEN |
+
+#### API Routes (all in `sarathi_biz.py`, gated by `_is_nidaan_host()` or admin token)
+
+**Auth**
+- `POST /nidaan/api/signup` — create account (bcrypt-style SHA256 pw_hash) + fire welcome email
+- `POST /nidaan/api/login` — email+password → Nidaan JWT (namespaced `:nidaan` suffix on JWT_SECRET, typ="nidaan")
+- `GET  /nidaan/api/me` — fetch own account details (auth required)
+
+**Claims**
+- `POST /nidaan/api/claims` — file a new claim (auth required, quota-checked)
+- `GET  /nidaan/api/claims` — list own claims (auth required)
+- `GET  /nidaan/api/claims/{id}` — single claim + status log
+
+**₹999 Review (per-claim direct-to-consumer)**
+- `POST /nidaan/api/review-request` — lead capture (no auth) → saves to `nidaan_per_claim_purchase`, emails admin + advisor
+
+**Subscriptions**
+- `POST /nidaan/api/subscribe` — create Razorpay subscription (auth required) → returns `{short_url, subscription_id}`
+- `POST /nidaan/api/webhook` — Razorpay webhook for Nidaan events (separate from Sarathi webhook at `/api/payments/webhook`)
+  - Handles: `subscription.activated`, `subscription.charged`, `subscription.cancelled`
+  - Distinguished by `notes.product == "nidaan"`
+
+**Admin (Bearer NIDAAN_ADMIN_TOKEN)**
+- `GET  /nidaan/api/admin/stats` — `{total_accounts, active_subscriptions, total_claims, open_claims, pending_review_requests, plans{}}`
+- `GET  /nidaan/api/admin/claims` — all claims with account info (paginated)
+- `GET  /nidaan/api/admin/accounts` — all accounts with sub status (paginated)
+- `GET  /nidaan/api/admin/review-requests` — all ₹999 review leads (paginated)
+- `PATCH /nidaan/api/admin/claims/{id}/status` — inline status update, logs to `nidaan_claim_status_log`
+
+#### Key Business Logic (`biz_nidaan.py`)
+
+```python
+NIDAAN_RAZORPAY_PLANS = {
+    "silver":   {"amount_paise": 150000, "interval": 3},  # ₹1,500/quarter
+    "gold":     {"amount_paise": 300000, "interval": 3},  # ₹3,000/quarter
+    "platinum": {"amount_paise": 600000, "interval": 3},  # ₹6,000/quarter
+}
+
+async def ensure_nidaan_plans(rzp_key_id, rzp_key_secret)   # idempotent plan creation
+async def create_nidaan_razorpay_subscription(...)          # returns {short_url, subscription_id}
+async def activate_from_razorpay_webhook(...)               # idempotent; sets sub active + quota
+async def create_review_request(...)                        # saves ₹999 lead
+async def get_admin_stats() -> dict                         # dashboard metrics
+async def get_all_accounts_admin(...)                       # LEFT JOIN with active sub
+async def get_review_requests_admin(...)                    # paginated leads list
+```
+
+#### Admin Panel (`static/nidaan_admin.html`)
+- Dark navy theme (`#0f172a` body, `#1e293b` cards)
+- Login gate: paste `NIDAAN_ADMIN_TOKEN` → calls all 4 admin APIs simultaneously
+- Stats row: 6 KPI cards
+- 3 tabs: Claims (inline status dropdown + update via `PATCH`), Accounts, ₹999 Reviews
+- Status badges color-coded (intimated=blue, resolved_won=green, resolved_lost=red, pending_payment=amber)
+
+#### Mobile Nav (nidaan_index.html — Two-Row Layout)
+- Row 1: Logo + "Nidaan Partner" brand name (full width, no collision possible)
+- Row 2: Horizontally scrollable pill strip — `How It Works · Plans · FAQ · EN/हिं · Sarathi-AI CRM ↗ · Login`
+- **Sarathi-AI CRM button**: `href="https://sarathi-ai.com"` by default; JS on init upgrades to `https://sarathi-ai.com/dashboard` if `localStorage.nidaan_token` exists
+- **setLang() root-cause fix**: Old code called `a.style.display = ''` on ALL `.nav-links a` — cleared `display:none` from wrong-language `.nav-cta`, causing both EN+HI Login to appear simultaneously. Fixed to explicitly set `display = a.classList.contains(l) ? '' : 'none'` for each anchor.
+
+#### Nidaan JWT Namespace Isolation
+- Nidaan JWTs use `jwt_secret + ":nidaan"` (namespaced) and carry `"typ": "nidaan"` claim.
+- `_nidaan_admin_auth(request)` checks `Authorization: Bearer <NIDAAN_ADMIN_TOKEN>` via `hmac.compare_digest` (constant-time).
+- Cross-use with Sarathi JWTs is impossible: different secret + type check.
+
+---
+
+### 30.12 Authentication & Notification Strategy (LOCKED, May 4, 2026)
+
+#### Login Strategy
+
+| Method | Status | Notes |
+|--------|--------|-------|
+| Email + Password | ✅ Live | Current primary auth for Nidaan accounts |
+| **Email OTP** | 🔜 Phase 3 next | Mirror of Sarathi-AI.com — `POST /nidaan/api/send-email-otp` + `POST /nidaan/api/verify-email-otp`; uses same in-memory OTP pattern as `biz_auth.py`. To be added to `biz_nidaan.py` and `nidaan_login.html`. |
+| Mobile OTP | ⏳ Future | After Fast2SMS DLT registration approved |
+| Google Sign-In | 🤔 Later | Not planned for Phase 3; revisit after Email OTP is live |
+
+**Decision**: Nidaan login will parallel Sarathi-AI.com login — Email OTP as primary once built, with email+password kept as fallback. No mobile OTP until DLT + Fast2SMS integration is live.
+
+#### SMS / Notification Strategy
+
+| Channel | Status | Provider | Notes |
+|---------|--------|----------|-------|
+| Email | ✅ Live | Gmail SMTP (same as Sarathi) | Used for signup welcome, review-request alerts |
+| SMS (transactional) | ⏳ Pending | **Fast2SMS** | DLT registration in progress with Jio (TRAI mandated). 7 templates planned (see §30.8). Sender ID: `NIDAAN`. |
+| SMS (OTP) | ⏳ After DLT | Fast2SMS | Will replace email OTP for login once live |
+| WhatsApp | ❌ Not planned | — | Not in scope for Nidaan (separate from Sarathi WA) |
+
+**Decision**: All notifications via email until DLT registration complete. May switch to alternate DLT vendor if Jio approval is delayed. Fast2SMS API integration stub lives in `biz_sms.py`.
+
+---
+
+### 30.13 Phase 3 Pending Items (Priority Order, as of May 4, 2026)
+
+| # | Item | Blocker / Notes |
+|---|------|-----------------|
+| 1 | **Server config** | Add `NIDAAN_ADMIN_TOKEN` + `NIDAAN_ADMIN_EMAIL` to `/opt/sarathi/biz.env`; restart service. Command: `echo "NIDAAN_ADMIN_TOKEN=$(openssl rand -hex 32)" >> /opt/sarathi/biz.env` |
+| 2 | **Register Razorpay webhook** | URL: `https://nidaanpartner.com/nidaan/api/webhook`. Events: `subscription.activated`, `subscription.charged`, `subscription.cancelled` |
+| 3 | **Subscribe flow in dashboard UI** | `nidaan_dashboard.html` has no "Subscribe" button. Need plan selector cards (silver/gold/platinum) → call `POST /nidaan/api/subscribe` → redirect to `short_url` |
+| 4 | **Email OTP login for Nidaan** | Add `POST /nidaan/api/send-email-otp` + `POST /nidaan/api/verify-email-otp` to `biz_nidaan.py`. Update `nidaan_login.html` to show Email OTP tab. |
+| 5 | **Claim status email to advisor** | `PATCH /nidaan/api/admin/claims/{id}/status` should fire email to advisor after status update |
+| 6 | **Admin review-request status update** | Admin can view ₹999 leads but can't mark them `in_review` / `completed` |
+| 7 | **nidaanpartner.com nginx routing** | Verify domain DNS is pointing to server and Nginx `server_name nidaanpartner.com` block is active |
+| 8 | **Nidaan pages in sitemap** | `nidaanpartner.com` pages not in XML sitemap |
+
+#### Git Commits This Session (Nidaan Phase 2)
+| Commit | Message |
+|--------|---------|
+| `253a303` | fix(mobile): nav overflow, sticky CTA alignment, brand text ellipsis on all pages |
+| `65b410c` | fix(mobile): setLang clears both nav-cta variants causing double login button overflow |
+| `11aeebd` | feat(nav): two-row mobile nav, add Sarathi-AI CRM button with smart redirect |
+| `0a27a5b` | feat(nidaan): review-request endpoint, Razorpay subscriptions, admin panel, signup email |
+
+---
+
+---
+
+## 32. NIDAAN INTERNAL OPS PORTAL (Deployed May 2026)
+
+> **URL:** `https://nidaanpartner.com/nidaan/ops`
+> **Status:** ✅ Live and running as of commits `905583b` + `2b73657`
+
+### 32.1 What Was Built
+
+A full internal staff operations SPA for Nidaan's claims team. Accessible only on the `nidaanpartner.com` host. Staff authenticate separately from advisors (different JWT secret).
+
+**New DB Tables (in `biz_database.py`):**
+```sql
+nidaan_staff        -- Staff accounts (name, email, password_hash, role, status)
+nidaan_claim_notes  -- Internal notes on claims by staff
+nidaan_followups    -- Follow-up tasks for staff per claim
+```
+**Migration applied:** `ALTER TABLE nidaan_claims ADD COLUMN assigned_to_staff_id INTEGER`
+
+**Business Logic (in `biz_nidaan.py`, ~400 lines added):**
+- Staff auth: SHA-256 + salt password hashing, JWT with secret `JWT_SECRET + ":nidaan_staff"`
+- Role hierarchy: `super_admin` (rank 2) > `sub_super_admin` (rank 1) > `team_member` (rank 0)
+- `_require_staff(request, min_role)` enforces role gates
+- Claims ops: `get_claims_ops()` (role-aware filtering), `assign_claim_to_staff()`, `add_claim_note()`, `add_followup()`, `complete_followup()`
+- Revenue split: 80% Ashwin / 20% Dushyant via `get_revenue_stats()`
+- App health: DB latency, table counts, overdue follow-ups, unassigned claims via `get_app_health()`
+- Impersonation: `impersonate_account()` generates advisor JWT (logged as WARNING)
+- Account management: `get_all_accounts_admin()`, `create_account_by_admin()`, `admin_update_account()`, `admin_set_account_password()`
+
+**API Routes (in `sarathi_biz.py`, ~20 routes added before `/sitemap.xml`):**
+```
+GET  /nidaan/ops                                  — SPA shell (nidaan host only)
+POST /nidaan/ops/api/login                        — Staff login
+GET  /nidaan/ops/api/me                           — Staff profile
+GET/POST /nidaan/ops/api/staff                    — List/create (super_admin)
+PATCH /nidaan/ops/api/staff/{id}                  — Update staff (super_admin)
+GET  /nidaan/ops/api/claims                       — Role-aware claim list
+GET  /nidaan/ops/api/claims/{id}                  — Claim detail
+POST /nidaan/ops/api/claims/{id}/assign           — Assign to staff (sub_super_admin+)
+PATCH /nidaan/ops/api/claims/{id}/status          — Update status
+POST/GET /nidaan/ops/api/claims/{id}/notes        — Internal notes
+POST /nidaan/ops/api/claims/{id}/followups        — Add follow-up
+PATCH /nidaan/ops/api/followups/{id}/done         — Mark done
+GET  /nidaan/ops/api/my-followups                 — My pending tasks
+GET/POST /nidaan/ops/api/accounts                 — Account list/create
+PATCH /nidaan/ops/api/accounts/{id}               — Update account
+POST /nidaan/ops/api/accounts/{id}/impersonate    — Get advisor JWT (super_admin)
+GET  /nidaan/ops/api/revenue                      — Revenue + split (super_admin)
+GET  /nidaan/ops/api/health                       — App health (super_admin)
+GET  /nidaan/ops/api/stats                        — Admin stats (sub_super_admin+)
+```
+
+**SPA Frontend (`static/nidaan_ops.html`):**
+- Dark theme (`#060d1a` / `#22d3ee` cyan accent)
+- 7 panels: Overview, Claims, My Follow-ups, Accounts, Staff, Revenue, App Health
+- Claims panel: searchable/filterable table → slide-in drawer with full detail, notes, follow-ups, status update, assign dropdown
+- Revenue panel: 80/20 split bars, monthly trend, by-plan breakdown
+- App Health panel: DB latency, overdue follow-ups, unassigned claims, table counts
+- Impersonate opens `/nidaan/dashboard` in new tab with advisor JWT pre-loaded into `localStorage`
+
+**Dashboard Subscription Gate (`static/nidaan_dashboard.html`, commit `2b73657`):**
+- Profile and Settings tabs locked behind `data-requires-sub="true"` attribute
+- Non-subscribers see a paywall overlay instead of the tab content
+- Future-proof: any tab with `data-requires-sub="true"` is automatically gated
+
+### 32.2 Production Staff Accounts (Bootstrapped)
+
+| staff_id | name | email | password | role |
+|----------|------|-------|----------|------|
+| 1 | Dushyant Kumar | dushyant@nidaanpartner.com | Nidaan@2026!D | super_admin |
+| 2 | Ashwin | ashwin@nidaanpartner.com | Nidaan@2026!A | super_admin |
+
+Bootstrap method: `sudo -u sarathi /opt/sarathi/venv/bin/python3 <script>` (DB is owned by `sarathi` user).
+
+### 32.3 What Is ON HOLD (Resume Later)
+
+| # | Feature | Notes |
+|---|---------|-------|
+| 1 | Password change from ops portal | Currently requires super_admin to use "Edit Staff" panel |
+| 2 | Email notification on claim assignment | Fire email to assigned `team_member` when claim assigned |
+| 3 | WhatsApp notification on claim status change | Notify advisor when their claim status changes |
+| 4 | Ops portal mobile sidebar | Hamburger menu; sidebar currently hidden on small screens |
+| 5 | Claims list pagination | Currently hardcoded `LIMIT 200` |
+| 6 | Sub-super_admin creation via UI | Dushyant/Ashwin can create team members; sub-admins need UI support |
+| 7 | Nidaan D2C ₹999 per-claim flow | Route and payment flow partially built; needs completion |
+| 8 | Claim document uploads | PDF evidence uploads for each claim |
+
+---
+
+## 33. SARATHI-AI WHATSAPP AGENT — APK BRIDGE ARCHITECTURE
+
+> **Document source:** `SARATHI-AI WHATSAPP AGENT — COMPLETE TECHNICAL BUILD PLAN.docx`
+> **Status:** Architecture reviewed and analyzed. NOT yet built. On hold pending decision.
+
+### 33.1 Concept Summary
+
+The APK-as-bridge approach uses an Android app installed on the advisor's own phone to act as a local proxy between WhatsApp and the Sarathi-AI backend. It avoids Meta's official API entirely (no WABA, no per-message costs). The advisor's own WhatsApp account becomes the AI agent.
+
+**Flow:**
+```
+Customer → WhatsApp → Advisor's Phone
+                         ↓
+              [Sarathi Agent APK]
+                         ↓ (WebSocket, AES-256-GCM)
+              [Node.js WS Server]
+                         ↓
+              [Python AI Engine (FastAPI)]
+                         ↓
+              Claude AI → reply text
+                         ↓
+              [Node.js] → [APK] → WhatsApp reply (via NotificationListenerService)
+```
+
+### 33.2 The Document's Proposed Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Android APK | Kotlin, `NotificationListenerService`, `AccessibilityService`, `ForegroundService` |
+| Backend bridge | Node.js (Express + WebSocket `ws` library) |
+| AI engine | Python FastAPI + Anthropic Claude + OpenAI Whisper (voice) |
+| Database | PostgreSQL (separate from current SQLite) |
+| Queue | Bull + Redis (for offline message delivery) |
+| Encryption | AES-256-GCM (APK ↔ server) |
+| Auth | JWT + bcrypt device tokens |
+
+### 33.3 What Is Technically Feasible (and How)
+
+#### ✅ FULLY FEASIBLE — Core Reply Flow
+- `NotificationListenerService` reads every WhatsApp notification (sender name, message text)
+- Reply is sent back using the notification's `RemoteInput` action — no root required
+- This is the same mechanism WhatsApp Web uses under the hood for quick replies
+- Works on Android 8+ (API 26+), all major OEMs
+
+#### ✅ FULLY FEASIBLE — Agent CRM Commands via Self-Message
+- Advisor messages their own WhatsApp number → APK detects it → routes to `AGENT_COMMAND`
+- AI parses Hindi/English voice or text → extracts CRM intent → executes against DB
+- Response sent back to advisor's own number (self-message)
+- **This directly replaces the current Telegram bot for advisors who prefer WhatsApp**
+
+#### ✅ FULLY FEASIBLE — Proactive Reminders
+- Backend schedules EMI/renewal reminders via Bull cron
+- Pushes to APK via WebSocket → APK uses `AccessibilityService` to open WA and send
+- `AccessibilityService` is more fragile (per-WA-version UI tree), but works for proactive sends
+
+#### ✅ FULLY FEASIBLE — Voice Note Handling
+- APK detects "Voice message" in notification text
+- Routes to AI engine → OpenAI Whisper transcribes → Claude extracts intent
+- Limitation: APK cannot extract the audio file itself from WA notification; workaround is to ask user to forward voice note to their own number
+
+#### ⚠️ PARTIAL — Multi-Account / Multi-WhatsApp
+- Supports WhatsApp Business (`com.whatsapp.w4b`) OR personal (`com.whatsapp`) — **not both simultaneously** per phone
+- One APK = one advisor's WhatsApp account = one business
+- For team accounts: each agent needs their own phone with APK installed
+
+#### ⚠️ PARTIAL — Proactive Outbound (WAAccessibilityService)
+- Opening WA via Accessibility and typing+sending is possible but fragile
+- UI element IDs change across WA versions → requires ongoing maintenance
+- Document acknowledges this as "skeleton only — full UIAutomator implementation needed"
+- Safer alternative: send reminder text to advisor's own number, advisor manually forwards
+
+#### ❌ NOT FEASIBLE — WhatsApp ToS Compliance
+- This approach violates WhatsApp's Terms of Service (automation via notification listener)
+- Risk: WhatsApp can ban the advisor's phone number
+- Meta has historically been aggressive about banning automation tools
+- **This is the #1 risk.** Mitigation: rate limiting, human-like delays, no mass blasting
+
+### 33.4 Sarathi-AI Integration Points
+
+The document proposes integrating into the existing Sarathi-AI dashboard with:
+- A "Connect WhatsApp Agent" button → generates QR code (encodes device token + AES key + WS URL)
+- APK scans QR → authenticates → establishes persistent WebSocket
+- Dashboard shows connection status: Connected 🟢 / Offline 🔴
+
+**How it maps to existing Sarathi-AI architecture:**
+- The Node.js backend is a **new separate service** (not our FastAPI app) — adds infrastructure complexity
+- The PostgreSQL DB is **separate** from our SQLite — needs migration/sync strategy
+- The Python AI engine is **separate** from our `sarathi_biz.py` — duplicates some logic
+- **Simpler integration path**: embed the WS server + device registry directly into our existing FastAPI app using `websockets` library, keep SQLite
+
+### 33.5 Recommended Simplified Architecture for Sarathi-AI
+
+Instead of 3 separate services (Node.js + Python FastAPI + PostgreSQL), collapse into existing stack:
+
+```
+[Sarathi Agent APK] ←WebSocket→ [sarathi_biz.py + /ws/agent endpoint]
+                                         ↓
+                               [Gemini AI] (already integrated)
+                                         ↓
+                               [SQLite biz_database.py] (existing tables)
+```
+
+**Changes needed:**
+1. Add `WebSocket` endpoint to `sarathi_biz.py` (FastAPI natively supports `websockets`)
+2. Add `linked_devices` table to `biz_database.py` (device_token_hash, aes_key, tenant_id)
+3. Add `pending_messages` table for offline queuing
+4. Write the Android APK in Kotlin (Android Studio project)
+5. Add "Connect WhatsApp Agent" card to `dashboard.html`
+6. Route APK events to existing `biz_ai.py` Gemini for AI responses
+
+**Advantages of simplified approach:**
+- One codebase, one DB, one server — no orchestration overhead
+- Reuse existing Gemini AI, tenant data, lead/policy tables
+- Reuse existing scheduler in `biz_reminders.py` for EMI/renewal triggers
+- Advisor identity tied to existing JWT token system
+
+### 33.6 Risk Assessment
+
+| Risk | Level | Mitigation |
+|------|-------|-----------|
+| WhatsApp ToS ban of advisor number | HIGH | Rate limit replies, add human-like delays, avoid mass outbound sends. Educate advisors. |
+| OEM battery kill (Xiaomi/Realme/Oppo) | HIGH | OEM-specific guide in onboarding; `START_STICKY` + `ForegroundService` |
+| WA app UI changes break Accessibility sends | MEDIUM | Keep proactive send optional; focus MVP on reply-only flow |
+| Phone offline = no automation | MEDIUM | `pending_messages` queue; messages delivered when APK reconnects |
+| Voice note file unavailable in notification | LOW | Gracefully detect + ask advisor to forward audio to self |
+| Play Store rejection for NotificationListenerService | LOW | Distribute APK via direct download link; no Play Store needed |
+
+### 33.7 Build Sequence (When Ready to Start)
+
+1. Add `WebSocket` route to `sarathi_biz.py` + device registry in-memory
+2. Add `linked_devices` + `pending_messages` tables to `biz_database.py`
+3. Add device connect/status endpoints: `POST /api/wa-agent/connect`, `GET /api/wa-agent/status`
+4. Build Android APK (Kotlin, Android Studio): `WANotificationService` → `CRMWebSocketClient`
+5. Test reply flow end-to-end (local ngrok WS tunnel)
+6. Add Gemini AI response routing for customer messages
+7. Add agent CRM command parsing (reuse existing voice intent system)
+8. Add "Connect WhatsApp Agent" UI card to `dashboard.html`
+9. Add APK download link to dashboard
+10. Deploy and test with real WhatsApp account (test phone)
+
+### 33.8 Decision Points Before Starting
+
+| Question | Recommended Decision |
+|----------|---------------------|
+| Start with reply-only or full CRM commands too? | Start with reply-only (simpler, less risky) |
+| Node.js bridge vs embed in FastAPI? | Embed in FastAPI (fewer moving parts) |
+| PostgreSQL vs keep SQLite? | Keep SQLite (no migration needed) |
+| Claude vs Gemini for AI? | Keep Gemini (already integrated, cost controlled) |
+| Proactive outbound via Accessibility? | Defer to Phase 2 |
+| Play Store vs direct APK download? | Direct download link from dashboard |
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
-*Last updated: May 2, 2026*
+*Last updated: May 11, 2026*
