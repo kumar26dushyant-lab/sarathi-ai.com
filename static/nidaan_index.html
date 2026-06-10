@@ -93,41 +93,41 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .bonus-banner{display:inline-flex;align-items:center;gap:.5rem;background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(6,182,212,.1));border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:.7rem 1.4rem;font-size:.88rem;color:rgba(255,255,255,.9);max-width:600px;margin:0 auto}
 .bonus-banner strong{color:var(--gold)}
 
-/* TWO-PATHS RIBBON — sits ABOVE hero so the buyer sees both prices first scroll */
-.paths-strip{background:linear-gradient(180deg,#fffbeb 0%,#ffffff 100%);border-top:3px solid #f59e0b;border-bottom:1px solid #e2e8f0;padding:.95rem 1rem;position:relative}
-.paths-strip::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f59e0b 0%,#f59e0b 50%,#06b6d4 50%,#06b6d4 100%)}
-.paths-strip-label{max-width:1100px;margin:0 auto .55rem;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#475569;text-align:center}
-.paths-strip-label span{display:inline-flex;align-items:center;gap:.4rem}
-.paths-strip-label .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;animation:pingDot 1.8s infinite}
-@keyframes pingDot{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}}
-.paths-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:.85rem;align-items:stretch}
-.path-card{display:grid;grid-template-columns:1fr auto;gap:.85rem;align-items:center;padding:.9rem 1.15rem;border-radius:12px;text-decoration:none;color:#0f172a;transition:transform .15s,box-shadow .15s;border:2px solid transparent;position:relative;overflow:hidden}
-.path-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(15,23,42,.10)}
-.path-499{background:linear-gradient(135deg,#fef3c7,#fed7aa);border-color:#f59e0b}
-.path-sub{background:linear-gradient(135deg,#cffafe,#a7f3d0);border-color:#06b6d4}
-.path-badge{position:absolute;top:-.45rem;left:.85rem;font-size:.62rem;font-weight:800;background:#0f172a;color:#fff;padding:.14rem .5rem;border-radius:20px;letter-spacing:.06em;z-index:2}
-.path-eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#475569;margin-bottom:.18rem}
-.path-title{font-size:1.02rem;font-weight:800;line-height:1.15;color:#0f172a;margin-bottom:.18rem}
-.path-sub-line{font-size:.78rem;color:#334155;line-height:1.4}
-.path-pricing-box{text-align:right;flex-shrink:0;min-width:120px}
-.path-price{font-size:1.4rem;font-weight:800;color:#0f172a;line-height:1;letter-spacing:-.02em;white-space:nowrap}
-.path-price .small{display:block;font-size:.7rem;font-weight:600;color:#64748b;margin-top:.15rem;margin-left:0}
-.path-cta{display:inline-flex;align-items:center;gap:.3rem;margin-top:.4rem;font-weight:800;color:#0f172a;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
-.path-cta::after{content:'→';margin-left:.15rem;transition:transform .15s}
-.path-card:hover .path-cta::after{transform:translateX(3px)}
-@media(max-width:780px){
-  .paths-strip{padding:.7rem .7rem}
-  .paths-strip-label{font-size:.65rem;margin-bottom:.45rem}
-  .paths-grid{grid-template-columns:1fr;gap:.5rem}
-  .path-card{padding:.7rem .85rem;grid-template-columns:1fr auto;gap:.5rem}
-  .path-title{font-size:.92rem}
-  .path-sub-line{display:none}
-  .path-price{font-size:1.15rem}
-  .path-pricing-box{min-width:90px}
-  .path-badge{font-size:.55rem;left:.65rem;padding:.12rem .42rem}
-  .path-eyebrow{font-size:.62rem}
-  .path-cta{font-size:.68rem;margin-top:.25rem}
+/* COMPACT TOP RIBBON — single line of two chips, sits above hero */
+.paths-strip{background:#0a1430;border-bottom:1px solid rgba(255,255,255,.08);padding:.5rem .85rem}
+.paths-strip-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:.7rem;flex-wrap:wrap}
+.path-chip{display:inline-flex;align-items:center;gap:.5rem;padding:.45rem .85rem;border-radius:999px;font-size:.82rem;font-weight:700;text-decoration:none;border:1px solid transparent;transition:transform .12s,box-shadow .12s,background .12s;white-space:nowrap}
+.path-chip:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.path-chip-499{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#fbbf24}
+.path-chip-sub{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border-color:#22d3ee}
+.path-chip .price{font-weight:800;letter-spacing:-.01em}
+.path-chip .arrow{transition:transform .12s}
+.path-chip:hover .arrow{transform:translateX(2px)}
+.path-chip .divider{opacity:.55;margin:0 .15rem}
+.paths-strip-sep{color:rgba(255,255,255,.35);font-size:.7rem;letter-spacing:.14em;font-weight:600;text-transform:uppercase}
+@media(max-width:540px){
+  .paths-strip{padding:.4rem .5rem}
+  .paths-strip-inner{gap:.4rem}
+  .paths-strip-sep{display:none}
+  .path-chip{font-size:.74rem;padding:.4rem .7rem;gap:.35rem}
 }
+
+/* FULL TWO-PATHS CARDS — placed ABOVE the plans grid, for the in-context buyer */
+.paths-detail{display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:1100px;margin:0 auto 2.5rem}
+.path-detail{display:flex;flex-direction:column;justify-content:space-between;padding:1.5rem 1.5rem;border-radius:16px;text-decoration:none;color:#0f172a;transition:transform .15s,box-shadow .15s;border:2px solid transparent;position:relative;overflow:hidden}
+.path-detail:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(15,23,42,.12)}
+.path-detail-499{background:linear-gradient(135deg,#fef3c7,#fed7aa);border-color:#f59e0b}
+.path-detail-sub{background:linear-gradient(135deg,#cffafe,#a7f3d0);border-color:#06b6d4}
+.path-detail-badge{position:absolute;top:-.6rem;left:1.25rem;font-size:.66rem;font-weight:800;background:#0f172a;color:#fff;padding:.22rem .65rem;border-radius:20px;letter-spacing:.08em;z-index:2}
+.path-detail-eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#475569;margin-bottom:.45rem}
+.path-detail-title{font-size:1.25rem;font-weight:800;line-height:1.15;color:#0f172a;margin-bottom:.5rem}
+.path-detail-desc{font-size:.92rem;color:#334155;line-height:1.5;margin-bottom:1.1rem}
+.path-detail-price{font-size:2rem;font-weight:800;color:#0f172a;line-height:1;letter-spacing:-.02em}
+.path-detail-price .small{font-size:.85rem;font-weight:600;color:#475569;margin-left:.3rem}
+.path-detail-cta{display:inline-flex;align-items:center;gap:.4rem;margin-top:.85rem;font-weight:800;color:#0f172a;font-size:.92rem;text-transform:uppercase;letter-spacing:.04em}
+.path-detail-cta::after{content:'→';transition:transform .15s}
+.path-detail:hover .path-detail-cta::after{transform:translateX(4px)}
+@media(max-width:780px){.paths-detail{grid-template-columns:1fr;gap:.85rem;margin-bottom:1.85rem}.path-detail{padding:1.25rem 1.15rem}.path-detail-title{font-size:1.1rem}.path-detail-price{font-size:1.6rem}}
 
 /* STATS STRIP */
 .stats-strip{background:#fff;border-bottom:1px solid #e2e8f0;padding:2.5rem 1.5rem}
@@ -544,50 +544,21 @@ span.hi-inline{display:none}
   </div>
 </nav>
 
-<!-- ══════════ TOP RIBBON — ₹499 single review vs subscribe (above hero for max visibility) ══════════ -->
+<!-- ══════════ COMPACT TOP RIBBON — quick price chips above hero ══════════ -->
 <div class="paths-strip">
-  <div class="paths-strip-label">
-    <span><span class="dot"></span>
-      <span class="en">Choose how you want to start</span>
-      <span class="hi" style="display:none">शुरू करने का तरीका चुनें</span>
-    </span>
-  </div>
-  <div class="paths-grid">
-    <a href="/nidaan/start#review-section" class="path-card path-499">
-      <span class="path-badge">⚡ FASTEST</span>
-      <div>
-        <div class="path-eyebrow"><span class="en">One-time review</span><span class="hi" style="display:none">एक बार समीक्षा</span></div>
-        <div class="path-title">
-          <span class="en">Get a single claim reviewed</span>
-          <span class="hi" style="display:none">एक क्लेम की समीक्षा कराएँ</span>
-        </div>
-        <div class="path-sub-line">
-          <span class="en">No subscription. Pay once. Detailed legal review in 48–72 hours.</span>
-          <span class="hi" style="display:none">कोई सब्सक्रिप्शन नहीं। एक बार भुगतान। 48–72 घंटे में रिपोर्ट।</span>
-        </div>
-      </div>
-      <div class="path-pricing-box">
-        <div class="path-price">₹499<span class="small"><span class="en">/ claim</span><span class="hi" style="display:none">/ क्लेम</span></span></div>
-        <div class="path-cta"><span class="en">Submit now</span><span class="hi" style="display:none">अभी जमा करें</span></div>
-      </div>
+  <div class="paths-strip-inner">
+    <a href="/nidaan/start#review-section" class="path-chip path-chip-499">
+      ⚡ <span class="en">One review</span><span class="hi" style="display:none">एक समीक्षा</span>
+      <span class="divider">·</span>
+      <span class="price">₹499</span>
+      <span class="arrow">→</span>
     </a>
-    <a href="/nidaan/start" class="path-card path-sub">
-      <span class="path-badge" style="background:#06b6d4">🛡 MULTI-CLAIM</span>
-      <div>
-        <div class="path-eyebrow"><span class="en">Subscribe for multiple claims</span><span class="hi" style="display:none">मल्टी-क्लेम सब्सक्रिप्शन</span></div>
-        <div class="path-title">
-          <span class="en">Silver · Gold · Platinum plans</span>
-          <span class="hi" style="display:none">सिल्वर · गोल्ड · प्लैटिनम प्लान</span>
-        </div>
-        <div class="path-sub-line">
-          <span class="en">10–unlimited claims/qtr + Sarathi-AI CRM FREE with every plan.</span>
-          <span class="hi" style="display:none">10 से असीमित क्लेम/तिमाही + Sarathi-AI CRM मुफ्त।</span>
-        </div>
-      </div>
-      <div class="path-pricing-box">
-        <div class="path-price"><span class="en">From ₹1,500</span><span class="hi" style="display:none">₹1,500 से</span><span class="small"><span class="en">/ quarter</span><span class="hi" style="display:none">/ तिमाही</span></span></div>
-        <div class="path-cta"><span class="en">Choose plan</span><span class="hi" style="display:none">प्लान चुनें</span></div>
-      </div>
+    <span class="paths-strip-sep"><span class="en">or</span><span class="hi" style="display:none">या</span></span>
+    <a href="#plans" class="path-chip path-chip-sub">
+      🛡 <span class="en">Multi-claim plans</span><span class="hi" style="display:none">मल्टी-क्लेम प्लान</span>
+      <span class="divider">·</span>
+      <span class="price"><span class="en">From ₹1,500</span><span class="hi" style="display:none">₹1,500 से</span></span>
+      <span class="arrow">→</span>
     </a>
   </div>
 </div>
@@ -803,8 +774,50 @@ span.hi-inline{display:none}
     <div class="tag hi" style="display:none">मूल्य योजनाएं</div>
     <h2 class="section-title en">Choose your plan</h2>
     <h2 class="section-title hi" style="display:none">अपना प्लान चुनें</h2>
-    <p class="section-sub en">All plans billed quarterly. Cancel anytime. Sarathi-AI CRM included free. Or try a <strong>one-time ₹499 review</strong> — no subscription needed.</p>
-    <p class="section-sub hi" style="display:none">सभी प्लान तिमाही बिलिंग। कभी भी रद्द करें। Sarathi-AI CRM मुफ्त शामिल। या सिर्फ <strong>₹499 में एकमुश्त समीक्षा</strong> — कोई सब्सक्रिप्शन नहीं।</p>
+    <p class="section-sub en">Pick the path that fits — pay once for a single review, or subscribe for ongoing claims work.</p>
+    <p class="section-sub hi" style="display:none">अपने अनुसार रास्ता चुनें — एक समीक्षा के लिए एक बार भुगतान, या लगातार क्लेम कार्य के लिए सब्सक्राइब करें।</p>
+
+    <!-- TWO-PATHS DETAILED CARDS (above plan grid for in-context decision) -->
+    <div class="paths-detail">
+      <a href="/nidaan/start#review-section" class="path-detail path-detail-499">
+        <span class="path-detail-badge">⚡ FASTEST</span>
+        <div>
+          <div class="path-detail-eyebrow"><span class="en">One-time review</span><span class="hi" style="display:none">एक बार समीक्षा</span></div>
+          <div class="path-detail-title">
+            <span class="en">Get a single claim reviewed</span>
+            <span class="hi" style="display:none">एक क्लेम की समीक्षा कराएँ</span>
+          </div>
+          <div class="path-detail-desc">
+            <span class="en">No subscription needed. Pay once, submit the case, and receive a detailed written legal review within 48–72 business hours.</span>
+            <span class="hi" style="display:none">कोई सब्सक्रिप्शन नहीं। एक बार भुगतान करें, केस जमा करें, और 48–72 घंटे में विस्तृत कानूनी समीक्षा पाएं।</span>
+          </div>
+        </div>
+        <div>
+          <div class="path-detail-price">₹499<span class="small"><span class="en">/ claim</span><span class="hi" style="display:none">/ क्लेम</span></span></div>
+          <div class="path-detail-cta"><span class="en">Submit a claim now</span><span class="hi" style="display:none">अभी क्लेम जमा करें</span></div>
+        </div>
+      </a>
+      <a href="#plans-grid-anchor" class="path-detail path-detail-sub">
+        <span class="path-detail-badge" style="background:#06b6d4">🛡 MULTI-CLAIM</span>
+        <div>
+          <div class="path-detail-eyebrow"><span class="en">Subscribe for multiple claims</span><span class="hi" style="display:none">मल्टी-क्लेम सब्सक्रिप्शन</span></div>
+          <div class="path-detail-title">
+            <span class="en">Silver · Gold · Platinum plans</span>
+            <span class="hi" style="display:none">सिल्वर · गोल्ड · प्लैटिनम प्लान</span>
+          </div>
+          <div class="path-detail-desc">
+            <span class="en">3 to unlimited disputed claims per quarter. Sarathi-AI CRM (worth ₹199–₹1,999/mo) included FREE with every plan.</span>
+            <span class="hi" style="display:none">3 से असीमित विवादित क्लेम प्रति तिमाही। हर प्लान के साथ Sarathi-AI CRM मुफ्त।</span>
+          </div>
+        </div>
+        <div>
+          <div class="path-detail-price"><span class="en">From ₹1,500</span><span class="hi" style="display:none">₹1,500 से</span><span class="small"><span class="en">/ quarter</span><span class="hi" style="display:none">/ तिमाही</span></span></div>
+          <div class="path-detail-cta"><span class="en">See the plans below</span><span class="hi" style="display:none">नीचे प्लान देखें</span></div>
+        </div>
+      </a>
+    </div>
+
+    <div id="plans-grid-anchor"></div>
     <div class="plans-grid">
 
       <!-- SILVER -->
