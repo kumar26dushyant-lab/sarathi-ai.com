@@ -12397,6 +12397,12 @@ async def api_get_campaign(
     tenant: dict = Depends(auth.get_current_tenant),
 ):
     """Get campaign details and stats."""
+    # IDOR fix (Sprint D): verify the campaign belongs to the caller's tenant
+    # before returning stats. Without this, any logged-in tenant could read any
+    # other tenant's campaign performance by iterating campaign_ids.
+    campaign = await campaigns.get_campaign(campaign_id)
+    if not campaign or campaign.get("tenant_id") != tenant["tenant_id"]:
+        return JSONResponse({"error": "Campaign not found"}, status_code=404)
     stats = await campaigns.get_campaign_stats(campaign_id)
     if not stats:
         return JSONResponse({"error": "Campaign not found"}, status_code=404)
