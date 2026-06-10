@@ -1,0 +1,36 @@
+name: gitleaks (secret scan)
+
+# Runs on every push and PR. Blocks the PR (or fails the push status) if any
+# secret-looking pattern is found in the diff. Prevents what happened with the
+# Evolution API key on June 10 from happening again.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:        # allow manual run from Actions tab
+
+jobs:
+  scan:
+    name: scan diff for secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history so gitleaks can scan everything)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Only the changed range on PRs; full history scan on pushes/manual runs.
+          GITLEAKS_ENABLE_COMMENTS: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+          # We use the built-in default ruleset which catches: AWS keys,
+          # GitHub PATs, Razorpay live keys, generic 32+ char hex blobs,
+          # Stripe, Slack tokens, Google API keys, JWTs, SSH keys, etc.
+          # Custom rules below extend the default with our project-specific
+          # patterns (Evolution API keys, our biz.env-style declarations).

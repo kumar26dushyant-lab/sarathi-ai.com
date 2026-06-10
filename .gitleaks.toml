@@ -1,0 +1,98 @@
+# Custom gitleaks rules — extends the default ruleset with project-specific
+# patterns derived from the June 10, 2026 secret-exposure incident.
+#
+# How this works:
+#   - GitHub Actions runs gitleaks on every push/PR (.github/workflows/gitleaks.yml)
+#   - Optional: local pre-commit hook (deploy/install-precommit-hook.sh)
+#   - Both reference THIS file for custom rules
+#
+# Test locally:
+#   gitleaks detect --config .gitleaks.toml --source . --no-git
+
+# Inherit gitleaks' built-in rules (AWS, GitHub, Razorpay live, Stripe, etc.)
+[extend]
+useDefault = true
+
+# ─── Custom rules for sarathi-ai patterns ───
+
+[[rules]]
+id = "evolution-api-key"
+description = "Evolution WhatsApp API key (64-char hex assigned to AUTHENTICATION_API_KEY or EVOLUTION_API_KEY)"
+regex = '''(?i)(?:EVOLUTION_API_KEY|AUTHENTICATION_API_KEY)\s*[:=]\s*['"]?([a-f0-9]{32,128})['"]?'''
+secretGroup = 1
+keywords = ["EVOLUTION_API_KEY", "AUTHENTICATION_API_KEY"]
+
+[[rules]]
+id = "razorpay-key-secret"
+description = "Razorpay key secret (separate from key id which is public)"
+regex = '''(?i)RAZORPAY_KEY_SECRET\s*[:=]\s*['"]?([A-Za-z0-9_\-]{20,})['"]?'''
+secretGroup = 1
+keywords = ["RAZORPAY_KEY_SECRET"]
+
+[[rules]]
+id = "razorpay-webhook-secret"
+description = "Razorpay webhook secret"
+regex = '''(?i)RAZORPAY_WEBHOOK_SECRET\s*[:=]\s*['"]?([A-Za-z0-9_\-]{20,})['"]?'''
+secretGroup = 1
+keywords = ["RAZORPAY_WEBHOOK_SECRET"]
+
+[[rules]]
+id = "smtp-password-line"
+description = "SMTP password in env-style declaration (Gmail app passwords are 16 chars)"
+regex = '''(?i)SMTP_PASSWORD\s*[:=]\s*['"]?([A-Za-z0-9]{12,})['"]?'''
+secretGroup = 1
+keywords = ["SMTP_PASSWORD"]
+
+[[rules]]
+id = "jwt-secret-line"
+description = "JWT secret in env-style declaration"
+regex = '''(?i)JWT_SECRET\s*[:=]\s*['"]?([A-Fa-f0-9]{32,})['"]?'''
+secretGroup = 1
+keywords = ["JWT_SECRET"]
+
+[[rules]]
+id = "gemini-api-key"
+description = "Google Gemini API key (starts with AIza)"
+regex = '''AIza[0-9A-Za-z_\-]{35}'''
+keywords = ["AIza"]
+
+[[rules]]
+id = "webshare-proxy-creds"
+description = "Webshare SOCKS5 proxy username:password in URL form"
+regex = '''(?:socks5|http)://[a-z0-9]{8,12}:[a-z0-9]{10,16}@[\d.]+:\d+'''
+keywords = ["socks5://", "webshare", "proxy"]
+
+[[rules]]
+id = "github-pat-classic"
+description = "GitHub classic PAT (ghp_ prefix)"
+regex = '''ghp_[A-Za-z0-9]{36,}'''
+keywords = ["ghp_"]
+
+[[rules]]
+id = "github-pat-fine-grained"
+description = "GitHub fine-grained PAT"
+regex = '''github_pat_[A-Za-z0-9_]{40,}'''
+keywords = ["github_pat_"]
+
+# ─── Allow-list: known-safe patterns gitleaks would otherwise flag ───
+[allowlist]
+description = "Allowlist false positives"
+
+# Razorpay TEST key IDs are designed to be public (only the secret matters).
+# The key ID `rzp_test_*` shows up in payment integration docs/examples.
+regexes = [
+  '''rzp_test_[A-Za-z0-9]{14}''',                    # Razorpay TEST key ID is OK to commit
+  '''AUTHENTICATION_API_KEY=\$\{[A-Z_]+\}''',         # docker-compose var substitution, not a secret
+  '''EVOLUTION_API_KEY=\[REDACTED.*?\]''',            # our explicit redaction placeholders
+]
+
+paths = [
+  '''static/Templates/marketing/.*\.png$''',          # binary image templates won't have secrets
+  '''_tools/.*''',                                     # local-only scratch tools (gitignored anyway)
+  '''.*\.lock$''',                                     # pip / npm lockfiles can have hashes that look like secrets
+]
+
+# Allow specific commit hashes — used when fixing a historical exposure where
+# we've already rotated the secret and don't want CI failing forever on history.
+# Format: comma-separated commit SHAs. Use sparingly.
+# commits = []
