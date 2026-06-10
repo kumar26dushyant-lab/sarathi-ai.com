@@ -112,22 +112,6 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
   .path-chip{font-size:.74rem;padding:.4rem .7rem;gap:.35rem}
 }
 
-/* FULL TWO-PATHS CARDS — placed ABOVE the plans grid, for the in-context buyer */
-.paths-detail{display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:1100px;margin:0 auto 2.5rem}
-.path-detail{display:flex;flex-direction:column;justify-content:space-between;padding:1.5rem 1.5rem;border-radius:16px;text-decoration:none;color:#0f172a;transition:transform .15s,box-shadow .15s;border:2px solid transparent;position:relative;overflow:visible}
-.path-detail:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(15,23,42,.12)}
-.path-detail-499{background:linear-gradient(135deg,#fef3c7,#fed7aa);border-color:#f59e0b}
-.path-detail-sub{background:linear-gradient(135deg,#cffafe,#a7f3d0);border-color:#06b6d4}
-.path-detail-badge{position:absolute;top:-.7rem;left:1.25rem;font-size:.66rem;font-weight:800;background:#0f172a;color:#fff;padding:.28rem .7rem;border-radius:20px;letter-spacing:.08em;z-index:3;box-shadow:0 2px 6px rgba(15,23,42,.25);line-height:1}
-.path-detail-eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#475569;margin-bottom:.45rem}
-.path-detail-title{font-size:1.25rem;font-weight:800;line-height:1.15;color:#0f172a;margin-bottom:.5rem}
-.path-detail-desc{font-size:.92rem;color:#334155;line-height:1.5;margin-bottom:1.1rem}
-.path-detail-price{font-size:2rem;font-weight:800;color:#0f172a;line-height:1;letter-spacing:-.02em}
-.path-detail-price .small{font-size:.85rem;font-weight:600;color:#475569;margin-left:.3rem}
-.path-detail-cta{display:inline-flex;align-items:center;gap:.4rem;margin-top:.85rem;font-weight:800;color:#0f172a;font-size:.92rem;text-transform:uppercase;letter-spacing:.04em}
-.path-detail-cta::after{content:'→';transition:transform .15s}
-.path-detail:hover .path-detail-cta::after{transform:translateX(4px)}
-@media(max-width:780px){.paths-detail{grid-template-columns:1fr;gap:.85rem;margin-bottom:1.85rem}.path-detail{padding:1.25rem 1.15rem}.path-detail-title{font-size:1.1rem}.path-detail-price{font-size:1.6rem}}
 
 /* STATS STRIP */
 .stats-strip{background:#fff;border-bottom:1px solid #e2e8f0;padding:2.5rem 1.5rem}
@@ -774,50 +758,9 @@ span.hi-inline{display:none}
     <div class="tag hi" style="display:none">मूल्य योजनाएं</div>
     <h2 class="section-title en">Choose your plan</h2>
     <h2 class="section-title hi" style="display:none">अपना प्लान चुनें</h2>
-    <p class="section-sub en">Pick the path that fits — pay once for a single review, or subscribe for ongoing claims work.</p>
-    <p class="section-sub hi" style="display:none">अपने अनुसार रास्ता चुनें — एक समीक्षा के लिए एक बार भुगतान, या लगातार क्लेम कार्य के लिए सब्सक्राइब करें।</p>
+    <p class="section-sub en">Three subscription tiers below — or skip subscription and pay ₹499 for a single review (see card under the plans).</p>
+    <p class="section-sub hi" style="display:none">नीचे तीन सब्सक्रिप्शन टियर — या सब्सक्रिप्शन छोड़कर ₹499 में एक समीक्षा (प्लान के नीचे कार्ड देखें)।</p>
 
-    <!-- TWO-PATHS DETAILED CARDS (above plan grid for in-context decision) -->
-    <div class="paths-detail">
-      <a href="/nidaan/start#review-section" class="path-detail path-detail-499">
-        <span class="path-detail-badge">⚡ FASTEST</span>
-        <div>
-          <div class="path-detail-eyebrow"><span class="en">One-time review</span><span class="hi" style="display:none">एक बार समीक्षा</span></div>
-          <div class="path-detail-title">
-            <span class="en">Get a single claim reviewed</span>
-            <span class="hi" style="display:none">एक क्लेम की समीक्षा कराएँ</span>
-          </div>
-          <div class="path-detail-desc">
-            <span class="en">No subscription needed. Pay once, submit the case, and receive a detailed written legal review within 48–72 business hours.</span>
-            <span class="hi" style="display:none">कोई सब्सक्रिप्शन नहीं। एक बार भुगतान करें, केस जमा करें, और 48–72 घंटे में विस्तृत कानूनी समीक्षा पाएं।</span>
-          </div>
-        </div>
-        <div>
-          <div class="path-detail-price">₹499<span class="small"><span class="en">/ claim</span><span class="hi" style="display:none">/ क्लेम</span></span></div>
-          <div class="path-detail-cta"><span class="en">Submit a claim now</span><span class="hi" style="display:none">अभी क्लेम जमा करें</span></div>
-        </div>
-      </a>
-      <a href="#plans-grid-anchor" class="path-detail path-detail-sub">
-        <span class="path-detail-badge" style="background:#06b6d4">🛡 MULTI-CLAIM</span>
-        <div>
-          <div class="path-detail-eyebrow"><span class="en">Subscribe for multiple claims</span><span class="hi" style="display:none">मल्टी-क्लेम सब्सक्रिप्शन</span></div>
-          <div class="path-detail-title">
-            <span class="en">Silver · Gold · Platinum plans</span>
-            <span class="hi" style="display:none">सिल्वर · गोल्ड · प्लैटिनम प्लान</span>
-          </div>
-          <div class="path-detail-desc">
-            <span class="en">3 to unlimited disputed claims per quarter. Sarathi-AI CRM (worth ₹199–₹1,999/mo) included FREE with every plan.</span>
-            <span class="hi" style="display:none">3 से असीमित विवादित क्लेम प्रति तिमाही। हर प्लान के साथ Sarathi-AI CRM मुफ्त।</span>
-          </div>
-        </div>
-        <div>
-          <div class="path-detail-price"><span class="en">From ₹1,500</span><span class="hi" style="display:none">₹1,500 से</span><span class="small"><span class="en">/ quarter</span><span class="hi" style="display:none">/ तिमाही</span></span></div>
-          <div class="path-detail-cta"><span class="en">See the plans below</span><span class="hi" style="display:none">नीचे प्लान देखें</span></div>
-        </div>
-      </a>
-    </div>
-
-    <div id="plans-grid-anchor"></div>
     <div class="plans-grid">
 
       <!-- SILVER -->
