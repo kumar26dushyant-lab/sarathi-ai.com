@@ -112,35 +112,70 @@ RAZORPAY_KEY_SECRET = ""
 SERVER_URL = ""
 TEST_MODE = False  # Auto-detected from rzp_test_ key prefix
 
-# Plan definitions: plan_key → {name, amount_paise, period, interval, max_agents}
+# Plan definitions: plan_key → {name, amount_paise, period, interval, max_agents, period_days}
 # NOTE: max_agents is admin-inclusive (admin + advisor seats)
+# period_days: how many days of access this payment grants (30 for monthly, 365 for annual)
 PLANS = {
     "individual": {
         "name": "Solo Advisor",
-        "amount_paise": 19900,       # ₹199
+        "amount_paise": 19900,       # ₹199/mo
         "amount_display": "₹199/mo",
         "period": "monthly",
         "interval": 1,
         "max_agents": 1,
+        "period_days": 30,
         "description": "1 Advisor · Unlimited Leads · Full CRM",
     },
     "team": {
         "name": "Team",
-        "amount_paise": 79900,       # ₹799
+        "amount_paise": 79900,       # ₹799/mo
         "amount_display": "₹799/mo",
         "period": "monthly",
         "interval": 1,
         "max_agents": 6,
+        "period_days": 30,
         "description": "Admin + 5 Advisors · WhatsApp · Custom Branding",
     },
     "enterprise": {
         "name": "Enterprise",
-        "amount_paise": 199900,      # ₹1,999
+        "amount_paise": 199900,      # ₹1,999/mo
         "amount_display": "₹1,999/mo",
         "period": "monthly",
         "interval": 1,
         "max_agents": 26,
+        "period_days": 30,
         "description": "Admin + 25 Advisors · API · Dedicated Support",
+    },
+    # Annual plans — ~17% savings vs 12 monthly payments
+    "individual_annual": {
+        "name": "Solo Advisor (Annual)",
+        "amount_paise": 199000,      # ₹1,990/yr (saves ~₹400 vs 12×₹199)
+        "amount_display": "₹1,990/yr",
+        "period": "yearly",
+        "interval": 1,
+        "max_agents": 1,
+        "period_days": 365,
+        "description": "1 Advisor · Unlimited Leads · Full CRM · Best Value",
+    },
+    "team_annual": {
+        "name": "Team (Annual)",
+        "amount_paise": 799000,      # ₹7,990/yr (saves ~₹1,600 vs 12×₹799)
+        "amount_display": "₹7,990/yr",
+        "period": "yearly",
+        "interval": 1,
+        "max_agents": 6,
+        "period_days": 365,
+        "description": "Admin + 5 Advisors · WhatsApp · Custom Branding · Best Value",
+    },
+    "enterprise_annual": {
+        "name": "Enterprise (Annual)",
+        "amount_paise": 1999000,     # ₹19,990/yr (saves ~₹4,000 vs 12×₹1,999)
+        "amount_display": "₹19,990/yr",
+        "period": "yearly",
+        "interval": 1,
+        "max_agents": 26,
+        "period_days": 365,
+        "description": "Admin + 25 Advisors · API · Dedicated Support · Best Value",
     },
 }
 
@@ -408,25 +443,45 @@ async def create_checkout_order(tenant_id: int, plan_key: str) -> dict:
 # =============================================================================
 
 def verify_webhook_signature(body: bytes, signature: str) -> bool:
-    """Verify Razorpay webhook signature using HMAC-SHA256."""
-    if not RAZORPAY_KEY_SECRET:
+    """Verify Razorpay webhook signature using HMAC-SHA256.
+
+    Razorpay webhook signatures are computed with a per-webhook secret that
+    is configured separately from the API key secret in the Razorpay
+    Dashboard (Settings → Webhooks → Active webhook → Secret).
+
+    Resolution order:
+      1. RAZORPAY_WEBHOOK_SECRET (preferred, separate secret per Razorpay docs)
+      2. RAZORPAY_KEY_SECRET (legacy fallback; only works if Dashboard's
+         webhook secret was set to match the API key secret)
+    Either secret can sign successfully; we accept the first match.
+    """
+    if not signature:
         return False
-    expected = hmac.new(
-        RAZORPAY_KEY_SECRET.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
+    candidates = []
+    if webhook_secret:
+        candidates.append(webhook_secret)
+    if RAZORPAY_KEY_SECRET and RAZORPAY_KEY_SECRET != webhook_secret:
+        candidates.append(RAZORPAY_KEY_SECRET)
+    for secret in candidates:
+        expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected, signature):
+            return True
+    return False
 
 
 def verify_payment_signature(order_id: str, payment_id: str,
                              signature: str) -> bool:
     """Verify Razorpay payment signature (for Checkout.js flow).
-    In TEST mode with empty/dummy signature, auto-accepts for development."""
-    if TEST_MODE and signature == "test_bypass":
-        logger.info("🧪 TEST MODE: bypassing payment signature verification")
-        return True
+
+    B5: Removed the literal `test_bypass` shortcut — too risky in production
+    even with TEST_MODE detection (a misconfigured TEST key in prod would let
+    anyone activate a paid plan for free). All payments must now present a
+    valid HMAC signature.
+    """
     if not RAZORPAY_KEY_SECRET:
+        return False
+    if not signature or not order_id or not payment_id:
         return False
     message = f"{order_id}|{payment_id}"
     expected = hmac.new(
@@ -435,6 +490,155 @@ def verify_payment_signature(order_id: str, payment_id: str,
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+def verify_subscription_signature(payment_id: str, subscription_id: str,
+                                   signature: str) -> bool:
+    """Verify Razorpay subscription payment signature.
+    Razorpay signs: HMAC-SHA256(payment_id + '|' + subscription_id).
+    B5: Removed the literal `test_bypass` shortcut (see verify_payment_signature)."""
+    if not RAZORPAY_KEY_SECRET:
+        return False
+    message = f"{payment_id}|{subscription_id}"
+    expected = hmac.new(
+        RAZORPAY_KEY_SECRET.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+async def verify_subscription_and_activate(tenant_id: int, plan_key: str,
+                                            razorpay_payment_id: str,
+                                            razorpay_subscription_id: str,
+                                            razorpay_signature: str) -> dict:
+    """
+    Verify Razorpay subscription payment and immediately activate the tenant.
+    Called after the user completes subscription checkout — provides instant activation
+    while the async webhook (subscription.activated) serves as a durable safety net.
+    """
+    valid = verify_subscription_signature(
+        razorpay_payment_id, razorpay_subscription_id, razorpay_signature
+    )
+    if not valid:
+        logger.warning("❌ Invalid subscription signature for tenant %d", tenant_id)
+        return {"error": "Invalid payment signature", "verified": False}
+
+    # Idempotency: skip if already processed (prevents race with webhook)
+    if await db.is_payment_processed(razorpay_payment_id):
+        logger.info("🔄 Subscription payment %s already processed — skipping duplicate",
+                    razorpay_payment_id)
+        tenant = await db.get_tenant(tenant_id)
+        return {
+            "status": "ok", "verified": True,
+            "tenant_id": tenant_id,
+            "plan": tenant.get("plan", plan_key) if tenant else plan_key,
+            "expires": tenant.get("subscription_expires_at", "") if tenant else "",
+            "already_processed": True,
+        }
+
+    plan_info = PLANS.get(plan_key, {})
+    period_days = plan_info.get("period_days", 30)
+    max_agents = plan_info.get("max_agents", 1)
+    expected_amount = plan_info.get("amount_paise", 0)
+
+    # Founding discount
+    founding_discount = False
+    tenant = await db.get_tenant(tenant_id)
+    if tenant and tenant.get("founding_discount") == 1:
+        fd_until = tenant.get("founding_discount_until", "")
+        if fd_until:
+            try:
+                if datetime.fromisoformat(fd_until) > datetime.now():
+                    founding_discount = True
+                    expected_amount = int(expected_amount * 0.80)
+            except ValueError:
+                pass
+
+    # Server-side verify: confirm payment status with Razorpay API
+    try:
+        rz_payment = await _razorpay_request("GET", f"payments/{razorpay_payment_id}")
+        rz_status = rz_payment.get("status")
+        if rz_status not in ("captured", "authorized"):
+            logger.warning("❌ Subscription payment %s status is '%s'",
+                           razorpay_payment_id, rz_status)
+            return {"error": f"Payment not completed (status: {rz_status})", "verified": False}
+    except Exception as e:
+        logger.error("Razorpay payment fetch failed for %s: %s", razorpay_payment_id, e)
+        # Signature was valid — proceed with activation (Razorpay API may be momentarily down)
+
+    # Record atomically before activating
+    inserted = await db.record_payment_processed(
+        razorpay_payment_id, tenant_id, plan_key, "subscription_frontend", expected_amount
+    )
+    if not inserted:
+        tenant = await db.get_tenant(tenant_id)
+        return {
+            "status": "ok", "verified": True, "tenant_id": tenant_id,
+            "plan": plan_key, "already_processed": True,
+            "expires": tenant.get("subscription_expires_at", "") if tenant else "",
+        }
+
+    # Smart expiry: extend from trial end if still in trial
+    tenant = await db.get_tenant(tenant_id)
+    now = datetime.now()
+    trial_end_str = tenant.get("trial_ends_at") if tenant else None
+    if trial_end_str:
+        try:
+            trial_end = datetime.fromisoformat(trial_end_str)
+            expires = (max(trial_end, now) + timedelta(days=period_days)).isoformat()
+        except ValueError:
+            expires = (now + timedelta(days=period_days)).isoformat()
+    else:
+        expires = (now + timedelta(days=period_days)).isoformat()
+
+    await db.update_tenant(
+        tenant_id,
+        is_active=1,
+        plan=plan_key,
+        subscription_status="active",
+        subscription_expires_at=expires,
+        trial_ends_at=None,
+        max_agents=max_agents,
+        razorpay_sub_id=razorpay_subscription_id,
+    )
+
+    logger.info("✅ Subscription verified & activated: tenant=%d plan=%s sub=%s payment=%s",
+                tenant_id, plan_key, razorpay_subscription_id, razorpay_payment_id)
+
+    await db.add_system_event(
+        "info", "low", "payment",
+        f"Subscription ₹{expected_amount/100:,.0f} for {plan_key}",
+        f"tenant={tenant_id} payment={razorpay_payment_id} sub={razorpay_subscription_id} founding={founding_discount}",
+        tenant_id=tenant_id)
+
+    # Auto-commission
+    try:
+        import asyncio
+        conv = await db.process_payment_commission(tenant_id, plan_key, razorpay_payment_id, expected_amount)
+        if conv and conv.get("commission") and conv.get("affiliate_email"):
+            from biz_email import send_affiliate_commission_earned
+            asyncio.create_task(send_affiliate_commission_earned(
+                conv["affiliate_email"], conv["affiliate_name"],
+                conv["commission"], plan_key,
+                tenant.get("owner_name", "") if tenant else ""))
+    except Exception as e:
+        logger.error("Commission error for tenant %d: %s", tenant_id, e)
+
+    original_amount = plan_info.get("amount_paise", 0)
+    await _notify_payment_success(tenant_id, plan_key, expected_amount,
+                                   razorpay_payment_id, expires,
+                                   founding_discount=founding_discount,
+                                   original_amount=original_amount)
+
+    return {
+        "status": "ok",
+        "verified": True,
+        "tenant_id": tenant_id,
+        "plan": plan_key,
+        "expires": expires,
+        "subscription_id": razorpay_subscription_id,
+    }
 
 
 async def process_webhook_event(event: str, payload: dict) -> dict:
@@ -454,6 +658,10 @@ async def process_webhook_event(event: str, payload: dict) -> dict:
         "subscription.pending": _handle_subscription_pending,
         "payment.captured": _handle_payment_captured,
         "payment.failed": _handle_payment_failed,
+        # B2: Sarathi refund webhook handlers
+        "refund.processed": _handle_refund_processed,
+        "refund.failed": _handle_refund_failed,
+        "refund.created": _handle_refund_processed,  # treat as in-progress
     }
 
     handler = handlers.get(event)
@@ -657,6 +865,7 @@ async def _handle_payment_captured(payload: dict) -> dict:
 
     plan_info = PLANS.get(plan_key, {})
     max_agents = plan_info.get("max_agents", 1)
+    period_days = plan_info.get("period_days", 30)
 
     # Smart expiry: if still in trial, start billing from trial end
     tenant = await db.get_tenant(tid)
@@ -666,13 +875,13 @@ async def _handle_payment_captured(payload: dict) -> dict:
         try:
             trial_end = datetime.fromisoformat(trial_end_str)
             if trial_end > now:
-                expires = (trial_end + timedelta(days=30)).isoformat()
+                expires = (trial_end + timedelta(days=period_days)).isoformat()
             else:
-                expires = (now + timedelta(days=30)).isoformat()
+                expires = (now + timedelta(days=period_days)).isoformat()
         except ValueError:
-            expires = (now + timedelta(days=30)).isoformat()
+            expires = (now + timedelta(days=period_days)).isoformat()
     else:
-        expires = (now + timedelta(days=30)).isoformat()
+        expires = (now + timedelta(days=period_days)).isoformat()
 
     await db.update_tenant(
         tid,
@@ -870,6 +1079,55 @@ async def _activate_tenant_from_sub(sub: dict, event_type: str) -> dict:
 #  PAYMENT VERIFICATION (for Checkout.js callback)
 # =============================================================================
 
+async def activate_from_api_verified_payment(
+    tenant_id: int, plan_key: str,
+    order_id: str, payment_id: str, amount_paise: int,
+) -> dict:
+    """Activate tenant when payment confirmed via Razorpay API (no HMAC needed).
+    Used by the UPI recovery endpoint — HMAC signature is unavailable when the
+    browser loses context during UPI app-switch.  Server-to-server API verification
+    replaces HMAC here.  Fully idempotent — safe to call multiple times.
+    """
+    if await db.is_payment_processed(payment_id):
+        logger.info("🔄 Payment %s already activated — recovery no-op", payment_id)
+        tenant = await db.get_tenant(tenant_id)
+        return {"status": "ok", "already_activated": True,
+                "plan": tenant.get("plan", plan_key) if tenant else plan_key}
+
+    plan_info = PLANS.get(plan_key, {})
+    max_agents = plan_info.get("max_agents", 1)
+    period_days = plan_info.get("period_days", 30)
+
+    inserted = await db.record_payment_processed(
+        payment_id, tenant_id, plan_key, "recovery_api_verified", amount_paise
+    )
+    if not inserted:
+        tenant = await db.get_tenant(tenant_id)
+        return {"status": "ok", "already_activated": True,
+                "plan": tenant.get("plan", plan_key) if tenant else plan_key}
+
+    tenant = await db.get_tenant(tenant_id)
+    trial_end_str = tenant.get("trial_ends_at") if tenant else None
+    now = datetime.now()
+    if trial_end_str:
+        try:
+            trial_end = datetime.fromisoformat(trial_end_str)
+            expires = ((trial_end if trial_end > now else now) + timedelta(days=period_days)).isoformat()
+        except ValueError:
+            expires = (now + timedelta(days=period_days)).isoformat()
+    else:
+        expires = (now + timedelta(days=period_days)).isoformat()
+
+    await db.update_tenant(
+        tenant_id,
+        is_active=1, plan=plan_key, subscription_status="active",
+        subscription_expires_at=expires, trial_ends_at=None, max_agents=max_agents,
+    )
+    logger.info("✅ Recovery-activated: tenant=%d plan=%s payment=%s order=%s",
+                tenant_id, plan_key, payment_id, order_id)
+    return {"status": "ok", "activated": True, "plan": plan_key, "expires": expires}
+
+
 async def verify_and_activate(tenant_id: int, plan_key: str,
                               razorpay_order_id: str,
                               razorpay_payment_id: str,
@@ -957,6 +1215,7 @@ async def verify_and_activate(tenant_id: int, plan_key: str,
                 "expires": tenant.get('subscription_expires_at', '') if tenant else ''}
 
     max_agents = plan_info.get("max_agents", 1)
+    period_days = plan_info.get("period_days", 30)
 
     # Smart expiry: if still in trial, start billing from trial end
     tenant = await db.get_tenant(tenant_id)
@@ -966,13 +1225,13 @@ async def verify_and_activate(tenant_id: int, plan_key: str,
         try:
             trial_end = datetime.fromisoformat(trial_end_str)
             if trial_end > now:
-                expires = (trial_end + timedelta(days=30)).isoformat()
+                expires = (trial_end + timedelta(days=period_days)).isoformat()
             else:
-                expires = (now + timedelta(days=30)).isoformat()
+                expires = (now + timedelta(days=period_days)).isoformat()
         except ValueError:
-            expires = (now + timedelta(days=30)).isoformat()
+            expires = (now + timedelta(days=period_days)).isoformat()
     else:
-        expires = (now + timedelta(days=30)).isoformat()
+        expires = (now + timedelta(days=period_days)).isoformat()
 
     await db.update_tenant(
         tenant_id,
@@ -984,8 +1243,8 @@ async def verify_and_activate(tenant_id: int, plan_key: str,
         max_agents=max_agents,
     )
 
-    logger.info("✅ Payment verified & activated: tenant=%d plan=%s payment=%s founding=%s",
-                tenant_id, plan_key, razorpay_payment_id, founding_discount)
+    logger.info("✅ Payment verified & activated: tenant=%d plan=%s payment=%s founding=%s period_days=%d",
+                tenant_id, plan_key, razorpay_payment_id, founding_discount, period_days)
 
     # Log payment event
     discount_note = " (founding 20% discount)" if founding_discount else ""
@@ -1062,3 +1321,284 @@ async def get_subscription_status(tenant_id: int) -> dict:
             logger.error("Error fetching subscription %s: %s", sub_id, e)
 
     return result
+
+
+async def _handle_refund_processed(payload: dict) -> dict:
+    """Razorpay confirmed our refund. Mark the sarathi_refunds row as processed
+    AND fire B4 auto-clawback if there's an affiliate referral on the tenant."""
+    refund_entity = (payload.get("refund") or {}).get("entity") or {}
+    rzp_refund_id = refund_entity.get("id", "")
+    rzp_payment_id = refund_entity.get("payment_id", "")
+    if not rzp_refund_id and not rzp_payment_id:
+        return {"status": "ignored", "reason": "no_ids"}
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        row = await (await conn.execute(
+            "SELECT refund_id, tenant_id FROM sarathi_refunds "
+            "WHERE razorpay_refund_id=? "
+            "OR (razorpay_payment_id=? AND (razorpay_refund_id IS NULL OR razorpay_refund_id=''))",
+            (rzp_refund_id, rzp_payment_id))).fetchone()
+    if row:
+        await update_sarathi_refund_status(row["refund_id"], "processed",
+                                            razorpay_refund_id=rzp_refund_id)
+        logger.info("✓ Sarathi refund webhook → processed: refund_id=%d rzp=%s",
+                    row["refund_id"], rzp_refund_id)
+        # B4: auto-clawback affiliate commission (idempotent — if already
+        # reversed/clawback_owed from the cancel-endpoint path, this is a no-op).
+        try:
+            cb = await _db.auto_clawback_for_refund(
+                row["tenant_id"], reason=f"webhook_refund_id={row['refund_id']}")
+            if cb:
+                logger.info("Affiliate clawback (webhook) tenant=%d action=%s amount=₹%s",
+                            row["tenant_id"], cb.get("action"), cb.get("amount"))
+        except Exception as cbe:
+            logger.error("Affiliate webhook clawback failed: %s", cbe)
+        return {"status": "ok", "refund_id": row["refund_id"]}
+    return {"status": "unmatched", "rzp_refund_id": rzp_refund_id}
+
+
+async def _handle_refund_failed(payload: dict) -> dict:
+    """Razorpay reported refund failure. Mark the sarathi_refunds row as failed."""
+    refund_entity = (payload.get("refund") or {}).get("entity") or {}
+    rzp_refund_id = refund_entity.get("id", "")
+    rzp_payment_id = refund_entity.get("payment_id", "")
+    err = refund_entity.get("error_description") or refund_entity.get("error_reason") or "unknown"
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        row = await (await conn.execute(
+            "SELECT refund_id FROM sarathi_refunds WHERE razorpay_refund_id=? "
+            "OR razorpay_payment_id=? ORDER BY requested_at DESC LIMIT 1",
+            (rzp_refund_id, rzp_payment_id))).fetchone()
+    if row:
+        await update_sarathi_refund_status(row["refund_id"], "failed",
+                                            razorpay_refund_id=rzp_refund_id,
+                                            last_error=str(err)[:500])
+        logger.warning("⚠️ Sarathi refund webhook → failed: refund_id=%d err=%s",
+                       row["refund_id"], err)
+        return {"status": "ok", "refund_id": row["refund_id"]}
+    return {"status": "unmatched", "rzp_refund_id": rzp_refund_id}
+
+
+# =============================================================================
+#  SARATHI REFUNDS — Policy A: full refund if cancelled within 7 days AND
+#                              tenant has < 5 leads (i.e. essentially unused)
+# =============================================================================
+
+SARATHI_REFUND_WINDOW_DAYS = 7
+SARATHI_REFUND_LEAD_THRESHOLD = 5  # < this = "no meaningful usage"
+
+
+async def _count_tenant_leads(tenant_id: int) -> int:
+    """Count leads belonging to a tenant. Leads are linked to agents,
+    which are linked to tenants — so we count via the agents JOIN."""
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM leads l "
+            "INNER JOIN agents a ON a.agent_id = l.agent_id "
+            "WHERE a.tenant_id = ?", (tenant_id,))
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
+
+async def find_latest_paid_payment_for_tenant(tenant_id: int) -> Optional[dict]:
+    """Most recent successfully-processed Razorpay payment for a tenant.
+    Used as the source-of-truth for what to refund against."""
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        cur = await conn.execute(
+            "SELECT razorpay_payment_id, plan_key, source, amount_paise, "
+            "       processed_at "
+            "FROM processed_payments "
+            "WHERE tenant_id = ? AND amount_paise > 0 "
+            "ORDER BY processed_at DESC LIMIT 1", (tenant_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def check_sarathi_refund_eligibility(tenant_id: int,
+                                            payment_id: str = ""
+                                            ) -> tuple[bool, str, dict]:
+    """Return (eligible, reason, payment_dict). Policy A:
+      - Tenant has a processed payment in the last SARATHI_REFUND_WINDOW_DAYS
+      - Tenant has < SARATHI_REFUND_LEAD_THRESHOLD leads (essentially unused)
+      - No existing pending/processing/processed refund row already
+    """
+    import biz_database as _db
+    import aiosqlite as _sql
+    import datetime as _dt
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        existing = await (await conn.execute(
+            "SELECT refund_id, status FROM sarathi_refunds "
+            "WHERE tenant_id = ? AND status IN ('pending','processing','processed') "
+            "LIMIT 1", (tenant_id,))).fetchone()
+        if existing:
+            return False, f"refund_already_{existing['status']}", {}
+        if payment_id:
+            row = await (await conn.execute(
+                "SELECT razorpay_payment_id, plan_key, source, amount_paise, processed_at "
+                "FROM processed_payments WHERE razorpay_payment_id = ? AND tenant_id = ?",
+                (payment_id, tenant_id))).fetchone()
+        else:
+            row = await (await conn.execute(
+                "SELECT razorpay_payment_id, plan_key, source, amount_paise, processed_at "
+                "FROM processed_payments WHERE tenant_id = ? AND amount_paise > 0 "
+                "ORDER BY processed_at DESC LIMIT 1", (tenant_id,))).fetchone()
+        if not row:
+            return False, "no_payment_found", {}
+        payment = dict(row)
+
+    # Window check
+    try:
+        proc_at = _dt.datetime.fromisoformat(str(payment["processed_at"]).replace("Z","").replace(" ","T")[:19])
+    except Exception:
+        return False, "bad_processed_at", payment
+    age_days = (_dt.datetime.utcnow() - proc_at).days
+    if age_days > SARATHI_REFUND_WINDOW_DAYS:
+        return False, f"outside_window_{age_days}d", payment
+
+    # Usage check
+    leads = await _count_tenant_leads(tenant_id)
+    if leads >= SARATHI_REFUND_LEAD_THRESHOLD:
+        return False, f"has_{leads}_leads", payment
+    return True, "eligible", payment
+
+
+async def create_sarathi_refund_row(*, tenant_id: int, amount: int,
+                                     razorpay_payment_id: str = "",
+                                     razorpay_order_id: str = "",
+                                     reason: str = "",
+                                     initiated_by: str = "tenant") -> int:
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO sarathi_refunds "
+            "(tenant_id, amount, razorpay_payment_id, razorpay_order_id, reason, initiated_by) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (tenant_id, amount, razorpay_payment_id, razorpay_order_id,
+             reason, initiated_by))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def update_sarathi_refund_status(refund_id: int, status: str, **fields) -> None:
+    import biz_database as _db
+    import aiosqlite as _sql
+    sets, vals = ["status=?"], [status]
+    for k, v in fields.items():
+        if k in ("razorpay_refund_id", "last_error"):
+            sets.append(f"{k}=?"); vals.append(v)
+    if status in ("processed", "failed"):
+        sets.append("processed_at=CURRENT_TIMESTAMP")
+    vals.append(refund_id)
+    async with _sql.connect(_db.DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE sarathi_refunds SET {', '.join(sets)} WHERE refund_id=?", vals)
+        await conn.commit()
+
+
+async def get_sarathi_refund(refund_id: int) -> Optional[dict]:
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        row = await (await conn.execute(
+            "SELECT * FROM sarathi_refunds WHERE refund_id=?", (refund_id,))).fetchone()
+        return dict(row) if row else None
+
+
+async def list_sarathi_refunds(status: Optional[str] = None,
+                                limit: int = 200) -> list[dict]:
+    import biz_database as _db
+    import aiosqlite as _sql
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        if status:
+            cur = await conn.execute(
+                "SELECT r.*, t.firm_name, t.email, t.owner_name "
+                "FROM sarathi_refunds r LEFT JOIN tenants t ON t.tenant_id=r.tenant_id "
+                "WHERE r.status=? ORDER BY r.requested_at DESC LIMIT ?", (status, limit))
+        else:
+            cur = await conn.execute(
+                "SELECT r.*, t.firm_name, t.email, t.owner_name "
+                "FROM sarathi_refunds r LEFT JOIN tenants t ON t.tenant_id=r.tenant_id "
+                "ORDER BY r.requested_at DESC LIMIT ?", (limit,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def issue_razorpay_refund_for_sarathi(payment_id: str, amount_paise: int,
+                                              notes: Optional[dict] = None) -> dict:
+    """Wrapper around Razorpay's POST /payments/{id}/refund.
+    Returns dict with 'ok', 'refund_id', 'status', or 'error'."""
+    import httpx as _httpx
+    key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not key_id or not key_secret:
+        return {"ok": False, "error": "razorpay_not_configured"}
+    body = {"amount": amount_paise, "speed": "normal"}
+    if notes:
+        body["notes"] = notes
+    try:
+        async with _httpx.AsyncClient() as client:
+            r = await client.post(
+                f"https://api.razorpay.com/v1/payments/{payment_id}/refund",
+                auth=(key_id, key_secret), json=body, timeout=30.0)
+        if r.status_code in (200, 201):
+            d = r.json()
+            return {"ok": True, "refund_id": d.get("id", ""),
+                    "status": d.get("status", "")}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:500]}"}
+    except Exception as e:
+        logger.exception("Razorpay refund call failed payment=%s", payment_id)
+        return {"ok": False, "error": str(e)}
+
+
+async def find_sarathi_eligible_unrefunded(days: int = 30) -> list[dict]:
+    """Reconciliation source: tenants whose recent payment qualifies for refund
+    but no refund row exists yet. Used by scheduler nudge for SA review."""
+    import biz_database as _db
+    import aiosqlite as _sql
+    import datetime as _dt
+    cutoff = (_dt.datetime.utcnow() - _dt.timedelta(days=days)).isoformat()
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        cur = await conn.execute(
+            f"""SELECT t.tenant_id, t.firm_name, t.email, t.subscription_status,
+                       p.razorpay_payment_id, p.amount_paise, p.processed_at,
+                       (SELECT COUNT(*) FROM leads l
+                          INNER JOIN agents a ON a.agent_id = l.agent_id
+                          WHERE a.tenant_id = t.tenant_id) AS lead_count,
+                       (SELECT status FROM sarathi_refunds sr WHERE sr.tenant_id = t.tenant_id
+                          ORDER BY sr.requested_at DESC LIMIT 1) AS last_refund_status
+                FROM tenants t
+                INNER JOIN processed_payments p ON p.tenant_id = t.tenant_id
+                WHERE t.subscription_status = 'cancelled'
+                  AND p.amount_paise > 0
+                  AND p.processed_at >= ?
+                ORDER BY p.processed_at DESC""",
+            (cutoff,))
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    eligible = []
+    now = _dt.datetime.utcnow()
+    for r in rows:
+        if (r.get("lead_count") or 0) >= SARATHI_REFUND_LEAD_THRESHOLD:
+            continue
+        if r.get("last_refund_status") in ("pending", "processing", "processed"):
+            continue
+        try:
+            pa = _dt.datetime.fromisoformat(str(r["processed_at"]).replace(" ","T")[:19])
+        except Exception:
+            continue
+        if (now - pa).days <= SARATHI_REFUND_WINDOW_DAYS:
+            eligible.append(r)
+    return eligible

@@ -21,7 +21,9 @@ gdrive_tokens/
 
 # ── Generated / Runtime Outputs ───────────────────────────────────────────────
 generated_pdfs/
+generated_videos/
 uploads/
+apk/                          # 96MB of WhatsApp APK builds — back up separately (releases / cloud storage)
 __pycache__/
 *.py[cod]
 *.pyo

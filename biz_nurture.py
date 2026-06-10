@@ -29,6 +29,7 @@ from typing import Optional, Callable
 
 import aiosqlite
 import biz_database as db
+import biz_whatsapp_evolution as wa_evo
 
 logger = logging.getLogger("sarathi.nurture")
 
@@ -42,6 +43,29 @@ def set_telegram_callback(callback: Callable):
     global _telegram_send
     _telegram_send = callback
     logger.info("Nurture: Telegram callback registered")
+
+
+async def _evo_send_direct(tenant_id: int, agent_id: int, phone: str, message: str) -> bool:
+    """Send message directly to lead's WhatsApp via Evolution API.
+    Looks up the tenant's connected wa_instance for the given agent."""
+    if not wa_evo.is_enabled():
+        return False
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            cur = await conn.execute(
+                "SELECT evolution_instance FROM wa_instances "
+                "WHERE tenant_id=? AND status IN ('open','connected') "
+                "AND (paused_until IS NULL OR paused_until < datetime('now')) "
+                "ORDER BY instance_id DESC LIMIT 1",
+                (tenant_id,))
+            row = await cur.fetchone()
+        if not row:
+            return False
+        result = await wa_evo.send_text(row[0], phone, message, delay_ms=2000)
+        return not result.get("error")
+    except Exception as _e:
+        logger.debug("Nurture: Evolution send failed tenant=%d phone=%s: %s", tenant_id, phone, _e)
+        return False
 
 
 # =============================================================================
@@ -388,6 +412,48 @@ def _wa_link(phone: str, text: str) -> str:
     return f"https://wa.me/{digits}?text={quote(text)}"
 
 
+def _check_message_safety(text: str, lead: dict) -> list:
+    """Return a list of problems found in the rendered message before sending to a lead.
+    An empty list means the message is safe to send.
+    """
+    import re as _re
+    problems = []
+    unresolved = _re.findall(r"\{[a-zA-Z_]+\}", text)
+    if unresolved:
+        problems.append(f"Unresolved placeholders: {', '.join(set(unresolved))}")
+    if len((text or "").strip()) < 10:
+        problems.append("Message is too short or blank")
+    if not (lead.get("name") or "").strip():
+        problems.append("Lead has no name — message may look impersonal")
+    return problems
+
+
+async def _alert_advisor_unsafe_msg(tenant_id: int, agent: dict, lead: dict,
+                                     problems: list, text: str) -> None:
+    """Notify advisor via WhatsApp/Telegram that a drip step was blocked for safety."""
+    _lead_name = lead.get("name") or "Lead"
+    _lead_phone = lead.get("phone") or lead.get("whatsapp") or "N/A"
+    _problems_str = "\n".join(f"  • {p}" for p in problems)
+    _adv_msg = (
+        f"⛔ *Drip message blocked (safety check)*\n\n"
+        f"👤 Lead: {_lead_name} ({_lead_phone})\n\n"
+        f"🔍 Issues found:\n{_problems_str}\n\n"
+        f"📝 Blocked message preview:\n_{text[:300]}_\n\n"
+        f"Please review your sequence template and fix the issue before re-running."
+    )
+    _adv_phone = agent.get("wa_phone") or agent.get("phone")
+    _wa_sent = False
+    if _adv_phone:
+        _wa_sent = await _evo_send_direct(tenant_id, agent.get("agent_id", 0), _adv_phone, _adv_msg)
+    if not _wa_sent:
+        tg_id = agent.get("telegram_id")
+        if tg_id and _telegram_send:
+            try:
+                await _telegram_send(tenant_id, tg_id, _adv_msg)
+            except Exception:
+                pass
+
+
 # =============================================================================
 #  STEP DISPATCH
 # =============================================================================
@@ -396,52 +462,133 @@ async def _send_step(enrollment: dict, step: dict, lead: dict,
                      agent: dict, firm_name: str, lang: str) -> bool:
     """Dispatch a single step. Returns True on success."""
     channel = step.get("channel", "telegram_agent")
+    tenant_id = enrollment["tenant_id"]
 
     # Render templates in agent's language (fallback to en)
     tpl = step.get(f"template_{lang}") or step.get("template_en") or ""
     body = _render(tpl, lead, agent, firm_name)
 
     wa_tpl = step.get(f"wa_template_{lang}") or step.get("wa_template_en") or ""
-    wa_text = _render(wa_tpl, lead, agent, firm_name) if wa_tpl else ""
+    wa_text = _render(wa_tpl, lead, agent, firm_name) if wa_tpl else body  # fallback to body
+
+    if channel == "whatsapp_customer":
+        # Safety check before sending to lead — catch template issues before they reach the client
+        _problems = _check_message_safety(wa_text or body, lead)
+        if _problems:
+            logger.warning("Nurture: blocked step for lead %d — %s", lead.get("lead_id"), _problems)
+            await _alert_advisor_unsafe_msg(tenant_id, agent, lead, _problems, wa_text or body)
+            return False
+
+        # Direct WhatsApp send to the lead — uses Evolution API
+        phone = lead.get("phone") or lead.get("whatsapp")
+        if not phone:
+            logger.info("Nurture: lead %d has no phone for whatsapp_customer step", lead.get("lead_id"))
+            return False
+        sent = await _evo_send_direct(tenant_id, agent.get("agent_id", 0), phone, wa_text or body)
+        _lead_name = lead.get("name", "lead")
+        if sent:
+            logger.info("Nurture: WhatsApp sent to lead %d (%s)", lead.get("lead_id"), phone)
+            # ── Also notify advisor via WhatsApp (primary) or Telegram (backup) ──
+            _advisor_phone = agent.get("wa_phone") or agent.get("phone")
+            _advisor_msg = (
+                f"✅ *Drip sent to {_lead_name}*\n\n"
+                f"_{wa_text or body}_\n\n"
+                f"📱 {phone}"
+            )
+            _wa_notified = False
+            if _advisor_phone:
+                _wa_notified = await _evo_send_direct(tenant_id, agent.get("agent_id", 0),
+                                                       _advisor_phone, _advisor_msg)
+            if not _wa_notified:
+                tg_id = agent.get("telegram_id")
+                if tg_id and _telegram_send:
+                    try:
+                        await _telegram_send(tenant_id, tg_id,
+                                             _advisor_msg.replace("*", "<b>", 1).replace("*", "</b>", 1))
+                    except Exception as _te:
+                        logger.error("Nurture: advisor TG notify failed: %s", _te)
+        else:
+            logger.warning("Nurture: WhatsApp send failed for lead %d — WA not connected?", lead.get("lead_id"))
+            # Notify agent via Telegram so the message isn't silently lost
+            tg_id = agent.get("telegram_id")
+            if tg_id and _telegram_send:
+                _fallback_body = wa_text or body
+                _fallback_msg = (
+                    f"⚠️ <b>WhatsApp not connected</b> — drip message not sent to {_lead_name}.\n\n"
+                    f"{_fallback_body}\n\n"
+                    f"📱 Phone: {phone}\n"
+                    f"_Please send manually._"
+                )
+                try:
+                    await _telegram_send(tenant_id, tg_id, _fallback_msg)
+                except Exception as _e:
+                    logger.error("Nurture: Telegram fallback notify failed: %s", _e)
+        return sent
 
     if channel == "telegram_agent":
-        if not _telegram_send:
-            logger.warning("Nurture: no telegram callback registered, skipping step %d",
-                           step["step_id"])
-            return False
+        lead_phone = lead.get("phone") or lead.get("whatsapp")
+
+        # ── Step 1: Send message to LEAD via WhatsApp (primary) ──
+        wa_sent = False
+        if lead_phone:
+            wa_sent = await _evo_send_direct(tenant_id, agent.get("agent_id", 0), lead_phone, wa_text)
+
+        # ── Step 2: Notify ADVISOR via WhatsApp (primary) or Telegram (backup) ──
+        seq_label = step.get("label", "")
+        _lead_name = lead.get("name", "")
+        _advisor_phone = agent.get("wa_phone") or agent.get("phone")
+        if wa_sent:
+            _adv_status = "✅ Message sent to your client automatically."
+        else:
+            _adv_status = "⚠️ WhatsApp not connected — please send manually."
+        _adv_wa_msg = (
+            f"💧 *Drip — {seq_label}*\n"
+            f"👤 {_lead_name}" + (f" • 📱 {lead_phone}" if lead_phone else "") + "\n\n"
+            f"_{wa_text or body}_\n\n"
+            f"{_adv_status}"
+        )
+        _adv_wa_notified = False
+        if _advisor_phone:
+            _adv_wa_notified = await _evo_send_direct(tenant_id, agent.get("agent_id", 0),
+                                                       _advisor_phone, _adv_wa_msg)
+
         tg_id = agent.get("telegram_id")
-        if not tg_id:
-            logger.info("Nurture: agent %d has no telegram_id, skipping",
+        if not tg_id and not wa_sent and not _adv_wa_notified:
+            logger.info("Nurture: agent %d has no telegram_id and WA not connected — skipping step",
                         agent.get("agent_id"))
             return False
-        # Build message + optional WA action button
-        seq_label = step.get("label", "")
-        header = f"💧 <b>Drip — {seq_label}</b>\n👤 {lead.get('name','')}"
-        if lead.get("phone"):
-            header += f" • 📱 {lead['phone']}"
-        full_msg = f"{header}\n\n{body}"
-        # Reply markup with WA send button (only if phone + wa_text present)
-        reply_markup = None
-        if lead.get("phone") and wa_text:
-            try:
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                wa_url = _wa_link(lead["phone"], wa_text)
-                if wa_url:
-                    btn_label = "💬 Send via WhatsApp" if lang == "en" else "💬 WhatsApp भेजें"
-                    reply_markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton(btn_label, url=wa_url)
-                    ]])
-            except Exception as e:
-                logger.warning("Nurture: button build failed: %s", e)
-        try:
-            tenant_id = enrollment["tenant_id"]
-            await _telegram_send(tenant_id, tg_id, full_msg, reply_markup=reply_markup)
-            return True
-        except Exception as e:
-            logger.error("Nurture: telegram send failed: %s", e)
-            return False
 
-    # Future channels (placeholders for Phase 2)
+        if tg_id and _telegram_send and not _adv_wa_notified:
+            # Fallback: notify advisor via Telegram only if WA advisor notify failed
+            header = f"💧 <b>Drip — {seq_label}</b>\n👤 {_lead_name}"
+            if lead_phone:
+                header += f" • 📱 {lead_phone}"
+            if wa_sent:
+                status_line = "✅ <i>WhatsApp message sent automatically to lead.</i>"
+            else:
+                status_line = "⚠️ <i>WhatsApp not connected — message not auto-sent.</i>"
+            full_msg = f"{header}\n\n{body}\n\n{status_line}"
+            # Only show manual wa.me button if Evolution didn't auto-send
+            reply_markup = None
+            if not wa_sent and lead_phone and wa_text:
+                try:
+                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                    wa_url = _wa_link(lead_phone, wa_text)
+                    if wa_url:
+                        btn_label = "💬 Send via WhatsApp" if lang == "en" else "💬 WhatsApp भेजें"
+                        reply_markup = InlineKeyboardMarkup([[
+                            InlineKeyboardButton(btn_label, url=wa_url)
+                        ]])
+                except Exception as e:
+                    logger.warning("Nurture: button build failed: %s", e)
+            try:
+                await _telegram_send(tenant_id, tg_id, full_msg, reply_markup=reply_markup)
+            except Exception as e:
+                logger.error("Nurture: telegram send failed: %s", e)
+
+        return wa_sent or bool(tg_id and _telegram_send)
+
+    # Future channels
     elif channel == "email_customer":
         logger.info("Nurture: email_customer channel not yet implemented")
         return False

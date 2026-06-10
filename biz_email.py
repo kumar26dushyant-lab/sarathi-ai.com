@@ -67,7 +67,9 @@ def is_enabled() -> bool:
 async def send_email(to_email: str, subject: str, html_body: str,
                      text_body: str = "", from_email: str = "",
                      from_name: str = "", reply_to: str = "") -> bool:
-    """Send an email via SMTP. Returns True on success.
+    """Send transactional email. Prefers Resend HTTPS API when RESEND_API_KEY is
+    set (proper DKIM-aligned deliverability), otherwise falls back to Gmail SMTP.
+    Returns True on success.
     from_email: override sender address (defaults to FROM_NOREPLY).
     from_name: override sender display name.
     reply_to: override Reply-To header (defaults to noreply)."""
@@ -78,10 +80,87 @@ async def send_email(to_email: str, subject: str, html_body: str,
     sender_email = from_email or FROM_NOREPLY
     sender_name = from_name or FROM_NAME
 
+    # Prepare a text body for deliverability if not given (used by both paths)
+    import re as _re
+    plain = text_body
+    if not plain:
+        plain = _re.sub(r'<[^>]+>', '', html_body or "")
+        plain = _re.sub(r'\s+', ' ', plain).strip()
+
+    reply_addr = reply_to or FROM_NOREPLY or sender_email
+    unsubscribe_header = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
+
+    # ─── Path 1: Brevo (free 300/day, proper DKIM, recommended) ──────────
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+    if brevo_key:
+        try:
+            import httpx
+            payload = {
+                "sender": {"name": sender_name, "email": sender_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": html_body,
+                "textContent": plain,
+                "replyTo": {"email": reply_addr} if reply_addr else None,
+                "headers": {
+                    "List-Unsubscribe": unsubscribe_header,
+                    "X-Mailer": "Sarathi-AI CRM",
+                },
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    headers={"api-key": brevo_key,
+                             "accept": "application/json",
+                             "content-type": "application/json"},
+                    json=payload,
+                )
+            if r.status_code in (200, 201, 202):
+                logger.info("📧 Brevo ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+                return True
+            logger.error("📧 Brevo rejected (%d): %s", r.status_code, r.text[:200])
+            # Fall through to SMTP on any transient failure
+        except Exception as e:
+            logger.error("📧 Brevo transport failed: %s — falling back to SMTP", e)
+
+    # ─── Path 2: Resend HTTPS API (if customer prefers it) ──────────────
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    if resend_key:
+        try:
+            import httpx
+            from_header = f"{sender_name} <{sender_email}>"
+            payload = {
+                "from": from_header,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body,
+                "text": plain,
+                "reply_to": [reply_addr] if reply_addr else None,
+                "headers": {
+                    "List-Unsubscribe": unsubscribe_header,
+                    "X-Mailer": "Sarathi-AI CRM",
+                },
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {resend_key}",
+                             "Content-Type": "application/json"},
+                    json=payload,
+                )
+            if r.status_code in (200, 202):
+                logger.info("📧 Resend ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+                return True
+            logger.error("📧 Resend rejected (%d): %s", r.status_code, r.text[:200])
+        except Exception as e:
+            logger.error("📧 Resend transport failed: %s — falling back to SMTP", e)
+
+    # ─── Path 2: Gmail SMTP fallback (legacy) ───────────────────────────
     try:
         import aiosmtplib
         import uuid
-        import re as _re
 
         msg = MIMEMultipart("alternative")
         msg["From"] = f"{sender_name} <{sender_email}>"
@@ -96,11 +175,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
         msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
         msg["X-Mailer"] = "Sarathi-AI CRM"
 
-        # Always attach plain text part for deliverability
-        if not text_body:
-            text_body = _re.sub(r'<[^>]+>', '', html_body)
-            text_body = _re.sub(r'\s+', ' ', text_body).strip()
-        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         await aiosmtplib.send(
@@ -112,7 +187,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
             use_tls=False,
             start_tls=True,
         )
-        logger.info("📧 Email sent: '%s' → %s (from %s)", subject, to_email, sender_email)
+        logger.info("📧 SMTP ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
         return True
 
     except Exception as e:
@@ -484,6 +559,46 @@ async def send_nidaan_claim_status_email(
     return await send_email(to_email, subject, _wrap_nidaan_template("Claim Status Update", content), from_name="Nidaan Partner")
 
 
+async def send_nidaan_claim_assigned_staff_email(
+    to_email: str,
+    staff_name: str,
+    claim_id: int,
+    insured_name: str,
+    claim_type: str,
+    advisor_name: str = "",
+    advisor_phone: str = "",
+) -> bool:
+    """Notify a Nidaan staff member (associate) that a claim has been assigned to them."""
+    greeting = f"Hi {staff_name}," if staff_name else "Hi,"
+    advisor_section = ""
+    if advisor_name or advisor_phone:
+        advisor_section = f"""
+<div class="highlight">
+  <strong>Advisor / Account Holder:</strong><br>
+  {advisor_name}{(' &nbsp;|&nbsp; ' + advisor_phone) if advisor_phone else ''}
+</div>"""
+    content = f"""
+<h2>New Claim Assigned to You</h2>
+<p>{greeting}</p>
+<p>A new claim has been assigned to you on <strong>Nidaan Partner</strong>. Please log in to the ops portal to review the details and take action.</p>
+<div style="background:#0f2a4a;border:1px solid rgba(6,182,212,.3);border-radius:10px;padding:18px 22px;margin:18px 0">
+  <div style="font-size:.75rem;font-weight:700;color:#06b6d4;letter-spacing:.08em;margin-bottom:10px">CLAIM DETAILS</div>
+  <div style="color:#e2e8f0"><strong>Claim #:</strong> #{claim_id}</div>
+  <div style="color:#e2e8f0;margin-top:6px"><strong>Claimant:</strong> {insured_name}</div>
+  <div style="color:#e2e8f0;margin-top:6px"><strong>Type:</strong> {claim_type.replace('_', ' ').title()}</div>
+</div>
+{advisor_section}
+<p>Please review all uploaded documents, update the claim status, and schedule any follow-ups as needed.</p>
+<p style="text-align:center;margin-top:24px">
+  <a href="https://nidaanpartner.com/nidaan/ops" class="btn">Open Ops Portal</a>
+</p>
+<p style="color:#94a3b8;font-size:13px;margin-top:28px">
+  If you have questions, contact your team admin or reply to this email.
+</p>"""
+    subject = f"New Claim Assigned — #{claim_id} ({insured_name}) | Nidaan Ops"
+    return await send_email(to_email, subject, _wrap_nidaan_template("Claim Assigned", content), from_name="Nidaan Ops")
+
+
 async def send_trial_reminder(to_email: str, owner_name: str, firm_name: str,
                                days_left: int, tenant_id: int) -> bool:
     """Send trial expiry reminder."""
@@ -793,3 +908,179 @@ async def send_support_ticket_notification(ticket_id: int, subject: str,
 </p>"""
     return await send_support_email(admin_email, email_subject,
                                     _wrap_template("Support Ticket", content))
+
+
+# =============================================================================
+#  SUBSCRIPTION RENEWAL REMINDERS
+# =============================================================================
+
+_NIDAAN_PLAN_PRICES = {
+    "silver":          "₹1,500/quarter",
+    "gold":            "₹3,000/quarter",
+    "platinum":        "₹6,000/quarter",
+    "silver_annual":   "₹5,400/year",
+    "gold_annual":     "₹10,800/year",
+    "platinum_annual": "₹21,600/year",
+}
+
+async def send_nidaan_renewal_reminder(
+    to_email: str,
+    owner_name: str,
+    plan: str,
+    days_left: int,
+    renewal_date: str,
+    renew_url: str = "https://nidaanpartner.com/nidaan/dashboard",
+) -> bool:
+    """Send renewal reminder 7 days or 1 day before Nidaan subscription expires."""
+    info = PLAN_FEATURES.get(plan.replace("_annual", ""), {"label": plan.title(), "quota": "—", "support": "—"})
+    price = _NIDAAN_PLAN_PRICES.get(plan, "—")
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    urgency = "⏰ Renewing Soon" if days_left > 1 else "🚨 Last Day!"
+    content = f"""
+<h2>{urgency} — Your Nidaan Partner subscription expires in {days_left} day{"s" if days_left != 1 else ""}.</h2>
+<p>{greeting}</p>
+<p>Your <strong>{info['label']} Plan</strong> is set to expire on <strong>{renewal_date}</strong>.</p>
+
+<div style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.35);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0">
+  <p style="color:#22d3ee;font-size:1.1rem;font-weight:800;margin-bottom:.75rem">{info['label']} Plan — {price}</p>
+  <table style="width:100%;font-size:.88rem;border-collapse:collapse">
+    <tr><td style="color:#64748b;padding:.3rem 0;width:130px">Claims quota</td><td style="color:#e2e8f0">{info['quota']}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0">Support</td><td style="color:#e2e8f0">{info['support']}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0">Expires on</td><td style="color:#f87171;font-weight:700">{renewal_date}</td></tr>
+  </table>
+</div>
+
+<p>To continue without interruption, renew your subscription now from your dashboard.</p>
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="{renew_url}"
+     style="display:inline-block;background:#06b6d4;color:#fff;padding:.75rem 2rem;
+            border-radius:8px;font-weight:700;text-decoration:none">
+    Renew Subscription →
+  </a>
+</p>
+<p style="color:#475569;font-size:.82rem">
+  After expiry, your dashboard will be locked until you renew. All your claim history is safely preserved.
+</p>"""
+    subject = (f"Nidaan Partner — Your {info['label']} plan expires in {days_left} day{'s' if days_left != 1 else ''}")
+    return await send_email(
+        to_email, subject,
+        _wrap_nidaan_template("Subscription Renewal Reminder", content),
+        from_name="Nidaan Partner",
+    )
+
+
+async def send_nidaan_expired_email(
+    to_email: str,
+    owner_name: str,
+    plan: str,
+    renew_url: str = "https://nidaanpartner.com/nidaan/dashboard",
+) -> bool:
+    """Send email when Nidaan subscription has just expired."""
+    info = PLAN_FEATURES.get(plan.replace("_annual", ""), {"label": plan.title(), "quota": "—", "support": "—"})
+    price = _NIDAAN_PLAN_PRICES.get(plan, "—")
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    content = f"""
+<h2>🔒 Your Nidaan Partner subscription has expired.</h2>
+<p>{greeting}</p>
+<p>Your <strong>{info['label']} Plan</strong> ({price}) has expired. Your dashboard has been locked, but your data and claim history are fully preserved.</p>
+
+<div style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0">
+  <p style="color:#fca5a5;font-size:.95rem;font-weight:700;margin-bottom:.5rem">What's locked:</p>
+  <ul style="color:#cbd5e1;font-size:.88rem;margin:0;padding-left:1.25rem">
+    <li>Submitting new claims</li>
+    <li>Accessing claim status and documents</li>
+    <li>Team member access</li>
+  </ul>
+</div>
+
+<p>Renew now to restore full access immediately.</p>
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="{renew_url}"
+     style="display:inline-block;background:#06b6d4;color:#fff;padding:.75rem 2rem;
+            border-radius:8px;font-weight:700;text-decoration:none">
+    Renew Now →
+  </a>
+</p>
+<p style="color:#475569;font-size:.82rem">
+  Questions? Reply to this email or contact us at <a href="mailto:support@nidaanpartner.com" style="color:#06b6d4">support@nidaanpartner.com</a>.
+</p>"""
+    return await send_email(
+        to_email,
+        f"Nidaan Partner — Your {info['label']} plan has expired",
+        _wrap_nidaan_template("Subscription Expired", content),
+        from_name="Nidaan Partner",
+    )
+
+
+_SARATHI_PLAN_LABELS = {
+    "individual": "Solo Advisor",
+    "team":       "Team",
+    "enterprise": "Enterprise",
+    "solo":       "Solo Advisor",
+}
+
+async def send_sarathi_renewal_reminder(
+    to_email: str,
+    owner_name: str,
+    firm_name: str,
+    plan: str,
+    days_left: int,
+    renewal_date: str,
+    renew_url: str = "",
+) -> bool:
+    """Send renewal reminder 7 days or 1 day before Sarathi CRM subscription expires."""
+    plan_label = _SARATHI_PLAN_LABELS.get(plan, plan.title())
+    if not renew_url:
+        renew_url = f"{_base_url()}/dashboard#subscription"
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    urgency = "⏰ Renewing Soon" if days_left > 1 else "🚨 Last Day!"
+    content = f"""
+<h2>{urgency} — {firm_name}'s Sarathi-AI subscription expires in {days_left} day{"s" if days_left != 1 else ""}.</h2>
+<p>{greeting}</p>
+<p>Your <strong>{plan_label}</strong> plan for <strong>{firm_name}</strong> is set to expire on <strong>{renewal_date}</strong>.</p>
+
+<div class="highlight">
+  <p><strong>Plan:</strong> {plan_label}</p>
+  <p><strong>Expires on:</strong> <span style="color:#ef4444">{renewal_date}</span></p>
+</div>
+
+<p>After expiry, your team will lose access to the AI assistant, reports, and client management tools.</p>
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="{renew_url}" class="btn">Renew Subscription →</a>
+</p>
+<p style="color:#475569;font-size:.82rem">
+  Need help? Reply to this email or contact <a href="mailto:support@sarathi-ai.com">support@sarathi-ai.com</a>.
+</p>"""
+    subject = f"Sarathi-AI — {firm_name}: subscription expires in {days_left} day{'s' if days_left != 1 else ''}"
+    return await send_email(to_email, subject, _wrap_template("Subscription Renewal Reminder", content))
+
+
+async def send_sarathi_expired_email(
+    to_email: str,
+    owner_name: str,
+    firm_name: str,
+    plan: str,
+    renew_url: str = "",
+) -> bool:
+    """Send email when a paid Sarathi CRM subscription has just expired."""
+    plan_label = _SARATHI_PLAN_LABELS.get(plan, plan.title())
+    if not renew_url:
+        renew_url = f"{_base_url()}/#pricing"
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    content = f"""
+<h2>🔒 {firm_name}'s Sarathi-AI subscription has expired.</h2>
+<p>{greeting}</p>
+<p>Your <strong>{plan_label}</strong> plan has expired. Your team's access to the AI assistant and client management tools has been paused.</p>
+<p>All your client data, leads, policies, and reports are safely preserved.</p>
+
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="{renew_url}" class="btn">Renew Subscription →</a>
+</p>
+<p style="color:#475569;font-size:.82rem">
+  Questions? Reply to this email or contact <a href="mailto:support@sarathi-ai.com">support@sarathi-ai.com</a>.
+</p>"""
+    return await send_email(
+        to_email,
+        f"Sarathi-AI — {firm_name}: subscription expired",
+        _wrap_template("Subscription Expired", content),
+    )

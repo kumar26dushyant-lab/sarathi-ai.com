@@ -9,6 +9,8 @@
 #    4. Follow-up reminders
 #    5. Daily agent summary (8:30 AM)
 #    6. Trial/subscription expiry reminders (Day 10, 13, 14, 15 → deactivate)
+#    8. Nidaan subscription renewal reminders (T-7, T-1, on expiry)
+#    9. Sarathi CRM paid subscription renewal reminders (T-7, T-1, on expiry)
 #    7. PROACTIVE AI ASSISTANT (hourly nudges throughout the day)
 #       - Real-time follow-up nudges (morning + afternoon + evening)
 #       - Meeting prep intelligence (30 min before)
@@ -29,10 +31,72 @@ import aiosqlite
 import biz_database as db
 import biz_email as email_svc
 import biz_whatsapp as wa
+import biz_whatsapp_evolution as wa_evo
 import biz_resilience as resilience
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger("sarathi.reminders")
+
+
+async def _evo_send_if_connected(agent_id: int, phone: str, message: str) -> bool:
+    """
+    Try to send `message` via Evolution API using the agent's tenant's connected WA instance.
+    Returns True if sent successfully, False otherwise (caller falls back to Meta Cloud API).
+    On failure, lowers the instance health_score so subsequent reminders skip it
+    and try the fallback path immediately (C7 — instance failover).
+    """
+    if not wa_evo.is_enabled():
+        return False
+    instance_name = None
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            cur = await conn.execute(
+                "SELECT i.instance_id, i.evolution_instance, i.health_score "
+                "FROM wa_instances i JOIN agents a ON i.tenant_id = a.tenant_id "
+                "WHERE a.agent_id=? AND i.status IN ('open','connected') "
+                "AND (i.paused_until IS NULL OR i.paused_until < datetime('now')) "
+                # Skip instances whose health is too low (auto-failover)
+                "AND COALESCE(i.health_score, 100) >= 30 "
+                "ORDER BY COALESCE(i.health_score, 100) DESC, i.instance_id DESC LIMIT 1",
+                (agent_id,))
+            row = await cur.fetchone()
+        if not row:
+            return False
+        instance_id, instance_name, _hs = row
+        result = await wa_evo.send_text(instance_name, phone, message, delay_ms=2000)
+        if result.get("error"):
+            # Lower health_score on failure; pause for 10 min if it gets too low.
+            try:
+                async with aiosqlite.connect(db.DB_PATH) as conn:
+                    await conn.execute(
+                        "UPDATE wa_instances SET health_score = MAX(0, COALESCE(health_score,100)-15), "
+                        "updated_at=datetime('now') WHERE instance_id=?", (instance_id,))
+                    # If we just dropped below 30, take it offline for 10 min so retries
+                    # don't repeatedly bash a dead instance.
+                    await conn.execute(
+                        "UPDATE wa_instances SET paused_until=datetime('now','+10 minutes'), "
+                        "pause_reason='evo_send_failures' "
+                        "WHERE instance_id=? AND COALESCE(health_score,100) < 30 "
+                        "AND (paused_until IS NULL OR paused_until < datetime('now'))",
+                        (instance_id,))
+                    await conn.commit()
+            except Exception as he:
+                logger.debug("health_score update failed: %s", he)
+            return False
+        # Success — restore health_score slowly toward 100 to recover from past dips
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute(
+                    "UPDATE wa_instances SET health_score = MIN(100, COALESCE(health_score,100)+3) "
+                    "WHERE instance_id=?", (instance_id,))
+                await conn.commit()
+        except Exception:
+            pass
+        return True
+    except Exception as _e:
+        logger.debug("Evolution send failed for agent=%d phone=%s: %s", agent_id, phone, _e)
+        return False
+
 
 # Callback to send Telegram alerts
 _telegram_alert: Optional[Callable] = None
@@ -53,13 +117,229 @@ def set_queue_callback(callback: Callable):
     logger.info("Message queue processor registered")
 
 
-async def _send_telegram(telegram_id: str, message: str, reply_markup=None):
-    """Send a Telegram alert if callback is set."""
-    if _telegram_alert:
+async def _fire_bundle_teardown_nudges():
+    """B3: For each bundled tenant whose `bundled_until` is 4 / 2 / 0 days
+    away, send a graduated nudge (email always; WA on the day-of if available).
+    Idempotency: matching exact day-offset means each tenant only matches once
+    per cohort window, so a single daily run hits them once.
+    """
+    import biz_nidaan as _nid
+    try:
+        import biz_email as _es
+    except Exception:
+        _es = None
+
+    cohorts = [
+        (4, "Heads-up: Sarathi access ending in 4 days",
+            "Your Nidaan-bundled Sarathi access ends in 4 days. Renew Nidaan to keep access, or subscribe directly to Sarathi."),
+        (2, "Reminder: Sarathi access ending in 2 days",
+            "Your Sarathi access ends in 2 days. Open NidaanPartner.com to renew, or choose a Sarathi plan."),
+        (0, "Today: Sarathi bundle has ended",
+            "Your Nidaan bundle has ended today. To keep using Sarathi-AI, choose a plan."),
+    ]
+    for offset, subject, body in cohorts:
+        try:
+            tenants = await _nid.find_bundles_ending_in(offset)
+        except Exception as e:
+            logger.error("find_bundles_ending_in(%d) failed: %s", offset, e)
+            continue
+        for t in tenants:
+            email = (t.get("email") or "").strip()
+            owner_name = t.get("owner_name") or ""
+            if email and _es:
+                try:
+                    await _es.send_email(
+                        to_email=email,
+                        subject=f"[Sarathi-AI] {subject}",
+                        html_body=(f"<p>Hi {owner_name},</p>"
+                                    f"<p>{body}</p>"
+                                    f"<p><a href='https://sarathi-ai.com/dashboard'>"
+                                    f"Open Sarathi dashboard →</a></p>"
+                                    f"<p>— Sarathi-AI</p>"),
+                        from_name="Sarathi-AI")
+                    logger.info("Bundle nudge T-%d sent to tenant=%d (%s)",
+                                offset, t.get("tenant_id"), email)
+                except Exception as ee:
+                    logger.error("Bundle nudge email failed tenant=%d: %s",
+                                 t.get("tenant_id"), ee)
+
+
+async def _check_webhook_failure_alert():
+    """Look at webhook_failure_log for the last 15 minutes. If >= 3 distinct
+    failures from REAL webhook senders (filtered by User-Agent), send an
+    alert to the owner via Telegram + email, then mark a 1h cooldown so the
+    alert can't loop.
+
+    Filter: only count failures where user_agent contains a known webhook
+    sender's UA (e.g. 'Razorpay-Webhook'). Our own smoke tests with
+    `curl -H "X-Razorpay-Signature: bad"` produce UA `curl/*` and are
+    correctly excluded — they should not page the owner.
+    """
+    import os as _os
+    import aiosqlite as _sql
+    import biz_database as _db
+    threshold = int(_os.getenv("WEBHOOK_FAILURE_ALERT_THRESHOLD", "3"))
+    window_min = int(_os.getenv("WEBHOOK_FAILURE_WINDOW_MIN", "15"))
+    cooldown_sec = int(_os.getenv("WEBHOOK_FAILURE_COOLDOWN_SEC", "3600"))
+    # Only known webhook senders trigger an alert. Add to this list when we
+    # onboard new providers (e.g. Stripe, Telegram, Evolution).
+    sender_ua_substrings = ("Razorpay-Webhook",)
+    ua_clauses = " OR ".join(
+        ["LOWER(COALESCE(user_agent,'')) LIKE ?" for _ in sender_ua_substrings])
+    ua_params = [f"%{s.lower()}%" for s in sender_ua_substrings]
+
+    async with _sql.connect(_db.DB_PATH) as conn:
+        conn.row_factory = _sql.Row
+        cur = await conn.execute(
+            f"SELECT COUNT(*) AS cnt, GROUP_CONCAT(DISTINCT endpoint) AS eps, "
+            f"  GROUP_CONCAT(DISTINCT reason) AS reasons "
+            f"FROM webhook_failure_log "
+            f"WHERE occurred_at >= datetime('now', '-{window_min} minutes') "
+            f"AND ({ua_clauses})",
+            ua_params)
+        row = await cur.fetchone()
+    if not row or (row["cnt"] or 0) < threshold:
+        return
+    # Cooldown check via system_flags (re-used as kv store for monitor state).
+    last_at_str = ""
+    try:
+        async with _sql.connect(_db.DB_PATH) as conn:
+            conn.row_factory = _sql.Row
+            cur = await conn.execute(
+                "SELECT flag_value FROM system_flags WHERE flag_key='webhook_alert_last_sent'")
+            r = await cur.fetchone()
+            last_at_str = (r["flag_value"] if r else "") or ""
+    except Exception:
+        last_at_str = ""
+    if last_at_str:
+        try:
+            last_at = datetime.fromisoformat(last_at_str)
+            if (datetime.utcnow() - last_at).total_seconds() < cooldown_sec:
+                return
+        except Exception:
+            pass
+
+    import socket as _socket
+    cnt = row["cnt"]
+    eps = row["eps"] or ""
+    reasons = row["reasons"] or ""
+    try:
+        hostname = _socket.gethostname()
+    except Exception:
+        hostname = "unknown"
+    subject = f"⚠️ Webhook signature failures: {cnt} in {window_min}m"
+    body = (
+        f"{cnt} webhook signature failures from real webhook senders "
+        f"(filtered by User-Agent) detected in the last {window_min} minutes.\n\n"
+        f"Endpoints: {eps}\n"
+        f"Reasons:   {reasons}\n\n"
+        f"This is a signal that the webhook secret in your service env does not "
+        f"match what the sender (e.g. Razorpay) is signing with. If you don't "
+        f"fix it, Razorpay will disable the webhook after enough retries.\n\n"
+        f"Server: {hostname}\nDetected at: {datetime.utcnow().isoformat()}Z")
+    # Telegram (if a monitoring chat id is configured)
+    tg_chat = _os.getenv("MONITOR_TG_CHAT_ID", "").strip()
+    if tg_chat:
+        try:
+            await _send_telegram(tg_chat, subject + "\n\n" + body)
+        except Exception as te:
+            logger.error("Webhook alert Telegram failed: %s", te)
+    # Email
+    try:
+        import biz_email as email_svc
+        to_email = _os.getenv("MONITOR_EMAIL", "").strip() or \
+                   _os.getenv("SUPPORT_ADMIN_EMAIL", "").strip() or \
+                   "kumar26.dushyant@gmail.com"
+        await email_svc.send_email(
+            to_email=to_email, subject="[Sarathi] " + subject,
+            html_body="<pre>" + body.replace("<","&lt;").replace(">","&gt;") + "</pre>",
+            from_name="Sarathi Monitor")
+    except Exception as ee:
+        logger.error("Webhook alert email failed: %s", ee)
+    # Mark cooldown
+    try:
+        async with _sql.connect(_db.DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO system_flags (flag_key, flag_value, description) "
+                "VALUES ('webhook_alert_last_sent', ?, 'last time webhook failure alert fired') "
+                "ON CONFLICT(flag_key) DO UPDATE SET flag_value=excluded.flag_value",
+                (datetime.utcnow().isoformat(),))
+            await conn.commit()
+    except Exception as me:
+        logger.error("Webhook alert cooldown write failed: %s", me)
+    logger.warning("Webhook failure alert dispatched: %d failures across %s", cnt, eps)
+
+
+async def _send_telegram(telegram_id: str, message: str, reply_markup=None) -> bool:
+    """Send a Telegram alert if callback is set. Returns True on success."""
+    if _telegram_alert and telegram_id:
         try:
             await _telegram_alert(telegram_id, message, reply_markup=reply_markup)
+            return True
         except Exception as e:
             logger.error("Telegram alert failed: %s", e)
+    return False
+
+
+async def _send_telegram_photo(telegram_id: str, image_path: str, caption: str = "") -> bool:
+    """Send a photo to a Telegram chat using the Bot API directly. Returns True on success."""
+    import httpx
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token or not telegram_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            with open(image_path, "rb") as f:
+                r = await client.post(url, data={"chat_id": telegram_id,
+                                                  "caption": caption[:1024],
+                                                  "parse_mode": "Markdown"},
+                                      files={"photo": f})
+        if r.status_code == 200:
+            return True
+        logger.warning("Telegram sendPhoto failed %s: %s", r.status_code, r.text[:200])
+        return False
+    except Exception as e:
+        logger.error("_send_telegram_photo error: %s", e)
+        return False
+
+
+async def _send_to_agent(agent: dict, message: str, reply_markup=None) -> bool:
+    """
+    Deliver a message to an agent. Tries Telegram first, falls back to WhatsApp
+    via Evolution API if Telegram is not configured or fails.
+    Returns True if delivered via any channel.
+    """
+    tg_id = str(agent.get("telegram_id") or "").strip()
+    if tg_id and tg_id.lstrip("-").isdigit():
+        if await _send_telegram(tg_id, message, reply_markup=reply_markup):
+            return True
+        logger.info("Agent %d Telegram failed — trying WhatsApp fallback", agent.get("agent_id", 0))
+
+    # WhatsApp fallback
+    phone = str(agent.get("wa_phone") or agent.get("phone") or "").strip()
+    tenant_id = agent.get("tenant_id")
+    if phone and tenant_id and wa_evo.is_enabled():
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as _conn:
+                _cur = await _conn.execute(
+                    "SELECT evolution_instance FROM wa_instances "
+                    "WHERE tenant_id=? AND status IN ('open','connected') "
+                    "ORDER BY instance_id DESC LIMIT 1", (tenant_id,))
+                _row = await _cur.fetchone()
+            if _row:
+                result = await wa_evo.send_text(_row[0], phone, message, delay_ms=1500)
+                if not result.get("error"):
+                    logger.info("Agent %d notified via WhatsApp (Telegram fallback)",
+                                agent.get("agent_id", 0))
+                    return True
+        except Exception as _e:
+            logger.error("Agent WhatsApp fallback failed for agent %d: %s",
+                         agent.get("agent_id", 0), _e)
+
+    logger.warning("Agent %d: no delivery channel available (no Telegram, no WA)",
+                   agent.get("agent_id", 0))
+    return False
 
 
 # =============================================================================
@@ -80,29 +360,60 @@ async def run_birthday_scan():
         # Send WhatsApp greeting
         phone = lead.get('whatsapp') or lead.get('phone')
         if phone:
-            # Build greeting message
-            greeting_msg = wa.send_birthday_greeting
-            result = await wa.send_birthday_greeting(
-                to=phone,
-                client_name=lead['name'],
-                agent_name=lead.get('agent_name', 'Your Advisor'),
-                company=lead.get('firm_name', 'Sarathi-AI'),
-                tagline=lead.get('brand_tagline', 'AI-Powered Financial Advisor CRM'),
+            # Try Evolution API first (from advisor's own connected WA number)
+            _bday_msg = (
+                f"🎂 *Happy Birthday, {lead['name']}!*\n\n"
+                f"Wishing you a wonderful day filled with joy and happiness!\n\n"
+                f"Warm regards,\n{lead.get('agent_name', 'Your Advisor')}\n"
+                f"_{lead.get('firm_name', 'Sarathi-AI')}_"
             )
-            if result.get('success'):
-                await db.log_greeting(
-                    lead['lead_id'], lead['agent_id'],
-                    'birthday', 'whatsapp'
-                )
+            _evo_sent = await _evo_send_if_connected(lead['agent_id'], phone, _bday_msg)
+            if _evo_sent:
+                await db.log_greeting(lead['lead_id'], lead['agent_id'], 'birthday', 'whatsapp_evolution')
                 sent_count += 1
-            elif result.get('retryable') or result.get('method') == 'queued':
-                # Network error — queue for retry
-                logger.warning("Birthday greeting queued for retry: %s → %s",
-                               lead['name'], phone)
-                sent_count += 1  # Queued counts as handled
             else:
-                logger.error("Birthday greeting failed for %s → %s: %s",
-                             lead['name'], phone, result.get('error', 'Unknown'))
+                # Fall back to Meta Cloud API
+                result = await wa.send_birthday_greeting(
+                    to=phone,
+                    client_name=lead['name'],
+                    agent_name=lead.get('agent_name', 'Your Advisor'),
+                    company=lead.get('firm_name', 'Sarathi-AI'),
+                    tagline=lead.get('brand_tagline', 'AI-Powered Financial Advisor CRM'),
+                )
+                if result.get('success'):
+                    await db.log_greeting(
+                        lead['lead_id'], lead['agent_id'],
+                        'birthday', 'whatsapp'
+                    )
+                    sent_count += 1
+                elif result.get('retryable') or result.get('method') == 'queued':
+                    # Network error — queue for retry via resilience layer
+                    logger.warning("Birthday greeting queued for retry: %s → %s",
+                                   lead['name'], phone)
+                    await resilience.enqueue_message(
+                        channel='whatsapp', recipient=phone,
+                        message=_bday_msg,
+                        tenant_id=lead.get('tenant_id'),
+                        agent_id=lead.get('agent_id'))
+                    # Log greeting (so we don't requeue tomorrow); resilience will retry
+                    await db.log_greeting(lead['lead_id'], lead['agent_id'],
+                                          'birthday', 'queued')
+                    sent_count += 1
+                else:
+                    # Hard failure — enqueue anyway so it's not lost. Birthday
+                    # only happens once per year; abandonment is unrecoverable.
+                    logger.error("Birthday greeting failed (%s → %s: %s) — enqueuing for delayed retry",
+                                 lead['name'], phone, result.get('error', 'Unknown'))
+                    try:
+                        await resilience.enqueue_message(
+                            channel='whatsapp', recipient=phone,
+                            message=_bday_msg,
+                            tenant_id=lead.get('tenant_id'),
+                            agent_id=lead.get('agent_id'))
+                        await db.log_greeting(lead['lead_id'], lead['agent_id'],
+                                              'birthday', 'queued')
+                    except Exception as qe:
+                        logger.error("Failed to enqueue birthday greeting for retry: %s", qe)
 
         # Notify agent via Telegram
         agent_tid = lead.get('agent_telegram_id')
@@ -141,26 +452,54 @@ async def run_anniversary_scan():
 
         phone = lead.get('whatsapp') or lead.get('phone')
         if phone:
-            result = await wa.send_anniversary_greeting(
-                to=phone,
-                client_name=lead['name'],
-                agent_name=lead.get('agent_name', 'Your Advisor'),
-                company=lead.get('firm_name', 'Sarathi-AI'),
-                tagline=lead.get('brand_tagline', 'AI-Powered Financial Advisor CRM'),
+            _anni_msg = (
+                f"💍 *Happy Anniversary, {lead['name']}!*\n\n"
+                f"Congratulations on this special day! Wishing you many more happy years together.\n\n"
+                f"Warm regards,\n{lead.get('agent_name', 'Your Advisor')}\n"
+                f"_{lead.get('firm_name', 'Sarathi-AI')}_"
             )
-            if result.get('success'):
-                await db.log_greeting(
-                    lead['lead_id'], lead['agent_id'],
-                    'anniversary', 'whatsapp'
-                )
-                sent_count += 1
-            elif result.get('retryable') or result.get('method') == 'queued':
-                logger.warning("Anniversary greeting queued for retry: %s → %s",
-                               lead['name'], phone)
+            _evo_sent = await _evo_send_if_connected(lead['agent_id'], phone, _anni_msg)
+            if _evo_sent:
+                await db.log_greeting(lead['lead_id'], lead['agent_id'], 'anniversary', 'whatsapp_evolution')
                 sent_count += 1
             else:
-                logger.error("Anniversary greeting failed for %s → %s: %s",
-                             lead['name'], phone, result.get('error', 'Unknown'))
+                result = await wa.send_anniversary_greeting(
+                    to=phone,
+                    client_name=lead['name'],
+                    agent_name=lead.get('agent_name', 'Your Advisor'),
+                    company=lead.get('firm_name', 'Sarathi-AI'),
+                    tagline=lead.get('brand_tagline', 'AI-Powered Financial Advisor CRM'),
+                )
+                if result.get('success'):
+                    await db.log_greeting(
+                        lead['lead_id'], lead['agent_id'],
+                        'anniversary', 'whatsapp'
+                    )
+                    sent_count += 1
+                elif result.get('retryable') or result.get('method') == 'queued':
+                    logger.warning("Anniversary greeting queued for retry: %s → %s",
+                                   lead['name'], phone)
+                    await resilience.enqueue_message(
+                        channel='whatsapp', recipient=phone,
+                        message=_anni_msg,
+                        tenant_id=lead.get('tenant_id'),
+                        agent_id=lead.get('agent_id'))
+                    await db.log_greeting(lead['lead_id'], lead['agent_id'],
+                                          'anniversary', 'queued')
+                    sent_count += 1
+                else:
+                    logger.error("Anniversary greeting failed (%s → %s: %s) — enqueuing",
+                                 lead['name'], phone, result.get('error', 'Unknown'))
+                    try:
+                        await resilience.enqueue_message(
+                            channel='whatsapp', recipient=phone,
+                            message=_anni_msg,
+                            tenant_id=lead.get('tenant_id'),
+                            agent_id=lead.get('agent_id'))
+                        await db.log_greeting(lead['lead_id'], lead['agent_id'],
+                                              'anniversary', 'queued')
+                    except Exception as qe:
+                        logger.error("Failed to enqueue anniversary greeting: %s", qe)
 
         agent_tid = lead.get('agent_telegram_id')
         if agent_tid:
@@ -235,43 +574,91 @@ async def run_renewal_scan():
             if days_left not in trigger_days:
                 continue
 
-            # Send WhatsApp to client
+            # Idempotency — don't re-fire the same T-X-day reminder if it already
+            # went out today (handles scheduler restarts, double-runs, retries).
+            policy_id = policy.get('policy_id')
+            if policy_id and await db.was_renewal_reminder_sent_today(policy_id, days_left):
+                logger.debug("Renewal T-%dd already sent today for policy %s, skipping",
+                             days_left, policy.get('policy_number'))
+                continue
+
+            # Send WhatsApp to client — wording depends on premium mode:
+            # monthly → EMI / Premium Due,  others → Policy Renewal
             phone = policy.get('client_whatsapp') or policy.get('client_phone')
+            _is_monthly = mode == 'monthly'
+            _premium_amt = float(policy.get('premium') or 0)
+            _due_date_str = renewal_date[:10]
             if phone:
-                result = await wa.send_renewal_reminder(
-                    to=phone,
-                    client_name=policy.get('client_name', 'Client'),
-                    policy_number=policy.get('policy_number', 'N/A'),
-                    renewal_date=renewal_date,
-                    days_left=days_left,
-                    agent_name=agent.get('name', 'Your Advisor'),
-                    agent_phone=agent.get('brand_phone', ''),
-                    company=agent.get('firm_name', 'Sarathi-AI'),
-                    cta=agent.get('brand_cta', 'Secure Your Future Today'),
-                )
-                if result.get('success'):
-                    total_sent += 1
-                elif result.get('retryable'):
-                    logger.warning("Renewal reminder queued for retry: %s → %s (%s)",
-                                   policy.get('client_name'), phone,
-                                   policy.get('policy_number'))
-                    # Enqueue for later delivery
-                    await resilience.enqueue_message(
-                        channel='whatsapp', recipient=phone,
-                        message=f"Renewal reminder for policy {policy.get('policy_number', 'N/A')}",
-                        tenant_id=agent.get('tenant_id'),
-                        agent_id=agent.get('agent_id'))
-                    total_sent += 1  # Queued counts as handled
+                if _is_monthly:
+                    _renewal_msg = (
+                        f"💳 *Premium Due Reminder*\n\n"
+                        f"Dear {policy.get('client_name', 'Client')},\n\n"
+                        f"Your monthly premium of *₹{_premium_amt:,.0f}* for policy "
+                        f"*#{policy.get('policy_number', 'N/A')}* is due on *{_due_date_str}* "
+                        f"({days_left} day{'s' if days_left != 1 else ''} from today).\n\n"
+                        f"💡 Pay on time to keep your coverage active.\n\n"
+                        f"📞 {agent.get('brand_phone', '')}\n"
+                        f"Regards,\n{agent.get('name', 'Your Advisor')}\n"
+                        f"_{agent.get('firm_name', 'Sarathi-AI')}_"
+                    )
                 else:
-                    logger.error("Renewal reminder failed: %s → %s: %s",
-                                 policy.get('client_name'), phone,
-                                 result.get('error', 'Unknown'))
+                    _renewal_msg = (
+                        f"🔔 *Policy Renewal Reminder*\n\n"
+                        f"Dear {policy.get('client_name', 'Client')},\n\n"
+                        f"Your policy *#{policy.get('policy_number', 'N/A')}* is due for renewal "
+                        f"in *{days_left} day{'s' if days_left != 1 else ''}* ({_due_date_str}).\n\n"
+                        f"Please contact us to ensure uninterrupted coverage.\n\n"
+                        f"📞 {agent.get('brand_phone', '')}\n"
+                        f"Regards,\n{agent.get('name', 'Your Advisor')}\n"
+                        f"_{agent.get('firm_name', 'Sarathi-AI')} — {agent.get('brand_cta', 'Secure Your Future Today')}_"
+                    )
+                _evo_sent = await _evo_send_if_connected(agent['agent_id'], phone, _renewal_msg)
+                if _evo_sent:
+                    total_sent += 1
+                    if policy_id:
+                        await db.mark_renewal_reminder_sent(policy_id, agent['agent_id'],
+                                                            days_left, channel='whatsapp_evolution')
+                else:
+                    result = await wa.send_renewal_reminder(
+                        to=phone,
+                        client_name=policy.get('client_name', 'Client'),
+                        policy_number=policy.get('policy_number', 'N/A'),
+                        renewal_date=renewal_date,
+                        days_left=days_left,
+                        agent_name=agent.get('name', 'Your Advisor'),
+                        agent_phone=agent.get('brand_phone', ''),
+                        company=agent.get('firm_name', 'Sarathi-AI'),
+                        cta=agent.get('brand_cta', 'Secure Your Future Today'),
+                    )
+                    if result.get('success'):
+                        total_sent += 1
+                        if policy_id:
+                            await db.mark_renewal_reminder_sent(policy_id, agent['agent_id'],
+                                                                days_left, channel='whatsapp')
+                    elif result.get('retryable'):
+                        logger.warning("Renewal reminder queued for retry: %s → %s (%s)",
+                                       policy.get('client_name'), phone,
+                                       policy.get('policy_number'))
+                        # Enqueue for later delivery
+                        await resilience.enqueue_message(
+                            channel='whatsapp', recipient=phone,
+                            message=f"Renewal reminder for policy {policy.get('policy_number', 'N/A')}",
+                            tenant_id=agent.get('tenant_id'),
+                            agent_id=agent.get('agent_id'))
+                        total_sent += 1  # Queued counts as handled
+                        # Mark sent so we don't enqueue a 2nd time today
+                        if policy_id:
+                            await db.mark_renewal_reminder_sent(policy_id, agent['agent_id'],
+                                                                days_left, channel='queued')
+                    else:
+                        logger.error("Renewal reminder failed: %s → %s: %s",
+                                     policy.get('client_name'), phone,
+                                     result.get('error', 'Unknown'))
 
             # Notify agent
             _hi = agent.get('lang', 'en') == 'hi'
             if _hi:
-                await _send_telegram(
-                    agent['telegram_id'],
+                _agent_notify_msg = (
                     f"🔔 *नवीनीकरण रिमाइंडर*\n\n"
                     f"क्लाइंट: *{policy.get('client_name')}*\n"
                     f"पॉलिसी: #{policy.get('policy_number', 'N/A')}\n"
@@ -281,8 +668,7 @@ async def run_renewal_scan():
                     f"📞 {phone or 'कोई फ़ोन नहीं'}"
                 )
             else:
-                await _send_telegram(
-                    agent['telegram_id'],
+                _agent_notify_msg = (
                     f"🔔 *Renewal Reminder*\n\n"
                     f"Client: *{policy.get('client_name')}*\n"
                     f"Policy: #{policy.get('policy_number', 'N/A')}\n"
@@ -291,6 +677,7 @@ async def run_renewal_scan():
                     f"Renewal: *{renewal_date}* ({days_left} days)\n\n"
                     f"📞 {phone or 'No phone'}"
                 )
+            await _send_to_agent(agent, _agent_notify_msg)
 
     logger.info("Renewal scan complete: %d reminders sent", total_sent)
     return total_sent
@@ -334,7 +721,7 @@ async def run_followup_scan():
         if len(followups) > 10:
             lines.append(f"\n...and {len(followups) - 10} more")
 
-        await _send_telegram(agent['telegram_id'], "\n".join(lines))
+        await _send_to_agent(agent, "\n".join(lines))
 
     logger.info("Follow-up scan complete: %d tasks sent", total)
     return total
@@ -407,7 +794,7 @@ async def send_daily_summary():
                 "_Sarathi\\-AI Business Technologies_ 🛡️"
             )
 
-        await _send_telegram(agent['telegram_id'], msg)
+        await _send_to_agent(agent, msg)
 
     logger.info("Daily summaries sent to %d agents", len(agents))
 
@@ -1032,8 +1419,7 @@ async def run_proactive_followup_nudge():
                     callback_data="pa_dismiss_fu")]
             ])
 
-            await _send_telegram(agent['telegram_id'], "\n".join(lines),
-                                 reply_markup=buttons)
+            await _send_to_agent(agent, "\n".join(lines), reply_markup=buttons)
             _mark_proactive_sent(agent_id, 'fu_morning')
             total += 1
 
@@ -1066,7 +1452,7 @@ async def run_proactive_followup_nudge():
                     callback_data="pa_snooze_fu")]
             ])
 
-            await _send_telegram(agent['telegram_id'], msg, reply_markup=buttons)
+            await _send_to_agent(agent, msg, reply_markup=buttons)
             _mark_proactive_sent(agent_id, 'fu_afternoon')
             total += 1
 
@@ -1098,7 +1484,7 @@ async def run_proactive_followup_nudge():
                     callback_data="pa_dismiss_fu")]
             ])
 
-            await _send_telegram(agent['telegram_id'], msg, reply_markup=buttons)
+            await _send_to_agent(agent, msg, reply_markup=buttons)
             _mark_proactive_sent(agent_id, 'fu_evening')
             total += 1
 
@@ -1231,7 +1617,7 @@ async def run_stale_lead_alert():
                 callback_data="pa_dismiss_stale")]
         ])
 
-        await _send_telegram(agent['telegram_id'], msg, reply_markup=buttons)
+        await _send_to_agent(agent, msg, reply_markup=buttons)
         _mark_proactive_sent(agent_id, 'stale_weekly')
         total += 1
 
@@ -1288,7 +1674,7 @@ async def run_weekly_momentum():
         else:
             msg += f"\n💡 {'अगले हफ्ते ज़्यादा follow-ups करो!' if hi else 'More follow-ups next week = more wins!'}"
 
-        await _send_telegram(agent['telegram_id'], msg)
+        await _send_to_agent(agent, msg)
         _mark_proactive_sent(agent_id, 'weekly_momentum')
         total += 1
 
@@ -1376,6 +1762,281 @@ async def run_smart_post_action_suggestion(agent_telegram_id: str, action: str,
 
 
 # =============================================================================
+#  NIDAAN SUBSCRIPTION RENEWAL REMINDERS
+# =============================================================================
+
+async def run_nidaan_subscription_renewal_scan():
+    """
+    Daily scan for Nidaan subscriptions expiring in 7 days or 1 day,
+    and subscriptions that expired today (marks them inactive + sends final email).
+    Sends renewal reminder emails with a dashboard repay link.
+    """
+    today = datetime.now().date()
+
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cursor = await conn.execute(
+                """SELECT ns.sub_id, ns.account_id, ns.plan, ns.current_period_end,
+                          na.email, na.owner_name
+                   FROM nidaan_subscriptions ns
+                   JOIN nidaan_accounts na ON ns.account_id = na.account_id
+                   WHERE ns.status = 'active'
+                     AND ns.current_period_end IS NOT NULL"""
+            )
+            subscriptions = [dict(r) for r in await cursor.fetchall()]
+
+        reminded = 0
+        expired_today = 0
+        renew_url = "https://nidaanpartner.com/nidaan/dashboard"
+
+        for sub in subscriptions:
+            to_email = sub.get("email")
+            if not to_email:
+                continue
+
+            try:
+                period_end = datetime.fromisoformat(sub["current_period_end"]).date()
+            except (ValueError, TypeError):
+                continue
+
+            days_left = (period_end - today).days
+
+            if days_left in (7, 1):
+                asyncio.create_task(email_svc.send_nidaan_renewal_reminder(
+                    to_email=to_email,
+                    owner_name=sub.get("owner_name", ""),
+                    plan=sub["plan"],
+                    days_left=days_left,
+                    renewal_date=period_end.strftime("%d %b %Y"),
+                    renew_url=renew_url,
+                ))
+                reminded += 1
+                logger.info("Nidaan renewal reminder sent: account=%d plan=%s days_left=%d",
+                            sub["account_id"], sub["plan"], days_left)
+
+            elif days_left <= 0:
+                # Subscription has expired — mark inactive and notify
+                async with aiosqlite.connect(db.DB_PATH) as conn:
+                    await conn.execute(
+                        "UPDATE nidaan_subscriptions SET status='expired' WHERE sub_id=?",
+                        (sub["sub_id"],),
+                    )
+                    await conn.commit()
+                    # Cascade: also expire any linked Sarathi-AI tenant so
+                    # the bundle user cannot access sarathi-ai.com dashboard
+                    cur = await conn.execute(
+                        "SELECT sarathi_tenant_id FROM product_link WHERE nidaan_account_id=? AND active=1",
+                        (sub["account_id"],),
+                    )
+                    linked = await cur.fetchall()
+                    for row in linked:
+                        sarathi_tid = row[0]
+                        if sarathi_tid:
+                            await conn.execute(
+                                "UPDATE tenants SET subscription_status='expired' WHERE tenant_id=?",
+                                (sarathi_tid,),
+                            )
+                            logger.info("Nidaan cascade: expired sarathi tenant %d (nidaan account %d)",
+                                        sarathi_tid, sub["account_id"])
+                    await conn.commit()
+                asyncio.create_task(email_svc.send_nidaan_expired_email(
+                    to_email=to_email,
+                    owner_name=sub.get("owner_name", ""),
+                    plan=sub["plan"],
+                    renew_url=renew_url,
+                ))
+                expired_today += 1
+                logger.info("Nidaan subscription expired: account=%d sub=%d plan=%s",
+                            sub["account_id"], sub["sub_id"], sub["plan"])
+
+        logger.info("Nidaan renewal scan: %d reminders sent, %d expired", reminded, expired_today)
+
+    except Exception as e:
+        logger.error("Nidaan renewal scan error: %s", e, exc_info=True)
+
+
+# =============================================================================
+#  SARATHI CRM PAID SUBSCRIPTION RENEWAL REMINDERS
+# =============================================================================
+
+async def run_sarathi_subscription_renewal_scan():
+    """
+    Daily scan for Sarathi CRM paid subscriptions expiring in 7 days or 1 day,
+    and subscriptions that expired today. Sends email reminders with repay link.
+    Only targets tenants with subscription_status IN ('active', 'paid') —
+    trial users are handled by run_trial_expiry_scan().
+    """
+    today = datetime.now().date()
+
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cursor = await conn.execute(
+                """SELECT tenant_id, owner_name, email, firm_name,
+                          subscription_status, subscription_plan, subscription_expires_at
+                   FROM tenants
+                   WHERE subscription_status IN ('active', 'paid')
+                     AND subscription_expires_at IS NOT NULL
+                     AND is_active = 1"""
+            )
+            tenants = [dict(r) for r in await cursor.fetchall()]
+
+        reminded = 0
+        expired_today = 0
+        server_url = os.getenv("SERVER_URL", "https://sarathi-ai.com").rstrip("/")
+        renew_url = f"{server_url}/static/dashboard.html#subscription"
+
+        for tenant in tenants:
+            to_email = tenant.get("email")
+            if not to_email:
+                continue
+
+            try:
+                expires = datetime.fromisoformat(tenant["subscription_expires_at"]).date()
+            except (ValueError, TypeError):
+                continue
+
+            days_left = (expires - today).days
+            plan = tenant.get("subscription_plan") or "individual"
+            firm_name = tenant.get("firm_name", "Your Firm")
+            owner_name = tenant.get("owner_name", "")
+
+            if days_left in (7, 1):
+                asyncio.create_task(email_svc.send_sarathi_renewal_reminder(
+                    to_email=to_email,
+                    owner_name=owner_name,
+                    firm_name=firm_name,
+                    plan=plan,
+                    days_left=days_left,
+                    renewal_date=expires.strftime("%d %b %Y"),
+                    renew_url=renew_url,
+                ))
+                reminded += 1
+                logger.info("Sarathi renewal reminder: tenant=%d firm=%s days_left=%d",
+                            tenant["tenant_id"], firm_name, days_left)
+
+            elif days_left <= 0:
+                # Expired today — send notification; deactivation handled by subscription middleware
+                asyncio.create_task(email_svc.send_sarathi_expired_email(
+                    to_email=to_email,
+                    owner_name=owner_name,
+                    firm_name=firm_name,
+                    plan=plan,
+                    renew_url=renew_url,
+                ))
+                expired_today += 1
+                logger.info("Sarathi subscription expired: tenant=%d firm=%s",
+                            tenant["tenant_id"], firm_name)
+
+        logger.info("Sarathi renewal scan: %d reminders sent, %d expired", reminded, expired_today)
+
+    except Exception as e:
+        logger.error("Sarathi renewal scan error: %s", e, exc_info=True)
+
+
+# =============================================================================
+#  MARKETING SCHEDULE FIRE
+# =============================================================================
+
+async def _fire_marketing_schedules(now) -> None:
+    """
+    Fire any pending marketing_schedule rows whose fire_at has passed.
+    Generates content, posts to the configured channel, marks fired.
+    """
+    import aiosqlite
+    import biz_marketing as mkt
+    import biz_database as db
+    from pathlib import Path
+
+    now_str = now.strftime("%Y-%m-%dT%H:%M")
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """SELECT s.*, t.firm_name, t.marketing_photo_path, t.marketing_logo_path, t.marketing_watermark,
+                      t.plan, t.brand_accent,
+                      (SELECT evolution_instance FROM wa_instances
+                       WHERE tenant_id = s.tenant_id AND status = 'connected'
+                       ORDER BY instance_id LIMIT 1) AS evolution_instance,
+                      (SELECT telegram_id FROM agents
+                       WHERE tenant_id = s.tenant_id AND role = 'owner' LIMIT 1) AS owner_tg
+               FROM marketing_schedule s
+               JOIN tenants t ON t.tenant_id = s.tenant_id
+               WHERE s.status = 'pending' AND s.fire_at <= ?
+               LIMIT 20""",
+            (now_str,))
+        due = [dict(r) for r in await cursor.fetchall()]
+
+    for row in due:
+        schedule_id = row["schedule_id"]
+        tid = row["tenant_id"]
+        try:
+            festival = None
+            if row["content_type"] == "festival" and row.get("festival_date"):
+                from datetime import date as _date
+                target = _date.fromisoformat(row["festival_date"])
+                prefs_json = "all"
+                async with aiosqlite.connect(db.DB_PATH) as conn:
+                    c = await conn.execute("SELECT marketing_festival_prefs FROM tenants WHERE tenant_id=?", (tid,))
+                    r2 = await c.fetchone()
+                    prefs_json = r2[0] if r2 else '["all"]'
+                import json as _json
+                prefs = _json.loads(prefs_json)
+                matches = mkt.get_festivals_for_date(target, prefs)
+                festival = matches[0] if matches else None
+
+            owner_agent = await db.get_owner_agent_by_tenant(tid)
+            agent_name = owner_agent.get("name", "") if owner_agent else ""
+
+            content = await mkt.generate_content(
+                tenant_id=tid,
+                content_type=row["content_type"],
+                lang=row["lang"] or "en",
+                festival=festival,
+                firm_name=row.get("firm_name", ""),
+                agent_name=agent_name,
+                marketing_photo_path=row.get("marketing_photo_path", ""),
+                marketing_logo_path=row.get("marketing_logo_path", ""),
+                watermark=bool(row.get("marketing_watermark", 1)),
+                custom_topic=row.get("custom_topic", ""),
+                image_format=row.get("image_format", "whatsapp_status"),
+                brand_accent=row.get("brand_accent", ""),
+            )
+            content_id = await mkt.save_content(tid, content)
+
+            channel = row.get("channel", "wa_status")
+            image_path = content.get("image_path", "")
+
+            if channel in ("wa_status", "both") and row.get("evolution_instance") and image_path:
+                full = str(Path(__file__).parent / image_path)
+                caption = f"{content['title']}\n\n{content['body_text'][:200]}"
+                await mkt.post_to_wa_status(row["evolution_instance"], full, caption)
+                await mkt.mark_sent_wa_status(content_id)
+
+            if channel in ("telegram", "both") and row.get("owner_tg"):
+                full = str(Path(__file__).parent / image_path) if image_path else None
+                await mkt.push_to_telegram(row["owner_tg"], content, full)
+                await mkt.mark_sent_tg(content_id)
+
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute(
+                    "UPDATE marketing_schedule SET status='fired', content_id=? WHERE schedule_id=?",
+                    (content_id, schedule_id))
+                await conn.commit()
+
+            logger.info("Marketing schedule %d fired for tenant %d", schedule_id, tid)
+
+        except Exception as exc:
+            logger.error("Marketing schedule %d fire failed: %s", schedule_id, exc)
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute(
+                    "UPDATE marketing_schedule SET status='failed', error_msg=? WHERE schedule_id=?",
+                    (str(exc)[:500], schedule_id))
+                await conn.commit()
+
+
+# =============================================================================
 #  SCHEDULER (runs as background asyncio task)
 # =============================================================================
 
@@ -1447,9 +2108,17 @@ async def start_scheduler():
                 await run_renewal_scan()
                 await run_followup_scan()
 
-            # Run at 11:00 AM — Trial/subscription expiry reminders
+            # Run at 11:00 AM — Trial/subscription expiry + paid subscription renewal reminders
             if hour == 11 and 0 <= minute < 5 and last_run_date != today:
                 await run_trial_expiry_scan()
+                try:
+                    await run_nidaan_subscription_renewal_scan()
+                except Exception as _ne:
+                    logger.error("Nidaan renewal scan error: %s", _ne, exc_info=True)
+                try:
+                    await run_sarathi_subscription_renewal_scan()
+                except Exception as _se:
+                    logger.error("Sarathi renewal scan error: %s", _se, exc_info=True)
                 last_run_date = today  # Mark today as processed
 
             # ════════════════════════════════════════════════════════════
@@ -1539,6 +2208,68 @@ async def start_scheduler():
                     await hm.cleanup_old_data(30)
                 except Exception:
                     pass
+
+            # ════════════════════════════════════════════════════════════
+            #  MARKETING AUTO-POST — per-tenant scheduled WA Status push
+            # ════════════════════════════════════════════════════════════
+            if 6 <= hour <= 22 and minute % 5 == 0:
+                try:
+                    import biz_marketing as mkt
+                    await mkt.run_marketing_auto_post(now)
+                except Exception as me:
+                    logger.error("Marketing auto-post error: %s", me, exc_info=True)
+
+            # ════════════════════════════════════════════════════════════
+            #  MARKETING SCHEDULE FIRE — fire due scheduled posts
+            # ════════════════════════════════════════════════════════════
+            # Every minute: check for pending scheduled posts due within the
+            # current minute window and fire them.
+            try:
+                await _fire_marketing_schedules(now)
+            except Exception as sche:
+                logger.error("Marketing schedule fire error: %s", sche, exc_info=True)
+
+            # Phase 4: retry deferred Nidaan notifications (WA cap recovered, etc.)
+            try:
+                import biz_nidaan_notifications as _nnot
+                _sent = await _nnot.retry_deferred_notifications()
+                if _sent > 0:
+                    logger.info("Nidaan deferred queue: %d sent", _sent)
+            except Exception as nrde:
+                logger.error("Nidaan deferred retry error: %s", nrde)
+
+            # Nidaan refund reconciliation — hourly: surface eligible-but-unrefunded
+            # cancellations so SA can manually trigger; also retries 'failed' rows
+            # that may have been transient.
+            try:
+                if now.minute == 17:  # once per hour, off the top of the hour
+                    import biz_nidaan as _nid
+                    eligible = await _nid.find_eligible_unrefunded_cancellations(days=30)
+                    if eligible:
+                        logger.warning(
+                            "Nidaan refund reconciliation: %d cancelled sub(s) "
+                            "in window with zero claims need SA action",
+                            len(eligible))
+            except Exception as rrec:
+                logger.error("Nidaan refund reconcile error: %s", rrec)
+
+            # Webhook signature-failure alert — every 5 min: alert owner if >= 3
+            # signature failures in the last 15 min, with 1h cooldown so we
+            # don't spam if a misconfig persists.
+            try:
+                if now.minute % 5 == 0:
+                    await _check_webhook_failure_alert()
+            except Exception as wfe:
+                logger.error("Webhook failure alert check error: %s", wfe)
+
+            # B3 — Bundle teardown nudges (T-4 / T-2 / T-0). Runs ONCE per day
+            # at 09:23 UTC ≈ 14:53 IST. Each daily run hits a distinct cohort
+            # because the SQL matches "exactly N days from today".
+            try:
+                if now.hour == 9 and now.minute == 23:
+                    await _fire_bundle_teardown_nudges()
+            except Exception as bne:
+                logger.error("Bundle teardown nudge error: %s", bne)
 
             # Sleep 60 seconds between checks
             await asyncio.sleep(60)

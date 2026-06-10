@@ -279,6 +279,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
+-- Custom roles & permissions (Team/Enterprise plans)
+-- Each tenant can define their own roles beyond owner/admin/agent.
+-- permissions is a JSON dict of boolean flags (see ROLE_PERMISSIONS_ALL).
+CREATE TABLE IF NOT EXISTS custom_roles (
+    role_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL,
+    role_slug       TEXT NOT NULL,
+    role_label      TEXT NOT NULL,
+    role_label_hi   TEXT DEFAULT '',
+    permissions     TEXT NOT NULL DEFAULT '{}',
+    is_system       INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id),
+    UNIQUE(tenant_id, role_slug)
+);
+
 -- Support tickets (help & support system)
 CREATE TABLE IF NOT EXISTS support_tickets (
     ticket_id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -487,6 +503,13 @@ async def init_db():
             "ALTER TABLE agents ADD COLUMN onboarding_step TEXT",
             "ALTER TABLE tenants ADD COLUMN tg_bot_token TEXT",
             "ALTER TABLE tenants ADD COLUMN feature_overrides TEXT DEFAULT '{}'",
+            # B3/B6: prevents trial reuse after bundle/trial ends. Set to 1 when:
+            #   - trial expires naturally
+            #   - Nidaan bundle is torn down
+            #   - paid sub is cancelled
+            "ALTER TABLE tenants ADD COLUMN lifetime_trial_used INTEGER DEFAULT 0",
+            # B6: stable Google identity — catches trial-reuse via email aliases
+            "ALTER TABLE tenants ADD COLUMN google_sub TEXT DEFAULT ''",
             # Phase-2 migrations: city, account_type, signup_channel
             "ALTER TABLE tenants ADD COLUMN city TEXT DEFAULT ''",
             "ALTER TABLE tenants ADD COLUMN account_type TEXT DEFAULT 'firm'",
@@ -876,6 +899,19 @@ async def init_db():
             "ALTER TABLE tenants ADD COLUMN wa_addon_ai_assist INTEGER DEFAULT 0",
             "ALTER TABLE tenants ADD COLUMN wa_tos_accepted_at TEXT",
             "ALTER TABLE tenants ADD COLUMN gdrive_connected INTEGER DEFAULT 0",
+            # LID support: store the instance's own WhatsApp LID JID for self-chat detection
+            "ALTER TABLE wa_instances ADD COLUMN own_jid TEXT",
+            # Pending advisor→lead reply forwarding table (added inline via migration)
+            """CREATE TABLE IF NOT EXISTS wa_pending_reply (
+                pending_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id  INTEGER NOT NULL,
+                lead_jid     TEXT NOT NULL,
+                lead_name    TEXT,
+                context      TEXT,
+                created_at   TEXT DEFAULT (datetime('now')),
+                expires_at   TEXT NOT NULL,
+                used_at      TEXT
+            )""",
         ]
         for m in wa_migrations:
             try:
@@ -1098,12 +1134,483 @@ async def init_db():
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN razorpay_subscription_id TEXT",
             # Phase 3: staff assignment column on claims
             "ALTER TABLE nidaan_claims ADD COLUMN assigned_to_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
+            # Phase 4: link per-claim purchase to a Nidaan account so they get dashboard access
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN account_id INTEGER REFERENCES nidaan_accounts(account_id)",
+            # Phase 4: track which nidaan_claim was submitted for this per-claim purchase (1:1)
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN linked_claim_id INTEGER REFERENCES nidaan_claims(claim_id)",
+            # Phase 4: Sarathi bundle — track bundled tenant expiry on tenants table
+            "ALTER TABLE tenants ADD COLUMN bundled_until DATE",
+            # Phase 5: findings_note for review_completed status (customer-visible)
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN findings_note TEXT",
+            # Phase 6 (ERP redesign, Jun 2026): intermediary (agent/consultant) details
+            # as printed on the policy — required for legal correspondence and IRDAI compliance
+            "ALTER TABLE nidaan_claims ADD COLUMN intermediary_code TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN intermediary_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN intermediary_code TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN intermediary_name TEXT DEFAULT ''",
         ]
         for m in nidaan_migrations:
             try:
                 await conn.execute(m)
             except Exception:
                 pass
+
+        # ═════════════════════════════════════════════════════════════════════
+        # NIDAAN ERP — Phase 3: Workflow Engine (Jun 2026)
+        # 6 new tables + 1 column.  Idempotent — runs on every boot, safe.
+        # ═════════════════════════════════════════════════════════════════════
+
+        # ── system_flags: SA-controlled toggles for any system behaviour
+        # (e.g. "auto_assign_tasks", "wa_automation_paused", "intake_paused").
+        # Reading code respects these; one row per key. Free-form values.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS system_flags (
+                flag_key       TEXT PRIMARY KEY,
+                flag_value     TEXT NOT NULL DEFAULT '',
+                description    TEXT,
+                updated_by     INTEGER,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── nidaan_status_def: configurable workflow statuses.
+        # Built-in statuses have system_owned=1 — slug never deleted, but
+        # SA can edit labels/colors/SLA/sort_order. SA can add custom ones.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_status_def (
+                status_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug                   TEXT NOT NULL UNIQUE,
+                label_en               TEXT NOT NULL,
+                label_hi               TEXT,
+                label_subscriber       TEXT,
+                color                  TEXT DEFAULT '#94a3b8',
+                stage                  TEXT NOT NULL DEFAULT 'preparation',
+                default_sla_hours      INTEGER,
+                is_paused              INTEGER DEFAULT 0,
+                is_terminal            INTEGER DEFAULT 0,
+                is_qc_required         INTEGER DEFAULT 0,
+                requires_approval      TEXT DEFAULT '',
+                sort_order             INTEGER DEFAULT 100,
+                system_owned           INTEGER DEFAULT 0,
+                is_active              INTEGER DEFAULT 1,
+                created_by             INTEGER,
+                created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nstatus_stage ON nidaan_status_def(stage)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nstatus_active ON nidaan_status_def(is_active)")
+
+        # ── nidaan_status_transitions: allowed from_slug → to_slug per role.
+        # Empty allowed_roles = any role can transition.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_status_transitions (
+                transition_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_slug        TEXT NOT NULL,
+                to_slug          TEXT NOT NULL,
+                allowed_roles    TEXT DEFAULT '',
+                requires_note    INTEGER DEFAULT 0,
+                system_owned     INTEGER DEFAULT 0,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(from_slug, to_slug)
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntrans_from ON nidaan_status_transitions(from_slug)")
+
+        # ── nidaan_tasks: the work units. Many per claim.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_tasks (
+                task_id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id                 INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                parent_task_id           INTEGER REFERENCES nidaan_tasks(task_id),
+                title                    TEXT NOT NULL,
+                description              TEXT,
+                stage                    TEXT NOT NULL DEFAULT 'intake',
+                status_slug              TEXT NOT NULL DEFAULT 'intimated' REFERENCES nidaan_status_def(slug),
+                priority                 TEXT DEFAULT 'normal',
+                assigned_to_staff_id     INTEGER REFERENCES nidaan_staff(staff_id),
+                created_by_staff_id      INTEGER REFERENCES nidaan_staff(staff_id),
+                sla_hours_override       INTEGER,
+                sla_due_at               TIMESTAMP,
+                paused_at                TIMESTAMP,
+                paused_reason            TEXT,
+                total_paused_seconds     INTEGER DEFAULT 0,
+                depends_on_task_id       INTEGER REFERENCES nidaan_tasks(task_id),
+                is_qc_required           INTEGER DEFAULT 0,
+                qc_status                TEXT,
+                qc_reviewer_staff_id     INTEGER REFERENCES nidaan_staff(staff_id),
+                qc_note                  TEXT,
+                qc_completed_at          TIMESTAMP,
+                created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at             TIMESTAMP,
+                closed_at                TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_claim ON nidaan_tasks(claim_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_assignee ON nidaan_tasks(assigned_to_staff_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_status ON nidaan_tasks(status_slug)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_stage ON nidaan_tasks(stage)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_sla ON nidaan_tasks(sla_due_at) WHERE completed_at IS NULL")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntask_dep ON nidaan_tasks(depends_on_task_id) WHERE depends_on_task_id IS NOT NULL")
+
+        # ── nidaan_task_status_log: immutable audit trail.
+        # Only INSERT — never UPDATE/DELETE.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_task_status_log (
+                log_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id             INTEGER NOT NULL REFERENCES nidaan_tasks(task_id),
+                from_status         TEXT,
+                to_status           TEXT NOT NULL,
+                changed_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                note                TEXT,
+                metadata            TEXT,
+                changed_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntlog_task ON nidaan_task_status_log(task_id, changed_at DESC)")
+
+        # ── nidaan_task_approvals: dual-approval (admin + SA) state.
+        # When BOTH set, transition executes once (one row per pending approval).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_task_approvals (
+                approval_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id               INTEGER NOT NULL REFERENCES nidaan_tasks(task_id),
+                requested_by          INTEGER REFERENCES nidaan_staff(staff_id),
+                target_status_slug    TEXT NOT NULL,
+                admin_staff_id        INTEGER REFERENCES nidaan_staff(staff_id),
+                admin_approved_at     TIMESTAMP,
+                admin_note            TEXT,
+                sa_staff_id           INTEGER REFERENCES nidaan_staff(staff_id),
+                sa_approved_at        TIMESTAMP,
+                sa_note               TEXT,
+                final_status          TEXT DEFAULT 'pending',
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at           TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_napprov_task ON nidaan_task_approvals(task_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_napprov_pending ON nidaan_task_approvals(final_status) WHERE final_status='pending'")
+
+        # ── nidaan_task_notes: per-task discussion thread (staff-only).
+        # Distinct from nidaan_claim_notes which is claim-scoped.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_task_notes (
+                note_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id     INTEGER NOT NULL REFERENCES nidaan_tasks(task_id),
+                staff_id    INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                note        TEXT NOT NULL,
+                is_internal INTEGER DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ntnotes_task ON nidaan_task_notes(task_id, created_at DESC)")
+        # Phase 5 — single-level reply threading on task notes.
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_task_notes ADD COLUMN parent_note_id INTEGER REFERENCES nidaan_task_notes(note_id)")
+        except Exception:
+            pass
+
+        # Phase 5+ — Quick Tasks: lightweight personal/team to-dos.
+        # Distinct from workflow tasks (nidaan_tasks) — no SLA, no QC, no
+        # dependencies. claim_id is OPTIONAL (free-flow tasks supported).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_tasks (
+                quick_task_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                title                TEXT NOT NULL,
+                description          TEXT,
+                assigned_to_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                created_by_staff_id  INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                priority             TEXT NOT NULL DEFAULT 'normal',
+                status               TEXT NOT NULL DEFAULT 'open',
+                claim_id             INTEGER REFERENCES nidaan_claims(claim_id),
+                due_date             DATE,
+                created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at         TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqt_assignee "
+            "ON nidaan_quick_tasks(assigned_to_staff_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqt_status "
+            "ON nidaan_quick_tasks(status)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqt_claim "
+            "ON nidaan_quick_tasks(claim_id) WHERE claim_id IS NOT NULL")
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_notes (
+                note_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                quick_task_id  INTEGER NOT NULL REFERENCES nidaan_quick_tasks(quick_task_id),
+                staff_id       INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                note           TEXT NOT NULL,
+                parent_note_id INTEGER REFERENCES nidaan_quick_task_notes(note_id),
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqtn_task "
+            "ON nidaan_quick_task_notes(quick_task_id, created_at DESC)")
+
+        # Webhook signature failure log — drives the monitoring alert that
+        # warns the owner before Razorpay (or any other webhook source) hits
+        # its retry cap and disables the webhook.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS webhook_failure_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                endpoint    TEXT NOT NULL,
+                source_ip   TEXT,
+                reason      TEXT,
+                occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wfl_time "
+            "ON webhook_failure_log(occurred_at DESC)")
+        # Backfill — capture User-Agent so we can filter out our own smoke
+        # tests (no UA / curl) from real Razorpay traffic (UA="Razorpay-Webhook/v1").
+        try:
+            await conn.execute(
+                "ALTER TABLE webhook_failure_log ADD COLUMN user_agent TEXT DEFAULT ''")
+        except Exception:
+            pass
+
+        # ── Sarathi refunds (Policy A: full refund within 7 days + <5 leads)
+        # Mirrors nidaan_refunds in shape so SA panel & reconciliation can be
+        # uniform across products. status: pending → processing → processed | failed
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sarathi_refunds (
+                refund_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id           INTEGER NOT NULL REFERENCES tenants(tenant_id),
+                amount              INTEGER NOT NULL,
+                razorpay_payment_id TEXT,
+                razorpay_refund_id  TEXT,
+                razorpay_order_id   TEXT,
+                status              TEXT NOT NULL DEFAULT 'pending',
+                reason              TEXT,
+                initiated_by        TEXT,
+                requested_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at        TIMESTAMP,
+                last_error          TEXT
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sref_tenant "
+            "ON sarathi_refunds(tenant_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sref_status "
+            "ON sarathi_refunds(status)")
+
+        # ── Add stage column to nidaan_claims (high-level claim phase).
+        # Done as ALTER inside a try block since column may already exist.
+        try:
+            await conn.execute("ALTER TABLE nidaan_claims ADD COLUMN stage TEXT DEFAULT 'intake'")
+        except Exception:
+            pass
+        try:
+            await conn.execute("ALTER TABLE nidaan_claims ADD COLUMN closed_reason TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # phone field on nidaan_staff for WA notifications (Phase 4)
+        try:
+            await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN phone TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # round-robin pointer: which staff_id index was last assigned
+        try:
+            await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN last_assigned_at TIMESTAMP")
+        except Exception:
+            pass
+        # ack whether staff has saved the 3 official Nidaan numbers (Phase 4)
+        try:
+            await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN saved_official_numbers_at TIMESTAMP")
+        except Exception:
+            pass
+
+        # ═════════════════════════════════════════════════════════════════════
+        # NIDAAN ERP — Phase 4: Notifications + Comms Hub (Jun 2026)
+        # ═════════════════════════════════════════════════════════════════════
+
+        # ── 3 official Nidaan WhatsApp numbers (Evolution instances).
+        # SA pairs them via QR scan. Health is updated by Evolution webhooks.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_official_instances (
+                instance_slot           INTEGER PRIMARY KEY,
+                evolution_instance      TEXT UNIQUE NOT NULL,
+                display_name            TEXT,
+                phone_number            TEXT,
+                own_jid                 TEXT,
+                health_state            TEXT DEFAULT 'disconnected',
+                health_score            INTEGER DEFAULT 100,
+                warmup_started_at       TIMESTAMP,
+                daily_sent_count        INTEGER DEFAULT 0,
+                daily_count_reset_at    DATE,
+                last_qr_emitted_at      TIMESTAMP,
+                last_connected_at       TIMESTAMP,
+                last_disconnected_at    TIMESTAMP,
+                paused_until            TIMESTAMP,
+                pause_reason            TEXT,
+                created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── Sticky outbound assignment: each subscriber permanently maps to
+        # ONE of the 3 numbers so they see consistent sender. Failover happens
+        # only if the assigned number stays unhealthy.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_subscriber_wa_assignment (
+                account_id          INTEGER PRIMARY KEY REFERENCES nidaan_accounts(account_id),
+                instance_slot       INTEGER NOT NULL REFERENCES nidaan_official_instances(instance_slot),
+                assigned_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at        TIMESTAMP,
+                failover_count      INTEGER DEFAULT 0
+            )
+        """)
+
+        # ── Subscriber notification preferences (DPDP-aligned opt-ins).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_subscriber_prefs (
+                account_id              INTEGER PRIMARY KEY REFERENCES nidaan_accounts(account_id),
+                wa_opt_in               INTEGER DEFAULT 0,
+                wa_opt_in_at            TIMESTAMP,
+                email_enabled           INTEGER DEFAULT 1,
+                saved_official_numbers_at TIMESTAMP,
+                created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── Notifications log (one row per fan-out event). Tracks channel
+        # status: queued | sent | failed | deferred | suppressed_quiet_hours.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_notifications (
+                notif_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_key           TEXT NOT NULL,
+                priority            TEXT NOT NULL DEFAULT 'P1',
+                claim_id            INTEGER,
+                task_id             INTEGER,
+                recipient_type      TEXT NOT NULL,
+                recipient_id        INTEGER,
+                recipient_phone     TEXT,
+                recipient_email     TEXT,
+                channel             TEXT NOT NULL,
+                subject             TEXT,
+                body                TEXT,
+                status              TEXT DEFAULT 'queued',
+                instance_slot       INTEGER,
+                wa_message_id       TEXT,
+                error               TEXT,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_at             TIMESTAMP,
+                deferred_until      TIMESTAMP,
+                retry_count         INTEGER DEFAULT 0
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_status ON nidaan_notifications(status, deferred_until)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_recipient ON nidaan_notifications(recipient_type, recipient_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_event ON nidaan_notifications(event_key)")
+
+        # ── nidaan_messages: subscriber ↔ associate thread per claim
+        # (in-dashboard chat + WhatsApp mirror).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_messages (
+                message_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id            INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                sender_type         TEXT NOT NULL,
+                sender_subscriber_id INTEGER,
+                sender_staff_id     INTEGER,
+                content             TEXT NOT NULL,
+                attachment_doc_id   INTEGER,
+                source_channel      TEXT NOT NULL DEFAULT 'dashboard',
+                source_wa_instance  TEXT,
+                source_wa_message_id TEXT,
+                read_by_subscriber_at TIMESTAMP,
+                read_by_staff_at    TIMESTAMP,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nmsg_claim ON nidaan_messages(claim_id, created_at DESC)")
+
+        # ── nidaan_documents: subscriber-uploaded docs per claim (Phase 4
+        # also accepts via WhatsApp + email later in Phase 5).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_documents (
+                doc_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id            INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                task_id             INTEGER,
+                uploaded_by_type    TEXT NOT NULL,
+                uploaded_by_id      INTEGER,
+                original_filename   TEXT,
+                storage_path        TEXT NOT NULL,
+                mime_type           TEXT,
+                size_bytes          INTEGER,
+                source              TEXT DEFAULT 'dashboard',
+                source_wa_instance  TEXT,
+                source_wa_message_id TEXT,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_ndoc_claim ON nidaan_documents(claim_id, created_at DESC)")
+
+        # ── Pending doc routing — when subscriber sends a doc on WA and has
+        # multiple active claims, we ask which one. Track that conversation.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_pending_doc_routing (
+                pending_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id          INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
+                wa_message_id       TEXT NOT NULL,
+                source_wa_instance  TEXT NOT NULL,
+                eligible_claim_ids  TEXT NOT NULL,
+                expires_at          TIMESTAMP NOT NULL,
+                resolved_to_claim   INTEGER,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Refunds (subscription cancellations within window with zero usage).
+        # status: pending → processing → processed | failed | manual
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_refunds (
+                refund_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                sub_id                 INTEGER REFERENCES nidaan_subscriptions(sub_id),
+                account_id             INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
+                amount                 INTEGER NOT NULL,
+                razorpay_order_id      TEXT,
+                razorpay_payment_id    TEXT,
+                razorpay_refund_id     TEXT,
+                status                 TEXT NOT NULL DEFAULT 'pending',
+                reason                 TEXT,
+                requested_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at           TIMESTAMP,
+                last_error             TEXT,
+                requested_by_staff_id  INTEGER REFERENCES nidaan_staff(staff_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nidaan_refunds_account "
+            "ON nidaan_refunds(account_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nidaan_refunds_status "
+            "ON nidaan_refunds(status)")
+
+        # Backfill: store the actual Razorpay payment_id so refunds have something
+        # to call against (column razorpay_subscription_id holds the order_id, not payment_id).
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_subscriptions ADD COLUMN razorpay_payment_id TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_subscriptions ADD COLUMN cancelled_at TIMESTAMP")
+        except Exception:
+            pass
+
+        await conn.commit()
 
         # ─────────────────────────────────────────────────────────────────────
         #  Sarathi Agent — APK-bridge WhatsApp automation (May 2026)
@@ -1187,6 +1694,108 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_wa_agent_conv_tenant "
             "ON wa_agent_conversations(tenant_id, created_at DESC)")
 
+        # ── AI Marketing Studio (May 2026) ──────────────────────────────────
+        marketing_migrations = [
+            "ALTER TABLE tenants ADD COLUMN marketing_enabled INTEGER DEFAULT 0",
+            "ALTER TABLE tenants ADD COLUMN marketing_autopost_enabled INTEGER DEFAULT 0",
+            "ALTER TABLE tenants ADD COLUMN marketing_autopost_time TEXT DEFAULT '08:00'",
+            "ALTER TABLE tenants ADD COLUMN marketing_festival_prefs TEXT DEFAULT '[\"all\",\"hindu\"]'",
+            "ALTER TABLE tenants ADD COLUMN marketing_photo_path TEXT DEFAULT ''",
+            "ALTER TABLE tenants ADD COLUMN marketing_lang TEXT DEFAULT 'en'",
+            "ALTER TABLE tenants ADD COLUMN marketing_watermark INTEGER DEFAULT 1",
+            "ALTER TABLE tenants ADD COLUMN marketing_logo_path TEXT DEFAULT ''",
+        ]
+        for m in marketing_migrations:
+            try:
+                await conn.execute(m)
+            except Exception:
+                pass
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS marketing_content (
+                content_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id       INTEGER NOT NULL,
+                content_type    TEXT NOT NULL,
+                title           TEXT,
+                body_text       TEXT,
+                image_path      TEXT,
+                video_path      TEXT,
+                festival_name   TEXT,
+                religion_tag    TEXT DEFAULT 'all',
+                language        TEXT DEFAULT 'en',
+                sent_wa_status  INTEGER DEFAULT 0,
+                sent_tg         INTEGER DEFAULT 0,
+                generated_date  TEXT,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mkt_content_tenant "
+            "ON marketing_content(tenant_id, generated_date DESC)")
+
+        # ── Marketing content extended columns (May 2026) ────────────────────
+        for col_sql in [
+            "ALTER TABLE marketing_content ADD COLUMN image_format TEXT DEFAULT 'whatsapp_status'",
+            "ALTER TABLE marketing_content ADD COLUMN brand_accent TEXT DEFAULT ''",
+            "ALTER TABLE marketing_content ADD COLUMN custom_topic TEXT DEFAULT ''",
+            "ALTER TABLE tenants ADD COLUMN brand_accent TEXT DEFAULT ''",
+        ]:
+            try:
+                await conn.execute(col_sql)
+            except Exception:
+                pass
+
+        # ── Marketing schedule table ─────────────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS marketing_schedule (
+                schedule_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id       INTEGER NOT NULL,
+                content_type    TEXT NOT NULL,
+                lang            TEXT DEFAULT 'en',
+                image_format    TEXT DEFAULT 'whatsapp_status',
+                custom_topic    TEXT DEFAULT '',
+                festival_date   TEXT,
+                channel         TEXT DEFAULT 'wa_status',
+                fire_at         TEXT NOT NULL,
+                status          TEXT DEFAULT 'pending',
+                content_id      INTEGER,
+                error_msg       TEXT,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mkt_schedule_fire "
+            "ON marketing_schedule(tenant_id, fire_at, status)")
+
+        # ── Marketing segments table (lead audience groups) ───────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS marketing_segments (
+                segment_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id       INTEGER NOT NULL,
+                name            TEXT NOT NULL,
+                filters_json    TEXT NOT NULL DEFAULT '{}',
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+            )
+        """)
+
+        # ── Marketing send log (per-lead delivery tracking) ───────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS marketing_sends (
+                send_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                content_id      INTEGER NOT NULL,
+                tenant_id       INTEGER NOT NULL,
+                lead_id         INTEGER,
+                phone           TEXT,
+                channel         TEXT DEFAULT 'whatsapp',
+                status          TEXT DEFAULT 'sent',
+                sent_at         TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (content_id) REFERENCES marketing_content(content_id)
+            )
+        """)
+
         await conn.commit()
     logger.info("Database initialized: %s", DB_PATH)
 
@@ -1227,13 +1836,15 @@ async def create_tenant_with_owner(firm_name: str, owner_name: str, phone: str,
     and links the telegram_id to this existing agent."""
     async with aiosqlite.connect(DB_PATH) as conn:
         trial_end = (datetime.now() + timedelta(days=14)).isoformat()
-        # Create tenant
+        # B6: stamp lifetime_trial_used=1 at creation. Even if they later
+        # upgrade to paid or cancel, the lifetime trial has been consumed —
+        # they can't get a fresh trial by re-registering with a variant email.
         cursor = await conn.execute(
             """INSERT INTO tenants
                (firm_name, owner_name, phone, email, owner_telegram_id,
                 brand_phone, brand_email, lang, trial_ends_at,
-                city, account_type, signup_channel)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                city, account_type, signup_channel, lifetime_trial_used)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
             (firm_name, owner_name, phone, email, owner_telegram_id,
              phone, email, lang, trial_end,
              city, account_type, signup_channel))
@@ -1737,11 +2348,303 @@ async def check_plan_feature(tenant_id: int, feature: str) -> dict:
     return result
 
 
+# =============================================================================
+#  CONFLICT DETECTION — "guide, don't block" for signup/login flows
+# =============================================================================
+
+def _normalize_phone10(phone: str) -> str:
+    """Last 10 digits — what we compare on for IN phone matching."""
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+async def find_existing_sarathi_tenant(email: str = "",
+                                        phone: str = "",
+                                        google_sub: str = "") -> Optional[dict]:
+    """Find a Sarathi tenant by email OR last-10-digits of phone OR Google
+    `sub` (subject) claim. Returns the row dict augmented with a
+    'subscription_state' classifier:
+       'trial_active' | 'trial_expired' | 'sub_active' | 'sub_cancelled_in_cycle' |
+       'sub_expired' | 'bundle_active' | 'bundle_expired' | 'unknown'
+    """
+    email = (email or "").strip().lower()
+    p10 = _normalize_phone10(phone)
+    google_sub = (google_sub or "").strip()
+    if not email and not p10 and not google_sub:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        wheres, params = [], []
+        if email:
+            wheres.append("LOWER(email) = ?"); params.append(email)
+        if p10:
+            wheres.append("substr(replace(phone,' ',''), -10) = ?"); params.append(p10)
+        if google_sub:
+            wheres.append("google_sub = ?"); params.append(google_sub)
+        cur = await conn.execute(
+            "SELECT tenant_id, firm_name, owner_name, email, phone, plan, "
+            "       subscription_status, trial_ends_at, subscription_expires_at, "
+            "       plan_source, bundled_until, razorpay_sub_id, is_active, "
+            "       lifetime_trial_used "
+            "FROM tenants WHERE " + " OR ".join(wheres) +
+            " ORDER BY created_at DESC LIMIT 1", params)
+        row = await cur.fetchone()
+    if not row:
+        return None
+    t = dict(row)
+    t["subscription_state"] = _classify_sarathi_state(t)
+    return t
+
+
+def _classify_sarathi_state(t: dict) -> str:
+    """Bucket a tenant row into one of the visible states."""
+    now = datetime.utcnow()
+    plan_source = (t.get("plan_source") or "").lower()
+    bu = t.get("bundled_until") or ""
+    if plan_source == "nidaan_bundle" and bu:
+        try:
+            if datetime.fromisoformat(bu) >= now.replace(hour=0, minute=0, second=0, microsecond=0):
+                return "bundle_active"
+            return "bundle_expired"
+        except Exception:
+            pass
+    status = (t.get("subscription_status") or "").lower()
+    if status in ("active", "paid"):
+        exp = t.get("subscription_expires_at") or ""
+        if exp:
+            try:
+                if datetime.fromisoformat(exp) > now:
+                    return "sub_active"
+                return "sub_expired"
+            except Exception:
+                return "sub_active"
+        return "sub_active"
+    if status == "cancelled":
+        exp = t.get("subscription_expires_at") or ""
+        if exp:
+            try:
+                if datetime.fromisoformat(exp) > now:
+                    return "sub_cancelled_in_cycle"
+            except Exception:
+                pass
+        return "sub_expired"
+    if status in ("trial", "trialing"):
+        te = t.get("trial_ends_at") or ""
+        if te:
+            try:
+                if datetime.fromisoformat(te) > now:
+                    return "trial_active"
+                return "trial_expired"
+            except Exception:
+                return "trial_active"
+        return "trial_active"
+    # B6: explicit terminal states from auto_fix_expired_trials / cancellation.
+    if status in ("expired", "wiped"):
+        return "trial_expired"
+    return "unknown"
+
+
+async def find_existing_nidaan_account(email: str = "",
+                                        phone: str = "") -> Optional[dict]:
+    """Find a Nidaan account; classify state.
+       'sub_active' | 'sub_cancelled' | 'no_sub' | 'unknown'
+    """
+    email = (email or "").strip().lower()
+    p10 = _normalize_phone10(phone)
+    if not email and not p10:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        wheres, params = [], []
+        if email:
+            wheres.append("LOWER(email) = ?"); params.append(email)
+        if p10:
+            wheres.append("substr(replace(phone,' ',''), -10) = ?"); params.append(p10)
+        cur = await conn.execute(
+            "SELECT account_id, owner_name, firm_name, email, phone, status, created_at "
+            "FROM nidaan_accounts WHERE " + " OR ".join(wheres) +
+            " ORDER BY created_at DESC LIMIT 1", params)
+        row = await cur.fetchone()
+        if not row:
+            return None
+        a = dict(row)
+        sub = await (await conn.execute(
+            "SELECT plan, status, started_at, current_period_end "
+            "FROM nidaan_subscriptions WHERE account_id = ? "
+            "ORDER BY started_at DESC LIMIT 1", (a["account_id"],))).fetchone()
+    if sub:
+        sub = dict(sub)
+        a["latest_subscription"] = sub
+        if (sub.get("status") or "").lower() == "active":
+            a["subscription_state"] = "sub_active"
+        elif (sub.get("status") or "").lower() == "cancelled":
+            a["subscription_state"] = "sub_cancelled"
+        else:
+            a["subscription_state"] = "no_sub"
+    else:
+        a["subscription_state"] = "no_sub"
+    return a
+
+
+def _build_conflict_response(*, sarathi: Optional[dict], nidaan: Optional[dict],
+                             intent: str) -> Optional[dict]:
+    """Translate the classified state(s) into a frontend-friendly conflict
+    object. Returns None when there's no conflict (user can proceed).
+
+    Intent values:
+      'sarathi_signup'  — trying to create a new Sarathi tenant
+      'sarathi_login'   — trying to log into Sarathi
+      'nidaan_signup'   — trying to create a new Nidaan account
+      'nidaan_login'    — trying to log into Nidaan
+    """
+    # B8 helper: bundle English + Hindi action labels into the structured shape
+    def _act(en: str, hi: str, deeplink: Optional[str] = None) -> dict:
+        return {"label": en, "label_hi": hi, "deeplink": deeplink}
+
+    if intent == "sarathi_signup":
+        if sarathi:
+            st = sarathi.get("subscription_state")
+            if st == "bundle_active":
+                return {
+                    "conflict": "bundle_active",
+                    "title":    "You already have Sarathi-AI via your Nidaan plan",
+                    "title_hi": "आपके Nidaan प्लान में Sarathi-AI पहले से शामिल है",
+                    "message":    "Your Nidaan subscription includes Sarathi-AI. No need to subscribe separately.",
+                    "message_hi": "आपकी Nidaan सदस्यता में Sarathi-AI शामिल है। अलग से सब्सक्राइब करने की आवश्यकता नहीं है।",
+                    "primary_action":   _act("Open Sarathi",  "Sarathi खोलें", "/dashboard"),
+                    "secondary_action": _act("Sign in",       "साइन इन",      "/login"),
+                    "tenant_id": sarathi.get("tenant_id"),
+                }
+            if st == "trial_active":
+                end_date = (sarathi.get('trial_ends_at') or '')[:10]
+                return {
+                    "conflict": "trial_active",
+                    "title":    "You're already in a free trial",
+                    "title_hi": "आप पहले से फ्री ट्रायल पर हैं",
+                    "message":    f"Your trial ends on {end_date}. Sign in to continue using Sarathi-AI.",
+                    "message_hi": f"आपका ट्रायल {end_date} को समाप्त होगा। Sarathi-AI जारी रखने के लिए साइन इन करें।",
+                    "primary_action":   _act("Sign in",        "साइन इन",     "/login"),
+                    "secondary_action": _act("Open dashboard", "डैशबोर्ड खोलें", "/dashboard"),
+                    "tenant_id": sarathi.get("tenant_id"),
+                }
+            if st in ("sub_active", "sub_cancelled_in_cycle"):
+                plan_name = (sarathi.get('plan','') or '').title()
+                return {
+                    "conflict": st,
+                    "title":    "You already have an active subscription",
+                    "title_hi": "आपकी सदस्यता पहले से सक्रिय है",
+                    "message":    f"You're on the {plan_name} plan. Sign in to manage or upgrade.",
+                    "message_hi": f"आप {plan_name} प्लान पर हैं। प्रबंधित या अपग्रेड करने के लिए साइन इन करें।",
+                    "primary_action":   _act("Sign in",        "साइन इन",     "/login"),
+                    "secondary_action": _act("Open dashboard", "डैशबोर्ड खोलें", "/dashboard"),
+                    "tenant_id": sarathi.get("tenant_id"),
+                }
+            if st in ("trial_expired", "sub_expired", "bundle_expired"):
+                if sarathi.get("lifetime_trial_used"):
+                    msg_en = ("Your previous Sarathi-AI access has ended. Free trials are "
+                              "once-per-customer, so to continue you'll need to pick a plan. "
+                              "Sign in and you can subscribe in a click.")
+                    msg_hi = ("आपकी पिछली Sarathi-AI एक्सेस समाप्त हो गई है। फ्री ट्रायल "
+                              "प्रति ग्राहक केवल एक बार के लिए है, इसलिए जारी रखने के लिए कोई "
+                              "प्लान चुनें। साइन इन करें और एक क्लिक में सब्सक्राइब करें।")
+                else:
+                    msg_en = "Your previous Sarathi-AI access has ended. Sign in and choose a plan to continue."
+                    msg_hi = "आपकी पिछली Sarathi-AI एक्सेस समाप्त हो गई है। जारी रखने के लिए साइन इन करें और प्लान चुनें।"
+                return {
+                    "conflict": st,
+                    "title":    "Welcome back",
+                    "title_hi": "वापस आने पर स्वागत है",
+                    "message":    msg_en,
+                    "message_hi": msg_hi,
+                    "primary_action":   _act("Sign in",     "साइन इन",     "/login"),
+                    "secondary_action": _act("View plans",  "प्लान देखें",  "/#pricing"),
+                    "tenant_id": sarathi.get("tenant_id"),
+                    "lifetime_trial_used": bool(sarathi.get("lifetime_trial_used")),
+                }
+        if nidaan and nidaan.get("subscription_state") == "sub_active":
+            return {
+                "conflict": "nidaan_active_no_sarathi",
+                "title":    "Your Nidaan plan includes Sarathi-AI",
+                "title_hi": "आपके Nidaan प्लान में Sarathi-AI शामिल है",
+                "message":    "Open Sarathi-AI directly from your Nidaan dashboard — no need to sign up separately.",
+                "message_hi": "अपने Nidaan डैशबोर्ड से सीधे Sarathi-AI खोलें — अलग से साइन अप करने की आवश्यकता नहीं है।",
+                "primary_action":   _act("Open Nidaan dashboard", "Nidaan डैशबोर्ड खोलें", "/nidaan/dashboard"),
+                "secondary_action": None,
+                "account_id": nidaan.get("account_id"),
+            }
+        return None
+
+    if intent == "sarathi_login":
+        if not sarathi and nidaan and nidaan.get("subscription_state") == "sub_active":
+            return {
+                "conflict": "nidaan_active_no_sarathi",
+                "title":    "Your Nidaan plan includes Sarathi-AI",
+                "title_hi": "आपके Nidaan प्लान में Sarathi-AI शामिल है",
+                "message":    "Open Sarathi from your Nidaan dashboard.",
+                "message_hi": "अपने Nidaan डैशबोर्ड से Sarathi खोलें।",
+                "primary_action": _act("Open Nidaan dashboard", "Nidaan डैशबोर्ड खोलें", "/nidaan/dashboard"),
+                "account_id": nidaan.get("account_id"),
+            }
+        return None
+
+    if intent == "nidaan_signup":
+        if nidaan:
+            st = nidaan.get("subscription_state")
+            if st == "sub_active":
+                return {
+                    "conflict": "nidaan_sub_active",
+                    "title":    "You already have an active Nidaan plan",
+                    "title_hi": "आपका Nidaan प्लान पहले से सक्रिय है",
+                    "message":    "Sign in to your dashboard to manage your subscription.",
+                    "message_hi": "अपनी सदस्यता प्रबंधित करने के लिए डैशबोर्ड में साइन इन करें।",
+                    "primary_action": _act("Sign in", "साइन इन", "/nidaan/login"),
+                    "account_id": nidaan.get("account_id"),
+                }
+            if st in ("sub_cancelled", "no_sub"):
+                return {
+                    "conflict": st,
+                    "title":    "Welcome back",
+                    "title_hi": "वापस आने पर स्वागत है",
+                    "message":    "You already have a Nidaan account. Sign in to continue.",
+                    "message_hi": "आपका Nidaan खाता पहले से है। जारी रखने के लिए साइन इन करें।",
+                    "primary_action": _act("Sign in", "साइन इन", "/nidaan/login"),
+                    "account_id": nidaan.get("account_id"),
+                }
+        return None
+
+    if intent == "nidaan_login":
+        return None
+
+    return None
+
+
+async def classify_signup_conflict(*, email: str = "", phone: str = "",
+                                    google_sub: str = "",
+                                    intent: str) -> Optional[dict]:
+    """Top-level conflict detector used by every signup/login endpoint.
+    Looks at BOTH products' tables to detect cross-product conflicts.
+    google_sub (Google's `sub` claim) helps catch trial reuse where the
+    user re-registers with a slightly different email."""
+    sarathi = await find_existing_sarathi_tenant(
+        email=email, phone=phone, google_sub=google_sub)
+    nidaan = await find_existing_nidaan_account(email=email, phone=phone)
+    return _build_conflict_response(sarathi=sarathi, nidaan=nidaan, intent=intent)
+
+
 async def check_subscription_active(tenant_id: int) -> bool:
-    """Check if tenant's subscription is active (trial, active, or paid)."""
+    """Check if tenant's subscription is active (trial, active, paid, or Nidaan bundle)."""
     tenant = await get_tenant(tenant_id)
     if not tenant:
         return False
+    # Nidaan bundle: bundled_until takes priority regardless of subscription_status
+    bundled_until = tenant.get('bundled_until')
+    if bundled_until:
+        try:
+            from datetime import date as _date
+            if _date.fromisoformat(bundled_until) >= _date.today():
+                return True
+        except ValueError:
+            pass
     status = tenant.get('subscription_status', 'trial')
     if status in ('active', 'paid'):
         expires = tenant.get('subscription_expires_at')
@@ -3100,6 +4003,34 @@ async def was_greeting_sent_today(lead_id: int, greeting_type: str) -> bool:
         return await cursor.fetchone() is not None
 
 
+async def was_renewal_reminder_sent_today(policy_id: int, days_left: int) -> bool:
+    """Check if a renewal/EMI reminder for this policy at this day-window already
+    fired today. Prevents double-sends when the scheduler restarts mid-day or
+    multiple workers race. We piggy-back on greetings_log with a synthetic
+    lead_id (negated policy_id) and a type like 'renewal_T7d'."""
+    if not policy_id:
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            """SELECT 1 FROM greetings_log
+               WHERE lead_id=? AND type=? AND date(sent_at) = date('now')""",
+            (-int(policy_id), f"renewal_T{days_left}d"))
+        return await cursor.fetchone() is not None
+
+
+async def mark_renewal_reminder_sent(policy_id: int, agent_id: int, days_left: int,
+                                     channel: str = "whatsapp"):
+    """Record that we sent a renewal/EMI reminder so the same day doesn't double-fire."""
+    if not policy_id:
+        return
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT INTO greetings_log (lead_id, agent_id, type, channel)
+               VALUES (?, ?, ?, ?)""",
+            (-int(policy_id), agent_id, f"renewal_T{days_left}d", channel))
+        await conn.commit()
+
+
 # =============================================================================
 #  CALCULATOR SESSIONS
 # =============================================================================
@@ -3192,6 +4123,26 @@ async def get_all_active_agents() -> list:
 # =============================================================================
 #  AUDIT LOG
 # =============================================================================
+
+async def log_webhook_failure(endpoint: str, source_ip: str = "",
+                               reason: str = "", user_agent: str = "") -> None:
+    """Fire-and-forget logger for webhook signature/payload failures.
+    Read by biz_reminders' periodic monitor to alert the owner before any
+    external party (Razorpay etc.) hits its retry cap. user_agent is stored
+    so the monitor can filter our own smoke tests (curl) from real Razorpay
+    deliveries (UA: Razorpay-Webhook/v1)."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO webhook_failure_log (endpoint, source_ip, reason, user_agent) "
+                "VALUES (?, ?, ?, ?)",
+                (endpoint[:200], (source_ip or "")[:64],
+                 (reason or "")[:200], (user_agent or "")[:200]))
+            await conn.commit()
+    except Exception as e:
+        logging.getLogger("sarathi.db").warning(
+            "Could not log webhook failure for %s: %s", endpoint, e)
+
 
 async def log_audit(action: str, detail: str = None,
                     tenant_id: int = None, agent_id: int = None,
@@ -4592,10 +5543,84 @@ async def reverse_commission(referral_id: int, reason: str = 'chargeback') -> Op
                    WHERE affiliate_id = ?""",
                 (commission, ref['affiliate_id']))
         await conn.commit()
+        ref_tenant_id = None
+        try:
+            ref_tenant_id = ref['tenant_id']
+        except Exception:
+            pass
         await log_audit('commission_reversed',
                         f'Referral #{referral_id} reversed ({reason}), ₹{commission} deducted',
-                        tenant_id=ref.get('tenant_id'))
+                        tenant_id=ref_tenant_id)
         return {'referral_id': referral_id, 'amount_reversed': commission, 'reason': reason}
+
+
+# =============================================================================
+#  B4 — AFFILIATE CLAWBACK AUTOMATION (only fires when a refund is processed)
+# =============================================================================
+
+async def find_active_referral_for_tenant(tenant_id: int) -> Optional[dict]:
+    """Returns the latest non-reversed/non-refunded referral for a tenant,
+    or None. Used by the refund pipeline to know if a clawback is needed."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM affiliate_referrals "
+            "WHERE tenant_id = ? "
+            "AND COALESCE(status,'') NOT IN ('reversed','refunded','cancelled','clawback_owed') "
+            "ORDER BY created_at DESC LIMIT 1", (tenant_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def auto_clawback_for_refund(tenant_id: int,
+                                    reason: str = "refund_processed") -> Optional[dict]:
+    """Triggered when a Sarathi refund is processed. Decides whether to:
+       - Reverse an unpaid commission (deducts from affiliate.total_earned),
+         OR
+       - Mark a paid commission as 'clawback_owed' (SA must manually offset
+         from the affiliate's next payout).
+    Returns a dict summarising the action, or None if there's nothing to do.
+    """
+    ref = await find_active_referral_for_tenant(tenant_id)
+    if not ref:
+        return None
+    commission = float(ref.get("commission_amount") or 0)
+    referral_id = ref["referral_id"]
+    if not ref.get("paid"):
+        # Unpaid → reverse fully now
+        result = await reverse_commission(referral_id, reason=reason)
+        return {"action": "reversed", "referral_id": referral_id,
+                "amount": commission, **(result or {})}
+    # Paid → owe-back path; SA settles offset on next payout
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE affiliate_referrals "
+            "SET status='clawback_owed', payout_status='clawback_owed' "
+            "WHERE referral_id = ?", (referral_id,))
+        await conn.commit()
+    await log_audit(
+        "commission_clawback_owed",
+        f"Referral #{referral_id} marked clawback_owed (commission already paid, ₹{commission}) — reason: {reason}",
+        tenant_id=tenant_id)
+    return {"action": "clawback_owed", "referral_id": referral_id,
+            "amount": commission, "needs_sa_offset": True}
+
+
+async def list_clawbacks_owed(limit: int = 200) -> list[dict]:
+    """SA queue: paid commissions awaiting offset on next payout."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT r.referral_id, r.affiliate_id, r.tenant_id, r.commission_amount, "
+            "       r.plan_activated, r.converted_at, "
+            "       a.name AS affiliate_name, a.referral_code, "
+            "       t.firm_name "
+            "FROM affiliate_referrals r "
+            "LEFT JOIN affiliates a ON a.affiliate_id = r.affiliate_id "
+            "LEFT JOIN tenants t ON t.tenant_id = r.tenant_id "
+            "WHERE r.payout_status = 'clawback_owed' "
+            "ORDER BY r.converted_at DESC LIMIT ?", (limit,))
+        return [dict(r) for r in await cur.fetchall()]
 
 
 # =============================================================================
@@ -5486,7 +6511,9 @@ async def run_anomaly_scan() -> list:
 # =============================================================================
 
 async def auto_fix_expired_trials() -> list:
-    """Auto-deactivate tenants whose trial has expired. Returns list of fixed tenants."""
+    """Auto-deactivate tenants whose trial has expired. Returns list of fixed tenants.
+    B6: also stamps `lifetime_trial_used=1` so the user can't restart a fresh
+    trial with the same email/phone/Google identity."""
     fixed = []
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -5497,7 +6524,8 @@ async def auto_fix_expired_trials() -> list:
         rows = await cur.fetchall()
         for r in rows:
             await conn.execute(
-                "UPDATE tenants SET is_active=0, subscription_status='expired' WHERE tenant_id=?",
+                "UPDATE tenants SET is_active=0, subscription_status='expired', "
+                "lifetime_trial_used=1 WHERE tenant_id=?",
                 (r['tenant_id'],))
             fixed.append({"tenant_id": r['tenant_id'], "firm_name": r['firm_name'],
                           "trial_ends_at": r['trial_ends_at']})
@@ -6007,3 +7035,206 @@ async def get_last_interaction_for_lead(lead_id: int) -> dict:
             (lead_id,))
         row = await cursor.fetchone()
         return dict(row) if row else {}
+
+
+# =============================================================================
+#  ROLE-BASED ACCESS CONTROL (RBAC) — Team & Enterprise Plans
+# =============================================================================
+
+# All possible permission flags with English + Hindi labels
+ROLE_PERMISSIONS_ALL = {
+    "leads_view":       {"label": "View Leads",         "label_hi": "Leads देखना",         "default_agent": True},
+    "leads_view_all":   {"label": "View All Agents' Leads", "label_hi": "सभी Agents के Leads देखना", "default_agent": False},
+    "leads_add":        {"label": "Add Leads",          "label_hi": "Leads जोड़ना",          "default_agent": True},
+    "leads_edit":       {"label": "Edit Leads",         "label_hi": "Leads edit करना",      "default_agent": True},
+    "leads_delete":     {"label": "Delete Leads",       "label_hi": "Leads delete करना",    "default_agent": False},
+    "leads_export":     {"label": "Export Leads (CSV)", "label_hi": "Leads export करना",    "default_agent": False},
+    "quotes_generate":  {"label": "Generate Quotes",    "label_hi": "Quotes बनाना",          "default_agent": True},
+    "ai_tools":         {"label": "Use AI Tools",       "label_hi": "AI tools use करना",    "default_agent": True},
+    "campaigns_view":   {"label": "View Campaigns",     "label_hi": "Campaigns देखना",      "default_agent": False},
+    "campaigns_send":   {"label": "Send Campaigns",     "label_hi": "Campaigns भेजना",      "default_agent": False},
+    "drip_view":        {"label": "View Drip Sequences","label_hi": "Drip Sequences देखना", "default_agent": False},
+    "drip_manage":      {"label": "Manage Drip & Enrol","label_hi": "Drip manage करना",     "default_agent": False},
+    "reports_view":     {"label": "View Reports",       "label_hi": "Reports देखना",        "default_agent": False},
+    "payments_view":    {"label": "View Payments",      "label_hi": "Payments देखना",       "default_agent": False},
+    "team_manage":      {"label": "Manage Team Members","label_hi": "Team manage करना",     "default_agent": False},
+}
+
+# Predefined role templates (tenant admins can clone these)
+ROLE_TEMPLATES = {
+    "associate": {
+        "label": "Sales Associate",
+        "label_hi": "Sales Associate",
+        "permissions": {
+            "leads_view": True, "leads_add": True, "leads_edit": True,
+            "quotes_generate": True, "ai_tools": True,
+        },
+    },
+    "senior_associate": {
+        "label": "Senior Associate",
+        "label_hi": "Senior Associate",
+        "permissions": {
+            "leads_view": True, "leads_add": True, "leads_edit": True,
+            "leads_view_all": False, "quotes_generate": True, "ai_tools": True,
+            "campaigns_view": True,
+        },
+    },
+    "manager": {
+        "label": "Manager",
+        "label_hi": "Manager",
+        "permissions": {
+            "leads_view": True, "leads_view_all": True, "leads_add": True,
+            "leads_edit": True, "leads_export": True, "quotes_generate": True,
+            "ai_tools": True, "campaigns_view": True, "campaigns_send": True,
+            "drip_view": True, "reports_view": True,
+        },
+    },
+    "sub_admin": {
+        "label": "Sub-Admin",
+        "label_hi": "Sub-Admin",
+        "permissions": {
+            "leads_view": True, "leads_view_all": True, "leads_add": True,
+            "leads_edit": True, "leads_delete": True, "leads_export": True,
+            "quotes_generate": True, "ai_tools": True, "campaigns_view": True,
+            "campaigns_send": True, "drip_view": True, "drip_manage": True,
+            "reports_view": True, "payments_view": True,
+        },
+    },
+}
+
+# Default permissions for the built-in 'agent' role (no custom_roles entry needed)
+_DEFAULT_AGENT_PERMS = {k: v["default_agent"] for k, v in ROLE_PERMISSIONS_ALL.items()}
+# Owner / admin — always all permissions
+_ALL_PERMS = {k: True for k in ROLE_PERMISSIONS_ALL}
+
+
+async def get_tenant_roles(tenant_id: int) -> list:
+    """Return all roles for a tenant: system templates + custom ones created by this tenant.
+    Always includes the built-in owner/admin/agent rows for display purposes.
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM custom_roles WHERE tenant_id=? ORDER BY is_system DESC, created_at ASC",
+            (tenant_id,))
+        rows = [dict(r) for r in await cur.fetchall()]
+    import json as _j
+    for r in rows:
+        try:
+            r["permissions"] = _j.loads(r["permissions"])
+        except Exception:
+            r["permissions"] = {}
+    return rows
+
+
+async def create_custom_role(tenant_id: int, role_slug: str, role_label: str,
+                              role_label_hi: str, permissions: dict,
+                              is_system: int = 0) -> int:
+    """Create a custom role for a tenant. Returns new role_id."""
+    import json as _j
+    # Sanitize slug
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9_]", "_", role_slug.lower().strip())[:40]
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO custom_roles (tenant_id, role_slug, role_label, role_label_hi, permissions, is_system) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (tenant_id, slug, role_label.strip()[:60], role_label_hi.strip()[:60],
+             _j.dumps(permissions), is_system))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def update_custom_role(role_id: int, tenant_id: int, role_label: str = None,
+                              role_label_hi: str = None, permissions: dict = None) -> bool:
+    """Update label or permissions of an existing custom role."""
+    import json as _j
+    updates, params = [], []
+    if role_label is not None:
+        updates.append("role_label=?"); params.append(role_label.strip()[:60])
+    if role_label_hi is not None:
+        updates.append("role_label_hi=?"); params.append(role_label_hi.strip()[:60])
+    if permissions is not None:
+        updates.append("permissions=?"); params.append(_j.dumps(permissions))
+    if not updates:
+        return False
+    params += [role_id, tenant_id]
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            f"UPDATE custom_roles SET {','.join(updates)} WHERE role_id=? AND tenant_id=?",
+            params)
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def delete_custom_role(role_id: int, tenant_id: int) -> dict:
+    """Delete a custom role. Fails if any agents are currently assigned to it.
+    Returns {ok: bool, error?: str, affected?: int}."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        # Find the slug so we can check agents
+        cur = await conn.execute(
+            "SELECT role_slug, is_system FROM custom_roles WHERE role_id=? AND tenant_id=?",
+            (role_id, tenant_id))
+        row = await cur.fetchone()
+        if not row:
+            return {"ok": False, "error": "Role not found"}
+        if row["is_system"]:
+            # System templates can be removed from this tenant's list — that's allowed
+            pass
+        # Check if any agents use this role slug
+        cur2 = await conn.execute(
+            "SELECT COUNT(*) as cnt FROM agents a "
+            "JOIN tenants t ON t.tenant_id=a.tenant_id "
+            "WHERE t.tenant_id=? AND a.role=?",
+            (tenant_id, row["role_slug"]))
+        cnt = (await cur2.fetchone())["cnt"]
+        if cnt > 0:
+            return {"ok": False, "error": f"{cnt} agent(s) are still assigned this role — reassign them first"}
+        await conn.execute("DELETE FROM custom_roles WHERE role_id=? AND tenant_id=?",
+                           (role_id, tenant_id))
+        await conn.commit()
+        return {"ok": True}
+
+
+async def get_role_by_slug(tenant_id: int, role_slug: str) -> dict | None:
+    """Fetch a single custom role by slug (for this tenant)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM custom_roles WHERE tenant_id=? AND role_slug=?",
+            (tenant_id, role_slug))
+        row = await cur.fetchone()
+    if not row:
+        return None
+    import json as _j
+    r = dict(row)
+    try:
+        r["permissions"] = _j.loads(r["permissions"])
+    except Exception:
+        r["permissions"] = {}
+    return r
+
+
+async def get_agent_permissions(agent: dict) -> dict:
+    """Return the full permissions dict for an agent.
+    - owner / admin → all permissions True
+    - agent (no custom role) → default minimal set
+    - custom role slug → look up custom_roles table
+    """
+    role = (agent.get("role") or "agent").lower()
+    if role in ("owner", "admin"):
+        return dict(_ALL_PERMS)
+    tenant_id = agent.get("tenant_id", 0)
+    if not tenant_id or role == "agent":
+        return dict(_DEFAULT_AGENT_PERMS)
+    # Custom role — look up in DB
+    custom = await get_role_by_slug(tenant_id, role)
+    if not custom:
+        return dict(_DEFAULT_AGENT_PERMS)
+    # Merge: start from default, overlay with what's defined in the role
+    perms = dict(_DEFAULT_AGENT_PERMS)
+    perms.update({k: bool(v) for k, v in custom["permissions"].items()
+                  if k in ROLE_PERMISSIONS_ALL})
+    return perms
+

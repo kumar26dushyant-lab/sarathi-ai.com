@@ -16,7 +16,7 @@ Security features:
 
 import os, time, secrets, hashlib, hmac, logging, re
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Dict, Optional
 
 import jwt
 import bleach
@@ -25,6 +25,10 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger("sarathi.auth")
+
+# ── Telegram login token single-use blacklist (in-memory, max 5-min lifetime) ─
+# Maps jti → expiry_timestamp. Cleaned up lazily on each verify call.
+_tg_token_blacklist: Dict[str, float] = {}
 
 # ── Configuration ────────────────────────────────────────────────────────────
 JWT_SECRET = os.getenv("JWT_SECRET", "")
@@ -254,6 +258,37 @@ async def require_owner(
             status_code=403,
             detail="Only the firm owner can perform this action.")
     return tenant
+
+
+async def check_permission(agent: dict, permission: str) -> bool:
+    """Check if an agent has a specific RBAC permission.
+    agent dict must include 'role' and 'tenant_id'.
+    owner/admin always returns True. For custom roles, DB is consulted.
+    """
+    role = (agent.get("role") or "agent").lower()
+    if role in ("owner", "admin"):
+        return True
+    # Lazy import to avoid circular deps
+    import biz_database as _db
+    perms = await _db.get_agent_permissions(agent)
+    return bool(perms.get(permission, False))
+
+
+def require_permission(permission: str):
+    """FastAPI dependency factory: require a specific RBAC permission.
+    Usage: Depends(auth.require_permission("campaigns_send"))
+    """
+    async def _dep(
+        request: Request,
+        credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+    ) -> dict:
+        tenant = await get_current_tenant(request, credentials)
+        if not await check_permission(tenant, permission):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your role does not have '{permission}' access.")
+        return tenant
+    return _dep
 
 
 # ── OTP System ───────────────────────────────────────────────────────────────
@@ -527,7 +562,7 @@ async def require_admin(request: Request):
 
 def create_telegram_login_token(tenant_id: int, agent_id: int, phone: str,
                                  role: str = "agent", firm_name: str = "") -> str:
-    """Create a short-lived token for Telegram→Web login (5 min)."""
+    """Create a short-lived, single-use token for Telegram→Web login (5 min)."""
     now = int(time.time())
     payload = {
         "sub": str(tenant_id),
@@ -536,6 +571,7 @@ def create_telegram_login_token(tenant_id: int, agent_id: int, phone: str,
         "role": role,
         "firm": firm_name,
         "type": "tg_login",
+        "jti": secrets.token_urlsafe(16),  # unique ID for single-use enforcement
         "iat": now,
         "exp": now + 300,
     }
@@ -543,11 +579,26 @@ def create_telegram_login_token(tenant_id: int, agent_id: int, phone: str,
 
 
 def verify_telegram_login_token(token: str) -> dict:
-    """Verify a Telegram login token. Relies on 5-minute expiry for security."""
+    """Verify a Telegram login token. Enforces single-use via jti blacklist."""
     payload = decode_token(token)
     if payload.get("type") != "tg_login":
         raise HTTPException(status_code=401, detail="Invalid token type")
+    jti = payload.get("jti")
+    if not jti:
+        raise HTTPException(status_code=401, detail="Token missing jti — regenerate login link")
+    # Purge expired entries from blacklist
+    now = time.time()
+    expired_keys = [k for k, exp in _tg_token_blacklist.items() if exp < now]
+    for k in expired_keys:
+        del _tg_token_blacklist[k]
+    if jti in _tg_token_blacklist:
+        raise HTTPException(status_code=401, detail="Login link already used. Use /weblogin to generate a new one.")
     return payload
+
+
+def consume_telegram_login_token(jti: str, exp: int) -> None:
+    """Mark a Telegram login token jti as used (call after successful login)."""
+    _tg_token_blacklist[jti] = float(exp)
 
 
 # ── CSRF Protection ──────────────────────────────────────────────────────────

@@ -73,7 +73,7 @@ IST = pytz.timezone("Asia/Kolkata")
 #  DEVICE CREDENTIAL MANAGEMENT
 # =============================================================================
 
-async def generate_device_credentials(tenant_id: int, agent_id: int) -> dict:
+async def generate_device_credentials(tenant_id: int, agent_id: int, phone: str = "") -> dict:
     """
     Generate a new device token + HMAC key for an agent.
     Revokes any existing active device for this agent first.
@@ -111,6 +111,7 @@ async def generate_device_credentials(tenant_id: int, agent_id: int) -> dict:
         "t": token,
         "k": hmac_key,
         "u": ws_url,
+        "p": phone,           # advisor's phone for self-message detection
     }
     qr_data = base64.b64encode(json.dumps(qr_payload, separators=(",", ":")).encode()).decode()
 
@@ -412,6 +413,296 @@ def detect_takeover(message: str, keywords: list) -> Optional[str]:
 #  AI REPLY GENERATION
 # =============================================================================
 
+# ── Conversation history & lead context helpers ───────────────────────────────
+
+async def get_conversation_history(instance_id: int, phone: str, limit: int = 5) -> list:
+    """Return last `limit` messages for a conversation as list of dicts."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cur = await conn.execute(
+                "SELECT direction, content, sent_at FROM wa_messages "
+                "WHERE instance_id=? AND conversation_id=("
+                "  SELECT conversation_id FROM wa_conversations "
+                "  WHERE instance_id=? AND customer_phone=? LIMIT 1"
+                ") ORDER BY sent_at DESC LIMIT ?",
+                (instance_id, instance_id, phone, limit))
+            rows = await cur.fetchall()
+            return [{"role": "lead" if r["direction"] == "in" else "advisor",
+                     "text": r["content"] or "", "at": r["sent_at"]} for r in reversed(rows)]
+    except Exception as e:
+        logger.error("get_conversation_history error: %s", e)
+        return []
+
+
+async def get_lead_context_for_phone(tenant_id: int, phone: str) -> dict:
+    """Return lead profile (name, interest, budget, stage, past notes) matched by phone."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            # Match phone digits (last 10) against leads.phone or leads.whatsapp
+            digits = "".join(c for c in (phone or "") if c.isdigit())[-10:]
+            cur = await conn.execute(
+                "SELECT l.lead_id, l.name, l.phone, l.need_type, l.premium_budget, "
+                "l.stage, l.notes, l.city, l.occupation "
+                "FROM leads l JOIN agents a ON a.agent_id = l.agent_id "
+                "WHERE a.tenant_id=? AND ("
+                "  SUBSTR(REPLACE(REPLACE(l.phone,'+',''),' ',''),-10)=? OR "
+                "  SUBSTR(REPLACE(REPLACE(l.whatsapp,'+',''),' ',''),-10)=?"
+                ") ORDER BY l.created_at DESC LIMIT 1",
+                (tenant_id, digits, digits))
+            row = await cur.fetchone()
+            if not row:
+                return {}
+            lead = dict(row)
+            # Get last 3 interaction notes
+            cur2 = await conn.execute(
+                "SELECT type, summary, follow_up_date FROM interactions "
+                "WHERE lead_id=? ORDER BY created_at DESC LIMIT 3",
+                (lead["lead_id"],))
+            notes = await cur2.fetchall()
+            lead["past_notes"] = [{"type": n["type"], "summary": n["summary"],
+                                    "date": n["follow_up_date"]} for n in notes]
+            # Get last 3 active policies so the AI can answer "premium kab hai" /
+            # "claim status" / "renewal date" questions factually instead of
+            # escalating to the advisor.
+            cur3 = await conn.execute(
+                "SELECT policy_number, insurer, plan_name, policy_type, sum_insured, "
+                "premium, premium_mode, renewal_date, end_date, status "
+                "FROM policies WHERE lead_id=? AND status='active' "
+                "ORDER BY renewal_date ASC LIMIT 3",
+                (lead["lead_id"],))
+            polrows = await cur3.fetchall()
+            lead["policies"] = [{
+                "policy_number": p["policy_number"],
+                "insurer": p["insurer"],
+                "plan_name": p["plan_name"],
+                "type": p["policy_type"],
+                "sum_insured": p["sum_insured"],
+                "premium": p["premium"],
+                "premium_mode": p["premium_mode"],
+                "renewal_date": p["renewal_date"],
+                "end_date": p["end_date"],
+                "status": p["status"],
+            } for p in polrows]
+            return lead
+    except Exception as e:
+        logger.error("get_lead_context_for_phone error: %s", e)
+        return {}
+
+
+async def store_pending_reply(instance_id: int, lead_jid: str, lead_name: str,
+                               context: str, expires_minutes: int = 30) -> None:
+    """Store a pending advisor→lead reply context (advisor must reply within window)."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            # Invalidate any previous pending replies for this instance
+            await conn.execute(
+                "UPDATE wa_pending_reply SET used_at=datetime('now') "
+                "WHERE instance_id=? AND used_at IS NULL",
+                (instance_id,))
+            await conn.execute(
+                "INSERT INTO wa_pending_reply "
+                "(instance_id, lead_jid, lead_name, context, expires_at) "
+                "VALUES (?, ?, ?, ?, datetime('now', ? || ' minutes'))",
+                (instance_id, lead_jid, lead_name, context, str(expires_minutes)))
+            await conn.commit()
+    except Exception as e:
+        logger.error("store_pending_reply error: %s", e)
+
+
+async def pop_pending_reply(instance_id: int) -> dict | None:
+    """Get the most recent unexpired pending reply for this instance and mark it used."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cur = await conn.execute(
+                "SELECT pending_id, lead_jid, lead_name, context FROM wa_pending_reply "
+                "WHERE instance_id=? AND used_at IS NULL "
+                "AND datetime('now') < datetime(expires_at) "
+                "ORDER BY created_at DESC LIMIT 1",
+                (instance_id,))
+            row = await cur.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            await conn.execute(
+                "UPDATE wa_pending_reply SET used_at=datetime('now') WHERE pending_id=?",
+                (row["pending_id"],))
+            await conn.commit()
+            return result
+    except Exception as e:
+        logger.error("pop_pending_reply error: %s", e)
+        return None
+
+
+# ── Smart inbound classifier ──────────────────────────────────────────────────
+
+async def smart_inbound_handler(
+    text: str,
+    instance_id: int,
+    tenant_id: int,
+    phone: str,
+    sender_name: str,
+    firm_name: str,
+) -> dict:
+    """
+    Classify an inbound lead message and decide how to respond.
+
+    Returns:
+        {"action": "reply_lead",    "reply": str}
+        {"action": "alert_advisor", "alert": str, "lead_name": str}
+        {"action": "silent"}
+    """
+    from datetime import date as _date
+    today = _date.today().isoformat()
+
+    # Gather context in parallel
+    hist_task = asyncio.ensure_future(get_conversation_history(instance_id, phone, limit=5))
+    lead_task = asyncio.ensure_future(get_lead_context_for_phone(tenant_id, phone))
+    hist, lead = await asyncio.gather(hist_task, lead_task)
+
+    # Format conversation history
+    hist_text = ""
+    if hist:
+        lines = []
+        for m in hist:
+            role = "Lead" if m["role"] == "lead" else "Advisor/Bot"
+            lines.append(f"{role}: {m['text'][:200]}")
+        hist_text = "\n".join(lines)
+
+    # Format lead profile
+    lead_profile = ""
+    if lead:
+        lead_profile = (
+            f"Name: {lead.get('name', 'Unknown')}\n"
+            f"Interest: {lead.get('need_type', 'N/A')}\n"
+            f"Budget: {lead.get('premium_budget', 'N/A')}\n"
+            f"Stage: {lead.get('stage', 'N/A')}\n"
+            f"City: {lead.get('city', 'N/A')}\n"
+            f"Occupation: {lead.get('occupation', 'N/A')}\n"
+            f"Notes: {lead.get('notes', '')}\n"
+        )
+        if lead.get("past_notes"):
+            for n in lead["past_notes"]:
+                lead_profile += f"- [{n['type']}] {n['summary']} ({n['date']})\n"
+        # Inject active policies so AI can factually answer "premium kab hai",
+        # "renewal date", "what's my sum insured", etc., instead of escalating.
+        if lead.get("policies"):
+            lead_profile += "\n=== ACTIVE POLICIES (use this for factual answers) ===\n"
+            for p in lead["policies"]:
+                policy_line = (
+                    f"- {p.get('insurer', '')} {p.get('plan_name', '')} "
+                    f"({p.get('type', '')})"
+                )
+                if p.get("policy_number"):
+                    policy_line += f" #{p['policy_number']}"
+                if p.get("sum_insured"):
+                    policy_line += f" | Sum insured: ₹{int(p['sum_insured']):,}"
+                if p.get("premium"):
+                    mode = p.get("premium_mode", "annual")
+                    policy_line += f" | Premium: ₹{int(p['premium']):,}/{mode}"
+                if p.get("renewal_date"):
+                    policy_line += f" | Next renewal: {p['renewal_date']}"
+                elif p.get("end_date"):
+                    policy_line += f" | Ends: {p['end_date']}"
+                lead_profile += policy_line + "\n"
+
+    prompt = f"""You are a smart WhatsApp AI assistant for {firm_name}, an Indian insurance/financial advisory firm.
+Today: {today}
+
+=== LEAD PROFILE ===
+{lead_profile if lead_profile else "Unknown contact — not in CRM yet."}
+
+=== RECENT CONVERSATION (last 5 messages) ===
+{hist_text if hist_text else "No prior conversation."}
+
+=== NEW MESSAGE FROM LEAD ===
+{sender_name}: {text}
+
+=== YOUR TASK ===
+1. Classify this message:
+   - "business": insurance, investment, policy, claim, premium, EMI, renewal, meeting request, financial query
+   - "personal": greetings-only, personal chitchat, non-business, casual conversation
+   - "off_topic": spam, irrelevant, unclear
+
+2. If "business": attempt a helpful, accurate reply using the lead profile + conversation history.
+   - Use plain Indian English or Hinglish matching the lead's language
+   - Max 3 sentences. Be warm, professional.
+   - NEVER hallucinate policy terms, claim amounts, or guarantee outcomes
+   - If the lead is asking something specific you cannot answer accurately → set confident=false
+
+3. Return ONLY valid JSON:
+{{
+  "category": "business" | "personal" | "off_topic",
+  "confident": true | false,
+  "response": "<reply text for the lead if category=business and confident=true, else null>",
+  "advisor_alert": "<1-2 line plain summary for the advisor: what is this lead asking and why you could not answer, else null>"
+}}"""
+
+    try:
+        raw = await ai._ask_gemini(prompt, json_mode=True)
+        result = ai._clean_json(raw)
+        category = result.get("category", "off_topic")
+        confident = bool(result.get("confident", False))
+        response = result.get("response") or ""
+        advisor_alert = result.get("advisor_alert") or ""
+
+        if category in ("personal", "off_topic"):
+            logger.info("WA smart: silent (category=%s) from %s", category, phone)
+            return {"action": "silent"}
+
+        # Business message
+        if confident and response:
+            # Append footer
+            if "Powered by Sarathi-AI" not in response:
+                response = response.rstrip() + f"\n\n— {firm_name} 🙏\n_Powered by Sarathi-AI_"
+            return {"action": "reply_lead", "reply": response}
+        else:
+            # Not confident — alert advisor
+            lead_name = lead.get("name") if lead else (sender_name or phone)
+            alert = (
+                f"📨 *Lead message — action needed*\n\n"
+                f"👤 *{sender_name}* ({phone})\n"
+                f"💬 \"{text[:300]}\"\n\n"
+                + (f"🤖 _{advisor_alert}_\n\n" if advisor_alert else "")
+                + "👆 *Reply to this message to forward your reply to the lead.*\n"
+                "_Sarathi-AI_"
+            )
+            return {"action": "alert_advisor", "alert": alert,
+                    "lead_name": lead_name, "lead_jid": phone}
+    except Exception as e:
+        logger.error("smart_inbound_handler error: %s", e)
+        return {"action": "silent"}
+
+
+async def transcribe_wa_audio_inbound(audio_bytes: bytes) -> str:
+    """Transcribe an inbound lead voice note. Returns plain text or empty string."""
+    import os as _os
+    try:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+    except ImportError:
+        return ""
+    key = _os.getenv("GEMINI_API_KEY", "")
+    if not key or not audio_bytes:
+        return ""
+    try:
+        client = _genai.Client(api_key=key)
+        model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=[
+                _genai_types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"),
+                "Transcribe this voice note to plain text. Output only the transcription, nothing else.",
+            ],
+        )
+        return (response.text or "").strip()
+    except Exception as e:
+        logger.error("transcribe_wa_audio_inbound error: %s", e)
+        return ""
+
+
 async def get_customer_ai_reply(device: dict, sender_name: str, message: str,
                                 firm_name: str = "your advisor",
                                 agent_name: str = "the advisor") -> Optional[str]:
@@ -457,24 +748,39 @@ async def parse_crm_command(message: str, agent_id: int, tenant_id: int) -> dict
     Parse an agent's self-message (text or voice transcript) as a CRM command.
     Returns parsed intent dict.
     """
+    from datetime import date as _date
+    today = _date.today().isoformat()
     try:
         prompt = f"""You are a CRM assistant for an Indian insurance/financial advisor using Sarathi-AI.
 Parse this natural language message (may be Hindi, English, or Hinglish) into a structured CRM command.
+Today's date: {today}
 
 MESSAGE: "{message}"
 
 Return ONLY valid JSON:
 {{
-  "action": "<one of: create_lead | get_pipeline | get_tasks | get_followups | unknown>",
-  "name": "<person name if mentioned, else null>",
-  "phone": "<10-digit phone if mentioned, else null>",
+  "action": "<one of: create_lead | create_task | add_note | update_stage | get_pipeline | get_tasks | get_followups | unknown>",
+  "name": "<person/lead name if mentioned, else null>",
+  "phone": "<10-digit Indian mobile if mentioned, else null>",
   "city": "<city if mentioned, else null>",
   "interest": "<insurance/investment type if mentioned, else null>",
-  "budget": "<budget amount in words/numbers if mentioned, else null>",
+  "budget": "<budget amount if mentioned, else null>",
+  "stage": "<new stage for update_stage — one of: prospect|contacted|pitched|proposal_sent|negotiation|closed_won|closed_lost — else null>",
+  "task_type": "<for create_task: meeting|call|follow_up — else null>",
   "follow_up_date": "<YYYY-MM-DD if mentioned, else null>",
-  "notes": "<any additional notes, else null>",
+  "follow_up_time": "<HH:MM 24h if time mentioned, else null>",
+  "notes": "<summary/details of the note or task, else null>",
   "response_text": "<friendly Hindi/English confirmation of what you understood, 1-2 lines>"
-}}"""
+}}
+
+ACTION RULES:
+- create_lead: new prospect/client mentioned by name
+- create_task: schedule a meeting, call, or follow-up with an EXISTING lead
+- add_note: add a note/update about an existing lead
+- update_stage: move a lead to a new stage (won, lost, pitched, etc.)
+- get_pipeline: show pipeline summary
+- get_tasks / get_followups: show today's tasks
+- unknown: anything else"""
         raw = await ai._ask_gemini(prompt, json_mode=True)
         return ai._clean_json(raw)
     except Exception as e:
@@ -569,6 +875,230 @@ async def create_lead_from_command(agent_id: int, parsed: dict):
             await conn.commit()
     except Exception as e:
         logger.error("Create lead from WA command failed: %s", e)
+
+
+async def find_lead_by_name(agent_id: int, name: str) -> dict | None:
+    """Find a lead by partial name match for the given agent (most recent match)."""
+    if not name:
+        return None
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cur = await conn.execute(
+                "SELECT lead_id, name, phone, stage FROM leads "
+                "WHERE agent_id=? AND name LIKE ? ORDER BY created_at DESC LIMIT 1",
+                (agent_id, f"%{name}%"))
+            row = await cur.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        logger.error("find_lead_by_name error: %s", e)
+        return None
+
+
+async def create_task_from_command(agent_id: int, parsed: dict) -> dict:
+    """Create a follow-up task or meeting for an existing lead."""
+    name = parsed.get("name", "")
+    lead = await find_lead_by_name(agent_id, name)
+    if not lead:
+        return {"ok": False, "error": f"Lead '{name}' nahi mila pipeline mein. Pehle lead banayein."}
+    try:
+        task_type = (parsed.get("task_type") or "follow_up").lower()
+        if task_type not in ("meeting", "call", "follow_up", "other"):
+            task_type = "follow_up"
+        notes = parsed.get("notes") or f"{task_type.replace('_',' ').title()} scheduled via WhatsApp"
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO interactions "
+                "(lead_id, agent_id, type, channel, summary, follow_up_date, follow_up_time, "
+                "follow_up_status, created_by_agent_id, assigned_to_agent_id) "
+                "VALUES (?, ?, ?, 'wa_agent', ?, ?, ?, 'pending', ?, ?)",
+                (lead["lead_id"], agent_id, task_type, notes,
+                 parsed.get("follow_up_date"), parsed.get("follow_up_time"),
+                 agent_id, agent_id))
+            await conn.commit()
+        return {"ok": True, "lead": lead}
+    except Exception as e:
+        logger.error("create_task_from_command error: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+async def add_note_from_command(agent_id: int, parsed: dict) -> dict:
+    """Add a note/interaction to an existing lead."""
+    name = parsed.get("name", "")
+    lead = await find_lead_by_name(agent_id, name)
+    if not lead:
+        return {"ok": False, "error": f"Lead '{name}' nahi mila pipeline mein."}
+    try:
+        note_text = parsed.get("notes") or parsed.get("response_text") or "Note added via WhatsApp"
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO interactions "
+                "(lead_id, agent_id, type, channel, summary, follow_up_status, "
+                "created_by_agent_id, assigned_to_agent_id) "
+                "VALUES (?, ?, 'note', 'wa_agent', ?, 'done', ?, ?)",
+                (lead["lead_id"], agent_id, note_text, agent_id, agent_id))
+            await conn.commit()
+        return {"ok": True, "lead": lead}
+    except Exception as e:
+        logger.error("add_note_from_command error: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+async def update_stage_from_command(agent_id: int, parsed: dict) -> dict:
+    """Move a lead to a new stage."""
+    name = parsed.get("name", "")
+    lead = await find_lead_by_name(agent_id, name)
+    if not lead:
+        return {"ok": False, "error": f"Lead '{name}' nahi mila pipeline mein."}
+    valid_stages = ("prospect", "contacted", "pitched", "proposal_sent",
+                    "negotiation", "closed_won", "closed_lost")
+    stage = (parsed.get("stage") or "").lower().replace(" ", "_")
+    if stage not in valid_stages:
+        return {"ok": False, "error": f"Stage '{stage}' valid nahi hai."}
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE leads SET stage=?, updated_at=datetime('now') WHERE lead_id=? AND agent_id=?",
+                (stage, lead["lead_id"], agent_id))
+            await conn.commit()
+        return {"ok": True, "lead": lead, "new_stage": stage}
+    except Exception as e:
+        logger.error("update_stage_from_command error: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+_WA_VOICE_PROMPT = """You are a CRM assistant for an Indian insurance/financial advisor using Sarathi-AI.
+The advisor just sent a WhatsApp voice note to their own Saved Messages (self-chat) as a hands-free CRM command.
+Transcribe the audio and detect what they want to do.
+
+POSSIBLE ACTIONS:
+- create_lead   : new prospect/client (name, phone, details)
+- create_task   : schedule a meeting, call, or follow-up with an existing lead
+- add_note      : add a note/update about an existing lead
+- update_stage  : move a lead to a new stage (won, lost, pitched, etc.)
+- get_pipeline  : wants to see their pipeline/summary
+- get_tasks     : wants to see today's tasks/follow-ups
+- unknown       : unclear or general chat
+
+Return ONLY valid JSON:
+{
+  "transcript": "<what was said, cleaned up>",
+  "action": "<create_lead | create_task | add_note | update_stage | get_pipeline | get_tasks | unknown>",
+  "name": "<lead/person name if mentioned, else null>",
+  "phone": "<10-digit Indian mobile if mentioned, else null>",
+  "city": "<city if mentioned, else null>",
+  "interest": "<insurance/investment type if mentioned, else null>",
+  "budget": "<budget amount if mentioned, else null>",
+  "stage": "<new stage for update_stage: prospect|contacted|pitched|proposal_sent|negotiation|closed_won|closed_lost — else null>",
+  "task_type": "<for create_task: meeting|call|follow_up — else null>",
+  "follow_up_date": "<YYYY-MM-DD if mentioned, else null>",
+  "follow_up_time": "<HH:MM 24h format if time mentioned, else null>",
+  "notes": "<summary/details, else null>",
+  "response_text": "<friendly 1-line confirmation in same language as the voice note (Hindi/English/Hinglish)>"
+}
+
+Examples:
+- "Ramesh Sharma se kal meeting hai, 11 baje" → create_task, name=Ramesh Sharma, follow_up_date=tomorrow, follow_up_time=11:00, task_type=meeting
+- "naya client aaya, Suresh Patel, 9876543210, health insurance chahiye" → create_lead
+- "Priya ka stage update karo, proposal send kar diya" → update_stage, name=Priya, stage=proposal_sent
+- "Amit ke liye note add karo — premium quoted, 15000 annual" → add_note, name=Amit
+- "pipeline dikhao" → get_pipeline
+The advisor may speak Hindi, English, or Hinglish. Handle all naturally."""
+
+
+async def handle_wa_voice_note(audio_bytes: bytes, agent_id: int, tenant_id: int) -> dict:
+    """Transcribe a WhatsApp voice note using Gemini and parse as CRM command.
+
+    Returns a dict with keys: action, transcript, name, phone, response_text, ...
+    """
+    import os as _os
+    try:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+    except ImportError:
+        logger.error("google-genai not installed — voice note transcription unavailable")
+        return {"action": "unknown", "response_text": "AI library missing"}
+
+    key = _os.getenv("GEMINI_API_KEY", "")
+    if not key or not audio_bytes:
+        return {"action": "unknown", "response_text": ""}
+
+    try:
+        client = _genai.Client(api_key=key)
+        model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=[
+                _genai_types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"),
+                _WA_VOICE_PROMPT,
+            ],
+        )
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+        result = json.loads(raw)
+        logger.info("WA voice note transcribed: action=%s transcript='%s'",
+                    result.get("action"), (result.get("transcript") or "")[:80])
+        return result
+    except json.JSONDecodeError as e:
+        logger.error("WA voice JSON parse error: %s", e)
+        return {"action": "unknown", "response_text": "Could not understand the voice note"}
+    except Exception as e:
+        logger.error("WA voice transcription error: %s", e)
+        return {"action": "unknown", "response_text": str(e)[:100]}
+
+
+async def send_outbound_via_apk(tenant_id: int, agent_id: int,
+                                 to_phone: str, message: str) -> bool:
+    """
+    Send an outbound WhatsApp message to a lead via the connected APK.
+    The APK opens WhatsApp with the phone number and pre-filled message;
+    the agent sees it ready and taps Send once.
+
+    Used for: EMI reminders, policy renewals, birthday greetings, follow-ups.
+
+    If the device is offline, the message is queued in wa_agent_pending and
+    delivered the next time the APK connects.
+
+    Returns True if dispatched (live) or queued (offline).
+    """
+    payload = {
+        "type": "SEND_OUTBOUND",
+        "phone": to_phone,
+        "text": message,
+    }
+    try:
+        # Find active device for this agent/tenant
+        device = await get_device_status(tenant_id, agent_id)
+        if not device:
+            logger.debug("send_outbound_via_apk: no active device for tenant=%d agent=%d",
+                         tenant_id, agent_id)
+            return False
+
+        device_id = device["device_id"]
+        hmac_key = device["hmac_key"]
+
+        # Try live delivery first
+        ws = _live_connections.get(device_id)
+        if ws:
+            try:
+                envelope = _send_signed(payload, hmac_key)
+                await ws.send_text(envelope)
+                logger.info("SEND_OUTBOUND dispatched live: device=%d to=%s", device_id, to_phone)
+                return True
+            except Exception as e:
+                logger.warning("SEND_OUTBOUND live send failed: %s — queuing", e)
+
+        # Device offline — queue it
+        await queue_pending(device_id, "SEND_OUTBOUND", payload)
+        logger.info("SEND_OUTBOUND queued: device=%d to=%s", device_id, to_phone)
+        return True
+
+    except Exception as e:
+        logger.error("send_outbound_via_apk error tenant=%d: %s", tenant_id, e)
+        return False
 
 
 # =============================================================================
@@ -855,6 +1385,7 @@ async def handle_apk_event(device: dict, event: dict, ws,
     elif event_type == "AGENT_COMMAND":
         message = event.get("message", "").strip()
         msg_type = event.get("messageType", "text")
+        conv_id = event.get("conversationId", "")
         agent_phone = device.get("agent_phone", "")
 
         if not message:
@@ -883,10 +1414,14 @@ async def handle_apk_event(device: dict, event: dict, ws,
                 + (f"📅 Follow-up: {fu}" if fu else "")
             )
 
-        # Send result to agent's own WA number via APK
+        full_reply = f"🤖 *Sarathi CRM*\n\n{response_text}\n\n_Powered by Sarathi-AI_"
+
+        # Send result back into the SAME WhatsApp chat (via conversationId if available)
+        # The APK will use sendReply() to reply inside WA, falling back to local notification
         envelope = _send_signed({
             "type": "SEND_TO_SELF",
-            "text": f"🤖 *Sarathi CRM*\n\n{response_text}\n\n_Powered by Sarathi-AI_",
+            "conversationId": conv_id,   # APK uses this to reply back into WA chat
+            "text": full_reply,
         }, hmac_key)
         await ws.send_text(envelope)
         await log_conv(device_id, tenant_id, agent_name, agent_phone, "self", message,
@@ -960,9 +1495,9 @@ async def _get_agent_from_request(request) -> tuple:
                             agent_id = row["agent_id"]
                 except Exception:
                     pass
-        return tenant_id, agent_id
+        return tenant_id, agent_id, payload.get("phone", "")
     except Exception:
-        return 0, 0
+        return 0, 0, ""
 
 
 async def _get_firm_name(tenant_id: int) -> str:

@@ -48,3 +48,8 @@ gTTS>=2.5.0
 
 # Microsite QR codes (Feature 4)
 qrcode[pil]>=7.4.0
+
+# Video Studio — generates themed marketing reels (Team / Enterprise)
+moviepy>=2.0.0
+Pillow>=11.0.0
+python-multipart>=0.0.9

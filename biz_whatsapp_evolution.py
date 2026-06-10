@@ -36,18 +36,46 @@ _webhook_url: str = ""
 _webhook_token: str = ""
 _default_timeout = 20.0
 
+# Residential proxy config (optional — loaded from env)
+_proxy_host: str = ""
+_proxy_port: str = ""
+_proxy_username: str = ""
+_proxy_password: str = ""
+_proxy_protocol: str = "socks5"
+
 
 def init_evolution() -> None:
     """Read configuration from environment. Idempotent."""
     global _base_url, _api_key, _webhook_url, _webhook_token
+    global _proxy_host, _proxy_port, _proxy_username, _proxy_password, _proxy_protocol
     _base_url = os.getenv("EVOLUTION_API_URL", "").rstrip("/")
     _api_key = os.getenv("EVOLUTION_API_KEY", "")
     _webhook_url = os.getenv("EVOLUTION_WEBHOOK_URL", "")
     _webhook_token = os.getenv("EVOLUTION_WEBHOOK_TOKEN", "")
+    _proxy_host = os.getenv("WA_PROXY_HOST", "")
+    _proxy_port = os.getenv("WA_PROXY_PORT", "")
+    _proxy_username = os.getenv("WA_PROXY_USERNAME", "")
+    _proxy_password = os.getenv("WA_PROXY_PASSWORD", "")
+    _proxy_protocol = os.getenv("WA_PROXY_PROTOCOL", "socks5")
     if is_enabled():
-        logger.info("✅ Evolution API client ready: %s", _base_url)
+        proxy_status = f" (proxy: {_proxy_host}:{_proxy_port})" if _proxy_host else " (no proxy)"
+        logger.info("\u2705 Evolution API client ready: %s%s", _base_url, proxy_status)
     else:
-        logger.info("⏸️  Evolution API not configured (EVOLUTION_API_URL/KEY missing)")
+        logger.info("\u23f8\ufe0f  Evolution API not configured (EVOLUTION_API_URL/KEY missing)")
+
+
+def proxy_config() -> dict:
+    """Return the residential proxy config dict, or empty dict if not configured."""
+    if _proxy_host and _proxy_port:
+        return {
+            "enabled": True,
+            "host": _proxy_host,
+            "port": _proxy_port,
+            "protocol": _proxy_protocol,
+            "username": _proxy_username,
+            "password": _proxy_password,
+        }
+    return {}
 
 
 def is_enabled() -> bool:
@@ -93,17 +121,31 @@ async def _request(method: str, path: str, *, json: Optional[dict] = None,
 #  Instance lifecycle
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def create_instance(instance_name: str, *, tenant_id: int) -> dict:
+async def create_instance(instance_name: str, *, tenant_id: int,
+                          qrcode: bool = True, number: str = "") -> dict:
     """
     Create a new Baileys instance. The instance_name MUST be unique
     across all tenants (use e.g. "sarathi_t{tenant_id}").
     Webhook is auto-registered if EVOLUTION_WEBHOOK_URL is set.
+    Set qrcode=False and number=E164 when requesting pairing-code mode.
     """
     payload: dict[str, Any] = {
         "instanceName": instance_name,
-        "qrcode": True,
+        "qrcode": qrcode,
         "integration": "WHATSAPP-BAILEYS",
+        # Mimic a real Windows/Chrome desktop — reduces IP-reputation 401 rejections
+        # from WhatsApp's fingerprint check during the pairing handshake.
+        # Format: [OS, Browser, Version] matching Baileys Browsers.windows("Chrome")
+        "browser": ["Windows", "Chrome", "126.0.0.0"],
     }
+    # Embed proxy in the create payload so Baileys is configured BEFORE it opens
+    # the WebSocket — calling proxy/set after create is a race condition because
+    # Baileys starts connecting immediately on instance creation.
+    cfg = proxy_config()
+    if cfg:
+        payload["proxy"] = cfg
+    if number:
+        payload["number"] = number
     if _webhook_url:
         payload["webhook"] = {
             "url": _webhook_url,
@@ -119,6 +161,22 @@ async def create_instance(instance_name: str, *, tenant_id: int) -> dict:
             "headers": {"X-Sarathi-Webhook-Token": _webhook_token} if _webhook_token else {},
         }
     return await _request("POST", "/instance/create", json=payload)
+
+
+async def set_instance_proxy(instance_name: str) -> dict:
+    """
+    Apply the residential proxy to a Baileys instance via Evolution API.
+    Must be called BEFORE connect_instance or request_pairing_code so that
+    the WhatsApp WebSocket handshake goes through the residential IP.
+    No-op if WA_PROXY_HOST is not configured.
+    """
+    cfg = proxy_config()
+    if not cfg:
+        logger.info("No proxy configured — skipping proxy setup for %s", instance_name)
+        return {"ok": True, "skipped": True}
+    result = await _request("POST", f"/proxy/set/{instance_name}", json=cfg)
+    logger.info("Proxy set for %s → %s", instance_name, result)
+    return result
 
 
 async def connect_instance(instance_name: str) -> dict:
@@ -157,7 +215,11 @@ async def list_instances() -> list:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _normalize_phone(phone: str) -> str:
-    """Normalize phone for Evolution: digits only, default +91 if 10-digit."""
+    """Normalize phone for Evolution: digits only, default +91 if 10-digit.
+    If the input already contains '@' (a full JID like xxx@lid or xxx@s.whatsapp.net),
+    pass it through unchanged so Evolution routes it correctly."""
+    if "@" in (phone or ""):
+        return phone
     digits = "".join(c for c in (phone or "") if c.isdigit())
     if len(digits) == 10:
         digits = "91" + digits
@@ -226,6 +288,56 @@ async def mark_read(instance_name: str, remote_jid: str, message_id: str) -> dic
     return await _request("POST", f"/chat/markMessageAsRead/{instance_name}", json=payload)
 
 
+async def get_media_base64(instance_name: str, message_key: dict) -> bytes:
+    """Download a media message (audio/image/video) from Evolution API.
+
+    Returns raw bytes on success, empty bytes on failure.
+    message_key is the 'key' dict from the Evolution webhook message object.
+    """
+    result = await _request(
+        "POST", f"/chat/getBase64FromMediaMessage/{instance_name}",
+        json={"message": {"key": message_key}, "convertToMp4": False},
+        timeout=30.0,
+    )
+    b64 = (result.get("base64") or
+           (result.get("data") or {}).get("base64") or "")
+    if not b64:
+        return b""
+    import base64
+    try:
+        return base64.b64decode(b64)
+    except Exception:
+        return b""
+
+
+async def send_status_image(instance_name: str, image_path: str,
+                            caption: str = "") -> dict:
+    """
+    Post an image to the advisor's WhatsApp Status (Story/Status broadcast).
+    image_path may be:
+      - An absolute filesystem path (encoded as base64)
+      - A public URL (used directly)
+    Uses Evolution API POST /status/send/{instance}.
+    """
+    import base64
+    from pathlib import Path as _Path
+
+    payload: dict[str, Any] = {"type": "image"}
+    if caption:
+        payload["caption"] = caption
+
+    p = _Path(image_path) if not image_path.startswith("http") else None
+    if p and p.exists():
+        # Read file and send as base64
+        img_bytes = p.read_bytes()
+        payload["content"] = base64.b64encode(img_bytes).decode()
+    else:
+        # Use URL directly
+        payload["content"] = image_path
+
+    return await _request("POST", f"/status/send/{instance_name}", json=payload)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Webhook validation helper
 # ─────────────────────────────────────────────────────────────────────────────
@@ -260,3 +372,21 @@ def build_instance_name(tenant_id: int, agent_id: Optional[int] = None) -> str:
     if agent_id:
         return f"sarathi_t{tenant_id}_a{agent_id}"
     return f"sarathi_t{tenant_id}"
+
+
+async def request_pairing_code(instance_name: str, phone_number: str = "") -> dict:
+    """
+    Poll Evolution for a WhatsApp pairing code.
+    The instance must have been created with qrcode=False and number set.
+    Evolution v2.2.3: GET /instance/connect/{name} returns {"code":"ABCD-1234"}
+    once Baileys has connected to WA and WA has issued the pairing code.
+    Returns {"count": 0} while still waiting (caller should retry).
+    """
+    params = {}
+    if phone_number:
+        digits = "".join(c for c in phone_number if c.isdigit())
+        if len(digits) == 10:
+            digits = "91" + digits
+        params["number"] = digits
+    return await _request("GET", f"/instance/connect/{instance_name}",
+                          params=params if params else None)

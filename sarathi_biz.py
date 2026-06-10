@@ -17,10 +17,12 @@ import json
 import logging
 import os
 import platform
+import random
 import signal
 import subprocess
 import sys
 import time as _time
+import uuid
 from pathlib import Path
 
 import aiosqlite
@@ -287,8 +289,25 @@ async def onboarding_page():
 def _nidaan_page(filename: str) -> HTMLResponse:
     f = static_dir / filename
     if f.exists():
-        return HTMLResponse(f.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            f.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate",
+                     "Pragma": "no-cache", "Expires": "0"})
     return HTMLResponse(f"<h1>{filename} not found</h1>", status_code=404)
+
+
+def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
+    """Serve nidaan_ops.html with intended_role injected as a JS variable.
+    The frontend enforces that the logged-in user's role matches this role.
+    """
+    f = static_dir / "nidaan_ops.html"
+    if not f.exists():
+        return HTMLResponse("<h1>nidaan_ops.html not found</h1>", status_code=404)
+    html = f.read_text(encoding="utf-8")
+    # Inject intended_role before closing </head> tag
+    inject = f'<script>window._INTENDED_ROLE = "{role}";</script>'
+    html = html.replace("</head>", inject + "\n</head>", 1)
+    return HTMLResponse(html)
 
 
 def _nidaan_bearer(request: Request) -> Optional[dict]:
@@ -362,6 +381,7 @@ class NidaanSignupReq(BaseModel):
     email: str
     phone: str
     password: str
+    email_otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
     firm_name: str = ""
     plan: str = "silver"
 
@@ -381,6 +401,8 @@ class NidaanClaimReq(BaseModel):
     disputed_amount: Optional[int] = None
     claim_event_date: Optional[str] = None
     notes_from_agent: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
 
 
 class NidaanSendOTPReq(BaseModel):
@@ -420,21 +442,25 @@ async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
 async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    # Plan is now optional at signup — advisors can subscribe later from dashboard
-    allowed_plans = ("silver", "gold", "platinum", "free", "")
+    email = auth.sanitize_email(body.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    # Verify email OTP before creating account — prevents fake email registrations
+    if not auth.verify_email_otp(email, body.email_otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code. Please request a new OTP.")
     plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     account_id = await nidaan.create_account(
         owner_name=body.owner_name.strip(),
-        email=body.email.strip(),
+        email=email,
         phone=body.phone.strip(),
         password=body.password,
         firm_name=body.firm_name.strip(),
     )
     if account_id is None:
         raise HTTPException(status_code=409, detail="Email already registered")
-    token = nidaan.create_nidaan_token(account_id, body.email.lower().strip(), plan)
+    token = nidaan.create_nidaan_token(account_id, email, plan)
     import asyncio as _asyncio
     _asyncio.create_task(email_svc.send_email(
         to_email=body.email.strip(),
@@ -463,6 +489,10 @@ async def nidaan_api_login(body: NidaanLoginReq, request: Request):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     sub = await nidaan.get_active_subscription(account["account_id"])
     plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     return {
         "access_token": token,
@@ -477,6 +507,42 @@ async def nidaan_api_login(body: NidaanLoginReq, request: Request):
 
 
 # ── Email OTP login (Nidaan) ──────────────────────────────────────────────────
+
+@app.post("/nidaan/api/send-verify-otp")
+@limiter.limit("5/minute")
+async def nidaan_api_send_verify_otp(req: NidaanSendOTPReq, request: Request):
+    """Send a 6-digit OTP to any email — for pre-signup/review email verification.
+    Does NOT require an existing account (unlike send-email-otp).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)
+    otp_code = result["otp"]
+    logger.info("📧 Nidaan Verify OTP (pre-signup) for %s***", email[:3])
+    # Fetch name if account exists, else use generic greeting
+    account = await nidaan.get_account_by_email(email)
+    name = account.get("owner_name", "") if account else ""
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, name)
+    if not sent:
+        return JSONResponse({"detail": "Could not send verification email right now. Please try again in a few minutes.", "code": "email_failed"}, status_code=503)
+    resp = {
+        "status": "otp_sent",
+        "email": email[:3] + "***" + email[email.index("@"):],
+        "expires_in": result["expires_in"],
+        "account_exists": account is not None,
+    }
+    if os.getenv("ENVIRONMENT", "").lower() == "development":
+        resp["_dev_otp"] = otp_code
+    return resp
+
 
 @app.post("/nidaan/api/send-email-otp")
 @limiter.limit("5/minute")
@@ -502,7 +568,7 @@ async def nidaan_api_send_email_otp(req: NidaanSendOTPReq, request: Request):
     logger.info("📧 Nidaan Email OTP for %s***", email[:3])
     sent = await email_svc.send_nidaan_otp_email(email, otp_code, account.get("owner_name", ""))
     if not sent:
-        return JSONResponse({"detail": "Failed to send OTP email. Please try again."}, status_code=503)
+        return JSONResponse({"detail": "Could not send OTP email right now. Please use Password login or try again in a few minutes.", "code": "email_failed"}, status_code=503)
     resp = {
         "status": "otp_sent",
         "email": email[:3] + "***" + email[email.index("@"):],
@@ -534,6 +600,10 @@ async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request)
         return JSONResponse({"detail": "Account not found"}, status_code=404)
     sub = await nidaan.get_active_subscription(account["account_id"])
     plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Email OTP Login: account %d (%s)", account["account_id"], email)
     return {
@@ -580,6 +650,10 @@ async def nidaan_api_reset_password(req: NidaanResetPasswordReq, request: Reques
     # Auto sign-in after reset
     sub = await nidaan.get_active_subscription(account["account_id"])
     plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Password Reset: account %d (%s)", account["account_id"], email)
     return {
@@ -623,6 +697,10 @@ async def nidaan_api_google_signin(req: NidaanGoogleReq, request: Request):
         }, status_code=404)
     sub = await nidaan.get_active_subscription(account["account_id"])
     plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Google Login: account %d (%s)", account["account_id"], email)
     return {
@@ -644,7 +722,7 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     if req.plan not in ("silver", "gold", "platinum"):
-        raise HTTPException(status_code=400, detail="Invalid plan")
+        req = req.model_copy(update={"plan": "silver"})  # default to silver for any unknown/free plan
     google_user = await auth.verify_google_id_token(req.credential)
     if not google_user:
         return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
@@ -694,6 +772,7 @@ async def nidaan_api_me(request: Request):
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     sub = await nidaan.get_active_subscription(account["account_id"])
+    per_claim = await nidaan.get_per_claim_status(account["account_id"])
     return {
         "account_id": account["account_id"],
         "owner_name": account["owner_name"],
@@ -702,6 +781,7 @@ async def nidaan_api_me(request: Request):
         "phone": account["phone"],
         "status": account["status"],
         "subscription": dict(sub) if sub else None,
+        "per_claim": per_claim,
     }
 
 
@@ -730,6 +810,11 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    # Server-side subscription gate — do not rely on client-side lock alone
+    _sub_check = await nidaan.get_active_subscription(payload["sub"])
+    _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
+    if not _sub_check and not (_per_claim_check and _per_claim_check.get("status") == "paid"):
+        raise HTTPException(status_code=402, detail="Active subscription required to submit a claim. Please subscribe at nidaanpartner.com")
     if not body.claim_type or not body.insured_name or not body.insured_phone:
         raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
     claim_id, reason = await nidaan.submit_claim(
@@ -744,9 +829,37 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         disputed_amount=body.disputed_amount,
         claim_event_date=body.claim_event_date,
         notes_from_agent=body.notes_from_agent,
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
+    # Phase 3+4: auto-create initial review task + fan out claim-filed notification.
+    try:
+        _create_flag = await ntasks.get_flag("auto_create_initial_task", "1")
+        if ntasks._flag_truthy(_create_flag):
+            new_task_id = await ntasks.create_task(
+                claim_id=claim_id,
+                title=f"Initial review of {body.insured_name}'s {body.claim_type} claim",
+                description=(body.notes_from_agent or "")[:400],
+                status_slug="initial_review",
+                priority="normal",
+                created_by_staff_id=None,
+            )
+            # Phase 4: notify assignee (if auto-assigned)
+            try:
+                import biz_nidaan_notifications as nnot
+                asyncio.create_task(nnot.on_task_assigned(new_task_id))
+            except Exception:
+                pass
+    except Exception as _te:
+        logger.warning("Auto-task create failed for claim %s: %s", claim_id, _te)
+    # Phase 4: notify subscriber + admins of new claim
+    try:
+        import biz_nidaan_notifications as nnot
+        asyncio.create_task(nnot.on_claim_filed(claim_id, payload["sub"]))
+    except Exception:
+        pass
     # Notify admin of new claim (non-blocking)
     _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
     if _admin_email:
@@ -768,7 +881,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     return {"claim_id": claim_id, "status": "intimated"}
 
 
-# ── Review Request (₹999 per-claim, no subscription) ──────────────────────────
+# ── Review Request (₹499 per-claim, no subscription) ──────────────────────────
 
 class NidaanReviewReq(BaseModel):
     advisor_name: str
@@ -780,10 +893,549 @@ class NidaanReviewReq(BaseModel):
     disputed_amount: Optional[int] = None
     notes: str = ""
     review_type: str = "per_claim_999"
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+
+
+class NidaanReviewSignupReq(BaseModel):
+    """Direct-insured signup: submit claim details first, pay later from dashboard."""
+    name: str
+    phone: str
+    email: str
+    otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+
+
+class NidaanReviewPayByIdReq(BaseModel):
+    """Create Razorpay order for a specific pending purchase (dashboard-initiated)."""
+    purchase_id: int
+
+
+class NidaanReviewVerifyByIdReq(BaseModel):
+    """Verify Razorpay payment for a specific purchase_id."""
+    purchase_id: int
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/api/review-signup")
+@limiter.limit("5/minute")
+async def nidaan_review_signup(body: NidaanReviewSignupReq, request: Request):
+    """Direct-insured signup: verify email OTP → create account + pending purchase → issue JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not body.name.strip() or not body.phone.strip() or not body.email.strip():
+        raise HTTPException(status_code=400, detail="name, phone, email are required")
+    if not body.claim_type:
+        raise HTTPException(status_code=400, detail="claim_type is required")
+    email = auth.sanitize_email(body.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    # Verify OTP before creating account — prevents fake email submissions
+    if not auth.verify_email_otp(email, body.otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code. Please request a new OTP.")
+    result = await nidaan.create_review_signup(
+        name=body.name,
+        phone=body.phone,
+        email=body.email,
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name,
+        disputed_amount=body.disputed_amount,
+        notes=body.notes,
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+    )
+    token = nidaan.create_nidaan_token(result["account_id"], body.email.strip().lower(), "per_claim")
+    import asyncio as _asyncio_rs
+    # Notify ops team of new pending review lead
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if admin_email:
+        _asyncio_rs.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] New ₹499 Review Lead #{result['purchase_id']} — Pending Payment",
+            html_body=(
+                f"<p><b>Name:</b> {body.name} | <b>Phone:</b> {body.phone} | <b>Email:</b> {body.email}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Description:</b> {body.notes or '—'}</p>"
+                f"<p><b>Status:</b> PENDING PAYMENT — follow up in 2–3 days if not paid.</p>"
+                f"<p>Purchase ID: #{result['purchase_id']} | New account: {'Yes' if result['is_new'] else 'No'}</p>"
+            ),
+        ))
+    # Send welcome/login instructions email to the new user
+    login_url = "https://nidaanpartner.com/nidaan/login"
+    _asyncio_rs.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Your Nidaan Claim Dashboard is Ready — How to Log Back In",
+        html_body=(
+            f"<p>Hi {body.name},</p>"
+            f"<p>Your claim has been submitted successfully! You can view your dashboard and complete the ₹499 payment at any time.</p>"
+            f"<p><b>How to log back in:</b><br>"
+            f"Visit <a href='{login_url}'>{login_url}</a> and use <b>Email OTP</b> — "
+            f"enter your email ({email}), click 'Send OTP', and use the code sent to your inbox. No password needed.</p>"
+            f"<p>Your dashboard: <a href='https://nidaanpartner.com/nidaan/dashboard'>https://nidaanpartner.com/nidaan/dashboard</a></p>"
+            f"<p>— Nidaan Team</p>"
+        ),
+    ))
+    return {
+        "token": token,
+        "purchase_id": result["purchase_id"],
+        "account_id": result["account_id"],
+        "is_new_account": result["is_new"],
+        "dashboard_url": "/nidaan/dashboard",
+    }
+
+
+@app.post("/nidaan/api/review/{purchase_id}/pay")
+@limiter.limit("10/minute")
+async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
+    """Authenticated: create Razorpay order for a specific pending purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    # Validate purchase belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT * FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, payload["sub"]),
+        )
+        purchase = await _cur.fetchone()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    if purchase["status"] != "pending_payment":
+        raise HTTPException(status_code=400, detail=f"Purchase is already '{purchase['status']}'")
+    import httpx as _httpx2, time as _time2
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
+    async with _httpx2.AsyncClient() as _client2:
+        _r = await _client2.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": 49900, "currency": "INR", "receipt": receipt,
+                  "notes": {"product": "nidaan_review_999", "purchase_id": str(purchase_id)}},
+            timeout=20.0,
+        )
+        result = _r.json()
+    if "id" not in result:
+        err = result.get("error", {}).get("description", "Order creation failed")
+        raise HTTPException(status_code=502, detail=err)
+    return {"order_id": result["id"], "amount": 49900, "currency": "INR", "razorpay_key_id": rzp_key_id}
+
+
+@app.post("/nidaan/api/review/{purchase_id}/pay-verify")
+@limiter.limit("5/minute")
+async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByIdReq, request: Request):
+    """Authenticated: verify Razorpay payment and mark purchase as paid."""
+    import hmac as _hm, hashlib as _hs2, asyncio as _asyncio_pv
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if body.purchase_id != purchase_id:
+        raise HTTPException(status_code=400, detail="purchase_id mismatch")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    # Verify Razorpay HMAC signature
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(rzp_key_secret.encode(), _msg, _hs2.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT * FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, payload["sub"]),
+        )
+        purchase = await _cur.fetchone()
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Purchase not found")
+        if purchase["status"] != "pending_payment":
+            return {"status": purchase["status"], "message": "Already processed"}
+        await _conn.execute(
+            "UPDATE nidaan_per_claim_purchase SET status='paid', reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=?",
+            (purchase_id,),
+        )
+        await _conn.commit()
+    # Email ops team
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if admin_email:
+        _asyncio_pv.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] ₹499 Review PAID #{purchase_id} — Begin Review",
+            html_body=(
+                f"<p><b>Name:</b> {purchase['advisor_name']} | <b>Phone:</b> {purchase['advisor_phone']} | <b>Email:</b> {purchase['advisor_email']}</p>"
+                f"<p><b>Claim type:</b> {purchase['claim_type']} | <b>Insurer:</b> {purchase['insurer_name'] or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{purchase['disputed_amount'] or 'N/A'}</p>"
+                f"<p><b>Description:</b> {purchase['brief_description'] or '—'}</p>"
+                f"<p><b>Payment ID:</b> {body.razorpay_payment_id} | <b>Status: PAID ✅</b></p>"
+                f"<p>Proceed with legal review. Purchase ID: #{purchase_id}</p>"
+            ),
+        ))
+    # Confirmation to customer
+    _asyncio_pv.create_task(email_svc.send_email(
+        to_email=purchase["advisor_email"],
+        subject="Payment confirmed — Your ₹499 claim review is underway",
+        html_body=(
+            f"<p>Hi {purchase['advisor_name']},</p>"
+            f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for your "
+            f"<b>{purchase['claim_type']}</b> claim.</p>"
+            f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
+            f"<p>Reference: <b>#{purchase_id}</b> | Payment: {body.razorpay_payment_id}</p>"
+            f"<p>You can track status on your <a href='https://nidaanpartner.com/nidaan/dashboard'>Nidaan Dashboard</a>.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    return {"status": "paid", "purchase_id": purchase_id, "message": "Payment confirmed. Review will be delivered within 48–72 hours."}
+
+
+# ── Document upload (customer) ────────────────────────────────────────────────
+
+_ALLOWED_MIME = {
+    "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+_NIDAAN_DOCS_DIR = Path(__file__).parent / "uploads" / "nidaan-docs"
+_NIDAAN_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+_MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@app.post("/nidaan/api/review/{purchase_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: list[UploadFile] = File(...)):
+    """Authenticated: upload supporting documents for a ₹499 review purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    # Verify purchase belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Review not found")
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
+        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id,
+            stored_name=stored_name,
+            original_name=f.filename or stored_name,
+            file_size=len(content),
+            mime_type=f.content_type or "",
+            purchase_id=purchase_id,
+        )
+        saved.append({"doc_id": doc_id, "original_name": f.filename, "size": len(content)})
+    return {"uploaded": saved, "count": len(saved)}
+
+
+@app.post("/nidaan/api/claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_upload_claim_doc(claim_id: int, request: Request, files: list[UploadFile] = File(...)):
+    """Authenticated: upload supporting documents for a regular claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    # Verify claim belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Claim not found")
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
+        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id,
+            stored_name=stored_name,
+            original_name=f.filename or stored_name,
+            file_size=len(content),
+            mime_type=f.content_type or "",
+            claim_id=claim_id,
+        )
+        saved.append({"doc_id": doc_id, "original_name": f.filename, "size": len(content)})
+    return {"uploaded": saved, "count": len(saved)}
+
+
+@app.get("/nidaan/ops/api/review-requests/{purchase_id}/documents")
+async def ops_get_review_docs(purchase_id: int, request: Request):
+    """Staff: get uploaded documents for a ₹499 review purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
+    # Add download URL for each doc
+    for d in docs:
+        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+    return {"docs": docs}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/documents")
+async def ops_get_claim_docs(claim_id: int, request: Request):
+    """Staff: get uploaded documents for a regular claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+    return {"docs": docs}
+
+
+@app.get("/nidaan/api/claims/{claim_id}/documents")
+async def nidaan_get_claim_docs(claim_id: int, request: Request):
+    """Customer: fetch documents they uploaded for one of their own claims."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+    return {"docs": docs}
+
+
+@app.get("/nidaan/api/review/{purchase_id}/documents")
+async def nidaan_get_review_docs(purchase_id: int, request: Request):
+    """Customer: fetch documents they uploaded for one of their own ₹499 reviews."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Review not found")
+    docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
+    for d in docs:
+        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+    return {"docs": docs}
+
+
+class NidaanReviewPayReq(BaseModel):
+    """Create a Razorpay order for ₹499 review — payment first, review created after."""
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+
+
+class NidaanReviewVerifyReq(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    # Form data repeated for server-side creation after payment verified
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+
+
+@app.post("/nidaan/api/review-request/pay")
+@limiter.limit("5/minute")
+async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
+    """Create a Razorpay order for ₹499 review payment. Public endpoint."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import httpx as _httpx, time as _time
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    receipt = f"nidaan_review_{int(_time.time())}"[:40]
+    async with _httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={
+                "amount": 49900,   # ₹499 in paise
+                "currency": "INR",
+                "receipt": receipt,
+                "notes": {
+                    "product": "nidaan_review",
+                    "advisor_email": body.advisor_email[:100],
+                    "insured_name": body.insured_name[:100],
+                    "claim_type": body.claim_type,
+                },
+            },
+            timeout=20.0,
+        )
+        result = r.json()
+    if "id" not in result:
+        err = result.get("error", {}).get("description", "Order creation failed")
+        raise HTTPException(status_code=502, detail=err)
+    return {
+        "order_id": result["id"],
+        "amount": 49900,
+        "currency": "INR",
+        "razorpay_key_id": rzp_key_id,
+    }
+
+
+@app.post("/nidaan/api/review-request/verify")
+@limiter.limit("5/minute")
+async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
+    """Verify ₹499 Razorpay payment, then create the review request. Idempotent."""
+    import hmac as _hmac_mod, hashlib as _hs, asyncio as _asyncio
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    # Verify Razorpay signature
+    msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    expected = _hmac_mod.new(rzp_key_secret.encode(), msg, _hs.sha256).hexdigest()
+    if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Find or create Nidaan account → gives this advisor dashboard access
+    email = body.advisor_email.strip().lower()
+    account = await nidaan.get_account_by_email(email)
+    if account:
+        account_id = account["account_id"]
+    else:
+        import secrets as _sec
+        tmp_pw = _sec.token_hex(16)
+        account_id = await nidaan.create_account(
+            owner_name=body.advisor_name.strip(),
+            email=email,
+            phone=body.advisor_phone.strip(),
+            password=tmp_pw,
+            firm_name="",
+        )
+        account = await nidaan.get_account_by_id(account_id)
+
+    # Create review request record, linked to this account
+    purchase_id = await nidaan.create_review_request(
+        advisor_name=body.advisor_name.strip(),
+        advisor_phone=body.advisor_phone.strip(),
+        advisor_email=email,
+        insured_name=body.insured_name.strip(),
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name.strip(),
+        disputed_amount=body.disputed_amount,
+        notes=body.notes.strip(),
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+        account_id=account_id,
+    )
+    # Mark as paid immediately
+    await nidaan.update_review_request_status(purchase_id, "paid")
+    # Notify admin
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
+    if admin_email:
+        _asyncio.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] ₹499 Review Request PAID #{purchase_id}",
+            html_body=(
+                f"<p><b>Advisor:</b> {body.advisor_name} — {body.advisor_phone} — {email}</p>"
+                f"<p><b>Client:</b> {body.insured_name}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Notes:</b> {body.notes or '—'}</p>"
+                f"<p><b>Payment ID:</b> {body.razorpay_payment_id}</p>"
+                f"<p><b>Status: PAID ✅</b> — proceed with legal review. Purchase ID: #{purchase_id}</p>"
+            ),
+        ))
+    # Confirmation to advisor
+    _asyncio.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Payment confirmed — Your review request is with our legal team",
+        html_body=(
+            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for "
+            f"client <b>{body.insured_name}</b> ({body.claim_type} claim).</p>"
+            f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
+            f"<p>Reference ID: <b>#{purchase_id}</b> | Payment: {body.razorpay_payment_id}</p>"
+            f"<p>You can track status on your <a href='https://nidaan.sarathi.ai/nidaan/dashboard'>Nidaan Dashboard</a>.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    # Issue a JWT so the dashboard loads immediately after payment
+    dashboard_token = nidaan.create_nidaan_token(account_id, email, "per_claim")
+    return {
+        "purchase_id": purchase_id,
+        "status": "paid",
+        "message": "Review request submitted. You will receive the review within 48–72 business hours.",
+        "dashboard_token": dashboard_token,
+        "dashboard_url": "/nidaan/dashboard",
+    }
 
 
 @app.post("/nidaan/api/review-request")
 async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
+    """Legacy: manual review request (admin sends payment link). Use /review-request/pay instead."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     import asyncio as _asyncio
@@ -796,20 +1448,22 @@ async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
         insurer_name=body.insurer_name.strip(),
         disputed_amount=body.disputed_amount,
         notes=body.notes.strip(),
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
     )
     # Notify admin
     admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
     if admin_email:
         _asyncio.create_task(email_svc.send_email(
             to_email=admin_email,
-            subject=f"[Nidaan] New ₹999 Review Request #{purchase_id}",
+            subject=f"[Nidaan] New ₹499 Review Request #{purchase_id}",
             html_body=(
                 f"<p><b>Advisor:</b> {body.advisor_name} — {body.advisor_phone} — {body.advisor_email}</p>"
                 f"<p><b>Client:</b> {body.insured_name}</p>"
                 f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
                 f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
                 f"<p><b>Notes:</b> {body.notes or '—'}</p>"
-                f"<p>Send payment link and proceed once ₹999 confirmed. Purchase ID: {purchase_id}</p>"
+                f"<p>Send payment link and proceed once ₹499 confirmed. Purchase ID: {purchase_id}</p>"
             ),
         ))
     # Confirmation to advisor
@@ -818,7 +1472,7 @@ async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
         subject="Your review request received — Nidaan Partner",
         html_body=(
             f"<p>Hi {body.advisor_name},</p>"
-            f"<p>We've received your ₹999 review request for client <b>{body.insured_name}</b> "
+            f"<p>We've received your ₹499 review request for client <b>{body.insured_name}</b> "
             f"({body.claim_type} claim).</p>"
             f"<p>Our team will send a payment link to this email within a few hours. "
             f"Once payment is confirmed, the legal review will be delivered in 48–72 business hours.</p>"
@@ -838,13 +1492,16 @@ class NidaanSubscribeReq(BaseModel):
 
 @app.post("/nidaan/api/subscribe")
 async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
-    """Create a Razorpay subscription for an authenticated Nidaan account."""
+    """Create a Razorpay ORDER (one-time) for an authenticated Nidaan account.
+    Orders support UPI, cards, wallets, net banking — unlike subscriptions which block UPI.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if body.plan not in ("silver", "gold", "platinum"):
+    _valid_nidaan_plans = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
+    if body.plan not in _valid_nidaan_plans:
         raise HTTPException(status_code=400, detail="Invalid plan")
     account = await nidaan.get_account_by_email(payload["email"])
     if not account:
@@ -853,38 +1510,216 @@ async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
     rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
-    result = await nidaan.create_nidaan_razorpay_subscription(
+    result = await nidaan.create_nidaan_razorpay_order(
         account_id=account["account_id"],
         plan=body.plan,
         rzp_key_id=rzp_key_id,
         rzp_key_secret=rzp_key_secret,
         email=account["email"],
-        phone=account["phone"],
+        phone=account["phone"] or "",
     )
     if "error" in result:
         raise HTTPException(status_code=502, detail=result["error"])
     return result
 
 
+# ── Nidaan → Sarathi Magic Link ───────────────────────────────────────────────
+
+@app.post("/nidaan/api/sarathi/access")
+async def nidaan_sarathi_access(request: Request):
+    """Magic link: Nidaan JWT → Sarathi JWT.
+    Called by the Nidaan dashboard "Open Sarathi CRM" button.
+    Finds (or provisions) the linked Sarathi tenant and returns a short-lived
+    Sarathi access token + redirect URL so the client can navigate directly
+    into the dashboard without a separate login step.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Nidaan account not found")
+    account_id = account["account_id"]
+
+    # Verify they have an active subscription that includes the Sarathi bundle
+    sub = await nidaan.get_active_subscription(account_id)
+    if not sub:
+        raise HTTPException(status_code=403,
+                            detail="No active Nidaan subscription")
+    plan = sub.get("plan", "")
+    if not nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+        raise HTTPException(status_code=403,
+                            detail="Your Nidaan plan does not include Sarathi CRM")
+
+    # Find (or provision on-demand) the linked Sarathi tenant
+    sarathi_tenant_id = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+    if not sarathi_tenant_id:
+        # Derive period_days from subscription current_period_end
+        import aiosqlite as _asql_ml
+        async with _asql_ml.connect(nidaan.DB_PATH) as _mc:
+            _row = await (await _mc.execute(
+                "SELECT current_period_end FROM nidaan_subscriptions "
+                "WHERE account_id=? AND status='active' ORDER BY started_at DESC LIMIT 1",
+                (account_id,),
+            )).fetchone()
+        from datetime import date as _dt_date
+        if _row and _row[0]:
+            try:
+                _end = _dt_date.fromisoformat(_row[0][:10])
+                _period_days = max(1, (_end - _dt_date.today()).days)
+            except ValueError:
+                _period_days = 30
+        else:
+            _period_days = 30
+        await nidaan._provision_sarathi_bundle(account_id, plan, _period_days)
+        sarathi_tenant_id = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+
+    if not sarathi_tenant_id:
+        raise HTTPException(status_code=503, detail="Could not provision Sarathi access")
+
+    sarathi_tenant = await db.get_tenant(sarathi_tenant_id)
+    if not sarathi_tenant:
+        raise HTTPException(status_code=404, detail="Sarathi tenant not found")
+
+    # Get owner agent (needed for agent_id claim in JWT)
+    owner_agent = await db.get_owner_agent_by_tenant(sarathi_tenant_id)
+    agent_id = owner_agent["agent_id"] if owner_agent else None
+
+    tokens = auth.create_token_pair(
+        tenant_id=sarathi_tenant_id,
+        phone=sarathi_tenant.get("phone") or sarathi_tenant.get("email", ""),
+        firm_name=sarathi_tenant.get("firm_name", ""),
+        role="owner",
+        agent_id=agent_id,
+    )
+    sarathi_base = os.getenv("SERVER_URL", "https://sarathi-ai.com").rstrip("/")
+    return {
+        "access_token": tokens["access_token"],
+        "redirect_url": f"{sarathi_base}/dashboard?token={tokens['access_token']}",
+        "firm_name": sarathi_tenant.get("firm_name", ""),
+    }
+
+
 # ── Nidaan Razorpay Webhook ────────────────────────────────────────────────────
 
 @app.post("/nidaan/api/webhook")
 async def nidaan_razorpay_webhook(request: Request):
-    """Razorpay webhook for Nidaan subscription events."""
+    """Razorpay webhook for Nidaan events.
+    Handles both legacy subscription events AND order payment.captured events.
+    This is the server-side safety net — activates subscription even if the client
+    handler failed (UPI app switch, browser context lost, network error, etc.).
+    """
     import asyncio as _asyncio, json as _json, hmac as _hmac_mod, hashlib as _hs
     body = await request.body()
     sig = request.headers.get("X-Razorpay-Signature", "")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
-    if rzp_secret and sig:
-        expected = _hmac_mod.new(rzp_secret.encode(), body, _hs.sha256).hexdigest()
-        if not _hmac_mod.compare_digest(expected, sig):
-            return JSONResponse({"detail": "Invalid signature"}, status_code=400)
+    # Razorpay webhooks are signed with the per-webhook secret (Dashboard →
+    # Webhooks → Secret), NOT the API key secret. Try the dedicated webhook
+    # secret first, fall back to API key secret for legacy setups.
+    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
+    api_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+    _ua = request.headers.get("User-Agent", "")
+    _ip = request.client.host if request.client else ""
+    if not sig:
+        try:
+            await db.log_webhook_failure("/nidaan/api/webhook", _ip,
+                                          "missing_signature", user_agent=_ua)
+        except Exception:
+            pass
+        return JSONResponse({"detail": "Missing signature"}, status_code=400)
+    secrets_to_try = []
+    if webhook_secret:
+        secrets_to_try.append(webhook_secret)
+    if api_secret and api_secret != webhook_secret:
+        secrets_to_try.append(api_secret)
+    if not secrets_to_try:
+        return JSONResponse({"detail": "Webhook secret not configured"}, status_code=503)
+    matched = False
+    for s in secrets_to_try:
+        expected = _hmac_mod.new(s.encode(), body, _hs.sha256).hexdigest()
+        if _hmac_mod.compare_digest(expected, sig):
+            matched = True; break
+    if not matched:
+        logger.warning("⚠️ Invalid Razorpay signature on Nidaan webhook")
+        try:
+            await db.log_webhook_failure("/nidaan/api/webhook", _ip,
+                                          "invalid_signature", user_agent=_ua)
+        except Exception:
+            pass
+        return JSONResponse({"detail": "Invalid signature"}, status_code=400)
     try:
         data = _json.loads(body)
     except Exception:
         return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
     event = data.get("event", "")
-    sub_entity = data.get("payload", {}).get("subscription", {}).get("entity", {})
+    payload = data.get("payload", {})
+
+    # ── Refund events (refund.processed / refund.failed) ─────────────────────────
+    if event in ("refund.processed", "refund.failed", "refund.created"):
+        refund_entity = payload.get("refund", {}).get("entity", {})
+        rzp_refund_id = refund_entity.get("id", "")
+        rzp_payment_id = refund_entity.get("payment_id", "")
+        rzp_status = refund_entity.get("status", "")
+        if not rzp_refund_id:
+            return {"status": "ignored", "reason": "no_refund_id"}
+        async with aiosqlite.connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = aiosqlite.Row
+            row = await (await _c.execute(
+                "SELECT refund_id FROM nidaan_refunds WHERE razorpay_refund_id=? "
+                "OR (razorpay_payment_id=? AND razorpay_refund_id IS NULL)",
+                (rzp_refund_id, rzp_payment_id))).fetchone()
+        if row:
+            new_status = "processed" if rzp_status == "processed" or event == "refund.processed" \
+                         else ("failed" if event == "refund.failed" else "processing")
+            await nidaan.update_refund_status(row["refund_id"], new_status,
+                                              razorpay_refund_id=rzp_refund_id)
+            logger.info("Nidaan refund webhook: refund_id=%d status=%s rzp=%s",
+                        row["refund_id"], new_status, rzp_refund_id)
+        else:
+            logger.info("Nidaan refund webhook unmatched: rzp_refund=%s payment=%s",
+                        rzp_refund_id, rzp_payment_id)
+        return {"status": "ok", "event": event}
+
+    # ── Order payment.captured (one-time order flow for quarterly/annual plans) ─
+    if event == "payment.captured":
+        payment_entity = payload.get("payment", {}).get("entity", {})
+        notes = payment_entity.get("notes", {})
+        if notes.get("product") != "nidaan":
+            return {"status": "ignored", "reason": "not_nidaan"}
+        account_id_str = notes.get("nidaan_account_id", "")
+        plan = notes.get("nidaan_plan", "")
+        order_id = payment_entity.get("order_id", "")
+        amount_paise = int(payment_entity.get("amount", 0))
+        if not account_id_str or not plan or not order_id:
+            logger.warning("Nidaan webhook payment.captured missing fields: %s", notes)
+            return {"status": "ignored"}
+        account_id = int(account_id_str)
+        payment_id_evt = payment_entity.get("id", "")
+        # Idempotent activation — safe to call even if client already verified
+        already = await nidaan.activate_from_order_payment(order_id, account_id, plan, amount_paise,
+                                                            razorpay_payment_id=payment_id_evt)
+        logger.info("Nidaan webhook payment.captured: account=%d plan=%s order=%s activated=%s",
+                    account_id, plan, order_id, already)
+        # Email confirmation (only sends if not already sent — handled inside activate)
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _row = await (await _c.execute(
+                "SELECT * FROM nidaan_accounts WHERE account_id=?", (account_id,)
+            )).fetchone()
+            if _row:
+                _row = dict(_row)
+                _sub = await nidaan.get_active_subscription(account_id)
+                _renewal = _sub["current_period_end"][:10] if _sub else ""
+                _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+                    _row["email"], _row["owner_name"], plan, amount_paise // 100, _renewal
+                ))
+        return {"status": "ok", "event": event}
+
+    # ── Legacy subscription events (kept for backward compat) ─────────────────
+    sub_entity = payload.get("subscription", {}).get("entity", {})
     notes = sub_entity.get("notes", {})
     if notes.get("product") != "nidaan":
         return {"status": "ignored", "reason": "not_nidaan"}
@@ -896,13 +1731,9 @@ async def nidaan_razorpay_webhook(request: Request):
     account_id = int(account_id_str)
     rzp_sub_id = sub_entity.get("id", "")
     if event in ("subscription.activated", "subscription.charged"):
-        payment_entity = data.get("payload", {}).get("payment", {}).get("entity", {})
+        payment_entity = payload.get("payment", {}).get("entity", {})
         amount_paise = payment_entity.get("amount", 0)
         await nidaan.activate_from_razorpay_webhook(rzp_sub_id, account_id, plan, amount_paise)
-        # Email confirmation
-        account = await nidaan.get_account_by_email(
-            (await nidaan.get_all_accounts_admin(limit=1, offset=0) or [{}])[0].get("email", "")
-        )
         async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
             _c.row_factory = __import__("aiosqlite").Row
             _row = await (await _c.execute(
@@ -916,23 +1747,91 @@ async def nidaan_razorpay_webhook(request: Request):
                     _row["email"], _row["owner_name"], plan,
                     amount_paise // 100, _renewal
                 ))
-    elif event == "subscription.cancelled":
-        logger.info("Nidaan subscription cancelled: account=%d rzp=%s", account_id, rzp_sub_id)
+    elif event in ("subscription.cancelled", "subscription.halted", "subscription.completed"):
+        logger.info("Nidaan subscription %s: account=%d rzp=%s", event, account_id, rzp_sub_id)
+        # B3: unified teardown — webhook + manual cancel converge here.
+        try:
+            await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
+        except Exception as bwe:
+            logger.error("Bundle teardown on webhook failed: %s", bwe)
     return {"status": "ok", "event": event}
+
+
+# ── Nidaan: Check order payment status (recovery endpoint) ────────────────────
+
+@app.get("/nidaan/api/subscribe/check")
+async def nidaan_subscribe_check(order_id: str, request: Request):
+    """Check if a Razorpay order has been paid. Used by the dashboard to recover from
+    handler failures (UPI app switching, browser context lost, etc.).
+    If the order is paid but not yet activated, this endpoint activates it.
+    Returns the new JWT so the client can update localStorage without a page reload.
+    """
+    import httpx as _httpx
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not order_id or len(order_id) > 60:
+        raise HTTPException(status_code=400, detail="Invalid order_id")
+
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+
+    # Fetch order from Razorpay to check status + notes
+    async with _httpx.AsyncClient() as client:
+        r = await client.get(
+            f"https://api.razorpay.com/v1/orders/{order_id}",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+        order_data = r.json()
+
+    if "id" not in order_data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Verify this order belongs to this user's account
+    notes = order_data.get("notes", {})
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if notes.get("nidaan_account_id") != str(account["account_id"]):
+        raise HTTPException(status_code=403, detail="Order does not belong to this account")
+
+    order_status = order_data.get("status", "")
+    if order_status != "paid":
+        # Payment not captured (either failed, still pending UPI, or never attempted)
+        # Return paid:false — client will show "try again" banner regardless
+        return {"paid": False, "order_status": order_status}
+
+    plan = notes.get("nidaan_plan", "")
+    amount_paise = int(order_data.get("amount", 0))
+    if not plan:
+        raise HTTPException(status_code=400, detail="Plan not found in order notes")
+
+    # Activate idempotently (safe to call if already activated by client-side verify)
+    await nidaan.activate_from_order_payment(order_id, account["account_id"], plan, amount_paise)
+
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("✅ Nidaan check-recovery activated: account=%d plan=%s order=%s",
+                account["account_id"], plan, order_id)
+    return {"paid": True, "token": new_token, "plan": plan, "status": "active"}
 
 
 # ── Nidaan: Verify inline-checkout payment ─────────────────────────────────────
 
 class NidaanVerifyPaymentReq(BaseModel):
     razorpay_payment_id: str
-    razorpay_subscription_id: str
+    razorpay_order_id: str          # Razorpay order_id (for one-time order flow)
     razorpay_signature: str
+    plan: Optional[str] = None      # plan passed from frontend as fallback
 
 
 @app.post("/nidaan/api/subscribe/verify")
 async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request):
-    """Verify Razorpay signature after inline checkout, activate subscription, return new JWT."""
-    import hmac as _hmac_mod, hashlib as _hs, httpx as _httpx
+    """Verify Razorpay order payment signature, activate 90-day subscription, return new JWT."""
+    import hmac as _hmac_mod, hashlib as _hs
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
@@ -944,40 +1843,37 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
     if not rzp_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
 
-    # Verify HMAC signature
-    msg = f"{body.razorpay_payment_id}|{body.razorpay_subscription_id}".encode()
+    # Razorpay order payment signature: HMAC-SHA256(order_id + "|" + payment_id)
+    msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
     expected = _hmac_mod.new(rzp_secret.encode(), msg, _hs.sha256).hexdigest()
     if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(status_code=400, detail="Invalid payment signature")
 
-    # Fetch subscription details from Razorpay to get plan
-    async with _httpx.AsyncClient() as client:
-        sr = await client.get(
-            f"https://api.razorpay.com/v1/subscriptions/{body.razorpay_subscription_id}",
-            auth=(rzp_key_id, rzp_secret), timeout=15.0,
-        )
-        sub_data = sr.json()
-        pr = await client.get(
-            f"https://api.razorpay.com/v1/payments/{body.razorpay_payment_id}",
-            auth=(rzp_key_id, rzp_secret), timeout=15.0,
-        )
-        payment_data = pr.json()
-
-    notes = sub_data.get("notes", {})
-    plan = notes.get("nidaan_plan", "")
-    if not plan:
-        raise HTTPException(status_code=400, detail="Could not determine plan from subscription")
+    # Plan comes from client body (already validated when order was created server-side)
+    plan = body.plan or ""
+    _valid = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
+    if plan not in _valid:
+        raise HTTPException(status_code=400, detail=f"Invalid plan '{plan}'")
 
     account = await nidaan.get_account_by_email(payload["email"])
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    amount_paise = payment_data.get("amount", 0)
-    await nidaan.activate_from_razorpay_webhook(
-        body.razorpay_subscription_id, account["account_id"], plan, amount_paise
-    )
+    # Amount comes from our own plan config — no need to hit Razorpay again
+    plan_info = nidaan.NIDAAN_RAZORPAY_PLANS.get(plan, {})
+    amount_paise = plan_info.get("amount_paise", 0)
 
-    # Send subscription confirmation email
+    try:
+        await nidaan.activate_from_order_payment(
+            body.razorpay_order_id, account["account_id"], plan, amount_paise,
+            razorpay_payment_id=body.razorpay_payment_id,
+        )
+    except Exception as exc:
+        logger.error("Nidaan activate_from_order_payment failed: order=%s plan=%s err=%s",
+                     body.razorpay_order_id, plan, exc)
+        raise HTTPException(status_code=500, detail="Subscription activation failed — contact support with payment ID: " + body.razorpay_payment_id)
+
+    # Send subscription confirmation email (non-blocking)
     sub = await nidaan.get_active_subscription(account["account_id"])
     renewal_date = sub["current_period_end"][:10] if sub else ""
     import asyncio as _asyncio
@@ -987,16 +1883,106 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
     ))
 
     new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
-    logger.info("✅ Nidaan payment verified: account=%d plan=%s", account["account_id"], plan)
+    logger.info("✅ Nidaan payment verified: account=%d plan=%s payment=%s",
+                account["account_id"], plan, body.razorpay_payment_id)
     return {"token": new_token, "plan": plan, "status": "active"}
+
+
+# ── Nidaan: Create recurring subscription (quarterly auto-renew) ───────────────
+
+@app.post("/nidaan/api/subscribe/recurring")
+async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request):
+    """Create a Razorpay recurring subscription for quarterly Nidaan plans.
+    Annual plans are not supported — use /nidaan/api/subscribe for those.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if body.plan.endswith("_annual"):
+        raise HTTPException(status_code=400, detail="Annual plans use one-time payment")
+    _valid_quarterly = ("silver", "gold", "platinum")
+    if body.plan not in _valid_quarterly:
+        raise HTTPException(status_code=400, detail="Invalid plan for recurring subscription")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.create_nidaan_recurring_subscription(
+        account_id=account["account_id"],
+        plan=body.plan,
+        rzp_key_id=rzp_key_id,
+        rzp_key_secret=rzp_key_secret,
+        email=account["email"],
+        phone=account["phone"] or "",
+    )
+    if "error" in result:
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+# ── Nidaan: Verify recurring subscription payment ──────────────────────────────
+
+class NidaanVerifySubscriptionReq(BaseModel):
+    razorpay_payment_id: str
+    razorpay_subscription_id: str
+    razorpay_signature: str
+    plan: str
+
+
+@app.post("/nidaan/api/subscribe/recurring/verify")
+async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, request: Request):
+    """Verify Razorpay subscription payment signature, activate subscription, return new JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    _valid = ("silver", "gold", "platinum")
+    if body.plan not in _valid:
+        raise HTTPException(status_code=400, detail=f"Invalid plan '{body.plan}'")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.verify_nidaan_subscription_and_activate(
+        account_id=account["account_id"],
+        plan=body.plan,
+        razorpay_payment_id=body.razorpay_payment_id,
+        razorpay_subscription_id=body.razorpay_subscription_id,
+        razorpay_signature=body.razorpay_signature,
+        rzp_key_secret=rzp_secret,
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    # Send confirmation email
+    plan_info = nidaan.NIDAAN_RAZORPAY_PLANS.get(body.plan, {})
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+        account["email"], account["owner_name"], body.plan,
+        plan_info.get("amount_paise", 0) // 100, result.get("renewal_date", "")
+    ))
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], body.plan)
+    logger.info("✅ Nidaan recurring sub verified: account=%d plan=%s",
+                account["account_id"], body.plan)
+    return {"token": new_token, "plan": body.plan, "status": "active",
+            "renewal_date": result.get("renewal_date", "")}
 
 
 # ── Nidaan: Cancel subscription ────────────────────────────────────────────────
 
 @app.post("/nidaan/api/subscribe/cancel")
 async def nidaan_subscribe_cancel(request: Request):
-    """Cancel current Nidaan subscription (Razorpay + DB)."""
-    import httpx as _httpx
+    """Cancel current Nidaan subscription + auto-refund if Policy A eligible.
+
+    Policy A: full refund when cancelled within 7 days AND zero claims filed.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
@@ -1010,26 +1996,105 @@ async def nidaan_subscribe_cancel(request: Request):
     sub = await nidaan.get_active_subscription(account["account_id"])
     if not sub:
         raise HTTPException(status_code=404, detail="No active subscription to cancel")
+    sub_id = sub["sub_id"]
 
-    rzp_sub_id = sub.get("razorpay_subscription_id", "")
-    if rzp_sub_id:
+    # 1. Mark cancelled in our DB (fast, always succeeds)
+    await nidaan.cancel_nidaan_subscription(account["account_id"])
+    logger.info("Nidaan sub cancelled: account=%d sub_id=%d",
+                account["account_id"], sub_id)
+
+    # 1b. B3: Cascade to the linked Sarathi tenant — apply 5-day grace.
+    # Mirrors the webhook path so manual + webhook cancel are equivalent.
+    try:
+        torn_tid = await nidaan.apply_bundle_teardown(
+            account["account_id"], reason="user_cancel_dashboard")
+        if torn_tid:
+            logger.info("Manual cancel → Sarathi tenant %d bundle scheduled to end in 5d", torn_tid)
+    except Exception as bte:
+        logger.error("Bundle teardown on manual cancel failed: %s", bte)
+
+    # 2. Decide refund eligibility (Policy A)
+    refund_info = {"eligible": False, "reason": "", "refund_id": None,
+                   "amount": 0, "status": ""}
+    eligible, reason, sub_full = await nidaan.check_refund_eligibility(sub_id)
+    refund_info["eligible"] = eligible
+    refund_info["reason"] = reason
+    if eligible:
         rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
         rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
-        try:
-            async with _httpx.AsyncClient() as client:
-                await client.post(
-                    f"https://api.razorpay.com/v1/subscriptions/{rzp_sub_id}/cancel",
-                    auth=(rzp_key_id, rzp_secret),
-                    json={"cancel_at_cycle_end": 0},
-                    timeout=15.0,
-                )
-        except Exception as e:
-            logger.warning("Razorpay cancel failed (continuing): %s", e)
+        order_id = sub_full.get("razorpay_subscription_id", "") or ""
+        payment_id = sub_full.get("razorpay_payment_id", "") or ""
+        # Legacy rows: payment_id missing — resolve via order_id
+        if not payment_id and order_id and rzp_secret:
+            payment_id = await nidaan.find_payment_id_via_razorpay(
+                order_id, rzp_key_id, rzp_secret)
+        amount_rupees = int(sub_full.get("amount_paid", 0))
+        amount_paise = amount_rupees * 100
+        refund_id = await nidaan.create_refund_row(
+            sub_id=sub_id,
+            account_id=account["account_id"],
+            amount=amount_rupees,
+            razorpay_order_id=order_id,
+            razorpay_payment_id=payment_id,
+            reason=f"Auto: cancelled in window, 0 claims",
+        )
+        refund_info["refund_id"] = refund_id
+        refund_info["amount"] = amount_rupees
 
-    await nidaan.cancel_nidaan_subscription(account["account_id"])
+        if payment_id and rzp_secret and amount_paise > 0:
+            await nidaan.update_refund_status(refund_id, "processing")
+            result = await nidaan.issue_razorpay_refund(
+                payment_id, amount_paise, rzp_key_id, rzp_secret,
+                notes={"sub_id": str(sub_id), "account_id": str(account["account_id"]),
+                       "reason": "policy_a_within_window_zero_claims"})
+            if result.get("ok"):
+                await nidaan.update_refund_status(
+                    refund_id, "processed",
+                    razorpay_refund_id=result.get("refund_id", ""))
+                refund_info["status"] = "processed"
+                logger.info("✅ Nidaan refund processed: refund_id=%d razorpay=%s amount=₹%d",
+                            refund_id, result.get("refund_id"), amount_rupees)
+                # B3: refund issued → re-affirm bundle teardown to today+5
+                # (already set in step 1b, but this acts as a safety net for
+                # rare cases where step 1b errored silently).
+                try:
+                    await nidaan.apply_bundle_teardown(
+                        account["account_id"], reason="refund_processed")
+                except Exception as bte2:
+                    logger.error("Bundle teardown on refund failed: %s", bte2)
+                # Notify the subscriber
+                try:
+                    import asyncio as _asyncio
+                    _asyncio.create_task(email_svc.send_email(
+                        to_email=account["email"],
+                        subject=f"[Nidaan] Refund of ₹{amount_rupees} initiated",
+                        html_body=(
+                            f"<p>Hi {account.get('owner_name','')},</p>"
+                            f"<p>Your subscription was cancelled and we have initiated a full "
+                            f"refund of <b>₹{amount_rupees}</b> to your original payment method.</p>"
+                            f"<p><b>Refund ID:</b> {result.get('refund_id','')}<br/>"
+                            f"<b>Expected in your account:</b> 5-7 working days.</p>"
+                            f"<p>— Team NidaanPartner</p>"),
+                        from_name="NidaanPartner"))
+                except Exception as _ee:
+                    logger.warning("Refund email enqueue failed: %s", _ee)
+            else:
+                await nidaan.update_refund_status(
+                    refund_id, "failed", last_error=result.get("error", "")[:500])
+                refund_info["status"] = "failed"
+                logger.error("❌ Nidaan refund failed: refund_id=%d err=%s",
+                             refund_id, result.get("error"))
+        else:
+            await nidaan.update_refund_status(
+                refund_id, "failed",
+                last_error="missing_payment_id_or_credentials")
+            refund_info["status"] = "failed"
+            logger.warning("Nidaan refund row %d marked failed: payment_id=%s rzp_secret=%s",
+                           refund_id, bool(payment_id), bool(rzp_secret))
+
     new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], "free")
-    logger.info("Nidaan sub cancelled: account=%d", account["account_id"])
-    return {"token": new_token, "plan": "free", "status": "cancelled"}
+    return {"token": new_token, "plan": "free", "status": "cancelled",
+            "refund": refund_info}
 
 
 # ── Nidaan: Update profile ─────────────────────────────────────────────────────
@@ -1101,9 +2166,23 @@ def _nidaan_admin_auth(request: Request) -> bool:
 
 @app.get("/nidaan/admin", response_class=HTMLResponse)
 async def nidaan_admin_page(request: Request):
+    """Redirect legacy /nidaan/admin to the unified ops portal.
+    The ops portal has email+password login and routes each staff member to the
+    correct panels based on their role — no token-paste UX needed.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_admin.html")
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/nidaan/ops", status_code=302)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def nidaan_admin_short(request: Request):
+    """Shorthand: nidaanpartner.com/admin → ops portal login."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/nidaan/ops", status_code=302)
 
 
 @app.get("/nidaan/api/admin/stats")
@@ -1276,7 +2355,8 @@ async def ops_login(body: OpsLoginReq, request: Request):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = nidaan.create_staff_token(staff["staff_id"], staff["role"], staff["name"])
     return {"token": token, "staff_id": staff["staff_id"],
-            "role": staff["role"], "name": staff["name"]}
+            "role": staff["role"], "name": staff["name"],
+            "email": staff.get("email", "")}
 
 
 @app.get("/nidaan/ops/api/me")
@@ -1288,6 +2368,28 @@ async def ops_me(request: Request):
     if not record:
         raise HTTPException(status_code=404)
     return record
+
+
+class _StaffSavedNumbersReq(BaseModel):
+    phone: str = ""
+
+@app.post("/nidaan/ops/api/me/saved-numbers")
+async def ops_me_saved_numbers(body: _StaffSavedNumbersReq, request: Request):
+    """Mark current staff as having saved all 3 official numbers (Phase 4)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    phone = (body.phone or "").strip()
+    await nidaan.mark_staff_saved_numbers(staff["staff_id"], phone)
+    # Phase 4: register staff phone for round-robin notification routing.
+    if phone:
+        try:
+            digits = "".join(ch for ch in phone if ch.isdigit())[-10:]
+            if len(digits) == 10:
+                logger.info("Staff %s saved phone for WA routing: %s", staff["staff_id"], digits)
+        except Exception:
+            pass
+    return {"ok": True, "saved_at": "now"}
 
 
 # ── Staff management (super_admin only) ───────────────────────────────────────
@@ -1318,6 +2420,8 @@ async def ops_create_staff(body: CreateStaffReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "super_admin")
+    if not body.email.lower().endswith("@nidaanpartner.com"):
+        raise HTTPException(status_code=400, detail="Staff email must be a @nidaanpartner.com address")
     try:
         staff_id = await nidaan.create_staff(
             name=body.name, email=body.email,
@@ -1422,6 +2526,25 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Claim not found")
+    # Non-blocking email notification to the assigned staff member
+    try:
+        import asyncio as _ae3
+        async def _notify_assigned():
+            staff = await nidaan.get_staff_by_id(body.staff_id)
+            claim = await nidaan.get_claim_with_account(claim_id)
+            if staff and claim:
+                await email_svc.send_nidaan_claim_assigned_staff_email(
+                    to_email=staff["email"],
+                    staff_name=staff["name"],
+                    claim_id=claim_id,
+                    insured_name=claim.get("insured_name", ""),
+                    claim_type=claim.get("claim_type", ""),
+                    advisor_name=claim.get("owner_name", ""),
+                    advisor_phone=claim.get("advisor_phone", ""),
+                )
+        _ae3.ensure_future(_notify_assigned())
+    except Exception:
+        pass
     return {"claim_id": claim_id, "assigned_to": body.staff_id}
 
 
@@ -1472,6 +2595,53 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
     except Exception:
         pass
     return {"claim_id": claim_id, "status": body.new_status}
+
+
+# ── Review Requests ₹499 (ops staff, sub_super_admin+) ───────────────────────
+
+@app.get("/nidaan/ops/api/review-requests")
+async def ops_list_review_requests(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    reviews = await nidaan.get_review_requests_admin(status=status, limit=limit, offset=offset)
+    return {"reviews": reviews, "count": len(reviews)}
+
+
+class OpsReviewStatusUpdate(BaseModel):
+    new_status: str
+    note: str = ""
+    findings_note: str = ""
+
+
+@app.patch("/nidaan/ops/api/review-requests/{purchase_id}/status")
+async def ops_update_review_status(
+    purchase_id: int,
+    body: OpsReviewStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    try:
+        ok = await nidaan.update_review_request_status(
+            purchase_id=purchase_id,
+            new_status=body.new_status,
+            note=body.note,
+            findings_note=body.findings_note or None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Review request not found")
+    logger.info("Review request %d status updated to %s by staff %d",
+                purchase_id, body.new_status, staff["staff_id"])
+    return {"purchase_id": purchase_id, "status": body.new_status}
 
 
 # ── Notes ─────────────────────────────────────────────────────────────────────
@@ -1553,6 +2723,54 @@ async def ops_list_accounts(request: Request, limit: int = 200, offset: int = 0)
     return {"accounts": accounts, "count": len(accounts)}
 
 
+@app.get("/nidaan/ops/api/accounts/{account_id}/detail")
+async def ops_account_detail(account_id: int, request: Request):
+    """Sub-admin+: full account detail — account info + claims + review purchases."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        # Account info
+        cur = await conn.execute(
+            """SELECT a.*, COALESCE(s.plan, 'free') AS plan,
+                      s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s
+                      ON s.account_id = a.account_id AND s.status = 'active'
+               WHERE a.account_id = ?""",
+            (account_id,),
+        )
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        # Claims
+        cur2 = await conn.execute(
+            """SELECT c.claim_id, c.insured_name, c.insured_phone, c.policy_no,
+                      c.insurer_name, c.disputed_amount, c.status, c.claim_type,
+                      c.created_at, c.last_status_at,
+                      n.name AS assigned_staff_name
+               FROM nidaan_claims c
+               LEFT JOIN nidaan_staff n ON n.staff_id = c.assigned_to_staff_id
+               WHERE c.account_id = ?
+               ORDER BY c.created_at DESC""",
+            (account_id,),
+        )
+        claims = [dict(r) for r in await cur2.fetchall()]
+        # Review purchases (₹499)
+        cur3 = await conn.execute(
+            """SELECT purchase_id, claim_type, amount_paid, status,
+                      linked_claim_id, findings_note, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id = ? AND status NOT IN ('pending_payment', 'cancelled')
+               ORDER BY created_at DESC""",
+            (account_id,),
+        )
+        reviews = [dict(r) for r in await cur3.fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
+
+
 @app.post("/nidaan/ops/api/accounts")
 async def ops_create_account(body: OpsCreateAccount, request: Request):
     if not _is_nidaan_host(request):
@@ -1590,23 +2808,195 @@ async def ops_impersonate(account_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "super_admin")
-    token = await nidaan.impersonate_account(account_id)
-    if not token:
+    result = await nidaan.impersonate_account(account_id)
+    if not result:
         raise HTTPException(status_code=404, detail="Account not found")
-    logger.warning("IMPERSONATE: staff_id=%d impersonating account_id=%d",
-                   caller["staff_id"], account_id)
-    return {"advisor_token": token, "account_id": account_id,
+    logger.warning("IMPERSONATE: staff_id=%d impersonating account_id=%d (%s)",
+                   caller["staff_id"], account_id, result["email"])
+    return {"advisor_token": result["token"], "account_id": account_id,
+            "owner_name": result["owner_name"], "plan": result["plan"],
             "dashboard_url": "/nidaan/dashboard"}
 
 
-# ── Revenue (super_admin only) ────────────────────────────────────────────────
+@app.get("/nidaan/ops/api/accounts/{account_id}/sarathi-link")
+async def ops_account_sarathi_link(account_id: int, request: Request):
+    """Super admin: check if this Nidaan account has a linked Sarathi CRM tenant."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    link = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+    return {"account_id": account_id, "link": link}
+
+
+@app.post("/nidaan/ops/api/staff/{staff_id}/impersonate")
+async def ops_impersonate_staff(staff_id: int, request: Request):
+    """Super admin: generate a staff token to act as another staff member."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    if caller["staff_id"] == staff_id:
+        raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target or target.get("status") != "active":
+        raise HTTPException(status_code=404, detail="Staff not found or inactive")
+    token = nidaan.create_staff_token(target["staff_id"], target["role"], target["name"])
+    logger.warning("STAFF_IMPERSONATE: staff_id=%d impersonating staff_id=%d (%s role=%s)",
+                   caller["staff_id"], staff_id, target["email"], target["role"])
+    return {"staff_token": token, "staff_id": staff_id, "role": target["role"],
+            "name": target["name"], "ops_url": "/admins"}
+
+
+# ── Revenue + Refunds: gated to the platform owner only ──────────────────────
+# Other super_admins do NOT see revenue or refund admin. Owner is matched by
+# email (case-insensitive). Configurable later via system flag if needed.
+NIDAAN_OWNER_EMAIL = "dushyant@nidaanpartner.com"
+
+
+async def _require_owner(request):
+    staff = _require_staff(request, "super_admin")
+    # JWT carries staff_id but not email; do the lookup once.
+    email = (staff.get("email", "") or "").lower()
+    if not email:
+        record = await nidaan.get_staff_by_id(staff["staff_id"])
+        email = ((record or {}).get("email", "") or "").lower()
+        if record:
+            staff["email"] = record.get("email", "")
+    if email != NIDAAN_OWNER_EMAIL.lower():
+        raise HTTPException(status_code=403, detail="Owner-only view")
+    return staff
+
 
 @app.get("/nidaan/ops/api/revenue")
 async def ops_revenue(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "super_admin")
+    await _require_owner(request)
     return await nidaan.get_revenue_stats()
+
+
+# ── Refunds (owner only — lives inside Revenue tab) ──────────────────────────
+@app.get("/nidaan/ops/api/refunds")
+async def ops_refunds_list(request: Request, status: Optional[str] = None, limit: int = 200):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _require_owner(request)
+    rows = await nidaan.list_refunds(status=status, limit=limit)
+    pending_review = await nidaan.find_eligible_unrefunded_cancellations(days=30)
+    return {"refunds": rows, "needs_review": pending_review,
+            "policy": {"window_days": nidaan.REFUND_WINDOW_DAYS,
+                       "require_zero_usage": nidaan.REFUND_REQUIRE_ZERO_USAGE}}
+
+
+class _ManualRefundReq(BaseModel):
+    sub_id: int
+    amount: Optional[int] = None  # rupees; defaults to full subscription amount
+    reason: str = "manual_sa_override"
+
+
+@app.post("/nidaan/ops/api/refunds/{refund_id}/retry")
+async def ops_refund_retry(refund_id: int, request: Request):
+    """Re-attempt a refund that previously failed (e.g. Razorpay balance was 0)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _require_owner(request)
+    refund = await nidaan.get_refund(refund_id)
+    if not refund:
+        raise HTTPException(status_code=404, detail="refund_not_found")
+    if refund["status"] not in ("failed", "pending"):
+        raise HTTPException(status_code=409,
+                            detail=f"cannot_retry_status_{refund['status']}")
+
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="razorpay_not_configured")
+
+    payment_id = refund.get("razorpay_payment_id", "") or ""
+    if not payment_id and refund.get("razorpay_order_id"):
+        payment_id = await nidaan.find_payment_id_via_razorpay(
+            refund["razorpay_order_id"], rzp_key_id, rzp_secret)
+    if not payment_id:
+        raise HTTPException(status_code=400, detail="cannot_resolve_payment_id")
+
+    await nidaan.update_refund_status(refund_id, "processing",
+                                      razorpay_payment_id=payment_id)
+    result = await nidaan.issue_razorpay_refund(
+        payment_id, int(refund["amount"]) * 100, rzp_key_id, rzp_secret,
+        notes={"refund_id": str(refund_id), "retry_by_staff": str(staff["staff_id"])})
+    if result.get("ok"):
+        await nidaan.update_refund_status(refund_id, "processed",
+                                          razorpay_refund_id=result.get("refund_id", ""))
+        logger.info("Refund retry succeeded: refund_id=%d staff=%d razorpay=%s",
+                    refund_id, staff["staff_id"], result.get("refund_id"))
+        return {"ok": True, "razorpay_refund_id": result.get("refund_id", "")}
+    await nidaan.update_refund_status(refund_id, "failed",
+                                      last_error=result.get("error", "")[:500])
+    raise HTTPException(status_code=502,
+                        detail=f"razorpay_failed: {result.get('error','')[:300]}")
+
+
+@app.post("/nidaan/ops/api/refunds/manual")
+async def ops_refund_manual(body: _ManualRefundReq, request: Request):
+    """Owner-triggered refund (bypasses policy A — e.g. user complains beyond window)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _require_owner(request)
+
+    async with aiosqlite.connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = aiosqlite.Row
+        sub = await (await _c.execute(
+            "SELECT * FROM nidaan_subscriptions WHERE sub_id=?", (body.sub_id,))).fetchone()
+        if not sub:
+            raise HTTPException(status_code=404, detail="subscription_not_found")
+        sub = dict(sub)
+        existing = await (await _c.execute(
+            "SELECT refund_id, status FROM nidaan_refunds WHERE sub_id=? "
+            "AND status IN ('pending','processing','processed') LIMIT 1",
+            (body.sub_id,))).fetchone()
+    if existing:
+        raise HTTPException(status_code=409,
+                            detail=f"refund_already_{existing['status']}")
+
+    amount_rupees = int(body.amount) if body.amount else int(sub.get("amount_paid", 0))
+    if amount_rupees <= 0:
+        raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    if amount_rupees > int(sub.get("amount_paid", 0)):
+        raise HTTPException(status_code=400, detail="amount_exceeds_payment")
+
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    order_id = sub.get("razorpay_subscription_id", "") or ""
+    payment_id = sub.get("razorpay_payment_id", "") or ""
+    if not payment_id and order_id and rzp_secret:
+        payment_id = await nidaan.find_payment_id_via_razorpay(order_id, rzp_key_id, rzp_secret)
+
+    refund_id = await nidaan.create_refund_row(
+        sub_id=body.sub_id, account_id=sub["account_id"], amount=amount_rupees,
+        razorpay_order_id=order_id, razorpay_payment_id=payment_id,
+        reason=body.reason, requested_by_staff_id=staff["staff_id"])
+
+    if not payment_id or not rzp_secret:
+        await nidaan.update_refund_status(refund_id, "failed",
+                                          last_error="missing_payment_id_or_credentials")
+        raise HTTPException(status_code=502,
+                            detail=f"created_row_but_cannot_call_razorpay: refund_id={refund_id}")
+
+    await nidaan.update_refund_status(refund_id, "processing")
+    result = await nidaan.issue_razorpay_refund(
+        payment_id, amount_rupees * 100, rzp_key_id, rzp_secret,
+        notes={"sub_id": str(body.sub_id), "manual_by_staff": str(staff["staff_id"]),
+               "reason": body.reason[:200]})
+    if result.get("ok"):
+        await nidaan.update_refund_status(refund_id, "processed",
+                                          razorpay_refund_id=result.get("refund_id", ""))
+        logger.info("Manual refund processed by staff %d: refund_id=%d rzp=%s amount=₹%d",
+                    staff["staff_id"], refund_id, result.get("refund_id"), amount_rupees)
+        return {"ok": True, "refund_id": refund_id, "amount": amount_rupees,
+                "razorpay_refund_id": result.get("refund_id", "")}
+    await nidaan.update_refund_status(refund_id, "failed",
+                                      last_error=result.get("error", "")[:500])
+    raise HTTPException(status_code=502,
+                        detail=f"razorpay_refund_failed: {result.get('error','')[:200]}")
 
 
 # ── App health (super_admin only) ─────────────────────────────────────────────
@@ -1625,8 +3015,780 @@ async def ops_health(request: Request):
 async def ops_stats(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    _require_staff(request, "team_member")
     return await nidaan.get_admin_stats()
+
+
+@app.get("/nidaan/ops/api/overview-widgets")
+async def ops_overview_widgets(request: Request):
+    """Aggregated Overview widgets: task pipeline, pending reviews,
+    follow-ups due, overdue claims, refunds needing action."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    return await nidaan.get_overview_widgets(
+        staff["staff_id"], staff["role"], staff.get("email", ""))
+
+
+@app.get("/nidaan/ops/api/accounts/{account_id}/birds-eye")
+async def ops_account_birds_eye(account_id: int, request: Request):
+    """Bird's-eye account drawer payload: profile + subs + reviews + claims
+    + open tasks + activity timeline in one call."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    data = await nidaan.get_account_birds_eye(account_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="account_not_found")
+    return data
+
+
+@app.get("/nidaan/ops/api/analytics")
+async def ops_analytics(request: Request, days: int = 30):
+    """30-day office analytics — closure/win rate, cycle time, by-stage,
+    daily trends, top reasons, top assignees. Admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await nidaan.get_office_analytics(days=days)
+
+
+@app.get("/nidaan/ops/api/escalations")
+async def ops_escalations(request: Request):
+    """Pending dual-approval queue + claims sitting in ombudsman/escalation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await nidaan.get_internal_escalations()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  QUICK TASKS — lightweight personal/team to-dos
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _QuickTaskCreateReq(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    description: str = ""
+    assigned_to_staff_id: Optional[int] = None
+    priority: str = Field("normal", pattern=r"^(low|normal|high|urgent)$")
+    claim_id: Optional[int] = None
+    due_date: Optional[str] = None
+    initial_comment: str = ""
+
+
+class _QuickTaskUpdateReq(BaseModel):
+    status: Optional[str] = Field(None, pattern=r"^(open|in_progress|done|cancelled)$")
+    assigned_to_staff_id: Optional[int] = None
+
+
+class _QuickTaskNoteReq(BaseModel):
+    note: str = Field(min_length=1, max_length=4000)
+    parent_note_id: Optional[int] = None
+
+
+@app.get("/nidaan/ops/api/quick-tasks/priorities")
+async def ops_quick_task_priorities(request: Request):
+    """Return the priority taxonomy + descriptions so the create panel can
+    show each option's notification behaviour upfront."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"priorities": nidaan.QUICK_TASK_PRIORITIES}
+
+
+@app.get("/nidaan/ops/api/quick-tasks")
+async def ops_quick_tasks_list(request: Request,
+                                status: Optional[str] = None,
+                                assignee: Optional[str] = None,
+                                claim_id: Optional[int] = None,
+                                include_done: bool = False,
+                                limit: int = 100):
+    """List quick tasks. Scope:
+       - team_member: only their own assigned (regardless of `assignee` param)
+       - admin/SA: everyone's; `assignee=me` filters to self
+    """
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = staff.get("role", "")
+    assignee_id: Optional[int] = None
+    if role == "team_member":
+        assignee_id = staff["staff_id"]
+    elif assignee == "me":
+        assignee_id = staff["staff_id"]
+    elif assignee and assignee.isdigit():
+        assignee_id = int(assignee)
+    items = await nidaan.list_quick_tasks(
+        status=status, assigned_to_staff_id=assignee_id,
+        claim_id=claim_id, include_done=include_done, limit=limit)
+    return {"quick_tasks": items, "count": len(items)}
+
+
+@app.get("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_get(qid: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    # Team members can only view tasks they're assigned to OR created
+    if staff.get("role") == "team_member":
+        if qt.get("assigned_to_staff_id") != staff["staff_id"] and \
+           qt.get("created_by_staff_id") != staff["staff_id"]:
+            raise HTTPException(403)
+    notes = await nidaan.list_quick_task_notes(qid)
+    return {"quick_task": qt, "notes": notes}
+
+
+@app.post("/nidaan/ops/api/quick-tasks")
+async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    qid = await nidaan.create_quick_task(
+        title=body.title, description=body.description,
+        created_by_staff_id=staff["staff_id"],
+        assigned_to_staff_id=body.assigned_to_staff_id,
+        priority=body.priority, claim_id=body.claim_id,
+        due_date=body.due_date)
+    if body.initial_comment.strip():
+        try:
+            await nidaan.add_quick_task_note(
+                quick_task_id=qid, staff_id=staff["staff_id"],
+                note=body.initial_comment)
+        except Exception as ce:
+            logger.warning("Initial comment failed on quick task %d: %s", qid, ce)
+    # Notification dispatch — driven by priority taxonomy
+    try:
+        qt = await nidaan.get_quick_task(qid)
+        if qt:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_quick_task_assigned(qt))
+    except Exception as ne:
+        logger.warning("Quick task notification dispatch failed: %s", ne)
+    return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+@app.patch("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    # Team members can only mark status on their own assigned tasks
+    if role == "team_member" and qt.get("assigned_to_staff_id") != staff["staff_id"]:
+        raise HTTPException(403)
+    # Only admin/SA can reassign
+    if body.assigned_to_staff_id is not None and role == "team_member":
+        raise HTTPException(403, "Only admin or SA can reassign")
+    if body.status is not None:
+        await nidaan.update_quick_task_status(qid, body.status)
+    if body.assigned_to_staff_id is not None:
+        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id)
+        # Notify new assignee if priority demands it
+        try:
+            new_qt = await nidaan.get_quick_task(qid)
+            if new_qt:
+                import asyncio as _asyncio
+                _asyncio.create_task(nnot.on_quick_task_assigned(new_qt))
+        except Exception:
+            pass
+    return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")
+async def ops_quick_task_note_add(qid: int, body: _QuickTaskNoteReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    if role == "team_member" and qt.get("assigned_to_staff_id") != staff["staff_id"] \
+       and qt.get("created_by_staff_id") != staff["staff_id"]:
+        raise HTTPException(403)
+    nid = await nidaan.add_quick_task_note(
+        quick_task_id=qid, staff_id=staff["staff_id"],
+        note=body.note, parent_note_id=body.parent_note_id)
+    return {"note_id": nid}
+
+
+@app.get("/nidaan/ops/api/claim-search")
+async def ops_claims_search(request: Request, q: str = ""):
+    """Claim picker for the Quick Task panel.
+    - Empty `q`: returns 8 most recent OPEN claims (so the dropdown is useful
+      on focus, before the user starts typing).
+    - With `q`: searches claim_id, insured_name, insurer_name, AND the
+      subscriber's owner_name + firm_name.
+    Always includes the linked account's name so the picker shows
+    "account · claim # · insured" together.
+
+    Path is intentionally /claim-search (not /claims/search) to avoid
+    conflicting with /claims/{claim_id:int} route matching."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    q = (q or "").strip()
+    async with aiosqlite.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        select_cols = (
+            "SELECT c.claim_id, c.insured_name, c.insurer_name, c.status, "
+            "       a.owner_name AS account_name, a.firm_name "
+            "FROM nidaan_claims c "
+            "LEFT JOIN nidaan_accounts a ON a.account_id = c.account_id "
+        )
+        if not q:
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.status NOT IN ('resolved_won','resolved_lost','closed','withdrawn') "
+                "ORDER BY c.created_at DESC LIMIT 8")
+        elif q.isdigit():
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.claim_id = ? OR c.insured_name LIKE ? "
+                "OR a.owner_name LIKE ? OR a.firm_name LIKE ? "
+                "ORDER BY c.created_at DESC LIMIT 8",
+                (int(q), f"%{q}%", f"%{q}%", f"%{q}%"))
+        else:
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.insured_name LIKE ? OR c.insurer_name LIKE ? "
+                "OR a.owner_name LIKE ? OR a.firm_name LIKE ? "
+                "ORDER BY c.created_at DESC LIMIT 8",
+                (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"))
+        return {"claims": [dict(r) for r in await cur.fetchall()]}
+
+
+# =============================================================================
+#  NIDAAN ERP — Phase 3: Workflow Engine (Tasks API)
+# =============================================================================
+import biz_nidaan_tasks as ntasks
+
+
+def _staff_role(staff: dict) -> str:
+    return (staff or {}).get("role", "team_member")
+
+
+def _task_visible_to_staff(task: dict, staff: dict) -> bool:
+    """Associate sees only tasks assigned to self; admin+ sees everything."""
+    role = _staff_role(staff)
+    if role in (ntasks.ROLE_SUPER_ADMIN, ntasks.ROLE_ADMIN):
+        return True
+    return task.get("assigned_to_staff_id") == staff.get("staff_id")
+
+
+class _TaskCreateReq(BaseModel):
+    claim_id: int
+    title: str = Field(min_length=2, max_length=200)
+    description: str = ""
+    status_slug: str = "intimated"
+    priority: str = Field("normal", pattern=r"^(low|normal|high|urgent)$")
+    assigned_to_staff_id: Optional[int] = None
+    sla_hours_override: Optional[int] = None
+    depends_on_task_id: Optional[int] = None
+    parent_task_id: Optional[int] = None
+    initial_comment: str = ""  # Phase 5: post first thread comment in same call
+
+
+class _TaskUpdateReq(BaseModel):
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    description: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
+    sla_hours_override: Optional[int] = None
+    depends_on_task_id: Optional[int] = None
+
+
+class _TaskTransitionReq(BaseModel):
+    to_status: str
+    note: str = ""
+
+
+class _TaskNoteReq(BaseModel):
+    note: str = Field(min_length=1, max_length=4000)
+    is_internal: bool = True
+    parent_note_id: Optional[int] = None  # 1-level reply threading
+
+
+class _TaskAssignReq(BaseModel):
+    assigned_to_staff_id: Optional[int] = None  # None = unassign
+
+
+class _TaskApprovalReq(BaseModel):
+    approve: bool
+    note: str = ""
+
+
+class _TaskQCReq(BaseModel):
+    approve: bool
+    note: str = ""
+
+
+class _StatusUpsertReq(BaseModel):
+    slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z][a-z0-9_]+$")
+    label_en: str = Field(min_length=1, max_length=80)
+    label_hi: str = ""
+    label_subscriber: str = ""
+    color: str = Field("#94a3b8", pattern=r"^#[0-9a-fA-F]{6}$")
+    stage: str = Field("preparation", pattern=r"^(intake|preparation|engagement|ombudsman|escalation|closed)$")
+    default_sla_hours: Optional[int] = None
+    is_paused: bool = False
+    is_terminal: bool = False
+    is_qc_required: bool = False
+    requires_approval: str = Field("", pattern=r"^(|admin|sa|both)$")
+    sort_order: int = 500
+
+
+class _SystemFlagReq(BaseModel):
+    flag_key: str = Field(min_length=2, max_length=60)
+    flag_value: str
+    description: str = ""
+
+
+# ── List / Detail / Kanban ────────────────────────────────────────────────────
+@app.get("/nidaan/ops/api/tasks")
+async def ops_tasks_list(request: Request,
+                         claim_id: Optional[int] = None,
+                         assigned_to: Optional[int] = None,
+                         stage: Optional[str] = None,
+                         status: Optional[str] = None,
+                         include_closed: bool = False,
+                         limit: int = 200, offset: int = 0):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = _staff_role(staff)
+    # Associates only see their own
+    if role == ntasks.ROLE_ASSOCIATE:
+        assigned_to = staff["staff_id"]
+    tasks = await ntasks.list_tasks(
+        claim_id=claim_id, assigned_to_staff_id=assigned_to,
+        stage=stage, status_slug=status,
+        include_closed=include_closed, limit=limit, offset=offset)
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.get("/nidaan/ops/api/tasks/kanban")
+async def ops_tasks_kanban(request: Request, claim_id: Optional[int] = None):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    by_stage = await ntasks.kanban_view(claim_id=claim_id)
+    role = _staff_role(staff)
+    if role == ntasks.ROLE_ASSOCIATE:
+        # Filter to only this associate's tasks
+        sid = staff["staff_id"]
+        by_stage = {k: [t for t in v if t.get("assigned_to_staff_id") == sid] for k, v in by_stage.items()}
+    return by_stage
+
+
+@app.get("/nidaan/ops/api/tasks/{task_id}")
+async def ops_task_detail(task_id: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404, "Task not found")
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403, "Forbidden — task not assigned to you")
+    notes = await ntasks.list_task_notes(task_id)
+    log = await ntasks.list_task_status_log(task_id)
+    transitions = await ntasks.list_transitions_from(t["status_slug"])
+    return {"task": t, "notes": notes, "status_log": log, "allowed_transitions": transitions}
+
+
+# ── Create / Update / Reassign ────────────────────────────────────────────────
+@app.post("/nidaan/ops/api/tasks")
+async def ops_task_create(body: _TaskCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = _staff_role(staff)
+    if role not in ntasks.ROLES_ADMIN_OR_ABOVE:
+        raise HTTPException(403, "Only Admin or Super Admin can create tasks")
+    try:
+        tid = await ntasks.create_task(
+            claim_id=body.claim_id, title=body.title, description=body.description,
+            status_slug=body.status_slug, priority=body.priority,
+            assigned_to_staff_id=body.assigned_to_staff_id,
+            created_by_staff_id=staff["staff_id"],
+            sla_hours_override=body.sla_hours_override,
+            depends_on_task_id=body.depends_on_task_id,
+            parent_task_id=body.parent_task_id)
+        # Phase 5 single-screen creation — post the first comment in the same call
+        if body.initial_comment and body.initial_comment.strip():
+            try:
+                await ntasks.add_task_note(
+                    task_id=tid, staff_id=staff["staff_id"],
+                    note=body.initial_comment.strip())
+            except Exception as ce:
+                logger.warning("Initial comment failed on task %d: %s", tid, ce)
+        return {"task_id": tid, "task": await ntasks.get_task(tid)}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.patch("/nidaan/ops/api/tasks/{task_id}")
+async def ops_task_update(task_id: int, body: _TaskUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    role = _staff_role(staff)
+    if role not in ntasks.ROLES_ADMIN_OR_ABOVE and t.get("assigned_to_staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "Forbidden")
+    fields = {}
+    if body.title is not None: fields["title"] = body.title.strip()
+    if body.description is not None: fields["description"] = body.description
+    if body.priority is not None: fields["priority"] = body.priority
+    if body.sla_hours_override is not None: fields["sla_hours_override"] = body.sla_hours_override
+    if body.depends_on_task_id is not None:
+        if body.depends_on_task_id == task_id:
+            raise HTTPException(400, "Task can't depend on itself")
+        await ntasks._assert_no_cycle(body.depends_on_task_id, task_id)
+        fields["depends_on_task_id"] = body.depends_on_task_id
+    if not fields:
+        return {"task": t}
+    set_clause = ", ".join(f"{k}=?" for k in fields) + ", updated_at=datetime('now')"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(f"UPDATE nidaan_tasks SET {set_clause} WHERE task_id=?",
+                          list(fields.values()) + [task_id])
+        await conn.commit()
+    return {"task": await ntasks.get_task(task_id)}
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/assign")
+async def ops_task_assign(task_id: int, body: _TaskAssignReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    if _staff_role(staff) not in ntasks.ROLES_ADMIN_OR_ABOVE:
+        raise HTTPException(403, "Only Admin or Super Admin can reassign")
+    out = await ntasks.reassign_task(
+        task_id=task_id, new_assignee_staff_id=body.assigned_to_staff_id,
+        by_staff_id=staff["staff_id"])
+    # Phase 4: notify new assignee
+    if body.assigned_to_staff_id:
+        try:
+            import biz_nidaan_notifications as nnot
+            asyncio.create_task(nnot.on_task_assigned(task_id))
+        except Exception:
+            pass
+    return {"task": out}
+
+
+# ── State transition / QC / Approvals ─────────────────────────────────────────
+@app.post("/nidaan/ops/api/tasks/{task_id}/transition")
+async def ops_task_transition(task_id: int, body: _TaskTransitionReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403, "Forbidden")
+    from_status = t.get("status_slug")
+    try:
+        out = await ntasks.transition_task(
+            task_id=task_id, to_status=body.to_status,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            note=body.note)
+        # Phase 4: fan-out notification
+        try:
+            import biz_nidaan_notifications as nnot
+            new_status = out.get("status_slug")
+            asyncio.create_task(nnot.on_task_status_changed(task_id, from_status, new_status, body.note or ""))
+            # Special events
+            if new_status == "awaiting_qc":
+                asyncio.create_task(nnot.on_qc_required(task_id))
+            elif new_status == "awaiting_approval":
+                asyncio.create_task(nnot.on_approval_required(task_id, body.to_status))
+        except Exception:
+            pass
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/qc-review")
+async def ops_task_qc_review(task_id: int, body: _TaskQCReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    try:
+        out = await ntasks.review_qc(task_id=task_id,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            approve=body.approve, note=body.note)
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/approve")
+async def ops_task_approve(task_id: int, body: _TaskApprovalReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    try:
+        out = await ntasks.record_approval(task_id=task_id,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            approve=body.approve, note=body.note)
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+@app.get("/nidaan/ops/api/tasks/{task_id}/notes")
+async def ops_task_notes_list(task_id: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403)
+    return {"notes": await ntasks.list_task_notes(task_id)}
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/notes")
+async def ops_task_notes_create(task_id: int, body: _TaskNoteReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403)
+    nid = await ntasks.add_task_note(task_id=task_id, staff_id=staff["staff_id"],
+                                      note=body.note, is_internal=body.is_internal,
+                                      parent_note_id=body.parent_note_id)
+    return {"note_id": nid}
+
+
+# ── Status registry + transitions (config) ────────────────────────────────────
+@app.get("/nidaan/ops/api/status-config")
+async def ops_status_config_list(request: Request, include_inactive: bool = False):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {
+        "statuses": await ntasks.list_statuses(active_only=not include_inactive),
+        "stages": ["intake","preparation","engagement","ombudsman","escalation","closed"],
+    }
+
+
+@app.post("/nidaan/ops/api/status-config")
+async def ops_status_config_create(body: _StatusUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    return {"status": await ntasks.upsert_status(
+        slug=body.slug, label_en=body.label_en, label_hi=body.label_hi,
+        label_subscriber=body.label_subscriber, color=body.color, stage=body.stage,
+        default_sla_hours=body.default_sla_hours, is_paused=body.is_paused,
+        is_terminal=body.is_terminal, is_qc_required=body.is_qc_required,
+        requires_approval=body.requires_approval, sort_order=body.sort_order,
+        created_by=staff["staff_id"])}
+
+
+@app.patch("/nidaan/ops/api/status-config/{slug}")
+async def ops_status_config_update(slug: str, body: _StatusUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    if slug != body.slug:
+        raise HTTPException(400, "Slug mismatch")
+    return {"status": await ntasks.upsert_status(
+        slug=body.slug, label_en=body.label_en, label_hi=body.label_hi,
+        label_subscriber=body.label_subscriber, color=body.color, stage=body.stage,
+        default_sla_hours=body.default_sla_hours, is_paused=body.is_paused,
+        is_terminal=body.is_terminal, is_qc_required=body.is_qc_required,
+        requires_approval=body.requires_approval, sort_order=body.sort_order,
+        created_by=staff["staff_id"])}
+
+
+@app.delete("/nidaan/ops/api/status-config/{slug}")
+async def ops_status_config_delete(slug: str, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await ntasks.deactivate_status(slug)
+    return {"ok": True}
+
+
+# ── System Flags (SA-controlled toggles) ──────────────────────────────────────
+@app.get("/nidaan/ops/api/system-flags")
+async def ops_flags_list(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"flags": await ntasks.list_flags()}
+
+
+@app.post("/nidaan/ops/api/system-flags")
+async def ops_flags_set(body: _SystemFlagReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await ntasks.set_flag(body.flag_key, body.flag_value,
+                           by_staff_id=staff["staff_id"], description=body.description)
+    return {"ok": True, "flag_key": body.flag_key, "flag_value": body.flag_value}
+
+
+# ── Staff roster (for assignee picker) ────────────────────────────────────────
+@app.get("/nidaan/ops/api/assignees")
+async def ops_assignees(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"staff": await ntasks.list_active_associates()}
+
+
+# =============================================================================
+#  NIDAAN ERP — Phase 4: Notifications + Comms Hub
+# =============================================================================
+import biz_nidaan_notifications as nnot
+
+
+class _OfficialInstanceUpsertReq(BaseModel):
+    instance_slot: int = Field(ge=1, le=3)
+    evolution_instance: str = Field(min_length=2, max_length=80)
+    display_name: str = ""
+    phone_number: str = ""
+
+
+class _SubscriberPrefsReq(BaseModel):
+    wa_opt_in: Optional[bool] = None
+    email_enabled: Optional[bool] = None
+    saved_numbers: Optional[bool] = None
+
+
+# ── Official numbers registry (SA only) ───────────────────────────────────────
+@app.get("/nidaan/ops/api/official-numbers")
+async def ops_official_list(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    insts = await nnot.list_official_instances()
+    caps = await nnot.compute_effective_caps()
+    return {
+        "instances": insts,
+        "caps": caps,
+        "official_phones": [
+            {"slot": 1, "phone": "+91 98272 84804", "display_name": "Nidaan Cases"},
+            {"slot": 2, "phone": "+91 98260 11116", "display_name": "Nidaan Updates"},
+            {"slot": 3, "phone": "+91 95844 68804", "display_name": "Nidaan Support"},
+        ],
+    }
+
+
+@app.post("/nidaan/ops/api/official-numbers")
+async def ops_official_upsert(body: _OfficialInstanceUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    inst = await nnot.upsert_official_instance(
+        instance_slot=body.instance_slot,
+        evolution_instance=body.evolution_instance,
+        display_name=body.display_name, phone_number=body.phone_number)
+    return {"instance": inst}
+
+
+@app.get("/nidaan/ops/api/official-numbers/{slot}/qr")
+async def ops_official_qr(slot: int, request: Request):
+    """Fetch a fresh QR code from Evolution for a slot (SA only).
+    Returns base64 QR + pairing code. SA scans on the SIM's WhatsApp app.
+    """
+    import asyncio as _asyncio
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    inst = await nnot.get_official_instance(slot)
+    if not inst:
+        raise HTTPException(404, "Instance slot not registered yet — POST evolution_instance first")
+    instance_name = inst["evolution_instance"]
+    try:
+        import biz_whatsapp_evolution as wa_evo
+
+        # 1) If already connected, no QR needed — surface that to the UI cleanly.
+        try:
+            state = await wa_evo.get_connection_state(instance_name)
+            cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
+            if cur_state == "open":
+                return {
+                    "instance_slot": slot,
+                    "evolution_instance": instance_name,
+                    "qr": "",
+                    "pairing_code": "",
+                    "already_connected": True,
+                }
+        except Exception:
+            pass
+
+        # 2) Ensure instance exists on Evolution (idempotent create).
+        # tenant_id=0 marks this as a system-level Nidaan official instance.
+        try:
+            await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
+            await _asyncio.sleep(3)  # let Baileys boot
+        except Exception:
+            pass
+
+        # 3) Apply residential proxy if configured (Hetzner→Webshare path).
+        try:
+            await wa_evo.set_instance_proxy(instance_name)
+        except Exception as pe:
+            logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
+
+        # 4) Trigger connect — retry up to 4 times since QR generation is async.
+        qr_b64 = ""
+        pairing = ""
+        last_raw = {}
+        for attempt in range(4):
+            result = await wa_evo.connect_instance(instance_name)
+            last_raw = result if isinstance(result, dict) else {}
+            qr_b64 = (last_raw.get("base64")
+                      or (last_raw.get("qrcode") or {}).get("base64", "")
+                      or "")
+            pairing = last_raw.get("pairingCode") or ""
+            if qr_b64 or pairing:
+                break
+            await _asyncio.sleep(2)
+
+        return {
+            "instance_slot": slot,
+            "evolution_instance": instance_name,
+            "qr": qr_b64,
+            "pairing_code": pairing,
+            "already_connected": False,
+        }
+    except Exception as e:
+        logger.exception("QR fetch failed for slot %s: %s", slot, e)
+        raise HTTPException(500, f"QR fetch failed: {e}")
+
+
+# ── Subscriber prefs (used by dashboard opt-in card) ─────────────────────────
+@app.get("/nidaan/api/prefs")
+async def nidaan_get_prefs(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401)
+    return await nnot.get_subscriber_prefs(payload["sub"])
+
+
+@app.post("/nidaan/api/prefs")
+async def nidaan_set_prefs(body: _SubscriberPrefsReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401)
+    return await nnot.set_subscriber_pref(
+        payload["sub"],
+        wa_opt_in=body.wa_opt_in,
+        email_enabled=body.email_enabled,
+        saved_numbers=body.saved_numbers)
+
+
+# ── vCard download for the 3 official numbers ─────────────────────────────────
+@app.get("/nidaan/api/official-vcard")
+async def nidaan_vcard():
+    """Returns a .vcf containing all 3 Nidaan official contacts so subscriber
+    (or staff) can save them with one click."""
+    contacts = [
+        ("Nidaan Cases",   "+919827284804"),
+        ("Nidaan Updates", "+919826011116"),
+        ("Nidaan Support", "+919584468804"),
+    ]
+    vcards = []
+    for name, phone in contacts:
+        vcards.append(
+            "BEGIN:VCARD\r\n"
+            "VERSION:3.0\r\n"
+            f"FN:{name}\r\n"
+            "ORG:NidaanPartner.com\r\n"
+            f"TEL;TYPE=CELL,WORK,VOICE:{phone}\r\n"
+            "EMAIL:nidaanhelp@gmail.com\r\n"
+            "URL:https://nidaanpartner.com\r\n"
+            "END:VCARD\r\n")
+    payload = "".join(vcards)
+    return Response(content=payload, media_type="text/vcard; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="NidaanPartner.vcf"'})
 
 
 # =============================================================================
@@ -1778,17 +3940,17 @@ async def wa_agent_ws(websocket: WebSocket):
 @limiter.limit("5/minute")
 async def wa_agent_connect(request: Request):
     """Generate QR credentials for a new APK connection. Revokes any existing device."""
-    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    tenant_id, agent_id, phone = await wa_agent._get_agent_from_request(request)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    creds = await wa_agent.generate_device_credentials(tenant_id, agent_id)
+    creds = await wa_agent.generate_device_credentials(tenant_id, agent_id, phone)
     return creds
 
 
 @app.get("/api/wa-agent/status")
 async def wa_agent_status(request: Request):
     """Return the active device status and live-connection flag for the agent."""
-    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    tenant_id, agent_id, _ = await wa_agent._get_agent_from_request(request)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     device = await wa_agent.get_device_status(tenant_id, agent_id)
@@ -1801,7 +3963,7 @@ async def wa_agent_status(request: Request):
 @app.delete("/api/wa-agent/disconnect")
 async def wa_agent_disconnect(request: Request):
     """Revoke the active device — closes live WS connection and deletes credentials."""
-    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    tenant_id, agent_id, _ = await wa_agent._get_agent_from_request(request)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     revoked = await wa_agent.revoke_device(tenant_id, agent_id)
@@ -1811,7 +3973,7 @@ async def wa_agent_disconnect(request: Request):
 @app.patch("/api/wa-agent/settings")
 async def wa_agent_settings(body: _WAAgentSettingsReq, request: Request):
     """Update per-device settings: auto_reply toggle, business hours, takeover keywords, caps."""
-    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    tenant_id, agent_id, _ = await wa_agent._get_agent_from_request(request)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     ok = await wa_agent.update_device_settings(
@@ -1828,7 +3990,7 @@ async def wa_agent_settings(body: _WAAgentSettingsReq, request: Request):
 @app.get("/api/wa-agent/conversations")
 async def wa_agent_conversations(request: Request, limit: int = Query(100, le=500)):
     """Fetch recent conversation history for the agent's WA bridge."""
-    tenant_id, agent_id = await wa_agent._get_agent_from_request(request)
+    tenant_id, agent_id, _ = await wa_agent._get_agent_from_request(request)
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     convs = await wa_agent.get_recent_conversations(tenant_id, agent_id, limit)
@@ -2176,22 +4338,10 @@ async def api_send_signup_otp(req: SendEmailOTPRequest, request: Request):
     if auth.is_ip_blocked(client_ip):
         return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
 
-    # Check if already registered
-    async with aiosqlite.connect(db.DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT tenant_id, subscription_status FROM tenants WHERE email = ? AND email != ''",
-            (email,))
-        existing = await cur.fetchone()
-    if existing:
-        status = existing["subscription_status"]
-        if status in ("expired", "wiped"):
-            return JSONResponse(
-                {"detail": "A trial was already used with this email. Please subscribe to a paid plan."},
-                status_code=409)
-        return JSONResponse(
-            {"detail": "An account with this email already exists. Please login instead."},
-            status_code=409)
+    # B1: guide-don't-block — friendly conflict popup instead of 409
+    conflict = await db.classify_signup_conflict(email=email, intent="sarathi_signup")
+    if conflict:
+        return JSONResponse({"conflict": conflict}, status_code=200)
 
     result = auth.generate_email_otp(email)
     if "error" in result:
@@ -2268,6 +4418,11 @@ async def api_send_email_otp(req: SendEmailOTPRequest, request: Request):
             if agent_match:
                 tenant = agent_match
     if not tenant:
+        # B1: Sarathi has no account, but maybe Nidaan does → guide them there
+        cross_product = await db.classify_signup_conflict(
+            email=email, intent="sarathi_login")
+        if cross_product:
+            return JSONResponse({"conflict": cross_product}, status_code=200)
         return JSONResponse(
             {"detail": "No account found with this email. Please sign up first."},
             status_code=404)
@@ -2740,26 +4895,16 @@ async def api_google_signup(req: GoogleSignUpRequest, request: Request):
 
     email = google_user["email"].lower().strip()
     name = google_user.get("name", "")
+    google_sub = google_user.get("sub", "") or ""  # B6: stable Google identity
 
-    # Check if account already exists
-    async with aiosqlite.connect(db.DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT tenant_id, subscription_status FROM tenants WHERE email = ? AND email != ''",
-            (email,))
-        existing = await cursor.fetchone()
-
-    if existing:
-        status = existing['subscription_status'] if existing else ''
-        if status in ('expired', 'wiped'):
-            return JSONResponse(
-                {"detail": "A trial was already used with this email. Please subscribe to continue.",
-                 "tenant_id": existing['tenant_id'], "can_subscribe": True},
-                status_code=409)
-        return JSONResponse(
-            {"detail": "An account with this email already exists. Please login instead.",
-             "tenant_id": existing['tenant_id']},
-            status_code=409)
+    # B1 + B6: surface conflicts (existing Sarathi tenant, existing Nidaan
+    # bundle, OR same Google identity that has already used a trial) as a
+    # friendly popup instead of a 409. Including google_sub catches the
+    # "user creates a new email alias to bypass trial reuse" abuse vector.
+    conflict = await db.classify_signup_conflict(
+        email=email, google_sub=google_sub, intent="sarathi_signup")
+    if conflict:
+        return JSONResponse({"conflict": conflict}, status_code=200)
 
     # Create account with Google info — minimal details, rest via onboarding
     plan_features = db.PLAN_FEATURES.get(req.plan, db.PLAN_FEATURES['trial'])
@@ -2781,6 +4926,10 @@ async def api_google_signup(req: GoogleSignUpRequest, request: Request):
     owner_agent_id = result['agent_id']
 
     update_fields = {"plan": req.plan, "max_agents": max_agents}
+    # B6: persist Google sub so a later trial-reuse attempt with a
+    # different email-alias from the same Google account is still detected.
+    if google_sub:
+        update_fields["google_sub"] = google_sub
     await db.update_tenant(tenant_id, **update_fields)
 
     # Handle referral code
@@ -2840,7 +4989,7 @@ async def api_google_signup(req: GoogleSignUpRequest, request: Request):
 
 @app.get("/api/auth/me")
 async def api_auth_me(tenant: dict = Depends(auth.get_current_tenant)):
-    """Return current authenticated tenant info with plan features and role."""
+    """Return current authenticated tenant info with plan features, role, and RBAC permissions."""
     tenant_data = await db.get_tenant(tenant["tenant_id"])
     if not tenant_data:
         return JSONResponse({"detail": "Tenant not found"}, status_code=404)
@@ -2852,6 +5001,24 @@ async def api_auth_me(tenant: dict = Depends(auth.get_current_tenant)):
     owner_name = tenant_data.get("owner_name", "")
     city = tenant_data.get("city", "")
     is_profile_complete = bool(owner_name and len(owner_name) >= 2 and city and len(city) >= 2 and city.upper() != "TBD")
+
+    # RBAC permissions for this agent
+    role = tenant.get("role", "owner")
+    agent_id = tenant.get("agent_id")
+    permissions = db._ALL_PERMS  # default for owner
+    if role not in ("owner", "admin") and agent_id:
+        _agent = await db.get_agent_by_id(agent_id)
+        if _agent:
+            permissions = await db.get_agent_permissions(_agent)
+
+    # Role display label (for custom roles, fetch from DB)
+    role_label = role
+    role_label_hi = role
+    if role not in ("owner", "admin", "agent") and agent_id:
+        _cr = await db.get_role_by_slug(tenant["tenant_id"], role)
+        if _cr:
+            role_label = _cr.get("role_label", role)
+            role_label_hi = _cr.get("role_label_hi") or role_label
 
     return {
         "tenant_id": tenant["tenant_id"],
@@ -2865,9 +5032,18 @@ async def api_auth_me(tenant: dict = Depends(auth.get_current_tenant)):
         "max_agents": tenant_data.get("max_agents", 1),
         "current_agents": agent_count,
         "features": features,
-        "role": tenant.get("role", "owner"),
-        "agent_id": tenant.get("agent_id"),
+        "role": role,
+        "role_label": role_label,
+        "role_label_hi": role_label_hi,
+        "agent_id": agent_id,
         "is_profile_complete": is_profile_complete,
+        "permissions": permissions,
+        # B3: surface bundle + expiry data so the frontend can render banners
+        "trial_ends_at": tenant_data.get("trial_ends_at"),
+        "subscription_expires_at": tenant_data.get("subscription_expires_at"),
+        "plan_source": tenant_data.get("plan_source"),
+        "bundled_until": tenant_data.get("bundled_until"),
+        "lifetime_trial_used": bool(tenant_data.get("lifetime_trial_used")),
     }
 
 
@@ -2895,7 +5071,7 @@ async def api_telegram_login(token: str = None):
         logger.warning("Telegram login failed: %s", e.detail)
         return HTMLResponse(
             "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
-            "<h2>❌ Link expired or invalid</h2>"
+            "<h2>❌ Link expired, invalid, or already used</h2>"
             "<p>Please generate a new login link from your Telegram bot using /weblogin</p>"
             "<a href='/'>← Back to Home</a></body></html>",
             status_code=401)
@@ -2923,6 +5099,9 @@ async def api_telegram_login(token: str = None):
     )
 
     logger.info("🔑 Telegram web login: tenant %d, agent %s, role=%s", tenant_id, agent_id, role)
+
+    # Invalidate this token so it cannot be reused (single-use enforcement)
+    auth.consume_telegram_login_token(payload["jti"], payload["exp"])
 
     # Redirect to dashboard with tokens injected via JS
     # Escape firm_name for safe JS string interpolation
@@ -3044,12 +5223,42 @@ async def api_admin_create_firm(req: CreateFirmRequest, _admin=Depends(auth.requ
 PLAN_PRICES = {"individual": 199, "team": 799, "enterprise": 1999}
 
 @app.get("/superadmin", response_class=HTMLResponse)
-async def superadmin_page():
+async def superadmin_page(request: Request):
     """Serve the Super Admin dashboard page."""
+    if _is_nidaan_host(request):
+        # Nidaan domain: redirect to unified /admins page
+        return HTMLResponse(status_code=302, headers={"Location": "/admins"})
     sa_file = static_dir / "superadmin.html"
     if sa_file.exists():
         return HTMLResponse(sa_file.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Super Admin page not found</h1>", status_code=404)
+
+
+@app.get("/subadmin", response_class=HTMLResponse)
+async def nidaan_subadmin_page(request: Request):
+    """Nidaan domain: redirect to unified /admins page."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return HTMLResponse(status_code=302, headers={"Location": "/admins"})
+
+
+@app.get("/associate", response_class=HTMLResponse)
+async def nidaan_associate_page(request: Request):
+    """Nidaan domain: redirect to unified /admins page."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return HTMLResponse(status_code=302, headers={"Location": "/admins"})
+
+
+@app.get("/admins", response_class=HTMLResponse)
+async def nidaan_admins_page(request: Request):
+    """Nidaan domain: unified ops portal — routes to appropriate dashboard after login."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    f = static_dir / "nidaan_ops.html"
+    if not f.exists():
+        return HTMLResponse("<h1>nidaan_ops.html not found</h1>", status_code=404)
+    return HTMLResponse(f.read_text(encoding="utf-8"))
 
 
 class SALoginRequest(BaseModel):
@@ -3235,7 +5444,7 @@ async def sa_dashboard(sa=Depends(auth.require_superadmin)):
 
 @app.get("/api/sa/tenants")
 async def sa_tenants(sa=Depends(auth.require_superadmin)):
-    """List all tenants with enriched data."""
+    """List all tenants with enriched data including Nidaan bundle origin."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute("""
@@ -3243,11 +5452,13 @@ async def sa_tenants(sa=Depends(auth.require_superadmin)):
                    subscription_status, is_active, trial_ends_at, subscription_expires_at,
                    razorpay_sub_id, tg_bot_token, wa_phone_id, max_agents,
                    founding_discount, founding_discount_until,
+                   plan_source, bundled_until,
                    created_at, updated_at
             FROM tenants ORDER BY created_at DESC
         """)
         tenants = [dict(r) for r in await cur.fetchall()]
 
+        # Enrich with per-tenant metrics and Nidaan account link
         for t in tenants:
             tid = t['tenant_id']
             cur = await conn.execute("SELECT COUNT(*) FROM agents WHERE tenant_id=?", (tid,))
@@ -3263,6 +5474,12 @@ async def sa_tenants(sa=Depends(auth.require_superadmin)):
             t['has_bot'] = bool(tok)
             t['tg_bot_token'] = f"{tok[:8]}...{tok[-4:]}" if len(tok) > 12 else ''
             t['has_whatsapp'] = bool(t.get('wa_phone_id'))
+            # Nidaan bundle origin: find linked Nidaan account_id via product_link
+            cur = await conn.execute(
+                "SELECT nidaan_account_id FROM product_link WHERE sarathi_tenant_id=? AND active=1 LIMIT 1",
+                (tid,))
+            link_row = await cur.fetchone()
+            t['nidaan_account_id'] = link_row[0] if link_row else None
 
     # Bulk-load affiliate mapping for all tenants
     aff_map = await db.get_affiliate_map_for_tenants([t['tenant_id'] for t in tenants])
@@ -3364,6 +5581,127 @@ async def sa_tenant_detail(tenant_id: int, sa=Depends(auth.require_superadmin)):
         "pending_plan_change": pending_change,
         "plan_features": plan_features,
     }
+
+
+# ── B2 — SA Refund Management (Sarathi) ────────────────────────────────────
+@app.get("/api/sa/refunds")
+async def sa_refunds_list(status: Optional[str] = None,
+                          sa=Depends(auth.require_superadmin)):
+    """List Sarathi refunds + the queue of eligible-but-unrefunded cancellations."""
+    rows = await payments.list_sarathi_refunds(status=status)
+    needs_review = await payments.find_sarathi_eligible_unrefunded(days=30)
+    return {"refunds": rows, "needs_review": needs_review,
+            "policy": {"window_days": payments.SARATHI_REFUND_WINDOW_DAYS,
+                       "lead_threshold": payments.SARATHI_REFUND_LEAD_THRESHOLD}}
+
+
+@app.post("/api/sa/refunds/{refund_id}/retry")
+async def sa_refund_retry(refund_id: int, sa=Depends(auth.require_superadmin)):
+    """Re-attempt a previously-failed Sarathi refund."""
+    rf = await payments.get_sarathi_refund(refund_id)
+    if not rf:
+        return JSONResponse({"detail": "refund_not_found"}, status_code=404)
+    if rf.get("status") not in ("failed", "pending"):
+        return JSONResponse({"detail": f"cannot_retry_status_{rf.get('status')}"}, status_code=409)
+    payment_id = rf.get("razorpay_payment_id") or ""
+    if not payment_id:
+        return JSONResponse({"detail": "no_payment_id_to_refund"}, status_code=400)
+    await payments.update_sarathi_refund_status(refund_id, "processing")
+    result = await payments.issue_razorpay_refund_for_sarathi(
+        payment_id, int(rf["amount"]) * 100,
+        notes={"refund_id": str(refund_id), "retry_by_sa": sa.get("phone", "")})
+    if result.get("ok"):
+        await payments.update_sarathi_refund_status(
+            refund_id, "processed", razorpay_refund_id=result.get("refund_id", ""))
+        return {"ok": True, "razorpay_refund_id": result.get("refund_id", "")}
+    await payments.update_sarathi_refund_status(refund_id, "failed",
+                                                 last_error=result.get("error", "")[:500])
+    return JSONResponse({"detail": f"razorpay_failed: {result.get('error','')[:200]}"},
+                        status_code=502)
+
+
+class _SaManualRefundReq(BaseModel):
+    tenant_id: int
+    amount: Optional[int] = None  # rupees; default = full latest payment
+    reason: str = "sa_manual"
+
+
+@app.post("/api/sa/refunds/manual")
+async def sa_refund_manual(body: _SaManualRefundReq, sa=Depends(auth.require_superadmin)):
+    """SA-triggered refund — bypasses Policy A window/usage rules."""
+    tenant = await db.get_tenant(body.tenant_id)
+    if not tenant:
+        return JSONResponse({"detail": "tenant_not_found"}, status_code=404)
+    payment = await payments.find_latest_paid_payment_for_tenant(body.tenant_id)
+    if not payment or not payment.get("razorpay_payment_id"):
+        return JSONResponse({"detail": "no_payment_to_refund"}, status_code=400)
+    amount_rupees = int(body.amount) if body.amount else (int(payment["amount_paise"]) // 100)
+    if amount_rupees <= 0 or amount_rupees * 100 > int(payment["amount_paise"]):
+        return JSONResponse({"detail": "amount_invalid"}, status_code=400)
+    refund_id = await payments.create_sarathi_refund_row(
+        tenant_id=body.tenant_id, amount=amount_rupees,
+        razorpay_payment_id=payment["razorpay_payment_id"],
+        reason=body.reason, initiated_by="sa")
+    await payments.update_sarathi_refund_status(refund_id, "processing")
+    result = await payments.issue_razorpay_refund_for_sarathi(
+        payment["razorpay_payment_id"], amount_rupees * 100,
+        notes={"refund_id": str(refund_id), "manual_by_sa": sa.get("phone", "")})
+    if result.get("ok"):
+        await payments.update_sarathi_refund_status(
+            refund_id, "processed", razorpay_refund_id=result.get("refund_id", ""))
+        return {"ok": True, "refund_id": refund_id, "amount": amount_rupees,
+                "razorpay_refund_id": result.get("refund_id", "")}
+    await payments.update_sarathi_refund_status(refund_id, "failed",
+                                                 last_error=result.get("error", "")[:500])
+    return JSONResponse({"detail": f"razorpay_failed: {result.get('error','')[:200]}",
+                          "refund_id": refund_id}, status_code=502)
+
+
+# ── B4 — SA Affiliate Clawback Queue (paid commissions awaiting offset) ────
+@app.get("/api/sa/affiliates/clawbacks")
+async def sa_affiliate_clawbacks_list(sa=Depends(auth.require_superadmin)):
+    """List paid commissions marked clawback_owed (refund happened after
+    payout). SA should offset these from the affiliate's next payout."""
+    rows = await db.list_clawbacks_owed()
+    return {"clawbacks": rows, "count": len(rows)}
+
+
+class _SettleClawbackReq(BaseModel):
+    referral_id: int
+    note: str = "Offset from next payout"
+
+
+@app.post("/api/sa/affiliates/clawbacks/settle")
+async def sa_settle_clawback(body: _SettleClawbackReq,
+                              sa=Depends(auth.require_superadmin)):
+    """SA confirms a clawback has been offset (manually deducted from the
+    affiliate's next scheduled payout). Marks the referral status='settled'."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT referral_id, payout_status, commission_amount, affiliate_id "
+            "FROM affiliate_referrals WHERE referral_id=?",
+            (body.referral_id,))).fetchone()
+        if not row:
+            return JSONResponse({"detail": "referral_not_found"}, status_code=404)
+        if row["payout_status"] != "clawback_owed":
+            return JSONResponse(
+                {"detail": f"not_owed (status={row['payout_status']})"},
+                status_code=409)
+        # Now deduct from total_earned since we're recording the actual offset
+        amt = float(row["commission_amount"] or 0)
+        await conn.execute(
+            "UPDATE affiliate_referrals SET status='clawback_settled', "
+            "payout_status='clawback_settled' WHERE referral_id=?",
+            (body.referral_id,))
+        if amt > 0:
+            await conn.execute(
+                "UPDATE affiliates SET total_earned = MAX(0, total_earned - ?) "
+                "WHERE affiliate_id=?", (amt, row["affiliate_id"]))
+        await conn.commit()
+    await db.log_audit("clawback_settled",
+                       f"Referral #{body.referral_id} clawback settled by SA — {body.note}")
+    return {"ok": True, "referral_id": body.referral_id, "amount_offset": amt}
 
 
 # ── SA Tenant Actions ───────────────────────────────────────────────────────
@@ -5557,26 +7895,191 @@ Use the phone number you registered with to sign in.</p>
 
 SUBSCRIPTION_EXPIRED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Subscription Expired — Sarathi-AI</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Poppins',sans-serif;background:#f8fafc;color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:48px;text-align:center;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.08)}
-.card h1{font-size:1.5em;margin-bottom:8px;color:#dc2626}.card p{color:#64748b;font-size:0.95em;margin-bottom:28px;line-height:1.7}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 36px;border-radius:12px;font-weight:600;font-size:0.95em;text-decoration:none;transition:all .25s;cursor:pointer;border:none;font-family:inherit}
-.btn-blue{background:linear-gradient(135deg,#1a56db,#3b82f6);color:#fff;box-shadow:0 4px 20px rgba(26,86,219,0.25)}
-.btn-blue:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(26,86,219,0.35)}
-.btn-ghost{background:transparent;color:#1a56db;border:2px solid #1a56db;margin-left:12px}
-.btn-ghost:hover{background:#1a56db;color:#fff}
-.note{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 20px;margin-bottom:20px;font-size:0.88em;color:#991b1b;line-height:1.6}</style></head>
-<body><div class="card"><div style="font-size:3em;margin-bottom:16px">⏰</div>
-<h1>Subscription Expired</h1>
-<p>Your free trial or subscription has ended.<br>
-Subscribe to a plan to continue using your dashboard, calculators, and all CRM features.</p>
-<div class="note">
-⚠️ Your data is safe! Subscribe to regain access immediately — no data is lost.
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Poppins',sans-serif;background:#f8fafc;color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:40px 36px;text-align:center;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.08)}
+h1{font-size:1.5em;margin-bottom:8px;color:#dc2626}
+.subtitle{color:#64748b;font-size:.92em;line-height:1.7;margin-bottom:20px}
+.note{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;margin-bottom:20px;font-size:.85em;color:#991b1b}
+.note-auto{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:10px 14px;margin-bottom:20px;font-size:.8em;color:#166534}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.plan-card{border:2px solid #e2e8f0;border-radius:14px;padding:14px 8px;cursor:pointer;transition:all .2s;background:#fff}
+.plan-card:hover{border-color:#3b82f6;background:#eff6ff}
+.plan-card.selected{border-color:#1a56db;background:#eff6ff;box-shadow:0 0 0 3px rgba(26,86,219,.12)}
+.plan-name{font-weight:700;font-size:.8em;color:#1e293b;margin-bottom:3px}
+.plan-price{font-size:1.15em;font-weight:800;color:#1a56db}
+.plan-desc{font-size:.68em;color:#64748b;margin-top:3px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-weight:700;font-size:.95em;cursor:pointer;border:none;font-family:inherit;margin-bottom:10px;transition:all .25s;text-decoration:none}
+.btn-pay{background:linear-gradient(135deg,#1a56db,#3b82f6);color:#fff;box-shadow:0 4px 20px rgba(26,86,219,0.25)}
+.btn-pay:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 28px rgba(26,86,219,0.35)}
+.btn-pay:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.btn-login{background:#0d9488;color:#fff;box-shadow:0 4px 16px rgba(13,148,136,0.3)}
+.btn-ghost{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;font-size:.88em}
+.btn-ghost:hover{background:#f1f5f9}
+.msg{min-height:18px;margin-bottom:10px;font-size:.82em;color:#dc2626}
+.msg.ok{color:#166534}
+.support{font-size:.78em;color:#94a3b8;margin-top:4px}
+.support a{color:#1a56db;text-decoration:none}
+.spinner{display:none;margin:6px auto;border:3px solid #e2e8f0;border-top-color:#1a56db;border-radius:50%;width:26px;height:26px;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.success-box{display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:16px;padding:24px;margin-bottom:16px;text-align:center}
+.success-box h2{color:#15803d;font-size:1.3em;margin-bottom:6px}
+.success-box p{color:#166534;font-size:.88em}
+</style></head>
+<body><div class="card">
+  <div id="mainView">
+    <div style="font-size:3em;margin-bottom:12px">⏰</div>
+    <h1>Subscription Expired</h1>
+    <p class="subtitle">Your free trial or subscription has ended.<br>Choose a plan below — your data is safe and waiting.</p>
+    <div class="note">⚠️ All your leads, policies and reports are preserved. Subscribe to regain access immediately.</div>
+    <div class="note-auto">🔄 <strong>Auto-renews monthly</strong> — cancel anytime from your dashboard.</div>
+    <div class="plans">
+      <div class="plan-card selected" data-plan="individual" onclick="selectPlan('individual')">
+        <div class="plan-name">Solo Advisor</div>
+        <div class="plan-price">₹199<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">1 Advisor · Full CRM</div>
+      </div>
+      <div class="plan-card" data-plan="team" onclick="selectPlan('team')">
+        <div class="plan-name">Team</div>
+        <div class="plan-price">₹799<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">6 Advisors · WhatsApp</div>
+      </div>
+      <div class="plan-card" data-plan="enterprise" onclick="selectPlan('enterprise')">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">₹1,999<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">26 Advisors · API</div>
+      </div>
+    </div>
+    <p class="msg" id="msg"></p>
+    <div class="spinner" id="spin"></div>
+    <button class="btn btn-pay" id="payBtn" onclick="startPayment()">💳 Subscribe Now</button>
+    <div id="loginFallback" style="display:none">
+      <a href="/?login=1" class="btn btn-login">🔑 Log In to Subscribe</a>
+    </div>
+    <a href="/" class="btn btn-ghost">← Go Home</a>
+    <p class="support">Need help? <a href="mailto:support@sarathi-ai.com">support@sarathi-ai.com</a> &nbsp;|&nbsp; <a href="/">sarathi-ai.com</a></p>
+  </div>
+  <div class="success-box" id="successBox">
+    <div style="font-size:2.5em;margin-bottom:10px">✅</div>
+    <h2>Subscription Activated!</h2>
+    <p id="successPlan" style="margin-bottom:10px"></p>
+    <p>Redirecting to your dashboard in <span id="countDown">3</span>s…</p>
+  </div>
 </div>
-<a href="/#pricing" class="btn btn-blue">💳 View Plans & Subscribe</a>
-<a href="/" class="btn btn-ghost">Go Home</a>
-</div></body></html>"""
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var _tid = null, _plan = 'individual', _sessionLost = false;
+
+(async function init() {
+  try {
+    var r = await fetch('/api/auth/me', {credentials: 'include'});
+    if (r.status === 401) {
+      _sessionLost = true;
+      document.getElementById('payBtn').style.display = 'none';
+      document.getElementById('loginFallback').style.display = 'block';
+      setMsg('Your session has expired. Please log in to subscribe.', true);
+      return;
+    }
+    if (!r.ok) return;
+    var d = await r.json();
+    _tid = d.tenant_id || null;
+    var lp = d.plan;
+    if (lp && document.querySelector('[data-plan="' + lp + '"]')) selectPlan(lp);
+  } catch(e) { setMsg('Could not load session. Try refreshing.'); }
+})();
+
+function selectPlan(p) {
+  _plan = p;
+  document.querySelectorAll('.plan-card').forEach(function(c) {
+    c.classList.toggle('selected', c.dataset.plan === p);
+  });
+}
+
+async function startPayment() {
+  if (_sessionLost || !_tid) {
+    document.getElementById('payBtn').style.display = 'none';
+    document.getElementById('loginFallback').style.display = 'block';
+    setMsg('Please log in first to subscribe.');
+    return;
+  }
+  setLoading(true); setMsg('');
+  try {
+    var r = await fetch('/api/payments/create-subscription', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tenant_id: _tid, plan: _plan})
+    });
+    var d = await r.json();
+    if (!r.ok) { setMsg(d.detail || d.error || 'Could not create subscription. Contact support.'); setLoading(false); return; }
+
+    var planNames = {individual: 'Solo Advisor ₹199/mo', team: 'Team ₹799/mo', enterprise: 'Enterprise ₹1,999/mo'};
+    var rzp = new Razorpay({
+      key: d.razorpay_key_id,
+      subscription_id: d.subscription_id,
+      name: 'Sarathi-AI',
+      description: (planNames[_plan] || _plan) + ' — auto-renews monthly',
+      theme: {color: '#1a56db'},
+      handler: async function(resp) {
+        setLoading(true); setMsg('');
+        try {
+          var vr = await fetch('/api/payments/verify-subscription', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              tenant_id: _tid, plan: _plan,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_subscription_id: resp.razorpay_subscription_id,
+              razorpay_signature: resp.razorpay_signature
+            })
+          });
+          var vd = await vr.json();
+          if (!vr.ok) {
+            var errMsg = typeof vd.detail === 'string' ? vd.detail : 'Verification failed';
+            setMsg(errMsg + ' — Email support@sarathi-ai.com with Payment ID: ' + resp.razorpay_payment_id);
+            setLoading(false); return;
+          }
+          showSuccess(planNames[_plan] || _plan, resp.razorpay_payment_id);
+        } catch(e) {
+          setMsg('Verification error. Your payment may have succeeded — email support@sarathi-ai.com with Payment ID: ' + resp.razorpay_payment_id);
+          setLoading(false);
+        }
+      },
+      modal: {ondismiss: function() { setLoading(false); }}
+    });
+    setLoading(false);
+    rzp.on('payment.failed', function(resp) {
+      var desc = resp.error && resp.error.description || 'Unknown error';
+      setMsg('Payment failed: ' + desc + '. Please try again or contact support.');
+    });
+    rzp.open();
+  } catch(e) { setMsg('Error: ' + e.message); setLoading(false); }
+}
+
+function showSuccess(planLabel, paymentId) {
+  document.getElementById('mainView').style.display = 'none';
+  var box = document.getElementById('successBox');
+  box.style.display = 'block';
+  document.getElementById('successPlan').textContent = planLabel + ' — Payment ID: ' + paymentId;
+  var n = 3;
+  var t = setInterval(function() {
+    n--; document.getElementById('countDown').textContent = n;
+    if (n <= 0) { clearInterval(t); window.location.replace('/dashboard'); }
+  }, 1000);
+}
+
+function setLoading(on) {
+  document.getElementById('spin').style.display = on ? 'block' : 'none';
+  document.getElementById('payBtn').disabled = on;
+}
+function setMsg(m, info) {
+  var el = document.getElementById('msg');
+  el.textContent = m;
+  el.className = 'msg' + (info ? ' ok' : '');
+}
+</script>
+</body></html>"""
 
 
 NOT_REGISTERED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -5648,7 +8151,26 @@ async def calculators_page(request: Request):
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     """Serve dashboard — requires active subscription (JWT cookie only).
-    Also allows SA impersonation tokens via ?_imp_token= query param."""
+    Also allows SA impersonation tokens via ?_imp_token= query param,
+    AND B7 magic-link tokens via ?token= (sets cookie + redirects clean)."""
+    # B7: magic-link from Nidaan dashboard. If ?token= is present but the
+    # session cookie isn't yet set, accept the URL token, plant a cookie, and
+    # redirect to /dashboard (clean URL — keeps JWT out of address bar/history
+    # and out of Referer headers when the user navigates onward).
+    magic_token = request.query_params.get("token")
+    if magic_token and not request.cookies.get("sarathi_token"):
+        try:
+            payload = auth.verify_access_token(magic_token)
+            if payload and payload.get("sub"):
+                response = RedirectResponse("/dashboard", status_code=302)
+                response.set_cookie(
+                    "sarathi_token", magic_token,
+                    max_age=86400, samesite="lax", httponly=False,
+                    secure=request.url.scheme == "https")
+                return response
+        except Exception:
+            pass
+
     tenant = await auth.get_optional_tenant(request)
 
     # If no cookie/header auth, check for SA impersonation token in query param
@@ -5859,38 +8381,16 @@ async def api_signup(req: SignupRequest, request: Request):
             existing = await cursor.fetchone()
 
     if email_existing:
-        status = email_existing['subscription_status'] if email_existing else ''
-        tid = email_existing['tenant_id']
-        if status in ('expired', 'wiped'):
-            return JSONResponse(
-                {"detail": "A trial was already used with this email address. "
-                            "Free trial is available once per email. "
-                            "Please subscribe to a paid plan to continue.",
-                 "tenant_id": tid,
-                 "can_subscribe": True},
-                status_code=409,
-            )
         return JSONResponse(
             {"detail": "An account with this email already exists. Please login instead.",
-             "tenant_id": tid},
+             "tenant_id": email_existing['tenant_id']},
             status_code=409,
         )
 
     if existing:
-        status = existing['subscription_status'] if existing else ''
-        tid = existing['tenant_id']
-        if status in ('expired', 'wiped'):
-            return JSONResponse(
-                {"detail": "A trial was already used with this phone number. "
-                            "Free trial is available once per phone. "
-                            "Please subscribe to a paid plan to continue.",
-                 "tenant_id": tid,
-                 "can_subscribe": True},
-                status_code=409,
-            )
         return JSONResponse(
-            {"detail": "An account with this phone number already exists. Please login instead.",
-             "tenant_id": tid},
+            {"detail": "An account already exists with these details. Please login instead.",
+             "tenant_id": existing['tenant_id']},
             status_code=409,
         )
 
@@ -6009,6 +8509,14 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_signature: str
 
 
+class VerifySubscriptionRequest(BaseModel):
+    tenant_id: int
+    plan: str = Field(..., pattern=r"^(individual|team|enterprise)$")
+    razorpay_payment_id: str
+    razorpay_subscription_id: str
+    razorpay_signature: str
+
+
 @app.post("/api/payments/create-order")
 @limiter.limit("10/minute")
 async def api_create_order(req: CreateOrderRequest, request: Request, tenant: dict = Depends(auth.require_owner)):
@@ -6042,6 +8550,26 @@ async def api_verify_payment(req: VerifyPaymentRequest, request: Request, tenant
     return result
 
 
+@app.post("/api/payments/verify-subscription")
+@limiter.limit("10/minute")
+async def api_verify_subscription(req: VerifySubscriptionRequest, request: Request,
+                                   tenant: dict = Depends(auth.require_owner)):
+    """Verify Razorpay subscription payment and immediately activate tenant. Owner/admin only.
+    Provides instant activation; the async webhook (subscription.activated) is the durable fallback."""
+    if tenant["tenant_id"] != req.tenant_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=403)
+    result = await payments.verify_subscription_and_activate(
+        tenant_id=req.tenant_id,
+        plan_key=req.plan,
+        razorpay_payment_id=req.razorpay_payment_id,
+        razorpay_subscription_id=req.razorpay_subscription_id,
+        razorpay_signature=req.razorpay_signature,
+    )
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=400)
+    return result
+
+
 @app.post("/api/payments/create-subscription")
 @limiter.limit("5/minute")
 async def api_create_subscription(req: CreateOrderRequest, request: Request,
@@ -6051,6 +8579,34 @@ async def api_create_subscription(req: CreateOrderRequest, request: Request,
         return JSONResponse({"detail": "Unauthorized"}, status_code=403)
     if not payments.is_enabled():
         return JSONResponse({"detail": "Payments not configured"}, status_code=503)
+
+    # Double-subscription guard: if the tenant has an active Nidaan bundle,
+    # block them from paying for a Sarathi plan they already get free.
+    _t = await db.get_tenant(req.tenant_id)
+    if _t and _t.get("plan_source") == "nidaan_bundle":
+        from datetime import date as _bdate
+        _bu = _t.get("bundled_until")
+        _bundle_still_active = False
+        if _bu:
+            try:
+                _bundle_still_active = _bdate.fromisoformat(_bu) >= _bdate.today()
+            except ValueError:
+                pass
+        if _bundle_still_active:
+            _bundle_plan = _t.get("plan", "")  # e.g. "individual", "team", "enterprise"
+            _nidaan_plan_names = {
+                "individual": "Nidaan Silver", "team": "Nidaan Gold",
+                "enterprise": "Nidaan Platinum",
+            }
+            if _bundle_plan == req.plan:
+                _nidaan_name = _nidaan_plan_names.get(_bundle_plan, "your Nidaan plan")
+                return JSONResponse(
+                    {"detail": f"You already get Sarathi {req.plan.title()} free with {_nidaan_name}. "
+                               f"No payment needed — open Sarathi from your Nidaan dashboard.",
+                     "blocked_by_bundle": True,
+                     "bundle_plan": _bundle_plan},
+                    status_code=409,
+                )
 
     result = await payments.create_subscription(req.tenant_id, req.plan)
     if "error" in result:
@@ -6076,11 +8632,23 @@ async def api_razorpay_webhook(request: Request):
     body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature", "")
 
+    _ua = request.headers.get("User-Agent", "")
+    _ip = request.client.host if request.client else ""
     # Verify webhook signature — reject if missing or invalid
     if not signature:
+        try:
+            await db.log_webhook_failure("/api/payments/webhook", _ip,
+                                          "missing_signature", user_agent=_ua)
+        except Exception:
+            pass
         return JSONResponse({"detail": "Missing signature"}, status_code=400)
     if not payments.verify_webhook_signature(body, signature):
         logger.warning("⚠️ Invalid Razorpay webhook signature")
+        try:
+            await db.log_webhook_failure("/api/payments/webhook", _ip,
+                                          "invalid_signature", user_agent=_ua)
+        except Exception:
+            pass
         return JSONResponse({"detail": "Invalid signature"}, status_code=400)
 
     try:
@@ -6091,6 +8659,77 @@ async def api_razorpay_webhook(request: Request):
     event = payload.get("event", "")
     result = await payments.process_webhook_event(event, payload.get("payload", {}))
     return result
+
+
+@app.get("/api/payments/check-order")
+@limiter.limit("10/minute")
+async def api_check_order(order_id: str, request: Request,
+                          tenant: dict = Depends(auth.get_current_tenant)):
+    """UPI recovery endpoint: checks if a Razorpay order was captured and activates the tenant.
+    Called when the browser loses context during UPI app-switch payment — the Razorpay
+    handler never fires, so we poll this endpoint on next page load.
+    Bypasses HMAC (not available in UPI context-loss) and verifies directly with Razorpay API.
+    """
+    import httpx as _httpx_co
+    if not order_id or len(order_id) > 60:
+        return JSONResponse({"detail": "Invalid order_id"}, status_code=400)
+
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_secret:
+        return JSONResponse({"detail": "Payments not configured"}, status_code=503)
+
+    # Fetch order from Razorpay
+    async with _httpx_co.AsyncClient() as _cl:
+        r = await _cl.get(
+            f"https://api.razorpay.com/v1/orders/{order_id}",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+    if r.status_code != 200:
+        return {"paid": False, "order_status": "not_found"}
+    order_data = r.json()
+
+    # Security: verify this order belongs to this tenant
+    notes = order_data.get("notes", {})
+    if str(notes.get("tenant_id", "")) != str(tenant["tenant_id"]):
+        return JSONResponse({"detail": "Order does not belong to this account"}, status_code=403)
+
+    order_status = order_data.get("status", "")
+    if order_status != "paid":
+        return {"paid": False, "order_status": order_status}
+
+    plan_key = notes.get("plan_key", "")
+    if not plan_key:
+        return JSONResponse({"detail": "Plan not in order"}, status_code=400)
+
+    # Fetch the captured payment for this order
+    async with _httpx_co.AsyncClient() as _cl:
+        r2 = await _cl.get(
+            f"https://api.razorpay.com/v1/orders/{order_id}/payments",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+    payments_data = r2.json() if r2.status_code == 200 else {}
+    payment_id = None
+    amount_paise = 0
+    for item in payments_data.get("items", []):
+        if item.get("status") == "captured":
+            payment_id = item["id"]
+            amount_paise = item.get("amount", 0)
+            break
+
+    if not payment_id:
+        return {"paid": False, "order_status": "no_captured_payment"}
+
+    result = await payments.activate_from_api_verified_payment(
+        tenant_id=tenant["tenant_id"],
+        plan_key=plan_key,
+        order_id=order_id,
+        payment_id=payment_id,
+        amount_paise=amount_paise,
+    )
+    return {"paid": True, "plan": plan_key,
+            "activated": result.get("activated", False),
+            "already_activated": result.get("already_activated", False)}
 
 
 @app.get("/api/payments/plans")
@@ -6185,8 +8824,75 @@ async def api_cancel_subscription(req: CancelRequest, request: Request,
         except Exception as e:
             logger.error("Failed to cancel Razorpay sub %s: %s", razorpay_sub_id, e)
 
-    # Send cancellation email
+    # Pull email up here so the refund block below can reach it
     tenant_email = tenant_data.get("email", "")
+
+    # B2: Policy A refund — full refund if cancelled within 7 days AND
+    # tenant has <5 leads. Auto-triggered, idempotent, all logged.
+    refund_info = {"eligible": False, "reason": "", "refund_id": None,
+                   "amount": 0, "status": ""}
+    try:
+        ok, reason, payment = await payments.check_sarathi_refund_eligibility(tenant_id)
+        refund_info["eligible"] = ok
+        refund_info["reason"] = reason
+        if ok and payment.get("razorpay_payment_id") and payment.get("amount_paise"):
+            amount_paise = int(payment["amount_paise"])
+            amount_rupees = amount_paise // 100
+            refund_id = await payments.create_sarathi_refund_row(
+                tenant_id=tenant_id, amount=amount_rupees,
+                razorpay_payment_id=payment["razorpay_payment_id"],
+                reason="Policy A: cancelled within window, <5 leads",
+                initiated_by="tenant")
+            refund_info["refund_id"] = refund_id
+            refund_info["amount"] = amount_rupees
+            await payments.update_sarathi_refund_status(refund_id, "processing")
+            result = await payments.issue_razorpay_refund_for_sarathi(
+                payment["razorpay_payment_id"], amount_paise,
+                notes={"tenant_id": str(tenant_id),
+                       "reason": "policy_a_within_7d_under_5_leads"})
+            if result.get("ok"):
+                await payments.update_sarathi_refund_status(
+                    refund_id, "processed",
+                    razorpay_refund_id=result.get("refund_id", ""))
+                refund_info["status"] = "processed"
+                logger.info("✅ Sarathi refund processed tenant=%d refund_id=%d rzp=%s amount=₹%d",
+                            tenant_id, refund_id, result.get("refund_id"), amount_rupees)
+                # B4: auto-clawback affiliate commission (if any)
+                try:
+                    cb = await db.auto_clawback_for_refund(
+                        tenant_id, reason=f"refund_id={refund_id}")
+                    if cb:
+                        logger.info("Affiliate clawback fired tenant=%d action=%s amount=₹%s",
+                                    tenant_id, cb.get("action"), cb.get("amount"))
+                except Exception as cbe:
+                    logger.error("Affiliate clawback failed tenant=%d: %s", tenant_id, cbe)
+                # Notify tenant
+                try:
+                    if tenant_email:
+                        asyncio.create_task(email_svc.send_email(
+                            to_email=tenant_email,
+                            subject=f"[Sarathi-AI] Refund of ₹{amount_rupees} initiated",
+                            html_body=(
+                                f"<p>Hi {tenant_data.get('owner_name','')},</p>"
+                                f"<p>Your Sarathi-AI subscription was cancelled and we have "
+                                f"initiated a full refund of <b>₹{amount_rupees}</b> to your "
+                                f"original payment method.</p>"
+                                f"<p><b>Refund ID:</b> {result.get('refund_id','')}<br/>"
+                                f"<b>Expected in your account:</b> 5-7 working days.</p>"
+                                f"<p>— Sarathi-AI Team</p>"),
+                            from_name="Sarathi-AI"))
+                except Exception as _ee:
+                    logger.warning("Refund email enqueue failed: %s", _ee)
+            else:
+                await payments.update_sarathi_refund_status(
+                    refund_id, "failed", last_error=result.get("error", "")[:500])
+                refund_info["status"] = "failed"
+                logger.error("❌ Sarathi refund failed tenant=%d refund_id=%d err=%s",
+                             tenant_id, refund_id, result.get("error"))
+    except Exception as rfe:
+        logger.error("Sarathi refund pipeline error tenant=%d: %s", tenant_id, rfe)
+
+    # Send cancellation email
     if tenant_email:
         asyncio.create_task(email_svc.send_cancellation_confirmation(
             tenant_email,
@@ -6201,6 +8907,7 @@ async def api_cancel_subscription(req: CancelRequest, request: Request,
         "message": "Your subscription has been cancelled. Your data will be retained for 30 days. "
                    "You can reactivate anytime by subscribing to a paid plan.",
         "data_retained_until": wipe_date,
+        "refund": refund_info,  # B2: surfaces refund outcome to the frontend
     }
 
 
@@ -7016,8 +9723,697 @@ async def api_microsite_check_slug(request: Request, slug: str = Query(...),
 
 
 # =============================================================================
+#  AI MARKETING STUDIO API
+# =============================================================================
+import biz_marketing as mkt
+
+class MarketingSettingsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    autopost_enabled: Optional[bool] = None
+    autopost_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    festival_prefs: Optional[list[str]] = None   # ["all","hindu","muslim",...]
+    lang: Optional[str] = Field(None, pattern=r"^(en|hi|mr|both)$")
+
+
+@app.get("/api/marketing/settings")
+async def api_marketing_settings_get(tenant: dict = Depends(auth.require_owner)):
+    """Return marketing studio settings for the logged-in owner."""
+    t = await db.get_tenant(tenant["tenant_id"])
+    if not t:
+        return JSONResponse({"error": "tenant not found"}, status_code=404)
+    plan = t.get("plan") or "trial"
+    return {
+        "enabled": bool(t.get("marketing_enabled", 0)),
+        "autopost_enabled": bool(t.get("marketing_autopost_enabled", 0)),
+        "autopost_time": t.get("marketing_autopost_time", "08:00"),
+        "festival_prefs": json.loads(t.get("marketing_festival_prefs") or '["all","hindu"]'),
+        "lang": t.get("marketing_lang", "en"),
+        "marketing_photo_path": t.get("marketing_photo_path", ""),
+        "marketing_logo_path": t.get("marketing_logo_path", ""),
+        "watermark": bool(t.get("marketing_watermark", 1)),
+        "can_video": mkt.can_generate_video(plan),
+        "watermark_removable": plan in ("enterprise", "enterprise_annual"),
+        "plan": plan,
+        "all_festivals": mkt.get_all_festivals(),
+    }
+
+
+@app.post("/api/marketing/settings")
+async def api_marketing_settings_save(body: MarketingSettingsRequest,
+                                       tenant: dict = Depends(auth.require_owner)):
+    """Save marketing studio settings."""
+    tid = tenant["tenant_id"]
+    fields: dict = {}
+    if body.enabled is not None:
+        fields["marketing_enabled"] = int(body.enabled)
+    if body.autopost_enabled is not None:
+        fields["marketing_autopost_enabled"] = int(body.autopost_enabled)
+    if body.autopost_time is not None:
+        fields["marketing_autopost_time"] = body.autopost_time
+    if body.festival_prefs is not None:
+        allowed = {"all", "hindu", "muslim", "sikh", "christian", "jain"}
+        prefs = [p for p in body.festival_prefs if p in allowed]
+        fields["marketing_festival_prefs"] = json.dumps(prefs)
+    if body.lang is not None:
+        fields["marketing_lang"] = body.lang
+    if not fields:
+        return {"ok": True}
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE tenants SET {set_clause} WHERE tenant_id = ?",
+            list(fields.values()) + [tid])
+        await conn.commit()
+    return {"ok": True}
+
+
+@app.post("/api/marketing/upload-photo")
+async def api_marketing_upload_photo(
+    file: UploadFile = File(...),
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Upload marketing headshot (separate from microsite photo)."""
+    tid = tenant["tenant_id"]
+    import imghdr
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        return JSONResponse({"error": "Image must be under 5MB"}, status_code=400)
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in {"jpg", "jpeg", "png", "webp"}:
+        return JSONResponse({"error": "Only JPG/PNG/WEBP accepted"}, status_code=400)
+    mkt_photo_dir = Path(__file__).parent / "uploads" / "marketing" / "photos"
+    mkt_photo_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"mktphoto_{tid}.{ext}"
+    save_path = mkt_photo_dir / filename
+    save_path.write_bytes(data)
+    rel_path = str(save_path)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE tenants SET marketing_photo_path = ? WHERE tenant_id = ?",
+            (rel_path, tid))
+        await conn.commit()
+    return {"ok": True, "photo_url": f"/uploads/marketing/photos/{filename}"}
+
+
+@app.post("/api/marketing/upload-logo")
+async def api_marketing_upload_logo(
+    file: UploadFile = File(...),
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Upload advisor firm logo for marketing image overlay."""
+    tid = tenant["tenant_id"]
+    data = await file.read()
+    if len(data) > 3 * 1024 * 1024:
+        return JSONResponse({"error": "Logo must be under 3MB"}, status_code=400)
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in {"jpg", "jpeg", "png", "webp"}:
+        return JSONResponse({"error": "Only JPG/PNG/WEBP accepted"}, status_code=400)
+    logo_dir = Path(__file__).parent / "uploads" / "marketing" / "logos"
+    logo_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"mktlogo_{tid}.{ext}"
+    save_path = logo_dir / filename
+    save_path.write_bytes(data)
+    rel_path = str(save_path)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE tenants SET marketing_logo_path = ? WHERE tenant_id = ?",
+            (rel_path, tid))
+        await conn.commit()
+    return {"ok": True, "logo_url": f"/uploads/marketing/logos/{filename}"}
+
+
+@app.delete("/api/marketing/upload-logo")
+async def api_marketing_remove_logo(tenant: dict = Depends(auth.require_owner)):
+    """Remove uploaded logo — reverts to 'Your logo here' placeholder."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE tenants SET marketing_logo_path = '' WHERE tenant_id = ?",
+            (tid,))
+        await conn.commit()
+    return {"ok": True}
+
+
+@app.get("/api/marketing/templates")
+async def api_marketing_templates(tenant: dict = Depends(auth.require_owner)):
+    """Return the list of available photo templates the advisor can pick."""
+    return {"templates": mkt.list_available_templates()}
+
+
+@app.get("/api/marketing/library")
+async def api_marketing_library(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Paginated marketing content library."""
+    items = await mkt.get_library(tenant["tenant_id"], page=page, limit=limit)
+    return {"ok": True, "items": items, "page": page}
+
+
+class MarketingGenerateRequest(BaseModel):
+    content_type: str = Field("tip", pattern=r"^(scenario_insurance|scenario_investment|tip|product_pitch|festival|custom)$")
+    lang: str = Field("en", pattern=r"^(en|hi|mr)$")
+    festival_date: Optional[str] = None
+    custom_topic: Optional[str] = Field(None, max_length=200)
+    image_format: str = Field("whatsapp_status", pattern=r"^(whatsapp_status|instagram_square|linkedin_banner)$")
+    brand_accent: Optional[str] = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
+    template_id: Optional[str] = Field(None, max_length=60)
+
+
+@app.post("/api/marketing/generate")
+@limiter.limit("10/minute")
+async def api_marketing_generate(
+    request: Request,
+    body: MarketingGenerateRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """On-demand content generation. Returns the saved content_id + preview."""
+    tid = tenant["tenant_id"]
+    t = await db.get_tenant(tid)
+    if not t:
+        return JSONResponse({"error": "tenant not found"}, status_code=404)
+    if body.content_type == "custom" and not body.custom_topic:
+        return JSONResponse({"error": "custom_topic is required for custom content type"}, status_code=400)
+
+    plan = t.get("plan") or "trial"
+    firm_name = t.get("firm_name", "")
+    marketing_photo_path = t.get("marketing_photo_path", "")
+    marketing_logo_path = t.get("marketing_logo_path", "")
+    watermark = mkt.has_watermark(plan)
+    lang = body.lang or t.get("marketing_lang", "en")
+    brand_accent = body.brand_accent or t.get("brand_accent", "")
+
+    festival = None
+    if body.content_type == "festival" and body.festival_date:
+        from datetime import date as _date
+        try:
+            target = _date.fromisoformat(body.festival_date)
+            prefs = json.loads(t.get("marketing_festival_prefs") or '["all"]')
+            matches = mkt.get_festivals_for_date(target, prefs)
+            festival = matches[0] if matches else None
+        except Exception:
+            pass
+
+    owner_agent = await db.get_owner_agent_by_tenant(tid)
+    agent_name = owner_agent.get("name", "") if owner_agent else ""
+
+    content = await mkt.generate_content(
+        tenant_id=tid,
+        content_type=body.content_type,
+        lang=lang,
+        festival=festival,
+        firm_name=firm_name,
+        agent_name=agent_name,
+        marketing_photo_path=marketing_photo_path,
+        marketing_logo_path=marketing_logo_path,
+        watermark=watermark,
+        custom_topic=body.custom_topic or "",
+        image_format=body.image_format,
+        brand_accent=brand_accent,
+        template_id=body.template_id or "",
+    )
+    content_id = await mkt.save_content(tid, content)
+    return {"ok": True, "content_id": content_id, "content": content}
+
+
+# ── Content Calendar: Schedule ─────────────────────────────────────────────
+class MarketingScheduleRequest(BaseModel):
+    content_type: str = Field("tip", pattern=r"^(scenario_insurance|scenario_investment|tip|product_pitch|festival|custom)$")
+    lang: str = Field("en", pattern=r"^(en|hi|mr)$")
+    fire_at: str          # ISO datetime "YYYY-MM-DDTHH:MM"
+    channel: str = Field("wa_status", pattern=r"^(wa_status|telegram|both)$")
+    image_format: str = Field("whatsapp_status", pattern=r"^(whatsapp_status|instagram_square|linkedin_banner)$")
+    custom_topic: Optional[str] = Field(None, max_length=200)
+    festival_date: Optional[str] = None
+
+
+@app.post("/api/marketing/schedule")
+async def api_marketing_schedule_create(
+    body: MarketingScheduleRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Schedule a content post for a future date/time."""
+    from datetime import datetime as _dt
+    tid = tenant["tenant_id"]
+    try:
+        fire_dt = _dt.fromisoformat(body.fire_at)
+        if fire_dt <= _dt.now():
+            return JSONResponse({"error": "fire_at must be in the future"}, status_code=400)
+    except ValueError:
+        return JSONResponse({"error": "Invalid fire_at datetime format (use YYYY-MM-DDTHH:MM)"}, status_code=400)
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cursor = await conn.execute(
+            """INSERT INTO marketing_schedule
+               (tenant_id, content_type, lang, image_format, custom_topic,
+                festival_date, channel, fire_at, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            (tid, body.content_type, body.lang, body.image_format,
+             body.custom_topic or "", body.festival_date, body.channel,
+             fire_dt.strftime("%Y-%m-%dT%H:%M")))
+        await conn.commit()
+        schedule_id = cursor.lastrowid
+    return {"ok": True, "schedule_id": schedule_id, "fire_at": body.fire_at}
+
+
+@app.get("/api/marketing/schedule")
+async def api_marketing_schedule_list(tenant: dict = Depends(auth.require_owner)):
+    """List all scheduled posts for this tenant (pending + recent)."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """SELECT * FROM marketing_schedule
+               WHERE tenant_id = ?
+               ORDER BY fire_at DESC LIMIT 100""",
+            (tid,))
+        rows = [dict(r) for r in await cursor.fetchall()]
+    return {"ok": True, "scheduled": rows}
+
+
+@app.delete("/api/marketing/schedule/{schedule_id}")
+async def api_marketing_schedule_delete(
+    schedule_id: int,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Cancel a pending scheduled post."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cursor = await conn.execute(
+            "UPDATE marketing_schedule SET status = 'cancelled' "
+            "WHERE schedule_id = ? AND tenant_id = ? AND status = 'pending'",
+            (schedule_id, tid))
+        await conn.commit()
+    if cursor.rowcount == 0:
+        return JSONResponse({"error": "Schedule not found or already fired"}, status_code=404)
+    return {"ok": True}
+
+
+# ── Lead Segments ──────────────────────────────────────────────────────────
+class SegmentFilters(BaseModel):
+    stage: Optional[str] = None          # lead stage
+    city: Optional[str] = None
+    need_type: Optional[str] = None
+    min_income: Optional[int] = None
+    max_income: Optional[int] = None
+    days_inactive: Optional[int] = None  # leads not updated in N days
+
+
+class MarketingSegmentRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    filters: SegmentFilters
+
+
+@app.post("/api/marketing/segments")
+async def api_marketing_segments_create(
+    body: MarketingSegmentRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Save a named lead segment (audience group)."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cursor = await conn.execute(
+            "INSERT INTO marketing_segments (tenant_id, name, filters_json) VALUES (?, ?, ?)",
+            (tid, body.name, body.filters.model_dump_json()))
+        await conn.commit()
+    return {"ok": True, "segment_id": cursor.lastrowid}
+
+
+@app.get("/api/marketing/segments")
+async def api_marketing_segments_list(tenant: dict = Depends(auth.require_owner)):
+    """List all saved segments for this tenant."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM marketing_segments WHERE tenant_id = ? ORDER BY created_at DESC",
+            (tid,))
+        rows = [dict(r) for r in await cursor.fetchall()]
+    return {"ok": True, "segments": rows}
+
+
+@app.delete("/api/marketing/segments/{segment_id}")
+async def api_marketing_segments_delete(
+    segment_id: int,
+    tenant: dict = Depends(auth.require_owner),
+):
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM marketing_segments WHERE segment_id = ? AND tenant_id = ?",
+            (segment_id, tid))
+        await conn.commit()
+    return {"ok": True}
+
+
+async def _resolve_segment_leads(tid: int, filters: dict) -> list[dict]:
+    """Return leads matching segment filters for a given tenant."""
+    clauses = ["tenant_id = ?"]
+    params: list = [tid]
+    if filters.get("stage"):
+        clauses.append("stage = ?")
+        params.append(filters["stage"])
+    if filters.get("city"):
+        clauses.append("LOWER(city) = LOWER(?)")
+        params.append(filters["city"])
+    if filters.get("need_type"):
+        clauses.append("need_type = ?")
+        params.append(filters["need_type"])
+    if filters.get("min_income"):
+        clauses.append("monthly_income >= ?")
+        params.append(filters["min_income"])
+    if filters.get("max_income"):
+        clauses.append("monthly_income <= ?")
+        params.append(filters["max_income"])
+    if filters.get("days_inactive"):
+        clauses.append(f"updated_at < datetime('now', '-{int(filters['days_inactive'])} days')")
+
+    where = " AND ".join(clauses)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            f"SELECT lead_id, name, phone, whatsapp FROM leads WHERE {where} LIMIT 500",
+            params)
+        return [dict(r) for r in await cursor.fetchall()]
+
+
+@app.get("/api/marketing/segments/{segment_id}/preview")
+async def api_marketing_segment_preview(
+    segment_id: int,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Return the count + sample of leads matching this segment."""
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT filters_json FROM marketing_segments WHERE segment_id = ? AND tenant_id = ?",
+            (segment_id, tid))
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse({"error": "Segment not found"}, status_code=404)
+    filters = json.loads(row["filters_json"])
+    leads = await _resolve_segment_leads(tid, filters)
+    return {
+        "ok": True,
+        "count": len(leads),
+        "sample": [{"name": l["name"], "phone": (l["phone"] or "")[-4:].rjust(10, "*")} for l in leads[:5]],
+    }
+
+
+class SegmentSendRequest(BaseModel):
+    content_id: int
+    message: Optional[str] = None    # override body_text if provided
+
+
+@app.post("/api/marketing/segments/{segment_id}/send")
+@limiter.limit("3/minute")
+async def api_marketing_segment_send(
+    request: Request,
+    segment_id: int,
+    body: SegmentSendRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Send a content piece to all leads in a segment (rate-limited bulk DM)."""
+    tid = tenant["tenant_id"]
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT filters_json FROM marketing_segments WHERE segment_id = ? AND tenant_id = ?",
+            (segment_id, tid))
+        seg_row = await cursor.fetchone()
+    if not seg_row:
+        return JSONResponse({"error": "Segment not found"}, status_code=404)
+
+    item = await mkt.get_content_by_id(body.content_id, tid)
+    if not item:
+        return JSONResponse({"error": "Content not found"}, status_code=404)
+
+    filters = json.loads(seg_row["filters_json"])
+    leads = await _resolve_segment_leads(tid, filters)
+    phones = [l.get("whatsapp") or l.get("phone") for l in leads if l.get("phone")]
+    if not phones:
+        return JSONResponse({"error": "No leads with phone numbers in this segment"}, status_code=400)
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT evolution_instance FROM wa_instances WHERE tenant_id=? AND status='connected' LIMIT 1",
+            (tid,))
+        wa_row = await cursor.fetchone()
+    if not wa_row:
+        return JSONResponse({"error": "No connected WhatsApp instance"}, status_code=400)
+
+    instance = wa_row["evolution_instance"]
+    message = body.message or item.get("body_text", "")
+    image_path = item.get("image_path")
+    result = await mkt.send_targeted_dm(instance, phones, message, image_path)
+
+    # Log sends
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        for lead in leads:
+            if lead.get("phone"):
+                await conn.execute(
+                    "INSERT INTO marketing_sends (content_id, tenant_id, lead_id, phone, status) VALUES (?, ?, ?, ?, ?)",
+                    (body.content_id, tid, lead["lead_id"], lead["phone"], "sent"))
+        await conn.commit()
+
+    return {"ok": True, "leads_targeted": len(phones), **result}
+
+
+@app.post("/api/marketing/send-status/{content_id}")
+async def api_marketing_send_status(content_id: int,
+                                     tenant: dict = Depends(auth.require_owner)):
+    """Post a content item to the advisor's WhatsApp Status."""
+    tid = tenant["tenant_id"]
+    item = await mkt.get_content_by_id(content_id, tid)
+    if not item:
+        return JSONResponse({"error": "content not found"}, status_code=404)
+    image_path = item.get("image_path", "")
+    if not image_path:
+        return JSONResponse({"error": "no image for this content"}, status_code=400)
+
+    # Find connected Evolution instance for this tenant
+    full_path = Path(__file__).parent / image_path
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT evolution_instance FROM wa_instances WHERE tenant_id=? AND status='connected' LIMIT 1",
+            (tid,))
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse({"error": "No connected WhatsApp instance found"}, status_code=400)
+    instance = row["evolution_instance"]
+    caption = item.get("body_text", "")[:200]
+    result = await mkt.post_to_wa_status(instance, str(full_path), caption)
+    if "error" not in result:
+        await mkt.mark_sent_wa_status(content_id)
+    return {"ok": "error" not in result, "result": result}
+
+
+@app.post("/api/marketing/send-telegram/{content_id}")
+async def api_marketing_send_telegram(content_id: int,
+                                       tenant: dict = Depends(auth.require_owner)):
+    """Push a content item to the advisor's Telegram bot chat for review."""
+    tid = tenant["tenant_id"]
+    item = await mkt.get_content_by_id(content_id, tid)
+    if not item:
+        return JSONResponse({"error": "content not found"}, status_code=404)
+    owner_agent = await db.get_owner_agent_by_tenant(tid)
+    if not owner_agent or not owner_agent.get("telegram_id"):
+        return JSONResponse({"error": "Owner has no Telegram connected"}, status_code=400)
+    image_path = item.get("image_path", "")
+    full_path = str(Path(__file__).parent / image_path) if image_path else None
+    ok = await mkt.push_to_telegram(owner_agent["telegram_id"], item, full_path)
+    if ok:
+        await mkt.mark_sent_tg(content_id)
+    return {"ok": ok}
+
+
+class MarketingDMRequest(BaseModel):
+    lead_ids: list[int] = Field(..., min_length=1, max_length=200)
+    message: str = Field(..., min_length=1, max_length=1000)
+    content_id: Optional[int] = None   # attach image from existing content
+
+@app.post("/api/marketing/send-dm")
+@limiter.limit("5/minute")
+async def api_marketing_send_dm(
+    request: Request,
+    body: MarketingDMRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Bulk send targeted DM (festival wish or any message) to selected leads."""
+    tid = tenant["tenant_id"]
+    # Resolve phones from lead_ids (within this tenant only)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        placeholders = ",".join("?" * len(body.lead_ids))
+        cursor = await conn.execute(
+            f"SELECT phone FROM leads WHERE lead_id IN ({placeholders}) AND tenant_id = ?",
+            body.lead_ids + [tid])
+        rows = await cursor.fetchall()
+    phones = [r["phone"] for r in rows if r["phone"]]
+    if not phones:
+        return JSONResponse({"error": "No valid lead phones found"}, status_code=400)
+
+    # Resolve optional image
+    image_path = None
+    if body.content_id:
+        item = await mkt.get_content_by_id(body.content_id, tid)
+        if item and item.get("image_path"):
+            full = Path(__file__).parent / item["image_path"]
+            if full.exists():
+                image_path = item["image_path"]
+
+    # Find connected instance
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT evolution_instance FROM wa_instances WHERE tenant_id=? AND status='connected' LIMIT 1",
+            (tid,))
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse({"error": "No connected WhatsApp instance"}, status_code=400)
+    instance = row["evolution_instance"]
+    result = await mkt.send_targeted_dm(instance, phones, body.message, image_path)
+    return {"ok": True, **result}
+
+
+@app.get("/api/marketing/festivals")
+async def api_marketing_festivals(tenant: dict = Depends(auth.require_owner)):
+    """Return full festival calendar filtered by tenant's religion prefs."""
+    tid = tenant["tenant_id"]
+    t = await db.get_tenant(tid)
+    prefs = json.loads(t.get("marketing_festival_prefs") or '["all","hindu"]') if t else ["all", "hindu"]
+    festivals = mkt.get_all_festivals(prefs)
+    return {"ok": True, "festivals": festivals}
+
+
+@app.get("/api/marketing/detect-religion")
+async def api_marketing_detect_religion(name: str = Query(...),
+                                         tenant: dict = Depends(auth.require_owner)):
+    """Detect religion from a lead's name (for targeted festival wishes preview)."""
+    return {"name": name, "religion": mkt.detect_religion_from_name(name)}
+
+
+# =============================================================================
+#  VIDEO STUDIO API  (Team / Enterprise plans)
+# =============================================================================
+import biz_video as vid
+
+
+class VideoGenerateRequest(BaseModel):
+    theme_id: str
+    fmt: str = "square"    # "square" | "reels"
+
+
+class VideoCustomRequest(BaseModel):
+    topic: str = Field(..., min_length=5, max_length=200)
+    fmt: str = Field("square", pattern=r"^(square|reels)$")
+    lang: str = Field("en", pattern=r"^(en|hi)$")
+
+
+@app.get("/api/video/themes")
+async def api_video_themes(tenant: dict = Depends(auth.require_owner)):
+    """Return available video themes."""
+    return {"themes": vid.get_all_themes()}
+
+
+@app.post("/api/video/generate")
+async def api_video_generate(
+    body: VideoGenerateRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Start async video generation for the authenticated advisor."""
+    t = await db.get_tenant(tenant["tenant_id"])
+    if not t:
+        raise HTTPException(404, "Tenant not found")
+    plan = t.get("plan") or "trial"
+    if not mkt.can_generate_video(plan):
+        raise HTTPException(403, "Video Studio is available on Team & Enterprise plans only.")
+
+    agent = await db.get_agent_by_id(tenant["agent_id"]) if tenant.get("agent_id") else None
+    advisor_name = (agent or {}).get("name") or t.get("name") or "Your Advisor"
+    advisor_phone = (agent or {}).get("phone") or t.get("phone") or "Contact for details"
+
+    if body.fmt not in ("square", "reels"):
+        raise HTTPException(400, "fmt must be 'square' or 'reels'")
+
+    try:
+        job_id = await vid.start_video_job(
+            body.theme_id, advisor_name, advisor_phone, body.fmt
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"job_id": job_id, "status": "generating"}
+
+
+@app.post("/api/video/generate-custom")
+@limiter.limit("5/minute")
+async def api_video_generate_custom(
+    request: Request,
+    body: VideoCustomRequest,
+    tenant: dict = Depends(auth.require_owner),
+):
+    """Generate a video for any custom topic using AI scene generation."""
+    t = await db.get_tenant(tenant["tenant_id"])
+    if not t:
+        raise HTTPException(404, "Tenant not found")
+    plan = t.get("plan") or "trial"
+    if not mkt.can_generate_video(plan):
+        raise HTTPException(403, "Video Studio (Custom AI) is available on Team & Enterprise plans only.")
+
+    agent = await db.get_agent_by_id(tenant["agent_id"]) if tenant.get("agent_id") else None
+    advisor_name = (agent or {}).get("name") or t.get("name") or "Your Advisor"
+    advisor_phone = (agent or {}).get("phone") or t.get("phone") or "Contact for details"
+    firm_name = t.get("firm_name", "")
+
+    job_id = await vid.start_custom_video_job(
+        topic=body.topic,
+        advisor_name=advisor_name,
+        advisor_phone=advisor_phone,
+        fmt=body.fmt,
+        lang=body.lang,
+        firm_name=firm_name,
+    )
+    return {"job_id": job_id, "status": "generating", "topic": body.topic}
+
+
+@app.get("/api/video/status/{job_id}")
+async def api_video_status(job_id: str, tenant: dict = Depends(auth.require_owner)):
+    """Poll video generation status."""
+    job = vid.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {
+        "job_id": job_id,
+        "status":   job["status"],   # generating | done | failed
+        "url":      job.get("url"),
+        "error":    job.get("error"),
+        "theme":    job.get("theme"),
+    }
+
+
+@app.get("/api/video/file/{filename}")
+async def api_video_file(filename: str, tenant: dict = Depends(auth.require_owner)):
+    """Download a generated video file (auth-gated)."""
+    import re
+    if not re.fullmatch(r"[a-z0-9_]+\.mp4", filename):
+        raise HTTPException(400, "Invalid filename")
+    path = os.path.join(vid.VIDEO_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Video not found or expired")
+    return FileResponse(path, media_type="video/mp4",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# =============================================================================
 #  PDF / REPORT API
 # =============================================================================
+
 
 def _build_brand(company: str = "", brand_primary: str = "", brand_accent: str = "",
                  brand_logo: str = "", brand_tagline: str = "",
@@ -7590,23 +10986,34 @@ async def api_wa_send(
     req: WaSendRequest,
     tenant: dict = Depends(auth.get_current_tenant),
 ):
-    """Send a WhatsApp message to a lead. Uses Cloud API if configured, else returns wa.me link."""
-    return _WA_DISABLED_RESPONSE
+    """Send a WhatsApp message to a lead via Evolution API."""
+    tid = tenant["tenant_id"]
     try:
-        result = await wa.send_or_link(req.phone, req.message)
-        # Log interaction
+        agents = await db.get_agents_by_tenant(tid)
+        agent_id = agents[0]["agent_id"] if agents else 0
+        # Get connected Evolution instance for this tenant
+        async with aiosqlite.connect(db.DB_PATH) as _conn:
+            _cur = await _conn.execute(
+                "SELECT evolution_instance FROM wa_instances "
+                "WHERE tenant_id=? AND status IN ('open','connected') "
+                "ORDER BY instance_id DESC LIMIT 1", (tid,))
+            _row = await _cur.fetchone()
+        if not _row:
+            return JSONResponse({"error": "WhatsApp not connected. Please connect WhatsApp first.",
+                                  "method": "not_connected"}, status_code=503)
+        result = await wa_evo.send_text(_row[0], req.phone, req.message, delay_ms=1500)
+        if result.get("error"):
+            return JSONResponse({"error": result.get("message", "Send failed")}, status_code=500)
         try:
-            agent = await db.get_agents_by_tenant(tenant["tenant_id"])
-            if agent:
-                await db.log_interaction(
-                    lead_id=None, agent_id=agent[0]["agent_id"],
-                    interaction_type="whatsapp_sent",
-                    channel="whatsapp",
-                    summary=f"To {req.phone}: {req.message[:100]}"
-                )
+            await db.log_interaction(
+                lead_id=None, agent_id=agent_id,
+                interaction_type="whatsapp_sent",
+                channel="whatsapp_evolution",
+                summary=f"To {req.phone}: {req.message[:100]}"
+            )
         except Exception:
             pass
-        return result
+        return {"success": True, "method": "whatsapp_evolution", "phone": req.phone}
     except Exception as e:
         logger.error("WA send error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -7619,23 +11026,33 @@ async def api_wa_share_calc(
     req: WaCalcShareRequest,
     tenant: dict = Depends(auth.get_current_tenant),
 ):
-    """Share calculator results via WhatsApp (Cloud API or wa.me link fallback)."""
-    return _WA_DISABLED_RESPONSE
+    """Share calculator results via WhatsApp via Evolution API."""
+    tid = tenant["tenant_id"]
     try:
-        tenant_data = await db.get_tenant(tenant["tenant_id"])
+        tenant_data = await db.get_tenant(tid)
         agent_name = tenant_data.get("owner_name", "Your Advisor") if tenant_data else "Your Advisor"
         company = tenant_data.get("firm_name", "Sarathi-AI") if tenant_data else "Sarathi-AI"
-
-        result = await wa.send_calc_report(
-            to=req.phone,
-            client_name=req.client_name,
-            calc_type=req.calc_type,
-            summary=req.summary,
-            report_url=req.report_url,
-            agent_name=agent_name,
-            company=company,
-        )
-        return result
+        async with aiosqlite.connect(db.DB_PATH) as _conn:
+            _cur = await _conn.execute(
+                "SELECT evolution_instance FROM wa_instances "
+                "WHERE tenant_id=? AND status IN ('open','connected') "
+                "ORDER BY instance_id DESC LIMIT 1", (tid,))
+            _row = await _cur.fetchone()
+        if not _row:
+            # Fallback: generate wa.me link
+            link = f"https://wa.me/{wa_evo._normalize_phone(req.phone)}"
+            return {"success": True, "method": "link", "wa_link": link}
+        msg = (
+            f"📊 *{req.calc_type.title()} Calculator Result*\n\n"
+            f"Dear {req.client_name},\n\n"
+            f"{req.summary}\n\n"
+            f"{('📎 Report: ' + req.report_url) if req.report_url else ''}\n\n"
+            f"Regards,\n{agent_name}\n_{company}_"
+        ).strip()
+        result = await wa_evo.send_text(_row[0], req.phone, msg, delay_ms=1500)
+        if result.get("error"):
+            return JSONResponse({"error": result.get("message", "Send failed")}, status_code=500)
+        return {"success": True, "method": "whatsapp_evolution"}
     except Exception as e:
         logger.error("WA calc share error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -7648,47 +11065,47 @@ async def api_wa_greeting(
     req: WaGreetingRequest,
     tenant: dict = Depends(auth.get_current_tenant),
 ):
-    """Send a birthday or anniversary greeting via WhatsApp."""
-    return _WA_DISABLED_RESPONSE
+    """Send a birthday or anniversary greeting via WhatsApp via Evolution API."""
+    tid = tenant["tenant_id"]
     try:
-        tenant_data = await db.get_tenant(tenant["tenant_id"])
+        tenant_data = await db.get_tenant(tid)
         agent_name = tenant_data.get("owner_name", "Your Advisor") if tenant_data else "Your Advisor"
         company = tenant_data.get("firm_name", "Sarathi-AI") if tenant_data else "Sarathi-AI"
-
+        async with aiosqlite.connect(db.DB_PATH) as _conn:
+            _cur = await _conn.execute(
+                "SELECT evolution_instance FROM wa_instances "
+                "WHERE tenant_id=? AND status IN ('open','connected') "
+                "ORDER BY instance_id DESC LIMIT 1", (tid,))
+            _row = await _cur.fetchone()
+        first = req.client_name.split()[0] if req.client_name else "Sir/Ma'am"
         if req.greeting_type == "birthday":
-            if wa.is_configured():
-                result = await wa.send_birthday_greeting(
-                    req.phone, req.client_name, agent_name, company
-                )
-            else:
-                link = wa.generate_birthday_link(
-                    req.phone, req.client_name, agent_name, company
-                )
-                result = {"success": True, "method": "link", "wa_link": link}
-        else:
-            # Anniversary greeting
-            first = req.client_name.split()[0] if req.client_name else "Sir/Ma'am"
             msg = (
-                f"🎊 Happy Anniversary! 🎉\n\n"
-                f"Dear {first},\n\n"
-                f"Wishing you a wonderful anniversary filled with "
-                f"love and happiness!\n\n"
-                f"Warm regards,\n{agent_name}\n{company} 🌟"
+                f"🎂 *Happy Birthday, {first}!*\n\n"
+                f"Wishing you a wonderful day filled with joy and happiness!\n\n"
+                f"Warm regards,\n{agent_name}\n_{company}_"
             )
-            result = await wa.send_or_link(req.phone, msg)
-
-        # Log interaction
+        else:
+            msg = (
+                f"🎊 *Happy Anniversary, {first}!* 🎉\n\n"
+                f"Wishing you a wonderful anniversary filled with love and happiness!\n\n"
+                f"Warm regards,\n{agent_name}\n_{company}_"
+            )
+        if not _row:
+            link = f"https://wa.me/{wa_evo._normalize_phone(req.phone)}?text={msg[:200]}"
+            return {"success": True, "method": "link", "wa_link": link}
+        result = await wa_evo.send_text(_row[0], req.phone, msg, delay_ms=1500)
+        if result.get("error"):
+            return JSONResponse({"error": result.get("message", "Send failed")}, status_code=500)
         try:
-            agent = await db.get_agents_by_tenant(tenant["tenant_id"])
-            if agent:
+            agents = await db.get_agents_by_tenant(tid)
+            if agents:
                 await db.log_interaction(
-                    agent[0]["agent_id"], None, "whatsapp_greeting",
+                    agents[0]["agent_id"], None, "whatsapp_greeting",
                     f"{req.greeting_type} to {req.client_name} ({req.phone})"
                 )
         except Exception:
             pass
-
-        return result
+        return {"success": True, "method": "whatsapp_evolution"}
     except Exception as e:
         logger.error("WA greeting error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -7970,11 +11387,17 @@ async def api_wa_v2_setup(request: Request, req: WhatsAppSetupRequest,
         return JSONResponse({"error": "tenant_not_found"}, status_code=404)
 
     instance_name = wa_evo.build_instance_name(tid)
-    # Create in Evolution
-    create_res = await wa_evo.create_instance(instance_name, tenant_id=tid)
-    if create_res.get("error") and "already" not in str(create_res.get("detail", "")).lower():
+    # Always delete existing instance and recreate fresh in pure QR mode.
+    # This clears any stale Baileys credentials (from previous QR/pairing sessions)
+    # and ensures the instance is NOT in phone-number/pairing-code mode.
+    await wa_evo.delete_instance(instance_name)
+    await asyncio.sleep(2)
+    create_res = await wa_evo.create_instance(instance_name, tenant_id=tid, qrcode=True)
+    if create_res.get("error"):
         return JSONResponse({"error": "evolution_create_failed", "detail": create_res},
                             status_code=502)
+    # Apply residential proxy so the WhatsApp WebSocket runs through a residential IP.
+    await wa_evo.set_instance_proxy(instance_name)
 
     # Persist in DB (upsert by evolution_instance unique key)
     async with aiosqlite.connect(db.DB_PATH) as conn:
@@ -7985,7 +11408,8 @@ async def api_wa_v2_setup(request: Request, req: WhatsAppSetupRequest,
         if row:
             await conn.execute(
                 "UPDATE wa_instances SET sim_type = ?, display_name = ?, "
-                "status = 'pending', updated_at = datetime('now') WHERE instance_id = ?",
+                "status = 'pending', qr_code = NULL, updated_at = datetime('now') "
+                "WHERE instance_id = ?",
                 (req.sim_type, req.display_name, row[0]))
             instance_id = row[0]
         else:
@@ -7996,9 +11420,18 @@ async def api_wa_v2_setup(request: Request, req: WhatsAppSetupRequest,
             instance_id = cur2.lastrowid
         await conn.commit()
 
-    # Trigger QR
-    qr_res = await wa_evo.connect_instance(instance_name)
-    qr_b64 = qr_res.get("base64") or (qr_res.get("qrcode", {}) or {}).get("base64", "")
+    # Wait for Baileys to connect and generate first QR (typically 5-8s)
+    await asyncio.sleep(8)
+    # Trigger QR — Evolution v2+ returns the PNG image in 'base64', raw QR
+    # string in 'code'. We need 'base64' for the img src.
+    qr_b64 = ""
+    for _attempt in range(5):
+        qr_res = await wa_evo.connect_instance(instance_name)
+        qr_b64 = (qr_res.get("base64")
+                  or (qr_res.get("qrcode", {}) or {}).get("base64", ""))
+        if qr_b64:
+            break
+        await asyncio.sleep(3)
     if qr_b64:
         async with aiosqlite.connect(db.DB_PATH) as conn:
             await conn.execute(
@@ -8124,6 +11557,137 @@ async def api_wa_v2_disconnect(request: Request,
     return {"ok": True, "permanent": permanent}
 
 
+class WhatsAppPairingRequest(BaseModel):
+    phone: str = Field(..., min_length=10, max_length=15,
+                       description="Phone number for pairing code (10-digit Indian or E.164)")
+
+
+@app.post("/api/whatsapp/v2/pairing-code")
+@limiter.limit("5/minute")
+async def api_wa_v2_pairing_code(request: Request,
+                                  req: WhatsAppPairingRequest,
+                                  tenant: dict = Depends(auth.get_current_tenant)):
+    """
+    Request a WhatsApp pairing code for the tenant's instance.
+    User opens WhatsApp → Settings → Linked Devices → Link with Phone Number → enters code.
+    The instance must already be created via /setup first.
+    """
+    tid = tenant["tenant_id"]
+    if not wa_evo.is_enabled():
+        return JSONResponse({"error": "whatsapp_v2_not_configured"}, status_code=503)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT instance_id, evolution_instance FROM wa_instances "
+            "WHERE tenant_id = ? ORDER BY instance_id DESC LIMIT 1", (tid,))
+        row = await cur.fetchone()
+    if not row:
+        return JSONResponse({"error": "no_instance",
+                             "message": "Run /setup first to create an instance"}, status_code=404)
+    instance_id, evo_name = row
+    # Pairing-code mode requires instance created with qrcode=False + number.
+    # Delete and recreate so Baileys initialises in pairing mode.
+    digits = "".join(c for c in req.phone if c.isdigit())
+    if len(digits) == 10:
+        digits = "91" + digits
+
+    # Clear DB FIRST so we can detect the webhook-delivered code that arrives
+    # shortly after create_instance starts Baileys (avoid race with stale code).
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE wa_instances SET status = 'pending', qr_code = NULL, "
+            "qr_expires_at = NULL, updated_at = datetime('now') WHERE instance_id = ?",
+            (instance_id,))
+        await conn.commit()
+
+    await wa_evo.delete_instance(evo_name)
+    await asyncio.sleep(2)
+    await wa_evo.create_instance(evo_name, tenant_id=tid, qrcode=False, number=digits)
+    await wa_evo.set_instance_proxy(evo_name)
+
+    # Wait for Baileys to open the WhatsApp WebSocket and negotiate the pairing code.
+    # Calling connect immediately returns pairingCode=null (count=0).
+    # Empirically ~6-9 seconds are needed; we start polling at 5s.
+    await asyncio.sleep(5)
+    result = await wa_evo.request_pairing_code(evo_name, digits)
+    code: str = result.get("pairingCode") or ""
+    expires_in: int = 55
+
+    if not code or len(code) < 4:
+        # Poll both the Evolution API endpoint and the DB (webhook stores PAIR: prefix).
+        # The pairing code is only available via GET /instance/connect poll, NOT via webhook.
+        deadline = asyncio.get_event_loop().time() + 25
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(3)
+            # Primary: re-poll the Evolution API directly
+            api_result = await wa_evo.request_pairing_code(evo_name, digits)
+            code = api_result.get("pairingCode") or ""
+            if code and len(code) >= 4:
+                break
+            # Secondary: check DB for webhook-delivered PAIR: code
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                cur = await conn.execute(
+                    "SELECT qr_code, qr_expires_at FROM wa_instances WHERE instance_id = ?",
+                    (instance_id,))
+                db_row = await cur.fetchone()
+            if db_row and db_row[0] and db_row[0].startswith("PAIR:"):
+                code = db_row[0][5:]
+                if db_row[1]:
+                    try:
+                        import datetime as _dtx
+                        exp = _dtx.datetime.fromisoformat(db_row[1])
+                        if exp.tzinfo is None:
+                            exp = exp.replace(tzinfo=_dtx.timezone.utc)
+                        expires_in = max(0, int(
+                            (exp - _dtx.datetime.now(_dtx.timezone.utc)).total_seconds()))
+                    except Exception:
+                        expires_in = 55
+                break
+
+    if not code:
+        return JSONResponse({"error": "whatsapp_busy",
+                             "message": "WhatsApp servers are taking too long. "
+                                        "Please wait a few minutes and try again."
+                             }, status_code=503)
+    await db.log_audit("wa_v2_pairing_code", f"instance={evo_name}",
+                       tenant_id=tid, ip_address=request.client.host)
+    return {"code": code, "expires_in": expires_in}
+
+
+@app.get("/api/whatsapp/v2/pairing-code/poll")
+async def api_wa_v2_pairing_poll(tenant: dict = Depends(auth.get_current_tenant)):
+    """
+    Lightweight poll endpoint for the current pairing code.
+    Returns the latest code saved by the webhook (auto-rotates every ~55s).
+    Frontend polls every 5s to ensure the user always sees the CURRENT valid code.
+    """
+    tid = tenant["tenant_id"]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT qr_code, qr_expires_at, status FROM wa_instances "
+            "WHERE tenant_id = ? ORDER BY instance_id DESC LIMIT 1", (tid,))
+        row = await cur.fetchone()
+    if not row:
+        return JSONResponse({"error": "no_instance"}, status_code=404)
+    qr_code, expires_at, status = row
+    if status in ("open", "connected"):
+        return {"connected": True, "code": None, "expires_in": 0}
+    if qr_code and qr_code.startswith("PAIR:"):
+        code = qr_code[5:]  # strip "PAIR:" prefix
+        expires_in = 0
+        if expires_at:
+            import datetime as _dt
+            try:
+                exp = _dt.datetime.fromisoformat(expires_at)
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=_dt.timezone.utc)
+                now = _dt.datetime.now(_dt.timezone.utc)
+                expires_in = max(0, int((exp - now).total_seconds()))
+            except Exception:
+                pass
+        return {"connected": False, "code": code, "expires_in": expires_in}
+    return {"connected": False, "code": None, "expires_in": 0}
+
+
 @app.post("/api/whatsapp/v2/acknowledge")
 async def api_wa_v2_acknowledge(request: Request,
                                  req: WhatsAppAcknowledgeRequest,
@@ -8212,18 +11776,31 @@ async def api_wa_v2_webhook(request: Request):
             logger.info("WA conn state: %s → %s", instance, state)
 
         elif event in ("qrcode.updated",):
-            qr_b64 = data.get("base64") or ""
-            qrcode_field = data.get("qrcode")
-            if not qr_b64 and isinstance(qrcode_field, dict):
-                qr_b64 = qrcode_field.get("base64", "")
-            if qr_b64:
-                async with aiosqlite.connect(db.DB_PATH) as conn:
+            # Evolution v2.2+ wraps everything inside a 'qrcode' key
+            qrcode_field = data.get("qrcode") if isinstance(data.get("qrcode"), dict) else {}
+            pairing_code = qrcode_field.get("pairingCode") or ""
+            # Prefer the full base64 PNG; fall back to raw QR string
+            qr_b64 = (qrcode_field.get("base64", "")
+                      or data.get("base64", "")
+                      or qrcode_field.get("code", "")
+                      or data.get("code", ""))
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                if pairing_code and len(pairing_code) >= 4:
+                    # Store pairing code with PAIR: prefix so the poll endpoint can
+                    # distinguish it from a QR base64 blob. Expires in 55s (WhatsApp
+                    # actually allows ~60s but give the user a 5s safety margin).
+                    await conn.execute(
+                        "UPDATE wa_instances SET qr_code = ?, "
+                        "qr_expires_at = datetime('now', '+55 seconds'), "
+                        "updated_at = datetime('now') WHERE evolution_instance = ?",
+                        (f"PAIR:{pairing_code}", instance))
+                elif qr_b64:
                     await conn.execute(
                         "UPDATE wa_instances SET qr_code = ?, "
                         "qr_expires_at = datetime('now', '+90 seconds'), "
                         "updated_at = datetime('now') WHERE evolution_instance = ?",
                         (qr_b64, instance))
-                    await conn.commit()
+                await conn.commit()
 
         elif event in ("messages.upsert", "MESSAGES_UPSERT"):
             # Inbound message — persist (suggestion generation comes in Phase 2)
@@ -8234,7 +11811,38 @@ async def api_wa_v2_webhook(request: Request):
             wa_id = key.get("id", "")
             text = ((msg.get("message", {}) or {}).get("conversation")
                     or ((msg.get("message", {}) or {}).get("extendedTextMessage", {}) or {}).get("text", ""))
+            # ── Skip group chats, status broadcasts, and non-direct-message JIDs ──
+            # WhatsApp 1-on-1: <number>@s.whatsapp.net   Groups: <id>@g.us
+            # Status broadcast: status@broadcast        LID self-chat: <num>@lid (advisor's own device)
+            if "@g.us" in remote or remote.startswith("status@") or remote.endswith("@broadcast"):
+                logger.info("WA inbound ignored (group/broadcast): %s", remote)
+                return {"ok": True, "ignored": "group_or_broadcast"}
             phone = remote.split("@")[0]
+            # ── Phase 4: Nidaan official instance branch ──────────────────
+            # If this incoming message arrived on one of the 3 official
+            # Nidaan numbers, route through the Nidaan handler (document
+            # ingestion, message-thread reply, etc.) instead of the Sarathi
+            # tenant flow.
+            try:
+                async with aiosqlite.connect(db.DB_PATH) as _ncon:
+                    _ncon.row_factory = aiosqlite.Row
+                    _ocur = await _ncon.execute(
+                        "SELECT instance_slot FROM nidaan_official_instances WHERE evolution_instance = ?",
+                        (instance,))
+                    _orow = await _ocur.fetchone()
+                if _orow:
+                    import biz_nidaan_inbound as nin
+                    await nin.handle_official_inbound(
+                        instance_slot=_orow["instance_slot"],
+                        evolution_instance=instance,
+                        from_phone=phone, from_me=from_me,
+                        wa_message_id=wa_id, text=text,
+                        msg_payload=msg, remote_jid=remote)
+                    return {"ok": True, "routed": "nidaan_official"}
+            except Exception as _ne:
+                logger.exception("Nidaan official inbound failed: %s", _ne)
+                # Fall through to legacy handling
+
             # Find instance & ensure conversation row
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 cur = await conn.execute(
@@ -8275,10 +11883,431 @@ async def api_wa_v2_webhook(request: Request):
                         "UPDATE wa_conversations SET last_outbound_at = datetime('now'), "
                         "last_message_at = datetime('now') WHERE conversation_id = ?", (conv_id,))
                 await conn.commit()
-            # Inbound: acquire 5-min brain lock so scheduler doesn't compete
-            if not from_me and text:
-                await wa_safety.acquire_lock(tenant_id, phone, "whatsapp_inbound",
-                                             duration_minutes=wa_safety.LOCK_INBOUND_MINUTES)
+# Update customer name if we have pushName
+                _push_name = msg.get("pushName") or ""
+                if not from_me and _push_name:
+                    async with aiosqlite.connect(db.DB_PATH) as conn:
+                        await conn.execute(
+                            "UPDATE wa_conversations SET customer_name = COALESCE(customer_name, ?) "
+                            "WHERE conversation_id = ?", (_push_name, conv_id))
+                        await conn.commit()
+
+                # ── Inbound customer message: smart AI pipeline ────────────
+                if not from_me and (text or True):  # voice handled below too
+                  if not from_me and text:
+                    await wa_safety.acquire_lock(tenant_id, phone, "whatsapp_inbound",
+                                                 duration_minutes=wa_safety.LOCK_INBOUND_MINUTES)
+                    try:
+                        async with aiosqlite.connect(db.DB_PATH) as _c:
+                            _cur = await _c.execute(
+                                "SELECT i.phone_number, t.firm_name, t.wa_tier, "
+                                "t.wa_addon_ai_assist, i.health_score, i.paused_until, i.status, "
+                                "i.instance_id, i.own_jid "
+                                "FROM wa_instances i JOIN tenants t ON i.tenant_id = t.tenant_id "
+                                "WHERE i.evolution_instance = ?", (instance,))
+                            _irow = await _cur.fetchone()
+                        if _irow:
+                            _, _firm, _tier, _addon_ai, _health, _paused, _inst_status, _iid, _own_jid = _irow
+                            _is_esc, _esc_kw = wa_safety.is_escalation(text)
+                            if _is_esc:
+                                async with aiosqlite.connect(db.DB_PATH) as _c:
+                                    await _c.execute(
+                                        "UPDATE wa_conversations SET escalated=1, "
+                                        "escalation_reason=? WHERE instance_id=? AND customer_phone=?",
+                                        (f"keyword:{_esc_kw}", instance_id, phone))
+                                    await _c.commit()
+                                logger.info("WA escalation '%s' from %s — skipping auto-reply", _esc_kw, phone)
+                            else:
+                                # AI auto-reply for all connected instances (wa_tier gate removed)
+                                if _inst_status in ("open", "connected") and not _paused:
+                                    _can, _reason = await wa_safety.check_can_send(
+                                        tenant_id=tenant_id, instance_id=instance_id,
+                                        customer_phone=phone, source="ai_auto")
+                                    if _can:
+                                        _sender = _push_name or phone
+                                        # Smart classify + respond
+                                        _smart = await wa_agent.smart_inbound_handler(
+                                            text=text, instance_id=instance_id,
+                                            tenant_id=tenant_id, phone=phone,
+                                            sender_name=_sender, firm_name=_firm or "your advisor")
+                                        _smart_action = _smart.get("action", "silent")
+
+                                        if _smart_action == "reply_lead":
+                                            _ai_reply = _smart.get("reply", "")
+                                            if _ai_reply:
+                                                await asyncio.sleep(random.uniform(1.5, 3.5))
+                                                _send_res = await wa_evo.send_text(
+                                                    instance, phone, _ai_reply,
+                                                    delay_ms=random.randint(1500, 3000))
+                                                if not _send_res.get("error"):
+                                                    _sent_wid = ((_send_res.get("key") or {}).get("id") or "")
+                                                    async with aiosqlite.connect(db.DB_PATH) as _c:
+                                                        await _c.execute(
+                                                            "INSERT INTO wa_messages (conversation_id, instance_id, "
+                                                            "wa_message_id, direction, msg_type, content, status, "
+                                                            "source, sent_at) VALUES (?,?,?,'out','text',?,"
+                                                            "'sent','ai_auto',datetime('now'))",
+                                                            (conv_id, instance_id, _sent_wid, _ai_reply))
+                                                        await _c.execute(
+                                                            "UPDATE wa_conversations SET "
+                                                            "last_outbound_at=datetime('now'), "
+                                                            "last_message_at=datetime('now') "
+                                                            "WHERE conversation_id=?", (conv_id,))
+                                                        await _c.commit()
+                                                    logger.info("WA smart reply sent: tenant=%d phone=%s", tenant_id, phone)
+
+                                        elif _smart_action == "alert_advisor" and _own_jid:
+                                            # Send alert to advisor's own Saved Messages
+                                            _alert_txt = _smart.get("alert", "")
+                                            _lead_jid_fwd = _smart.get("lead_jid", phone)
+                                            _lead_name_fwd = _smart.get("lead_name", _sender)
+                                            if _alert_txt:
+                                                await wa_evo.send_text(instance, _own_jid, _alert_txt)
+                                                # Store pending reply context
+                                                await wa_agent.store_pending_reply(
+                                                    instance_id=instance_id,
+                                                    lead_jid=remote,  # full JID of lead
+                                                    lead_name=_lead_name_fwd,
+                                                    context=text[:500])
+                                                logger.info("WA advisor alert sent for %s → %s", phone, _own_jid)
+                                        else:
+                                            logger.info("WA smart: silent for %s", phone)
+
+                                        await wa_safety.release_lock(tenant_id, phone, "whatsapp_inbound")
+                                    else:
+                                        logger.debug("WA AI reply skipped (%s)", _reason)
+                    except Exception as _e:
+                        logger.exception("WA smart inbound error for %s: %s", phone, _e)
+
+                # ── Inbound voice note from lead ────────────────────────────
+                if not from_me and not text:
+                    try:
+                        _msg_body2 = msg.get("message") or {}
+                        _is_lead_audio = bool(
+                            _msg_body2.get("audioMessage") or _msg_body2.get("pttMessage"))
+                        if _is_lead_audio:
+                            async with aiosqlite.connect(db.DB_PATH) as _ca:
+                                _cura = await _ca.execute(
+                                    "SELECT i.phone_number, t.firm_name, t.wa_tier, "
+                                    "t.wa_addon_ai_assist, i.paused_until, i.status, "
+                                    "i.instance_id, i.own_jid "
+                                    "FROM wa_instances i JOIN tenants t ON i.tenant_id = t.tenant_id "
+                                    "WHERE i.evolution_instance = ?", (instance,))
+                                _iarow = await _cura.fetchone()
+                            if _iarow:
+                                _, _firm2, _tier2, _addon_ai2, _paused2, _inst_status2, _iid2, _own_jid2 = _iarow
+                                # Voice AI reply for all connected instances (wa_tier gate removed)
+                                if _inst_status2 in ("open", "connected") and not _paused2 and _own_jid2:
+                                    _audio2 = await wa_evo.get_media_base64(instance, key)
+                                    if _audio2:
+                                        _transcript2 = await wa_agent.transcribe_wa_audio_inbound(_audio2)
+                                        _transcript2 = (_transcript2 or "").strip()
+                                        # C8: skip non-speech / empty / too-short transcripts (noise,
+                                        # silence, music). Customer voice notes <4 chars
+                                        # rarely contain useful intent.
+                                        if not _transcript2 or len(_transcript2) < 4:
+                                            logger.info(
+                                                "WA inbound voice ignored (non-speech): instance=%s phone=%s",
+                                                instance, phone)
+                                        else:
+                                            _sender2 = _push_name or phone
+                                            _smart2 = await wa_agent.smart_inbound_handler(
+                                                text=_transcript2, instance_id=instance_id,
+                                                tenant_id=tenant_id, phone=phone,
+                                                sender_name=_sender2, firm_name=_firm2 or "your advisor")
+                                            if _smart2.get("action") == "reply_lead":
+                                                _vreply = _smart2.get("reply", "")
+                                                if _vreply:
+                                                    await wa_evo.send_text(instance, remote, _vreply)
+                                            elif _smart2.get("action") == "alert_advisor":
+                                                _valert = (
+                                                    f"🎙 *Voice note from lead*\n\n"
+                                                    f"👤 *{_sender2}* ({phone})\n"
+                                                    f"📝 _{_transcript2[:300]}_\n\n"
+                                                    + (_smart2.get("alert", "") or "")
+                                                )
+                                                await wa_evo.send_text(instance, _own_jid2, _valert)
+                                                await wa_agent.store_pending_reply(
+                                                    instance_id=instance_id, lead_jid=remote,
+                                                    lead_name=_sender2, context=_transcript2[:500])
+                                                logger.info("WA voice alert sent for %s", phone)
+                    except Exception as _e:
+                        logger.exception("WA inbound voice error: %s", _e)
+
+                # ── Outbound from advisor: check for CRM commands (#cmd or self-chat) ──
+                elif from_me and text:
+                    try:
+                        async with aiosqlite.connect(db.DB_PATH) as _c:
+                            _cur = await _c.execute(
+                                "SELECT phone_number FROM wa_instances WHERE evolution_instance=?",
+                                (instance,))
+                            _prow = await _cur.fetchone()
+                        _inst_phone = (_prow[0] or "") if _prow else ""
+                        _own_norm = "".join(d for d in _inst_phone if d.isdigit())
+                        _remote_norm = "".join(d for d in remote.split("@")[0] if d.isdigit())
+                        # Self-chat = advisor messaged their own WA number (Saved Messages)
+                        # Check own_jid (LID) stored in DB for this instance
+                        _stored_own_jid = ""
+                        async with aiosqlite.connect(db.DB_PATH) as _cj:
+                            _cjr = await _cj.execute(
+                                "SELECT own_jid FROM wa_instances WHERE evolution_instance=?",
+                                (instance,))
+                            _cjrow = await _cjr.fetchone()
+                            _stored_own_jid = (_cjrow[0] or "") if _cjrow else ""
+                        # If this is a fromMe @lid message and we haven't stored the LID yet, save it
+                        if from_me and remote.endswith("@lid") and not _stored_own_jid:
+                            async with aiosqlite.connect(db.DB_PATH) as _cj:
+                                await _cj.execute(
+                                    "UPDATE wa_instances SET own_jid=? WHERE evolution_instance=?",
+                                    (remote, instance))
+                                await _cj.commit()
+                            _stored_own_jid = remote
+                        # Self-chat: phone digits match OR JID matches stored own_jid
+                        _is_self_chat = bool(_own_norm and _remote_norm and (
+                            _own_norm.endswith(_remote_norm[-10:]) or
+                            _remote_norm.endswith(_own_norm[-10:])))
+                        _is_self_chat = _is_self_chat or (_stored_own_jid and remote == _stored_own_jid)
+                        _is_crm_cmd = _is_self_chat or text.strip().startswith("#")
+                        if _is_crm_cmd:
+                            # ── Priority: check if this is a reply to a lead alert ──
+                            _pending = await wa_agent.pop_pending_reply(instance_id)
+                            if _pending and not text.strip().startswith("#"):
+                                # Forward advisor's reply to the lead
+                                _lead_jid_fwd = _pending.get("lead_jid", "")
+                                _lead_nm_fwd = _pending.get("lead_name", "lead")
+                                if _lead_jid_fwd:
+                                    await wa_evo.send_text(instance, _lead_jid_fwd, text)
+                                    _crm_reply = (
+                                        f"✅ *Reply forwarded to {_lead_nm_fwd}*\n\n"
+                                        f"📤 \"{text[:200]}\"\n\n_Sarathi-AI_")
+                                    await wa_evo.send_text(instance, remote, _crm_reply)
+                                    logger.info("WA advisor reply forwarded to %s", _lead_jid_fwd)
+                            else:
+                                # No pending reply — process as CRM command.
+                                # Sender = the advisor who owns this SIM/instance. Prefer the
+                                # instance.agent_id (set when SIM was paired); only fall back to
+                                # the first agent if instance has no owner (legacy data).
+                                async with aiosqlite.connect(db.DB_PATH) as _c:
+                                    _cur = await _c.execute(
+                                        "SELECT agent_id FROM wa_instances WHERE evolution_instance=?",
+                                        (instance,))
+                                    _arow = await _cur.fetchone()
+                                    _agent_id = (_arow[0] if _arow and _arow[0] else 0)
+                                    if not _agent_id:
+                                        _cur = await _c.execute(
+                                            "SELECT agent_id FROM agents WHERE tenant_id=? "
+                                            "ORDER BY created_at ASC LIMIT 1",
+                                            (tenant_id,))
+                                        _arow = await _cur.fetchone()
+                                        _agent_id = _arow[0] if _arow else 0
+                                        if _agent_id:
+                                            logger.warning(
+                                                "WA CRM command: instance %s has no agent_id, "
+                                                "falling back to first agent %d (tenant %d)",
+                                                instance, _agent_id, tenant_id)
+                                _parsed = await wa_agent.parse_crm_command(text, _agent_id, tenant_id)
+                                _action = _parsed.get("action", "unknown")
+                                _resp = _parsed.get("response_text", "Samajh gaya! ✅")
+                                if _action == "get_pipeline":
+                                    _resp = await wa_agent.get_pipeline_summary(_agent_id)
+                                elif _action in ("get_tasks", "get_followups"):
+                                    _resp = await wa_agent.get_tasks_summary(_agent_id)
+                                elif _action == "create_lead" and _parsed.get("name"):
+                                    await wa_agent.create_lead_from_command(_agent_id, _parsed)
+                                    _n = _parsed.get("name", "")
+                                    _ph = _parsed.get("phone", "N/A")
+                                    _int = _parsed.get("interest", "N/A")
+                                    _fu = _parsed.get("follow_up_date", "")
+                                    _resp = (
+                                        f"✅ *Lead banaya!*\n\n👤 Naam: {_n}\n"
+                                        f"📱 Phone: {_ph}\n💼 Interest: {_int}"
+                                        + (f"\n📅 Follow-up: {_fu}" if _fu else ""))
+                                elif _action == "create_task":
+                                    _tres = await wa_agent.create_task_from_command(_agent_id, _parsed)
+                                    if _tres.get("ok"):
+                                        _tl = _tres["lead"]
+                                        _tt = (_parsed.get("task_type") or "follow_up").replace("_", " ").title()
+                                        _fu = _parsed.get("follow_up_date", "")
+                                        _ft = _parsed.get("follow_up_time", "")
+                                        _resp = (f"✅ *{_tt} schedule hua!*\n\n"
+                                                 f"👤 Lead: {_tl['name']}\n"
+                                                 + (f"📅 Date: {_fu}\n" if _fu else "")
+                                                 + (f"⏰ Time: {_ft}\n" if _ft else "")
+                                                 + "📲 Dashboard mein dikhega.")
+                                    else:
+                                        _resp = f"❌ Task nahi bana: {_tres.get('error', '')}"
+                                elif _action == "add_note":
+                                    _nres = await wa_agent.add_note_from_command(_agent_id, _parsed)
+                                    if _nres.get("ok"):
+                                        _nl = _nres["lead"]
+                                        _resp = (f"✅ *Note add hua!*\n\n"
+                                                 f"👤 Lead: {_nl['name']}\n"
+                                                 f"📝 {_parsed.get('notes', '')}")
+                                    else:
+                                        _resp = f"❌ Note add nahi hua: {_nres.get('error', '')}"
+                                elif _action == "update_stage":
+                                    _sres = await wa_agent.update_stage_from_command(_agent_id, _parsed)
+                                    if _sres.get("ok"):
+                                        _sl = _sres["lead"]
+                                        _ns = _sres.get("new_stage", "").replace("_", " ").title()
+                                        _resp = (f"✅ *Stage update hua!*\n\n"
+                                                 f"👤 Lead: {_sl['name']}\n"
+                                                 f"📊 New Stage: {_ns}")
+                                    else:
+                                        _resp = f"❌ Stage update nahi hua: {_sres.get('error', '')}"
+                                _crm_reply = f"🤖 *Sarathi CRM*\n\n{_resp}\n\n_Powered by Sarathi-AI_"
+                                # Reply using the full remote JID (preserves @lid for self-chat)
+                                await wa_evo.send_text(instance, remote, _crm_reply)
+                                logger.info("WA CRM cmd '%s' for tenant=%d", _action, tenant_id)
+                    except Exception as _e:
+                        logger.exception("WA CRM command error: %s", _e)
+
+                # ── Audio/PTT self-chat: voice note CRM command ──────────────
+                elif from_me and not text:
+                    try:
+                        _msg_body = msg.get("message") or {}
+                        _is_audio = bool(
+                            _msg_body.get("audioMessage") or _msg_body.get("pttMessage")
+                        )
+                        if _is_audio:
+                            async with aiosqlite.connect(db.DB_PATH) as _c:
+                                _cur = await _c.execute(
+                                    "SELECT phone_number FROM wa_instances WHERE evolution_instance=?",
+                                    (instance,))
+                                _prow = await _cur.fetchone()
+                            _inst_phone = (_prow[0] or "") if _prow else ""
+                            _own_norm = "".join(d for d in _inst_phone if d.isdigit())
+                            _remote_norm = "".join(d for d in remote.split("@")[0] if d.isdigit())
+                            _is_self = bool(_own_norm and _remote_norm and (
+                                _own_norm.endswith(_remote_norm[-10:]) or
+                                _remote_norm.endswith(_own_norm[-10:])))
+                            # Also check stored own_jid (LID self-chat / WhatsApp Multi-Device)
+                            if not _is_self:
+                                async with aiosqlite.connect(db.DB_PATH) as _cj3:
+                                    _r3 = await _cj3.execute(
+                                        "SELECT own_jid FROM wa_instances WHERE evolution_instance=?",
+                                        (instance,))
+                                    _cj3row = await _r3.fetchone()
+                                    _stored_lid3 = (_cj3row[0] or "") if _cj3row else ""
+                                if not _stored_lid3 and remote.endswith("@lid"):
+                                    # First time: store this as the instance's own LID
+                                    _stored_lid3 = remote
+                                    async with aiosqlite.connect(db.DB_PATH) as _cj3:
+                                        await _cj3.execute(
+                                            "UPDATE wa_instances SET own_jid=? WHERE evolution_instance=?",
+                                            (remote, instance))
+                                        await _cj3.commit()
+                                _is_self = bool(_stored_lid3 and remote == _stored_lid3)
+                            if _is_self:
+                                # Download audio from Evolution
+                                _key_dict = key  # message key from earlier
+                                _audio_bytes = await wa_evo.get_media_base64(instance, _key_dict)
+                                if _audio_bytes:
+                                    # Use instance.agent_id (the SIM owner), not first-agent.
+                                    async with aiosqlite.connect(db.DB_PATH) as _c:
+                                        _cur = await _c.execute(
+                                            "SELECT agent_id FROM wa_instances WHERE evolution_instance=?",
+                                            (instance,))
+                                        _arow = await _cur.fetchone()
+                                        _agent_id = (_arow[0] if _arow and _arow[0] else 0)
+                                        if not _agent_id:
+                                            _cur = await _c.execute(
+                                                "SELECT agent_id FROM agents WHERE tenant_id=? "
+                                                "ORDER BY created_at ASC LIMIT 1", (tenant_id,))
+                                            _arow = await _cur.fetchone()
+                                            _agent_id = _arow[0] if _arow else 0
+                                    _voice_result = await wa_agent.handle_wa_voice_note(
+                                        _audio_bytes, _agent_id, tenant_id)
+                                    _action = _voice_result.get("action", "unknown")
+                                    _transcript = (_voice_result.get("transcript", "") or "").strip()
+                                    _resp = _voice_result.get("response_text", "")
+
+                                    # C8: Skip non-speech / empty transcripts.
+                                    # If Gemini gave us nothing meaningful, don't pretend
+                                    # to interpret it — just log and silently drop.
+                                    if not _transcript or len(_transcript) < 4:
+                                        logger.info(
+                                            "WA voice ignored (empty/non-speech, tenant=%d agent=%d)",
+                                            tenant_id, _agent_id)
+                                        return {"ok": True, "ignored": "voice_non_speech"}
+
+                                    if _action == "get_pipeline":
+                                        _resp = await wa_agent.get_pipeline_summary(_agent_id)
+                                    elif _action in ("get_tasks",):
+                                        _resp = await wa_agent.get_tasks_summary(_agent_id)
+                                    elif _action == "create_lead" and _voice_result.get("name"):
+                                        await wa_agent.create_lead_from_command(_agent_id, _voice_result)
+                                        _n = _voice_result.get("name", "")
+                                        _ph = _voice_result.get("phone", "N/A")
+                                        _int = _voice_result.get("interest", "N/A")
+                                        _fu = _voice_result.get("follow_up_date", "")
+                                        _resp = (
+                                            f"✅ *Lead banaya!*\n\n"
+                                            f"🎙 _{_transcript}_\n\n"
+                                            f"👤 Naam: {_n}\n📱 Phone: {_ph}\n💼 Interest: {_int}"
+                                            + (f"\n📅 Follow-up: {_fu}" if _fu else "")
+                                            + "\n\n_Sarathi dashboard mein check karein._")
+                                    elif _action == "create_lead" and not _voice_result.get("name"):
+                                        _resp = (
+                                            f"🤔 *Lead ka naam nahi mila*\n\n"
+                                            f"🎙 _{_transcript}_\n\n"
+                                            "Lead create karne ke liye naam zaroori hai.\n"
+                                            "Dobara bolein: \"*Naya client — [naam], [phone number]*\"")
+                                    elif _action == "create_task":
+                                        _tres = await wa_agent.create_task_from_command(_agent_id, _voice_result)
+                                        if _tres.get("ok"):
+                                            _tl = _tres["lead"]
+                                            _tt = (_voice_result.get("task_type") or "follow_up").replace("_", " ").title()
+                                            _fu2 = _voice_result.get("follow_up_date", "")
+                                            _ft2 = _voice_result.get("follow_up_time", "")
+                                            _resp = (f"✅ *{_tt} schedule hua!*\n\n"
+                                                     f"🎙 _{_transcript}_\n\n"
+                                                     f"👤 Lead: {_tl['name']}\n"
+                                                     + (f"📅 Date: {_fu2}\n" if _fu2 else "")
+                                                     + (f"⏰ Time: {_ft2}\n" if _ft2 else "")
+                                                     + "📲 Dashboard mein dikhega.")
+                                        else:
+                                            _resp = (f"❌ Task nahi bana\n\n🎙 _{_transcript}_\n\n"
+                                                     f"{_tres.get('error', '')}")
+                                    elif _action == "add_note":
+                                        _nres = await wa_agent.add_note_from_command(_agent_id, _voice_result)
+                                        if _nres.get("ok"):
+                                            _nl = _nres["lead"]
+                                            _resp = (f"✅ *Note add hua!*\n\n"
+                                                     f"🎙 _{_transcript}_\n\n"
+                                                     f"👤 Lead: {_nl['name']}\n"
+                                                     f"📝 {_voice_result.get('notes', '')}")
+                                        else:
+                                            _resp = (f"❌ Note add nahi hua\n\n🎙 _{_transcript}_\n\n"
+                                                     f"{_nres.get('error', '')}")
+                                    elif _action == "update_stage":
+                                        _sres = await wa_agent.update_stage_from_command(_agent_id, _voice_result)
+                                        if _sres.get("ok"):
+                                            _sl = _sres["lead"]
+                                            _ns = _sres.get("new_stage", "").replace("_", " ").title()
+                                            _resp = (f"✅ *Stage update hua!*\n\n"
+                                                     f"🎙 _{_transcript}_\n\n"
+                                                     f"👤 Lead: {_sl['name']}\n"
+                                                     f"📊 New Stage: {_ns}")
+                                        else:
+                                            _resp = (f"❌ Stage update nahi hua\n\n🎙 _{_transcript}_\n\n"
+                                                     f"{_sres.get('error', '')}")
+                                    elif _action == "unknown" or not _resp:
+                                        _resp = (
+                                            f"🤔 *Samajh nahi aaya*\n\n"
+                                            + (f"🎙 _{_transcript}_\n\n" if _transcript else "")
+                                            + "Yeh commands try karein:\n"
+                                            "• \"*Naya client — Ramesh Sharma, 9876543210*\"\n"
+                                            "• \"*Ramesh se kal meeting hai*\"\n"
+                                            "• \"*Priya ka stage — proposal sent*\"\n"
+                                            "• \"*Amit ke liye note — premium quoted*\"\n"
+                                            "• \"*Pipeline dikhao*\"")
+                                    _crm_reply = f"🤖 *Sarathi CRM*\n\n{_resp}\n\n_Powered by Sarathi-AI_"
+                                    # Reply using full remote JID (preserves @lid)
+                                    await wa_evo.send_text(instance, remote, _crm_reply)
+                                    logger.info("WA voice CRM '%s' for tenant=%d", _action, tenant_id)
+                    except Exception as _e:
+                        logger.exception("WA voice CRM error: %s", _e)
 
         elif event in ("messages.update",):
             # Delivery / read receipts — update statuses
@@ -8578,6 +12607,57 @@ async def api_nurture_test_tick(request: Request,
     """Owner-only: trigger a nurture tick immediately for testing."""
     stats = await nurture.process_due_enrollments()
     return {"success": True, "stats": stats}
+
+
+class NurtureBulkEnrolReq(BaseModel):
+    sequence_id: int
+    lead_ids: list = []   # empty = enrol ALL active leads for this tenant
+
+
+@app.post("/api/nurture/enrol-bulk")
+@limiter.limit("10/minute")
+async def api_nurture_enrol_bulk(req: NurtureBulkEnrolReq, request: Request,
+                                   tenant: dict = Depends(auth.require_owner)):
+    """Bulk-enrol leads in a sequence. Pass lead_ids=[] to enrol ALL active leads."""
+    tid = tenant["tenant_id"]
+    enrolled = skipped = 0
+    try:
+        if not req.lead_ids:
+            # Enrol ALL active leads belonging to this tenant (via agent join)
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                conn.row_factory = aiosqlite.Row
+                cur = await conn.execute(
+                    "SELECT l.lead_id, l.agent_id FROM leads l "
+                    "JOIN agents a ON a.agent_id = l.agent_id "
+                    "WHERE a.tenant_id=? AND l.stage NOT IN ('closed_won','closed_lost')",
+                    (tid,))
+                rows = await cur.fetchall()
+            for r in rows:
+                eid = await nurture.enrol_lead(tid, req.sequence_id, r["lead_id"], r["agent_id"])
+                if eid:
+                    enrolled += 1
+                else:
+                    skipped += 1
+        else:
+            # Enrol explicit lead_ids (verify they belong to this tenant)
+            for lead_id in req.lead_ids:
+                async with aiosqlite.connect(db.DB_PATH) as conn:
+                    cur = await conn.execute(
+                        "SELECT l.agent_id FROM leads l "
+                        "JOIN agents a ON a.agent_id = l.agent_id "
+                        "WHERE l.lead_id=? AND a.tenant_id=?",
+                        (lead_id, tid))
+                    row = await cur.fetchone()
+                if row:
+                    eid = await nurture.enrol_lead(tid, req.sequence_id, lead_id, row[0])
+                    if eid:
+                        enrolled += 1
+                    else:
+                        skipped += 1
+        return {"success": True, "enrolled": enrolled, "skipped": skipped}
+    except Exception as e:
+        logger.exception("enrol-bulk error: %s", e)
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
 # =============================================================================
@@ -9949,8 +14029,9 @@ async def api_send_nudge(req: NudgeRequest, request: Request,
     target = await db.get_agent_by_id(req.target_agent_id)
     if not target or target.get("tenant_id") != tid:
         return JSONResponse({"error": "Agent not found in your team"}, status_code=404)
-    if not target.get("telegram_id"):
-        return JSONResponse({"error": "This advisor has no Telegram connected"}, status_code=400)
+    # Require either Telegram or a phone number (for WhatsApp fallback)
+    if not target.get("telegram_id") and not target.get("phone") and not target.get("wa_phone"):
+        return JSONResponse({"error": "This advisor has no Telegram or phone number to notify"}, status_code=400)
 
     # Get lead data
     lead = await db.get_lead(req.lead_id, tenant_id=tid)
@@ -9986,50 +14067,70 @@ async def api_send_nudge(req: NudgeRequest, request: Request,
         lead_id=req.lead_id,
     )
 
-    # Send to advisor via Telegram
-    tg_id = target["telegram_id"]
+    # Send to advisor — try Telegram first, fall back to WhatsApp
+    tg_id = target.get("telegram_id", "")
+    advisor_phone = target.get("wa_phone") or target.get("phone") or ""
     delivered = False
     delivery_error = ""
-    try:
-        # Try tenant bot first, fall back to master
-        mgr = botmgr.bot_manager
-        bot_app = mgr._bots.get(tid)
-        if not bot_app or not bot_app.running:
-            bot_app = mgr.master_bot
-        if not bot_app or not bot_app.running:
-            delivery_error = "No running bot available. Please check bot configuration."
-        else:
-            # Build inline buttons for advisor response
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            buttons = [
-                [InlineKeyboardButton("✅ Done", callback_data=f"nudge_act_{nudge_id}"),
-                 InlineKeyboardButton("⏰ Remind Later", callback_data=f"nudge_snooze_{nudge_id}")],
-            ]
+    delivery_channel = ""
 
-            await bot_app.bot.send_message(
-                chat_id=int(tg_id),
-                text=f"📩 <b>Nudge from your firm</b>\n\n{message_text}",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(buttons),
-            )
-            delivered = True
-            await db.update_nudge_status(nudge_id, "delivered")
-    except Exception as tg_err:
-        err_str = str(tg_err)
-        logger.error("Failed to deliver nudge %d via Telegram: %s", nudge_id, tg_err)
-        if "bot was blocked" in err_str.lower() or "forbidden" in err_str.lower():
-            delivery_error = "Advisor has blocked the bot. They need to unblock and /start the bot again."
-        elif "chat not found" in err_str.lower() or "user not found" in err_str.lower():
-            delivery_error = "Advisor hasn't started the bot yet. They need to open the bot and tap /start first."
-        elif "not enough rights" in err_str.lower():
-            delivery_error = "Bot doesn't have permission to message this user."
-        else:
-            delivery_error = f"Telegram error: {err_str[:150]}"
+    # 1. Try Telegram if advisor has a valid numeric telegram_id
+    if tg_id and str(tg_id).lstrip("-").isdigit():
+        try:
+            mgr = botmgr.bot_manager
+            bot_app = mgr._bots.get(tid)
+            if not bot_app or not bot_app.running:
+                bot_app = mgr.master_bot
+            if bot_app and bot_app.running:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                buttons = [
+                    [InlineKeyboardButton("✅ Done", callback_data=f"nudge_act_{nudge_id}"),
+                     InlineKeyboardButton("⏰ Remind Later", callback_data=f"nudge_snooze_{nudge_id}")],
+                ]
+                await bot_app.bot.send_message(
+                    chat_id=int(tg_id),
+                    text=f"📩 <b>Nudge from your firm</b>\n\n{message_text}",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+                delivered = True
+                delivery_channel = "telegram"
+                await db.update_nudge_status(nudge_id, "delivered")
+        except Exception as tg_err:
+            logger.warning("Nudge %d Telegram failed: %s — will try WhatsApp", nudge_id, tg_err)
+
+    # 2. Fall back to WhatsApp if Telegram failed or not configured
+    if not delivered and advisor_phone and wa_evo.is_enabled():
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as _conn:
+                _cur = await _conn.execute(
+                    "SELECT evolution_instance FROM wa_instances "
+                    "WHERE tenant_id=? AND status IN ('open','connected') "
+                    "ORDER BY instance_id DESC LIMIT 1", (tid,))
+                _evo_row = await _cur.fetchone()
+            if _evo_row:
+                wa_nudge_text = f"📩 *Nudge from your firm*\n\n{message_text}"
+                wa_result = await wa_evo.send_text(_evo_row[0], advisor_phone, wa_nudge_text, delay_ms=1000)
+                if not wa_result.get("error"):
+                    delivered = True
+                    delivery_channel = "whatsapp"
+                    await db.update_nudge_status(nudge_id, "delivered")
+                else:
+                    delivery_error = f"WhatsApp send failed: {wa_result.get('message', 'Unknown error')}"
+            else:
+                delivery_error = "WhatsApp not connected and Telegram not configured for this advisor."
+        except Exception as wa_err:
+            logger.error("Nudge %d WhatsApp fallback failed: %s", nudge_id, wa_err)
+            delivery_error = f"Delivery failed: {str(wa_err)[:150]}"
+
+    if not delivered and not delivery_error:
+        delivery_error = "Advisor has no Telegram connected and no phone number for WhatsApp."
 
     return {
         "ok": True,
         "nudge_id": nudge_id,
         "delivered": delivered,
+        "delivery_channel": delivery_channel,
         "delivery_error": delivery_error,
         "summary": ai_result.get("summary", ""),
         "message_preview": message_text[:200],
@@ -10051,7 +14152,8 @@ async def api_broadcast_nudge(req: BroadcastNudgeRequest, request: Request,
         sender_agent_id = owner_agent["agent_id"] if owner_agent else 0
 
     all_agents = await db.get_agents_by_tenant(tid)
-    targets = [a for a in all_agents if a.get("is_active") and a.get("telegram_id")
+    targets = [a for a in all_agents if a.get("is_active")
+               and (a.get("telegram_id") or a.get("phone") or a.get("wa_phone"))
                and a["agent_id"] != sender_agent_id]
 
     if req.agent_ids:
@@ -10059,27 +14161,64 @@ async def api_broadcast_nudge(req: BroadcastNudgeRequest, request: Request,
         targets = [a for a in targets if a["agent_id"] in allowed]
 
     if not targets:
-        return JSONResponse({"error": "No active advisors with Telegram to notify"}, status_code=400)
+        return JSONResponse({"error": "No active advisors with Telegram or phone number to notify"}, status_code=400)
 
     mgr = botmgr.bot_manager
     bot_app = mgr._bots.get(tid) or mgr.master_bot
+
+    # Get connected Evolution instance for this tenant (for WhatsApp fallback)
+    evo_instance = None
+    if wa_evo.is_enabled():
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as _conn:
+                _cur = await _conn.execute(
+                    "SELECT evolution_instance FROM wa_instances "
+                    "WHERE tenant_id=? AND status IN ('open','connected') "
+                    "ORDER BY instance_id DESC LIMIT 1", (tid,))
+                _row = await _cur.fetchone()
+                if _row:
+                    evo_instance = _row[0]
+        except Exception:
+            pass
+
     sent_count = 0
+    broadcast_text = f"📢 *Announcement from your firm*\n\n{req.message}"
 
     for agent in targets:
+        delivered = False
         try:
             nudge_id = await db.create_nudge(
                 tenant_id=tid, sender_agent_id=sender_agent_id,
                 target_agent_id=agent["agent_id"], nudge_type="broadcast",
                 message=req.message)
 
-            if bot_app:
-                await bot_app.bot.send_message(
-                    chat_id=int(agent["telegram_id"]),
-                    text=f"📢 <b>Announcement from your firm</b>\n\n{req.message}",
-                    parse_mode="HTML",
-                )
+            # 1. Try Telegram first
+            tg_id = agent.get("telegram_id", "")
+            if tg_id and str(tg_id).lstrip("-").isdigit() and bot_app and bot_app.running:
+                try:
+                    await bot_app.bot.send_message(
+                        chat_id=int(tg_id),
+                        text=f"📢 <b>Announcement from your firm</b>\n\n{req.message}",
+                        parse_mode="HTML",
+                    )
+                    delivered = True
+                except Exception as _tg_err:
+                    logger.warning("Broadcast Telegram failed agent %d: %s", agent["agent_id"], _tg_err)
+
+            # 2. Fall back to WhatsApp if Telegram failed/missing
+            if not delivered and evo_instance:
+                adv_phone = agent.get("wa_phone") or agent.get("phone") or ""
+                if adv_phone:
+                    try:
+                        wa_result = await wa_evo.send_text(evo_instance, adv_phone, broadcast_text, delay_ms=1500)
+                        if not wa_result.get("error"):
+                            delivered = True
+                    except Exception as _wa_err:
+                        logger.error("Broadcast WhatsApp failed agent %d: %s", agent["agent_id"], _wa_err)
+
+            if delivered:
                 await db.update_nudge_status(nudge_id, "delivered")
-            sent_count += 1
+                sent_count += 1
         except Exception as e:
             logger.error("Broadcast to agent %d failed: %s", agent["agent_id"], e)
 
@@ -10459,7 +14598,12 @@ async def api_get_profile(current=Depends(auth.get_current_tenant)):
 async def api_update_profile(req: ProfileUpdateRequest, request: Request,
                               current=Depends(auth.get_current_tenant)):
     """Update current user's profile fields."""
-    agent = await db.get_owner_agent_by_tenant(current["tenant_id"])
+    # Prefer direct lookup by agent_id from JWT (works even if is_active=0)
+    agent = None
+    if current.get("agent_id"):
+        agent = await db.get_agent_by_id(current["agent_id"])
+    if not agent:
+        agent = await db.get_owner_agent_by_tenant(current["tenant_id"])
     if not agent:
         return JSONResponse({"detail": "Agent not found"}, status_code=404)
 
@@ -10633,6 +14777,36 @@ async def api_public_branding(tenant_id: int):
 #  ADMIN DASHBOARD API — Lead/Policy/Agent/Overview for Firm Owners
 # =============================================================================
 
+class TriggerScanRequest(BaseModel):
+    scan_type: str  # birthday | anniversary | renewal | followup | nurture
+
+@app.post("/api/admin/trigger-scan")
+@limiter.limit("10/minute")
+async def api_trigger_scan(request: Request, req: TriggerScanRequest,
+                            tenant: dict = Depends(auth.get_current_tenant)):
+    """Manually trigger an automation scan for testing. Owner-only."""
+    if tenant.get("role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner access required")
+    import biz_nurture as _nurture
+    scan_map = {
+        "birthday":    reminders.run_birthday_scan,
+        "anniversary": reminders.run_anniversary_scan,
+        "renewal":     reminders.run_renewal_scan,
+        "followup":    reminders.run_followup_scan,
+        "nurture":     _nurture.process_due_enrollments,
+    }
+    fn = scan_map.get(req.scan_type)
+    if not fn:
+        raise HTTPException(status_code=400,
+                            detail=f"Unknown scan_type. Valid: {list(scan_map)}")
+    try:
+        result = await fn()
+        return {"ok": True, "scan_type": req.scan_type, "result": result}
+    except Exception as e:
+        logger.exception("Manual scan %s failed", req.scan_type)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/admin/overview")
 async def api_admin_overview(tenant: dict = Depends(auth.get_current_tenant)):
     """Dashboard overview — owners see firm-wide, agents see own stats."""
@@ -10667,9 +14841,26 @@ async def api_admin_overview(tenant: dict = Depends(auth.get_current_tenant)):
                 aff = await _cur.fetchone()
         if aff:
             is_partner = True
+    # RBAC permissions and role label
+    role_label = role
+    role_label_hi = role
+    permissions = db._ALL_PERMS
+    if not is_owner and tenant.get("agent_id"):
+        _ag_for_perms = await db.get_agent_by_id(tenant["agent_id"])
+        if _ag_for_perms:
+            permissions = await db.get_agent_permissions(_ag_for_perms)
+    if role not in ("owner", "admin", "agent") and tenant.get("agent_id"):
+        _cr = await db.get_role_by_slug(tenant["tenant_id"], role)
+        if _cr:
+            role_label = _cr.get("role_label", role)
+            role_label_hi = _cr.get("role_label_hi") or role_label
+
     return {
         **overview,
         "role": role,
+        "role_label": role_label,
+        "role_label_hi": role_label_hi,
+        "permissions": permissions,
         "agent_name": agent_name,
         "agent_phone": agent_phone,
         "is_partner": is_partner,
@@ -11478,14 +15669,22 @@ async def api_edit_agent(agent_id: int, req: AgentEditRequest, request: Request,
         updates["phone"] = req.phone.strip()
     if req.email and req.email.strip():
         updates["email"] = req.email.strip()
-    if req.role and req.role in ("admin", "agent"):
-        # Only owner can change roles; admin cannot promote/demote
+    if req.role:
+        role_val = req.role.strip().lower()
+        # Only owner can change roles
         if caller.get("role") != "owner":
             return JSONResponse({"error": "Only the firm owner can change roles"}, status_code=403)
-        # Cannot set anyone to owner
-        if req.role == "owner":
+        if role_val == "owner":
             return JSONResponse({"error": "Cannot assign owner role"}, status_code=400)
-        updates["role"] = req.role
+        # Built-in roles are always valid; custom roles must exist in custom_roles table
+        built_in = {"admin", "agent"}
+        if role_val not in built_in:
+            existing_role = await db.get_role_by_slug(tenant["tenant_id"], role_val)
+            if not existing_role:
+                return JSONResponse(
+                    {"error": f"Role '{role_val}' does not exist. Create it first in Role Management."},
+                    status_code=400)
+        updates["role"] = role_val
 
     if not updates:
         return JSONResponse({"error": "No valid fields to update"}, status_code=400)
@@ -11578,6 +15777,153 @@ async def api_remove_agent(agent_id: int, request: Request,
                        f"Agent {agent_id} removed (transfers: {result.get('transfers', {})})",
                        tenant_id=tenant["tenant_id"], ip_address=request.client.host)
     return result
+
+
+# =============================================================================
+#  RBAC ROLE MANAGEMENT — Team & Enterprise Plans
+# =============================================================================
+
+class RoleCreateReq(BaseModel):
+    role_slug: str = Field(..., min_length=2, max_length=40,
+                           pattern=r"^[a-z0-9_]+$",
+                           description="Unique slug for this role, e.g. 'senior_associate'")
+    role_label: str = Field(..., min_length=2, max_length=60,
+                            description="English display name, e.g. 'Senior Associate'")
+    role_label_hi: str = Field("", max_length=60,
+                               description="Hindi display name (optional)")
+    permissions: dict = Field(default_factory=dict,
+                              description="Permission flags (see /api/roles/meta for full list)")
+    from_template: str = Field("", description="If set, start permissions from this template slug")
+
+
+class RoleUpdateReq(BaseModel):
+    role_label: str = None
+    role_label_hi: str = None
+    permissions: dict = None
+
+
+@app.get("/api/roles/meta")
+async def api_roles_meta(tenant: dict = Depends(auth.require_owner)):
+    """Return all available permission flags and predefined role templates."""
+    return {
+        "permissions": db.ROLE_PERMISSIONS_ALL,
+        "templates": db.ROLE_TEMPLATES,
+    }
+
+
+@app.get("/api/roles")
+@limiter.limit("30/minute")
+async def api_list_roles(request: Request, tenant: dict = Depends(auth.require_owner)):
+    """List all custom roles defined for this tenant. Team+ plan."""
+    await _require_team_plan(tenant["tenant_id"])
+    roles = await db.get_tenant_roles(tenant["tenant_id"])
+    return {"roles": roles, "permissions_meta": db.ROLE_PERMISSIONS_ALL}
+
+
+@app.post("/api/roles")
+@limiter.limit("20/minute")
+async def api_create_role(req: RoleCreateReq, request: Request,
+                           tenant: dict = Depends(auth.require_owner)):
+    """Create a new custom role for this tenant. Owner only, Team+ plan."""
+    await _require_team_plan(tenant["tenant_id"])
+    caller = await _require_owner_role(tenant)
+    if caller.get("role") != "owner":
+        return JSONResponse({"error": "Only the firm owner can create roles"}, status_code=403)
+
+    # Reserved slugs
+    if req.role_slug in ("owner", "admin", "agent", "superadmin"):
+        return JSONResponse({"error": f"'{req.role_slug}' is a reserved system role"}, status_code=400)
+
+    # Check duplicate slug for this tenant
+    existing = await db.get_role_by_slug(tenant["tenant_id"], req.role_slug)
+    if existing:
+        return JSONResponse({"error": f"A role with slug '{req.role_slug}' already exists"}, status_code=409)
+
+    # Start from template if requested
+    perms = {}
+    if req.from_template and req.from_template in db.ROLE_TEMPLATES:
+        perms = dict(db.ROLE_TEMPLATES[req.from_template]["permissions"])
+
+    # Apply any explicit overrides from request
+    valid_perms = {k: bool(v) for k, v in req.permissions.items() if k in db.ROLE_PERMISSIONS_ALL}
+    perms.update(valid_perms)
+
+    role_id = await db.create_custom_role(
+        tenant_id=tenant["tenant_id"],
+        role_slug=req.role_slug,
+        role_label=req.role_label,
+        role_label_hi=req.role_label_hi,
+        permissions=perms,
+        is_system=0,
+    )
+    await db.log_audit("role_created", f"Role '{req.role_slug}' ({req.role_label}) created",
+                       tenant_id=tenant["tenant_id"], ip_address=request.client.host)
+    return {"success": True, "role_id": role_id, "role_slug": req.role_slug}
+
+
+@app.put("/api/roles/{role_id}")
+@limiter.limit("20/minute")
+async def api_update_role(role_id: int, req: RoleUpdateReq, request: Request,
+                           tenant: dict = Depends(auth.require_owner)):
+    """Update a custom role's label or permissions. Owner only."""
+    await _require_team_plan(tenant["tenant_id"])
+    caller = await _require_owner_role(tenant)
+    if caller.get("role") != "owner":
+        return JSONResponse({"error": "Only the firm owner can update roles"}, status_code=403)
+
+    valid_perms = None
+    if req.permissions is not None:
+        valid_perms = {k: bool(v) for k, v in req.permissions.items() if k in db.ROLE_PERMISSIONS_ALL}
+
+    ok = await db.update_custom_role(
+        role_id=role_id, tenant_id=tenant["tenant_id"],
+        role_label=req.role_label, role_label_hi=req.role_label_hi,
+        permissions=valid_perms,
+    )
+    if not ok:
+        return JSONResponse({"error": "Role not found or no changes"}, status_code=404)
+    await db.log_audit("role_updated", f"Role {role_id} updated",
+                       tenant_id=tenant["tenant_id"], ip_address=request.client.host)
+    return {"success": True}
+
+
+@app.delete("/api/roles/{role_id}")
+@limiter.limit("10/minute")
+async def api_delete_role(role_id: int, request: Request,
+                           tenant: dict = Depends(auth.require_owner)):
+    """Delete a custom role. Fails if any agents currently have it. Owner only."""
+    await _require_team_plan(tenant["tenant_id"])
+    caller = await _require_owner_role(tenant)
+    if caller.get("role") != "owner":
+        return JSONResponse({"error": "Only the firm owner can delete roles"}, status_code=403)
+
+    result = await db.delete_custom_role(role_id, tenant["tenant_id"])
+    if not result["ok"]:
+        return JSONResponse({"error": result.get("error", "Failed")}, status_code=400)
+    await db.log_audit("role_deleted", f"Role {role_id} deleted",
+                       tenant_id=tenant["tenant_id"], ip_address=request.client.host)
+    return {"success": True}
+
+
+@app.post("/api/roles/seed-templates")
+@limiter.limit("5/minute")
+async def api_seed_role_templates(request: Request, tenant: dict = Depends(auth.require_owner)):
+    """Seed the 4 predefined role templates for this tenant (idempotent). Team+ plan."""
+    await _require_team_plan(tenant["tenant_id"])
+    created = []
+    for slug, tpl in db.ROLE_TEMPLATES.items():
+        existing = await db.get_role_by_slug(tenant["tenant_id"], slug)
+        if not existing:
+            await db.create_custom_role(
+                tenant_id=tenant["tenant_id"],
+                role_slug=slug,
+                role_label=tpl["label"],
+                role_label_hi=tpl["label_hi"],
+                permissions=tpl["permissions"],
+                is_system=1,
+            )
+            created.append(slug)
+    return {"success": True, "created": created, "skipped": [s for s in db.ROLE_TEMPLATES if s not in created]}
 
 
 # =============================================================================
@@ -11945,7 +16291,7 @@ async def api_set_followup(lead_id: int, req: FollowupRequest,
     if notify_id and notify_id != caller_agent_id:
         try:
             notify_agent = await db.get_agent_by_id(notify_id)
-            if notify_agent and notify_agent.get('telegram_id'):
+            if notify_agent:
                 admin_name = tenant.get("firm_name") or "Admin"
                 admin_agent = await db.get_agent_by_id(caller_agent_id) if caller_agent_id else None
                 if admin_agent:
@@ -11962,7 +16308,17 @@ async def api_set_followup(lead_id: int, req: FollowupRequest,
                             f"📅 Date: {req.date}\n"
                             f"📝 {req.notes or '—'}")
                 import biz_reminders as rem
-                await rem._send_telegram(notify_agent['telegram_id'], ntxt)
+                # Telegram notification
+                if notify_agent.get('telegram_id'):
+                    await rem._send_telegram(notify_agent['telegram_id'], ntxt)
+                # WhatsApp notification (plain text, no markdown asterisks)
+                wa_phone = notify_agent.get('phone') or notify_agent.get('wa_phone') or ''
+                if wa_phone:
+                    wa_plain = ntxt.replace('*', '')
+                    try:
+                        await rem._evo_send_if_connected(notify_id, wa_phone, wa_plain)
+                    except Exception as we:
+                        logger.debug("WA task notification skip (agent %s): %s", notify_id, we)
         except Exception as e:
             logger.warning("Failed to notify agent of admin follow-up: %s", e)
 
@@ -12262,6 +16618,12 @@ async def main():
     await db.init_plan_changes_table()  # Scheduled plan changes
     await campaigns.init_campaigns_db()
     await resilience.init_resilience()  # Message queue + retry engine
+    # Phase 3: Nidaan workflow defaults (statuses, transitions, system flags)
+    try:
+        import biz_nidaan_tasks as ntasks
+        await ntasks.seed_defaults()
+    except Exception as _se:
+        logger.warning("Nidaan workflow seed failed: %s", _se)
     # Drip nurture sequences (multi-step time-delayed lead nurturing)
     try:
         import biz_nurture as nurture
@@ -12275,6 +16637,11 @@ async def main():
         await _quotes.init_quotes_schema()
     except Exception as _qe:
         logger.error("Quotes init failed: %s", _qe, exc_info=True)
+    # Nidaan claim documents table
+    try:
+        await nidaan.ensure_claim_documents_table()
+    except Exception as _nde:
+        logger.error("Nidaan claim docs table init failed: %s", _nde, exc_info=True)
     logger.info("✅ Database ready (sarathi_biz.db)")
 
     # Step 1b: Initialize authentication
@@ -12406,7 +16773,20 @@ async def main():
 
     otp_cleanup = asyncio.create_task(otp_cleanup_task())
 
-    # Step 7: Start FastAPI server
+    # Step 6d: Video job cleanup (remove files older than 24h)
+    async def video_cleanup_task():
+        """Purge stale generated video files every 6 hours."""
+        import biz_video as _vid
+        while True:
+            try:
+                await asyncio.sleep(6 * 3600)
+                _vid.cleanup_old_jobs(max_age_hours=24)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
+    asyncio.create_task(video_cleanup_task())
     logger.info("🌐 Starting web server on %s:%d...", SERVER_HOST, SERVER_PORT)
     config = uvicorn.Config(
         app,
