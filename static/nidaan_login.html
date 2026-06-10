@@ -179,6 +179,26 @@ function switchTab(tab) {
 // ── OTP flow ──────────────────────────────────────────────────────────────
 let _otpSent = false, _resendTimer = null;
 
+// Robust FastAPI error extraction — handles string / Pydantic-422 array / object detail.
+function _extractErr(data, fallback) {
+  if (!data) return fallback || 'Something went wrong';
+  const d = data.detail;
+  if (d == null) return data.message || data.msg || fallback || 'Something went wrong';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    const parts = d.map(e => {
+      if (!e) return '';
+      if (typeof e === 'string') return e;
+      const field = Array.isArray(e.loc) && e.loc.length ? e.loc[e.loc.length - 1] : '';
+      const msg = e.msg || e.message || '';
+      return field && msg ? field + ': ' + msg : (msg || field || '');
+    }).filter(Boolean);
+    return parts.length ? parts.join('; ') : (fallback || 'Validation failed. Please check your inputs.');
+  }
+  if (typeof d === 'object') return d.message || d.msg || d.error || d.title || (fallback || 'Something went wrong');
+  return String(d) || (fallback || 'Something went wrong');
+}
+
 async function sendOTP(isResend) {
   const email = document.getElementById('otpEmail').value.trim();
   const otpMsg = document.getElementById('otpMsg');
@@ -195,7 +215,7 @@ async function sendOTP(isResend) {
       body: JSON.stringify({email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    if (!res.ok) throw new Error(_extractErr(data, 'Failed to send OTP'));
     _otpSent = true;
     document.getElementById('otpEmail').readOnly = true;
     document.getElementById('otpRow').style.display = 'flex';
@@ -240,7 +260,7 @@ async function verifyOTP() {
       body: JSON.stringify({email, otp})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Invalid OTP');
+    if (!res.ok) throw new Error(_extractErr(data, 'Invalid OTP'));
     _loginSuccess(data);
   } catch(err) {
     showMsg(otpMsg, 'err', err.message);
@@ -284,7 +304,7 @@ async function doPasswordLogin(e) {
       })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Login failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Login failed'));
     _loginSuccess(data);
   } catch(err) {
     showMsg(msg, 'err', err.message);
@@ -327,7 +347,7 @@ async function _handleGoogleCb(response) {
         `<a href="/nidaan/signup" style="color:#22d3ee">${isHi() ? 'साइन अप करें →' : 'Sign up →'}</a>`);
       return;
     }
-    if (!res.ok) throw new Error(data.detail || 'Google sign-in failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Google sign-in failed'));
     _loginSuccess(data);
   } catch(err) {
     showMsg(document.getElementById('otpMsg'), 'err', err.message);

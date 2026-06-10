@@ -1,0 +1,12 @@
+[Unit]
+Description=Sarathi-AI — Daily Database & Files Backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=sarathi
+Group=sarathi
+ExecStart=/opt/sarathi/deploy/backup.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sarathi-backup

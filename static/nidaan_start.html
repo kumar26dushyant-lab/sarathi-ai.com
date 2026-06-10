@@ -121,6 +121,7 @@ input::placeholder{color:rgba(255,255,255,.25)}
   <a href="/" class="nav-back">← Back to home</a>
 </nav>
 
+<div id="login-section">
 <div class="page">
   <div class="card">
 
@@ -245,38 +246,91 @@ input::placeholder{color:rgba(255,255,255,.25)}
       </div>
       <div class="divider" id="divider2b"><span>or register with email</span></div>
 
-      <div class="row2">
-        <div class="field">
-          <label>Full name *</label>
-          <input type="text" id="regName" placeholder="Rahul Sharma" autocomplete="name">
+      <!-- SUB-STEP 1: Verify email via OTP (shown first) -->
+      <div id="regOtpSection">
+        <p class="card-sub" style="margin-bottom:1rem">First, let's verify this email belongs to you. We'll send a 6-digit code.</p>
+        <div id="regOtpStep1">
+          <button class="btn btn-cyan" id="sendRegOtpBtn" onclick="sendRegOTP(false)">Send Verification Code →</button>
+        </div>
+        <div id="regOtpStep2" style="display:none">
+          <div class="field">
+            <label>Enter the 6-digit code sent to your email</label>
+            <input type="text" id="regOtpInput" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" oninput="this.value=this.value.replace(/\D/g,'')">
+          </div>
+          <div class="otp-actions">
+            <button class="btn btn-cyan btn-sm" onclick="verifyRegOTP()">Verify Email</button>
+            <span id="regOtpCountdown" style="display:none" class="otp-hint"></span>
+            <button class="btn btn-ghost btn-sm" id="resendRegOtpBtn" onclick="sendRegOTP(true)" style="display:none">Resend</button>
+          </div>
+        </div>
+        <div class="msg" id="msgRegOtp"></div>
+      </div>
+
+      <!-- SUB-STEP 2: Registration form (shown after OTP verified) -->
+      <div id="regFormSection" style="display:none">
+        <div class="msg info" id="emailVerifiedBadge" style="margin-bottom:.85rem">✅ Email verified — complete your profile below.</div>
+        <div class="row2">
+          <div class="field">
+            <label>Full name *</label>
+            <input type="text" id="regName" placeholder="Rahul Sharma" autocomplete="name">
+          </div>
+          <div class="field">
+            <label>Phone *</label>
+            <input type="tel" id="regPhone" placeholder="9876543210" inputmode="tel">
+          </div>
         </div>
         <div class="field">
-          <label>Phone *</label>
-          <input type="tel" id="regPhone" placeholder="9876543210" inputmode="tel">
+          <label>Firm / agency name</label>
+          <input type="text" id="regFirm" placeholder="Optional">
         </div>
+        <div class="field">
+          <label>Password *</label>
+          <input type="password" id="regPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+        </div>
+        <button class="btn btn-cyan" id="registerBtn" onclick="doRegister()">Create free account &rarr;</button>
+        <div class="msg" id="msg2b"></div>
+        <p class="card-foot">By creating an account you agree to our <a href="/terms" target="_blank">Terms</a> &amp; <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
       </div>
-      <div class="field">
-        <label>Firm / agency name</label>
-        <input type="text" id="regFirm" placeholder="Optional">
-      </div>
-      <div class="field">
-        <label>Password *</label>
-        <input type="password" id="regPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
-      </div>
-      <button class="btn btn-cyan" id="registerBtn" onclick="doRegister()">Create free account &rarr;</button>
-      <div class="msg" id="msg2b"></div>
-      <p class="card-foot">By creating an account you agree to our <a href="/terms" target="_blank">Terms</a> &amp; <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
     </div>
 
   </div>
-</div>
+</div><!-- /.page -->
+</div><!-- /#login-section -->
 
 <script>
 // ── URL param: ?plan=silver etc. carried through to dashboard for post-signup subscribe prompt
 const _plan = new URLSearchParams(location.search).get('plan') || '';
 let _email = '';
+
+// ── Robust error extraction ──────────────────────────────────────────────────
+// FastAPI errors can have `detail` as: (a) string, (b) array of {loc,msg,...} from
+// Pydantic 422 validation, or (c) a structured object from custom conflict logic.
+// Without this helper, the UI rendered "[object Object]" on (b) and (c).
+function _extractErr(data, fallback) {
+  if (!data) return fallback || 'Something went wrong';
+  const d = data.detail;
+  if (d == null) return data.message || data.msg || fallback || 'Something went wrong';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    const parts = d.map(e => {
+      if (!e) return '';
+      if (typeof e === 'string') return e;
+      const field = Array.isArray(e.loc) && e.loc.length ? e.loc[e.loc.length - 1] : '';
+      const msg = e.msg || e.message || '';
+      if (field && msg) return field + ': ' + msg;
+      return msg || field || '';
+    }).filter(Boolean);
+    return parts.length ? parts.join('; ') : (fallback || 'Validation failed. Please check your inputs.');
+  }
+  if (typeof d === 'object') {
+    return d.message || d.msg || d.error || d.title || (fallback || 'Something went wrong');
+  }
+  return String(d) || (fallback || 'Something went wrong');
+}
 let _otpSent = false;
 let _countdownTimer = null;
+let _regOtpCountdownTimer = null;
+let _regVerifiedOtp = '';  // stores the OTP that was successfully used to verify email before registration
 
 // ── State management ──────────────────────────────────────────────────────────
 function showStep(id) {
@@ -290,6 +344,13 @@ function goBack() {
   showStep('step1');
   _email = '';
   _otpSent = false;
+  _regVerifiedOtp = '';
+  // Reset step 2B OTP sub-step
+  document.getElementById('regOtpSection').style.display = '';
+  document.getElementById('regFormSection').style.display = 'none';
+  document.getElementById('regOtpStep1').style.display = '';
+  document.getElementById('regOtpStep2').style.display = 'none';
+  document.getElementById('msgRegOtp').className = 'msg';
   document.getElementById('emailInput').value = '';
   document.getElementById('emailInput').focus();
 }
@@ -325,7 +386,7 @@ async function checkEmail() {
       body: JSON.stringify({email: _email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Error checking email');
+    if (!res.ok) throw new Error(_extractErr(data, 'Error checking email'));
 
     if (data.exists) {
       // Existing user → sign in
@@ -338,15 +399,19 @@ async function checkEmail() {
       document.getElementById('otpStep2').style.display = 'none';
       switchTab('otp');
     } else {
-      // New user → register
+      // New user → verify email first, then register
       _googleMode = 'signup';
       document.getElementById('emailChip2b').textContent = _email;
-      document.getElementById('regName').value = '';
-      document.getElementById('regPhone').value = '';
-      document.getElementById('regFirm').value = '';
-      document.getElementById('regPwd').value = '';
+      // Reset OTP sub-step state
+      _regVerifiedOtp = '';
+      document.getElementById('regOtpSection').style.display = '';
+      document.getElementById('regFormSection').style.display = 'none';
+      document.getElementById('regOtpStep1').style.display = '';
+      document.getElementById('regOtpStep2').style.display = 'none';
+      document.getElementById('msgRegOtp').className = 'msg';
+      document.getElementById('sendRegOtpBtn').disabled = false;
+      document.getElementById('sendRegOtpBtn').textContent = 'Send Verification Code →';
       showStep('step2b');
-      document.getElementById('regName').focus();
     }
   } catch(e) {
     showMsg('msg1','err', e.message);
@@ -385,7 +450,10 @@ async function sendOTP(isResend) {
       body: JSON.stringify({email: _email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    if (!res.ok) {
+      const hint = data.code === 'email_failed' ? ' Try the Password tab instead.' : '';
+      throw new Error(_extractErr(data, 'Failed to send OTP') + hint);
+    }
     // Show OTP input
     document.getElementById('otpStep1').style.display = 'none';
     document.getElementById('otpStep2').style.display = '';
@@ -409,7 +477,7 @@ async function verifyOTP() {
       body: JSON.stringify({email: _email, otp})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Invalid OTP');
+    if (!res.ok) throw new Error(_extractErr(data, 'Invalid OTP'));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
@@ -448,7 +516,7 @@ async function doPasswordLogin() {
       body: JSON.stringify({email: _email, password: pwd})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Invalid password');
+    if (!res.ok) throw new Error(_extractErr(data, 'Invalid password'));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
@@ -471,7 +539,10 @@ async function sendResetOTP() {
       body: JSON.stringify({email: _email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+    if (!res.ok) {
+      const hint = data.code === 'email_failed' ? ' Use the Password tab to sign in instead.' : '';
+      throw new Error(_extractErr(data, 'Failed to send OTP') + hint);
+    }
     document.getElementById('resetStep1').style.display = 'none';
     document.getElementById('resetStep2').style.display = '';
     document.getElementById('resetOtpInput').focus();
@@ -504,11 +575,74 @@ async function doResetPassword() {
       body: JSON.stringify({email: _email, otp, new_password: pwd})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Reset failed. Try again.');
+    if (!res.ok) throw new Error(_extractErr(data, 'Reset failed. Try again.'));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
   }
+}
+
+// ── Registration OTP (email verification before account creation) ─────────────
+async function sendRegOTP(isResend) {
+  const msgEl = document.getElementById('msgRegOtp');
+  msgEl.className = 'msg';
+  const sendBtn = document.getElementById('sendRegOtpBtn');
+  const resendBtn = document.getElementById('resendRegOtpBtn');
+  if (!isResend) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+  else { resendBtn.style.display = 'none'; }
+
+  try {
+    const res = await fetch('/nidaan/api/send-verify-otp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _email})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(_extractErr(data, 'Failed to send code'));
+    // Show OTP input
+    document.getElementById('regOtpStep1').style.display = 'none';
+    document.getElementById('regOtpStep2').style.display = '';
+    document.getElementById('regOtpInput').value = '';
+    document.getElementById('regOtpInput').focus();
+    // Countdown
+    const cEl = document.getElementById('regOtpCountdown');
+    cEl.style.display = '';
+    if (_regOtpCountdownTimer) clearInterval(_regOtpCountdownTimer);
+    let t = 60;
+    cEl.textContent = `Resend in ${t}s`;
+    _regOtpCountdownTimer = setInterval(() => {
+      t--;
+      if (t <= 0) { clearInterval(_regOtpCountdownTimer); cEl.style.display = 'none'; resendBtn.style.display = ''; }
+      else cEl.textContent = `Resend in ${t}s`;
+    }, 1000);
+  } catch(e) {
+    msgEl.className = 'msg err';
+    msgEl.textContent = e.message;
+    if (!isResend) { sendBtn.disabled = false; sendBtn.textContent = 'Send Verification Code →'; }
+    else { resendBtn.style.display = ''; }
+  }
+}
+
+async function verifyRegOTP() {
+  const otp = document.getElementById('regOtpInput').value.trim();
+  const msgEl = document.getElementById('msgRegOtp');
+  msgEl.className = 'msg';
+  if (!otp || otp.length < 4) {
+    msgEl.className = 'msg err';
+    msgEl.textContent = 'Enter the 6-digit code from your email.';
+    return;
+  }
+  // Store the OTP — actual server-side verification happens at account creation (doRegister).
+  // The OTP is consumed once at that point; if wrong, user is sent back to this step.
+  _regVerifiedOtp = otp;
+  if (_regOtpCountdownTimer) clearInterval(_regOtpCountdownTimer);
+  // Show registration form
+  document.getElementById('regOtpSection').style.display = 'none';
+  document.getElementById('regFormSection').style.display = '';
+  document.getElementById('regName').value = '';
+  document.getElementById('regPhone').value = '';
+  document.getElementById('regFirm').value = '';
+  document.getElementById('regPwd').value = '';
+  document.getElementById('regName').focus();
 }
 
 // ── Registration ──────────────────────────────────────────────────────────────
@@ -518,6 +652,20 @@ async function doRegister() {
   const phone = document.getElementById('regPhone').value.trim();
   const firm  = document.getElementById('regFirm').value.trim();
   const pwd   = document.getElementById('regPwd').value;
+
+  // Session state guard — if user refreshed or deep-linked to step 2, _email or
+  // _regVerifiedOtp will be empty and the backend would 422. Send them back cleanly.
+  if (!_email) {
+    showMsg('msg2b','err','Your session expired. Please re-enter your email and verify again.');
+    setTimeout(() => location.reload(), 1500);
+    return;
+  }
+  if (!_regVerifiedOtp) {
+    showMsg('msg2b','err','Verification code missing. Please request a new OTP.');
+    document.getElementById('regOtpSection').style.display = '';
+    document.getElementById('regFormSection').style.display = 'none';
+    return;
+  }
 
   if (!name)  { showMsg('msg2b','err','Full name is required.'); return; }
   if (!phone || phone.replace(/\D/g,'').length < 10) { showMsg('msg2b','err','Enter a valid 10-digit phone number.'); return; }
@@ -533,11 +681,26 @@ async function doRegister() {
       body: JSON.stringify({
         owner_name: name, email: _email, phone: phone.replace(/\D/g,''),
         password: pwd, firm_name: firm,
+        email_otp: _regVerifiedOtp,
         plan: _plan || 'free'
       })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+    if (!res.ok) {
+      // OTP expired between verification and submit — send them back to OTP step
+      if (res.status === 401) {
+        _regVerifiedOtp = '';
+        document.getElementById('regOtpSection').style.display = '';
+        document.getElementById('regFormSection').style.display = 'none';
+        document.getElementById('regOtpStep1').style.display = '';
+        document.getElementById('regOtpStep2').style.display = 'none';
+        document.getElementById('msgRegOtp').className = 'msg err';
+        document.getElementById('msgRegOtp').textContent = 'Your verification code expired. Please request a new one.';
+        btn.disabled = false; btn.innerHTML = 'Create free account &rarr;';
+        return;
+      }
+      throw new Error(_extractErr(data, 'Registration failed'));
+    }
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2b','err', e.message);
@@ -618,14 +781,14 @@ async function _handleGoogleStep1(response) {
     if (res.status === 404) {
       const res2 = await fetch('/nidaan/api/signup/google', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({credential: response.credential, plan: _plan || 'free'})
+        body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver'})
       });
       if (res2.ok) { _loginSuccess(await res2.json()); return; }
       const d2 = await res2.json();
-      throw new Error(d2.detail || 'Google signup failed');
+      throw new Error(_extractErr(d2, 'Google signup failed'));
     }
     const d = await res.json();
-    throw new Error(d.detail || 'Google sign-in failed');
+    throw new Error(_extractErr(d, 'Google sign-in failed'));
   } catch(e) {
     showMsg('msg1','err', e.message);
   }
@@ -638,7 +801,7 @@ async function _handleGoogleLogin(response) {
       body: JSON.stringify({credential: response.credential})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Google sign-in failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Google sign-in failed'));
     _loginSuccess(data);
   } catch(e) { showMsg('msg2a','err', e.message); }
 }
@@ -647,16 +810,17 @@ async function _handleGoogleSignup(response) {
   try {
     const res = await fetch('/nidaan/api/signup/google', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({credential: response.credential, plan: _plan || 'free'})
+      body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver'})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Google sign-up failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Google sign-up failed'));
     _loginSuccess(data);
   } catch(e) { showMsg('msg2b','err', e.message); }
 }
 
 // ── Auto-detect if already logged in ─────────────────────────────────────────
-if (localStorage.getItem('nidaan_token')) {
+// Don't auto-redirect if arriving on #get-reviewed
+if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-reviewed')) {
   window.location.replace('/nidaan/dashboard');
 }
 
@@ -671,6 +835,194 @@ if (localStorage.getItem('nidaan_token')) {
   // Fallback: if SDK loads before onload fires
   setTimeout(_initGoogle, 2500);
 })();
+
+// ── Show #get-reviewed section if anchored ────────────────────────────────────
+(function() {
+  if (location.hash.startsWith('#get-reviewed')) {
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('review-section').style.display = 'flex';
+  }
+})();
+</script>
+
+<!-- ══ GET REVIEWED SECTION ══════════════════════════════════════════════════ -->
+<style>
+#review-section{display:none;flex:1;flex-direction:column;align-items:center;padding:1.5rem 1rem}
+#review-section .rev-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:520px}
+#review-section h2{font-size:1.45rem;font-weight:800;margin-bottom:.35rem}
+#review-section .rev-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
+#review-section .rev-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .85rem;font-size:.82rem;color:#22d3ee;margin-bottom:1.25rem}
+#review-section fieldset{border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem 1.15rem .65rem;margin-bottom:1.1rem}
+#review-section legend{font-size:.78rem;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.05em;padding:0 .5rem}
+.rev-row2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
+.rev-price-line{display:flex;align-items:center;justify-content:space-between;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.25);border-radius:10px;padding:.75rem 1rem;margin-bottom:1.25rem}
+.rev-price-line .rev-amount{font-size:1.45rem;font-weight:800;color:#22d3ee}
+.rev-price-line .rev-label{font-size:.8rem;color:rgba(255,255,255,.5);line-height:1.4}
+#rev-msg{font-size:.85rem;padding:.6rem .9rem;border-radius:9px;display:none;margin-bottom:.9rem;line-height:1.5}
+#rev-msg.err{background:rgba(239,68,68,.13);border:1px solid rgba(239,68,68,.35);color:#fca5a5;display:block}
+#rev-msg.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac;display:block}
+.btn-pay{width:100%;border:none;border-radius:11px;padding:.9rem 1rem;font-size:1rem;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.btn-pay:hover{opacity:.9;transform:translateY(-1px)}
+.btn-pay:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.rev-note{font-size:.78rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.75rem;line-height:1.5}
+@media(max-width:480px){
+  #review-section .rev-card{padding:1.5rem 1.1rem}
+  .rev-row2{grid-template-columns:1fr}
+  #review-section h2{font-size:1.2rem}
+}
+</style>
+
+<section id="review-section">
+  <div class="rev-card">
+    <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
+    <h2>Get a ₹499 Claim Review</h2>
+    <p class="rev-sub">Submit your client's claim details. Our legal experts review within 48–72 business hours and send you a detailed written assessment.</p>
+    <div class="rev-badge">🔒 One-time · Secure Payment · 48–72 hr turnaround</div>
+
+    <fieldset>
+      <legend>Your Details (Advisor)</legend>
+      <div class="field"><label>Full Name *</label><input type="text" id="rv_advisor_name" placeholder="Your name" autocomplete="name"></div>
+      <div class="rev-row2">
+        <div class="field"><label>Phone *</label><input type="tel" id="rv_advisor_phone" placeholder="+91 XXXXX XXXXX" autocomplete="tel" inputmode="tel"></div>
+        <div class="field"><label>Email *</label><input type="email" id="rv_advisor_email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Claim Details</legend>
+      <div class="rev-row2">
+        <div class="field"><label>Client / Insured Name *</label><input type="text" id="rv_insured_name" placeholder="Client full name"></div>
+        <div class="field"><label>Claim Type *</label>
+          <select id="rv_claim_type" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
+            <option value="">Select type…</option>
+            <option value="health">Health Insurance</option>
+            <option value="life">Life Insurance</option>
+            <option value="motor">Motor Insurance</option>
+            <option value="home">Home / Property</option>
+            <option value="travel">Travel Insurance</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="rev-row2">
+        <div class="field"><label>Insurer / Company Name</label><input type="text" id="rv_insurer_name" placeholder="e.g. HDFC Ergo"></div>
+        <div class="field"><label>Disputed Amount (₹)</label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
+      </div>
+      <div class="field"><label>Brief Description / Notes</label>
+        <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, rejection reason, or what you need the review to cover…"></textarea>
+      </div>
+    </fieldset>
+
+    <div class="rev-price-line">
+      <div class="rev-label">One-time review fee<br><span style="font-size:.72rem;color:rgba(255,255,255,.35)">All UPI, cards, net banking accepted</span></div>
+      <div class="rev-amount">₹499</div>
+    </div>
+
+    <div id="rev-msg"></div>
+
+    <button class="btn-pay" id="revPayBtn" onclick="startReviewPayment()">
+      <span>🔒</span> Pay ₹499 &amp; Submit Request
+    </button>
+    <p class="rev-note">Payment is collected via Razorpay. After successful payment, you'll receive a confirmation email and the legal review within 48–72 business hours.</p>
+  </div>
+</section>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+async function startReviewPayment() {
+  const btn = document.getElementById('revPayBtn');
+  const msg = document.getElementById('rev-msg');
+  msg.className = ''; msg.style.display = 'none';
+
+  const fields = {
+    advisor_name: document.getElementById('rv_advisor_name').value.trim(),
+    advisor_phone: document.getElementById('rv_advisor_phone').value.trim(),
+    advisor_email: document.getElementById('rv_advisor_email').value.trim(),
+    insured_name: document.getElementById('rv_insured_name').value.trim(),
+    claim_type: document.getElementById('rv_claim_type').value,
+    insurer_name: document.getElementById('rv_insurer_name').value.trim(),
+    disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
+    notes: document.getElementById('rv_notes').value.trim(),
+  };
+
+  if (!fields.advisor_name) { showRevMsg('err', 'Please enter your name.'); return; }
+  if (!fields.advisor_phone) { showRevMsg('err', 'Please enter your phone number.'); return; }
+  if (!fields.advisor_email || !fields.advisor_email.includes('@')) { showRevMsg('err', 'Please enter a valid email.'); return; }
+  if (!fields.insured_name) { showRevMsg('err', 'Please enter the client / insured name.'); return; }
+  if (!fields.claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> Creating order…';
+
+  try {
+    const res = await fetch('/nidaan/api/review-request/pay', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(_extractErr(data, 'Failed to create payment order.'));
+
+    const rzp = new Razorpay({
+      key: data.razorpay_key_id,
+      amount: data.amount,
+      currency: data.currency,
+      order_id: data.order_id,
+      name: 'Nidaan Partner',
+      description: 'Claim Review — ₹499',
+      image: '/static/nidaan_logo.png',
+      prefill: { name: fields.advisor_name, email: fields.advisor_email, contact: fields.advisor_phone },
+      theme: { color: '#06b6d4' },
+      handler: async function(resp) {
+        btn.innerHTML = '<span>⏳</span> Verifying payment…';
+        try {
+          const vRes = await fetch('/nidaan/api/review-request/verify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              razorpay_order_id: resp.razorpay_order_id,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_signature: resp.razorpay_signature,
+              ...fields,
+            }),
+          });
+          const vData = await vRes.json();
+          if (!vRes.ok) throw new Error(_extractErr(vData, 'Verification failed.'));
+          if (vData.dashboard_token) {
+            localStorage.setItem('nidaan_token', vData.dashboard_token);
+            showRevMsg('ok', '✅ Payment confirmed! Redirecting to your Nidaan dashboard…');
+            setTimeout(() => { window.location.href = '/nidaan/dashboard?payment=success'; }, 2200);
+          } else {
+            showRevMsg('ok', '✅ Payment confirmed! Your review request has been submitted. Check your email. Reference: #' + vData.purchase_id);
+          }
+          btn.style.display = 'none';
+        } catch(e) {
+          showRevMsg('err', 'Payment received but verification failed. Please contact support with Payment ID: ' + resp.razorpay_payment_id);
+          btn.disabled = false;
+          btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
+        }
+      },
+      modal: {
+        ondismiss: function() {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
+        }
+      }
+    });
+    rzp.open();
+  } catch(e) {
+    showRevMsg('err', e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
+  }
+}
+
+function showRevMsg(type, text) {
+  const el = document.getElementById('rev-msg');
+  el.className = type;
+  el.textContent = text;
+  el.style.display = 'block';
+}
 </script>
 <script>
 if ('serviceWorker' in navigator) {

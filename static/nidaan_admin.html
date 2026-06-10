@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nidaan Admin Panel</title>
+<link rel="stylesheet" href="/static/nidaan_design.css?v=1">
+<link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
@@ -75,7 +77,7 @@ tr:hover td{background:#1a2744}
     <div class="tabs">
       <div class="tab active" onclick="showTab('claims')">Claims</div>
       <div class="tab" onclick="showTab('accounts')">Accounts</div>
-      <div class="tab" onclick="showTab('reviews')">₹999 Reviews</div>
+      <div class="tab" onclick="showTab('reviews')">₹499 Reviews</div>
     </div>
     <div id="claimsPane"><div class="tbl-wrap"><table id="claimsTbl"><thead><tr><th>ID</th><th>Account</th><th>Firm</th><th>Client</th><th>Type</th><th>Insurer</th><th>Amount ₹</th><th>Status</th><th>Created</th><th>Update</th></tr></thead><tbody id="claimsTbody"></tbody></table></div></div>
     <div id="accountsPane" style="display:none"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Owner</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Sub Status</th><th>Period End</th><th>Joined</th></tr></thead><tbody id="accountsTbody"></tbody></table></div></div>
@@ -124,7 +126,7 @@ function renderStats(s) {
     {n: s.active_subscriptions, l: 'Active Subs'},
     {n: s.total_claims, l: 'Total Claims'},
     {n: s.open_claims, l: 'Open Claims'},
-    {n: s.pending_review_requests, l: '₹999 Pending'},
+    {n: s.pending_review_requests, l: '₹499 Pending'},
     ...(Object.entries(s.plans||{}).map(([k,v]) => ({n:v, l:k+' plan'}))),
   ];
   document.getElementById('statsRow').innerHTML = items.map(i =>
@@ -225,5 +227,6 @@ function showToast(msg) {
   setTimeout(() => t.style.display='none', 2500);
 }
 </script>
+<script src="/static/nidaan_ui.js?v=2"></script>
 </body>
 </html>

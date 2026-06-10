@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter','Poppins',sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.6;min-height:100vh}
@@ -416,7 +417,7 @@ async function saveTelegramBot(e) {
     });
     const data = await res.json();
     if (!res.ok) {
-      errEl.textContent = data.detail || 'Failed to validate token.';
+      errEl.textContent = _extractErr(data, 'Failed to validate token.');
       errEl.style.display = 'block';
       badge.className = 'status-badge pending';
       badge.textContent = '❌ Token validation failed';
@@ -466,7 +467,7 @@ async function saveWhatsApp(e) {
       body: JSON.stringify({ tenant_id: tenantId, wa_phone_id: phoneId, wa_access_token: token, wa_verify_token: verify }),
     });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.detail || 'Failed to save.'; errEl.style.display = 'block'; }
+    if (!res.ok) { errEl.textContent = _extractErr(data, 'Failed to save.'); errEl.style.display = 'block'; }
     else { sucEl.textContent = '✅ WhatsApp configured!'; sucEl.style.display = 'block'; setTimeout(() => goToStep(3), 1000); }
   } catch { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Save WhatsApp Config ✓';
@@ -495,7 +496,7 @@ async function saveBranding(e) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.detail || 'Failed to save.'; errEl.style.display = 'block'; }
+    if (!res.ok) { errEl.textContent = _extractErr(data, 'Failed to save.'); errEl.style.display = 'block'; }
     else { sucEl.textContent = '✅ Branding saved!'; sucEl.style.display = 'block'; setTimeout(() => completeOnboarding(), 800); }
   } catch { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
   btn.disabled = false; btn.textContent = 'Save Branding ✓';

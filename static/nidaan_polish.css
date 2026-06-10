@@ -1,0 +1,85 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NIDAAN POLISH OVERLAY  —  Jun 2026
+   Loaded AFTER nidaan_design.css and AFTER each page's own <style> block.
+   Applies progressive enhancements to existing pages without breaking
+   their layouts. Tokens come from nidaan_design.css.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Typography */
+body { font-family: var(--nd-font-sans) !important; }
+a    { transition: color var(--nd-motion-fast) var(--nd-ease); }
+
+/* Inputs: focus glow + touch targets */
+input, select, textarea {
+  font-family: inherit;
+  transition: border-color var(--nd-motion-fast) var(--nd-ease),
+              box-shadow var(--nd-motion-fast) var(--nd-ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
+}
+@media (max-width: 480px) {
+  input, select, textarea, button { min-height: 44px; }
+}
+
+/* Buttons: subtle press feedback */
+button, .btn-sm, .btn, .btn-cyan, .btn-ghost, .doc-upload-btn {
+  transition: transform var(--nd-motion-fast) var(--nd-ease),
+              background var(--nd-motion-base) var(--nd-ease),
+              box-shadow var(--nd-motion-base) var(--nd-ease),
+              filter var(--nd-motion-fast) var(--nd-ease) !important;
+}
+button:active, .btn-sm:active, .btn:active { transform: scale(.97); }
+
+/* Cards / panels: fade-in entrance */
+.stat, .card, .sub-banner, .stats > *,
+.section-card, .ops-card, .stat-card,
+.stat-grid > * {
+  animation: ndFadeUp .35s var(--nd-ease-out) backwards;
+}
+.stat:nth-child(1), .stat-card:nth-child(1), .stat-grid > *:nth-child(1) { animation-delay: .04s; }
+.stat:nth-child(2), .stat-card:nth-child(2), .stat-grid > *:nth-child(2) { animation-delay: .10s; }
+.stat:nth-child(3), .stat-card:nth-child(3), .stat-grid > *:nth-child(3) { animation-delay: .16s; }
+.stat:nth-child(4), .stat-card:nth-child(4), .stat-grid > *:nth-child(4) { animation-delay: .22s; }
+.stat:nth-child(5), .stat-card:nth-child(5), .stat-grid > *:nth-child(5) { animation-delay: .28s; }
+
+/* Stat cards: micro-lift on hover */
+.stat, .stat-card {
+  transition: transform var(--nd-motion-base) var(--nd-ease),
+              border-color var(--nd-motion-base) var(--nd-ease);
+}
+.stat:hover, .stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--nd-border-strong);
+}
+
+/* Modal: smooth entry */
+.modal-bg { transition: opacity var(--nd-motion-base) var(--nd-ease); }
+.modal-bg[style*="display:flex"],
+.modal-bg[style*="display: flex"] {
+  animation: ndFadeIn var(--nd-motion-base) var(--nd-ease-out);
+}
+.modal-bg[style*="display:flex"] > .modal,
+.modal-bg[style*="display: flex"] > .modal {
+  animation: ndModalIn var(--nd-motion-slow) var(--nd-ease-spring);
+}
+
+/* Nav: deeper backdrop blur for premium feel */
+nav { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+
+/* Tables: row hover transition */
+tr { transition: background-color var(--nd-motion-fast) var(--nd-ease); }
+
+/* Letter-spacing for uppercase pills/labels */
+.status-pill, .badge { letter-spacing: var(--nd-tracking-wide); }
+
+/* Scrollbars (WebKit only — Firefox uses native) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--nd-bg-base-2); }
+::-webkit-scrollbar-thumb {
+  background: var(--nd-bg-surface-2);
+  border-radius: var(--nd-radius-pill);
+  border: 2px solid var(--nd-bg-base);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--nd-bg-surface-3); }

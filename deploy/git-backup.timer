@@ -1,0 +1,11 @@
+[Unit]
+Description=Sarathi-AI — GitHub Backup Timer (every 6 hours)
+Requires=git-backup.service
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:30:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

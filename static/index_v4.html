@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="description" content="Sarathi-AI — voice-first CRM built in India for SEBI, IRDAI, AMFI-registered advisors. Hindi + English. DPDP-compliant.">
+<title>Sarathi-AI — The institutional-grade CRM for India's wealth advisors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=IBM+Plex+Serif:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   v3 — INSTITUTIONAL BLUE × CLEAN TECH-FORWARD (Indian fintech mix)
+   Aesthetic references: Nuvama, Groww, Waterfield Advisors
+   Inter sans (no italic flourish), IBM Plex Serif only for editorial pulls
+   Color: institutional navy + emerald + gold (no neon, no crypto pink)
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* Light — institutional white */
+  --bg:        #FFFFFF;
+  --bg-elev:   #FFFFFF;
+  --bg-muted:  #F8FAFC;
+  --bg-deep:   #F1F5F9;
+  --ink:       #0F2C5C;     /* deep institutional navy */
+  --ink-soft:  #475569;
+  --ink-mute:  #94A3B8;
+  --line:      #E2E8F0;
+  --line-soft: #F1F5F9;
+
+  --primary:    #0F2C5C;    /* deep navy (Nuvama-style) */
+  --primary-2:  #1E3A8A;
+  --primary-50: #EFF6FF;
+
+  --emerald:    #047857;    /* emerald — wealth + growth */
+  --emerald-50: #D1FAE5;
+  --gold:       #B45309;    /* warm corporate gold */
+  --gold-50:    #FEF3C7;
+  --warn:       #B91C1C;    /* reserved for risk/compliance accent */
+
+  --shadow-xs: 0 1px 2px rgba(15,44,92,.04);
+  --shadow:    0 4px 24px rgba(15,44,92,.06);
+  --shadow-lg: 0 16px 48px rgba(15,44,92,.10);
+
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 14px;
+
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-editorial: 'IBM Plex Serif', Georgia, serif;
+  --font-hi:      'Noto Sans Devanagari', system-ui, sans-serif;
+}
+html[data-theme="dark"] {
+  --bg:        #0A1628;
+  --bg-elev:   #0F1E3A;
+  --bg-muted:  #0F2440;
+  --bg-deep:   #061122;
+  --ink:       #F8FAFC;
+  --ink-soft:  #CBD5E1;
+  --ink-mute:  #64748B;
+  --line:      #1F2F4D;
+  --line-soft: #142441;
+
+  --primary:    #60A5FA;
+  --primary-2:  #93C5FD;
+  --primary-50: rgba(96,165,250,.10);
+
+  --emerald:    #34D399;
+  --emerald-50: rgba(52,211,153,.12);
+  --gold:       #FCD34D;
+  --gold-50:    rgba(252,211,77,.12);
+  --warn:       #F87171;
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.4);
+  --shadow:    0 4px 24px rgba(0,0,0,.4);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.55);
+}
+html[data-lang="hi"], html[data-lang="hi"] body { font-family: var(--font-hi); }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  font-feature-settings: "ss01" 1, "cv11" 1, "kern" 1;
+  -webkit-font-smoothing: antialiased;
+  transition: background .25s, color .25s;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img, svg { display: block; max-width: 100%; }
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.018em; line-height: 1.18; color: var(--ink); }
+::selection { background: var(--primary); color: #fff; }
+
+.container { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+.narrow { max-width: 820px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 768px) { .container, .narrow { padding: 0 20px; } }
+
+/* ── Typography utilities ── */
+.eyebrow {
+  font-size: 12.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--primary);
+}
+.eyebrow.gold { color: var(--gold); }
+.eyebrow.emerald { color: var(--emerald); }
+.lead {
+  font-size: 18px; line-height: 1.6;
+  color: var(--ink-soft); max-width: 560px;
+}
+.editorial { font-family: var(--font-editorial); }
+
+/* ── Top trust strip (above topbar) — compliance signal ── */
+.trustbar {
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px 16px;
+  line-height: 1.5;
+}
+.trustbar .dot { color: var(--gold); margin: 0 10px; }
+.trustbar a { color: #fff; text-decoration: underline; opacity: .9; }
+html[data-theme="dark"] .trustbar { background: var(--bg-deep); border-bottom: 1px solid var(--line); }
+
+/* ── Topbar ── */
+.topbar {
+  position: sticky; top: 0; z-index: 90;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 66px; }
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-sans);
+  font-weight: 800; font-size: 21px;
+  color: var(--ink); letter-spacing: -.02em;
+}
+.brand .mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 7px;
+  background: var(--primary); color: #fff;
+  font-weight: 800; font-size: 16px;
+}
+.brand-suffix { color: var(--primary); font-weight: 700; }
+.nav-links { display: flex; gap: 2px; }
+.nav-link {
+  padding: 9px 14px; border-radius: 7px;
+  color: var(--ink-soft); font-weight: 500; font-size: 14.5px;
+  transition: background .12s, color .12s;
+}
+.nav-link:hover { background: var(--bg-muted); color: var(--ink); text-decoration: none; }
+.nav-tools { display: flex; align-items: center; gap: 10px; }
+.toggle {
+  background: var(--bg-muted); border: 1px solid var(--line);
+  color: var(--ink-soft); width: 36px; height: 36px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  transition: background .12s, border-color .12s;
+}
+.toggle:hover { background: var(--bg-deep); border-color: var(--primary); color: var(--primary); }
+.lang-pill {
+  background: var(--bg-muted); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 3px; display: inline-flex; align-items: center;
+}
+.lang-pill button {
+  background: transparent; border: 0; padding: 5px 11px; border-radius: 5px;
+  color: var(--ink-soft); font-weight: 600; font-size: 12.5px; cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background .12s, color .12s;
+}
+.lang-pill button.active { background: var(--primary); color: #fff; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 22px; border-radius: var(--radius-sm);
+  font-weight: 600; font-size: 14.5px;
+  border: 1px solid transparent; cursor: pointer;
+  transition: background .12s, border-color .12s, transform .12s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-2); transform: translateY(-1px); text-decoration: none; }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn-ghost:hover { background: var(--bg-muted); border-color: var(--ink-soft); text-decoration: none; }
+.btn-lg { padding: 14px 28px; font-size: 15.5px; }
+@media (max-width: 820px) {
+  .nav-links { display: none; }
+  .trustbar { font-size: 12px; padding: 6px 12px; }
+  .topbar-inner { height: 60px; }
+}
+
+/* ── HERO — institutional credibility + voice proposition ── */
+.hero { padding: 88px 0 72px; }
+.hero-grid {
+  display: grid; grid-template-columns: 1.1fr .9fr;
+  gap: 64px; align-items: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; letter-spacing: .14em;
+  color: var(--emerald); text-transform: uppercase;
+}
+.hero-eyebrow .live {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--emerald);
+  animation: pulse 1.8s infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--emerald) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.hero h1 {
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 800;
+  letter-spacing: -.025em;
+  line-height: 1.05;
+  margin: 22px 0 22px;
+  color: var(--ink);
+}
+.hero h1 .hl { color: var(--primary); }
+.hero p.lead { font-size: 19px; margin-bottom: 32px; }
+.hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.hero-meta {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 20px; margin-top: 40px; padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.hero-meta .item { display: flex; flex-direction: column; gap: 2px; }
+.hero-meta .num { font-weight: 800; font-size: 22px; color: var(--ink); letter-spacing: -.02em; }
+.hero-meta .lbl { font-size: 12px; color: var(--ink-mute); }
+@media (max-width: 540px) {
+  .hero-meta { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+}
+
+/* Hero visual — structural panel with phone + ledger */
+.hero-visual {
+  position: relative;
+  background:
+    linear-gradient(180deg, var(--primary-50), transparent 70%),
+    var(--bg-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  aspect-ratio: 1 / 1.1;
+  display: flex; align-items: center; justify-content: center;
+}
+.phone {
+  width: 78%; max-width: 280px; aspect-ratio: 9 / 19.2;
+  background: var(--ink); border-radius: 32px; padding: 7px;
+  box-shadow: var(--shadow-lg); position: relative; z-index: 2;
+}
+.phone-screen {
+  background: var(--bg-elev);
+  border-radius: 26px; height: 100%; overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: var(--font-sans);
+}
+.phone-notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 80px; height: 20px; background: var(--ink); border-radius: 0 0 12px 12px; z-index: 3; }
+.phone-head { padding: 38px 16px 14px; border-bottom: 1px solid var(--line); text-align: center; }
+.phone-firm { font-weight: 700; color: var(--ink); font-size: 13px; }
+.phone-sub { font-size: 10.5px; color: var(--ink-mute); margin-top: 2px; letter-spacing: .04em; }
+.phone-mic-wrap { padding: 24px 0 16px; display: flex; flex-direction: column; align-items: center; }
+.phone-mic {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: var(--primary); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 35%, transparent);
+  position: relative;
+}
+.phone-mic::before, .phone-mic::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid var(--primary); opacity: 0;
+  animation: ringOut 2.6s infinite;
+}
+.phone-mic::after { animation-delay: 1.3s; }
+@keyframes ringOut {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.3); }
+}
+.phone-mic-lbl { font-size: 10.5px; color: var(--ink-mute); margin-top: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.phone-rows { padding: 0 12px 16px; }
+.phone-row {
+  background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; margin-top: 10px;
+  display: grid; grid-template-columns: 20px 1fr auto; gap: 8px;
+  align-items: center; font-size: 11.5px; color: var(--ink);
+  animation: rowIn .55s both;
+}
+.phone-row:nth-of-type(1) { animation-delay: .25s; }
+.phone-row:nth-of-type(2) { animation-delay: .9s; }
+.phone-row:nth-of-type(3) { animation-delay: 1.55s; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.phone-row .icon { color: var(--emerald); font-size: 12px; }
+.phone-row .label { font-weight: 500; color: var(--ink); }
+.phone-row .time { color: var(--ink-mute); font-size: 10px; }
+
+/* Floating credibility badges around phone */
+.cred-badge {
+  position: absolute;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 11.5px;
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600;
+}
+.cred-badge .ico { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+.cred-badge .ico.e { background: var(--emerald); }
+.cred-badge .ico.g { background: var(--gold); }
+.cred-badge.tl { top: 30px; left: -10px; }
+.cred-badge.br { bottom: 30px; right: -10px; }
+
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; gap: 48px; }
+  .hero-visual { max-width: 480px; margin: 0 auto; padding: 28px; }
+  .cred-badge.tl { left: -6px; }
+  .cred-badge.br { right: -6px; }
+}
+
+/* ── Compliance / trust strip ── */
+.creds {
+  background: var(--bg-muted);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 24px 0;
+}
+.creds-row {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 24px;
+}
+.creds-lbl { color: var(--ink-mute); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; }
+.creds-set { display: flex; gap: 28px; flex-wrap: wrap; }
+.cred-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 13.5px; color: var(--ink);
+}
+.cred-tag .badge {
+  width: 26px; height: 26px;
+  border-radius: 50%; background: var(--primary-50); color: var(--primary);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
+}
+.cred-tag .badge.e { background: var(--emerald-50); color: var(--emerald); }
+.cred-tag .badge.g { background: var(--gold-50); color: var(--gold); }
+
+/* ── Section base ── */
+.section { padding: 96px 0; }
+@media (max-width: 768px) { .section { padding: 64px 0; } }
+.section-head { text-align: center; max-width: 720px; margin: 0 auto 56px; }
+.section-head h2 {
+  font-size: clamp(28px, 4vw, 40px); font-weight: 800;
+  letter-spacing: -.025em; line-height: 1.12;
+  margin-top: 10px; color: var(--ink);
+}
+.section-head p.lead { margin: 16px auto 0; }
+
+/* ── A day with Sarathi (storytelling, but institutional tone) ── */
+.day { background: var(--bg-muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.day-rail {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--bg-elev); overflow: hidden;
+}
+.day-step { padding: 32px 28px; border-right: 1px solid var(--line); position: relative; }
+.day-step:last-child { border-right: 0; }
+.day-step .num {
+  font-family: var(--font-editorial);
+  font-size: 13px; font-weight: 600; color: var(--gold);
+  letter-spacing: .12em; text-transform: uppercase;
+}
+.day-step h3 { font-size: 19px; margin: 10px 0 8px; color: var(--ink); }
+.day-step p { color: var(--ink-soft); font-size: 14.5px; margin: 0; line-height: 1.55; }
+.day-step .ico-line {
+  display: block; width: 36px; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--emerald));
+  margin: 18px 0 14px;
+}
+@media (max-width: 900px) {
+  .day-rail { grid-template-columns: 1fr 1fr; }
+  .day-step:nth-child(2) { border-right: 0; }
+  .day-step:nth-child(1), .day-step:nth-child(2) { border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 540px) {
+  .day-rail { grid-template-columns: 1fr; }
+  .day-step { border-right: 0; border-bottom: 1px solid var(--line); }
+  .day-step:last-child { border-bottom: 0; }
+}
+
+/* ── PAIN — concrete problem grid ── */
+.pain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-elev); }
+.pain-row {
+  padding: 28px 28px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.pain-row:nth-child(3n) { border-right: 0; }
+.pain-row:nth-last-child(-n+3) { border-bottom: 0; }
+.pain-row h4 { font-size: 17px; margin-bottom: 8px; color: var(--ink); }
+.pain-row p { color: var(--ink-soft); font-size: 14px; line-height: 1.5; margin: 0; }
+.pain-tag {
+  display: inline-block; padding: 3px 9px;
+  background: var(--primary-50); color: var(--primary);
+  border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; margin-bottom: 14px;
+}
+@media (max-width: 900px) {
+  .pain-grid { grid-template-columns: 1fr 1fr; }
+  .pain-row:nth-child(3n) { border-right: 1px solid var(--line); }
+  .pain-row:nth-child(2n) { border-right: 0; }
+}
+@media (max-width: 540px) {
+  .pain-grid { grid-template-columns: 1fr; }
+  .pain-row { border-right: 0 !important; }
+}
+
+/* ── FEATURES ── */
+.feat { background: var(--bg-muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.feat-cell { padding: 36px 32px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.feat-cell:nth-child(3n) { border-right: 0; }
+.feat-cell:nth-last-child(-n+3) { border-bottom: 0; }
+.feat-cell .icn {
+  width: 40px; height: 40px;
+  border-radius: 8px;
+  background: var(--primary-50); color: var(--primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; margin-bottom: 18px;
+}
+.feat-cell h3 { font-size: 18px; margin-bottom: 8px; color: var(--ink); }
+.feat-cell p { color: var(--ink-soft); font-size: 14.5px; margin: 0; line-height: 1.55; }
+@media (max-width: 900px) {
+  .feat-grid { grid-template-columns: 1fr 1fr; }
+  .feat-cell:nth-child(3n) { border-right: 1px solid var(--line); }
+  .feat-cell:nth-child(2n) { border-right: 0; }
+}
+@media (max-width: 540px) {
+  .feat-grid { grid-template-columns: 1fr; }
+  .feat-cell { border-right: 0 !important; }
+}
+
+/* ── METRICS / scoreboard panel ── */
+.metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0; background: var(--ink); color: #fff;
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  margin-top: -48px; margin-bottom: 96px;
+  position: relative; z-index: 2;
+  box-shadow: var(--shadow-lg);
+}
+.metrics .m {
+  padding: 32px 24px;
+  background: var(--ink);
+  position: relative;
+  border-right: 1px solid color-mix(in srgb, #fff 14%, transparent);
+}
+.metrics .m:last-child { border-right: 0; }
+.metrics .num {
+  font-family: var(--font-sans);
+  font-size: 38px; font-weight: 800;
+  letter-spacing: -.025em; color: #fff;
+}
+.metrics .num .pct { color: var(--gold); }
+.metrics .lbl { color: rgba(255,255,255,.62); font-size: 12.5px; margin-top: 6px; }
+.metrics .note {
+  display: block; color: var(--emerald); font-size: 11.5px; font-weight: 600; margin-top: 10px;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+@media (max-width: 900px) {
+  .metrics { grid-template-columns: 1fr 1fr; margin-top: 0; }
+  .metrics .m:nth-child(2) { border-right: 0; }
+  .metrics .m:nth-child(1), .metrics .m:nth-child(2) { border-bottom: 1px solid color-mix(in srgb, #fff 14%, transparent); }
+}
+@media (max-width: 540px) {
+  .metrics { grid-template-columns: 1fr; }
+  .metrics .m { border-right: 0; border-bottom: 1px solid color-mix(in srgb, #fff 14%, transparent); }
+  .metrics .m:last-child { border-bottom: 0; }
+}
+
+/* ── DEMO callout ── */
+.demo-band {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, var(--primary-50) 0%, transparent 100%),
+    var(--bg-elev);
+  border-radius: var(--radius-lg);
+  padding: 56px 48px;
+  text-align: center;
+}
+.demo-band h2 { font-size: clamp(26px, 3.4vw, 36px); margin-bottom: 12px; }
+.demo-band p { color: var(--ink-soft); max-width: 580px; margin: 0 auto 28px; }
+.demo-band .chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 28px; }
+.demo-band .chip {
+  padding: 6px 14px; border-radius: 999px;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+}
+
+/* ── For who ── */
+.who-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.who-card {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  position: relative;
+}
+.who-card.featured { border: 2px solid var(--primary); }
+.who-card h3 { font-size: 21px; margin-bottom: 8px; color: var(--ink); }
+.who-card .who-eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--emerald); margin-bottom: 6px; }
+.who-card .for { font-size: 13px; color: var(--ink-soft); margin-bottom: 18px; }
+.who-card ul { margin: 18px 0 0; padding: 0; list-style: none; }
+.who-card li { padding: 8px 0 8px 24px; position: relative; font-size: 14px; color: var(--ink); border-top: 1px solid var(--line-soft); }
+.who-card li:first-child { border-top: 0; }
+.who-card li::before { content: ""; position: absolute; left: 0; top: 14px; width: 12px; height: 7px; border-left: 2px solid var(--emerald); border-bottom: 2px solid var(--emerald); transform: rotate(-45deg); }
+@media (max-width: 900px) { .who-grid { grid-template-columns: 1fr; } }
+
+/* ── PRICING ── */
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.price-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.price-card.featured {
+  border: 2px solid var(--primary);
+  box-shadow: var(--shadow);
+}
+.price-card.featured::before {
+  content: "MOST POPULAR";
+  position: absolute; top: -11px; left: 28px;
+  background: var(--primary); color: #fff;
+  font-size: 10.5px; padding: 3px 10px; border-radius: 999px;
+  font-weight: 700; letter-spacing: .12em;
+}
+.price-name { font-size: 19px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.price-for { color: var(--ink-mute); font-size: 12.5px; margin-top: 3px; }
+.price-amount {
+  display: flex; align-items: baseline; gap: 4px;
+  margin-top: 22px; padding-bottom: 24px; border-bottom: 1px solid var(--line);
+}
+.price-amount .cur { font-size: 19px; font-weight: 700; color: var(--ink-mute); }
+.price-amount .v { font-size: 46px; font-weight: 800; color: var(--ink); letter-spacing: -.03em; line-height: 1; }
+.price-amount .unit { font-size: 13.5px; color: var(--ink-mute); margin-left: 4px; }
+.price-card ul { margin: 24px 0 28px; padding: 0; list-style: none; flex: 1; }
+.price-card li { padding: 8px 0 8px 22px; position: relative; font-size: 14px; color: var(--ink); }
+.price-card li::before { content: ""; position: absolute; left: 0; top: 13px; width: 10px; height: 6px; border-left: 2px solid var(--emerald); border-bottom: 2px solid var(--emerald); transform: rotate(-45deg); }
+.price-card .btn { width: 100%; justify-content: center; }
+.price-fine { font-size: 11.5px; color: var(--ink-mute); margin-top: 14px; text-align: center; }
+@media (max-width: 900px) { .pricing-grid { grid-template-columns: 1fr; } }
+
+/* ── TRUST / ABOUT ── */
+.trust { background: var(--bg-muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.trust-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+.trust h2 { font-size: clamp(28px, 4vw, 40px); margin: 12px 0 16px; }
+.trust p { color: var(--ink-soft); font-size: 16.5px; margin: 0 0 14px; line-height: 1.6; }
+.principles { display: flex; flex-direction: column; gap: 14px; }
+.principle {
+  padding: 22px;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex; gap: 16px; align-items: flex-start;
+}
+.principle .p-icon {
+  width: 38px; height: 38px; border-radius: 8px;
+  background: var(--primary-50); color: var(--primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; flex-shrink: 0;
+}
+.principle h4 { font-size: 16px; margin: 0 0 4px; color: var(--ink); }
+.principle p { color: var(--ink-soft); font-size: 13.5px; line-height: 1.5; margin: 0; }
+@media (max-width: 900px) { .trust-grid { grid-template-columns: 1fr; gap: 40px; } }
+
+/* ── FINAL CTA ── */
+.cta-final { padding: 88px 0; text-align: center; }
+.cta-final h2 { font-size: clamp(32px, 4.6vw, 48px); margin-bottom: 18px; font-weight: 800; }
+.cta-final p { color: var(--ink-soft); max-width: 520px; margin: 0 auto 32px; font-size: 17px; }
+
+/* ── FOOTER ── */
+.footer { background: var(--bg-deep); border-top: 1px solid var(--line); padding: 56px 0 36px; }
+.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+.footer h5 { font-size: 12.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); margin: 0 0 14px; }
+.footer a { color: var(--ink-soft); display: block; padding: 5px 0; font-size: 14px; }
+.footer a:hover { color: var(--primary); text-decoration: none; }
+.footer-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; margin-bottom: 12px; color: var(--ink); letter-spacing: -.02em; }
+.footer-tag { color: var(--ink-soft); font-size: 13.5px; max-width: 320px; line-height: 1.55; }
+.footer-meta { background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin-top: 16px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+.footer-meta b { color: var(--ink); }
+.footer-bottom { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--ink-mute); font-size: 12.5px; }
+@media (max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 540px) { .footer-grid { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════════
+   v4 — LIVE AGENTIC AI STAGE (hero centerpiece)
+   Voice → BIG LOGO brain → fans out to WhatsApp / Telegram / Dashboard / Mobile
+   ═══════════════════════════════════════════════════════════════ */
+.hero-v4 { padding: 64px 0 40px; }
+.hero-text-block { text-align: center; max-width: 880px; margin: 0 auto; }
+.hero-text-block .hero-eyebrow { justify-content: center; }
+.hero-text-block .lead { margin-left: auto; margin-right: auto; }
+.hero-text-block .hero-ctas { justify-content: center; }
+
+/* The 3-column live stage */
+.stage {
+  margin-top: 56px;
+  display: grid;
+  grid-template-columns: 1fr 1.05fr 1fr;
+  gap: 32px;
+  align-items: center;
+  padding: 40px 32px;
+  background:
+    radial-gradient(60% 80% at 50% 10%, color-mix(in srgb, var(--primary) 8%, transparent), transparent),
+    var(--bg-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.stage::before, .stage::after {
+  content: "→";
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  color: var(--primary);
+  font-size: 32px; font-weight: 800;
+  opacity: .35;
+  pointer-events: none;
+}
+.stage::before { left: calc(33% + 4px); }
+.stage::after  { right: calc(33% + 4px); }
+
+.stage-label {
+  position: absolute; top: 14px; left: 20px;
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--emerald);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.stage-label::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--emerald);
+  animation: pulse 1.8s infinite;
+}
+
+/* ═══ Column 1: VOICE INPUT card ═══ */
+.stage-voice {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 18px;
+  box-shadow: var(--shadow-xs);
+}
+.stage-voice .head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.stage-voice .mic-icon {
+  width: 38px; height: 38px;
+  background: var(--primary); color: #fff;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 var(--primary);
+  animation: micPulse 2.2s infinite;
+}
+@keyframes micPulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 60%, transparent); }
+  70% { box-shadow: 0 0 0 14px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.stage-voice .label-small {
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--emerald); font-weight: 700;
+}
+.stage-voice .label-name {
+  font-size: 13px; color: var(--ink); font-weight: 700;
+  letter-spacing: -.01em;
+}
+.waveform {
+  display: flex; align-items: center; justify-content: center;
+  gap: 3.5px; height: 52px;
+  padding: 4px;
+  background: var(--bg-muted);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.waveform .bar {
+  width: 4px;
+  background: linear-gradient(180deg, var(--primary), var(--emerald));
+  border-radius: 3px;
+  animation: wave 1.1s ease-in-out infinite;
+}
+.waveform .bar:nth-child(1)  { animation-delay: 0s; }
+.waveform .bar:nth-child(2)  { animation-delay: .06s; }
+.waveform .bar:nth-child(3)  { animation-delay: .12s; }
+.waveform .bar:nth-child(4)  { animation-delay: .18s; }
+.waveform .bar:nth-child(5)  { animation-delay: .24s; }
+.waveform .bar:nth-child(6)  { animation-delay: .30s; }
+.waveform .bar:nth-child(7)  { animation-delay: .36s; }
+.waveform .bar:nth-child(8)  { animation-delay: .42s; }
+.waveform .bar:nth-child(9)  { animation-delay: .48s; }
+.waveform .bar:nth-child(10) { animation-delay: .54s; }
+.waveform .bar:nth-child(11) { animation-delay: .60s; }
+.waveform .bar:nth-child(12) { animation-delay: .66s; }
+.waveform .bar:nth-child(13) { animation-delay: .72s; }
+.waveform .bar:nth-child(14) { animation-delay: .78s; }
+.waveform .bar:nth-child(15) { animation-delay: .84s; }
+.waveform .bar:nth-child(16) { animation-delay: .90s; }
+.waveform .bar:nth-child(17) { animation-delay: .96s; }
+@keyframes wave {
+  0%, 100% { height: 6px; }
+  50% { height: 42px; }
+}
+.transcript {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--bg-muted);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  min-height: 58px;
+  line-height: 1.5;
+  border-left: 3px solid var(--emerald);
+  font-style: italic;
+}
+.transcript .cursor {
+  display: inline-block; width: 2px; height: 14px;
+  background: var(--primary); margin-left: 2px;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ═══ Column 2: BIG LOGO AGENTIC BRAIN ═══ */
+.stage-brain {
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 18px 8px;
+  min-height: 400px;
+}
+.brain-halo {
+  position: absolute;
+  width: 380px; height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 38%, transparent), transparent 62%);
+  filter: blur(24px);
+  animation: haloPulse 4s ease-in-out infinite;
+  z-index: 0;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+@keyframes haloPulse {
+  0%, 100% { opacity: .4; transform: translate(-50%, -50%) scale(.92); }
+  50% { opacity: .75; transform: translate(-50%, -50%) scale(1.05); }
+}
+.brain-orbit, .brain-orbit-2 {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px dashed color-mix(in srgb, var(--primary) 35%, transparent);
+  top: 50%; left: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.brain-orbit {
+  width: 340px; height: 340px;
+  transform: translate(-50%, -50%);
+  animation: orbit 24s linear infinite;
+}
+.brain-orbit-2 {
+  width: 270px; height: 270px;
+  border-color: color-mix(in srgb, var(--emerald) 38%, transparent);
+  transform: translate(-50%, -50%);
+  animation: orbit 18s linear infinite reverse;
+}
+@keyframes orbit { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.brain-orbit-dot {
+  position: absolute; top: -4px; left: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 12px var(--gold);
+  transform: translateX(-50%);
+}
+.brain-orbit-2 .brain-orbit-dot { background: var(--emerald); box-shadow: 0 0 12px var(--emerald); }
+
+.brain-logo {
+  position: relative; z-index: 3;
+  width: 280px; max-width: 90%;
+  height: auto;
+  filter:
+    drop-shadow(0 14px 36px color-mix(in srgb, var(--primary) 35%, transparent))
+    drop-shadow(0 4px 12px rgba(0,0,0,.10));
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+html[data-theme="dark"] .brain-logo {
+  filter:
+    drop-shadow(0 14px 36px color-mix(in srgb, var(--primary) 55%, transparent))
+    drop-shadow(0 4px 12px rgba(0,0,0,.4));
+}
+
+.brain-label {
+  margin-top: 18px;
+  text-align: center;
+  position: relative; z-index: 3;
+}
+.brain-label .tag {
+  display: inline-block;
+  padding: 5px 14px; border-radius: 999px;
+  background: var(--primary); color: #fff;
+  font-size: 10.5px; font-weight: 800;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.brain-label .title {
+  font-family: var(--font-editorial);
+  font-size: 16px; color: var(--ink);
+  font-weight: 600;
+  margin-top: 8px;
+  line-height: 1.3;
+}
+
+/* ═══ Column 3: 4-CHANNEL SURFACES ═══ */
+.stage-channels {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.channel {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+  min-height: 120px;
+  display: flex; flex-direction: column; gap: 8px;
+  position: relative;
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: channelIn .55s ease-out forwards;
+}
+.channel:nth-child(1) { animation-delay: 1.0s; }
+.channel:nth-child(2) { animation-delay: 1.55s; }
+.channel:nth-child(3) { animation-delay: 2.1s; }
+.channel:nth-child(4) { animation-delay: 2.65s; }
+@keyframes channelIn {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.channel .ch-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: .02em;
+}
+.channel .ch-icon {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 700;
+  flex-shrink: 0;
+}
+.channel.wa .ch-icon { background: #25D366; }
+.channel.tg .ch-icon { background: #229ED9; }
+.channel.dash .ch-icon { background: var(--primary); }
+.channel.mob .ch-icon { background: var(--gold); }
+.channel .ch-body {
+  background: var(--bg-muted);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.45;
+  border: 1px solid var(--line-soft);
+  flex: 1;
+}
+.channel .ch-status {
+  font-size: 10.5px; color: var(--emerald);
+  font-weight: 700; letter-spacing: .06em;
+  display: flex; align-items: center; gap: 4px;
+}
+.channel .ch-status::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--emerald);
+  animation: pulse 1.6s infinite;
+}
+
+/* Hero stats below stage */
+.hero-v4 .hero-meta { margin-top: 48px; }
+
+/* ═══ Responsive ═══ */
+@media (max-width: 1000px) {
+  .stage { grid-template-columns: 1fr; gap: 24px; padding: 36px 22px 28px; }
+  .stage::before, .stage::after { display: none; }
+  .stage-brain { min-height: 360px; order: 1; }
+  .stage-voice { order: 0; }
+  .stage-channels { order: 2; }
+  .brain-halo { width: 300px; height: 300px; }
+  .brain-orbit { width: 280px; height: 280px; }
+  .brain-orbit-2 { width: 220px; height: 220px; }
+  .brain-logo { width: 240px; }
+}
+@media (max-width: 540px) {
+  .stage-channels { grid-template-columns: 1fr; }
+  .brain-logo { width: 200px; }
+  .brain-halo { width: 240px; height: 240px; }
+  .brain-orbit { width: 220px; height: 220px; }
+  .brain-orbit-2 { width: 170px; height: 170px; }
+  .stage-brain { min-height: 320px; }
+}
+
+/* ── Language reveal ── */
+.en, .hi { display: none; }
+html[data-lang="en"] .en { display: inline; }
+html[data-lang="hi"] .hi { display: inline; }
+html[data-lang="en"] .en.block, html[data-lang="hi"] .hi.block { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ═══ TRUST STRIP (above-the-topbar compliance signal) ═══ -->
+<div class="trustbar">
+  <span class="en">Built for SEBI · IRDAI · AMFI-registered advisors</span><span class="hi">SEBI · IRDAI · AMFI-पंजीकृत एडवाइज़र्स के लिए बना</span>
+  <span class="dot">●</span>
+  <span class="en">DPDP Act 2023 compliant</span><span class="hi">DPDP अधिनियम 2023 अनुपालित</span>
+  <span class="dot">●</span>
+  <span class="en">Served from India 🇮🇳</span><span class="hi">भारत से सर्व 🇮🇳</span>
+</div>
+
+<!-- ═══ NAV ═══ -->
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a href="/" class="brand"><span class="mark">S</span>Sarathi<span class="brand-suffix">·AI</span></a>
+    <nav class="nav-links">
+      <a class="nav-link" href="#story"><span class="en">A day with Sarathi</span><span class="hi">Sarathi के साथ एक दिन</span></a>
+      <a class="nav-link" href="#features"><span class="en">Platform</span><span class="hi">प्लेटफ़ॉर्म</span></a>
+      <a class="nav-link" href="/demo"><span class="en">Demo</span><span class="hi">डेमो</span></a>
+      <a class="nav-link" href="#pricing"><span class="en">Pricing</span><span class="hi">मूल्य</span></a>
+      <a class="nav-link" href="#about"><span class="en">About</span><span class="hi">हमारे बारे में</span></a>
+    </nav>
+    <div class="nav-tools">
+      <div class="lang-pill" id="langPill">
+        <button data-lang="en" class="active">EN</button>
+        <button data-lang="hi">हिं</button>
+      </div>
+      <button class="toggle" id="themeBtn" title="Theme" aria-label="Toggle theme">🌙</button>
+      <a href="/login" class="btn btn-ghost" id="loginBtn" style="display:none"><span class="en">Sign in</span><span class="hi">साइन इन</span></a>
+      <a href="#pricing" class="btn btn-primary"><span class="en">Start trial</span><span class="hi">ट्रायल शुरू करें</span></a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ HERO v4 — AGENTIC AI LIVE STAGE ═══ -->
+<section class="hero hero-v4">
+  <div class="container">
+    <div class="hero-text-block">
+      <span class="hero-eyebrow">
+        <span class="live"></span>
+        <span class="en">AGENTIC AI · VOICE-FIRST · BUILT IN INDIA</span><span class="hi">एजेंटिक AI · वॉइस-फर्स्ट · भारत में बना</span>
+      </span>
+      <h1>
+        <span class="en">One voice note in.<br><span class="hl">WhatsApp, Telegram, Dashboard</span> — out.</span>
+        <span class="hi">एक वॉइस नोट डालिए।<br><span class="hl">WhatsApp, Telegram, डैशबोर्ड</span> — बाहर।</span>
+      </h1>
+      <p class="lead">
+        <span class="en">Sarathi listens in Hindi or English, structures the lead, auto-replies on WhatsApp, briefs your Telegram bot, and updates the dashboard — agentically, in real time.</span>
+        <span class="hi">Sarathi हिंदी या अंग्रेज़ी सुनता है, लीड व्यवस्थित करता है, WhatsApp पर ऑटो-उत्तर देता है, Telegram बॉट को सूचित करता है, और डैशबोर्ड अपडेट करता है — एजेंटिक, रियल-टाइम में।</span>
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary btn-lg" href="#pricing"><span class="en">Start 14-day free trial</span><span class="hi">14-दिन का मुफ़्त ट्रायल</span> →</a>
+        <a class="btn btn-ghost btn-lg" href="/demo"><span class="en">Watch 90-sec demo</span><span class="hi">90-सेकंड डेमो</span></a>
+      </div>
+    </div>
+
+    <!-- ═══ LIVE AGENTIC STAGE ═══ -->
+    <div class="stage">
+      <span class="stage-label"><span class="en">LIVE · ORCHESTRATING NOW</span><span class="hi">लाइव · अभी संचालन</span></span>
+
+      <!-- Column 1 — VOICE IN -->
+      <div class="stage-voice">
+        <div class="head">
+          <div class="mic-icon">🎙</div>
+          <div>
+            <div class="label-small"><span class="en">VOICE IN</span><span class="hi">वॉइस इन</span> · हिंदी/EN</div>
+            <div class="label-name"><span class="en">Sharma Wealth Advisory</span><span class="hi">शर्मा वेल्थ एडवाइज़री</span></div>
+          </div>
+        </div>
+        <div class="waveform">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        </div>
+        <div class="transcript">
+          <span class="en">"Met Mr. Sharma at the café — wants ₹15L health cover for parents, two kids, has a home loan…"</span>
+          <span class="hi">"कैफ़े में मि. शर्मा से मिला — माता-पिता के लिए ₹15 लाख हेल्थ कवर, दो बच्चे, होम लोन है…"</span>
+          <span class="cursor"></span>
+        </div>
+      </div>
+
+      <!-- Column 2 — BIG LOGO AGENTIC BRAIN -->
+      <div class="stage-brain">
+        <div class="brain-halo"></div>
+        <div class="brain-orbit"><span class="brain-orbit-dot"></span></div>
+        <div class="brain-orbit-2"><span class="brain-orbit-dot"></span></div>
+        <img src="/static/logo.png?v=3" alt="Sarathi-AI · Agentic AI Brain" class="brain-logo" onerror="this.outerHTML='<div style=font-size:8em;text-align:center;position:relative;z-index:3>🤖</div>'">
+        <div class="brain-label">
+          <span class="tag"><span class="en">AGENTIC AI · LIVE</span><span class="hi">एजेंटिक AI · लाइव</span></span>
+          <div class="title"><span class="en">Orchestrates 4 surfaces<br>from one voice note</span><span class="hi">एक वॉइस नोट से<br>4 सतहों का संचालन</span></div>
+        </div>
+      </div>
+
+      <!-- Column 3 — 4 CHANNEL SURFACES -->
+      <div class="stage-channels">
+        <div class="channel wa">
+          <div class="ch-head"><span class="ch-icon">💬</span>WhatsApp</div>
+          <div class="ch-body">
+            <span class="en">"धन्यवाद मि. शर्मा! ₹15L हेल्थ की तुलना WhatsApp पर भेज रहा हूँ…"</span>
+            <span class="hi">"धन्यवाद मि. शर्मा! ₹15L हेल्थ की तुलना भेज रहा हूँ…"</span>
+          </div>
+          <div class="ch-status"><span class="en">Auto-replied</span><span class="hi">ऑटो-उत्तर</span></div>
+        </div>
+        <div class="channel tg">
+          <div class="ch-head"><span class="ch-icon">✈</span>Telegram</div>
+          <div class="ch-body">
+            <b>/leads_today</b><br>
+            <span class="en">+1 new · ₹15L health · Sharma</span>
+            <span class="hi">+1 नया · ₹15L हेल्थ · शर्मा</span>
+          </div>
+          <div class="ch-status"><span class="en">Owner notified</span><span class="hi">ओनर सूचित</span></div>
+        </div>
+        <div class="channel dash">
+          <div class="ch-head"><span class="ch-icon">💻</span><span class="en">Dashboard</span><span class="hi">डैशबोर्ड</span></div>
+          <div class="ch-body">
+            <span class="en">Lead · Hot 🔥<br>Pipeline updated · Reports refreshed</span>
+            <span class="hi">लीड · हॉट 🔥<br>पाइपलाइन अपडेट</span>
+          </div>
+          <div class="ch-status"><span class="en">Live</span><span class="hi">लाइव</span></div>
+        </div>
+        <div class="channel mob">
+          <div class="ch-head"><span class="ch-icon">📱</span><span class="en">Mobile</span><span class="hi">मोबाइल</span></div>
+          <div class="ch-body">
+            <span class="en">📅 Follow-up: tomorrow 11 AM · Mr. Sharma</span>
+            <span class="hi">📅 फ़ॉलो-अप: कल 11 बजे · मि. शर्मा</span>
+          </div>
+          <div class="ch-status"><span class="en">Reminder set</span><span class="hi">रिमाइंडर सेट</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HERO META STATS -->
+    <div class="hero-meta">
+      <div class="item">
+        <span class="num">14<span style="font-size:14px;color:var(--ink-mute)"> days</span></span>
+        <span class="lbl"><span class="en">Free trial · no card</span><span class="hi">मुफ़्त ट्रायल · कार्ड नहीं</span></span>
+      </div>
+      <div class="item">
+        <span class="num">हिं/EN</span>
+        <span class="lbl"><span class="en">Hindi + English parity</span><span class="hi">हिंदी + अंग्रेज़ी बराबरी</span></span>
+      </div>
+      <div class="item">
+        <span class="num">DPDP</span>
+        <span class="lbl"><span class="en">Privacy-act ready</span><span class="hi">गोपनीयता-तैयार</span></span>
+      </div>
+      <div class="item">
+        <span class="num">100%</span>
+        <span class="lbl"><span class="en">Mobile-first</span><span class="hi">मोबाइल-फर्स्ट</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CREDENTIALS STRIP ═══ -->
+<section class="creds">
+  <div class="container">
+    <div class="creds-row">
+      <span class="creds-lbl"><span class="en">Trust signals</span><span class="hi">विश्वास संकेत</span></span>
+      <div class="creds-set">
+        <span class="cred-tag"><span class="badge e">✓</span><span class="en">DPDP Act 2023</span><span class="hi">DPDP अधिनियम 2023</span></span>
+        <span class="cred-tag"><span class="badge">🏦</span><span class="en">IRDAI advisor-ready</span><span class="hi">IRDAI एडवाइज़र-तैयार</span></span>
+        <span class="cred-tag"><span class="badge">📊</span><span class="en">SEBI compliance log</span><span class="hi">SEBI अनुपालन लॉग</span></span>
+        <span class="cred-tag"><span class="badge g">🇮🇳</span><span class="en">India-only data residency</span><span class="hi">भारत-केवल डेटा निवास</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ A DAY WITH SARATHI ═══ -->
+<section class="section day" id="story">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow emerald"><span class="en">A day with Sarathi</span><span class="hi">Sarathi के साथ एक दिन</span></span>
+      <h2><span class="en">Your job is people.<br>The recordkeeping isn't.</span><span class="hi">आपका काम लोग हैं।<br>रिकॉर्ड रखना नहीं।</span></h2>
+    </div>
+    <div class="day-rail">
+      <div class="day-step">
+        <span class="num">Step 01</span>
+        <span class="ico-line"></span>
+        <h3><span class="en">Café meeting</span><span class="hi">कैफ़े मीटिंग</span></h3>
+        <p><span class="en">Prospect mentions parents' health, two kids, home loan. A 40-second conversation.</span><span class="hi">माता-पिता की हेल्थ, दो बच्चे, होम लोन — 40 सेकंड की बातचीत।</span></p>
+      </div>
+      <div class="day-step">
+        <span class="num">Step 02</span>
+        <span class="ico-line"></span>
+        <h3><span class="en">Voice note</span><span class="hi">वॉइस नोट</span></h3>
+        <p><span class="en">In the auto, you open Sarathi and just talk. Hindi or English. AI captures names, ages, intent, budget.</span><span class="hi">ऑटो में Sarathi खोलिए और बोलिए। AI नाम, उम्र, रुचि, बजट समझ लेता है।</span></p>
+      </div>
+      <div class="day-step">
+        <span class="num">Step 03</span>
+        <span class="ico-line"></span>
+        <h3><span class="en">Structured lead</span><span class="hi">स्ट्रक्चर्ड लीड</span></h3>
+        <p><span class="en">Lead appears in your dashboard. WhatsApp follow-up is drafted in your tone. Reminders set.</span><span class="hi">डैशबोर्ड में लीड दिखता है। WhatsApp ड्राफ्ट हो जाता है। रिमाइंडर तय।</span></p>
+      </div>
+      <div class="day-step">
+        <span class="num">Step 04</span>
+        <span class="ico-line"></span>
+        <h3><span class="en">Close the policy</span><span class="hi">पॉलिसी पक्की</span></h3>
+        <p><span class="en">Three days later Mr. Sharma replies. You know his budget, his last word. You close.</span><span class="hi">तीन दिन बाद मि. शर्मा जवाब देते हैं। आप बजट जानते हैं। डील पक्की।</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ METRICS (institutional scoreboard) ═══ -->
+<section style="background: var(--bg-muted); padding-bottom: 0;">
+  <div class="container">
+    <div class="metrics">
+      <div class="m">
+        <div class="num">2M+</div>
+        <div class="lbl"><span class="en">advisors in India we're built for</span><span class="hi">भारत के एडवाइज़र्स के लिए बना</span></div>
+        <span class="note"><span class="en">addressable market</span><span class="hi">सम्भावित बाज़ार</span></span>
+      </div>
+      <div class="m">
+        <div class="num">30<span class="pct">s</span></div>
+        <div class="lbl"><span class="en">avg voice-note to structured lead</span><span class="hi">वॉइस नोट से लीड तक</span></div>
+        <span class="note"><span class="en">in production</span><span class="hi">उत्पादन में</span></span>
+      </div>
+      <div class="m">
+        <div class="num">14<span class="pct">d</span></div>
+        <div class="lbl"><span class="en">free trial, no card required</span><span class="hi">मुफ़्त ट्रायल, कार्ड नहीं</span></div>
+        <span class="note"><span class="en">policy A refund · 7d window</span><span class="hi">7-दिन रिफंड Policy A</span></span>
+      </div>
+      <div class="m">
+        <div class="num">हिं/EN</div>
+        <div class="lbl"><span class="en">at full parity across UI + AI</span><span class="hi">UI + AI में पूरी बराबरी</span></div>
+        <span class="note"><span class="en">no language penalty</span><span class="hi">कोई भाषा-दंड नहीं</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PAIN POINTS ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow"><span class="en">What we replace</span><span class="hi">क्या बदल देता है</span></span>
+      <h2><span class="en">Six recurring time-leaks that quietly eat your week.</span><span class="hi">छह रोज़ की चीज़ें जो आपका हफ़्ता खा जाती हैं।</span></h2>
+    </div>
+    <div class="pain-grid">
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Data scattered</span><span class="hi">डेटा बिखरा</span></span>
+        <h4><span class="en">Excel + WhatsApp + 3 diaries</span><span class="hi">Excel + WhatsApp + 3 डायरी</span></h4>
+        <p><span class="en">Leads live everywhere. You forget who said what. Sarathi puts every conversation in one searchable place.</span><span class="hi">लीड हर जगह बिखरे हैं। Sarathi हर बातचीत एक जगह रखता है।</span></p>
+      </div>
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Follow-up</span><span class="hi">फ़ॉलो-अप</span></span>
+        <h4><span class="en">"I'll send the brochure tomorrow"</span><span class="hi">"कल भेजता हूँ ब्रोशर"</span></h4>
+        <p><span class="en">Tomorrow becomes next week. Sarathi schedules WhatsApp and pings you the moment you slip.</span><span class="hi">कल अगला हफ़्ता बन जाता है। Sarathi WhatsApp शेड्यूल करता है।</span></p>
+      </div>
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Calculators</span><span class="hi">कैल्कुलेटर</span></span>
+        <h4><span class="en">SIP, term, ULIP — on the wrong page</span><span class="hi">SIP, टर्म, ULIP — ग़लत पेज पर</span></h4>
+        <p><span class="en">12 financial calculators, all branded to your firm, shareable via WhatsApp in two taps.</span><span class="hi">12 कैल्कुलेटर, आपकी फ़र्म ब्रांडिंग, दो टैप में WhatsApp पर शेयर।</span></p>
+      </div>
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Cold calls</span><span class="hi">कोल्ड कॉल</span></span>
+        <h4><span class="en">Walking in unprepared</span><span class="hi">बिना तैयारी के पहुँचना</span></h4>
+        <p><span class="en">Sarathi reads back your last conversation before you dial. You sound prepared because you are.</span><span class="hi">डायल करने से पहले Sarathi पिछली बातचीत बता देता है।</span></p>
+      </div>
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Reporting</span><span class="hi">रिपोर्टिंग</span></span>
+        <h4><span class="en">"How many leads this month?"</span><span class="hi">"इस महीने कितने लीड?"</span></h4>
+        <p><span class="en">Dashboard, pipeline, conversion, lost-reason analytics — the numbers your spreadsheet won't show.</span><span class="hi">डैशबोर्ड, पाइपलाइन, कन्वर्ज़न — जो स्प्रेडशीट नहीं दिखाती।</span></p>
+      </div>
+      <div class="pain-row">
+        <span class="pain-tag"><span class="en">Compliance</span><span class="hi">अनुपालन</span></span>
+        <h4><span class="en">Client data scattered, audit ad-hoc</span><span class="hi">क्लाइंट डेटा बिखरा, ऑडिट तदर्थ</span></h4>
+        <p><span class="en">Tenant isolation, audit log on every privileged action, DPDP-compliant export, no shadow IT.</span><span class="hi">टेनेंट अलगाव, हर अहम काम पर ऑडिट, DPDP-तैयार।</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FEATURES ═══ -->
+<section class="section feat" id="features">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow"><span class="en">The platform</span><span class="hi">प्लेटफ़ॉर्म</span></span>
+      <h2><span class="en">Built around the voice. Wired to WhatsApp. Reports to your dashboard.</span><span class="hi">वॉइस के लिए बना। WhatsApp से जुड़ा। डैशबोर्ड पर रिपोर्ट।</span></h2>
+    </div>
+    <div class="feat-grid">
+      <div class="feat-cell">
+        <div class="icn">🎙</div>
+        <h3><span class="en">Voice → structured lead</span><span class="hi">वॉइस → स्ट्रक्चर्ड लीड</span></h3>
+        <p><span class="en">Speak in Hindi or English. Sarathi picks names, ages, intent, budget, urgency — saves to your CRM as a clean structured row.</span><span class="hi">हिंदी या अंग्रेज़ी में बोलिए — नाम, उम्र, रुचि, बजट सब पकड़ता है।</span></p>
+      </div>
+      <div class="feat-cell">
+        <div class="icn">💬</div>
+        <h3><span class="en">WhatsApp automation</span><span class="hi">WhatsApp ऑटोमेशन</span></h3>
+        <p><span class="en">AI drafts follow-ups in your tone. Drip campaigns, branded calculators, brochures — all from one chat.</span><span class="hi">AI आपकी शैली में फ़ॉलो-अप तैयार करता है। ड्रिप कैम्पेन, ब्रोशर, सब चैट से।</span></p>
+      </div>
+      <div class="feat-cell">
+        <div class="icn">📊</div>
+        <h3><span class="en">Pipeline + smart nudges</span><span class="hi">पाइपलाइन + स्मार्ट नज</span></h3>
+        <p><span class="en">Kanban board. Lead temperature. Smart nudges when a hot lead goes cold. SLAs you can override — informational, never blocking.</span><span class="hi">कानबन। लीड का तापमान। हॉट लीड ठंडी होते ही नज। SLA — जानकारी के लिए, ब्लॉक करने के लिए नहीं।</span></p>
+      </div>
+      <div class="feat-cell">
+        <div class="icn">🧮</div>
+        <h3><span class="en">12 branded calculators</span><span class="hi">12 ब्रांडेड कैल्कुलेटर</span></h3>
+        <p><span class="en">SIP, retirement, term vs. endowment, ULIP, HLV, child-education, motor-claim — white-labeled with your firm logo + WhatsApp share.</span><span class="hi">SIP, रिटायरमेंट, टर्म, ULIP, HLV — आपके फ़र्म लोगो के साथ।</span></p>
+      </div>
+      <div class="feat-cell">
+        <div class="icn">🤝</div>
+        <h3><span class="en">Team RBAC + audit log</span><span class="hi">टीम RBAC + ऑडिट लॉग</span></h3>
+        <p><span class="en">Owner sees all. Agents see their own. Custom roles for senior agents, finance, support. Every privileged change recorded.</span><span class="hi">ओनर सब देखता है। एजेंट अपना। कस्टम रोल — हर बदलाव रिकॉर्ड।</span></p>
+      </div>
+      <div class="feat-cell">
+        <div class="icn">🛡</div>
+        <h3><span class="en">DPDP + India-only data</span><span class="hi">DPDP + भारत-केवल डेटा</span></h3>
+        <p><span class="en">Tenant isolation, audit trail, opt-in WhatsApp, consent capture, export on data-principal request. Hosted from India only.</span><span class="hi">टेनेंट अलगाव, ऑडिट, सहमति। भारत से ही होस्ट।</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ DEMO ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="demo-band">
+      <h2><span class="en">Hear it work. 90 seconds, no signup.</span><span class="hi">सुनिए कैसे काम करता है। 90 सेकंड, साइन-अप नहीं।</span></h2>
+      <p><span class="en">A real voice note → a real lead → a real WhatsApp draft — across the three channels your customers actually use.</span><span class="hi">असली वॉइस नोट → लीड → WhatsApp ड्राफ्ट — आपके ग्राहकों के तीनों चैनलों पर।</span></p>
+      <a href="/demo" class="btn btn-primary btn-lg"><span class="en">Watch the demo</span><span class="hi">डेमो देखें</span> →</a>
+      <div class="chips">
+        <span class="chip">🎙 <span class="en">Voice CRM</span><span class="hi">वॉइस CRM</span></span>
+        <span class="chip">💬 WhatsApp</span>
+        <span class="chip">📱 Telegram</span>
+        <span class="chip">🧮 <span class="en">Calculators</span><span class="hi">कैल्कुलेटर</span></span>
+        <span class="chip">📊 <span class="en">Dashboard</span><span class="hi">डैशबोर्ड</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FOR WHO ═══ -->
+<section class="section" id="for-who">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow"><span class="en">Built for the entire spectrum</span><span class="hi">पूरे स्पेक्ट्रम के लिए</span></span>
+      <h2><span class="en">From solo advisors to 50-agent enterprises.</span><span class="hi">अकेले एडवाइज़र से 50-एजेंट एंटरप्राइज़ तक।</span></h2>
+    </div>
+    <div class="who-grid">
+      <div class="who-card">
+        <div class="who-eyebrow"><span class="en">Individual</span><span class="hi">व्यक्तिगत</span></div>
+        <h3><span class="en">The solo advisor</span><span class="hi">अकेला एडवाइज़र</span></h3>
+        <div class="for"><span class="en">For 1 advisor</span><span class="hi">1 एडवाइज़र के लिए</span></div>
+        <ul>
+          <li><span class="en">Hindi + English voice capture</span><span class="hi">हिं + EN वॉइस कैप्चर</span></li>
+          <li><span class="en">12 branded calculators</span><span class="hi">12 ब्रांडेड कैल्कुलेटर</span></li>
+          <li><span class="en">Dashboard, pipeline, reports</span><span class="hi">डैशबोर्ड, पाइपलाइन, रिपोर्ट</span></li>
+          <li><span class="en">Email support</span><span class="hi">ईमेल सहयोग</span></li>
+        </ul>
+      </div>
+      <div class="who-card featured">
+        <div class="who-eyebrow"><span class="en">Team</span><span class="hi">टीम</span></div>
+        <h3><span class="en">5-10 advisor firm</span><span class="hi">5-10 एडवाइज़र फ़र्म</span></h3>
+        <div class="for"><span class="en">Owner + 5 advisors</span><span class="hi">ओनर + 5 एडवाइज़र</span></div>
+        <ul>
+          <li><span class="en">Everything in Individual</span><span class="hi">Individual की सब सुविधाएँ</span></li>
+          <li><span class="en">WhatsApp campaigns + drip nurture</span><span class="hi">WhatsApp + ड्रिप नर्चर</span></li>
+          <li><span class="en">Per-agent pipeline + reports</span><span class="hi">हर एजेंट की पाइपलाइन</span></li>
+          <li><span class="en">Custom roles + permissions</span><span class="hi">कस्टम रोल + अनुमति</span></li>
+          <li><span class="en">Priority email support</span><span class="hi">प्राथमिकता सहयोग</span></li>
+        </ul>
+      </div>
+      <div class="who-card">
+        <div class="who-eyebrow"><span class="en">Enterprise</span><span class="hi">एंटरप्राइज़</span></div>
+        <h3><span class="en">40-50 advisors</span><span class="hi">40-50 एडवाइज़र</span></h3>
+        <div class="for"><span class="en">Owner + 25 advisors</span><span class="hi">ओनर + 25 एडवाइज़र</span></div>
+        <ul>
+          <li><span class="en">Everything in Team</span><span class="hi">Team की सब सुविधाएँ</span></li>
+          <li><span class="en">API access + bulk operations</span><span class="hi">API + बल्क ऑपरेशन</span></li>
+          <li><span class="en">Full audit log + compliance exports</span><span class="hi">पूरा ऑडिट + compliance निर्यात</span></li>
+          <li><span class="en">White-label for full firm</span><span class="hi">पूरे फ़र्म पर white-label</span></li>
+          <li><span class="en">Dedicated support manager</span><span class="hi">समर्पित सहयोग</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PRICING ═══ -->
+<section class="section" id="pricing" style="background: var(--bg-muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow"><span class="en">Plans · transparent pricing</span><span class="hi">मूल्य · पारदर्शी</span></span>
+      <h2><span class="en">No hidden fees. 14-day free trial. Refund in 7 days.</span><span class="hi">कोई छुपा शुल्क नहीं। 14-दिन ट्रायल। 7-दिन रिफंड।</span></h2>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-name"><span class="en">Individual</span><span class="hi">व्यक्तिगत</span></div>
+        <div class="price-for"><span class="en">For solo advisors</span><span class="hi">अकेले एडवाइज़र्स के लिए</span></div>
+        <div class="price-amount"><span class="cur">₹</span><span class="v">199</span><span class="unit">/ <span class="en">month</span><span class="hi">महीना</span></span></div>
+        <ul>
+          <li><span class="en">1 advisor</span><span class="hi">1 एडवाइज़र</span></li>
+          <li><span class="en">Voice → CRM (हिं + EN)</span><span class="hi">वॉइस → CRM (हिं + EN)</span></li>
+          <li><span class="en">12 branded calculators</span><span class="hi">12 ब्रांडेड कैल्कुलेटर</span></li>
+          <li><span class="en">Dashboard + reports</span><span class="hi">डैशबोर्ड + रिपोर्ट</span></li>
+          <li><span class="en">Email support</span><span class="hi">ईमेल सहयोग</span></li>
+        </ul>
+        <a href="/?plan=individual&signup=1" class="btn btn-ghost"><span class="en">Start trial</span><span class="hi">ट्रायल शुरू करें</span></a>
+        <div class="price-fine"><span class="en">14-day free · no card · cancel anytime</span><span class="hi">14-दिन मुफ़्त · कार्ड नहीं</span></div>
+      </div>
+      <div class="price-card featured">
+        <div class="price-name"><span class="en">Team</span><span class="hi">टीम</span></div>
+        <div class="price-for"><span class="en">For 5-10 advisor firms</span><span class="hi">5-10 एडवाइज़र फ़र्म</span></div>
+        <div class="price-amount"><span class="cur">₹</span><span class="v">799</span><span class="unit">/ <span class="en">month</span><span class="hi">महीना</span></span></div>
+        <ul>
+          <li><span class="en">6 advisors (owner + 5)</span><span class="hi">6 एडवाइज़र (1+5)</span></li>
+          <li><span class="en">Everything in Individual</span><span class="hi">Individual की सब सुविधाएँ</span></li>
+          <li><span class="en">WhatsApp automation + campaigns</span><span class="hi">WhatsApp ऑटोमेशन + कैम्पेन</span></li>
+          <li><span class="en">Nurture drip sequences</span><span class="hi">नर्चर ड्रिप</span></li>
+          <li><span class="en">Per-agent pipeline</span><span class="hi">हर एजेंट की पाइपलाइन</span></li>
+          <li><span class="en">Custom roles + RBAC</span><span class="hi">कस्टम रोल + RBAC</span></li>
+          <li><span class="en">Priority email support</span><span class="hi">प्राथमिकता सहयोग</span></li>
+        </ul>
+        <a href="/?plan=team&signup=1" class="btn btn-primary"><span class="en">Start trial</span><span class="hi">ट्रायल शुरू करें</span></a>
+        <div class="price-fine"><span class="en">14-day free · no card · cancel anytime</span><span class="hi">14-दिन मुफ़्त · कार्ड नहीं</span></div>
+      </div>
+      <div class="price-card">
+        <div class="price-name"><span class="en">Enterprise</span><span class="hi">एंटरप्राइज़</span></div>
+        <div class="price-for"><span class="en">For 40+ advisors</span><span class="hi">40+ एडवाइज़र</span></div>
+        <div class="price-amount"><span class="cur">₹</span><span class="v">1,999</span><span class="unit">/ <span class="en">month</span><span class="hi">महीना</span></span></div>
+        <ul>
+          <li><span class="en">26 advisors (owner + 25)</span><span class="hi">26 एडवाइज़र (1+25)</span></li>
+          <li><span class="en">Everything in Team</span><span class="hi">Team की सब सुविधाएँ</span></li>
+          <li><span class="en">API access + bulk operations</span><span class="hi">API + बल्क ऑपरेशन</span></li>
+          <li><span class="en">Full audit log + exports</span><span class="hi">पूरा ऑडिट + निर्यात</span></li>
+          <li><span class="en">White-label for full firm</span><span class="hi">पूरे फ़र्म पर white-label</span></li>
+          <li><span class="en">Custom training + onboarding</span><span class="hi">कस्टम ट्रेनिंग</span></li>
+          <li><span class="en">Dedicated support manager</span><span class="hi">समर्पित सहयोग</span></li>
+        </ul>
+        <a href="/?plan=enterprise&signup=1" class="btn btn-ghost"><span class="en">Start trial</span><span class="hi">ट्रायल शुरू करें</span></a>
+        <div class="price-fine"><span class="en">14-day free · no card · cancel anytime</span><span class="hi">14-दिन मुफ़्त · कार्ड नहीं</span></div>
+      </div>
+    </div>
+    <p style="text-align:center; margin-top:42px; color:var(--ink-mute); font-size:13.5px">
+      <span class="en"><b style="color:var(--ink)">Refund policy:</b> Full refund within 7 days if you haven't crossed light usage (Policy A). Manual reviews for edge cases — no automated retention nags.</span>
+      <span class="hi"><b style="color:var(--ink)">रिफंड नीति:</b> 7 दिनों में पूरा रिफंड अगर भारी इस्तेमाल नहीं किया (Policy A)।</span>
+    </p>
+  </div>
+</section>
+
+<!-- ═══ ABOUT / MISSION / PRINCIPLES ═══ -->
+<section class="section trust" id="about">
+  <div class="container">
+    <div class="trust-grid">
+      <div>
+        <span class="eyebrow gold"><span class="en">Our mission</span><span class="hi">हमारा मिशन</span></span>
+        <h2><span class="en">Free India's advisors from data entry.</span><span class="hi">भारत के एडवाइज़र्स को डेटा एंट्री से मुक्त करना।</span></h2>
+        <p><span class="en">India has over 2 million financial advisors. Most still run on spreadsheets, three notebooks, and a WhatsApp group. The work is human — the recordkeeping shouldn't be.</span><span class="hi">भारत में 20+ लाख फाइनेंशियल एडवाइज़र हैं। ज़्यादातर अब भी स्प्रेडशीट, तीन डायरी, और एक WhatsApp ग्रुप पर चलते हैं। काम इंसानी है — रिकॉर्ड नहीं।</span></p>
+        <p><span class="en">Sarathi-AI is built by advisors and engineers in India, for advisors in India. Voice-first because that's how Bharat actually speaks. Hindi-first because that's how Bharat actually thinks. Mobile-first because that's the phone in your pocket.</span><span class="hi">Sarathi-AI एडवाइज़र और इंजीनियरों ने भारत में, भारत के एडवाइज़र्स के लिए बनाया है। वॉइस-फर्स्ट क्योंकि भारत ऐसे ही बोलता है।</span></p>
+        <p style="font-family: var(--font-editorial); font-size: 17px; color: var(--ink); padding: 16px 20px; border-left: 3px solid var(--gold); margin-top: 24px; background: var(--bg-muted); border-radius: 0 var(--radius) var(--radius) 0;">
+          <span class="en">"We don't sell a CRM. We sell back the hours an advisor was losing to their spreadsheet."</span>
+          <span class="hi">"हम CRM नहीं बेचते। हम वो घंटे लौटाते हैं जो एडवाइज़र अपनी स्प्रेडशीट को दे रहा था।"</span>
+        </p>
+      </div>
+      <div class="principles">
+        <div class="principle">
+          <div class="p-icon">🎯</div>
+          <div>
+            <h4><span class="en">Voice-first, always</span><span class="hi">वॉइस-फर्स्ट, हमेशा</span></h4>
+            <p><span class="en">Typing is a tax on busy advisors. Every workflow has a voice path.</span><span class="hi">टाइपिंग व्यस्त एडवाइज़र पर कर है। हर वर्कफ़्लो में वॉइस।</span></p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="p-icon">🛡</div>
+          <div>
+            <h4><span class="en">Your data is yours</span><span class="hi">आपका डेटा आपका है</span></h4>
+            <p><span class="en">Tenant-isolated, exportable, deletable on request. DPDP-compliant. India-only servers.</span><span class="hi">टेनेंट-अलग, निर्यात योग्य, माँग पर मिटाने योग्य। DPDP-अनुकूल।</span></p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="p-icon">🇮🇳</div>
+          <div>
+            <h4><span class="en">Built in India, for India</span><span class="hi">भारत में बना, भारत के लिए</span></h4>
+            <p><span class="en">Hindi + English at parity, mobile-first, UPI-native payments, hosted from India.</span><span class="hi">हिंदी + अंग्रेज़ी बराबरी, मोबाइल-फर्स्ट, UPI।</span></p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="p-icon">🤝</div>
+          <div>
+            <h4><span class="en">Real refunds, real support</span><span class="hi">असली रिफंड, असली सहयोग</span></h4>
+            <p><span class="en">Full refund within 7 days under Policy A. No "fine print." No retention scripts.</span><span class="hi">7 दिन में पूरा रिफंड (Policy A)। कोई "fine print" नहीं।</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FINAL CTA ═══ -->
+<section class="cta-final">
+  <div class="narrow">
+    <h2><span class="en">Stop typing.<br>Start selling.</span><span class="hi">टाइप करना बंद कीजिए।<br>बेचना शुरू कीजिए।</span></h2>
+    <p><span class="en">Fourteen days. Free. No credit card. If Sarathi doesn't earn its keep, walk away.</span><span class="hi">चौदह दिन। मुफ़्त। कोई कार्ड नहीं। अगर Sarathi काम का न लगे — चले जाइए।</span></p>
+    <a href="/?signup=1" class="btn btn-primary btn-lg"><span class="en">Start your 14-day trial</span><span class="hi">14-दिन का ट्रायल शुरू करें</span> →</a>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-brand"><span class="mark" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;background:var(--primary);color:#fff;font-weight:800;font-size:15px">S</span>Sarathi<span class="brand-suffix">·AI</span></div>
+        <p class="footer-tag"><span class="en">Voice-first CRM built in India, for India's wealth advisors. Hindi + English at parity. Mobile-first. DPDP-compliant.</span><span class="hi">भारत में बना वॉइस-फर्स्ट CRM, भारत के वेल्थ एडवाइज़र्स के लिए।</span></p>
+        <div class="footer-meta">
+          <b><span class="en">Compliance</span><span class="hi">अनुपालन</span>:</b><br>
+          <span class="en">DPDP Act 2023 ready · India-only data residency · Audit log on every privileged action · Built for SEBI/IRDAI/AMFI-registered advisors</span>
+          <span class="hi">DPDP अधिनियम 2023 तैयार · केवल भारत डेटा · ऑडिट लॉग · SEBI/IRDAI/AMFI एडवाइज़र्स के लिए</span>
+        </div>
+      </div>
+      <div>
+        <h5><span class="en">Product</span><span class="hi">उत्पाद</span></h5>
+        <a href="#features"><span class="en">Platform</span><span class="hi">प्लेटफ़ॉर्म</span></a>
+        <a href="/demo"><span class="en">Demo</span><span class="hi">डेमो</span></a>
+        <a href="#pricing"><span class="en">Pricing</span><span class="hi">मूल्य</span></a>
+        <a href="/help"><span class="en">Help center</span><span class="hi">सहायता</span></a>
+      </div>
+      <div>
+        <h5><span class="en">Company</span><span class="hi">कंपनी</span></h5>
+        <a href="#about"><span class="en">About us</span><span class="hi">हमारे बारे में</span></a>
+        <a href="/partner"><span class="en">Affiliate / Partner</span><span class="hi">पार्टनर</span></a>
+        <a href="https://nidaanpartner.com"><span class="en">NidaanPartner.com</span><span class="hi">NidaanPartner.com</span></a>
+      </div>
+      <div>
+        <h5><span class="en">Legal</span><span class="hi">कानूनी</span></h5>
+        <a href="/privacy"><span class="en">Privacy policy</span><span class="hi">गोपनीयता नीति</span></a>
+        <a href="/terms"><span class="en">Terms of service</span><span class="hi">सेवा की शर्तें</span></a>
+        <a href="/refund-policy"><span class="en">Refund policy</span><span class="hi">रिफंड नीति</span></a>
+        <a href="/grievance"><span class="en">Grievance officer</span><span class="hi">शिकायत अधिकारी</span></a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>© 2026 Sarathi-AI Business Technologies Pvt. Ltd.</div>
+      <div><span class="en">Made in India 🇮🇳 · Built for advisors, by advisors + engineers</span><span class="hi">भारत में बना 🇮🇳 · एडवाइज़र्स के लिए, एडवाइज़र + इंजीनियरों द्वारा</span></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+let _lang = localStorage.getItem('sarathi_lang_v3') || 'en';
+document.documentElement.setAttribute('data-lang', _lang);
+function setLang(lang) {
+  _lang = lang;
+  localStorage.setItem('sarathi_lang_v3', lang);
+  document.documentElement.setAttribute('data-lang', lang);
+  document.documentElement.setAttribute('lang', lang);
+  document.querySelectorAll('#langPill button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+}
+document.querySelectorAll('#langPill button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+setLang(_lang);
+
+let _theme = localStorage.getItem('sarathi_theme_v3');
+if (!_theme) _theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+document.documentElement.setAttribute('data-theme', _theme);
+function setTheme(t) {
+  _theme = t;
+  localStorage.setItem('sarathi_theme_v3', t);
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀' : '🌙';
+}
+document.getElementById('themeBtn').addEventListener('click', () => setTheme(_theme === 'dark' ? 'light' : 'dark'));
+setTheme(_theme);
+
+if (localStorage.getItem('sarathi_token') || document.cookie.includes('sarathi_token=')) {
+  document.getElementById('loginBtn').style.display = 'inline-flex';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+[Unit]
+Description=Sarathi-AI — Daily Backup Timer
+Requires=backup-db.service
+
+[Timer]
+# Run daily at 02:00 AM server time
+OnCalendar=*-*-* 02:00:00
+# Run immediately if the last scheduled run was missed (e.g. server was down)
+Persistent=true
+# Randomize by up to 10 minutes to avoid thundering herd
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

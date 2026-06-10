@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter','Poppins',sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.6;min-height:100vh}
@@ -266,7 +267,7 @@ async function submitJoin(e) {
     const data = await res.json();
 
     if (!res.ok) {
-      toast(data.error || data.detail || 'Failed to join. Please try again.', 'error');
+      toast(_extractErr(data, 'Failed to join. Please try again.'), 'error');
       btn.disabled = false;
       btn.textContent = 'Join Team';
       return false;
@@ -304,7 +305,7 @@ async function sendJoinOTP() {
       document.getElementById('otp-sent-msg').textContent = msg;
       document.getElementById('inp-otp').focus();
     } else {
-      toast(data.detail || data.error || 'Failed to send OTP', 'error');
+      toast(_extractErr(data, 'Failed to send OTP'), 'error');
     }
   } catch(e) {
     toast('Network error', 'error');
@@ -333,7 +334,7 @@ async function verifyJoinOTP() {
       toast('\u2705 Login successful! Redirecting...', 'success');
       setTimeout(() => { window.location.href = '/dashboard'; }, 1000);
     } else {
-      toast(data.detail || data.error || 'Invalid OTP', 'error');
+      toast(_extractErr(data, 'Invalid OTP'), 'error');
       btn.disabled = false; btn.textContent = '\u2705 Verify & Login';
     }
   } catch(e) {

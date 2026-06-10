@@ -13,6 +13,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -741,11 +742,11 @@ function showLoginForGuide() {
           document.getElementById('gatedGuide').classList.remove('locked');
           alert('Welcome back! Setup guide unlocked.');
         } else {
-          alert(d.detail || 'Invalid OTP. Please try again.');
+          alert(_extractErr(d, 'Invalid OTP. Please try again.'));
         }
       });
     } else {
-      alert(data.detail || 'Phone not found. Please sign up first.');
+      alert(_extractErr(data, 'Phone not found. Please sign up first.'));
     }
   }).catch(() => alert('Network error. Try again.'));
 }

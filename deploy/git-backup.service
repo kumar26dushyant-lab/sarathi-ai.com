@@ -1,0 +1,15 @@
+[Unit]
+Description=Sarathi-AI — GitHub Code Backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+ExecStart=/opt/sarathi/deploy/git-backup.sh
+EnvironmentFile=/opt/sarathi/biz.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sarathi-git-backup

@@ -195,6 +195,26 @@
 </main>
 
 <script>
+  // Robust FastAPI error extraction — handles string / Pydantic-422 array / object detail.
+  function _extractErr(data, fallback) {
+    if (!data) return fallback || 'Something went wrong';
+    const d = data.detail;
+    if (d == null) return data.message || data.msg || fallback || 'Something went wrong';
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d)) {
+      const parts = d.map(e => {
+        if (!e) return '';
+        if (typeof e === 'string') return e;
+        const field = Array.isArray(e.loc) && e.loc.length ? e.loc[e.loc.length - 1] : '';
+        const msg = e.msg || e.message || '';
+        return field && msg ? field + ': ' + msg : (msg || field || '');
+      }).filter(Boolean);
+      return parts.length ? parts.join('; ') : (fallback || 'Validation failed. Please check your inputs.');
+    }
+    if (typeof d === 'object') return d.message || d.msg || d.error || d.title || (fallback || 'Something went wrong');
+    return String(d) || (fallback || 'Something went wrong');
+  }
+
   let selectedPlan = 'silver';
   const urlPlan = new URLSearchParams(location.search).get('plan');
   if (urlPlan && ['silver','gold','platinum'].includes(urlPlan)) selectPlan(urlPlan);
@@ -225,7 +245,7 @@
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Signup failed');
+      if (!res.ok) throw new Error(_extractErr(data, 'Signup failed'));
       localStorage.setItem('nidaan_token', data.access_token);
       localStorage.setItem('nidaan_plan', data.plan);
       msg.className = 'msg ok';
@@ -282,7 +302,7 @@
         body: JSON.stringify({credential: response.credential, plan: selectedPlan})
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Google signup failed');
+      if (!res.ok) throw new Error(_extractErr(data, 'Google signup failed'));
       localStorage.setItem('nidaan_token', data.access_token);
       localStorage.setItem('nidaan_plan', data.plan || '');
       const msg = document.getElementById('msg');

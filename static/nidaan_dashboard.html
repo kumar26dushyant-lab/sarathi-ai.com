@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — Nidaan Partner</title>
+<link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
 <link rel="manifest" href="/static/nidaan.webmanifest">
 <meta name="theme-color" content="#06b6d4">
@@ -11,7 +12,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Nidaan Partner">
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
+<link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh;min-height:100svh}
@@ -248,6 +251,11 @@
     /* Info rows */
     .info-row{flex-direction:column;align-items:flex-start;gap:.1rem}
     .info-val{text-align:left;font-size:.83rem;word-break:break-all}
+    /* B7+B8 mobile polish: Sarathi-access card stacks vertically with
+       a full-width tap-target on phones */
+    #sarathiAccessCard{flex-direction:column;align-items:stretch !important;text-align:center;gap:.65rem !important}
+    #sarathiAccessCard > div{min-width:0 !important}
+    #openSarathiBtn{width:100%;min-height:48px;font-size:1rem}
     /* Sub actions */
     #subActionsRow{flex-direction:column;gap:.45rem}
     #subActionsRow button{width:100%}
@@ -352,6 +360,28 @@
     </button>
   </div>
 
+  <!-- B7: Sarathi bundled-access CTA. Shown when subscriber has an active
+       Nidaan plan that includes Sarathi (silver/gold/platinum). Clicking
+       opens Sarathi-AI in a new tab via magic-link SSO. -->
+  <div id="sarathiAccessCard" style="display:none;background:linear-gradient(135deg,#0d9488,#0891b2);color:#fff;border-radius:14px;padding:1.1rem 1.4rem;margin-bottom:1.2rem;align-items:center;gap:1rem;flex-wrap:wrap;box-shadow:0 8px 24px rgba(13,148,136,.22)">
+    <div style="font-size:2.2rem">🚀</div>
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:800;font-size:1.05rem;margin-bottom:.15rem">
+        <span class="en">Sarathi-AI CRM is included</span>
+        <span class="hi" style="display:none">Sarathi-AI CRM शामिल है</span>
+      </div>
+      <div style="font-size:.88rem;opacity:.92">
+        <span class="en">Your Nidaan plan unlocks the full Sarathi-AI CRM — voice-first lead capture, WhatsApp campaigns, calculators, and more.</span>
+        <span class="hi" style="display:none">आपका Nidaan प्लान पूरा Sarathi-AI CRM अनलॉक करता है।</span>
+      </div>
+    </div>
+    <button id="openSarathiBtn" onclick="openSarathiCRM(this)"
+            style="background:#fff;color:#0d9488;border:none;padding:.65rem 1.3rem;border-radius:9px;font-weight:800;font-size:.92rem;cursor:pointer;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.18)">
+      <span class="en">Open Sarathi-AI →</span>
+      <span class="hi" style="display:none">Sarathi-AI खोलें →</span>
+    </button>
+  </div>
+
   <!-- Stats -->
   <div class="stats">
     <div class="stat">
@@ -389,9 +419,58 @@
     <div class="section-title en">Claims</div>
     <div class="section-title hi">क्लेम</div>
     <button class="btn-sm btn-cyan" id="newClaimBtn" onclick="openModal()" disabled>
-      <span class="en">+ New Claim</span>
-      <span class="hi">+ नया क्लेम</span>
+      <span class="en">+ Raise a Claim Review</span>
+      <span class="hi">+ क्लेम समीक्षा शुरू करें</span>
     </button>
+  </div>
+
+  <!-- ── Phase 4: WhatsApp opt-in card (default OFF, eye-catching) ────────── -->
+  <div id="waOptInCard" style="display:none;background:linear-gradient(135deg,rgba(34,197,94,.10),rgba(6,182,212,.08));border:1px solid rgba(34,197,94,.32);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.85rem;animation:pulse-border 3s ease infinite">
+    <div style="display:flex;align-items:center;gap:.85rem;min-width:0;flex:1">
+      <div style="font-size:2rem;flex-shrink:0">📱</div>
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:.98rem;margin-bottom:.15rem" class="en">Get real-time case updates on WhatsApp</div>
+        <div style="font-weight:700;font-size:.98rem;margin-bottom:.15rem;display:none" class="hi">WhatsApp पर रीयल-टाइम केस अपडेट पाएं</div>
+        <div style="font-size:.82rem;color:rgba(255,255,255,.62)" class="en">Status changes, documents, urgent action items — all directly to your phone.</div>
+        <div style="font-size:.82rem;color:rgba(255,255,255,.62);display:none" class="hi">स्थिति परिवर्तन, दस्तावेज़, तत्काल कार्य — सीधे आपके फोन पर।</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.65rem;flex-shrink:0">
+      <button class="btn-sm btn-cyan" onclick="optInWhatsApp()" style="background:#22c55e;color:#0a1628;padding:.55rem 1.1rem;border-radius:8px;font-weight:700">
+        <span class="en">🔔 Turn On</span><span class="hi" style="display:none">🔔 चालू करें</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Saved-all-3-contacts confirmation prompt (shown after Turn On) -->
+  <div id="waVcardModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target.id==='waVcardModalBg')document.getElementById('waVcardModalBg').style.display='none'">
+    <div style="background:#0a1628;border:1px solid rgba(255,255,255,.15);border-radius:14px;max-width:480px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
+      <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 Save All 3 Nidaan Numbers</h2>
+      <p style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1rem">
+        We may message you from any of these. Save all 3 so our messages don't go to spam.
+      </p>
+      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
+          <div><div style="font-weight:600">Nidaan Cases</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 98272 84804</div></div>
+          <button onclick="copyOfficial('+919827284804')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
+          <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 98260 11116</div></div>
+          <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0">
+          <div><div style="font-weight:600">Nidaan Support</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 95844 68804</div></div>
+          <button onclick="copyOfficial('+919584468804')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+        </div>
+      </div>
+      <a href="/nidaan/api/official-vcard" download="NidaanPartner.vcf" class="btn-sm btn-cyan" style="display:block;text-align:center;padding:.75rem;border-radius:8px;font-weight:700;margin-bottom:.65rem">
+        📥 Download all 3 as contact card (.vcf)
+      </a>
+      <div style="display:flex;gap:.5rem">
+        <button onclick="confirmSavedNumbers()" class="btn-sm btn-cyan" style="flex:1;padding:.65rem;border-radius:8px;font-weight:700">✓ I've saved them</button>
+        <button onclick="document.getElementById('waVcardModalBg').style.display='none'" class="btn-sm" style="background:transparent;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7);padding:.65rem 1rem;border-radius:8px">Later</button>
+      </div>
+    </div>
   </div>
 
   <div class="card" id="claimsSectionCard" style="position:relative">
@@ -400,10 +479,16 @@
       <div class="lock-overlay-icon">🔒</div>
       <div class="lock-overlay-text en">Subscribe to manage claims</div>
       <div class="lock-overlay-text hi" style="display:none">क्लेम प्रबंधित करने के लिए सब्सक्राइब करें</div>
-      <div class="lock-overlay-sub en">Choose a plan below to unlock all features</div>
-      <button class="btn-sm btn-cyan" onclick="openSubscribeModal()" style="z-index:12;pointer-events:all;margin-top:.5rem">
-        <span class="en">View Plans →</span><span class="hi">प्लान देखें →</span>
-      </button>
+      <div class="lock-overlay-sub en">Choose a plan below — or get a single claim reviewed for ₹499</div>
+      <div class="lock-overlay-sub hi" style="display:none">कोई प्लान चुनें — या ₹499 में एक क्लेम समीक्षा कराएँ</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin-top:.5rem;z-index:12;pointer-events:all">
+        <button class="btn-sm btn-cyan" onclick="openSubscribeModal()">
+          <span class="en">View Plans →</span><span class="hi">प्लान देखें →</span>
+        </button>
+        <a href="/nidaan/start#review-section" class="btn-sm" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:.5rem .9rem;border-radius:7px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem">
+          ⚡ <span class="en">Pay ₹499 for single review</span><span class="hi">₹499 में एकल समीक्षा</span>
+        </a>
+      </div>
     </div>
     <table id="claimsTable">
       <thead>
@@ -591,7 +676,21 @@
     <h2 class="en">Choose a Subscription Plan</h2>
     <h2 class="hi">सदस्यता प्लान चुनें</h2>
 
-    <div class="plan-cards">
+    <!-- Billing period toggle -->
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px">
+      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Quarterly</span>
+      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">तिमाही</span>
+      <label style="position:relative;display:inline-block;width:46px;height:24px;cursor:pointer">
+        <input type="checkbox" id="nidaanBillingToggle" onchange="toggleNidaanBilling()" style="opacity:0;width:0;height:0">
+        <span id="nidaanToggleTrack" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></span>
+        <span id="nidaanToggleThumb" style="position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s"></span>
+      </label>
+      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Yearly <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">Save 10%</span></span>
+      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">वार्षिक <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">10% बचत</span></span>
+    </div>
+
+    <!-- Plan cards — quarterly -->
+    <div id="nidaan-plan-cards-quarterly" class="plan-cards">
       <div class="plan-card" id="pc-silver" onclick="selectPlan('silver')">
         <div class="pc-name">Silver</div>
         <div class="pc-price">₹1,500</div>
@@ -618,8 +717,49 @@
       </div>
     </div>
 
-    <p class="sub-info en">You'll be redirected to Razorpay to complete payment securely.</p>
-    <p class="sub-info hi">भुगतान पूरा करने के लिए आपको Razorpay पर रिडायरेक्ट किया जाएगा।</p>
+    <!-- Plan cards — yearly (hidden by default) -->
+    <div id="nidaan-plan-cards-yearly" class="plan-cards" style="display:none">
+      <div class="plan-card" id="pc-silver-annual" onclick="selectPlan('silver_annual')">
+        <div class="pc-name">Silver</div>
+        <div class="pc-price">₹5,400</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹600</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹600 बचत</span></div>
+        <div class="pc-quota en">10 claims/quarter<br>Basic support</div>
+        <div class="pc-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+      </div>
+      <div class="plan-card" id="pc-gold-annual" onclick="selectPlan('gold_annual')">
+        <div class="pc-name">Gold</div>
+        <div class="pc-price">₹10,800</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹1,200</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹1,200 बचत</span></div>
+        <div class="pc-quota en">25 claims/quarter<br>Priority support</div>
+        <div class="pc-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+      </div>
+      <div class="plan-card" id="pc-platinum-annual" onclick="selectPlan('platinum_annual')">
+        <div class="pc-name">Platinum</div>
+        <div class="pc-price">₹21,600</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹2,400</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹2,400 बचत</span></div>
+        <div class="pc-quota en">Unlimited claims<br>Dedicated manager</div>
+        <div class="pc-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+      </div>
+    </div>
+
+    <p class="sub-info en" id="nidaan-sub-info-q">One-time payment for 3 months access. Renew anytime. UPI, cards, net banking accepted.</p>
+    <p class="sub-info hi" id="nidaan-sub-info-q-hi">3 महीने की एक्सेस के लिए एकमुश्त भुगतान। UPI, कार्ड, नेट बैंकिंग स्वीकार्य।</p>
+    <p class="sub-info en" id="nidaan-sub-info-y" style="display:none">One-time payment for 12 months access. Renew anytime. All payment methods accepted.</p>
+    <p class="sub-info hi" id="nidaan-sub-info-y-hi" style="display:none">12 महीने की एक्सेस के लिए एकमुश्त भुगतान। सभी भुगतान विधियाँ स्वीकार्य।</p>
+
+    <!-- Auto-renew toggle (only shown for quarterly plans) -->
+    <div id="autoRenewRow" style="display:flex;align-items:center;gap:10px;justify-content:center;margin:10px 0;padding:10px 14px;background:rgba(255,255,255,.07);border-radius:10px">
+      <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;flex-shrink:0">
+        <input type="checkbox" id="autoRenewToggle" onchange="toggleAutoRenew()" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:22px;transition:.3s" id="arTrack"></span>
+        <span style="position:absolute;left:3px;top:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.3s" id="arThumb"></span>
+      </label>
+      <span class="en" style="font-size:.82em;color:rgba(255,255,255,.75)">Auto-renew quarterly — cancel anytime from dashboard</span>
+      <span class="hi" style="font-size:.82em;color:rgba(255,255,255,.75)">तिमाही ऑटो-नवीनीकरण — डैशबोर्ड से कभी भी रद्द करें</span>
+    </div>
 
     <div class="msg" id="subMsg"></div>
     <div class="modal-footer">
@@ -636,8 +776,8 @@
 <!-- Submit Claim Modal -->
 <div class="modal-bg" id="claimModal">
   <div class="modal">
-    <h2 class="en">Submit a New Claim</h2>
-    <h2 class="hi">नया क्लेम सबमिट करें</h2>
+    <h2 class="en">Raise a Claim Review</h2>
+    <h2 class="hi">क्लेम समीक्षा शुरू करें</h2>
     <form id="claimForm" onsubmit="submitClaim(event)">
       <div class="row2">
         <div class="field">
@@ -683,10 +823,47 @@
           <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0">
         </div>
       </div>
+      <div class="row2">
+        <div class="field">
+          <label class="en">Advisor / Agent Code <span style="opacity:.5;font-weight:400">(as on policy)</span></label>
+          <label class="hi">सलाहकार / एजेंट कोड <span style="opacity:.5;font-weight:400">(पॉलिसी पर अंकित)</span></label>
+          <input type="text" id="intermediaryCode" placeholder="e.g. AGT/0012345" maxlength="60">
+        </div>
+        <div class="field">
+          <label class="en">Advisor / Agent Name <span style="opacity:.5;font-weight:400">(as printed on policy)</span></label>
+          <label class="hi">सलाहकार / एजेंट का नाम <span style="opacity:.5;font-weight:400">(पॉलिसी पर अंकित)</span></label>
+          <input type="text" id="intermediaryName" placeholder="As printed on the policy document" maxlength="120">
+        </div>
+      </div>
+      <div class="field">
+        <label class="en">Supporting Documents <span style="opacity:.5;font-weight:400">(optional)</span></label>
+        <label class="hi">सहायक दस्तावेज़ <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
+        <div style="margin-top:.35rem;background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
+          <label class="doc-upload-btn" for="claimDocs" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.45);border-radius:6px;cursor:pointer;font-size:.9rem;color:#93c5fd;font-weight:700">
+            📂 <span class="en">Select Files to Attach</span><span class="hi">फ़ाइलें चुनें</span>
+          </label>
+          <input type="file" id="claimDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="showClaimDocList()">
+          <p style="text-align:center;color:#93c5fd;opacity:.75;font-size:.78rem;margin:.4rem 0 .15rem;font-weight:600">💡 <span class="en">You can select multiple files at once from the file picker</span><span class="hi">आप एक साथ कई फ़ाइलें चुन सकते हैं</span></p>
+          <div id="claimDocList" style="margin-top:.5rem;font-size:.82rem"></div>
+          <p style="opacity:.45;font-size:.73rem;margin:.4rem 0 0;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>
+        </div>
+      </div>
       <div class="field">
         <label class="en">Notes for Legal Team</label>
         <label class="hi">कानूनी टीम के लिए नोट्स</label>
         <textarea id="notes" placeholder="Brief background, reason for rejection, key documents…"></textarea>
+      </div>
+      <!-- ── DPDP + IRDAI compliance disclaimer ────────────────────────── -->
+      <div class="field" style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);border-radius:10px;padding:.75rem .95rem;margin-top:.25rem">
+        <div style="font-size:.78rem;line-height:1.55;color:rgba(255,255,255,.78)">
+          <strong style="color:#22d3ee">🛡️ Your data is protected</strong>
+          <p class="en" style="margin:.35rem 0 0">
+            By submitting, you authorise <b>Nidaan – The Legal Consultants LLP</b> to use these details solely for assessing and pursuing this insurance claim dispute. Per the <b>DPDP Act</b>, we collect only what's necessary, retain it for the duration of the legal engagement, and never share it with third parties without your consent. We comply with applicable <b>IRDAI</b> regulations on policyholder representation.
+          </p>
+          <p class="hi" style="margin:.35rem 0 0">
+            जमा करके आप <b>Nidaan – The Legal Consultants LLP</b> को इस जानकारी का उपयोग केवल इस बीमा दावा विवाद के लिए करने का अधिकार देते हैं। <b>DPDP अधिनियम</b> के अनुसार हम केवल आवश्यक जानकारी एकत्र करते हैं, कानूनी संलग्नता तक रखते हैं, और आपकी सहमति के बिना तीसरे पक्ष के साथ साझा नहीं करते। <b>IRDAI</b> नियमों का पालन करते हैं।
+          </p>
+        </div>
       </div>
       <div class="msg" id="claimMsg"></div>
       <div class="modal-footer">
@@ -694,7 +871,7 @@
           <span class="en">Cancel</span><span class="hi">रद्द करें</span>
         </button>
         <button type="submit" class="btn btn-primary" id="claimSubmitBtn">
-          <span class="en">Submit Claim →</span><span class="hi">क्लेम सबमिट करें →</span>
+          <span class="en">Raise Claim Review →</span><span class="hi">समीक्षा शुरू करें →</span>
         </button>
       </div>
     </form>
@@ -734,6 +911,31 @@ function pillHtml(s) {
   const label = (isHi ? STATUS_LABELS_HI[s] : STATUS_LABELS[s]) || s;
   return `<span class="status-pill s-${s}">${label}</span>`;
 }
+// Subscriber-friendly stage label per Phase 3 design (Q6 + D2).
+// Subscriber sees ONE high-level stage label, never internal task statuses.
+const STAGE_LABELS = {
+  intake:       'Under initial review',
+  preparation:  'Preparing your case',
+  engagement:   'Engaging with insurer',
+  ombudsman:    'Filing with Ombudsman',
+  escalation:   'Higher legal escalation',
+  closed:       'Case closed',
+};
+const STAGE_LABELS_HI = {
+  intake:       'प्रारंभिक समीक्षा',
+  preparation:  'केस की तैयारी',
+  engagement:   'बीमाकर्ता से बातचीत',
+  ombudsman:    'लोकपाल फाइलिंग',
+  escalation:   'उच्च स्तरीय एस्केलेशन',
+  closed:       'केस बंद',
+};
+function stageLabel(stage){
+  const isHi = document.body.classList.contains('hi');
+  return (isHi ? STAGE_LABELS_HI[stage] : STAGE_LABELS[stage]) || stage || '—';
+}
+function stageHtml(stage){
+  return `<span class="status-pill s-${(stage||'intake').replace(/\W/g,'')}">${stageLabel(stage)}</span>`;
+}
 
 // ── Load dashboard data ───────────────────────────────────────────────────────
 async function loadDashboard() {
@@ -743,6 +945,16 @@ async function loadDashboard() {
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
+
+  // New signup welcome toast (from ?new=1 redirect after review form)
+  if (new URLSearchParams(location.search).get('new') === '1') {
+    history.replaceState({}, '', '/nidaan/dashboard');
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;top:1.25rem;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;border:1px solid #10b981;border-radius:10px;padding:.85rem 1.5rem;color:#d1fae5;font-weight:600;font-size:.9rem;box-shadow:0 8px 32px rgba(0,0,0,.4);text-align:center;max-width:90vw';
+    toast.innerHTML = '✅ Your claim has been submitted! <br><span style="font-weight:400;font-size:.82rem">Pay ₹499 below to start your legal review.</span>';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 6000);
+  }
 
   // Greeting
   const name = me.owner_name ? me.owner_name.split(' ')[0] : '';
@@ -775,6 +987,143 @@ async function loadDashboard() {
     claimCard.style.pointerEvents = '';
     // Remove locked-tab styling from gated tabs
     document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
+    // B7: Sarathi access CTA — all bundled plans (silver/gold/platinum) include Sarathi
+    if (plan && ['silver','silver_annual','gold','gold_annual','platinum','platinum_annual'].includes(plan)) {
+      const card = document.getElementById('sarathiAccessCard');
+      if (card) card.style.display = 'flex';
+    }
+  } else if (me.per_claim && (me.per_claim.balance > 0 || me.per_claim.purchased > 0 || (me.per_claim.pending && me.per_claim.pending.length > 0))) {
+    // ₹499 per-claim entitlement user (includes pending_payment signups)
+    const bal = me.per_claim.balance || 0;
+    const purchased = me.per_claim.purchased || 0;
+    const pending = me.per_claim.pending || [];
+    const used = purchased - bal;
+    _isSubscribed = bal > 0;
+
+    if (pending.length > 0 && bal === 0) {
+      // Pending payment — show prominent Pay CTA (no review access until paid)
+      const p = pending[0];  // most recent pending purchase
+      banner.className = 'sub-banner sub-expired';
+      banner.innerHTML = `
+        <div class="sub-banner-text" style="flex:1">
+          <strong>⚖️ Claim Submitted — Payment Pending</strong>
+          <span>${p.claim_type ? p.claim_type.charAt(0).toUpperCase()+p.claim_type.slice(1) : 'Your'} claim review is ready to begin. Pay ₹499 to start.</span>
+        </div>
+        <button id="payNowBtn" onclick="payForReview(${p.purchase_id})"
+          style="flex-shrink:0;background:#f59e0b;color:#000;border:none;border-radius:8px;padding:.55rem 1.25rem;font-weight:800;font-size:.95rem;cursor:pointer;white-space:nowrap">
+          Pay ₹499 Now →
+        </button>`;
+      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
+      lockOverlay.style.display = 'flex';
+      claimCard.style.minHeight = '220px';
+      claimCard.classList.add('locked-section');
+
+      // Show claim detail card under banner
+      const claimInfoCard = document.createElement('div');
+      claimInfoCard.style.cssText = 'margin:.9rem 0 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:.75rem;padding:1rem 1.25rem';
+      claimInfoCard.innerHTML = `
+        <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.06em;margin-bottom:.6rem">YOUR CLAIM DETAILS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem .9rem;font-size:.88rem">
+          <div><span style="color:rgba(255,255,255,.4)">Type: </span>${esc(p.claim_type||'—')}</div>
+          <div><span style="color:rgba(255,255,255,.4)">Insurer: </span>${esc(p.insurer_name||'Not specified')}</div>
+          <div><span style="color:rgba(255,255,255,.4)">Amount: </span>${p.disputed_amount ? '₹'+p.disputed_amount.toLocaleString('en-IN') : 'Not specified'}</div>
+          <div><span style="color:rgba(255,255,255,.4)">Status: </span><span style="color:#fbbf24">⏳ Awaiting Payment</span></div>
+        </div>
+        ${p.brief_description ? `<div style="margin-top:.6rem;font-size:.82rem;color:rgba(255,255,255,.5)">"${esc(p.brief_description)}"</div>` : ''}
+        <div style="margin-top:.85rem;text-align:center">
+          <button onclick="payForReview(${p.purchase_id})"
+            style="background:#f59e0b;color:#000;border:none;border-radius:8px;padding:.7rem 2rem;font-weight:800;font-size:1rem;cursor:pointer;width:100%">
+            Pay ₹499 to Start Legal Review →
+          </button>
+          <div style="font-size:.75rem;color:rgba(255,255,255,.35);margin-top:.5rem">Review delivered within 48–72 business hours after payment</div>
+        </div>
+        <div style="margin-top:1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.85rem">
+          <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:.5rem">📎 SUPPORTING DOCUMENTS</div>
+          <div id="rvDocList_${p.purchase_id}" style="font-size:.82rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">Loading…</div>
+          <label for="rvDocInput_${p.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.13);border:2px dashed rgba(59,130,246,.35);border-radius:6px;cursor:pointer;font-size:.82rem;color:#93c5fd;font-weight:700">📂 Select Files to Attach</label>
+          <input type="file" id="rvDocInput_${p.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewRvDocs(${p.purchase_id})">
+          <p style="text-align:center;color:#93c5fd;opacity:.6;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 You can select multiple files at once</p>
+          <div id="rvDocPreview_${p.purchase_id}" style="margin-top:.35rem;font-size:.78rem"></div>
+          <button id="rvDocUploadBtn_${p.purchase_id}" onclick="uploadRvDocs(${p.purchase_id},'review')" style="display:none;margin-top:.35rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
+          <div id="rvDocMsg_${p.purchase_id}" style="font-size:.78rem;margin-top:.3rem"></div>
+          <p style="opacity:.3;font-size:.7rem;margin:.35rem 0 0;text-align:center">PDF / JPG / PNG / DOCX · uploaded docs sent to our legal team</p>
+        </div>`;
+      banner.insertAdjacentElement('afterend', claimInfoCard);
+      // load existing docs for pending review
+      loadRvDocs(p.purchase_id, 'review');
+
+    } else if (bal > 0) {
+      banner.className = 'sub-banner sub-active';
+      banner.innerHTML = `
+        <div class="sub-banner-text">
+          <strong>Per-Claim Review — ₹499</strong>
+          <span>${bal} review${bal>1?'s':''} available · ${used} used · <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Upgrade to subscription</a></span>
+        </div>`;
+      document.getElementById('newClaimBtn').disabled = false;
+      lockOverlay.style.display = 'none';
+      claimCard.style.pointerEvents = '';
+      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
+    } else {
+      // Balance exhausted — all reviews used
+      _isSubscribed = false;
+      banner.className = 'sub-banner sub-expired';
+      banner.innerHTML = `
+        <div class="sub-banner-text">
+          <strong>Review Balance Exhausted</strong>
+          <span>${used} review${used>1?'s':''} used · <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Pay ₹499 for another review</a></span>
+        </div>`;
+      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
+      lockOverlay.style.display = 'flex';
+      claimCard.style.minHeight = '220px';
+      claimCard.classList.add('locked-section');
+    }
+
+    // Show per-claim history items (all states, not just completed-with-findings)
+    const allHistory = me.per_claim.history || [];
+    if (allHistory.length > 0) {
+      const historyHtml = allHistory.map(h => {
+        const statusLabel = {
+          pending_review: '⏳ Under Review',
+          review_completed: '✅ Review Completed',
+          pending_payment: '💳 Pending Payment',
+        }[h.status] || h.status;
+        const statusColor = h.status === 'review_completed' ? '#4ade80' : h.status === 'pending_review' ? '#fbbf24' : 'rgba(255,255,255,.5)';
+        return `
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:.6rem;padding:.85rem;margin-bottom:.7rem">
+          <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">
+            Review #${h.purchase_id} · ${h.created_at ? h.created_at.split('T')[0] : ''} — <span style="color:${statusColor}">${statusLabel}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .9rem;font-size:.84rem;margin-bottom:.5rem">
+            <div><span style="color:rgba(255,255,255,.4)">Type: </span>${esc(h.claim_type||'—')}</div>
+            <div><span style="color:rgba(255,255,255,.4)">Insurer: </span>${esc(h.insurer_name||'—')}</div>
+          </div>
+          ${h.findings_note ? `<div style="font-size:.84rem;line-height:1.5;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:.4rem;padding:.6rem;margin-bottom:.5rem">${esc(h.findings_note)}</div>` : ''}
+          <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:.6rem;margin-top:.4rem">
+            <div style="font-size:.72rem;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:.35rem">📎 DOCUMENTS</div>
+            <div id="rvDocList_${h.purchase_id}" style="font-size:.8rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Loading…</div>
+            <label for="rvDocInput_${h.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.4rem .75rem;background:rgba(59,130,246,.12);border:2px dashed rgba(59,130,246,.32);border-radius:5px;cursor:pointer;font-size:.78rem;color:#93c5fd;font-weight:700">📂 Select Files (multiple allowed)</label>
+            <input type="file" id="rvDocInput_${h.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewRvDocs(${h.purchase_id})">
+            <div id="rvDocPreview_${h.purchase_id}" style="margin-top:.3rem;font-size:.76rem"></div>
+            <button id="rvDocUploadBtn_${h.purchase_id}" onclick="uploadRvDocs(${h.purchase_id},'review')" style="display:none;margin-top:.3rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:5px;padding:.35rem .75rem;font-size:.78rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
+            <div id="rvDocMsg_${h.purchase_id}" style="font-size:.76rem;margin-top:.25rem"></div>
+          </div>
+        </div>`;
+      }).join('');
+      const existingHistory = document.getElementById('rvHistorySection');
+      if (!existingHistory) {
+        const card = document.createElement('div');
+        card.id = 'rvHistorySection';
+        card.style.cssText = 'margin:.75rem 0 0;';
+        card.innerHTML = '<div style="font-size:.82rem;font-weight:600;color:rgba(255,255,255,.55);margin-bottom:.5rem">📋 Review History</div>' + historyHtml;
+        banner.insertAdjacentElement('afterend', card);
+        // Load docs for each history item
+        allHistory.forEach(h => loadRvDocs(h.purchase_id, 'review'));
+      }
+    }
+
+    const upgSec = document.getElementById('subscribeSection');
+    if (upgSec && bal === 0 && pending.length === 0) upgSec.style.display = '';
+    else if (upgSec) upgSec.style.display = 'none';
   } else {
     _isSubscribed = false;
     // Mark gated tabs visually with lock icon
@@ -797,7 +1146,7 @@ async function loadDashboard() {
   // Claims table
   const tbody = document.getElementById('claimsBody');
   if (!claims.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty en">No claims yet. Click "+ New Claim" to get started.</td></tr>
+    tbody.innerHTML = `<tr><td colspan="5" class="empty en">No claims yet. Click "+ Raise a Claim Review" to get started.</td></tr>
       <tr><td colspan="5" class="empty hi">अभी तक कोई क्लेम नहीं। शुरू करने के लिए "+ नया क्लेम" पर क्लिक करें।</td></tr>`;
     return;
   }
@@ -809,6 +1158,61 @@ async function loadDashboard() {
       <td>${c.created_at ? c.created_at.split('T')[0] : '—'}</td>
       <td>${pillHtml(c.status)}</td>
     </tr>`).join('');
+  // Phase 4: show WhatsApp opt-in card for subscribed/per-claim users
+  if (_isSubscribed) loadWaPrefs();
+}
+
+// ── Phase 4: WhatsApp opt-in flow ─────────────────────────────────────────
+async function loadWaPrefs() {
+  try {
+    const r = await fetch('/nidaan/api/prefs', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('nidaan_token') }});
+    if (!r.ok) return;
+    const p = await r.json();
+    const card = document.getElementById('waOptInCard');
+    if (!card) return;
+    if (p.wa_opt_in) {
+      card.style.display = 'none';
+    } else {
+      card.style.display = 'flex';
+    }
+  } catch(e){}
+}
+async function optInWhatsApp() {
+  try {
+    const r = await fetch('/nidaan/api/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('nidaan_token') },
+      body: JSON.stringify({ wa_opt_in: true })
+    });
+    if (r.ok) {
+      document.getElementById('waVcardModalBg').style.display = 'flex';
+    }
+  } catch(e){ alert('Could not enable WhatsApp updates. Try again.'); }
+}
+function copyOfficial(num) {
+  navigator.clipboard.writeText(num).then(() => {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;top:1.25rem;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;border:1px solid #10b981;border-radius:8px;padding:.55rem 1rem;color:#d1fae5;font-weight:600;font-size:.85rem';
+    t.textContent = '✓ Copied ' + num;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 1800);
+  });
+}
+async function confirmSavedNumbers() {
+  try {
+    await fetch('/nidaan/api/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('nidaan_token') },
+      body: JSON.stringify({ saved_numbers: true })
+    });
+  } catch(e){}
+  document.getElementById('waVcardModalBg').style.display = 'none';
+  document.getElementById('waOptInCard').style.display = 'none';
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:1.25rem;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;border:1px solid #10b981;border-radius:10px;padding:.75rem 1.25rem;color:#d1fae5;font-weight:600;font-size:.9rem;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+  t.innerHTML = '🔔 WhatsApp updates enabled. We’ll message you from our official numbers only.';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
 }
 
 function esc(s) {
@@ -819,6 +1223,15 @@ function esc(s) {
 // ── New claim modal ───────────────────────────────────────────────────────────
 function openModal()  { document.getElementById('claimModal').classList.add('open'); }
 function closeModal() { document.getElementById('claimModal').classList.remove('open'); document.getElementById('claimMsg').className = 'msg'; }
+
+function showClaimDocList() {
+  const files = document.getElementById('claimDocs').files;
+  const list = document.getElementById('claimDocList');
+  if (!files.length) { list.innerHTML = ''; return; }
+  list.innerHTML = Array.from(files).map(f =>
+    `<div>📄 ${f.name} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+  ).join('');
+}
 
 async function submitClaim(e) {
   e.preventDefault();
@@ -836,11 +1249,26 @@ async function submitClaim(e) {
         insurer_name: document.getElementById('insurerName').value.trim(),
         policy_no: document.getElementById('policyNo').value.trim(),
         disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,
-        notes_from_agent: document.getElementById('notes').value.trim()
+        notes_from_agent: document.getElementById('notes').value.trim(),
+        intermediary_code: (document.getElementById('intermediaryCode')?.value || '').trim(),
+        intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim()
       })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Submission failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Submission failed'));
+    // Upload any selected documents
+    const claimFiles = document.getElementById('claimDocs').files;
+    if (claimFiles.length > 0 && data.claim_id) {
+      try {
+        const fd = new FormData();
+        for (const f of claimFiles) fd.append('files', f);
+        await fetch(`/nidaan/api/claims/${data.claim_id}/documents/upload`, {
+          method: 'POST',
+          headers: {'Authorization': 'Bearer ' + token},
+          body: fd
+        });
+      } catch(_) { /* non-fatal */ }
+    }
     msg.className = 'msg ok';
     const isHi = document.body.classList.contains('hi');
     msg.textContent = isHi ? `क्लेम #${data.claim_id} सफलतापूर्वक दर्ज हुआ!` : `Claim #${data.claim_id} submitted successfully!`;
@@ -853,7 +1281,68 @@ async function submitClaim(e) {
   }
 }
 
-// ── Claim Detail Drawer ────────────────────────────────────────────────────────────────
+// ── Review document helpers (₹499 per-claim reviews) ─────────────────────────
+async function loadRvDocs(id, type) {
+  const el = document.getElementById(`rvDocList_${id}`);
+  if (!el) return;
+  try {
+    const endpoint = type === 'review' ? `/nidaan/api/review/${id}/documents` : `/nidaan/api/claims/${id}/documents`;
+    const r = await api(endpoint);
+    if (!r || !r.ok) { el.textContent = 'Could not load documents'; return; }
+    const d = await r.json();
+    if (d.docs && d.docs.length > 0) {
+      el.innerHTML = d.docs.map(f =>
+        `<div style="margin-bottom:.25rem">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(f.original_name)}</a> <span style="opacity:.4">(${(f.file_size/1024).toFixed(0)} KB)</span></div>`
+      ).join('');
+    } else {
+      el.textContent = 'No documents uploaded yet';
+    }
+  } catch(_) { el.textContent = 'Could not load documents'; }
+}
+
+function previewRvDocs(id) {
+  const files = document.getElementById(`rvDocInput_${id}`).files;
+  const preview = document.getElementById(`rvDocPreview_${id}`);
+  const btn = document.getElementById(`rvDocUploadBtn_${id}`);
+  if (!files.length) { preview.innerHTML = ''; btn.style.display = 'none'; return; }
+  preview.innerHTML = Array.from(files).map(f =>
+    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+  ).join('');
+  btn.style.display = '';
+}
+
+async function uploadRvDocs(id, type) {
+  const files = document.getElementById(`rvDocInput_${id}`).files;
+  const btn = document.getElementById(`rvDocUploadBtn_${id}`);
+  const msgEl = document.getElementById(`rvDocMsg_${id}`);
+  if (!files.length) return;
+  btn.disabled = true;
+  msgEl.style.color = 'rgba(255,255,255,.5)';
+  msgEl.textContent = 'Uploading…';
+  try {
+    const endpoint = type === 'review' ? `/nidaan/api/review/${id}/documents/upload` : `/nidaan/api/claims/${id}/documents/upload`;
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const r = await fetch(endpoint, {
+      method: 'POST', headers: {'Authorization': 'Bearer ' + token}, body: fd
+    });
+    let d;
+    try { d = await r.json(); } catch(_) { d = {}; }
+    if (!r.ok) throw new Error(_extractErr(d, `Upload failed (${r.status})`));
+    msgEl.style.color = '#4ade80';
+    msgEl.textContent = `✓ ${d.count} file${d.count>1?'s':''} uploaded`;
+    document.getElementById(`rvDocInput_${id}`).value = '';
+    document.getElementById(`rvDocPreview_${id}`).innerHTML = '';
+    btn.style.display = 'none';
+    await loadRvDocs(id, type);
+  } catch(err) {
+    msgEl.style.color = '#f87171';
+    msgEl.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+// ── Claim Detail Drawer ───────────────────────────────────────────────────────
 const STATUS_LABELS_FULL = {
   intimated:'Intimated', assigned:'Assigned to Legal Team', in_review:'Under Review',
   in_negotiation:'In Negotiation', resolved_won:'Resolved — Won', resolved_lost:'Resolved — Lost',
@@ -906,13 +1395,118 @@ async function openClaimDrawer(claim_id) {
       ${detailRows}
     </div>
     <div class="drawer-section">
+      <h4>${isHi ? 'दस्तावेज़' : 'Documents'}</h4>
+      <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:rgba(255,255,255,.5)">Loading documents…</div>
+      <div style="background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
+        <label for="drawerDocInput" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);border-radius:6px;cursor:pointer;font-size:.85rem;color:#93c5fd;font-weight:700">📂 ${isHi ? 'दस्तावेज़ चुनें' : 'Select Files to Upload'}</label>
+        <input type="file" id="drawerDocInput" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewDrawerDocs()">
+        <p style="text-align:center;color:#93c5fd;opacity:.7;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 ${isHi ? 'एक साथ कई फ़ाइलें चुनें' : 'You can select multiple files at once from the file picker'}</p>
+        <div id="drawerDocPreview" style="margin-top:.4rem;font-size:.8rem"></div>
+        <p style="opacity:.35;font-size:.72rem;margin:.4rem 0 .5rem;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>
+        <button id="drawerUploadBtn" onclick="uploadDrawerDocs(${claim_id})" style="display:none;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
+        <div id="drawerUploadMsg" style="font-size:.8rem;margin-top:.35rem"></div>
+      </div>
+    </div>
+    <div class="drawer-section">
       <h4>${isHi ? 'स्थिति इतिहास' : 'Status History'}</h4>
       <div class="timeline">${timeline}</div>
     </div>`;
+
+  // Load existing documents
+  try {
+    const dr = await api(`/nidaan/api/claims/${claim_id}/documents`);
+    if (dr && dr.ok) {
+      const dd = await dr.json();
+      const docList = document.getElementById('drawerDocList');
+      if (dd.docs && dd.docs.length > 0) {
+        docList.innerHTML = dd.docs.map(d =>
+          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
+        ).join('');
+      } else {
+        docList.textContent = isHi ? 'कोई दस्तावेज़ नहीं' : 'No documents uploaded yet';
+      }
+    }
+  } catch(_) {}
+}
+
+function previewDrawerDocs() {
+  const files = document.getElementById('drawerDocInput').files;
+  const preview = document.getElementById('drawerDocPreview');
+  const btn = document.getElementById('drawerUploadBtn');
+  if (!files.length) { preview.innerHTML = ''; btn.style.display = 'none'; return; }
+  preview.innerHTML = Array.from(files).map(f =>
+    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+  ).join('');
+  btn.style.display = '';
+}
+
+async function uploadDrawerDocs(claim_id) {
+  const files = document.getElementById('drawerDocInput').files;
+  const btn = document.getElementById('drawerUploadBtn');
+  const msgEl = document.getElementById('drawerUploadMsg');
+  if (!files.length) return;
+  btn.disabled = true;
+  msgEl.style.color = 'rgba(255,255,255,.5)';
+  msgEl.textContent = 'Uploading…';
+  try {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const r = await fetch(`/nidaan/api/claims/${claim_id}/documents/upload`, {
+      method: 'POST', headers: {'Authorization': 'Bearer ' + token}, body: fd
+    });
+    let d;
+    try { d = await r.json(); } catch(_) { d = {}; }
+    if (!r.ok) throw new Error(_extractErr(d, `Upload failed (${r.status})`));
+    msgEl.style.color = '#4ade80';
+    msgEl.textContent = `✓ ${d.count} file${d.count>1?'s':''} uploaded`;
+    document.getElementById('drawerDocInput').value = '';
+    document.getElementById('drawerDocPreview').innerHTML = '';
+    btn.style.display = 'none';
+    // Refresh doc list
+    const dr2 = await api(`/nidaan/api/claims/${claim_id}/documents`);
+    if (dr2 && dr2.ok) {
+      const dd2 = await dr2.json();
+      const docList = document.getElementById('drawerDocList');
+      if (dd2.docs && dd2.docs.length > 0) {
+        docList.innerHTML = dd2.docs.map(d =>
+          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
+        ).join('');
+      }
+    }
+  } catch(err) {
+    msgEl.style.color = '#f87171';
+    msgEl.textContent = err.message;
+    btn.disabled = false;
+  }
 }
 
 function closeDrawer() { document.getElementById('claimDrawer').classList.remove('open'); }
 function _drawerBgClick(e) { if (e.target === document.getElementById('claimDrawer')) closeDrawer(); }
+
+// B7: Open Sarathi-AI CRM via magic-link SSO. Calls /nidaan/api/sarathi/access
+// with the Nidaan JWT, gets back a Sarathi JWT + redirect URL, and navigates.
+async function openSarathiCRM(btn) {
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Opening…'; }
+  try {
+    const res = await api('/nidaan/api/sarathi/access', { method: 'POST' });
+    if (!res) { if (btn) { btn.disabled = false; btn.innerHTML = original; } return; }
+    if (!res.ok) {
+      const e = await res.json().catch(()=>({}));
+      alert(_extractErr(e, 'Could not open Sarathi-AI. Please try again or sign in directly at sarathi-ai.com.'));
+      if (btn) { btn.disabled = false; btn.innerHTML = original; }
+      return;
+    }
+    const d = await res.json();
+    const target = d.redirect_url || ('https://sarathi-ai.com/dashboard?token=' + encodeURIComponent(d.access_token || ''));
+    // Open in a new tab so subscriber doesn't lose their Nidaan dashboard
+    window.open(target, '_blank', 'noopener');
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  } catch (e) {
+    alert('Network error: ' + (e.message || e));
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  }
+}
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 function showTab(id) {
@@ -966,65 +1560,195 @@ function openSubscribeModal() {
 function closeSubscribeModal() {
   document.getElementById('subscribeModal').classList.remove('open');
 }
+function toggleNidaanBilling() {
+  const tog = document.getElementById('nidaanBillingToggle');
+  const isYearly = tog.checked;
+  // Toggle styling
+  document.getElementById('nidaanToggleTrack').style.background = isYearly ? '#06b6d4' : 'rgba(255,255,255,.2)';
+  document.getElementById('nidaanToggleThumb').style.left = isYearly ? '25px' : '3px';
+  // Show/hide card sets
+  document.getElementById('nidaan-plan-cards-quarterly').style.display = isYearly ? 'none' : '';
+  document.getElementById('nidaan-plan-cards-yearly').style.display = isYearly ? '' : 'none';
+  // Show/hide info text
+  document.getElementById('nidaan-sub-info-q').style.display = isYearly ? 'none' : '';
+  document.getElementById('nidaan-sub-info-q-hi').style.display = isYearly ? 'none' : '';
+  document.getElementById('nidaan-sub-info-y').style.display = isYearly ? '' : 'none';
+  document.getElementById('nidaan-sub-info-y-hi').style.display = isYearly ? '' : 'none';
+  // Auto-renew toggle only visible for quarterly
+  document.getElementById('autoRenewRow').style.display = isYearly ? 'none' : '';
+  // Deselect plan when toggling
+  _selectedPlan = null;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('subBtn').disabled = true;
+}
+
+function toggleAutoRenew() {
+  const tog = document.getElementById('autoRenewToggle');
+  document.getElementById('arTrack').style.background = tog.checked ? '#06b6d4' : 'rgba(255,255,255,.2)';
+  document.getElementById('arThumb').style.left = tog.checked ? '21px' : '3px';
+}
+
 function selectPlan(plan) {
   _selectedPlan = plan;
   document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('pc-' + plan).classList.add('selected');
+  // Map plan key to card ID (annual plans use dashes in IDs, underscores in keys)
+  const cardId = 'pc-' + plan.replace('_', '-');
+  const card = document.getElementById(cardId);
+  if (card) card.classList.add('selected');
   document.getElementById('subBtn').disabled = false;
 }
 
 async function doSubscribe() {
   if (!_selectedPlan) return;
+  const isAutoRenew = !_selectedPlan.endsWith('_annual') &&
+    document.getElementById('autoRenewToggle').checked;
   const btn = document.getElementById('subBtn');
   const msg = document.getElementById('subMsg');
   btn.disabled = true;
   msg.className = 'msg';
+  const isHi = document.body.classList.contains('hi');
   try {
-    const res = await api('/nidaan/api/subscribe', {
-      method: 'POST',
-      body: JSON.stringify({ plan: _selectedPlan })
-    });
-    if (!res) return;
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Subscription failed');
+    // Branch: subscription (auto-renew) vs one-time order
+    if (isAutoRenew) {
+      // ── Razorpay Subscription flow (auto-renews quarterly) ────────────────
+      const res = await api('/nidaan/api/subscribe/recurring', {
+        method: 'POST',
+        body: JSON.stringify({ plan: _selectedPlan })
+      });
+      if (!res) return;
+      const data = await res.json();
+      if (!res.ok) throw new Error(_extractErr(data, 'Subscription creation failed'));
 
-    // Use Razorpay inline checkout
-    const opts = {
-      key: data.razorpay_key_id,
-      subscription_id: data.subscription_id,
-      name: 'Nidaan Partner',
-      description: data.plan.charAt(0).toUpperCase() + data.plan.slice(1) + ' Plan — Insurance Claim Advisory',
-      image: '/static/nidaan_logo.png',
-      theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
-      prefill: {
-        email: _meCache ? _meCache.email : '',
-        contact: _meCache ? _meCache.phone : '',
-        name: _meCache ? _meCache.owner_name : '',
-      },
-      modal: { backdropclose: false },
-      handler: async function(response) {
-        msg.className = 'msg ok';
-        const isHi = document.body.classList.contains('hi');
-        msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment successful! Activating plan…';
-        try {
-          const vr = await fetch('/nidaan/api/subscribe/verify', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY), 'Content-Type': 'application/json' },
-            body: JSON.stringify(response),
-          });
-          const vd = await vr.json();
-          if (vr.ok && vd.token) {
-            localStorage.setItem(TOKEN_KEY, vd.token);
-            localStorage.setItem('nidaan_plan', vd.plan);
+      const planLabel = _selectedPlan.charAt(0).toUpperCase() + _selectedPlan.slice(1);
+      closeSubscribeModal();
+      const rzpSub = new Razorpay({
+        key: data.razorpay_key_id,
+        subscription_id: data.subscription_id,
+        name: 'Nidaan Partner',
+        description: planLabel + ' Plan — Auto-renews quarterly',
+        image: '/static/nidaan_logo.png',
+        theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
+        prefill: {
+          email: _meCache ? _meCache.email : '',
+          contact: _meCache ? _meCache.phone : '',
+          name: _meCache ? _meCache.owner_name : '',
+        },
+        modal: { backdropclose: false, escape: false, ondismiss: function() { btn.disabled = false; } },
+        handler: async function(response) {
+          msg.className = 'msg ok';
+          msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment received! Activating your plan…';
+          btn.disabled = true;
+          try {
+            const vr = await fetch('/nidaan/api/subscribe/recurring/verify', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY), 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_subscription_id: response.razorpay_subscription_id,
+                razorpay_signature: response.razorpay_signature,
+                plan: _selectedPlan,
+              }),
+            });
+            const vd = await vr.json();
+            if (!vr.ok) {
+              msg.className = 'msg err';
+              msg.textContent = _extractErr(vd, 'Activation failed') + ' — Payment ID: ' + response.razorpay_payment_id;
+              btn.disabled = false; return;
+            }
+            if (vd.token) {
+              localStorage.setItem(TOKEN_KEY, vd.token);
+              localStorage.setItem('nidaan_plan', vd.plan);
+            }
+            location.href = '/nidaan/dashboard?payment=success';
+          } catch(e) {
+            msg.className = 'msg err';
+            msg.textContent = 'Activation error — contact support with Payment ID: ' + response.razorpay_payment_id;
+            btn.disabled = false;
           }
-        } catch(e) { /* token update best-effort */ }
-        closeSubscribeModal();
-        location.href = '/nidaan/dashboard?payment=success';
-      },
-    };
-    closeSubscribeModal();
-    const rzp = new Razorpay(opts);
-    rzp.open();
+        },
+      });
+      rzpSub.open();
+    } else {
+      // ── One-time Order flow (existing, also used for annual plans) ─────────
+      const res = await api('/nidaan/api/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ plan: _selectedPlan })
+      });
+      if (!res) return;
+      const data = await res.json();
+      if (!res.ok) throw new Error(_extractErr(data, 'Subscription failed'));
+
+      const isAnnual = data.plan.endsWith('_annual');
+      const planLabel = data.plan.replace('_annual','').charAt(0).toUpperCase() + data.plan.replace('_annual','').slice(1);
+      const periodLabel = isAnnual ? '12 months access' : '3 months access';
+
+      // Store pending payment — recovery fallback for UPI app-switch / browser context loss
+      sessionStorage.setItem('nidaan_pending_order', JSON.stringify({
+        order_id: data.order_id,
+        plan: data.plan,
+        amount: data.amount,
+        key: data.razorpay_key_id,
+        ts: Date.now(),
+      }));
+
+      const opts = {
+        key: data.razorpay_key_id,
+        order_id: data.order_id,
+        amount: data.amount,
+        currency: 'INR',
+        name: 'Nidaan Partner',
+        description: planLabel + ' Plan — Insurance Claim Advisory (' + periodLabel + ')',
+        image: '/static/nidaan_logo.png',
+        theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
+        prefill: {
+          email: _meCache ? _meCache.email : '',
+          contact: _meCache ? _meCache.phone : '',
+          name: _meCache ? _meCache.owner_name : '',
+        },
+        modal: {
+          backdropclose: false,
+          escape: false,
+          ondismiss: function() { recoverPendingPayment(true); }
+        },
+        handler: async function(response) {
+          msg.className = 'msg ok';
+          msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment received! Activating your plan…';
+          btn.disabled = true;
+          try {
+            const vr = await fetch('/nidaan/api/subscribe/verify', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY), 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                plan: data.plan,
+              }),
+            });
+            const vd = await vr.json();
+            if (!vr.ok) {
+              msg.className = 'msg err';
+              msg.textContent = _extractErr(vd, 'Activation failed') + ' — Payment ID: ' + response.razorpay_payment_id;
+              btn.disabled = false; return;
+            }
+            if (vd.token) {
+              localStorage.setItem(TOKEN_KEY, vd.token);
+              localStorage.setItem('nidaan_plan', vd.plan);
+            }
+            sessionStorage.removeItem('nidaan_pending_order');
+            closeSubscribeModal();
+            location.href = '/nidaan/dashboard?payment=success';
+          } catch(e) {
+            msg.className = 'msg err';
+            msg.textContent = 'Payment received but activation failed (network error). Retrying… Payment ID: ' + response.razorpay_payment_id;
+            setTimeout(function() { recoverPendingPayment(true); }, 3000);
+          }
+        },
+      };
+      closeSubscribeModal();
+      const rzp = new Razorpay(opts);
+      rzp.open();
+    }
   } catch(err) {
     msg.className = 'msg err';
     msg.textContent = err.message;
@@ -1054,7 +1778,7 @@ async function doCancelSub() {
     const res = await api('/nidaan/api/subscribe/cancel', { method: 'POST' });
     if (!res) return;
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Cancellation failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Cancellation failed'));
     if (data.token) {
       localStorage.setItem(TOKEN_KEY, data.token);
       localStorage.setItem('nidaan_plan', 'free');
@@ -1128,7 +1852,7 @@ async function saveProfile() {
     });
     if (!res) return;
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Update failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Update failed'));
     msg.className = 'msg ok';
     const isHi = document.body.classList.contains('hi');
     msg.textContent = isHi ? 'प्रोफ़ाइल सहेजी गई!' : 'Profile saved!';
@@ -1158,7 +1882,7 @@ async function doChangePassword() {
     });
     if (!res) return;
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Failed'));
     msg.className = 'msg ok';
     msg.textContent = isHi ? 'पासवर्ड बदल दिया गया!' : 'Password updated successfully!';
     document.getElementById('cp-current').value = '';
@@ -1177,6 +1901,78 @@ function doLogout() {
   location.href = '/nidaan/start';
 }
 
+// ── ₹499 Pay from dashboard ───────────────────────────────────────────────────
+async function payForReview(purchaseId) {
+  const btn = document.getElementById('payNowBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading payment…'; }
+  try {
+    const r = await api('/nidaan/api/review/' + purchaseId + '/pay', {method:'POST'});
+    if (!r || !r.ok) {
+      const e = r ? await r.json() : {};
+      alert('Could not initiate payment: ' + _extractErr(e, 'Error'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Pay ₹499 Now →'; }
+      return;
+    }
+    const data = await r.json();
+    const options = {
+      key: data.razorpay_key_id,
+      amount: data.amount,
+      currency: data.currency,
+      name: 'Nidaan Partner',
+      description: '₹499 Claim Review',
+      image: '/static/nidaan_logo.png',
+      order_id: data.order_id,
+      prefill: {
+        name: _meCache ? _meCache.owner_name : '',
+        email: _meCache ? _meCache.email : '',
+        contact: _meCache ? _meCache.phone : '',
+      },
+      theme: { color: '#f59e0b' },
+      handler: async function(response) {
+        try {
+          const vr = await api('/nidaan/api/review/' + purchaseId + '/pay-verify', {
+            method: 'POST',
+            body: JSON.stringify({
+              purchase_id: purchaseId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            }),
+          });
+          const vd = vr ? await vr.json() : {};
+          if (vr && vr.ok && vd.status === 'paid') {
+            location.reload();
+          } else {
+            alert('Payment received but verification failed. Contact support with Payment ID: ' + response.razorpay_payment_id);
+          }
+        } catch(err) {
+          alert('Verification error. Contact support with Payment ID: ' + response.razorpay_payment_id);
+        }
+      },
+      modal: { ondismiss: function() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Pay ₹499 Now →'; }
+      }},
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function(response) {
+      alert('Payment failed: ' + response.error.description);
+      if (btn) { btn.disabled = false; btn.textContent = 'Pay ₹499 Now →'; }
+    });
+    rzp.open();
+  } catch(err) {
+    alert('Error: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Pay ₹499 Now →'; }
+  }
+}
+
+// helper: fetch with auth token for public API calls (no /nidaan/api prefix in path)
+async function apiReq(path, method='GET', body=null) {
+  const tok = localStorage.getItem(TOKEN_KEY);
+  const opts = { method, headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(path, opts);
+}
+
 // ── Language ──────────────────────────────────────────────────────────────────
 function setLang(l) {
   document.body.className = 'body ' + l;
@@ -1185,6 +1981,55 @@ function setLang(l) {
 }
 const _lang = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
 setLang(_lang);
+
+// ── Pending payment recovery ──────────────────────────────────────────────────
+// Called on modal dismiss AND on page init.
+// If UPI app switch caused JS context loss, handler never fired.
+// We check the order status server-side and activate if paid.
+async function recoverPendingPayment(showFeedback) {
+  const raw = sessionStorage.getItem('nidaan_pending_order');
+  if (!raw) return;
+  let pending;
+  try { pending = JSON.parse(raw); } catch(e) { sessionStorage.removeItem('nidaan_pending_order'); return; }
+  // Expire recovery after 30 minutes
+  if (Date.now() - pending.ts > 30 * 60 * 1000) { sessionStorage.removeItem('nidaan_pending_order'); return; }
+  try {
+    const r = await fetch('/nidaan/api/subscribe/check?order_id=' + encodeURIComponent(pending.order_id), {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY) }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.paid && d.token) {
+      // Payment captured — activate and reload
+      localStorage.setItem(TOKEN_KEY, d.token);
+      localStorage.setItem('nidaan_plan', d.plan);
+      sessionStorage.removeItem('nidaan_pending_order');
+      location.href = '/nidaan/dashboard?payment=success';
+      return;
+    }
+    // Any non-success state (failed or attempted-but-not-captured)
+    if (showFeedback) {
+      sessionStorage.removeItem('nidaan_pending_order');
+      // Show banner explaining what happened
+      const banner = document.getElementById('subBanner');
+      if (banner) {
+        banner.className = 'sub-banner';
+        banner.innerHTML = `
+          <div class="sub-banner-text" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+            <strong>❌ Payment was not completed &mdash; your account was not charged.</strong>
+            <span style="font-size:.85rem;opacity:.8">
+              If you paid on mobile and it shows success there, your plan will activate automatically within a few minutes.
+              Otherwise, click below to try again.
+            </span>
+            <button onclick="sessionStorage.removeItem('nidaan_pending_order');openSubscribeModal();selectPlan('${pending.plan || 'silver'}');"
+              style="margin-top:.35rem;padding:.45rem 1rem;background:#06b6d4;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem">
+              🔄 Try Again
+            </button>
+          </div>`;
+      }
+    }
+  } catch(e) { /* network error — leave pending, try next visit */ }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadDashboard().then(() => {
@@ -1201,15 +2046,21 @@ loadDashboard().then(() => {
       banner.className = 'sub-banner sub-active';
       banner.innerHTML = '<div class="sub-banner-text"><strong class="en">🎉 Payment successful! Your plan is now active.</strong><strong class="hi">🎉 भुगतान सफल! आपका प्लान सक्रिय है।</strong></div>';
     }
+  } else {
+    // No explicit success param — attempt recovery if there's a pending order
+    // (covers UPI app switching, browser context loss, network errors during verify)
+    recoverPendingPayment(false);
   }
   history.replaceState(null, '', '/nidaan/dashboard');
 });
 
-// ── PWA Install Prompt ────────────────────────────────────────────────────────
+// ── PWA Install Prompt (mobile-only) ─────────────────────────────────────────
+var _isMobileDevice = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
 let _deferredInstall = null;
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   _deferredInstall = e;
+  if (!_isMobileDevice) return; // never show on desktop/laptop
   const banner = document.getElementById('pwaInstallBanner');
   if (banner) banner.style.display = 'flex';
 });
@@ -1233,5 +2084,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
 }
 </script>
+<script src="/static/nidaan_ui.js?v=2"></script>
 </body>
 </html>

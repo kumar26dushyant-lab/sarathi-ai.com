@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter','Poppins',sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.7}
@@ -124,13 +125,27 @@ body{font-family:'Inter','Poppins',sans-serif;background:#f1f5f9;color:#1e293b;l
   .container{padding:24px 16px}
   .form-row{grid-template-columns:1fr}
   .card{padding:20px}
-  .tabs{flex-direction:column;gap:4px;max-width:100%}
-  .tab-btn{padding:8px 14px;font-size:.85em}
+  /* Tabs: horizontal-scroll bar instead of vertical stack — feels native on mobile */
+  .tabs{flex-direction:row;gap:6px;max-width:100%;overflow-x:auto;
+        -webkit-overflow-scrolling:touch;padding:6px;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab-btn{flex:0 0 auto;min-width:max-content;padding:10px 16px;font-size:.88em;
+           min-height:44px}
   .ref-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .navbar{padding:10px 16px}
   .navbar .logo img{height:50px}
   .benefit{padding:20px}
   .step{padding:20px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .stats-grid > div{padding:14px}
+  /* Form inputs always fill width on phones */
+  .form-row input,.form-row select,.form-row textarea,
+  .card input,.card select,.card textarea{width:100%;box-sizing:border-box;
+    min-height:44px;font-size:16px}
+  /* Buttons big enough to tap */
+  .card button,.btn{min-height:44px}
+  /* Dashboard heading + actions wrap properly */
+  .dash-header{flex-wrap:wrap;gap:8px}
 }
 @media(max-width:380px){
   .hero{padding:40px 16px}
@@ -170,10 +185,11 @@ body{font-family:'Inter','Poppins',sans-serif;background:#f1f5f9;color:#1e293b;l
 
 <div class="container">
 
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('about')" data-i18n="tab_about">About</button>
-    <button class="tab-btn" onclick="switchTab('register')" data-i18n="tab_join">Join Now</button>
-    <button class="tab-btn" onclick="switchTab('dashboard')" data-i18n="tab_dashboard">My Dashboard</button>
+  <div class="tabs" id="tabs-bar">
+    <button class="tab-btn active" data-tab-key="about" onclick="switchTab('about')" data-i18n="tab_about">About</button>
+    <button class="tab-btn" data-tab-key="register" onclick="switchTab('register')" data-i18n="tab_join">Join Now</button>
+    <button class="tab-btn" data-tab-key="dashboard" onclick="switchTab('dashboard')" data-i18n="tab_dashboard">My Dashboard</button>
+    <button class="tab-btn tab-logout" data-tab-key="logout" onclick="affGlobalLogout()" data-i18n="tab_logout" style="display:none;color:#dc2626">Logout</button>
   </div>
 
   <!-- ── About ── -->
@@ -541,6 +557,7 @@ const _AT = {
   tab_about:{en:'About',hi:'जानकारी'},
   tab_join:{en:'Join Now',hi:'अभी जुड़ें'},
   tab_dashboard:{en:'My Dashboard',hi:'मेरा डैशबोर्ड'},
+  tab_logout:{en:'Logout',hi:'लॉगआउट'},
   // Benefits
   b1_title:{en:'20% Recurring Commission',hi:'20% बार-बार कमीशन'},
   b1_desc:{en:'Earn 20% of every subscription payment from users you refer — every month, as long as they stay subscribed.',hi:'आपके रेफर किए गए यूज़र्स की हर सब्सक्रिप्शन पेमेंट का 20% कमाएं — हर महीने, जब तक वे सब्सक्राइब हैं।'},
@@ -719,17 +736,49 @@ function switchLang() {
 // ── Tab switching ──
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => {
-    const di = b.getAttribute('data-i18n')||'';
-    b.classList.toggle('active',
-      (tab === 'about' && di === 'tab_about') ||
-      (tab === 'register' && di === 'tab_join') ||
-      (tab === 'dashboard' && di === 'tab_dashboard'));
+    const key = b.getAttribute('data-tab-key') || '';
+    b.classList.toggle('active', key === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const el = document.getElementById('tab-' + tab);
   if (el) el.classList.add('active');
   // Auto-load dashboard if logged in
   if (tab === 'dashboard' && _affToken) loadDashboardData();
+}
+
+// ── Tab nav adjusts to login state ──
+function syncAffTabs() {
+  const loggedIn = !!_affToken;
+  const joinBtn = document.querySelector('[data-tab-key="register"]');
+  const dashBtn = document.querySelector('[data-tab-key="dashboard"]');
+  const aboutBtn = document.querySelector('[data-tab-key="about"]');
+  const logoutBtn = document.querySelector('[data-tab-key="logout"]');
+  if (joinBtn) joinBtn.style.display = loggedIn ? 'none' : '';
+  if (logoutBtn) logoutBtn.style.display = loggedIn ? '' : 'none';
+  // When logged in, default to Dashboard tab if user is currently on Join/login screens
+  if (loggedIn) {
+    const activeTab = document.querySelector('.tab-panel.active')?.id || '';
+    if (activeTab === 'tab-register' || activeTab === '') {
+      switchTab('dashboard');
+    }
+  }
+}
+
+// ── Global logout from the top tab nav ──
+function affGlobalLogout() {
+  _affToken = '';
+  sessionStorage.removeItem('sarathi_aff_token');
+  // Reset any dashboard panels in-place
+  try {
+    const dc = document.getElementById('dashboard-content');
+    const dl = document.getElementById('dash-login');
+    if (dc) dc.style.display = 'none';
+    if (dl) dl.style.display = 'block';
+    const ds2 = document.getElementById('dash-login-step2');
+    if (ds2) ds2.style.display = 'none';
+  } catch(_) {}
+  syncAffTabs();
+  switchTab('about');
 }
 
 function showAlert(id, msg, type) {
@@ -776,7 +825,7 @@ async function startRegistration() {
       _affCode = data.referral_code;
       showRegSuccess(data.referral_code);
     } else {
-      throw new Error(data.detail || 'Registration failed');
+      throw new Error(_extractErr(data, 'Registration failed'));
     }
   } catch(err) {
     showAlert('register-alert', '❌ ' + err.message, 'error');
@@ -795,12 +844,12 @@ async function verifyEmailOTP() {
       body: JSON.stringify({ email: _regEmail, otp })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Verification failed');
+    if (!r.ok) throw new Error(_extractErr(data, 'Verification failed'));
 
     if (data.token) {
       // Auto-login after verification
       _affToken = data.token;
-      sessionStorage.setItem('sarathi_aff_token', _affToken);
+      sessionStorage.setItem('sarathi_aff_token', _affToken); syncAffTabs();
       _affCode = data.affiliate?.referral_code || '';
       showRegSuccess(_affCode);
       // Auto-switch to dashboard after showing success
@@ -846,7 +895,7 @@ async function sendDashOTP() {
       body: JSON.stringify({ email })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Failed to send OTP');
+    if (!r.ok) throw new Error(_extractErr(data, 'Failed to send OTP'));
 
     document.getElementById('dash-login-step2').style.display = 'block';
     showAlert('dash-alert', _at('otp_sent_dash') || '📧 OTP sent to your email!', 'success');
@@ -866,10 +915,10 @@ async function verifyDashOTP() {
       body: JSON.stringify({ email: _regEmail, otp })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Login failed');
+    if (!r.ok) throw new Error(_extractErr(data, 'Login failed'));
 
     _affToken = data.token;
-    sessionStorage.setItem('sarathi_aff_token', _affToken);
+    sessionStorage.setItem('sarathi_aff_token', _affToken); syncAffTabs();
     _affCode = data.affiliate.referral_code;
     document.getElementById('dash-login').style.display = 'none';
     document.getElementById('dashboard-content').style.display = 'block';
@@ -886,7 +935,7 @@ async function loadDashboardData() {
     });
     if (r.status === 401) {
       // Token expired — force re-login
-      sessionStorage.removeItem('sarathi_aff_token');
+      sessionStorage.removeItem('sarathi_aff_token'); syncAffTabs();
       _affToken = '';
       document.getElementById('dashboard-content').style.display = 'none';
       document.getElementById('dash-login').style.display = 'block';
@@ -894,7 +943,7 @@ async function loadDashboardData() {
       return;
     }
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Failed to load');
+    if (!r.ok) throw new Error(_extractErr(data, 'Failed to load'));
 
     const a = data.affiliate;
     _affCode = a.referral_code;
@@ -951,6 +1000,7 @@ async function loadDashboardData() {
 function logoutDash() {
   _affToken = '';
   sessionStorage.removeItem('sarathi_aff_token');
+  syncAffTabs();
   document.getElementById('dashboard-content').style.display = 'none';
   document.getElementById('dash-login').style.display = 'block';
   document.getElementById('dash-login-step2').style.display = 'none';
@@ -1079,7 +1129,7 @@ async function savePayoutInfo() {
       body: JSON.stringify(body)
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Failed to save');
+    if (!r.ok) throw new Error(_extractErr(data, 'Failed to save'));
     showAlert('payout-alert', _at('payout_saved'), 'success');
   } catch(err) {
     showAlert('payout-alert', '❌ ' + err.message, 'error');
@@ -1118,7 +1168,7 @@ async function submitTicket() {
       body: JSON.stringify({ subject, message, category })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Failed');
+    if (!r.ok) throw new Error(_extractErr(data, 'Failed'));
     document.getElementById('ticket-subject').value = '';
     document.getElementById('ticket-message').value = '';
     hideNewTicketForm();
@@ -1260,7 +1310,7 @@ async function handleAffGoogleSignIn(response) {
       if (r.ok && data.token) {
         // Auto-login (all paths now return token)
         _affToken = data.token;
-        sessionStorage.setItem('sarathi_aff_token', _affToken);
+        sessionStorage.setItem('sarathi_aff_token', _affToken); syncAffTabs();
         _affCode = data.affiliate?.referral_code || '';
         showAlert('register-alert', '✅ ' + (_at('reg_success') || 'Welcome! Account created successfully.'), 'success');
         setTimeout(() => {
@@ -1270,7 +1320,7 @@ async function handleAffGoogleSignIn(response) {
           loadDashboardData();
         }, 1500);
       } else {
-        showAlert('register-alert', '❌ ' + (data.detail || 'Google signup failed'), 'error');
+        showAlert('register-alert', '❌ ' + _extractErr(data, 'Google signup failed'), 'error');
       }
     } catch(e) {
       showAlert('register-alert', '❌ Network error', 'error');
@@ -1286,7 +1336,7 @@ async function handleAffGoogleSignIn(response) {
       const data = await r.json();
       if (r.ok && data.token) {
         _affToken = data.token;
-        sessionStorage.setItem('sarathi_aff_token', _affToken);
+        sessionStorage.setItem('sarathi_aff_token', _affToken); syncAffTabs();
         _affCode = data.affiliate?.referral_code || '';
         document.getElementById('dash-login').style.display = 'none';
         document.getElementById('dashboard-content').style.display = 'block';
@@ -1296,7 +1346,7 @@ async function handleAffGoogleSignIn(response) {
         showAlert('dash-alert', _at('google_not_registered') || '⚠️ No affiliate account found. Please sign up first.', 'error');
         setTimeout(() => switchTab('register'), 1500);
       } else {
-        showAlert('dash-alert', '❌ ' + (data.detail || 'Google login failed'), 'error');
+        showAlert('dash-alert', '❌ ' + _extractErr(data, 'Google login failed'), 'error');
       }
     } catch(e) {
       showAlert('dash-alert', '❌ Network error', 'error');
@@ -1340,6 +1390,7 @@ function _initAffGoogleBtns() {
     sessionStorage.setItem('sarathi_ref', ref);
   }
   applyAffI18n();
+  syncAffTabs();
   // Check for SA impersonation token
   const impToken = p.get('_imp_token');
   if (impToken) {

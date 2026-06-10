@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/dark-mode.css?v=4">
     <script src="/static/dark-mode.js?v=3"></script>
+    <script src="/static/_err.js?v=1"></script>
     <style>
         :root {
             --blue: #0d9488; --blue-dark: #0f766e; --blue-light: #ccfbf1;
@@ -35,6 +36,9 @@
             color: #fff; padding: 20px 0; flex-shrink: 0; position: fixed;
             top: 0; left: 0; height: 100vh; z-index: 100; overflow-y: auto;
             transition: transform .3s;
+            /* Reserve room at the bottom for the mobile bottom-nav (~64px + safe area)
+               so Logout / Plan badge never sit behind it on phones. */
+            padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
         }
         .sidebar .brand { padding: 0 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 10px; }
         .sidebar .brand img { height: 50px; border-radius: 8px; }
@@ -308,7 +312,122 @@
             .topbar .right span#topbar-user { display: none; }
             .topbar .right #topbar-role { display: none !important; }
             .sidebar { width: 260px; }
+            /* Compact topbar buttons: language toggle becomes icon-only and logout collapses */
+            .topbar #topbar-lang-btn { padding: 4px 8px; font-size: .75em; }
+            .topbar .right .theme-toggle, .topbar .right #topbar-logout { padding: 4px 8px; }
+            #topbar-logout .logout-text { display: none; }
         }
+        #topbar-logout .logout-icon { display: none; }
+        @media (max-width: 480px) {
+            #topbar-logout .logout-icon { display: inline; font-size: 1em; }
+        }
+
+        /* ════════════════════════════════════════════════════════════════
+           MOBILE HARDENING (≤768px) — May 2026 audit fixes
+           Marketing Studio, Microsite, Profile, Quotes, AI Tools all rely
+           on 2-column / inline-flex form layouts that overflow on phones.
+           These rules force stacking, full-width inputs, and 44px taps. */
+        @media (max-width: 768px) {
+            /* All two-column form grids stack on phones */
+            .form-row, .form-grid-2,
+            [style*="grid-template-columns:1fr 1fr"],
+            [style*="grid-template-columns: 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+                max-width: 100% !important;
+            }
+            /* Auto-fit grids that demand >220px per column should fold to 1col */
+            .ai-grid, .overview-grid, .kpi-grid,
+            [style*="minmax(220px"], [style*="minmax(260px"], [style*="minmax(280px"],
+            [style*="minmax(340px"], [style*="minmax(400px"] {
+                grid-template-columns: 1fr !important;
+            }
+            /* Flex rows must wrap so dropdowns + inputs don't shove off-screen */
+            .toolbar, .task-toolbar,
+            .content .card-body > div[style*="display:flex"]:not([style*="flex-wrap"]) {
+                flex-wrap: wrap !important;
+                row-gap: 8px;
+            }
+            /* Inputs / selects / textareas inside the content area: full-width unless tiny */
+            .content input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),
+            .content select,
+            .content textarea {
+                max-width: 100% !important;
+                box-sizing: border-box;
+            }
+            /* Selects with inline width:220px (Marketing settings/forms) */
+            .content select[style*="max-width:220px"],
+            .content select[style*="width:220px"],
+            .content input[style*="width:220px"] {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            /* Touch targets: any non-icon button gets at least 40px tap height */
+            .content button:not(.task-chip):not(.task-status-chip):not(.sub-tab) {
+                min-height: 40px;
+            }
+            .bottom-nav-item { min-height: 56px; padding: 10px 4px; }
+            .lead-card .lc-actions button, .policy-card .pc-actions button {
+                min-height: 38px; padding: 8px 12px; font-size: .8em;
+            }
+            /* Microsite preview iframe should shrink to fit */
+            iframe[style*="width:390px"], iframe[style*="width: 390px"] {
+                max-width: 100% !important;
+                width: 100% !important;
+            }
+            /* Marketing Studio: the Generate form row's children grow to fill */
+            #tab-marketing .card-body > details > div > div,
+            #tab-marketing > div > div {
+                flex-wrap: wrap !important;
+            }
+            #tab-marketing label + select,
+            #tab-marketing label + input {
+                width: 100%;
+            }
+            /* Marketing preview image cap so it doesn't dominate scroll */
+            #mktPreviewImg {
+                max-width: 100% !important;
+                max-height: 50vh;
+                object-fit: contain;
+            }
+            /* Marketing Calendar + Segments inline form rows */
+            #cal-add input, #cal-add select, #seg-add input, #seg-add select {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            /* Hardcoded 600px form containers (Profile, etc.) drop to 100% */
+            [style*="max-width:600px"], [style*="max-width: 600px"] {
+                max-width: 100% !important;
+            }
+            /* Modals never wider than the screen */
+            .modal-content, [class*="modal-content"] {
+                width: calc(100vw - 20px) !important;
+                max-width: calc(100vw - 20px) !important;
+            }
+            /* Datetime-local inputs (Calendar schedule) need readable padding */
+            input[type="datetime-local"], input[type="date"], input[type="time"] {
+                padding: 10px 12px !important;
+                font-size: 16px !important; /* iOS will auto-zoom if <16px */
+                min-height: 44px;
+            }
+            /* Tables that haven't migrated to mobile cards: allow horizontal swipe */
+            .desktop-table-wrap, .table-wrap {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+        /* Tighter rules for actual phones */
+        @media (max-width: 480px) {
+            .content { padding: 12px !important; }
+            .card-body { padding: 12px !important; }
+            .topbar h1 { font-size: .82em !important; }
+            /* Marketing Studio Generate form: give every label-and-control pair a full row */
+            #tab-marketing select, #tab-marketing input[type=text],
+            #tab-marketing input[type=number], #tab-marketing input[type=datetime-local] {
+                min-height: 44px;
+                font-size: 15px;
+            }
+        }
+        /* End mobile hardening */
 
         /* ── Bottom Nav (Mobile) ──── */
         .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); z-index: 200; padding: 4px 0; padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); transform: translateZ(0); -webkit-backface-visibility: hidden; }
@@ -454,6 +573,52 @@
             .topbar .right button[onclick="dashLogout()"] { display: none; }
             body { padding-top: env(safe-area-inset-top, 0px); }
         }
+
+        /* ── Marketing Studio ──────── */
+        .check-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border: 1px solid var(--border, #e5e7eb);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: .85em;
+            user-select: none;
+            transition: background .15s, border-color .15s;
+        }
+        .check-pill:has(input:checked) {
+            background: #eff6ff;
+            border-color: #3b82f6;
+            color: #1d4ed8;
+        }
+        .check-pill input { display: none; }
+        .mkt-preview-img { width:100%; max-width:280px; border-radius:12px; display:block; margin:12px auto; }
+        .mkt-card { background:var(--surface,#fff); border:1px solid var(--border,#e5e7eb); border-radius:12px; overflow:hidden; }
+        .mkt-card img { width:100%; aspect-ratio:9/16; object-fit:cover; }
+        .mkt-card-body { padding:10px; }
+        .mkt-card-body h4 { margin:0 0 4px; font-size:.9em; }
+        .mkt-card-body p { margin:0 0 8px; font-size:.8em; color:var(--text-muted,#666); }
+        .mkt-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        .mkt-card-actions button { font-size:.75em; padding:4px 10px; }
+        .lead-pick-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border,#f0f0f0); }
+        .lead-pick-row:last-child { border-bottom:none; }
+        /* B3+B8 mobile polish: bundle-ending banner buttons stack full-width
+           on phones so they're easy to tap. Touch target ≥ 44px (WCAG).      */
+        @media (max-width: 480px) {
+          #bundle-ending-banner {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: .55rem !important;
+          }
+          #bundle-ending-banner > a, #bundle-ending-banner > button {
+            text-align: center;
+            min-height: 44px;
+            font-size: .9rem;
+            padding: .7rem 1rem !important;
+          }
+          #bundle-ending-banner > div { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -497,22 +662,27 @@ function exitImpersonation() {
     <div class="nav-item" data-tab="drip" onclick="switchTab('drip')" data-i18n="nav_drip">🌱 Drip Sequences</div>
     <div class="nav-item" data-tab="quotes" onclick="switchTab('quotes')" data-i18n="nav_quotes">💰 Quote Compare</div>
     <div class="nav-item" data-tab="lapse" onclick="switchTab('lapse')" data-i18n="nav_lapse">🚨 Lapse Risk</div>
-    <div class="nav-item" data-tab="whatsapp" onclick="switchTab('whatsapp')" data-i18n="nav_whatsapp" style="display:none">💬 WhatsApp</div>
+    <div class="nav-item" data-tab="whatsapp" onclick="switchTab('whatsapp')" data-i18n="nav_whatsapp">💬 WhatsApp</div>
     <div class="nav-item hidden" data-tab="agents" id="nav-agents" onclick="switchTab('agents')" data-i18n="nav_team">👥 Team</div>
     <div class="nav-divider"></div>
     <div class="nav-item" data-tab="subscription" onclick="switchTab('subscription')" data-i18n="nav_subscription">💎 Subscription</div>
     <div class="nav-item" data-tab="profile" onclick="switchTab('profile')" data-i18n="nav_profile">👤 Profile & Settings</div>
     <div class="nav-item" data-tab="microsite" onclick="switchTab('microsite')" data-i18n="nav_microsite">🌐 My Microsite</div>
+    <div class="nav-item" id="nav-marketing" data-tab="marketing" onclick="switchTab('marketing')">📣 Marketing Studio</div>
     <div class="nav-item" data-tab="support" onclick="switchTab('support')" data-i18n="nav_support">🎫 Support</div>
     <div class="nav-item" onclick="window.location.href='/calculators'" data-i18n="nav_calculators">🧮 Calculators</div>
     <div class="nav-item" onclick="window.location.href='/help'" data-i18n="nav_help">❓ Help</div>
     <div class="nav-divider"></div>
     <div class="nav-item hidden" id="nav-affiliate" onclick="window.open('/partner','_blank')" data-i18n="nav_affiliate">🤝 Affiliate Portal</div>
+    <div class="nav-item hidden" id="nav-testlab" data-tab="testlab" onclick="switchTab('testlab')">🧪 Test Automation</div>
+    <div class="nav-item hidden" id="nav-testlab" data-tab="testlab" onclick="switchTab('testlab')">🧪 Test Automation</div>
     <div class="nav-item" id="nav-partner-cta" onclick="crossSignupAsPartner()" style="background:linear-gradient(135deg,#312e81,#4338ca);color:#fff;border-radius:8px;margin:8px 12px;text-align:center;font-weight:700;font-size:.88em" data-i18n="cross_earn_btn_short">💰 Become a Partner</div>
     <div class="plan-badge" id="sidebar-plan">
         <strong data-i18n="free_trial">Free Trial</strong>
         <span id="sidebar-plan-detail">14 days remaining</span>
     </div>
+    <div class="nav-divider"></div>
+    <div class="nav-item" id="sidebar-logout" onclick="dashLogout()" data-i18n="logout" style="color:#fca5a5">🚪 Logout</div>
 </nav>
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
@@ -601,7 +771,7 @@ function exitImpersonation() {
         <button class="bottom-nav-item" data-tab="tasks" onclick="switchTab('tasks')"><span class="nav-icon">📋</span><span data-i18n="bnav_tasks">Tasks</span></button>
         <button class="bottom-nav-item" data-tab="leads" onclick="switchTab('leads')"><span class="nav-icon">👥</span><span data-i18n="bnav_leads">Leads</span></button>
         <button class="bottom-nav-item" data-tab="ai" onclick="switchTab('ai')"><span class="nav-icon">🤖</span><span data-i18n="bnav_ai">AI</span></button>
-        <button class="bottom-nav-item" data-tab="whatsapp" onclick="switchTab('whatsapp')" style="display:none"><span class="nav-icon">💬</span><span data-i18n="bnav_wa">WA</span></button>
+        <button class="bottom-nav-item" data-tab="whatsapp" onclick="switchTab('whatsapp')"><span class="nav-icon">💬</span><span data-i18n="bnav_wa">WA</span></button>
         <button class="bottom-nav-item" onclick="toggleSidebar()"><span class="nav-icon">☰</span><span data-i18n="bnav_more">More</span></button>
     </div>
 </nav>
@@ -620,11 +790,22 @@ function exitImpersonation() {
             </div>
             <button id="topbar-lang-btn" onclick="switchDashLang(_dlang==='en'?'hi':'en');document.getElementById('topbar-lang-btn').textContent=_dlang==='en'?'हिंदी':'English'" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:.82em" title="Switch language">हिंदी</button>
             <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-            <button onclick="dashLogout()" data-i18n="logout">Logout</button>
+            <button id="topbar-logout" onclick="dashLogout()" data-i18n="logout" title="Logout"><span class="logout-text">Logout</span><span class="logout-icon" aria-hidden="true">🚪</span></button>
         </div>
     </div>
 
     <div class="content">
+        <!-- B3: bundle-ending banner. Auto-shown when tenant.bundled_until ≤ 7 days away. -->
+        <div id="bundle-ending-banner" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:.85rem 1.1rem;margin-bottom:1rem;color:#92400e;display:none;align-items:center;gap:.7rem;flex-wrap:wrap">
+            <span style="font-size:1.4rem">⏰</span>
+            <div style="flex:1;min-width:200px">
+                <strong id="bundle-ending-title">Your Sarathi access ends soon</strong>
+                <div id="bundle-ending-text" style="font-size:.88rem;margin-top:.15rem"></div>
+            </div>
+            <a href="https://nidaanpartner.com/nidaan/dashboard" style="background:#0d9488;color:#fff;padding:.45rem .9rem;border-radius:6px;text-decoration:none;font-weight:600;font-size:.85rem">Renew in Nidaan</a>
+            <button onclick="showTab('subscription')" style="background:transparent;border:1px solid #92400e;color:#92400e;padding:.4rem .85rem;border-radius:6px;cursor:pointer;font-weight:600;font-size:.85rem">Choose Sarathi plan</button>
+        </div>
+
         <div class="alert alert-warn" id="pending-change-banner" style="display:none">
             <span>📋</span>
             <span id="pending-change-text"></span>
@@ -833,6 +1014,25 @@ function exitImpersonation() {
                     <div id="nudge-history-panel" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
                         <h4 style="font-size:.85em;margin-bottom:8px;color:var(--muted)" data-i18n="nudge_history_title">📋 Recent Nudge History</h4>
                         <div id="nudge-history-list" style="max-height:260px;overflow-y:auto;font-size:.82em"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── Roles & Permissions (owner only, Team+ plan) ─── -->
+            <div id="roles-section" class="card" style="margin-top:24px;display:none">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <div>
+                        <h3 style="margin:0">🔐 <span data-i18n="roles_h">Roles &amp; Permissions</span></h3>
+                        <p style="font-size:.78em;color:var(--muted);margin:2px 0 0" data-i18n="roles_sub">अपनी टीम के लिए custom roles बनाएं और decide करें कि किसे क्या access मिलेगा।</p>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button class="btn btn-sm btn-outline" onclick="seedRoleTemplates()" data-i18n="roles_seed_btn">📦 Load Predefined Roles</button>
+                        <button class="btn btn-sm btn-primary" onclick="openCreateRoleModal()" data-i18n="roles_create_btn">➕ Create Custom Role</button>
+                    </div>
+                </div>
+                <div class="card-body" style="padding:12px 16px">
+                    <div id="roles-list">
+                        <div style="text-align:center;padding:24px;color:var(--muted);font-size:.85em" data-i18n="roles_empty">कोई custom role नहीं है। "Load Predefined Roles" से शुरू करें या नई role बनाएं।</div>
                     </div>
                 </div>
             </div>
@@ -1082,91 +1282,36 @@ function exitImpersonation() {
         <!-- ═══ WHATSAPP v2 TAB (Agent-Assist) ═══ -->
         <div class="tab-panel" id="tab-whatsapp">
 
-            <!-- ── SARATHI AGENT: APK Bridge (NEW) ─────────────────────────────── -->
-            <div class="card" style="margin-bottom:20px;border:2px solid rgba(37,211,102,0.35)">
-                <div class="card-header" style="background:linear-gradient(135deg,rgba(37,211,102,0.08),rgba(6,13,26,0))">
+            <!-- ── How AI Automation Works ─────────────────────────────── -->
+            <div class="card" style="margin-bottom:20px;border:1px solid rgba(37,211,102,0.25)">
+                <div class="card-header" style="background:linear-gradient(135deg,rgba(37,211,102,0.06),rgba(6,13,26,0))">
                     <div style="display:flex;align-items:center;gap:10px">
-                        <span style="font-size:1.5em">📱</span>
+                        <span style="font-size:1.5em">🤖</span>
                         <div>
-                            <h3 style="margin:0;font-size:1em;font-weight:700">Sarathi Agent — APK Bridge <span style="font-size:.7em;background:#10b981;color:white;padding:2px 8px;border-radius:8px;margin-left:6px;vertical-align:middle">NEW</span></h3>
-                            <div style="font-size:.78em;color:var(--muted);margin-top:2px">Install the APK on your phone → WhatsApp AI replies work directly from your number</div>
+                            <h3 style="margin:0;font-size:1em;font-weight:700">How WhatsApp AI Automation Works</h3>
+                            <div style="font-size:.78em;color:var(--muted);margin-top:2px">Connect once — Sarathi handles AI replies, CRM commands, and reminders from your number</div>
                         </div>
                     </div>
                 </div>
                 <div class="card-body">
 
-                    <!-- Status row -->
-                    <div id="apk-status-row" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg);border-radius:10px;margin-bottom:16px">
-                        <div id="apk-status-icon" style="font-size:1.9em">⚪</div>
-                        <div style="flex:1">
-                            <div id="apk-status-text" style="font-weight:700;color:var(--text)">Checking...</div>
-                            <div id="apk-status-meta" style="font-size:.8em;color:var(--muted);margin-top:2px"></div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+                        <div style="padding:13px;background:var(--bg);border-radius:10px;border-left:3px solid #25D366">
+                            <div style="font-size:1.3em;margin-bottom:4px">📨</div>
+                            <div style="font-weight:700;font-size:.9em;margin-bottom:3px">Customer Auto-Reply</div>
+                            <div style="font-size:.78em;color:var(--muted)">Inbound messages → Gemini AI reads intent → replies in your tone from your number. Claims & complaints → escalated to you.</div>
                         </div>
-                        <button id="apk-connect-btn" onclick="apkConnect()" style="display:none;padding:9px 18px;border-radius:9px;font-weight:700;background:#25D366;color:white;border:none;cursor:pointer;font-size:.9em">📱 Connect APK</button>
-                        <button id="apk-regen-btn" onclick="apkConnect()" style="display:none;padding:8px 14px;border-radius:8px;font-weight:600;background:none;color:#22d3ee;border:1px solid #22d3ee;cursor:pointer;font-size:.85em">🔄 New QR</button>
-                        <button id="apk-disconnect-btn" onclick="apkDisconnect()" style="display:none;padding:8px 14px;border-radius:8px;font-weight:600;background:none;color:#ef4444;border:1px solid #ef4444;cursor:pointer;font-size:.85em">Disconnect</button>
-                    </div>
-
-                    <!-- Today's stats (when connected) -->
-                    <div id="apk-stats" style="display:none;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
-                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #10b981">
-                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Auto-Replied Today</div>
-                            <div id="apk-stat-replied" style="font-size:1.4em;font-weight:700;color:#10b981">—</div>
+                        <div style="padding:13px;background:var(--bg);border-radius:10px;border-left:3px solid #6366f1">
+                            <div style="font-size:1.3em;margin-bottom:4px">🗣️</div>
+                            <div style="font-weight:700;font-size:.9em;margin-bottom:3px">Voice CRM Commands</div>
+                            <div style="font-size:.78em;color:var(--muted)">Message yourself on WA: <em>#pipeline</em>, <em>#add lead Ramesh 9876543210</em>, <em>#my tasks today</em> → CRM updates instantly.</div>
                         </div>
-                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid var(--primary)">
-                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Incoming Today</div>
-                            <div id="apk-stat-incoming" style="font-size:1.4em;font-weight:700">—</div>
-                        </div>
-                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #f59e0b">
-                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Escalations</div>
-                            <div id="apk-stat-takeover" style="font-size:1.4em;font-weight:700;color:#f59e0b">—</div>
-                        </div>
-                        <div style="padding:11px 14px;background:var(--bg);border-radius:9px;border-left:3px solid #6366f1">
-                            <div style="font-size:.72em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Device</div>
-                            <div id="apk-stat-device" style="font-size:.82em;font-weight:600">—</div>
+                        <div style="padding:13px;background:var(--bg);border-radius:10px;border-left:3px solid #f59e0b">
+                            <div style="font-size:1.3em;margin-bottom:4px">⏰</div>
+                            <div style="font-weight:700;font-size:.9em;margin-bottom:3px">Proactive Reminders</div>
+                            <div style="font-size:.78em;color:var(--muted)">EMI due, policy renewal, birthday greetings — sent automatically from your number to your clients.</div>
                         </div>
                     </div>
-
-                    <!-- Quick settings (when connected) -->
-                    <div id="apk-settings" style="display:none;margin-bottom:16px">
-                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:10px">
-                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88em;font-weight:600">
-                                <input type="checkbox" id="apk-toggle-autoreply" onchange="apkToggleAutoReply()" style="width:16px;height:16px;cursor:pointer">
-                                Auto-Reply ON
-                            </label>
-                            <div style="font-size:.82em;color:var(--muted)">Business hours: 9 AM – 8 PM IST (Mon–Sun)</div>
-                            <button onclick="apkShowConversations()" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid var(--primary);background:none;color:var(--primary);cursor:pointer;font-size:.83em;font-weight:600">💬 View Chats</button>
-                        </div>
-                    </div>
-
-                    <!-- QR Modal -->
-                    <div id="apk-qr-modal" style="display:none;text-align:center;padding:20px 16px;background:var(--bg);border-radius:12px;margin-bottom:16px">
-                        <div style="font-size:.92em;font-weight:700;margin-bottom:6px">📱 Scan this QR in the Sarathi Agent app</div>
-                        <div style="font-size:.8em;color:var(--muted);margin-bottom:14px">QR expires in 5 minutes. Download APK first if you haven't.</div>
-                        <div id="apk-qr-container" style="display:inline-block;background:white;padding:12px;border-radius:10px;margin-bottom:12px"></div>
-                        <div style="margin-top:10px">
-                            <a id="apk-download-link" href="/static/sarathi-agent.apk" download style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;background:#25D366;color:white;font-weight:700;font-size:.88em;text-decoration:none">⬇️ Download Sarathi Agent APK</a>
-                        </div>
-                        <div style="margin-top:8px;font-size:.75em;color:var(--muted)">APK size: ~4 MB · Requires Android 8.0+</div>
-                    </div>
-
-                    <!-- Risk disclaimer -->
-                    <div style="padding:12px 14px;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:10px;font-size:.8em;color:var(--muted);line-height:1.5">
-                        <strong style="color:#ef4444">⚠️ Important:</strong> Sarathi Agent works on your personal WhatsApp number.
-                        Built-in protections: human-like delays, 200-msg/day cap, 20-msg/hour cap, business hours filter, and keyword-based escalation.
-                        Use responsibly — avoid mass blasting. You remain in control at all times. All auto-replies carry a "Powered by Sarathi-AI" footer.
-                    </div>
-                </div>
-            </div>
-
-            <!-- Conversations panel (initially hidden) -->
-            <div id="apk-conversations-panel" style="display:none;margin-bottom:20px">
-                <div class="card">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                        <h3 style="margin:0;font-size:.95em;font-weight:700">💬 Recent WA Conversations</h3>
-                        <button onclick="document.getElementById('apk-conversations-panel').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2em">✕</button>
-                    </div>
-                    <div id="apk-conv-list" style="max-height:420px;overflow-y:auto"></div>
                 </div>
             </div>
 
@@ -1452,13 +1597,41 @@ function exitImpersonation() {
                 <div class="card-body">
                     <h3 style="margin:0 0 6px"><span data-i18n="drip_title">🌱 Drip Nurture Sequences</span></h3>
                     <p style="font-size:.85em;color:var(--muted);margin:0 0 10px" data-i18n="drip_desc">
-                        Multi-step time-delayed nurture campaigns. When a lead enters a stage (e.g. "prospect"), the system automatically schedules drip messages at the right time. You'll get a Telegram nudge with a one-click "Send via WhatsApp" button — your client never knows it was automated.
+                        Multi-step time-delayed nurture campaigns. When a lead is enrolled, messages are sent automatically via <b>WhatsApp</b> at the right time — to both the client (personalized message) and you (a delivery confirmation). Telegram is used as a backup if WhatsApp is unavailable.
                     </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
                         <button class="btn btn-sm btn-outline" onclick="loadDripSequences()" data-i18n="drip_refresh">🔄 Refresh</button>
                         <button class="btn btn-sm btn-outline" onclick="loadDripEnrollments()" data-i18n="drip_view_enrollments">📊 View Active Enrollments</button>
                         <button class="btn btn-sm btn-primary" onclick="dripTestTick()" data-i18n="drip_test_tick" id="drip-test-btn" style="display:none">⚡ Run Tick Now (test)</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Enrol leads card -->
+            <div class="card" style="margin-bottom:16px" id="drip-enrol-card" style="display:none">
+                <div class="card-body">
+                    <h4 style="margin:0 0 4px">➕ <span data-i18n="drip_enrol_h">Leads को Sequence में जोड़ें</span></h4>
+                    <p style="font-size:.8em;color:var(--muted);margin:0 0 12px" data-i18n="drip_enrol_sub">किसी भी sequence में leads को automatically add करें ताकि drip messages चलने लगें।</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                        <div style="flex:1;min-width:220px">
+                            <label style="font-size:.8em;color:var(--muted);display:block;margin-bottom:4px" data-i18n="drip_enrol_seq_label">Sequence चुनें</label>
+                            <select id="drip-enrol-seq" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88em">
+                                <option value="">— पहले sequence चुनें —</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                            <button class="btn btn-primary" onclick="dripEnrolAll()" style="white-space:nowrap">
+                                📋 <span data-i18n="drip_enrol_all_btn">सभी Active Leads जोड़ें</span>
+                            </button>
+                            <button class="btn btn-outline" onclick="dripEnrolSelected()" style="white-space:nowrap">
+                                👤 <span data-i18n="drip_enrol_sel_btn">चुना हुआ Lead जोड़ें</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="font-size:.76em;color:var(--muted);margin:10px 0 0;line-height:1.5" data-i18n="drip_enrol_hint">
+                        💡 <b>सभी Active Leads जोड़ें</b> — जो leads closed नहीं हैं उन्हें sequence में डाल देगा (पहले से enrolled को skip करेगा)।<br>
+                        💡 <b>चुना हुआ Lead जोड़ें</b> — Leads tab में किसी lead का ✏️ Edit खोलने के बाद यह button काम करता है।
+                    </p>
                 </div>
             </div>
 
@@ -1658,6 +1831,421 @@ function exitImpersonation() {
             </div>
         </div>
 
+        <!-- ═══ MARKETING STUDIO TAB ═══ -->
+        <div class="tab-panel" id="tab-marketing">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+              <div>
+                <h2 style="margin:0;font-size:1.4em">📣 AI Marketing Studio</h2>
+                <div style="color:#6b7280;font-size:.9em;margin-top:4px">Generate branded content, post to WhatsApp Status, send targeted festival wishes.</div>
+              </div>
+              <button class="btn btn-primary" onclick="mktGenerate()" id="mktGenerateBtn">✨ Generate Now</button>
+            </div>
+
+            <!-- Enable toggle -->
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-secondary,#f9fafb);border-radius:8px;margin-bottom:16px">
+              <label style="font-weight:600;margin:0">Marketing Studio</label>
+              <label class="toggle-switch" style="margin:0">
+                <input type="checkbox" id="mktEnabled" onchange="mktSaveSetting('enabled',this.checked)">
+                <span class="slider"></span>
+              </label>
+              <span id="mktEnabledLabel" style="font-size:.85em;color:#6b7280">Disabled</span>
+            </div>
+
+            <!-- Settings accordion -->
+            <details id="mktSettings" style="margin-bottom:16px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:12px">
+              <summary style="cursor:pointer;font-weight:600;user-select:none">⚙️ Settings</summary>
+              <div style="margin-top:14px;display:grid;gap:14px">
+
+                <!-- Language -->
+                <div>
+                  <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:4px">Language</label>
+                  <select id="mktLang" onchange="mktSaveSetting('lang',this.value)" style="width:100%;max-width:220px">
+                    <option value="en">English</option>
+                    <option value="hi">हिंदी (Hindi)</option>
+                    <option value="mr">मराठी (Marathi)</option>
+                  </select>
+                </div>
+
+                <!-- Auto-post -->
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <label style="font-weight:600;font-size:.9em">Auto-post to WhatsApp Status</label>
+                  <label class="toggle-switch" style="margin:0">
+                    <input type="checkbox" id="mktAutopost" onchange="mktSaveSetting('autopost_enabled',this.checked)">
+                    <span class="slider"></span>
+                  </label>
+                  <input type="time" id="mktAutopostTime" value="08:00" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:4px 8px"
+                         onchange="mktSaveSetting('autopost_time',this.value)">
+                  <span style="font-size:.8em;color:#6b7280">Daily scheduled post time</span>
+                </div>
+
+                <!-- Festival preferences -->
+                <div>
+                  <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:8px">Festival Preferences (select which festivals to include)</label>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px" id="mktFestivalPrefs">
+                    <label class="check-pill"><input type="checkbox" value="all" onchange="mktSaveFestivalPrefs()"> 🌏 National Holidays</label>
+                    <label class="check-pill"><input type="checkbox" value="hindu" onchange="mktSaveFestivalPrefs()"> 🪔 Hindu</label>
+                    <label class="check-pill"><input type="checkbox" value="muslim" onchange="mktSaveFestivalPrefs()"> 🌙 Muslim</label>
+                    <label class="check-pill"><input type="checkbox" value="sikh" onchange="mktSaveFestivalPrefs()"> 🙏 Sikh</label>
+                    <label class="check-pill"><input type="checkbox" value="christian" onchange="mktSaveFestivalPrefs()"> ✝️ Christian</label>
+                    <label class="check-pill"><input type="checkbox" value="jain" onchange="mktSaveFestivalPrefs()"> 🙏 Jain</label>
+                  </div>
+                </div>
+
+                <!-- Brand accent color -->
+                <div>
+                  <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Brand Accent Color <span style="font-size:.8em;color:#6b7280">(used on all generated images)</span></label>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <input type="color" id="mktBrandAccent" value="#3b82f6" style="width:48px;height:36px;border:none;border-radius:6px;cursor:pointer;padding:2px"
+                           onchange="mktSaveSetting('brand_accent',this.value)">
+                    <span id="mktBrandAccentLabel" style="font-size:.85em;color:#374151">#3b82f6</span>
+                    <button class="btn btn-secondary" style="font-size:.75em;padding:4px 10px" onclick="document.getElementById('mktBrandAccent').value='#3b82f6';mktSaveSetting('brand_accent','#3b82f6')">Reset</button>
+                  </div>
+                </div>
+
+                <!-- Marketing headshot -->
+                <div>
+                  <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Marketing Headshot <span style="font-size:.8em;color:#6b7280">(shown on generated images)</span></label>
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <img id="mktPhotoPreview" src="" style="width:60px;height:60px;border-radius:50%;object-fit:cover;display:none;border:2px solid #3b82f6">
+                    <label class="btn btn-secondary" style="cursor:pointer;font-size:.85em">
+                      📷 Upload Photo
+                      <input type="file" accept="image/*" style="display:none" onchange="mktUploadPhoto(this)">
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Firm logo -->
+                <div>
+                  <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Firm Logo <span style="font-size:.8em;color:#6b7280">(top-left of every generated image; transparent PNG works best)</span></label>
+                  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                    <img id="mktLogoPreview" src="" style="height:48px;max-width:160px;object-fit:contain;display:none;background:#0f172a;padding:4px;border-radius:4px">
+                    <label class="btn btn-secondary" style="cursor:pointer;font-size:.85em">
+                      🏷️ Upload Logo
+                      <input type="file" accept="image/*" style="display:none" onchange="mktUploadLogo(this)">
+                    </label>
+                    <button id="mktRemoveLogoBtn" class="btn btn-secondary" style="display:none;font-size:.75em;padding:4px 10px;color:#dc2626" onclick="mktRemoveLogo()">Remove</button>
+                  </div>
+                  <div style="font-size:.78em;color:#6b7280;margin-top:6px">Until uploaded, posts show a "Your logo here" placeholder + a small "by Sarathi AI" co-brand on the top-right.</div>
+                </div>
+
+              </div>
+            </details>
+
+            <!-- Generate form -->
+            <div style="background:var(--bg-secondary,#f9fafb);border-radius:8px;padding:14px;margin-bottom:16px">
+              <div style="font-weight:600;margin-bottom:10px">✨ Generate Content</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                  <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Type</label>
+                  <select id="mktContentType" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px" onchange="mktOnTypeChange()">
+                    <option value="tip">💡 Financial Tip</option>
+                    <option value="scenario_insurance">🏥 Insurance Scenario</option>
+                    <option value="scenario_investment">📈 Investment Scenario</option>
+                    <option value="product_pitch">🤝 Product Pitch</option>
+                    <option value="festival">🎉 Festival Greeting</option>
+                    <option value="custom">✏️ Custom Topic (AI writes it)</option>
+                  </select>
+                </div>
+                <div id="mktFestivalPicker" style="display:none">
+                  <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Festival Date</label>
+                  <select id="mktFestivalDate" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px"></select>
+                </div>
+                <div>
+                  <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Language</label>
+                  <select id="mktGenLang" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px">
+                    <option value="en">English</option>
+                    <option value="hi">हिंदी (Hindi)</option>
+                    <option value="mr">मराठी (Marathi)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Image Format</label>
+                  <select id="mktImageFormat" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px">
+                    <option value="whatsapp_status">📱 WhatsApp Status (9:16)</option>
+                    <option value="instagram_square">📷 Instagram Square (1:1)</option>
+                    <option value="linkedin_banner">💼 LinkedIn Banner (1200×627)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Background</label>
+                  <select id="mktTemplateId" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px;max-width:200px">
+                    <option value="">Auto (matches type)</option>
+                    <option value="__pexels__">🔎 Stock photo (Pexels)</option>
+                    <!-- Templates loaded dynamically -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- Custom topic input (shown only for "custom" type) -->
+              <div id="mktCustomTopicRow" style="display:none;margin-top:10px">
+                <label style="font-size:.8em;font-weight:600;display:block;margin-bottom:4px">Your Topic <span style="color:#6b7280">(e.g. "Diwali family protection offer", "Why SIP beats FD for 30-year-olds")</span></label>
+                <input type="text" id="mktCustomTopic" placeholder="Describe what you want the post to be about…"
+                       style="width:100%;border:1px solid #3b82f6;border-radius:6px;padding:8px 12px;font-size:.9em;box-sizing:border-box">
+              </div>
+
+              <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-primary" onclick="mktGenerate()" id="mktGenerateBtn">✨ Generate</button>
+                <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenSchedule()">🗓️ Schedule Post</button>
+              </div>
+
+              <div id="mktGenerating" style="display:none;margin-top:12px;color:#6b7280;font-size:.88em">⏳ Generating content with AI…</div>
+              <div id="mktPreview" style="display:none;margin-top:14px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:12px">
+                <div style="font-weight:600;margin-bottom:8px" id="mktPreviewTitle"></div>
+                <div style="font-size:.9em;color:#374151;white-space:pre-wrap;margin-bottom:12px" id="mktPreviewBody"></div>
+                <img id="mktPreviewImg" src="" style="max-width:280px;border-radius:8px;display:none;margin-bottom:12px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-primary" style="font-size:.85em" onclick="mktSendStatus()">📱 Post to WA Status</button>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendTelegram()">✈️ Push to Telegram</button>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenDMPanel()">📨 Send as DM to Leads</button>
+                  <a id="mktDownloadImg" href="#" download style="display:none" class="btn btn-secondary" style="font-size:.85em;text-decoration:none">⬇️ Download Image</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- ═══ CONTENT CALENDAR ═══ -->
+            <details style="margin-bottom:16px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:0">
+              <summary style="cursor:pointer;font-weight:600;user-select:none;padding:12px">🗓️ Content Calendar <span style="font-size:.8em;font-weight:400;color:#6b7280;margin-left:6px">— Schedule posts in advance</span></summary>
+              <div style="padding:12px;border-top:1px solid var(--border,#e5e7eb)">
+                <!-- New schedule form -->
+                <div style="background:var(--bg-secondary,#f9fafb);border-radius:8px;padding:12px;margin-bottom:14px">
+                  <div style="font-weight:600;font-size:.9em;margin-bottom:10px">Schedule a New Post</div>
+                  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                    <div>
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Type</label>
+                      <select id="calContentType" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.88em">
+                        <option value="tip">💡 Financial Tip</option>
+                        <option value="scenario_insurance">🏥 Insurance Scenario</option>
+                        <option value="scenario_investment">📈 Investment Scenario</option>
+                        <option value="product_pitch">🤝 Product Pitch</option>
+                        <option value="festival">🎉 Festival Greeting</option>
+                        <option value="custom">✏️ Custom Topic</option>
+                      </select>
+                    </div>
+                    <div id="calCustomTopicWrap" style="display:none">
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Topic</label>
+                      <input type="text" id="calCustomTopic" placeholder="Your topic…" style="border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;font-size:.88em;width:220px">
+                    </div>
+                    <div>
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Language</label>
+                      <select id="calLang" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.88em">
+                        <option value="en">English</option>
+                        <option value="hi">हिंदी (Hindi)</option>
+                        <option value="mr">मराठी (Marathi)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Channel</label>
+                      <select id="calChannel" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.88em">
+                        <option value="wa_status">📱 WA Status</option>
+                        <option value="telegram">✈️ Telegram</option>
+                        <option value="both">Both</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Date &amp; Time</label>
+                      <input type="datetime-local" id="calFireAt" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.88em">
+                    </div>
+                    <button class="btn btn-primary" style="font-size:.85em" onclick="calSchedule()">Schedule</button>
+                  </div>
+                </div>
+
+                <!-- Scheduled posts list -->
+                <div style="font-weight:600;font-size:.88em;margin-bottom:8px">Upcoming & Recent <span style="cursor:pointer;color:#3b82f6;font-weight:400" onclick="loadCalendar()">↻ Refresh</span></div>
+                <div id="calList" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">
+                  <div style="color:#6b7280;font-size:.85em">Loading…</div>
+                </div>
+              </div>
+            </details>
+
+            <!-- ═══ LEAD SEGMENTS ═══ -->
+            <details style="margin-bottom:16px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:0">
+              <summary style="cursor:pointer;font-weight:600;user-select:none;padding:12px">🎯 Lead Segments <span style="font-size:.8em;font-weight:400;color:#6b7280;margin-left:6px">— Target specific audience groups</span></summary>
+              <div style="padding:12px;border-top:1px solid var(--border,#e5e7eb)">
+                <!-- Create segment form -->
+                <div style="background:var(--bg-secondary,#f9fafb);border-radius:8px;padding:12px;margin-bottom:14px">
+                  <div style="font-weight:600;font-size:.9em;margin-bottom:10px">Create New Segment</div>
+                  <div style="display:grid;gap:10px">
+                    <div>
+                      <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Segment Name</label>
+                      <input type="text" id="segName" placeholder="e.g. Hot Leads in Delhi, Renewal Due 30 Days" style="width:100%;border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 10px;font-size:.88em;box-sizing:border-box">
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                      <div>
+                        <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Stage</label>
+                        <select id="segStage" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.85em">
+                          <option value="">Any stage</option>
+                          <option value="prospect">Prospect</option>
+                          <option value="contacted">Contacted</option>
+                          <option value="pitched">Pitched</option>
+                          <option value="proposal_sent">Proposal Sent</option>
+                          <option value="negotiation">Negotiation</option>
+                          <option value="closed_won">Closed Won</option>
+                          <option value="closed_lost">Closed Lost</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">City</label>
+                        <input type="text" id="segCity" placeholder="e.g. Delhi" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.85em;width:120px">
+                      </div>
+                      <div>
+                        <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Need Type</label>
+                        <select id="segNeedType" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.85em">
+                          <option value="">Any</option>
+                          <option value="life">Life Insurance</option>
+                          <option value="health">Health Insurance</option>
+                          <option value="vehicle">Vehicle Insurance</option>
+                          <option value="investment">Investment / SIP</option>
+                          <option value="retirement">Retirement</option>
+                          <option value="term">Term Insurance</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Inactive (days)</label>
+                        <input type="number" id="segInactive" placeholder="e.g. 30" min="1" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.85em;width:80px">
+                      </div>
+                    </div>
+                    <div style="display:flex;gap:8px">
+                      <button class="btn btn-secondary" style="font-size:.85em" onclick="segPreview()">👁️ Preview Matches</button>
+                      <button class="btn btn-primary" style="font-size:.85em" onclick="segCreate()">Save Segment</button>
+                    </div>
+                    <div id="segPreviewResult" style="display:none;font-size:.85em;color:#374151;padding:8px;background:#eff6ff;border-radius:6px"></div>
+                  </div>
+                </div>
+
+                <!-- Segments list -->
+                <div style="font-weight:600;font-size:.88em;margin-bottom:8px">Saved Segments <span style="cursor:pointer;color:#3b82f6;font-weight:400" onclick="loadSegments()">↻ Refresh</span></div>
+                <div id="segList" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto">
+                  <div style="color:#6b7280;font-size:.85em">Loading…</div>
+                </div>
+              </div>
+            </details>
+
+            <!-- Content Library -->
+            <div>
+              <div style="font-weight:600;margin-bottom:10px">Content Library <span id="mktLibRefresh" style="font-size:.8em;color:#3b82f6;cursor:pointer" onclick="loadMktLibrary()">↻ Refresh</span></div>
+              <div id="mktLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+                <div style="color:#6b7280;font-size:.88em">Loading library…</div>
+              </div>
+              <div id="mktLibMore" style="display:none;text-align:center;margin-top:12px">
+                <button class="btn btn-secondary" style="font-size:.85em" onclick="loadMktLibrary(_mktPage+1)">Load more</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ VIDEO STUDIO CARD ═══ -->
+          <div class="card" id="videoStudioCard" style="margin-top:0">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+              <div>
+                <h2 style="margin:0;font-size:1.3em">🎬 Video Studio</h2>
+                <div style="color:#6b7280;font-size:.88em;margin-top:3px">Auto-generate branded marketing reels for WhatsApp Status, Instagram Reels &amp; Facebook Stories.</div>
+              </div>
+              <span id="videoStudioPlanBadge" style="display:none;font-size:.75em;padding:3px 10px;border-radius:12px;background:#fef3c7;color:#92400e;font-weight:600">Team / Enterprise</span>
+            </div>
+
+            <!-- Plan gate notice -->
+            <div id="videoStudioGate" style="display:none;padding:14px;background:#fef3c7;border-radius:8px;margin-bottom:14px;font-size:.88em;color:#92400e">
+              🔒 Video Studio is available on <strong>Team</strong> and <strong>Enterprise</strong> plans.
+              <a href="#" style="color:#d97706;text-decoration:underline;margin-left:6px" onclick="switchTab('billing')">Upgrade now →</a>
+            </div>
+
+            <!-- Format selector -->
+            <div id="videoStudioContent">
+              <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                <label style="font-size:.85em;font-weight:600">Format:</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.88em">
+                  <input type="radio" name="vidFmt" value="square" checked onchange="vidSetFmt(this.value)">
+                  📱 Square 1:1 <span style="color:#6b7280;font-size:.8em">(WA Status, FB)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.88em">
+                  <input type="radio" name="vidFmt" value="reels" onchange="vidSetFmt(this.value)">
+                  🎬 Vertical 9:16 <span style="color:#6b7280;font-size:.8em">(Reels, Stories)</span>
+                </label>
+              </div>
+
+              <!-- Video mode toggle: themed vs custom AI -->
+              <div style="display:flex;gap:8px;margin-bottom:14px">
+                <button id="vidModeTheme" class="btn btn-primary" style="font-size:.85em" onclick="vidSetMode('theme')">🎨 Choose Theme</button>
+                <button id="vidModeCustom" class="btn btn-secondary" style="font-size:.85em" onclick="vidSetMode('custom')">✏️ Custom AI Topic</button>
+              </div>
+
+              <!-- Custom topic input -->
+              <div id="vidCustomPanel" style="display:none;margin-bottom:14px;background:var(--bg-secondary,#f9fafb);border-radius:8px;padding:12px">
+                <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Describe your video topic</label>
+                <input type="text" id="vidCustomTopic" placeholder="e.g. Why families need critical illness cover, Benefits of NPS over PPF…"
+                       style="width:100%;border:1px solid #3b82f6;border-radius:6px;padding:8px 12px;font-size:.9em;box-sizing:border-box;margin-bottom:10px">
+                <div style="display:flex;gap:8px;align-items:center">
+                  <div>
+                    <label style="font-size:.78em;font-weight:600;display:block;margin-bottom:3px">Language</label>
+                    <select id="vidCustomLang" style="border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:.85em">
+                      <option value="en">English</option>
+                      <option value="hi">Hindi</option>
+                    </select>
+                  </div>
+                  <button class="btn btn-primary" style="margin-top:14px;font-size:.85em" onclick="vidGenerateCustom()">🎬 Generate Custom Video</button>
+                </div>
+              </div>
+
+              <!-- Theme grid -->
+              <div id="vidThemePanel">
+              <div id="vidThemeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+                <div style="color:#6b7280;font-size:.88em;grid-column:1/-1">Loading themes…</div>
+              </div>
+              </div>
+
+              <!-- Generation status -->
+              <div id="vidProgress" style="display:none;padding:14px;background:var(--bg-secondary,#f9fafb);border-radius:8px;margin-top:4px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div class="spinner" style="width:20px;height:20px;border-width:2px"></div>
+                  <div>
+                    <div style="font-weight:600;font-size:.9em" id="vidProgressLabel">Generating your video…</div>
+                    <div style="color:#6b7280;font-size:.8em" id="vidProgressSub">This takes 20–40 seconds. You can keep using the dashboard.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Result -->
+              <div id="vidResult" style="display:none;padding:14px;background:var(--bg-secondary,#f9fafb);border-radius:8px;margin-top:4px">
+                <div style="font-weight:600;margin-bottom:10px" id="vidResultTitle">✅ Video ready!</div>
+                <video id="vidResultPlayer" controls style="width:100%;max-width:400px;border-radius:8px;margin-bottom:10px;display:block" preload="metadata"></video>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <a id="vidDownloadBtn" href="#" download class="btn btn-primary" style="font-size:.85em;text-decoration:none">⬇️ Download MP4</a>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="vidReset()">🔄 Generate Another</button>
+                </div>
+              </div>
+
+              <!-- Error -->
+              <div id="vidError" style="display:none;padding:10px 14px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:.88em;margin-top:4px" id="vidErrorMsg"></div>
+            </div>
+          </div>
+
+          <!-- Targeted DM Modal -->
+          <div id="mktDMModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;align-items:center;justify-content:center">
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3 style="margin:0">📨 Send Festival Wish as DM</h3>
+                <button onclick="document.getElementById('mktDMModal').style.display='none'" style="border:none;background:none;font-size:1.4em;cursor:pointer">✕</button>
+              </div>
+              <div style="margin-bottom:12px">
+                <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Message</label>
+                <textarea id="mktDMMsg" rows="4" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-size:.9em;resize:vertical"></textarea>
+              </div>
+              <div style="margin-bottom:12px">
+                <label style="font-size:.85em;font-weight:600;display:block;margin-bottom:6px">Select Leads to Send To</label>
+                <div style="font-size:.8em;color:#3b82f6;margin-bottom:6px;cursor:pointer" onclick="mktAutoSelectByReligion()">✨ Auto-select leads by religion match</div>
+                <div id="mktLeadList" style="max-height:240px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+                  Loading leads…
+                </div>
+              </div>
+              <div id="mktDMStatus" style="font-size:.85em;margin-bottom:12px"></div>
+              <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="btn btn-secondary" onclick="document.getElementById('mktDMModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" onclick="mktSendDM()" id="mktSendDMBtn">Send to Selected Leads</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ═══ SUPPORT TAB ═══ -->
         <div class="tab-panel" id="tab-support">
             <div class="toolbar">
@@ -1698,6 +2286,47 @@ function exitImpersonation() {
         </div>
 
 </div>
+</div>
+
+<!-- ═══ TEST AUTOMATION TAB ═══ -->
+<div class="tab-panel" id="tab-testlab">
+  <div class="card" style="max-width:680px;margin:0 auto">
+    <div class="card-header" style="background:linear-gradient(135deg,#0d9488,#0891b2);color:#fff;border-radius:12px 12px 0 0;padding:18px 20px">
+      <h3 style="margin:0;font-size:1.1em">🧪 Automation Test Panel</h3>
+      <p style="margin:4px 0 0;font-size:.82em;opacity:.85">Owner-only. Click any button — results appear below instantly.</p>
+    </div>
+    <div class="card-body" style="padding:20px">
+
+      <p style="font-weight:600;margin-bottom:10px;font-size:.9em;color:var(--primary)">📡 Trigger Automation Scans</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+        <button class="btn btn-primary" onclick="triggerScan('birthday')">🎂 Birthday Scan</button>
+        <button class="btn btn-primary" onclick="triggerScan('anniversary')">💍 Anniversary Scan</button>
+        <button class="btn btn-primary" onclick="triggerScan('renewal')">🔔 Renewal Scan</button>
+        <button class="btn btn-primary" onclick="triggerScan('followup')">📋 Follow-up Scan</button>
+        <button class="btn btn-primary" onclick="triggerScan('nurture')">🌱 Nurture Drip</button>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:10px;font-size:.9em;color:var(--primary)">💬 WhatsApp Direct Send Test</p>
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <input id="testlab-phone" type="tel" placeholder="Phone number (e.g. 9876543210)" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:.88em">
+        <button class="btn btn-primary" onclick="testWASend()">📤 Send Test WA</button>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:10px;font-size:.9em;color:var(--primary)">📢 Broadcast to Team</p>
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <input id="testlab-broadcast" type="text" placeholder="Message to broadcast..." value="🧪 Test broadcast from owner" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:.88em">
+        <button class="btn btn-primary" onclick="testBroadcast()">📢 Send Broadcast</button>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:8px;font-size:.9em;color:var(--primary)">📋 Result Log</p>
+      <div id="testlab-log" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:100px;max-height:320px;overflow-y:auto;font-family:monospace;font-size:.8em;color:var(--text)">
+        <em style="opacity:.5">Results will appear here after each test...</em>
+      </div>
+      <div style="margin-top:10px;text-align:right">
+        <button class="btn" style="font-size:.8em" onclick="document.getElementById('testlab-log').innerHTML='<em style=opacity:.5>Cleared.</em>'">🗑 Clear log</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ ADD/EDIT LEAD MODAL ═══ -->
@@ -1907,11 +2536,65 @@ function exitImpersonation() {
             <div class="form-group"><label>Name</label><input type="text" id="edit-agent-name" placeholder="Agent name"></div>
             <div class="form-group"><label>Phone</label><input type="text" id="edit-agent-phone" placeholder="Phone number"></div>
             <div class="form-group"><label>Email</label><input type="email" id="edit-agent-email" placeholder="Email address"></div>
-            <div class="form-group" id="edit-agent-role-group"><label>Role</label><select id="edit-agent-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
+            <div class="form-group" id="edit-agent-role-group">
+                <label data-i18n="th_role">Role</label>
+                <select id="edit-agent-role">
+                    <option value="agent">Agent (Default)</option>
+                    <option value="admin">Admin (Full access)</option>
+                    <!-- Custom roles populated dynamically by _populateRoleDropdown() -->
+                </select>
+                <p style="font-size:.76em;color:var(--muted);margin:4px 0 0">
+                    👉 Custom roles configure करने के लिए Team tab में नीचे "Roles &amp; Permissions" देखें।
+                </p>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('edit-agent-modal')">Cancel</button>
             <button class="btn btn-primary" onclick="saveAgent()">💾 Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ CREATE / EDIT ROLE MODAL ═══ -->
+<div class="modal-overlay" id="role-modal">
+    <div class="modal" style="width:520px;max-height:90vh;overflow-y:auto">
+        <div class="modal-header">
+            <h3 id="role-modal-title">🔐 Create Role</h3>
+            <button class="close" onclick="closeModal('role-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="role-modal-id">
+            <div class="form-group">
+                <label>Role Slug <span style="color:var(--muted);font-size:.8em">(unique ID, lowercase, no spaces)</span></label>
+                <input type="text" id="role-slug" placeholder="e.g. senior_associate" pattern="[a-z0-9_]+" maxlength="40">
+                <p id="role-slug-note" style="font-size:.75em;color:var(--muted);margin:2px 0 0">Lowercase letters, numbers, underscore only. Cannot be changed after creation.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="form-group">
+                    <label>Title (English)</label>
+                    <input type="text" id="role-label-en" placeholder="e.g. Senior Associate" maxlength="60">
+                </div>
+                <div class="form-group">
+                    <label>Title (Hindi)</label>
+                    <input type="text" id="role-label-hi" placeholder="e.g. वरिष्ठ सहयोगी" maxlength="60">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Start from template (optional)</label>
+                <select id="role-template-sel" onchange="applyRoleTemplate()">
+                    <option value="">— blank / no template —</option>
+                    <option value="associate">Sales Associate</option>
+                    <option value="senior_associate">Senior Associate</option>
+                    <option value="manager">Manager</option>
+                    <option value="sub_admin">Sub-Admin</option>
+                </select>
+            </div>
+            <p style="font-size:.82em;font-weight:600;margin:12px 0 6px;color:var(--text)">🔑 Permissions</p>
+            <div id="role-perms-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.83em"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('role-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveRole()" id="role-save-btn">💾 Create Role</button>
         </div>
     </div>
 </div>
@@ -2067,15 +2750,56 @@ function exitImpersonation() {
                 </div>
             </div>
 
-            <!-- Step 3: QR scan -->
-            <div id="wa-step3" class="wa-step" style="display:none;text-align:center">
-                <p style="font-size:.88em;color:var(--muted);margin-bottom:16px" data-i18n="wa_step3_intro">Open WhatsApp on your phone → Settings → Linked Devices → Link a device, then scan the QR below.</p>
-                <div id="wa-qr-container" style="display:inline-block;padding:14px;background:white;border-radius:12px;border:1px solid var(--border);min-width:260px;min-height:260px">
-                    <div id="wa-qr-loading" data-i18n="wa_qr_loading" style="padding:60px 20px;color:#666">Generating QR...</div>
-                    <img id="wa-qr-img" src="" alt="QR" style="display:none;width:240px;height:240px">
+            <!-- Step 3: Connect — QR scan OR Pairing Code -->
+            <div id="wa-step3" class="wa-step" style="display:none">
+                <!-- Toggle between methods -->
+                <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px">
+                    <button id="wa-method-qr" onclick="waSwitchMethod('qr')"
+                        style="flex:1;padding:10px;font-weight:700;font-size:.88em;background:#25D366;color:white;border:none;cursor:pointer">
+                        🔲 Scan QR Code
+                    </button>
+                    <button id="wa-method-pair" onclick="waSwitchMethod('pair')"
+                        style="flex:1;padding:10px;font-weight:700;font-size:.88em;background:var(--bg);color:var(--muted);border:none;cursor:pointer">
+                        📱 Pairing Code (Easier)
+                    </button>
                 </div>
-                <div id="wa-qr-status" style="margin-top:16px;font-size:.85em;color:var(--muted)" data-i18n="wa_qr_waiting">Waiting for scan...</div>
-                <div id="wa-qr-success" style="display:none;margin-top:16px;padding:14px;background:rgba(16,185,129,0.1);border-radius:10px;color:#10b981;font-weight:700" data-i18n="wa_qr_success">✅ Connected! Closing...</div>
+
+                <!-- QR method -->
+                <div id="wa-connect-qr" style="text-align:center">
+                    <p style="font-size:.85em;color:var(--muted);margin-bottom:14px">Open WhatsApp → Settings → Linked Devices → Link a device → scan QR below.</p>
+                    <div id="wa-qr-container" style="display:inline-block;padding:14px;background:white;border-radius:12px;border:1px solid var(--border);min-width:260px;min-height:260px">
+                        <div id="wa-qr-loading" data-i18n="wa_qr_loading" style="padding:60px 20px;color:#666">Generating QR...</div>
+                        <img id="wa-qr-img" src="" alt="QR" style="display:none;width:240px;height:240px">
+                    </div>
+                    <div id="wa-qr-status" style="margin-top:14px;font-size:.85em;color:var(--muted)">Waiting for scan...</div>
+                </div>
+
+                <!-- Pairing code method -->
+                <div id="wa-connect-pair" style="display:none;text-align:center">
+                    <p style="font-size:.85em;color:var(--muted);margin-bottom:14px">
+                        Enter your WhatsApp number → get an 8-character code → open WhatsApp → Settings → Linked Devices → Link with Phone Number → enter code.
+                    </p>
+                    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap">
+                        <input type="tel" id="wa-pair-phone" placeholder="9876543210" maxlength="15"
+                            style="padding:10px 14px;border:1px solid var(--border);border-radius:9px;font-size:1em;background:var(--card);color:var(--text);width:200px">
+                        <button onclick="waRequestPairingCode()"
+                            style="padding:10px 20px;background:#25D366;color:white;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:.9em">
+                            Get Code
+                        </button>
+                    </div>
+                    <div id="wa-pair-result" style="display:none;padding:20px;background:var(--bg);border-radius:12px;margin-bottom:12px">
+                        <div style="font-size:.82em;color:var(--muted);margin-bottom:6px">Enter this code in WhatsApp → Linked Devices → Link with Phone Number:</div>
+                        <div id="wa-pair-code" style="font-size:2.4em;font-weight:900;letter-spacing:.18em;color:#25D366;font-family:monospace;transition:color .3s,transform .3s;display:inline-block"></div>
+                        <div style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap">
+                            <div id="wa-pair-countdown" style="font-size:.88em;font-weight:700;color:#f59e0b">⏱ 55s to enter</div>
+                            <button id="wa-pair-refresh-btn" onclick="waRequestPairingCode()" style="display:none;padding:5px 14px;background:#f59e0b;color:white;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:.82em">🔄 Get New Code</button>
+                        </div>
+                    </div>
+                    <div id="wa-pair-status" style="font-size:.85em;color:var(--muted);margin-bottom:8px"></div>
+                </div>
+
+                <!-- Success state (shared) -->
+                <div id="wa-qr-success" style="display:none;margin-top:16px;padding:14px;background:rgba(16,185,129,0.1);border-radius:10px;color:#10b981;font-weight:700;text-align:center">✅ Connected! WhatsApp AI is now active.</div>
             </div>
         </div>
         <div class="modal-footer">
@@ -2356,7 +3080,7 @@ const _DT = {
   wa_intro:{en:"Connect your WhatsApp once. Sarathi handles reminders, suggests AI replies for you to approve, and protects you from bans with built-in safety guards.",hi:'अपना वाट्सऐप एक बार जोड़ें। सारथी रिमाइंडर भेजता है, AI जवाब सुझाता है जिन्हें आप मंज़ूर करते हैं, और बिल्ट-इन सुरक्षा से आपको बैन से बचाता है।'},
   wa_checking:{en:'Checking connection...',hi:'कनेक्शन जाँच रहे हैं...'},
   wa_status_not_setup:{en:'Not connected yet',hi:'अभी कनेक्ट नहीं है'},
-  wa_status_pending:{en:'Setup in progress — scan QR',hi:'सेटअप जारी — QR स्कैन करें'},
+  wa_status_pending:{en:'⏳ Waiting for connection…',hi:'कनेक्शन की प्रतीक्षा…'},
   wa_status_open:{en:'✅ Active & connected',hi:'✅ सक्रिय और जुड़ा हुआ'},
   wa_status_logged_out:{en:'Logged out — reconnect to resume',hi:'लॉग-आउट — पुनः कनेक्ट करें'},
   wa_status_paused:{en:'⚠️ Paused for safety',hi:'⚠️ सुरक्षा हेतु रोका गया'},
@@ -3021,7 +3745,7 @@ function _waUrl(phone, name, opts) {
   }
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 }
-// Pretty pill-shaped WhatsApp action button (use in tables/cards)
+// Pretty pill-shaped WhatsApp action button (use in tables/cards) — opens wa.me fallback
 function _waBtn(phone, name, opts) {
   const url = _waUrl(phone, name, opts); if(!url) return '';
   const label = (opts && opts.label) || 'WhatsApp';
@@ -3031,10 +3755,136 @@ function _waBtn(phone, name, opts) {
     : 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:#25D366;color:#fff;text-decoration:none;font-size:.78em;font-weight:600;line-height:1';
   return `<a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(label)}" style="${style}">💬 ${esc(label)}</a>`;
 }
+// Send WhatsApp message directly via Evolution API; falls back to wa.me if not connected
+async function sendWaDirect(phone, name) {
+  const p = String(phone||'').replace(/\D/g,''); if(!p) return;
+  const num = p.length === 10 ? '91'+p : p;
+  const firm = (STATE && STATE.firm_name) || 'Sarathi-AI';
+  const first = (name||'').trim().split(' ')[0] || (_dlang==='hi'?'जी':'there');
+  const msg = _dlang==='hi'
+    ? `नमस्ते ${first}, ${firm} की ओर से। क्या आप कुछ मिनटों के लिए बात कर सकते हैं?`
+    : `Hi ${first}, this is ${firm}. Do you have a couple of minutes to chat?`;
+  try {
+    const r = await api('/api/wa/send', {method:'POST', body:JSON.stringify({phone:num, message:msg})});
+    if (r && r.ok) {
+      showToast(_dlang==='hi'?'WhatsApp संदेश भेजा गया ✓':'WhatsApp message sent ✓', 'success');
+      return;
+    }
+    if (r && r.status === 503) {
+      window.open(_waUrl(phone, name), '_blank');
+      return;
+    }
+    const err = await r.json().catch(()=>({}));
+    showToast('WhatsApp error: '+_extractErr(err,'Send failed'), 'error');
+  } catch(e) {
+    window.open(_waUrl(phone, name), '_blank');
+  }
+}
+// Pill button that sends directly via Evolution API automation
+function _waDirectBtn(phone, name, opts) {
+  const p = String(phone||'').replace(/\D/g,''); if(!p) return '';
+  const safePhone = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const safeName = (name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const label = (opts && opts.label) || 'WhatsApp';
+  const small = opts && opts.small;
+  const style = small
+    ? 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;background:#25D366;color:#fff;font-size:.72em;font-weight:600;line-height:1;border:none;cursor:pointer'
+    : 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:#25D366;color:#fff;font-size:.78em;font-weight:600;line-height:1;border:none;cursor:pointer';
+  return `<button onclick="event.stopPropagation();sendWaDirect('${safePhone}','${safeName}')" title="Send via WhatsApp automation" style="${style}">💬 ${esc(label)}</button>`;
+}
 function fmtTime12(t) { if(!t)return ''; try{const [h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';const h12=h%12||12;return h12+':'+(m<10?'0':'')+m+' '+ap;}catch(e){return t;} }
 function closeModal(id) { const el=document.getElementById(id); el.style.animation='modalOverlayOut .2s ease forwards'; setTimeout(()=>{el.classList.remove('show');el.style.animation='';},200); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function isTeamPlan() { return ['team','enterprise'].includes(STATE.plan); }
+
+// B3: bundle-ending banner. Visible when plan_source=nidaan_bundle and
+// bundled_until is within 7 days (including past, which triggers the
+// "ended today / yesterday" guidance instead of a count-down).
+function _renderBundleEndingBanner(tenant) {
+  const banner = document.getElementById('bundle-ending-banner');
+  if (!banner) return;
+  const planSource = tenant.plan_source || '';
+  const bu = tenant.bundled_until || '';
+  if (planSource !== 'nidaan_bundle' || !bu) { banner.style.display = 'none'; return; }
+  // bundled_until is a date (YYYY-MM-DD). Compute days from today using UTC.
+  let days = NaN;
+  try {
+    const buD = new Date(bu + 'T00:00:00Z');
+    const today = new Date();
+    today.setUTCHours(0,0,0,0);
+    days = Math.round((buD - today) / 86400000);
+  } catch (_) { days = NaN; }
+  if (isNaN(days) || days > 7) { banner.style.display = 'none'; return; }
+  const title = document.getElementById('bundle-ending-title');
+  const text = document.getElementById('bundle-ending-text');
+  if (days > 1) {
+    title.textContent = '⏰ Your Sarathi access ends in ' + days + ' days';
+    text.textContent = 'Renew your Nidaan plan to keep bundled access, or subscribe to Sarathi-AI directly.';
+  } else if (days === 1) {
+    title.textContent = '⏰ Your Sarathi access ends tomorrow';
+    text.textContent = 'Last chance to renew Nidaan or pick a Sarathi plan to avoid interruption.';
+  } else if (days === 0) {
+    title.textContent = '⚠️ Your Sarathi access ends today';
+    text.textContent = 'Choose a plan now to keep using Sarathi-AI without interruption.';
+  } else {
+    title.textContent = '⚠️ Your Sarathi bundle has ended';
+    text.textContent = 'You can re-subscribe directly to keep using Sarathi-AI.';
+  }
+  banner.style.display = 'flex';
+}
+
+// ── Test Automation Lab ────
+function _tlLog(msg, ok) {
+  const el = document.getElementById('testlab-log');
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString();
+  const color = ok === false ? '#ef4444' : ok === true ? '#10b981' : '#64748b';
+  el.innerHTML += `<div style="margin-bottom:4px"><span style="color:#94a3b8">[${ts}]</span> <span style="color:${color}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+async function triggerScan(type) {
+  const labels = {birthday:'Birthday',anniversary:'Anniversary',renewal:'Renewal',followup:'Follow-up',nurture:'Nurture Drip'};
+  const label = labels[type] || type;
+  _tlLog(`Running ${label} scan...`, null);
+  try {
+    const r = await api('/api/admin/trigger-scan', {method:'POST', body:JSON.stringify({scan_type:type})});
+    const d = await r.json().catch(()=>({}));
+    if (r.ok) {
+      const summary = d.result ? JSON.stringify(d.result) : (d.message || 'Done');
+      _tlLog(`✅ ${label}: ${summary}`, true);
+      showToast(`${label} scan complete`, 'success');
+    } else {
+      _tlLog(`❌ ${label} failed — ${_extractErr(d, r.status)}`, false);
+      showToast(`${label} scan failed`, 'error');
+    }
+  } catch(e) {
+    _tlLog(`❌ ${label} error: ${e.message}`, false);
+    showToast('Scan error: ' + e.message, 'error');
+  }
+}
+async function testWASend() {
+  const raw = (document.getElementById('testlab-phone').value || '').replace(/\D/g,'');
+  if (!raw) { showToast('Enter a phone number first', 'error'); return; }
+  const phone = raw.length === 10 ? '91' + raw : raw;
+  _tlLog(`Sending test WA to ${phone}...`, null);
+  try {
+    const r = await api('/api/wa/send', {method:'POST', body:JSON.stringify({phone, message:'🧪 Sarathi-AI test message — system check.'})});
+    const d = await r.json().catch(()=>({}));
+    if (r.ok) { _tlLog(`✅ WA sent to ${phone}`, true); showToast('WhatsApp test sent ✓', 'success'); }
+    else { _tlLog(`❌ WA send failed — ${_extractErr(d, r.status)}`, false); showToast('WA send failed', 'error'); }
+  } catch(e) { _tlLog(`❌ WA error: ${e.message}`, false); }
+}
+async function testBroadcast() {
+  const msg = (document.getElementById('testlab-broadcast').value || '').trim();
+  if (!msg) { showToast('Enter a message first', 'error'); return; }
+  _tlLog(`Broadcasting to team...`, null);
+  try {
+    const r = await api('/api/agents/broadcast', {method:'POST', body:JSON.stringify({message:msg})});
+    const d = await r.json().catch(()=>({}));
+    if (r.ok) { _tlLog(`✅ Broadcast sent — ${d.sent || ''} recipients`, true); showToast('Broadcast sent ✓', 'success'); }
+    else { _tlLog(`❌ Broadcast failed — ${_extractErr(d, r.status)}`, false); showToast('Broadcast failed', 'error'); }
+  } catch(e) { _tlLog(`❌ Broadcast error: ${e.message}`, false); }
+}
 
 let _debTimer;
 function debouncedLoadLeads() { clearTimeout(_debTimer); _debTimer = setTimeout(()=>{_leadsPage=0;loadLeads();}, 400); }
@@ -3069,21 +3919,39 @@ function switchTab(tab) {
     }
     else if (tab==='tasks') loadTasks();
     else if (tab==='policies') loadPolicies();
-    else if (tab==='agents') loadAgents();
+    else if (tab==='agents') {
+        loadAgents();
+        // Show Roles section for owners on team+ plans
+        const rolesSection = document.getElementById('roles-section');
+        if (rolesSection) {
+            const isOwner = (STATE.role || localStorage.getItem('sarathi_role')) === 'owner';
+            const isPaid = STATE.plan && !['trial','individual'].includes(STATE.plan);
+            if (isOwner && isPaid) {
+                rolesSection.style.display = 'block';
+                loadRoles();
+            }
+        }
+    }
     else if (tab==='subscription') loadSubscription();
     else if (tab==='profile') loadProfile();
     else if (tab==='support') loadTickets();
     else if (tab==='whatsapp') { loadWhatsAppStatus(); apkLoadStatus(); }
     else if (tab==='drip') { loadDripSequences(); loadDripEnrollments('active');
-        if (isOwnerRole && isOwnerRole()) document.getElementById('drip-test-btn').style.display='inline-block'; }
+        if (isOwnerRole && isOwnerRole()) {
+            document.getElementById('drip-test-btn').style.display='inline-block';
+            document.getElementById('drip-enrol-card').style.display='block';
+            _populateDripEnrolSeqDropdown();
+        }
+    }
     else if (tab==='lapse') loadLapse();
     else if (tab==='microsite') loadMicrosite();
+    else if (tab==='marketing') { loadMarketing(); loadVideoStudio(); loadCalendar(); loadSegments(); }
 }
 
 // ── Plan-based UI ────
 function isOwnerRole() { return ['owner','admin'].includes(STATE.role); }
 
-function configurePlanUI() {
+function configurePlanUI(overviewData) {
     const isTeam = isTeamPlan();
     const isOwner = isOwnerRole();
     // Team tab: only show for owners/admins on team plans
@@ -3098,12 +3966,17 @@ function configurePlanUI() {
     // Affiliate Portal button: owner/admin only
     const affNav = document.getElementById('nav-affiliate');
     if (affNav) affNav.classList.toggle('hidden', !isOwner);
+    // Test Automation panel: owner/admin only
+    const testNav = document.getElementById('nav-testlab');
+    if (testNav) testNav.classList.toggle('hidden', !isOwner);
     // Import CSV button: owner only
     document.querySelectorAll('.import-csv-btn').forEach(el => el.style.display = isOwner ? '' : 'none');
     // Delete / Reassign buttons: owner only
     document.querySelectorAll('.owner-only').forEach(el => el.style.display = isOwner ? '' : 'none');
     // Plan badge
     document.getElementById('sidebar-plan').querySelector('strong').textContent = PLAN_NAMES[STATE.plan] || STATE.plan;
+    // B3: bundle-ending banner — show when within 7 days of bundled_until
+    _renderBundleEndingBanner(STATE.tenant || {});
     if (STATE.tenant) {
         const firmName = STATE.tenant.firm_name || _dt('sidebar_crm');
         document.getElementById('sidebar-brand-name').textContent = firmName;
@@ -3115,7 +3988,13 @@ function configurePlanUI() {
         if (roleBadge && STATE.role) {
             const roleColors = {owner:'#0d9488',admin:'#4338ca',agent:'#3b82f6'};
             const roleBgs = {owner:'#f0fdfa',admin:'#eef2ff',agent:'#eff6ff'};
-            roleBadge.textContent = STATE.role;
+            // For custom roles, show the human label instead of the slug
+            const hi = STATE.lang === 'hi';
+            const od = overviewData || {};
+            const roleDisplay = od.role_label_hi && hi ? od.role_label_hi
+                              : od.role_label ? od.role_label
+                              : STATE.role;
+            roleBadge.textContent = roleDisplay;
             roleBadge.style.color = roleColors[STATE.role] || '#64748b';
             roleBadge.style.background = roleBgs[STATE.role] || '#f1f5f9';
             roleBadge.style.display = 'inline';
@@ -3138,8 +4017,11 @@ async function loadOverview() {
     const d = await res.json();
     STATE.tenant = d.tenant; STATE.plan = d.tenant?.plan||'trial'; STATE.features = d.plan_features||{}; STATE.pendingChange = d.pending_plan_change; STATE.role = d.role||localStorage.getItem('sarathi_role')||'owner';
     STATE._agent_name = d.agent_name || ''; STATE._agent_phone = d.agent_phone || ''; STATE.isPartner = !!d.is_partner;
+    STATE._permissions = d.permissions || {};  // RBAC permissions from /api/auth/me
+    STATE._roleLabel = d.role_label || STATE.role;
+    STATE._roleLabelHi = d.role_label_hi || STATE._roleLabel;
     window._currentAgentName = STATE._agent_name;
-    configurePlanUI();
+    configurePlanUI(d);
 
     // Sidebar plan detail
     const t = d.tenant;
@@ -3315,7 +4197,7 @@ async function loadLeads() {
     try {
         _body.innerHTML = d.leads.length ? d.leads.map(l=>{const _lp=(l.phone||'').replace(/\D/g,'');return `<tr>
             <td><strong>${esc(l.name)}</strong>${l.email?'<br><span style="font-size:.72em;color:var(--muted)">'+esc(l.email)+'</span>':''}</td>
-            <td style="white-space:nowrap">${esc(l.phone||'-')}${_lp?' '+_waBtn(l.phone,l.name,{small:true}):''}</td>
+            <td style="white-space:nowrap">${esc(l.phone||'-')}${_lp?' '+_waDirectBtn(l.phone,l.name,{small:true}):''}</td>
             <td><span class="badge stage-${l.stage}">${_stageLabel(l.stage)}</span></td>
             <td>${l.need_type==='review'?'<span class=\"badge need-review\">⚠️ Review</span>':esc(l.need_type||'-')}</td>
             <td>${esc(l.source||'-')}</td>
@@ -3344,7 +4226,7 @@ async function loadLeads() {
                 <span class="badge stage-${l.stage}" style="font-size:.7em">${_stageLabel(l.stage)}</span>
             </div>
             <div class="lc-row">
-                <span>📱 ${esc(l.phone||'-')}${_lp?' '+_waBtn(l.phone,l.name,{small:true}):''}</span>
+                <span>📱 ${esc(l.phone||'-')}${_lp?' '+_waDirectBtn(l.phone,l.name,{small:true}):''}</span>
                 ${l.need_type?'<span>🏥 '+esc(l.need_type)+'</span>':''}
                 ${l.source?'<span>📎 '+esc(l.source)+'</span>':''}
             </div>
@@ -3391,6 +4273,7 @@ function showAddLeadModal() {
 
 let _cachedLeads = [];
 async function editLead(id) {
+    STATE._selectedLeadId = id;  // track for drip enrol
     // Find lead from cached page or re-fetch
     let lead = null;
     const res = await api(`/api/admin/leads?limit=200&offset=0`);
@@ -3436,9 +4319,7 @@ async function saveLead() {
         }
         if (!res.ok) {
             const d = await res.json().catch(()=>({}));
-            const msg = d.error || d.detail || ('HTTP '+res.status);
-            const msgStr = typeof msg==='string'? msg : JSON.stringify(msg);
-            alert((editId?'Could not update lead:':'Could not add lead:')+'\n\n'+msgStr);
+            alert((editId?'Could not update lead:':'Could not add lead:')+'\n\n'+_extractErr(d, 'HTTP '+res.status));
             console.error('saveLead failed:', res.status, d);
             btn.disabled=false; btn.textContent=origText; return;
         }
@@ -3790,8 +4671,7 @@ async function savePolicy() {
         if (!res) { if(btn){btn.disabled=false;btn.textContent=origText;} return; }
         if (!res.ok) {
             const d = await res.json().catch(()=>({}));
-            const msg = d.error || d.detail || _dt('server_error');
-            showToast(typeof msg==='string'? msg : JSON.stringify(msg), 'error');
+            showToast(_extractErr(d, _dt('server_error')), 'error');
             console.error('savePolicy failed:', res.status, d);
             if(btn){btn.disabled=false;btn.textContent=origText;} return;
         }
@@ -4412,7 +5292,7 @@ async function runLeadAI(action) {
         loadingDiv.style.display = 'none';
         if (!res || !res.ok) {
             const err = await res?.json().catch(()=>({}));
-            resultDiv.textContent = '❌ ' + (err.error || err.detail || 'AI request failed');
+            resultDiv.textContent = '❌ ' + _extractErr(err, 'AI request failed');
             resultDiv.style.display = 'block';
             return;
         }
@@ -5537,11 +6417,29 @@ function editAgent(agentId) {
     document.getElementById('edit-agent-name').value = a.name||'';
     document.getElementById('edit-agent-phone').value = a.phone||'';
     document.getElementById('edit-agent-email').value = a.email||'';
-    document.getElementById('edit-agent-role').value = a.role||'agent';
+    // Populate role dropdown with custom roles
+    _populateRoleDropdown('edit-agent-role', a.role||'agent');
     // Only owner can change roles
     const callerRole = STATE.plan_info?.role || STATE.agents.find(x=>x.phone===STATE.profile?.phone)?.role;
     document.getElementById('edit-agent-role-group').style.display = callerRole==='owner'?'':'none';
     openModal('edit-agent-modal');
+}
+
+function _populateRoleDropdown(selectId, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const hi = STATE.lang === 'hi';
+    // Built-in roles
+    let html = `<option value="agent">Agent — Default (basic access)</option>
+                <option value="admin">Admin — Full access (no owner)</option>`;
+    // Custom roles
+    (STATE._roles || []).forEach(r => {
+        const label = (hi && r.role_label_hi) ? r.role_label_hi : r.role_label;
+        const badge = r.is_system ? ' 📦' : ' ✏️';
+        html += `<option value="${esc(r.role_slug)}">${label}${badge}</option>`;
+    });
+    sel.innerHTML = html;
+    sel.value = currentValue || 'agent';
 }
 
 async function saveAgent() {
@@ -5573,6 +6471,202 @@ async function doTransfer() {
     const res = await api('/api/agents/transfer',{method:'POST',body:JSON.stringify({from_agent_id:from,to_agent_id:to})});
     if (res&&res.ok) { closeModal('transfer-modal'); loadAgents(); alert('Transfer complete!'); }
     else { const d=await res?.json(); alert(d?.error||'Failed'); }
+}
+
+// ═══════════ ROLES & PERMISSIONS ═══════════
+STATE._roles = [];
+STATE._permsMeta = {};
+
+async function loadRoles() {
+    const hi = STATE.lang === 'hi';
+    const res = await api('/api/roles');
+    if (!res) return;
+    if (res.status === 403) return; // not owner or not team plan — section hidden
+    if (!res.ok) return;
+    const d = await res.json();
+    STATE._roles = d.roles || [];
+    STATE._permsMeta = d.permissions_meta || {};
+    renderRolesList();
+}
+
+function renderRolesList() {
+    const hi = STATE.lang === 'hi';
+    const el = document.getElementById('roles-list');
+    if (!el) return;
+    const roles = STATE._roles;
+    if (!roles.length) {
+        el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted);font-size:.85em">
+            ${hi ? 'कोई role नहीं है। "Load Predefined Roles" से शुरू करें।' : 'No roles yet. Click "Load Predefined Roles" to get started.'}
+        </div>`;
+        return;
+    }
+    el.innerHTML = roles.map(r => {
+        const label = (hi && r.role_label_hi) ? r.role_label_hi : r.role_label;
+        const perms = r.permissions || {};
+        const enabledPerms = Object.entries(STATE._permsMeta)
+            .filter(([k]) => perms[k])
+            .map(([k, v]) => `<span style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:.72em;margin:2px;white-space:nowrap">${hi ? v.label_hi : v.label}</span>`)
+            .join('');
+        const disabledCount = Object.keys(STATE._permsMeta).length - Object.values(perms).filter(Boolean).length;
+        const systemBadge = r.is_system ? `<span style="font-size:.7em;background:#e0f2fe;color:#0284c7;padding:2px 6px;border-radius:8px;margin-left:6px">📦 ${hi?'Template':'Template'}</span>` : '';
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
+                <div>
+                    <strong style="font-size:.9em">${esc(label)}</strong>${systemBadge}
+                    <span style="font-size:.72em;color:var(--muted);margin-left:8px">slug: ${esc(r.role_slug)}</span>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm btn-outline" onclick="openEditRoleModal(${r.role_id})">✏️ ${hi?'Edit':'Edit'}</button>
+                    <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteRole(${r.role_id},'${esc(label.replace(/'/g,"\\'"))}')">🗑️</button>
+                </div>
+            </div>
+            <div style="margin-top:8px;line-height:1.8">${enabledPerms || `<em style="color:var(--muted);font-size:.8em">${hi?'कोई permission नहीं':'No permissions enabled'}</em>`}</div>
+        </div>`;
+    }).join('');
+}
+
+function _buildPermsGrid(currentPerms) {
+    const hi = STATE.lang === 'hi';
+    const grid = document.getElementById('role-perms-grid');
+    if (!grid) return;
+    grid.innerHTML = Object.entries(STATE._permsMeta).map(([key, meta]) => {
+        const checked = currentPerms[key] ? 'checked' : '';
+        const label = hi ? meta.label_hi : meta.label;
+        return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+            <input type="checkbox" id="perm-${key}" ${checked} style="width:14px;height:14px">
+            <span>${label}</span>
+        </label>`;
+    }).join('');
+}
+
+function _getPermsFromGrid() {
+    const perms = {};
+    Object.keys(STATE._permsMeta).forEach(key => {
+        const cb = document.getElementById('perm-' + key);
+        if (cb) perms[key] = cb.checked;
+    });
+    return perms;
+}
+
+const _ROLE_TEMPLATES = {
+    associate: {leads_view:true,leads_add:true,leads_edit:true,quotes_generate:true,ai_tools:true},
+    senior_associate: {leads_view:true,leads_add:true,leads_edit:true,quotes_generate:true,ai_tools:true,campaigns_view:true},
+    manager: {leads_view:true,leads_view_all:true,leads_add:true,leads_edit:true,leads_export:true,quotes_generate:true,ai_tools:true,campaigns_view:true,campaigns_send:true,drip_view:true,reports_view:true},
+    sub_admin: {leads_view:true,leads_view_all:true,leads_add:true,leads_edit:true,leads_delete:true,leads_export:true,quotes_generate:true,ai_tools:true,campaigns_view:true,campaigns_send:true,drip_view:true,drip_manage:true,reports_view:true,payments_view:true},
+};
+
+function applyRoleTemplate() {
+    const tpl = document.getElementById('role-template-sel').value;
+    if (!tpl || !_ROLE_TEMPLATES[tpl]) return;
+    // Apply template permissions to checkboxes
+    Object.keys(STATE._permsMeta).forEach(key => {
+        const cb = document.getElementById('perm-' + key);
+        if (cb) cb.checked = !!_ROLE_TEMPLATES[tpl][key];
+    });
+}
+
+function openCreateRoleModal() {
+    const hi = STATE.lang === 'hi';
+    document.getElementById('role-modal-title').textContent = hi ? '🔐 नई Role बनाएं' : '🔐 Create Role';
+    document.getElementById('role-modal-id').value = '';
+    document.getElementById('role-slug').value = '';
+    document.getElementById('role-slug').disabled = false;
+    document.getElementById('role-slug-note').style.display = '';
+    document.getElementById('role-label-en').value = '';
+    document.getElementById('role-label-hi').value = '';
+    document.getElementById('role-template-sel').value = '';
+    document.getElementById('role-save-btn').textContent = hi ? '💾 Role बनाएं' : '💾 Create Role';
+    _buildPermsGrid({});
+    openModal('role-modal');
+}
+
+function openEditRoleModal(roleId) {
+    const hi = STATE.lang === 'hi';
+    const role = STATE._roles.find(r => r.role_id === roleId);
+    if (!role) return;
+    document.getElementById('role-modal-title').textContent = hi ? '✏️ Role Edit करें' : '✏️ Edit Role';
+    document.getElementById('role-modal-id').value = roleId;
+    document.getElementById('role-slug').value = role.role_slug;
+    document.getElementById('role-slug').disabled = true; // slug cannot change
+    document.getElementById('role-slug-note').style.display = 'none';
+    document.getElementById('role-label-en').value = role.role_label || '';
+    document.getElementById('role-label-hi').value = role.role_label_hi || '';
+    document.getElementById('role-template-sel').value = '';
+    document.getElementById('role-save-btn').textContent = hi ? '💾 Save Changes' : '💾 Save Changes';
+    _buildPermsGrid(role.permissions || {});
+    openModal('role-modal');
+}
+
+async function saveRole() {
+    const hi = STATE.lang === 'hi';
+    const roleId = document.getElementById('role-modal-id').value;
+    const slug = document.getElementById('role-slug').value.trim();
+    const labelEn = document.getElementById('role-label-en').value.trim();
+    const labelHi = document.getElementById('role-label-hi').value.trim();
+    const perms = _getPermsFromGrid();
+
+    if (!labelEn) {
+        showToast(hi ? 'English title zaroori hai' : 'English title is required', 'error');
+        return;
+    }
+    if (!roleId && !slug) {
+        showToast(hi ? 'Role slug zaroori hai' : 'Role slug is required', 'error');
+        return;
+    }
+    if (!roleId && !/^[a-z0-9_]+$/.test(slug)) {
+        showToast(hi ? 'Slug mein sirf lowercase letters, numbers, underscore allowed hain' : 'Slug: lowercase letters, numbers, underscore only', 'error');
+        return;
+    }
+
+    let res;
+    if (roleId) {
+        res = await api(`/api/roles/${roleId}`, {
+            method: 'PUT',
+            body: JSON.stringify({role_label: labelEn, role_label_hi: labelHi, permissions: perms})
+        });
+    } else {
+        res = await api('/api/roles', {
+            method: 'POST',
+            body: JSON.stringify({role_slug: slug, role_label: labelEn, role_label_hi: labelHi, permissions: perms})
+        });
+    }
+    let d; try { d = await res?.json(); } catch(_) { d = null; }
+    if (res?.ok && d?.success) {
+        showToast(hi ? (roleId ? 'Role update ho gayi ✓' : 'Role bana di gayi ✓') : (roleId ? 'Role updated ✓' : 'Role created ✓'), 'success');
+        closeModal('role-modal');
+        await loadRoles();
+    } else {
+        showToast(_extractErr(d, hi ? 'Kuch gadbad hui' : 'Something went wrong'), 'error');
+    }
+}
+
+async function deleteRole(roleId, label) {
+    const hi = STATE.lang === 'hi';
+    const msg = hi ? `"${label}" role delete karein?\n(Agar kisi agent ko assign hai to delete nahi hogi)` : `Delete role "${label}"?\n(Cannot delete if any agents are assigned to it)`;
+    if (!confirm(msg)) return;
+    const res = await api(`/api/roles/${roleId}`, {method: 'DELETE'});
+    let d; try { d = await res?.json(); } catch(_) { d = null; }
+    if (res?.ok && d?.success) {
+        showToast(hi ? 'Role delete ho gayi' : 'Role deleted', 'success');
+        await loadRoles();
+    } else {
+        showToast(_extractErr(d, hi ? 'Delete nahi hua' : 'Delete failed'), 'error');
+    }
+}
+
+async function seedRoleTemplates() {
+    const hi = STATE.lang === 'hi';
+    const msg = hi ? '4 predefined roles load karein? (Associate, Senior Associate, Manager, Sub-Admin) — Jo pehle se hain unhe skip karenge.' : 'Load 4 predefined roles? (Associate, Senior Associate, Manager, Sub-Admin) — Already existing ones will be skipped.';
+    if (!confirm(msg)) return;
+    const res = await api('/api/roles/seed-templates', {method: 'POST'});
+    let d; try { d = await res?.json(); } catch(_) { d = null; }
+    if (res?.ok) {
+        const created = d?.created || [];
+        showToast(created.length ? `✅ ${created.length} role(s) add ki gayi: ${created.join(', ')}` : (hi ? 'Sab roles pehle se hain' : 'All templates already exist'), created.length ? 'success' : 'info');
+        await loadRoles();
+    } else {
+        showToast(_extractErr(d, 'Failed'), 'error');
+    }
 }
 
 // ═══════════ SUBSCRIPTION ═══════════
@@ -5617,7 +6711,7 @@ async function loadSubscription() {
             <div><div style="font-size:.75em;color:var(--muted);text-transform:uppercase;font-weight:600">${_dt('sub_features')}</div><div style="margin-top:4px;font-size:.82em">${sub.plan_features?.bulk_campaigns?'✅':'❌'} ${_dt('sub_campaigns')} • ${sub.plan_features?.google_drive?'✅':'❌'} ${_dt('sub_drive')} • ${sub.plan_features?.team_dashboard?'✅':'❌'} ${_dt('sub_team')}</div></div>
         </div>
         ${sub.pending_plan_change?`<div class="alert alert-warn" style="margin-top:16px"><span>📋</span><span>${_dt('scheduled')}: <strong>${PLAN_NAMES[sub.pending_plan_change.current_plan]} → ${PLAN_NAMES[sub.pending_plan_change.new_plan]}</strong></span><button class="btn btn-sm btn-outline" onclick="cancelPendingChange()" style="margin-left:auto">${_dt('cancel_change')}</button></div>`:''}
-        ${sub.status==='active'&&sub.razorpay_sub_id?`<div style="margin-top:12px;font-size:.82em;color:var(--green)">🔄 ${_dt('sub_autorenew')}</div>`:''}
+        ${sub.status==='active'&&sub.subscription_expires_at?`<div style="margin-top:12px;font-size:.82em;color:var(--muted)">📅 Access until ${new Date(sub.subscription_expires_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>`:''}
         ${sub.status==='cancelled'&&sub.subscription_expires_at?`<div class="alert alert-warn" style="margin-top:12px"><span>⚠️ ${_dtf('sub_cancelled_notice',new Date(sub.subscription_expires_at).toLocaleDateString())}</span></div>`:''}
     `;
 
@@ -5627,53 +6721,139 @@ async function loadSubscription() {
         cancelCard.style.display = (sub.status==='active' && sub.plan!=='trial' && isOwnerRole()) ? '' : 'none';
     }
 
-    // Plan cards
+    // Plan cards — with Monthly / Yearly toggle
+    const billingToggleHtml = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;justify-content:center">
+            <span style="font-size:.9em;color:var(--muted)">Monthly</span>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">
+                <input type="checkbox" id="billing-toggle" onchange="toggleBillingPeriod()" style="opacity:0;width:0;height:0">
+                <span style="position:absolute;inset:0;background:#ccc;border-radius:24px;transition:.3s" id="toggle-track"></span>
+                <span style="position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s" id="toggle-thumb"></span>
+            </label>
+            <span style="font-size:.9em;color:var(--muted)">Yearly <span style="background:var(--green);color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">Save ~17%</span></span>
+        </div>`;
     const plans = [
-        {key:'individual',name:_dt('plan_solo'),price:199,agents:1,feats:[_dt('pf_1advisor'),_dt('pf_unlimited_leads'),_dt('pf_all_calc'),_dt('pf_whatsapp'),_dt('pf_reports')]},
-        {key:'team',name:_dt('plan_team'),price:799,agents:6,feats:[_dt('pf_5advisors'),_dt('pf_team_dash'),_dt('pf_campaigns'),_dt('pf_drive'),_dt('pf_transfer'),_dt('pf_all_solo')]},
-        {key:'enterprise',name:_dt('plan_enterprise'),price:1999,agents:26,feats:[_dt('pf_25advisors'),_dt('pf_admin'),_dt('pf_branding'),_dt('pf_api'),_dt('pf_priority'),_dt('pf_all_team')]},
+        {key:'individual',name:_dt('plan_solo'),price:199,annualPrice:1990,annualKey:'individual_annual',agents:1,feats:[_dt('pf_1advisor'),_dt('pf_unlimited_leads'),_dt('pf_all_calc'),_dt('pf_whatsapp'),_dt('pf_reports')]},
+        {key:'team',name:_dt('plan_team'),price:799,annualPrice:7990,annualKey:'team_annual',agents:6,feats:[_dt('pf_5advisors'),_dt('pf_team_dash'),_dt('pf_campaigns'),_dt('pf_drive'),_dt('pf_transfer'),_dt('pf_all_solo')]},
+        {key:'enterprise',name:_dt('plan_enterprise'),price:1999,annualPrice:19990,annualKey:'enterprise_annual',agents:26,feats:[_dt('pf_25advisors'),_dt('pf_admin'),_dt('pf_branding'),_dt('pf_api'),_dt('pf_priority'),_dt('pf_all_team')]},
     ];
+    window._sarathiPlans = plans;
+    window._sarathiCurrentPlan = sub.plan;
+    window._sarathiSubStatus = sub.status;
     const pending = sub.pending_plan_change;
     const isTrial = ['trial','trialing'].includes(sub.status);
-    document.getElementById('plan-cards').innerHTML = plans.map(p=>{
-        const isCur = sub.plan===p.key, isSched = pending?.new_plan===p.key;
-        const isUp = PLAN_ORDER.indexOf(p.key) > PLAN_ORDER.indexOf(sub.plan);
+    const isYearly = document.getElementById('billing-toggle')?.checked || false;
+    document.getElementById('plan-cards').innerHTML = billingToggleHtml + plans.map(p=>{
+        const effectiveKey = isYearly ? p.annualKey : p.key;
+        const isCur = sub.plan === effectiveKey || (!isYearly && sub.plan === p.key) || (isYearly && sub.plan === p.annualKey);
+        const isSched = pending?.new_plan === effectiveKey;
+        const isUp = PLAN_ORDER.indexOf(p.key) > PLAN_ORDER.indexOf(sub.plan.replace('_annual',''));
         const showBtn = !isSched && (!isCur || (isCur && isTrial));
-        return `<div class="plan-card ${isCur?'current':''} ${isSched?'scheduled':''}" ${showBtn?`onclick="schedulePlanChange('${p.key}')"`:''}>
+        const displayPrice = isYearly ? `₹${p.annualPrice.toLocaleString('en-IN')}<small>/yr</small>` : `₹${p.price}<small>${_dt('per_month')}</small>`;
+        return `<div class="plan-card ${isCur?'current':''} ${isSched?'scheduled':''}" ${showBtn?`onclick="schedulePlanChange('${effectiveKey}')"`:''}>
             ${isCur?`<div class="tag" style="background:var(--green);color:#fff">${_dt('current_plan')}</div>`:''}
             ${isSched?`<div class="tag" style="background:var(--saffron);color:#fff">${_dt('scheduled')}</div>`:''}
             <h4>${p.name}</h4>
-            <div class="price">₹${p.price}<small>${_dt('per_month')}</small></div>
+            <div class="price">${displayPrice}</div>
+            ${isYearly?`<div style="font-size:.75em;color:var(--muted);margin-top:-6px">≈ ₹${Math.round(p.annualPrice/12)}/mo — save ₹${(p.price*12-p.annualPrice).toLocaleString('en-IN')}</div>`:''}
             <div class="features">${p.feats.map(f=>'✓ '+f).join('<br>')}</div>
             <div style="font-size:.78em;color:var(--muted)">${p.agents} ${p.agents>1?_dt('advisors_pl'):_dt('advisor_sg')}</div>
             ${showBtn?`<button class="btn ${isUp||(isCur&&isTrial)?'btn-primary':'btn-warn'}" style="margin-top:12px;width:100%">${isCur&&isTrial?_dt('subscribe_now'):(isUp?_dt('upgrade_now'):_dt('schedule_downgrade'))}</button>`:''}
         </div>`;
     }).join('');
+    // Re-apply toggle styling after render
+    _applyToggleStyle(isYearly);
+}
+
+function _applyToggleStyle(isYearly) {
+    const track = document.getElementById('toggle-track');
+    const thumb = document.getElementById('toggle-thumb');
+    if (!track || !thumb) return;
+    track.style.background = isYearly ? 'var(--primary)' : '#ccc';
+    thumb.style.left = isYearly ? '23px' : '3px';
+}
+
+function toggleBillingPeriod() {
+    const tog = document.getElementById('billing-toggle');
+    _applyToggleStyle(tog?.checked);
+    // Re-render plan cards preserving sub data
+    if (window._sarathiPlans) {
+        const sub = { plan: window._sarathiCurrentPlan, status: window._sarathiSubStatus };
+        loadSubscription();
+    }
 }
 
 async function schedulePlanChange(newPlan) {
-    const isSamePlanActivation = newPlan === STATE.plan && ['trial','trialing'].includes(STATE.tenant?.subscription_status);
-    const isUp = PLAN_ORDER.indexOf(newPlan) > PLAN_ORDER.indexOf(STATE.plan);
+    const basePlan = newPlan.replace('_annual', '');
+    const isSamePlanActivation = (newPlan === STATE.plan || basePlan === STATE.plan) && ['trial','trialing'].includes(STATE.tenant?.subscription_status);
+    const isUp = PLAN_ORDER.indexOf(basePlan) > PLAN_ORDER.indexOf((STATE.plan||'').replace('_annual',''));
+    const isAnnual = newPlan.endsWith('_annual');
     if (isUp || isSamePlanActivation) {
-        if (!confirm(_dtf('plan_upgrade_q',PLAN_NAMES[newPlan]))) return;
+        const planLabel = PLAN_NAMES[newPlan] || PLAN_NAMES[basePlan] || newPlan;
+        if (!confirm(_dtf('plan_upgrade_q', planLabel))) return;
         try {
             const t = STATE.tenant;
-            // Create recurring subscription via Razorpay Subscriptions API
+            // Create Razorpay ORDER — supports UPI, cards, net banking (all payment methods)
+            // B5: Create a recurring SUBSCRIPTION (was one-time order before).
+            // Reason: one-time orders charged once and expired silently after a month.
             const sRes = await api('/api/payments/create-subscription',{method:'POST',body:JSON.stringify({tenant_id:t.tenant_id,plan:newPlan})});
-            if (!sRes||!sRes.ok) { const e=await sRes?.json(); alert(e?.detail||'Failed to create subscription'); return; }
-            const sub = await sRes.json();
-            if (!sub.razorpay_key_id) { alert('Payments not configured'); return; }
+            if (!sRes) return;
+            if (!sRes.ok) {
+                const e = await sRes.json().catch(()=>({}));
+                if (sRes.status === 409 && e.blocked_by_bundle) {
+                    if (typeof showSignupConflict === 'function') {
+                        showSignupConflict({
+                            title: 'You already get this plan free',
+                            message: _extractErr(e, 'Your Nidaan subscription includes Sarathi-AI.'),
+                            primary_action: {label: 'Open Sarathi', deeplink: '/dashboard'}
+                        });
+                    } else {
+                        alert(_extractErr(e, 'Already included in your Nidaan bundle.'));
+                    }
+                    return;
+                }
+                alert(_extractErr(e, 'Failed to start subscription'));
+                return;
+            }
+            const subData = await sRes.json();
+            if (!subData.razorpay_key_id || !subData.subscription_id) {
+                alert(_extractErr(subData, 'Payments not configured')); return;
+            }
+            const billingLabel = isAnnual ? '(Annual — auto-renew)' : '(Monthly — auto-renew)';
             const opts = {
-                key: sub.razorpay_key_id,
-                subscription_id: sub.subscription_id,
-                name:'Sarathi-AI Business Technologies', description:sub.plan_name+' Plan — '+sub.amount,
-                handler: function(r) {
-                    alert(_dt('upgrade_success')); location.reload();
+                key: subData.razorpay_key_id,
+                subscription_id: subData.subscription_id,   // ← subscription mode (recurring)
+                name:'Sarathi-AI Business Technologies',
+                description: (PLAN_NAMES[basePlan]||basePlan) + ' Plan ' + billingLabel,
+                handler: async function(r) {
+                    sessionStorage.removeItem('sarathi_pending_subscription');
+                    const vRes = await api('/api/payments/verify-subscription', {
+                        method:'POST',
+                        body: JSON.stringify({
+                            tenant_id: t.tenant_id,
+                            plan: newPlan,
+                            razorpay_payment_id: r.razorpay_payment_id,
+                            razorpay_subscription_id: r.razorpay_subscription_id,
+                            razorpay_signature: r.razorpay_signature,
+                        })
+                    });
+                    if (vRes && vRes.ok) {
+                        location.href = '/dashboard?payment=success';
+                    } else {
+                        const ve = await vRes?.json();
+                        showToast('Payment captured (Ref: ' + r.razorpay_payment_id + '). Your plan will activate shortly. Contact support if it doesn\u2019t within 5 minutes.', 'info', 10000);
+                        location.reload();
+                    }
                 },
-                prefill:{name:t.owner_name||'',contact:t.phone||'',email:t.email||''}, theme:{color:'#0d9488'},
+                prefill:{name:t.owner_name||'',contact:t.phone||'',email:t.email||''},
+                theme:{color:'#0d9488'},
                 modal:{ ondismiss: function() { loadSubscription(); } }
             };
-            try { await _ensureRazorpay(); } catch(_) { alert('Could not load payment library. Please check your connection.'); return; }
+            try { await _ensureRazorpay(); } catch(_) { showToast('Could not load payment library. Please check your connection and try again.', 'error', 6000); return; }
+            // Save pending subscription for UPI recovery (browser context loss on mobile)
+            sessionStorage.setItem('sarathi_pending_subscription', JSON.stringify({
+                subscription_id: subData.subscription_id, plan: newPlan, ts: Date.now()
+            }));
             const rzp = new Razorpay(opts); rzp.open();
         } catch(e) { alert('Payment error: '+e.message); }
     } else {
@@ -5705,7 +6885,7 @@ async function cancelSubscription() {
             loadSubscription(); loadOverview();
         } else {
             const e = await res?.json();
-            alert(e?.detail||'Failed to cancel subscription');
+            alert(_extractErr(e,'Failed to cancel subscription'));
         }
     } catch(e) { alert('Error: '+e.message); }
 }
@@ -6187,6 +7367,7 @@ let _apkStatusInterval = null;
 
 async function apkLoadStatus() {
     const icon = document.getElementById('apk-status-icon');
+    if (!icon) return; // APK section not rendered on this tab
     const text = document.getElementById('apk-status-text');
     const meta = document.getElementById('apk-status-meta');
     const connectBtn = document.getElementById('apk-connect-btn');
@@ -6487,11 +7668,104 @@ async function dripTestTick() {
         const r = await fetch('/api/nurture/test-tick', { method:'POST', credentials:'include' });
         const j = await r.json();
         if (j.success) {
-            showToast('Tick: '+JSON.stringify(j.stats),'success');
+            const s = j.stats || {};
+            const p = s.processed || 0;
+            const a = s.advanced || 0;
+            const f = s.failed || 0;
+            const msg = p === 0
+                ? 'No active enrollments due right now'
+                : `Processed ${p} enrollment(s) — ${a} step(s) advanced${f ? `, ${f} failed` : ''}`;
+            showToast(msg, p === 0 ? 'info' : 'success');
             loadDripEnrollments('active');
         } else { showToast('Failed','error'); }
     } catch(e) { showToast(e.message,'error'); }
     finally { if (btn) { btn.disabled = false; btn.textContent = '⚡ Run Tick Now (test)'; } }
+}
+
+async function _populateDripEnrolSeqDropdown() {
+    try {
+        const r = await fetch('/api/nurture/sequences', { credentials: 'include' });
+        const j = await r.json();
+        const sel = document.getElementById('drip-enrol-seq');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— pick a sequence —</option>' +
+            (j.sequences || []).map(s =>
+                `<option value="${s.sequence_id}">${esc(s.name)}</option>`
+            ).join('');
+    } catch(e) {}
+}
+
+async function dripEnrolAll() {
+    const hi = STATE.lang === 'hi';
+    const seqId = parseInt(document.getElementById('drip-enrol-seq').value);
+    if (!seqId) {
+        showToast(hi ? 'पहले कोई sequence चुनें' : 'Please pick a sequence first', 'error');
+        return;
+    }
+    const seqName = document.getElementById('drip-enrol-seq').selectedOptions[0]?.text || '';
+    const confirmMsg = hi
+        ? `क्या आप "${seqName}" में सभी active leads को जोड़ना चाहते हैं?\n(जो पहले से enrolled हैं उन्हें skip किया जाएगा)`
+        : `Enrol ALL active leads in "${seqName}"?\n(Already-enrolled leads will be skipped)`;
+    if (!confirm(confirmMsg)) return;
+    try {
+        const r = await api('/api/nurture/enrol-bulk', {
+            method: 'POST',
+            body: JSON.stringify({ sequence_id: seqId, lead_ids: [] })
+        });
+        let d;
+        try { d = await r.json(); } catch(_) { d = null; }
+        if (!r.ok || !d) {
+            showToast(hi ? 'सर्वर से जवाब नहीं आया — दोबारा कोशिश करें' : 'Server error — please try again', 'error');
+            return;
+        }
+        if (d.success) {
+            const msg = hi
+                ? `✅ ${d.enrolled} lead(s) को "${seqName}" में जोड़ा गया${d.skipped ? ` — ${d.skipped} पहले से enrolled थे` : ''}`
+                : `✅ ${d.enrolled} lead(s) enrolled in "${seqName}"${d.skipped ? ` — ${d.skipped} already enrolled (skipped)` : ''}`;
+            showToast(msg, d.enrolled > 0 ? 'success' : 'info');
+            if (d.enrolled > 0) loadDripEnrollments('active');
+        } else {
+            showToast(d.error || (hi ? 'कुछ गड़बड़ हुई' : 'Something went wrong'), 'error');
+        }
+    } catch(e) {
+        showToast(hi ? 'नेटवर्क error — दोबारा कोशिश करें' : 'Network error — please try again', 'error');
+    }
+}
+
+async function dripEnrolSelected() {
+    const hi = STATE.lang === 'hi';
+    const seqId = parseInt(document.getElementById('drip-enrol-seq').value);
+    if (!seqId) {
+        showToast(hi ? 'पहले कोई sequence चुनें' : 'Please pick a sequence first', 'error');
+        return;
+    }
+    const leadId = STATE._selectedLeadId;
+    if (!leadId) {
+        showToast(
+            hi ? '⚠️ Leads tab में जाकर किसी lead का ✏️ Edit खोलें, फिर यहाँ आएं'
+               : '⚠️ Open a lead (click ✏️ Edit in Leads tab) then come back here',
+            'error'
+        );
+        return;
+    }
+    const seqName = document.getElementById('drip-enrol-seq').selectedOptions[0]?.text || '';
+    try {
+        const r = await api(`/api/nurture/leads/${leadId}/enrol/${seqId}`, { method: 'POST' });
+        let d;
+        try { d = await r.json(); } catch(_) { d = null; }
+        if (!r.ok || !d) {
+            showToast(hi ? 'सर्वर से जवाब नहीं आया' : 'Server error — please try again', 'error');
+            return;
+        }
+        if (d.success) {
+            showToast(hi ? `✅ Lead को "${seqName}" में जोड़ा गया` : `✅ Lead enrolled in "${seqName}"`, 'success');
+            loadDripEnrollments('active');
+        } else {
+            showToast(d.error || (hi ? 'Lead को add नहीं किया जा सका (शायद पहले से enrolled है या sequence खाली है)' : 'Could not enrol — already enrolled or sequence has no steps'), 'error');
+        }
+    } catch(e) {
+        showToast(hi ? 'नेटवर्क error' : 'Network error — please try again', 'error');
+    }
 }
 
 // ═══════════ QUOTE COMPARE (Feature 5) ═══════════
@@ -6831,12 +8105,13 @@ async function loadWhatsAppStatus() {
         } else if (d.paused_until) {
             icon.textContent = '🟡'; text.textContent = _dt('wa_status_paused');
             setupBtn.style.display = 'none'; discBtn.style.display = 'inline-block';
-        } else if (status === 'logged_out' || status === 'close' || status === 'closed') {
+        } else if (status === 'logged_out' || status === 'close' || status === 'closed' || status === 'deleted') {
             icon.textContent = '🔴'; text.textContent = _dt('wa_status_logged_out');
             setupBtn.style.display = 'inline-block'; discBtn.style.display = 'none';
         } else {
+            // 'connecting' / 'pending' — setup started but not yet scanned/linked
             icon.textContent = '⏳'; text.textContent = _dt('wa_status_pending');
-            setupBtn.style.display = 'inline-block'; discBtn.style.display = 'inline-block';
+            setupBtn.style.display = 'inline-block'; discBtn.style.display = 'none';
         }
         meta.textContent = (d.display_name||'') + (d.spam_reports ? ' • ' + d.spam_reports + ' reports' : '');
         benefits.style.display = 'none'; metrics.style.display = 'grid';
@@ -6944,6 +8219,154 @@ function waShowQr(b64) {
     loading.style.display = 'none';
 }
 
+function waSwitchMethod(method) {
+    const isQr = method === 'qr';
+    document.getElementById('wa-connect-qr').style.display = isQr ? 'block' : 'none';
+    document.getElementById('wa-connect-pair').style.display = isQr ? 'none' : 'block';
+    document.getElementById('wa-method-qr').style.background = isQr ? '#25D366' : 'var(--bg)';
+    document.getElementById('wa-method-qr').style.color = isQr ? 'white' : 'var(--muted)';
+    document.getElementById('wa-method-pair').style.background = isQr ? 'var(--bg)' : '#25D366';
+    document.getElementById('wa-method-pair').style.color = isQr ? 'var(--muted)' : 'white';
+    if (!isQr) waStopPolling(); // Pairing method: stop QR polling, use status polling only
+}
+
+let _pairCountdownInterval = null;
+let _pairPollInterval = null;
+let _lastPairingCode = '';
+
+function waStopPairPoll() {
+    if (_pairPollInterval) { clearInterval(_pairPollInterval); _pairPollInterval = null; }
+}
+
+function waStartPairPoll() {
+    waStopPairPoll();
+    // Poll every 5s for the latest pairing code from webhook DB.
+    // Baileys rotates codes every ~45s; this ensures the UI always shows
+    // the CURRENT valid code, not an already-expired one.
+    _pairPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch('/api/whatsapp/v2/pairing-code/poll', {credentials: 'include', headers: hdrs()});
+            if (!res || !res.ok) return;
+            const d = await res.json();
+            if (d.connected) {
+                document.getElementById('wa-qr-success').style.display = 'block';
+                waStopPolling();
+                setTimeout(() => { closeModal('wa-setup-modal'); loadWhatsAppStatus(); }, 1800);
+                return;
+            }
+            if (d.code && d.code.length >= 4 && d.code !== _lastPairingCode) {
+                _lastPairingCode = d.code;
+                const codeEl = document.getElementById('wa-pair-code');
+                if (codeEl) {
+                    const formatted = _formatPairCode(d.code);
+                    codeEl.textContent = formatted;
+                    // Bright flash to alert user the code just changed
+                    codeEl.style.color = '#ef4444';
+                    codeEl.style.transform = 'scale(1.15)';
+                    setTimeout(() => {
+                        codeEl.style.color = '#25D366';
+                        codeEl.style.transform = 'scale(1)';
+                    }, 600);
+                    document.getElementById('wa-pair-status').textContent =
+                        '🔄 Code updated \u2014 type THIS code in WhatsApp now!';
+                }
+                document.getElementById('wa-pair-result').style.display = 'block';
+                waStartPairCountdown(d.expires_in || 45);
+            }
+        } catch(e) {}
+    }, 5000);
+}
+
+function waStartPairCountdown(expiresIn) {
+    if (_pairCountdownInterval) clearInterval(_pairCountdownInterval);
+    let secs = expiresIn > 0 ? expiresIn : 55;
+    const countEl = document.getElementById('wa-pair-countdown');
+    const refreshBtn = document.getElementById('wa-pair-refresh-btn');
+    const codeEl = document.getElementById('wa-pair-code');
+    if (!countEl) return;
+    countEl.style.color = '#f59e0b';
+    if (refreshBtn) refreshBtn.style.display = 'none';
+    _pairCountdownInterval = setInterval(() => {
+        secs--;
+        if (secs > 0) {
+            countEl.textContent = `⏱ ${secs}s to enter`;
+            if (secs <= 15) countEl.style.color = '#ef4444';
+        } else {
+            clearInterval(_pairCountdownInterval);
+            countEl.textContent = '❌ Code expired';
+            countEl.style.color = '#ef4444';
+            if (codeEl) codeEl.style.color = 'var(--muted)';
+            if (refreshBtn) refreshBtn.style.display = 'inline-block';
+        }
+    }, 1000);
+}
+
+function _formatPairCode(code) {
+    const c = (code || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    return c.length >= 8 ? c.slice(0,4) + '-' + c.slice(4,8) : c;
+}
+async function waRequestPairingCode() {
+    const phone = (document.getElementById('wa-pair-phone').value || '').trim().replace(/\D/g,'');
+    if (!phone || phone.length < 10) { showToast('Valid phone number required','error'); return; }
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = '⏳...';
+    document.getElementById('wa-pair-result').style.display = 'none';
+    // Show WhatsApp navigation steps during the ~10s backend startup
+    document.getElementById('wa-pair-status').innerHTML =
+        '<strong>While we connect to WhatsApp, navigate on your phone:</strong><br>' +
+        '1. Open WhatsApp &rarr; ⋮ Menu &rarr; <strong>Linked Devices</strong><br>' +
+        '2. Tap <strong>Link a Device</strong> &rarr; camera opens<br>' +
+        '3. Tap <strong>"Link with phone number"</strong> (bottom of screen)<br>' +
+        '4. You\'ll see 8 code boxes — <strong>wait here for your code</strong>';
+    try {
+        const res = await fetch('/api/whatsapp/v2/pairing-code', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({phone})
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) {
+            const msg = d.message || d.error || 'Failed — try QR method';
+            document.getElementById('wa-pair-status').textContent = '❌ ' + msg;
+        } else {
+            const raw = d.pairingCode || d.code || '';
+            if (!raw || raw.length < 4 || raw.startsWith('2@')) {
+                document.getElementById('wa-pair-status').textContent = '❌ WhatsApp is busy. Please wait a minute and try again.';
+            } else {
+                const code = _formatPairCode(raw);
+                document.getElementById('wa-pair-code').textContent = code;
+                document.getElementById('wa-pair-code').style.color = '#25D366';
+                document.getElementById('wa-pair-result').style.display = 'block';
+                document.getElementById('wa-pair-status').textContent = '👆 Type the code above in WhatsApp now — you have ~45 seconds!';
+                _lastPairingCode = raw;
+                waStartPairCountdown(d.expires_in || 45);
+                waStartPairPoll();
+                waStartStatusPolling();
+            }
+        }
+    } catch(e) {
+        document.getElementById('wa-pair-status').textContent = '❌ ' + e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Get Code';
+    }
+}
+
+function waStartStatusPolling() {
+    if (_waStatusPoll) return;
+    _waStatusPoll = setInterval(async () => {
+        try {
+            const res = await fetch('/api/whatsapp/v2/status', {headers: hdrs()});
+            if (!res || !res.ok) return;
+            const d = await res.json();
+            if (d.status === 'open' || d.status === 'connected') {
+                document.getElementById('wa-qr-success').style.display = 'block';
+                waStopPolling();
+                setTimeout(() => { closeModal('wa-setup-modal'); loadWhatsAppStatus(); }, 1800);
+            }
+        } catch(e) {}
+    }, 3000);
+}
+
 function waStartQrPolling() {
     waStopPolling();
     _waQrPoll = setInterval(async () => {
@@ -6970,6 +8393,9 @@ function waStartQrPolling() {
 function waStopPolling() {
     if (_waQrPoll) { clearInterval(_waQrPoll); _waQrPoll = null; }
     if (_waStatusPoll) { clearInterval(_waStatusPoll); _waStatusPoll = null; }
+    if (_pairCountdownInterval) { clearInterval(_pairCountdownInterval); _pairCountdownInterval = null; }
+    if (_pairPollInterval) { clearInterval(_pairPollInterval); _pairPollInterval = null; }
+    _lastPairingCode = '';
 }
 
 async function waDisconnect(permanent) {
@@ -7009,7 +8435,7 @@ async function connectTelegramBot() {
             body: JSON.stringify({ tenant_id: STATE.tenant?.tenant_id, tg_bot_token: token })
         });
         const d = await res.json();
-        if (!res.ok) { errEl.textContent = d.detail || 'Failed to connect bot'; errEl.style.display = ''; return; }
+        if (!res.ok) { errEl.textContent = _extractErr(d, 'Failed to connect bot'); errEl.style.display = ''; return; }
         showToast('✅ Telegram bot connected: @' + (d.bot_username || 'your bot'), 'success');
         loadProfile(); // Refresh to show connected state
     } catch(e) {
@@ -7053,7 +8479,7 @@ async function connectWhatsApp() {
             body: JSON.stringify({ tenant_id: STATE.tenant?.tenant_id, wa_phone_id: phoneId, wa_access_token: token, wa_verify_token: verify || 'sarathi_verify' })
         });
         const d = await res.json();
-        if (!res.ok) { errEl.textContent = d.detail || 'Failed to connect WhatsApp'; errEl.style.display = ''; return; }
+        if (!res.ok) { errEl.textContent = _extractErr(d, 'Failed to connect WhatsApp'); errEl.style.display = ''; return; }
         showToast('✅ WhatsApp Business API connected!', 'success');
         loadProfile();
     } catch(e) {
@@ -7079,9 +8505,8 @@ async function saveProfile() {
         const r = await api('/api/profile', { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
         if (!r) { statusEl.textContent = _dt('session_expired'); statusEl.style.color = '#ef4444'; return; }
         if (!r.ok) {
-            let detail = 'Failed (status ' + r.status + ')';
-            try { const j = await r.json(); detail = Array.isArray(j.detail) ? j.detail.map(d=>d.msg).join(', ') : (j.detail || detail); } catch(_) {}
-            statusEl.textContent = '❌ ' + detail;
+            let j = {}; try { j = await r.json(); } catch(_) {}
+            statusEl.textContent = '❌ ' + _extractErr(j, 'Failed (status ' + r.status + ')');
             statusEl.style.color = '#ef4444';
             return;
         }
@@ -7091,7 +8516,7 @@ async function saveProfile() {
             statusEl.style.color = '#22c55e';
             loadOverview();
         } else {
-            statusEl.textContent = '❌ ' + (res.detail || 'Failed');
+            statusEl.textContent = '❌ ' + _extractErr(res, 'Failed');
             statusEl.style.color = '#ef4444';
         }
     } catch(e) {
@@ -7127,7 +8552,7 @@ async function saveBranding() {
                 document.getElementById('sidebar-brand-name').textContent = body.firm_name;
             }
         } else {
-            statusEl.textContent = '❌ ' + (res?.detail || 'Failed');
+            statusEl.textContent = '❌ ' + _extractErr(res, 'Failed');
             statusEl.style.color = '#ef4444';
         }
     } catch(e) {
@@ -7155,7 +8580,7 @@ async function uploadLogo() {
             document.getElementById('sidebar-logo').style.display = '';
             document.getElementById('sidebar-logo-initial').style.display = 'none';
         } else {
-            alert('Upload failed: ' + (res?.detail || 'Unknown error'));
+            alert('Upload failed: ' + _extractErr(res, 'Unknown error'));
         }
     } catch(e) { alert('Upload error: ' + e.message); }
     fileInput.value = '';
@@ -7247,7 +8672,7 @@ async function saveOnboarding() {
             loadProfile();
         } else {
             const d = res ? await res.json() : {};
-            errEl.textContent = d.detail || 'Failed to save. Try again.';
+            errEl.textContent = _extractErr(d, 'Failed to save. Try again.');
             errEl.style.display = 'block';
         }
     } catch(e) {
@@ -7259,14 +8684,23 @@ async function saveOnboarding() {
 
 function skipOnboarding() {
     document.getElementById('onboarding-overlay').style.display = 'none';
-    // Show persistent reminder banner
+    // Show persistent reminder banner — INSIDE .main, BELOW the topbar, not as a full-page overlay
     let banner = document.getElementById('profile-incomplete-banner');
     if (!banner) {
         banner = document.createElement('div');
         banner.id = 'profile-incomplete-banner';
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9990;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:10px 16px;text-align:center;font-size:.88em;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer';
-        banner.innerHTML = '⚠️ Complete your profile for the best experience <button onclick="document.getElementById(\'onboarding-overlay\').style.display=\'flex\'" style="background:#fff;color:#d97706;border:none;padding:4px 12px;border-radius:6px;font-size:.85em;font-weight:600;cursor:pointer;margin-left:8px">Complete Now</button>';
-        document.body.prepend(banner);
+        banner.style.cssText = 'position:sticky;top:64px;z-index:40;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:10px 16px;text-align:center;font-size:.88em;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap';
+        banner.innerHTML = '⚠️ Complete your profile for the best experience <button onclick="document.getElementById(\'onboarding-overlay\').style.display=\'flex\'" style="background:#fff;color:#d97706;border:none;padding:4px 12px;border-radius:6px;font-size:.85em;font-weight:600;cursor:pointer">Complete Now</button> <button onclick="document.getElementById(\'profile-incomplete-banner\').style.display=\'none\'" aria-label="Dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.9em;line-height:1">×</button>';
+        // Insert inside .main, right after the topbar (so it pushes content down, not the whole layout)
+        const main = document.querySelector('.main');
+        const topbar = main?.querySelector('.topbar');
+        if (topbar && topbar.nextSibling) {
+            main.insertBefore(banner, topbar.nextSibling);
+        } else if (main) {
+            main.appendChild(banner);
+        } else {
+            document.body.prepend(banner);
+        }
     }
     banner.style.display = 'flex';
 }
@@ -7535,6 +8969,47 @@ try {
     loadProfile();
     // Check if profile is complete (for Google/Email OTP quick signups)
     checkOnboarding();
+    // ── Post-payment UX ────────────────────────────────────────────────
+    (function() {
+        const _pp = new URLSearchParams(location.search);
+        if (_pp.get('payment') === 'success') {
+            showToast('\uD83C\uDF89 Payment successful! Your plan is now active.', 'success', 7000);
+            history.replaceState(null, '', '/dashboard');
+        } else {
+            // UPI recovery — legacy one-time-order path (kept for in-flight legacy orders)
+            const _raw = sessionStorage.getItem('sarathi_pending_order');
+            if (_raw) {
+                let _pnd; try { _pnd = JSON.parse(_raw); } catch(e) { sessionStorage.removeItem('sarathi_pending_order'); }
+                if (_pnd && Date.now() - _pnd.ts < 30 * 60 * 1000) {
+                    (async function() {
+                        try {
+                            const _cr = await api('/api/payments/check-order?order_id=' + encodeURIComponent(_pnd.order_id));
+                            if (!_cr) return;
+                            const _cd = await _cr.json();
+                            if (_cd.paid) {
+                                sessionStorage.removeItem('sarathi_pending_order');
+                                location.href = '/dashboard?payment=success';
+                            } else if (_cd.order_status === 'attempted') {
+                                sessionStorage.removeItem('sarathi_pending_order');
+                                showToast('Your payment was not completed. Please try again from the Billing section.', 'error', 8000);
+                            }
+                        } catch(e) { /* network error — leave pending, retry next visit */ }
+                    })();
+                } else {
+                    sessionStorage.removeItem('sarathi_pending_order');
+                }
+            }
+            // B5: subscription recovery — webhook handles activation, so we
+            // just expire stale pending markers (>30 min) to avoid stale UI.
+            const _rawSub = sessionStorage.getItem('sarathi_pending_subscription');
+            if (_rawSub) {
+                let _ps; try { _ps = JSON.parse(_rawSub); } catch(e) { sessionStorage.removeItem('sarathi_pending_subscription'); }
+                if (_ps && Date.now() - _ps.ts > 30 * 60 * 1000) {
+                    sessionStorage.removeItem('sarathi_pending_subscription');
+                }
+            }
+        }
+    })();
     setInterval(loadOverview, 120000);
     setInterval(_fetchCsrf, 3600000);
     console.log('✅ Sarathi dashboard init complete');
@@ -7613,6 +9088,764 @@ try {
         });
     });
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MARKETING STUDIO
+// ═══════════════════════════════════════════════════════════════════════
+let _mktSettings = {};
+let _mktCurrentContentId = null;
+let _mktPage = 1;
+let _mktLeads = [];
+
+async function loadMarketing() {
+  const r = await fetch('/api/marketing/settings', {headers: hdrs()});
+  if (!r.ok) return;
+  _mktSettings = await r.json();
+
+  // Populate Background dropdown with available photo templates
+  try {
+    const tr = await fetch('/api/marketing/templates', {headers: hdrs()});
+    if (tr.ok) {
+      const td = await tr.json();
+      const sel = document.getElementById('mktTemplateId');
+      if (sel) {
+        // Keep first two options ("" Auto, "__pexels__" Stock) — drop rest
+        while (sel.options.length > 2) sel.remove(2);
+        (td.templates || []).forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = '🖼️ ' + t.id.replace(/_/g, ' ');
+          sel.appendChild(opt);
+        });
+      }
+    }
+  } catch(e) { /* non-blocking */ }
+
+  document.getElementById('mktEnabled').checked = _mktSettings.enabled;
+  document.getElementById('mktEnabledLabel').textContent = _mktSettings.enabled ? 'Enabled' : 'Disabled';
+  document.getElementById('mktLang').value = _mktSettings.lang || 'en';
+  document.getElementById('mktGenLang').value = _mktSettings.lang || 'en';
+  document.getElementById('mktAutopost').checked = _mktSettings.autopost_enabled;
+  document.getElementById('mktAutopostTime').value = _mktSettings.autopost_time || '08:00';
+
+  // Festival prefs
+  const prefs = _mktSettings.festival_prefs || ['all', 'hindu'];
+  document.querySelectorAll('#mktFestivalPrefs input[type=checkbox]').forEach(cb => {
+    cb.checked = prefs.includes(cb.value);
+  });
+
+  // Marketing photo
+  if (_mktSettings.marketing_photo_path) {
+    const parts = _mktSettings.marketing_photo_path.split(/[\\/]/);
+    const fname = parts[parts.length - 1];
+    const preview = document.getElementById('mktPhotoPreview');
+    preview.src = '/uploads/marketing/photos/' + fname;
+    preview.style.display = 'block';
+  }
+
+  // Firm logo
+  const logoPreview = document.getElementById('mktLogoPreview');
+  const removeBtn = document.getElementById('mktRemoveLogoBtn');
+  if (_mktSettings.marketing_logo_path) {
+    const parts = _mktSettings.marketing_logo_path.split(/[\\/]/);
+    const fname = parts[parts.length - 1];
+    logoPreview.src = '/uploads/marketing/logos/' + fname + '?t=' + Date.now();
+    logoPreview.style.display = 'block';
+    if (removeBtn) removeBtn.style.display = 'inline-block';
+  } else {
+    if (logoPreview) logoPreview.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = 'none';
+  }
+
+  // Festival picker options
+  const fsel = document.getElementById('mktFestivalDate');
+  fsel.innerHTML = '';
+  (_mktSettings.all_festivals || []).forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.date;
+    opt.textContent = `${f.date} — ${f.name}`;
+    fsel.appendChild(opt);
+  });
+
+  // Show festival picker when type=festival
+  document.getElementById('mktContentType').addEventListener('change', function() {
+    document.getElementById('mktFestivalPicker').style.display =
+      this.value === 'festival' ? 'flex' : 'none';
+  });
+
+  // Video note for plan
+  if (!_mktSettings.can_video) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.78em;color:#6b7280;margin-top:4px';
+    note.textContent = '📹 Video generation available on Team & Enterprise plans.';
+    document.getElementById('mktGenerateBtn').parentNode.appendChild(note);
+  }
+
+  loadMktLibrary();
+}
+
+async function mktSaveSetting(key, value) {
+  const body = {};
+  if (key === 'enabled') {
+    body.enabled = value;
+    document.getElementById('mktEnabledLabel').textContent = value ? 'Enabled' : 'Disabled';
+  } else if (key === 'autopost_enabled') {
+    body.autopost_enabled = value;
+  } else if (key === 'autopost_time') {
+    body.autopost_time = value;
+  } else if (key === 'lang') {
+    body.lang = value;
+    document.getElementById('mktGenLang').value = value;
+  }
+  await fetch('/api/marketing/settings', {
+    method: 'POST', headers: {...hdrs(), 'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+}
+
+function mktSaveFestivalPrefs() {
+  const prefs = [...document.querySelectorAll('#mktFestivalPrefs input:checked')].map(c => c.value);
+  fetch('/api/marketing/settings', {
+    method: 'POST', headers: {...hdrs(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({festival_prefs: prefs}),
+  });
+}
+
+// Auth headers WITHOUT Content-Type — browser sets correct multipart boundary for FormData
+function _uploadHdrs() {
+  const h = hdrs();
+  delete h['Content-Type'];
+  return h;
+}
+
+async function mktUploadPhoto(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  const r = await fetch('/api/marketing/upload-photo', {method:'POST', headers:_uploadHdrs(), body:fd});
+  if (r.ok) {
+    const d = await r.json();
+    const preview = document.getElementById('mktPhotoPreview');
+    preview.src = d.photo_url + '?v=' + Date.now();
+    preview.style.display = 'block';
+    showToast && showToast('Marketing photo updated!', 'success');
+  } else {
+    const err = await r.json().catch(() => ({}));
+    showToast && showToast(err.error || ('Photo upload failed (HTTP ' + r.status + ')'), 'error');
+  }
+}
+
+async function mktUploadLogo(input) {
+  if (!input.files[0]) return;
+  const f = input.files[0];
+  // Client-side validation matching server: <3MB, JPG/PNG/WEBP
+  if (f.size > 3 * 1024 * 1024) {
+    showToast && showToast('Logo file too large — must be under 3MB.', 'error');
+    input.value = ''; return;
+  }
+  const okExt = ['image/jpeg','image/png','image/webp'];
+  if (!okExt.includes(f.type)) {
+    showToast && showToast('Logo must be a JPG, PNG, or WEBP image.', 'error');
+    input.value = ''; return;
+  }
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/marketing/upload-logo', {method:'POST', headers:_uploadHdrs(), body:fd});
+  if (r.ok) {
+    const d = await r.json();
+    const preview = document.getElementById('mktLogoPreview');
+    preview.src = d.logo_url + '?v=' + Date.now();
+    preview.style.display = 'block';
+    const rb = document.getElementById('mktRemoveLogoBtn');
+    if (rb) rb.style.display = 'inline-block';
+    showToast && showToast('Firm logo uploaded — will appear on all new posts.', 'success');
+  } else {
+    const err = await r.json().catch(() => ({}));
+    showToast && showToast(err.error || ('Logo upload failed (HTTP ' + r.status + ')'), 'error');
+  }
+  input.value = '';
+}
+
+async function mktRemoveLogo() {
+  if (!confirm('Remove your firm logo? Posts will revert to the "Your logo here" placeholder.')) return;
+  const r = await fetch('/api/marketing/upload-logo', {method:'DELETE', headers:hdrs()});
+  if (r.ok) {
+    document.getElementById('mktLogoPreview').style.display = 'none';
+    const rb = document.getElementById('mktRemoveLogoBtn');
+    if (rb) rb.style.display = 'none';
+    showToast && showToast('Logo removed.', 'success');
+  }
+}
+
+function mktOnTypeChange() {
+  const type = document.getElementById('mktContentType').value;
+  document.getElementById('mktFestivalPicker').style.display = type === 'festival' ? 'block' : 'none';
+  document.getElementById('mktCustomTopicRow').style.display = type === 'custom' ? 'block' : 'none';
+}
+
+async function mktGenerate() {
+  const type = document.getElementById('mktContentType').value;
+  const lang = document.getElementById('mktGenLang').value;
+  const festDate = type === 'festival' ? document.getElementById('mktFestivalDate').value : null;
+  const customTopic = type === 'custom' ? document.getElementById('mktCustomTopic').value.trim() : '';
+  const imageFormat = document.getElementById('mktImageFormat').value;
+  const brandAccent = document.getElementById('mktBrandAccent')?.value || '';
+
+  if (type === 'custom' && !customTopic) {
+    showToast && showToast('Please enter a topic for custom content', 'error');
+    document.getElementById('mktCustomTopic').focus();
+    return;
+  }
+
+  document.getElementById('mktGenerating').style.display = 'block';
+  document.getElementById('mktPreview').style.display = 'none';
+  document.getElementById('mktGenerateBtn').disabled = true;
+
+  try {
+    const body = {content_type: type, lang, image_format: imageFormat};
+    if (festDate) body.festival_date = festDate;
+    if (customTopic) body.custom_topic = customTopic;
+    if (brandAccent && brandAccent !== '#3b82f6') body.brand_accent = brandAccent;
+    const tplSel = document.getElementById('mktTemplateId');
+    const tpl = tplSel ? tplSel.value : '';
+    // "__pexels__" is the explicit "use stock search" choice. Backend's
+    // Pexels fallback runs whenever no template_id is sent, so for that
+    // we just leave template_id empty.
+    if (tpl && tpl !== '__pexels__') body.template_id = tpl;
+
+    const r = await fetch('/api/marketing/generate', {
+      method: 'POST', headers: {...hdrs(), 'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      showToast && showToast(_extractErr(err, 'Generation failed'), 'error');
+      return;
+    }
+    const d = await r.json();
+    _mktCurrentContentId = d.content_id;
+    const c = d.content;
+
+    document.getElementById('mktPreviewTitle').textContent = c.title || '';
+    document.getElementById('mktPreviewBody').textContent = c.body_text || '';
+    const img = document.getElementById('mktPreviewImg');
+    const dlBtn = document.getElementById('mktDownloadImg');
+    if (c.image_path) {
+      const url = '/' + c.image_path + '?v=' + Date.now();
+      img.src = url;
+      img.style.display = 'block';
+      if (dlBtn) { dlBtn.href = url; dlBtn.download = c.image_path.split('/').pop(); dlBtn.style.display = 'inline-flex'; }
+    } else {
+      img.style.display = 'none';
+      if (dlBtn) dlBtn.style.display = 'none';
+    }
+    document.getElementById('mktPreview').style.display = 'block';
+    loadMktLibrary();
+  } finally {
+    document.getElementById('mktGenerating').style.display = 'none';
+    document.getElementById('mktGenerateBtn').disabled = false;
+  }
+}
+
+function mktOpenSchedule() {
+  const cal = document.querySelector('#tab-marketing details:nth-of-type(1)');
+  if (cal) { cal.open = true; cal.scrollIntoView({behavior:'smooth', block:'nearest'}); }
+}
+
+async function loadMktLibrary(page) {
+  _mktPage = page || 1;
+  const r = await fetch(`/api/marketing/library?page=${_mktPage}&limit=12`, {headers: hdrs()});
+  if (!r.ok) return;
+  const d = await r.json();
+  const grid = document.getElementById('mktLibrary');
+  if (_mktPage === 1) grid.innerHTML = '';
+  if (!d.items || !d.items.length) {
+    if (_mktPage === 1) grid.innerHTML = '<div style="color:#6b7280;font-size:.88em">No content generated yet. Click "Generate Now" to create your first post.</div>';
+    document.getElementById('mktLibMore').style.display = 'none';
+    return;
+  }
+  d.items.forEach(item => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;background:#fff;cursor:pointer';
+    const imgHtml = item.image_path
+      ? `<img src="/${item.image_path}?v=${item.content_id}" style="width:100%;aspect-ratio:9/16;object-fit:cover">`
+      : `<div style="background:#f3f4f6;aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;font-size:2em">📝</div>`;
+    const waIcon = item.sent_wa_status ? '✅' : '📱';
+    const tgIcon = item.sent_tg ? '✅' : '✈️';
+    card.innerHTML = `${imgHtml}
+      <div style="padding:10px">
+        <div style="font-size:.8em;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title||'')}</div>
+        <div style="font-size:.72em;color:#6b7280;margin-bottom:8px">${item.generated_date||''} · ${item.language||'en'}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktSendStatusById(${item.content_id})">${waIcon} Status</button>
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktSendTelegramById(${item.content_id})">${tgIcon} Telegram</button>
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktOpenDMPanelById(${item.content_id})">📨 DM</button>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+  document.getElementById('mktLibMore').style.display = d.items.length === 12 ? 'block' : 'none';
+}
+
+async function mktSendStatus() { if (_mktCurrentContentId) await mktSendStatusById(_mktCurrentContentId); }
+async function mktSendTelegram() { if (_mktCurrentContentId) await mktSendTelegramById(_mktCurrentContentId); }
+
+async function mktSendStatusById(id) {
+  const r = await fetch(`/api/marketing/send-status/${id}`, {method:'POST', headers:hdrs()});
+  const d = await r.json().catch(()=>({}));
+  if (r.ok && d.ok) showToast && showToast('Posted to WhatsApp Status! ✅', 'success');
+  else showToast && showToast(d.error || 'Failed to post. Is WhatsApp connected?', 'error');
+}
+
+async function mktSendTelegramById(id) {
+  const r = await fetch(`/api/marketing/send-telegram/${id}`, {method:'POST', headers:hdrs()});
+  const d = await r.json().catch(()=>({}));
+  if (r.ok && d.ok) showToast && showToast('Sent to Telegram for review! ✅', 'success');
+  else showToast && showToast(d.error || 'Telegram not connected', 'error');
+}
+
+function mktOpenDMPanel() { mktOpenDMPanelById(_mktCurrentContentId); }
+async function mktOpenDMPanelById(contentId) {
+  _mktCurrentContentId = contentId;
+  document.getElementById('mktDMModal').style.display = 'flex';
+  document.getElementById('mktDMStatus').textContent = '';
+
+  // Pre-fill message with current content body
+  const r2 = await fetch('/api/marketing/library?page=1&limit=50', {headers:hdrs()});
+  if (r2.ok) {
+    const d2 = await r2.json();
+    const item = (d2.items||[]).find(i=>i.content_id===contentId);
+    if (item) document.getElementById('mktDMMsg').value = item.body_text || '';
+  }
+
+  // Load leads
+  await mktLoadLeads();
+}
+
+async function mktLoadLeads() {
+  const r = await fetch('/api/leads?limit=200', {headers:hdrs()});
+  if (!r.ok) return;
+  const d = await r.json();
+  _mktLeads = d.leads || [];
+  const container = document.getElementById('mktLeadList');
+  if (!_mktLeads.length) { container.textContent = 'No leads found.'; return; }
+  container.innerHTML = _mktLeads.map(l => `
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;cursor:pointer">
+      <input type="checkbox" class="mkt-lead-cb" data-id="${l.lead_id}" data-name="${esc(l.name||'')}" data-phone="${esc(l.phone||'')}">
+      <span style="font-size:.88em"><strong>${esc(l.name||'')}</strong> <span style="color:#6b7280">${esc(l.phone||'')}</span></span>
+    </label>`).join('');
+}
+
+async function mktAutoSelectByReligion() {
+  // Get religion of current festival content
+  const r = await fetch('/api/marketing/library?page=1&limit=50', {headers:hdrs()});
+  if (!r.ok) return;
+  const d = await r.json();
+  const item = (d.items||[]).find(i=>i.content_id===_mktCurrentContentId);
+  const religion = item?.religion_tag || 'all';
+
+  const checkboxes = document.querySelectorAll('.mkt-lead-cb');
+  for (const cb of checkboxes) {
+    if (religion === 'all') { cb.checked = true; continue; }
+    const name = cb.dataset.name || '';
+    const r2 = await fetch(`/api/marketing/detect-religion?name=${encodeURIComponent(name)}`, {headers:hdrs()});
+    if (r2.ok) {
+      const rd = await r2.json();
+      cb.checked = (rd.religion === religion);
+    }
+  }
+}
+
+async function mktSendDM() {
+  const selectedIds = [...document.querySelectorAll('.mkt-lead-cb:checked')].map(cb=>parseInt(cb.dataset.id));
+  if (!selectedIds.length) { alert('Select at least one lead.'); return; }
+  const msg = document.getElementById('mktDMMsg').value.trim();
+  if (!msg) { alert('Enter a message.'); return; }
+
+  const btn = document.getElementById('mktSendDMBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  document.getElementById('mktDMStatus').textContent = `Sending to ${selectedIds.length} leads (rate-limited, please wait)…`;
+
+  const body = {lead_ids: selectedIds, message: msg};
+  if (_mktCurrentContentId) body.content_id = _mktCurrentContentId;
+  const r = await fetch('/api/marketing/send-dm', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  const result = await r.json().catch(()=>({}));
+  document.getElementById('mktDMStatus').textContent =
+    r.ok ? `✅ Sent: ${result.sent}, Failed: ${result.failed}` : (result.error || 'Failed');
+  btn.disabled = false;
+  btn.textContent = 'Send to Selected Leads';
+}
+
+// Hook into switchTab
+// Marketing tab hook is directly inside switchTab() function
+
+// ═══════════════════════════════════════════════════════════════
+//  VIDEO STUDIO
+// ═══════════════════════════════════════════════════════════════
+let _vidFmt = 'square';
+let _vidPollTimer = null;
+let _vidCanGenerate = false;
+
+async function loadVideoStudio() {
+  const r = await fetch('/api/marketing/settings');
+  if (!r.ok) return;
+  const s = await r.json();
+  _vidCanGenerate = s.can_video;
+  const gate = document.getElementById('videoStudioGate');
+  const content = document.getElementById('videoStudioContent');
+  const badge = document.getElementById('videoStudioPlanBadge');
+  if (!_vidCanGenerate) {
+    if (gate)    gate.style.display = 'block';
+    if (content) content.style.display = 'none';
+    if (badge)   badge.style.display = 'inline-block';
+    return;
+  }
+  if (badge) badge.style.display = 'inline-block';
+  await _loadVidThemes();
+}
+
+async function _loadVidThemes() {
+  const grid = document.getElementById('vidThemeGrid');
+  if (!grid) return;
+  const r = await fetch('/api/video/themes');
+  if (!r.ok) { grid.innerHTML = '<div style="color:#dc2626">Failed to load themes.</div>'; return; }
+  const data = await r.json();
+  const themes = data.themes || [];
+  grid.innerHTML = '';
+  themes.forEach(th => {
+    const card = document.createElement('div');
+    card.className = 'vid-theme-card';
+    card.dataset.themeId = th.id;
+    card.style.cssText = `
+      border:2px solid var(--border,#e5e7eb);border-radius:12px;padding:14px 12px;cursor:pointer;
+      text-align:center;transition:border-color .18s,box-shadow .18s;position:relative;
+    `;
+    card.innerHTML = `
+      <div style="font-size:2.2em;margin-bottom:6px">${th.icon}</div>
+      <div style="font-weight:700;font-size:.88em;margin-bottom:4px">${th.name}</div>
+      <div style="font-size:.76em;color:#6b7280;line-height:1.35">${th.description}</div>
+      <button onclick="vidGenerate('${th.id}')" style="
+        margin-top:10px;padding:5px 14px;font-size:.8em;border:none;border-radius:7px;
+        background:${th.accent};color:#fff;cursor:pointer;font-weight:600;
+      ">▶ Generate</button>
+    `;
+    card.addEventListener('mouseenter', () => { card.style.borderColor = th.accent; card.style.boxShadow = `0 4px 16px ${th.accent}33`; });
+    card.addEventListener('mouseleave', () => { card.style.borderColor = 'var(--border,#e5e7eb)'; card.style.boxShadow = 'none'; });
+    grid.appendChild(card);
+  });
+}
+
+function vidSetFmt(fmt) { _vidFmt = fmt; }
+
+async function vidGenerate(themeId) {
+  if (!_vidCanGenerate) return;
+  _showVidState('progress');
+  document.getElementById('vidProgressLabel').textContent = 'Generating your video…';
+  document.getElementById('vidProgressSub').textContent = 'This takes 20–40 seconds. You can keep using the dashboard.';
+
+  const r = await fetch('/api/video/generate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ theme_id: themeId, fmt: _vidFmt }),
+  });
+  const data = await r.json();
+  if (!r.ok) { _showVidError(_extractErr(data, 'Generation failed.')); return; }
+
+  const jobId = data.job_id;
+  _pollVidJob(jobId);
+}
+
+function _pollVidJob(jobId) {
+  clearTimeout(_vidPollTimer);
+  _vidPollTimer = setTimeout(async () => {
+    const r = await fetch(`/api/video/status/${jobId}`, {headers: hdrs()});
+    if (!r.ok) { _showVidError('Status check failed.'); return; }
+    const job = await r.json();
+    if (job.status === 'done') {
+      _showVidResult(job.url, job.theme);
+    } else if (job.status === 'failed') {
+      _showVidError(job.error || 'Video generation failed.');
+    } else {
+      _pollVidJob(jobId);
+    }
+  }, 3000);
+}
+
+// Auth-aware video download — fetches with bearer token, serves blob to <a>
+async function vidDownloadAuth(ev) {
+  ev.preventDefault();
+  const dl = document.getElementById('vidDownloadBtn');
+  const url = dl?.dataset?.videoUrl;
+  if (!url) { showToast && showToast('No video to download', 'error'); return; }
+  try {
+    const r = await fetch(url, {headers: hdrs()});
+    if (!r.ok) { showToast && showToast('Download failed (HTTP ' + r.status + ')', 'error'); return; }
+    const blob = await r.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = url.split('/').pop() || 'sarathi-video.mp4';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  } catch(e) {
+    showToast && showToast('Download error: ' + e.message, 'error');
+  }
+}
+
+function _showVidState(state) {
+  const states = ['progress','result','error'];
+  states.forEach(s => {
+    const el = document.getElementById(`vid${s.charAt(0).toUpperCase()+s.slice(1)}`);
+    if (el) el.style.display = (s === state) ? 'block' : 'none';
+  });
+}
+
+function _showVidResult(url, themeId) {
+  _showVidState('result');
+  const player = document.getElementById('vidResultPlayer');
+  const dl = document.getElementById('vidDownloadBtn');
+  // Player needs raw URL — but the file endpoint is auth-gated. Use blob URL for both.
+  if (dl) {
+    dl.dataset.videoUrl = url;
+    dl.href = '#';
+    dl.onclick = vidDownloadAuth;
+  }
+  // Fetch the video once with auth and serve to <video> as blob (avoids auth issue)
+  fetch(url, {headers: hdrs()}).then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(blob => {
+    if (player) { player.src = URL.createObjectURL(blob); player.load(); }
+  }).catch(e => {
+    if (player) { player.removeAttribute('src'); player.load(); }
+    showToast && showToast('Video preview failed: ' + e.message, 'error');
+  });
+}
+
+function _showVidError(msg) {
+  _showVidState('error');
+  const el = document.getElementById('vidError');
+  if (el) el.textContent = '❌ ' + msg;
+}
+
+function vidReset() {
+  clearTimeout(_vidPollTimer);
+  _showVidState('progress');
+  ['vidProgress','vidResult','vidError'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+// ── Video Mode Toggle ──────────────────────────────────────────────────────
+function vidSetMode(mode) {
+  const themePanel = document.getElementById('vidThemePanel');
+  const customPanel = document.getElementById('vidCustomPanel');
+  const btnTheme = document.getElementById('vidModeTheme');
+  const btnCustom = document.getElementById('vidModeCustom');
+  if (mode === 'custom') {
+    themePanel.style.display = 'none';
+    customPanel.style.display = 'block';
+    btnTheme.className = 'btn btn-secondary';
+    btnCustom.className = 'btn btn-primary';
+  } else {
+    themePanel.style.display = 'block';
+    customPanel.style.display = 'none';
+    btnTheme.className = 'btn btn-primary';
+    btnCustom.className = 'btn btn-secondary';
+  }
+}
+
+async function vidGenerateCustom() {
+  const topic = document.getElementById('vidCustomTopic').value.trim();
+  const lang = document.getElementById('vidCustomLang').value;
+  if (!topic) { showToast && showToast('Please enter a topic', 'error'); return; }
+  if (!_vidCanGenerate) return;
+
+  _showVidState('progress');
+  document.getElementById('vidProgressLabel').textContent = 'Generating AI-scripted video…';
+  document.getElementById('vidProgressSub').textContent = 'AI is writing the script + rendering frames. Takes 30–60 seconds.';
+
+  const r = await fetch('/api/video/generate-custom', {
+    method: 'POST',
+    headers: {...hdrs(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({ topic, lang, fmt: _vidFmt }),
+  });
+  const data = await r.json();
+  if (!r.ok) { _showVidError(_extractErr(data, 'Generation failed.')); return; }
+  _pollVidJob(data.job_id);
+}
+
+// ── Content Calendar ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const calType = document.getElementById('calContentType');
+  if (calType) calType.addEventListener('change', () => {
+    const wrap = document.getElementById('calCustomTopicWrap');
+    if (wrap) wrap.style.display = calType.value === 'custom' ? 'block' : 'none';
+  });
+  // Set default datetime-local to tomorrow 08:00
+  const calFireAt = document.getElementById('calFireAt');
+  if (calFireAt) {
+    const tmrw = new Date(); tmrw.setDate(tmrw.getDate()+1); tmrw.setHours(8,0,0,0);
+    calFireAt.value = tmrw.toISOString().slice(0,16);
+  }
+});
+
+async function loadCalendar() {
+  const el = document.getElementById('calList');
+  if (!el) return;
+  el.innerHTML = '<div style="color:#6b7280;font-size:.85em">Loading…</div>';
+  const r = await fetch('/api/marketing/schedule', {headers: hdrs()});
+  if (!r.ok) { el.innerHTML = '<div style="color:#dc2626;font-size:.85em">Failed to load</div>'; return; }
+  const d = await r.json();
+  const items = d.scheduled || [];
+  if (!items.length) {
+    el.innerHTML = '<div style="color:#6b7280;font-size:.85em">No scheduled posts yet. Create one above.</div>';
+    return;
+  }
+  el.innerHTML = items.map(s => {
+    const statusColor = {pending:'#3b82f6', fired:'#22c55e', failed:'#ef4444', cancelled:'#9ca3af'}[s.status] || '#6b7280';
+    const cancelBtn = s.status === 'pending'
+      ? `<button onclick="calCancel(${s.schedule_id})" style="border:none;background:none;color:#ef4444;cursor:pointer;font-size:.8em;padding:2px 6px">✕ Cancel</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary,#f9fafb);border-radius:8px;gap:8px;flex-wrap:wrap">
+      <div>
+        <span style="font-weight:600;font-size:.88em">${s.content_type === 'custom' ? '✏️ ' + (s.custom_topic||'Custom') : s.content_type}</span>
+        <span style="font-size:.78em;color:#6b7280;margin-left:8px">${s.channel} · ${s.lang}</span>
+        <div style="font-size:.78em;color:#374151;margin-top:2px">📅 ${s.fire_at.replace('T',' ')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:.75em;padding:3px 8px;border-radius:10px;background:${statusColor}20;color:${statusColor};font-weight:600">${s.status}</span>
+        ${cancelBtn}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function calSchedule() {
+  const content_type = document.getElementById('calContentType').value;
+  const lang = document.getElementById('calLang').value;
+  const channel = document.getElementById('calChannel').value;
+  const fire_at = document.getElementById('calFireAt').value;
+  const custom_topic = content_type === 'custom' ? document.getElementById('calCustomTopic').value.trim() : '';
+  if (!fire_at) { showToast && showToast('Please pick a date & time', 'error'); return; }
+  if (content_type === 'custom' && !custom_topic) { showToast && showToast('Please enter a topic', 'error'); return; }
+
+  const body = { content_type, lang, channel, fire_at };
+  if (custom_topic) body.custom_topic = custom_topic;
+
+  const r = await fetch('/api/marketing/schedule', {
+    method: 'POST', headers: {...hdrs(), 'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { showToast && showToast(_extractErr(d, 'Schedule failed'), 'error'); return; }
+  showToast && showToast('Post scheduled for ' + fire_at.replace('T',' '), 'success');
+  loadCalendar();
+}
+
+async function calCancel(scheduleId) {
+  if (!confirm('Cancel this scheduled post?')) return;
+  const r = await fetch(`/api/marketing/schedule/${scheduleId}`, {method:'DELETE', headers: hdrs()});
+  if (!r.ok) { showToast && showToast('Cancel failed', 'error'); return; }
+  showToast && showToast('Scheduled post cancelled', 'success');
+  loadCalendar();
+}
+
+// ── Lead Segments ──────────────────────────────────────────────────────────
+async function loadSegments() {
+  const el = document.getElementById('segList');
+  if (!el) return;
+  el.innerHTML = '<div style="color:#6b7280;font-size:.85em">Loading…</div>';
+  const r = await fetch('/api/marketing/segments', {headers: hdrs()});
+  if (!r.ok) { el.innerHTML = '<div style="color:#dc2626;font-size:.85em">Failed to load</div>'; return; }
+  const d = await r.json();
+  const segs = d.segments || [];
+  if (!segs.length) {
+    el.innerHTML = '<div style="color:#6b7280;font-size:.85em">No segments saved yet. Create one above.</div>';
+    return;
+  }
+  el.innerHTML = segs.map(s => {
+    const f = JSON.parse(s.filters_json || '{}');
+    const tags = [f.stage, f.city, f.need_type, f.days_inactive ? `inactive ${f.days_inactive}d` : ''].filter(Boolean).join(' · ');
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary,#f9fafb);border-radius:8px;gap:8px;flex-wrap:wrap">
+      <div>
+        <span style="font-weight:600;font-size:.88em">${s.name}</span>
+        ${tags ? `<div style="font-size:.78em;color:#6b7280;margin-top:2px">${tags}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="segSend(${s.segment_id}, '${s.name.replace(/'/g,"\\'")}'')" class="btn btn-primary" style="font-size:.75em;padding:4px 10px">📨 Send DM</button>
+        <button onclick="segDelete(${s.segment_id})" style="border:none;background:none;color:#ef4444;cursor:pointer;font-size:.8em">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function segPreview() {
+  const filters = _segFilters();
+  const name = document.getElementById('segName').value.trim() || 'preview';
+  // Temporarily create a preview without saving
+  const el = document.getElementById('segPreviewResult');
+  el.style.display = 'block';
+  el.textContent = 'Previewing…';
+
+  // Quick count via a temp segment approach: we just show the filter summary
+  const filterStr = JSON.stringify(filters, null, 0).replace(/[{}"]/g, '').replace(/,/g, ': ');
+  el.textContent = 'Filters: ' + filterStr + '. Save the segment then click "Send DM" to see exact count before sending.';
+}
+
+function _segFilters() {
+  const filters = {};
+  const stage = document.getElementById('segStage').value;
+  const city = document.getElementById('segCity').value.trim();
+  const needType = document.getElementById('segNeedType').value;
+  const inactive = parseInt(document.getElementById('segInactive').value) || 0;
+  if (stage) filters.stage = stage;
+  if (city) filters.city = city;
+  if (needType) filters.need_type = needType;
+  if (inactive > 0) filters.days_inactive = inactive;
+  return filters;
+}
+
+async function segCreate() {
+  const name = document.getElementById('segName').value.trim();
+  if (!name) { showToast && showToast('Please enter a segment name', 'error'); return; }
+  const filters = _segFilters();
+  const r = await fetch('/api/marketing/segments', {
+    method: 'POST', headers: {...hdrs(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, filters }),
+  });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { showToast && showToast(_extractErr(d, 'Failed to save segment'), 'error'); return; }
+  showToast && showToast('Segment saved: ' + name, 'success');
+  document.getElementById('segName').value = '';
+  loadSegments();
+}
+
+async function segDelete(segId) {
+  if (!confirm('Delete this segment?')) return;
+  await fetch(`/api/marketing/segments/${segId}`, {method:'DELETE', headers: hdrs()});
+  loadSegments();
+}
+
+function segSend(segId, segName) {
+  // Reuse existing DM modal but seed it with segment context
+  const modal = document.getElementById('mktDMModal');
+  if (!modal) return;
+  document.querySelector('#mktDMModal h3').textContent = `📨 Send DM to Segment: ${segName}`;
+  // Store segment id for send
+  modal.dataset.segmentId = segId;
+  modal.style.display = 'flex';
+  // Load library for content selection
+  loadDMLeadList();
+}
+
 </script>
 </body>
 </html>

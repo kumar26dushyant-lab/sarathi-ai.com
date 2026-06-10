@@ -1,13 +1,13 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sarathi-AI — Voice-First WhatsApp & Telegram CRM for India's Insurance Advisors</title>
-<meta name="description" content="Sarathi-AI is India's voice-first WhatsApp and Telegram CRM built exclusively for insurance advisors (LIC, HDFC, ICICI, Star Health and more). Manage leads, quotes, claims and renewals by voice in Hindi or English. Hosted in India. End-to-end encrypted. DPDP Act 2023 compliant. Made by Dushyant Sharma in Indore. Not affiliated with any lending or fintech marketplace.">
+<meta name="description" content="Sarathi-AI is India's WhatsApp Voice AI CRM for insurance advisors. Send a WhatsApp voice note in Hindi or English — AI transcribes, creates leads, schedules follow-ups, auto-replies to client messages, and alerts you when human intervention is needed. Drip nurture, lapse prediction, branded PDFs, 12 calculators. Hosted in India, DPDP Act 2023 compliant. Made by Dushyant Sharma in Indore.">
 <link rel="canonical" href="https://sarathi-ai.com/">
 <meta name="author" content="Dushyant Sharma">
-<meta name="keywords" content="insurance CRM India, voice AI CRM, WhatsApp CRM for agents, Telegram CRM, insurance advisor software, LIC agent CRM, IRDAI compliant CRM, Indian insurance CRM, AI for insurance agents, voice-first CRM">
+<meta name="keywords" content="WhatsApp voice AI CRM India, WhatsApp CRM for insurance agents, voice AI CRM insurance advisor, WhatsApp automation insurance, WhatsApp AI auto reply, LIC agent WhatsApp CRM, IRDAI compliant CRM, insurance advisor software India, voice note CRM Hindi, AI WhatsApp agent India">
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
 <meta name="google-site-verification" content="">
 <!-- Open Graph / Facebook / LinkedIn -->
@@ -15,7 +15,7 @@
 <meta property="og:url" content="https://sarathi-ai.com/">
 <meta property="og:site_name" content="Sarathi-AI">
 <meta property="og:title" content="Sarathi-AI — Voice-First WhatsApp & Telegram CRM for India's Insurance Advisors">
-<meta property="og:description" content="India's voice-first AI CRM for insurance advisors. WhatsApp + Telegram native. Hosted in India. End-to-end encrypted. DPDP Act 2023 compliant.">
+<meta property="og:description" content="India's WhatsApp Voice AI CRM for insurance advisors. Send a voice note → AI adds lead, schedules follow-up, auto-replies to clients. Smart enough to reply. Wise enough to alert you when it can't. Hosted in India, DPDP compliant.">
 <meta property="og:image" content="https://sarathi-ai.com/static/logo.png">
 <meta property="og:image:alt" content="Sarathi-AI logo">
 <meta property="og:locale" content="en_IN">
@@ -23,7 +23,7 @@
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Sarathi-AI — Voice-First Insurance CRM for India">
-<meta name="twitter:description" content="WhatsApp + Telegram CRM for India's insurance advisors. Voice-first. Bilingual. Hosted in India. DPDP-compliant.">
+<meta name="twitter:description" content="WhatsApp Voice AI CRM for India's insurance advisors. Send voice note → lead created. Client messages → AI auto-replies or alerts you. Hindi + English. Hosted in India. DPDP-compliant.">
 <meta name="twitter:image" content="https://sarathi-ai.com/static/logo.png">
 <meta name="theme-color" content="#0d9488">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,6 +36,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=5">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <!-- Razorpay checkout is lazy-loaded on demand by _ensureRazorpay() to avoid 215 preload warnings + 2MB on the login/landing page -->
 <style>
 /* ═══════════════════════════════════════════════════════════
@@ -755,6 +756,14 @@ section{padding:80px 0}
 .price-roi .roi-line{font-size:.78em;color:var(--green);font-weight:600}
 .price-tagline{font-size:.82em;color:var(--teal);font-weight:700;margin-top:8px}
 .plan-card .old-price{text-decoration:line-through;color:var(--g400);font-size:.85em;font-weight:500;margin-bottom:4px}
+.hp-savings{font-size:.82em;color:#0d9488;font-weight:600;margin-top:-10px;margin-bottom:12px;min-height:1.2em}
+/* ── Billing toggle ── */
+.billing-toggle-wrap{display:flex;align-items:center;justify-content:center;gap:12px;margin:1rem auto 2rem;font-size:.95rem;font-weight:600;color:var(--g600)}
+.billing-switch{width:54px;height:28px;border-radius:14px;border:none;background:var(--g200);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;padding:0}
+.billing-switch::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s}
+.billing-switch.on{background:#0d9488}
+.billing-switch.on::after{transform:translateX(26px)}
+.billing-save-badge{background:linear-gradient(135deg,#0d9488,#06b6d4);color:#fff;font-size:.72em;font-weight:700;padding:2px 8px;border-radius:100px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
 
 /* ═══ EARN & PARTNER SECTION ═══════════════════════════════ */
 .earn-section{position:relative;overflow:hidden;padding:72px 0;background:linear-gradient(145deg,#0f172a 0%,#1e1b4b 50%,#312e81 100%)}
@@ -942,6 +951,83 @@ section{padding:80px 0}
 #scrollTopBtn{bottom:140px}
 #scrollBottomBtn{bottom:88px}
 @media(max-width:768px){#scrollTopBtn{bottom:120px;right:14px;width:40px;height:40px;font-size:1.1em}#scrollBottomBtn{bottom:72px;right:14px;width:40px;height:40px;font-size:1.1em}}
+
+/* ═══ WHATSAPP WEB HERO DEMO (Tab 0) ═════════════════ */
+.waw-hero-layout{display:flex;flex-direction:row;gap:22px;width:92%;max-width:1300px;margin:0 auto;align-items:stretch}
+.waw-screen{flex:1.4;min-width:0;background:#111b21;border-radius:20px;overflow:hidden;display:flex;flex-direction:row;box-shadow:0 30px 80px rgba(0,0,0,.35),0 0 0 3px rgba(255,255,255,.08)}
+.waw-sidebar{width:27%;max-width:270px;background:#111b21;border-right:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;flex-shrink:0}
+.waw-sb-top{display:flex;align-items:center;justify-content:space-between;padding:12px 15px;background:#202c33;border-bottom:1px solid rgba(255,255,255,.05)}
+.waw-sb-avatar{width:34px;height:34px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;font-size:.74em;font-weight:800;color:#fff;flex-shrink:0}
+.waw-sb-icons{display:flex;gap:15px;color:rgba(255,255,255,.5);font-size:1em}
+.waw-sb-search{padding:7px 11px;background:#111b21}
+.waw-sb-search-inp{width:100%;background:#202c33;border:none;border-radius:8px;padding:6px 10px;color:#d1d7db;font-size:.76em;outline:none;box-sizing:border-box}
+.waw-sb-search-inp::placeholder{color:#8696a0}
+.waw-chat-list{flex:1;overflow-y:auto;-ms-overflow-style:none;scrollbar-width:none}
+.waw-chat-list::-webkit-scrollbar{display:none}
+.waw-chat-item{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;transition:background .15s}
+.waw-chat-item.active,.waw-chat-item:hover{background:#2a3942}
+.waw-ci-av{width:40px;height:40px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;font-size:.78em;font-weight:800;color:#fff;flex-shrink:0;transition:background .3s}
+.waw-ci-body{flex:1;min-width:0}
+.waw-ci-name{font-size:.82em;font-weight:600;color:#e9edef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.waw-ci-preview{font-size:.71em;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.waw-ci-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.waw-ci-time{font-size:.64em;color:#8696a0}
+.waw-ci-badge{background:#25d366;color:#fff;border-radius:50%;width:17px;height:17px;font-size:.58em;display:flex;align-items:center;justify-content:center;font-weight:700}
+.waw-main{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0}
+.waw-main-hdr{display:flex;align-items:center;gap:10px;padding:11px 15px;background:#202c33;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0}
+.waw-main-av{width:34px;height:34px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;font-size:.74em;font-weight:800;color:#fff;flex-shrink:0;transition:background .3s}
+.waw-main-t{flex:1}
+.waw-main-name{font-size:.88em;font-weight:700;color:#e9edef}
+.waw-main-sub{font-size:.72em;color:#8696a0}
+.waw-main-icons{display:flex;gap:17px;color:rgba(255,255,255,.5);font-size:1em}
+.waw-chat-area{flex:1;padding:9px 13px;overflow-y:auto;background:#0b141a;display:flex;flex-direction:column;gap:5px;min-height:300px;max-height:400px;-ms-overflow-style:none;scrollbar-width:none}
+.waw-chat-area::-webkit-scrollbar{display:none}
+/* WA description panel */
+.waw-desc-panel{width:240px;flex-shrink:0;background:rgba(17,27,33,.95);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:22px 18px;display:flex;flex-direction:column;gap:12px}
+.waw-desc-title{font-size:1em;font-weight:800;color:#e9edef;line-height:1.35}
+.waw-desc-sub{font-size:.77em;color:#8696a0;line-height:1.55;margin-top:-4px}
+.waw-desc-items{display:flex;flex-direction:column;gap:10px;margin-top:2px}
+.waw-desc-item{display:flex;align-items:flex-start;gap:8px}
+.waw-desc-icon{font-size:.9em;flex-shrink:0;margin-top:2px}
+.waw-desc-text{font-size:.8em;line-height:1.4}
+.waw-desc-text strong{color:#e9edef;font-weight:700;display:block}
+.waw-desc-text span{color:#8696a0}
+.waw-desc-now{margin-top:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:13px}
+.waw-desc-now-lbl{font-size:.65em;font-weight:700;color:#25d366;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.waw-desc-now-text{font-size:.82em;font-weight:600;color:#e9edef;transition:opacity .3s;min-height:1.2em}
+.waw-desc-now-prev{font-size:.72em;color:#8696a0;margin-top:3px;min-height:1em}
+/* WA input bar */
+.waw-input-row{display:flex;align-items:center;gap:9px;padding:8px 12px;background:#202c33;flex-shrink:0}
+.waw-input-icons{color:rgba(255,255,255,.45);font-size:1em;display:flex;gap:12px}
+.waw-input-box{flex:1;background:#2a3942;border:none;border-radius:8px;padding:8px 13px;color:#e9edef;font-size:.83em;outline:none}
+.waw-input-box::placeholder{color:#8696a0}
+/* WA message bubbles */
+.wa-date-div{text-align:center;margin:4px 0}
+.wa-date-div span{background:rgba(11,20,26,.9);border:1px solid rgba(255,255,255,.1);color:#8696a0;font-size:.62em;font-weight:600;padding:3px 11px;border-radius:7px}
+.wa-msg{max-width:70%;display:flex;flex-direction:column;animation:waMsgIn .22s ease both;opacity:0}
+.wa-msg.in{align-self:flex-start}
+.wa-msg.out,.wa-msg.ai{align-self:flex-end}
+@keyframes waMsgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.wa-bub{padding:7px 10px 17px;border-radius:8px;position:relative;font-size:.82em;line-height:1.55;word-break:break-word;white-space:pre-wrap}
+.in .wa-bub{background:#202c33;border-radius:0 8px 8px 8px;color:#e9edef}
+.out .wa-bub{background:#005c4b;border-radius:8px 0 8px 8px;color:#e9edef}
+.ai .wa-bub{background:#0a3d2e;border-radius:8px 0 8px 8px;border-left:3px solid #25d366;color:#e9edef}
+.wa-meta{position:absolute;bottom:3px;right:8px;display:flex;align-items:center;gap:2px;font-size:.59em;color:#8696a0}
+.wa-ticks{color:#53bdeb}
+.wa-typing-row{align-self:flex-start;display:flex;animation:waMsgIn .2s ease both}
+.wa-typing-inner{background:#202c33;border-radius:0 10px 10px 10px;padding:8px 12px;display:flex;gap:4px;align-items:center}
+.wa-dot{width:6px;height:6px;border-radius:50%;background:#8696a0;animation:waDot .9s ease-in-out infinite}
+.wa-dot:nth-child(2){animation-delay:.15s}.wa-dot:nth-child(3){animation-delay:.3s}
+@keyframes waDot{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.2);opacity:1}}
+.wa-voice-bub{background:#005c4b;border-radius:8px 0 8px 8px;padding:7px 10px 17px;position:relative;display:flex;align-items:center;gap:7px;min-width:140px;max-width:100%}
+.wa-waveform{display:flex;align-items:center;gap:2px;flex:1;height:20px}
+.wa-waveform span{width:2px;border-radius:2px;background:#25d366;animation:waWave .55s ease-in-out infinite alternate}
+.wa-waveform span:nth-child(even){animation-delay:.1s}
+@keyframes waWave{from{height:3px}to{height:14px}}
+.wa-ai-tag{align-self:flex-end;background:linear-gradient(135deg,#0a3d2e,#1a5c3a);border:1px solid #25d366;border-radius:7px;padding:4px 10px;font-size:.65em;font-weight:600;color:#25d366;animation:waMsgIn .2s ease both;opacity:0;display:flex;align-items:center;gap:5px}
+@media(max-width:900px){.waw-sidebar{display:none}}
+@media(max-width:820px){.waw-hero-layout{flex-direction:column;align-items:center;gap:14px}.waw-screen{width:97%;flex:none}.waw-desc-panel{width:90%;max-width:520px;flex-direction:row;flex-wrap:wrap;gap:14px 20px}}
+@media(max-width:480px){.waw-desc-panel{display:none}.waw-screen{border-radius:14px}}
 </style>
 <link rel="preconnect" href="https://accounts.google.com" crossorigin>
 <link rel="preconnect" href="https://oauth2.googleapis.com" crossorigin>
@@ -1147,12 +1233,12 @@ section{padding:80px 0}
 @keyframes vwHl { 0%,100%{ background:transparent } 50%{ background:rgba(245,158,11,.18) } }
 .vw-highlight { animation: vwHl 1s ease-in-out 4; border-radius:8px; padding:4px; }
 </style>
-<div id="voiceWalkBtn" class="vw-pulse" onclick="vwToggle()" title="Listen to a 60-sec walkthrough" style="position:fixed;bottom:20px;left:20px;z-index:9998;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:50px;padding:12px 18px;font-weight:700;font-size:.92em;cursor:pointer;box-shadow:0 6px 20px rgba(13,148,136,.4);display:flex;align-items:center;gap:8px;border:2px solid rgba(255,255,255,.25);user-select:none">
-  <span style="font-size:1.2em">🎧</span> <span id="vwBtnLabel">Listen (60s)</span>
+<div id="voiceWalkBtn" class="vw-pulse" onclick="vwToggle()" title="Listen to a 2-minute walkthrough" style="position:fixed;bottom:20px;left:20px;z-index:9998;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:50px;padding:12px 18px;font-weight:700;font-size:.92em;cursor:pointer;box-shadow:0 6px 20px rgba(13,148,136,.4);display:flex;align-items:center;gap:8px;border:2px solid rgba(255,255,255,.25);user-select:none">
+  <span style="font-size:1.2em">🎧</span> <span id="vwBtnLabel">Listen (2 min)</span>
 </div>
 <div id="voiceWalkPanel" style="position:fixed;bottom:80px;left:20px;z-index:9999;background:#fff;border-radius:14px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.18);width:300px;display:none;border:1px solid #e5e7eb">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <strong style="color:#0f766e;font-size:.95em">🎧 60-Second Walkthrough</strong>
+    <strong style="color:#0f766e;font-size:.95em">🎧 2-Minute Walkthrough</strong>
     <span onclick="vwClose()" style="cursor:pointer;color:#9ca3af;font-size:1.3em;line-height:1">×</span>
   </div>
   <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -1173,8 +1259,8 @@ section{padding:80px 0}
 (function(){
   var vwLang='hi', vwUtter=null, vwOpen=false, vwAutoStarted=false;
   var SCRIPTS = {
-    en: "Welcome to Sarathi-AI. India's voice-first CRM, built for financial advisors who play to win. Just talk to your bot in Hindi or English. It captures leads, sends drip nurture sequences, predicts which policies will lapse, generates branded quote PDFs, and gives every advisor a free public microsite. All for less than the price of a chai per day. Tap Start Free to begin your 14-day trial.",
-    hi: "Sarathi-AI में आपका स्वागत है। यह भारत का Voice-First CRM है, जो जीतने वाले Financial Advisors के लिए बना है। बस अपने bot से Hindi या English में बात करें। यह leads पकड़ता है, drip nurture sequences भेजता है, lapse होने वाली policies की पहचान करता है, branded quote PDF बनाता है, और हर advisor को एक free public microsite देता है। यह सब एक चाय की कीमत से भी कम में। 14 दिन का free trial शुरू करने के लिए Start Free दबाएं।"
+    en: "You're an insurance advisor managing hundreds of clients. Every lead is in a different WhatsApp chat. Every renewal tracked in Excel. Every forgotten follow-up is commission you'll never recover. Every lapsed policy is a client who blames you. Sound familiar? Sarathi-AI fixes all of that. It's your AI office — running entirely inside WhatsApp. Just send a voice note in Hindi or English: say 'new lead, Ramesh, Delhi, wants a 50 lakh term plan' — and the AI does the rest. Creates the lead. Schedules the follow-up. Sends your client a welcome message. Drafts a personalized pitch based on their age and income. No app to open. No form to fill. When a client messages you, Sarathi-AI reads their full history and sends a smart, branded reply. When it's unsure, it routes to your private WhatsApp Saved Messages. You approve with one tap. It delivers to the client automatically. Thirty days before every renewal, you get a lapse-risk alert — so no policy ever slips through. Twelve built-in financial calculators help you show clients exactly what they're protecting. Branded quote PDFs land in their WhatsApp in seconds. The price? Just one hundred and ninety-nine rupees a month. Six rupees a day. Less than a chai. One extra policy renewal pays for an entire year of Sarathi-AI. Start your 14-day free trial right now. No credit card required. Setup takes five minutes. Go to sarathi-ai.com.",
+    hi: "आप insurance advisor हैं — सैकड़ों clients, अलग-अलग WhatsApp chats, Excel में renewals। जो follow-up भूल गए — वो commission गया। जो renewal याद नहीं रही — policy lapse, और client ने आपको blame किया। यह रोज़ का दर्द है। Sarathi-AI इसे खत्म करता है। यह आपका AI office है — सिर्फ WhatsApp पर। बस एक voice note भेजिए, Hindi या English में: 'नया lead है, Ramesh, दिल्ली, 50 लाख term plan चाहिए।' AI खुद lead बनाएगा। Follow-up schedule करेगा। Client को welcome message भेजेगा। उनकी उम्र और income के हिसाब से personalized pitch तैयार करेगा। कोई app नहीं खोलनी। कोई form नहीं भरना। जब client आपको message करे — AI पूरी history पढ़कर smart, branded reply भेजेगा। जब confident नहीं होगा — आपके Saved Messages में भेजेगा। आप एक tap में approve करो — client को automatically forward। हर renewal से 30 दिन पहले lapse-risk alert — कोई policy कभी slip नहीं होगी। 12 built-in calculators से client को दिखाएं वो क्या protect कर रहे हैं। Branded PDF quote — WhatsApp पर seconds में। कीमत? सिर्फ 199 रुपए महीने में। 6 रुपए रोज़। एक चाय से भी कम। एक extra renewal — पूरे साल का Sarathi-AI cover हो जाता है। अभी 14 दिन का free trial शुरू करें। No credit card। 5 minutes में setup। Sarathi-AI.com पर जाएं।"
   };
   if(localStorage.getItem('vw_hide')==='1'){
     var b=document.getElementById('voiceWalkBtn'); if(b) b.style.display='none';
@@ -1341,16 +1427,138 @@ section{padding:80px 0}
 
     <!-- Tab Pills -->
     <div class="hero-tabs" id="heroTabs">
-      <div class="hero-tab active" data-hero-tab="0" onclick="switchHeroTab(0)"><span class="tab-icon">🤖</span><span data-i18n="htab_bot">Your Voice AI Assistant Bot</span><div class="hero-tab-progress"></div></div>
-      <div class="hero-tab" data-hero-tab="1" onclick="switchHeroTab(1)"><span class="tab-icon">💻</span><span data-i18n="htab_web">Your Voice AI Web Dashboard</span><div class="hero-tab-progress"></div></div>
-      <div class="hero-tab" data-hero-tab="2" onclick="switchHeroTab(2)"><span class="tab-icon">📱</span><span data-i18n="htab_mob">Your Voice AI Mobile App</span><div class="hero-tab-progress"></div></div>
+      <div class="hero-tab active" data-hero-tab="0" onclick="switchHeroTab(0)"><span class="tab-icon">💬</span><span data-i18n="htab_wa">WhatsApp AI in Action</span><div class="hero-tab-progress"></div></div>
+      <div class="hero-tab" data-hero-tab="1" onclick="switchHeroTab(1)"><span class="tab-icon">🤖</span><span data-i18n="htab_bot">Your AI Assistant Bot</span><div class="hero-tab-progress"></div></div>
+      <div class="hero-tab" data-hero-tab="2" onclick="switchHeroTab(2)"><span class="tab-icon">💻</span><span data-i18n="htab_web">Voice AI Web Dashboard</span><div class="hero-tab-progress"></div></div>
+      <div class="hero-tab" data-hero-tab="3" onclick="switchHeroTab(3)"><span class="tab-icon">📱</span><span data-i18n="htab_mob">Voice AI Mobile App</span><div class="hero-tab-progress"></div></div>
     </div>
 
     <!-- Tab Content -->
     <div class="hero-tab-content">
 
-      <!-- ══ TAB 0: Voice Assistant Bot (existing) ══ -->
-      <div class="hero-tab-panel active" id="heroPanel0">
+      <!-- ══ TAB 0: WhatsApp AI in Action ══ -->
+      <div class="hero-tab-panel active" id="heroPanel-wa">
+        <div class="waw-hero-layout">
+          <!-- Left: WA Web Interface (auto-cycling showcase) -->
+          <div class="waw-screen">
+            <div class="waw-sidebar">
+              <div class="waw-sb-top">
+                <div class="waw-sb-avatar">SB</div>
+                <div class="waw-sb-icons"><span>💬</span><span>⋮</span></div>
+              </div>
+              <div class="waw-sb-search"><input class="waw-sb-search-inp" placeholder="🔍 Search or start new chat" readonly></div>
+              <div class="waw-chat-list">
+                <div class="waw-chat-item active" id="wawSbActive">
+                  <div class="waw-ci-av" id="wawSbAv">AS</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name" id="wawSbName">Anita Sharma</div>
+                    <div class="waw-ci-preview" id="wawSbPreview">Mujhe family health insurance...</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">9:38</span><span class="waw-ci-badge" id="wawSbBadge">1</span></div>
+                </div>
+                <div class="waw-chat-item">
+                  <div class="waw-ci-av" style="background:#7c3aed">RV</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name">Rajesh Verma</div>
+                    <div class="waw-ci-preview">Term plan quote bhejo please</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">8:54</span></div>
+                </div>
+                <div class="waw-chat-item">
+                  <div class="waw-ci-av" style="background:#b45309">PM</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name">Priya Mehta</div>
+                    <div class="waw-ci-preview">Renewal reminder set ✓</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">8:21</span></div>
+                </div>
+                <div class="waw-chat-item">
+                  <div class="waw-ci-av" style="background:#0369a1">SK</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name">Suresh Kumar</div>
+                    <div class="waw-ci-preview">ULIP quote bhejo please</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">Yesterday</span></div>
+                </div>
+                <div class="waw-chat-item">
+                  <div class="waw-ci-av" style="background:#be123c">MK</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name">Meena Krishnan</div>
+                    <div class="waw-ci-preview">PDF mila, bahut achha! 🙏</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">Yesterday</span></div>
+                </div>
+                <div class="waw-chat-item">
+                  <div class="waw-ci-av" style="background:#0891b2">AN</div>
+                  <div class="waw-ci-body">
+                    <div class="waw-ci-name">Anand Nair</div>
+                    <div class="waw-ci-preview">Term insurance interest hai</div>
+                  </div>
+                  <div class="waw-ci-meta"><span class="waw-ci-time">Mon</span></div>
+                </div>
+              </div>
+            </div>
+            <!-- Conversation area (auto-cycles through 12 scenarios) -->
+            <div class="waw-main">
+              <div class="waw-main-hdr">
+                <div class="waw-main-av" id="wawMainAv">SA</div>
+                <div class="waw-main-t">
+                  <div class="waw-main-name" id="wawMainName">Sarathi-AI Bot</div>
+                  <div class="waw-main-sub">online</div>
+                </div>
+                <div class="waw-main-icons"><span>🔍</span><span>📞</span><span>⋮</span></div>
+              </div>
+              <div class="waw-chat-area" id="waDemoChat">
+                <div class="wa-date-div"><span>TODAY</span></div>
+              </div>
+              <div class="waw-input-row">
+                <div class="waw-input-icons"><span>😊</span><span>📎</span></div>
+                <input class="waw-input-box" placeholder="Type a message" readonly>
+                <div class="waw-input-icons"><span>🎤</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Right: WhatsApp AI feature highlights -->
+          <div class="waw-desc-panel">
+            <div class="waw-desc-title" data-i18n="waw_title">WhatsApp is your CRM</div>
+            <div class="waw-desc-sub" data-i18n="waw_sub">Clients already use WhatsApp. Your AI is already there.</div>
+            <div class="waw-desc-items">
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">🎤</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f1_t">Voice → Lead in 5 sec</strong><span data-i18n="waw_f1_s">Speak a name, get a CRM entry</span></div>
+              </div>
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">💬</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f2_t">Auto-reply 24/7</strong><span data-i18n="waw_f2_s">AI handles client queries instantly</span></div>
+              </div>
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">📊</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f3_t">Full CRM on WhatsApp</strong><span data-i18n="waw_f3_s">Pipeline, follow-ups, reminders</span></div>
+              </div>
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">🔔</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f4_t">Renewal reminders</strong><span data-i18n="waw_f4_s">Never miss a renewal again</span></div>
+              </div>
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">📣</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f5_t">WA Blast campaigns</strong><span data-i18n="waw_f5_s">Reach all leads in one tap</span></div>
+              </div>
+              <div class="waw-desc-item">
+                <span class="waw-desc-icon">📄</span>
+                <div class="waw-desc-text"><strong data-i18n="waw_f6_t">Branded PDF sender</strong><span data-i18n="waw_f6_s">Quotes &amp; comparisons on WhatsApp</span></div>
+              </div>
+            </div>
+            <div class="waw-desc-now">
+              <div class="waw-desc-now-lbl" data-i18n="waw_now_lbl">▶ Now showing</div>
+              <div class="waw-desc-now-text" id="wawDescNowText">Bot Menu</div>
+              <div class="waw-desc-now-prev" id="wawDescNowPrev">Bot capabilities overview</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TAB 1: Voice Assistant Bot ══ -->
+      <div class="hero-tab-panel" id="heroPanel0">
         <div class="hero-bot-screen" id="heroBotScreen">
           <div class="phone-header">
             <div class="phone-back">←</div>
@@ -1516,7 +1724,7 @@ section{padding:80px 0}
     <div class="trust-item"><span class="ti-icon">🇮🇳</span> <span data-i18n="tb_3">Hosted in India (Mumbai)</span></div>
     <div class="trust-item"><span class="ti-icon">🚫</span> <span data-i18n="tb_4">Zero Data Sharing</span></div>
     <div class="trust-item"><span class="ti-icon">🤖</span> <span data-i18n="tb_5">Powered by Google Gemini</span></div>
-    <div class="trust-item"><span class="ti-icon">📱</span> <span data-i18n="tb_6">No App to Install</span></div>
+    <div class="trust-item"><span class="ti-icon">�</span> <span data-i18n="tb_6">WhatsApp + Telegram Native</span></div>
   </div>
 </div>
 
@@ -1603,8 +1811,8 @@ section{padding:80px 0}
       <div class="feature-card reveal gradient-border" style="border:2px solid var(--indigo-light)!important;background:linear-gradient(135deg,#eef2ff 0%,#fff 100%);position:relative">
         <span style="position:absolute;top:10px;right:10px;background:var(--indigo);color:#fff;font-size:.65em;padding:3px 8px;border-radius:8px;font-weight:700">LIVE</span>
         <div class="fc-icon indigo" style="font-size:2.2em">🎙️</div>
-        <h3 style="color:var(--indigo)" data-i18n="kf3_t">Voice Notes → CRM</h3>
-        <p data-i18n="kf3_d">Send a Telegram voice note in Hindi or English. AI transcribes, extracts action, updates lead, sets reminder. Zero typing.</p>
+        <h3 style="color:var(--indigo)" data-i18n="kf3_t">WhatsApp Voice AI CRM</h3>
+        <p data-i18n="kf3_d">Send a WhatsApp voice note — AI transcribes, creates lead, schedules follow-up. Client messages you? AI auto-replies or alerts you. All from WhatsApp. Zero typing.</p>
       </div>
 
       <!-- 4. Advisor Microsite (NEW) -->
@@ -1623,12 +1831,12 @@ section{padding:80px 0}
         <p data-i18n="kf5_d">Compare 8 term + 8 health insurers in seconds. Generate a branded comparison PDF the client can share with their family. Upload your own rate-cards.</p>
       </div>
 
-      <!-- 6. Marketing Studio (Coming Soon) -->
-      <div class="feature-card reveal gradient-border" style="border:2px dashed #8b5cf6!important;background:linear-gradient(135deg,#faf5ff 0%,#fff 100%);position:relative">
-        <span style="position:absolute;top:10px;right:10px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-size:.65em;padding:3px 8px;border-radius:8px;font-weight:700">SOON</span>
-        <div class="fc-icon" style="font-size:2.2em;color:#8b5cf6">📣</div>
-        <h3 style="color:#8b5cf6" data-i18n="kf6_t">Marketing Content Studio</h3>
-        <p data-i18n="kf6_d">AI-generated posts for Diwali, Budget Day, World Heart Day & more. One-tap share to Instagram, Facebook & WhatsApp Status. Schedule daily/weekly cadence.</p>
+      <!-- 6. WhatsApp Smart AI Agent (LIVE) -->
+      <div class="feature-card reveal gradient-border" style="border:2px solid #25d366!important;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);position:relative">
+        <span style="position:absolute;top:10px;right:10px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;font-size:.65em;padding:3px 8px;border-radius:8px;font-weight:700">LIVE</span>
+        <div class="fc-icon" style="font-size:2.2em;color:#25d366">💬</div>
+        <h3 style="color:#128c7e" data-i18n="kf6_t">WhatsApp Smart AI Agent</h3>
+        <p data-i18n="kf6_d">Leads WhatsApp aapko? AI reads the message, checks their profile, and either auto-replies confidently — or alerts you in Saved Messages so you can forward your reply in one tap. Advisor always in control.</p>
       </div>
     </div>
 
@@ -2339,12 +2547,18 @@ section{padding:80px 0}
       <h2><span data-i18n="price_title_1">Invest in</span> <span class="amber" data-i18n="price_title_2">Peace of Mind</span></h2>
       <p data-i18n="price_desc">Less than a cup of chai per day. The cheapest "employee" who never forgets, never sleeps, never takes leave.</p>
     </div>
+    <div class="billing-toggle-wrap">
+      <span data-i18n="billing_monthly">Monthly</span>
+      <button class="billing-switch" id="homeBillingToggle" onclick="toggleBillingHome()" aria-label="Toggle billing period"></button>
+      <span>Yearly &nbsp;<span class="billing-save-badge">Save up to 17%</span></span>
+    </div>
     <div class="pricing-grid">
       <!-- Solo -->
       <div class="plan-card reveal">
         <div class="plan-name" data-i18n="p1_name">Solo Advisor</div>
-        <div class="old-price">₹499/mo</div>
-        <div class="plan-price"><span class="rupee">₹</span><span class="amount">199</span><span class="period" data-i18n="per_mo">/mo</span></div>
+        <div class="old-price" id="hp-old-1">₹499/mo</div>
+        <div class="plan-price"><span class="rupee">₹</span><span class="amount" id="hp-amount-1">199</span><span class="period" id="hp-period-1">/mo</span></div>
+        <div class="hp-savings" id="hp-savings-1"></div>
         <div class="plan-desc" data-i18n="p1_desc">Perfect for individual financial advisors</div>
         <div class="price-roi"><div class="roi-line" data-i18n="p1_roi">Just ₹7/day — less than a samosa 🥟</div></div>
         <ul class="plan-features">
@@ -2360,15 +2574,16 @@ section{padding:80px 0}
           <li data-i18n="p1_f8b">Google Drive sync & AI document scanner</li>
           <li data-i18n="p1_f8">Help & Support tickets</li>
         </ul>
-        <button class="btn btn-outline btn-lg" style="width:100%" onclick="openSignup('individual','₹199/mo')" data-i18n="start_trial">Start Free Trial</button>
+        <button class="btn btn-outline btn-lg" style="width:100%" id="hp-btn-1" onclick="openSignupBilling('individual','individual_annual')" data-i18n="start_trial">Start Free Trial</button>
         <div class="price-tagline" data-i18n="p1_tag">Your peace of mind, guaranteed</div>
       </div>
       <!-- Team -->
       <div class="plan-card featured gradient-border reveal">
         <div class="plan-badge-tag" data-i18n="most_pop">⭐ Most Popular</div>
         <div class="plan-name" data-i18n="p2_name">Team</div>
-        <div class="old-price">₹1,499/mo</div>
-        <div class="plan-price"><span class="rupee">₹</span><span class="amount">799</span><span class="period" data-i18n="per_mo">/mo</span></div>
+        <div class="old-price" id="hp-old-2">₹1,499/mo</div>
+        <div class="plan-price"><span class="rupee">₹</span><span class="amount" id="hp-amount-2">799</span><span class="period" id="hp-period-2">/mo</span></div>
+        <div class="hp-savings" id="hp-savings-2"></div>
         <div class="plan-desc" data-i18n="p2_desc">For growing advisory teams</div>
         <div class="price-roi"><div class="roi-line" data-i18n="p2_roi">₹160/advisor — cheapest team member ever 🤝</div></div>
         <ul class="plan-features">
@@ -2380,14 +2595,15 @@ section{padding:80px 0}
           <li data-i18n="p2_f6">Priority support (24hr response)</li>
           <li data-i18n="p2_f7">Team-wide partner earnings tracking</li>
         </ul>
-        <button class="btn btn-teal btn-lg btn-glow" style="width:100%" onclick="openSignup('team','₹799/mo')" data-i18n="start_trial">Start Free Trial</button>
+        <button class="btn btn-teal btn-lg btn-glow" style="width:100%" id="hp-btn-2" onclick="openSignupBilling('team','team_annual')" data-i18n="start_trial">Start Free Trial</button>
         <div class="price-tagline" data-i18n="p2_tag">Run your agency like a wealth firm</div>
       </div>
       <!-- Enterprise -->
       <div class="plan-card reveal">
         <div class="plan-name" data-i18n="p3_name">Enterprise</div>
-        <div class="old-price">₹3,999/mo</div>
-        <div class="plan-price"><span class="rupee">₹</span><span class="amount">1,999</span><span class="period" data-i18n="per_mo">/mo</span></div>
+        <div class="old-price" id="hp-old-3">₹3,999/mo</div>
+        <div class="plan-price"><span class="rupee">₹</span><span class="amount" id="hp-amount-3">1,999</span><span class="period" id="hp-period-3">/mo</span></div>
+        <div class="hp-savings" id="hp-savings-3"></div>
         <div class="plan-desc" data-i18n="p3_desc">For large agencies & wealth firms</div>
         <div class="price-roi"><div class="roi-line" data-i18n="p3_roi">₹80/advisor — less than an office chai bill ☕</div></div>
         <ul class="plan-features">
@@ -2400,7 +2616,7 @@ section{padding:80px 0}
           <li data-i18n="p3_f7">Higher partner commissions</li>
           <li data-i18n="p3_f8">Dedicated support (4hr SLA)</li>
         </ul>
-        <button class="btn btn-outline btn-lg" style="width:100%" onclick="openSignup('enterprise','₹1,999/mo')" data-i18n="start_trial">Start Free Trial</button>
+        <button class="btn btn-outline btn-lg" style="width:100%" id="hp-btn-3" onclick="openSignupBilling('enterprise','enterprise_annual')" data-i18n="start_trial">Start Free Trial</button>
         <div class="price-tagline" data-i18n="p3_tag">The smartest investment for your firm</div>
       </div>
     </div>
@@ -2453,11 +2669,11 @@ section{padding:80px 0}
           <span style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:#22d3ee;padding:.3rem .75rem;border-radius:16px;font-size:.8rem;font-weight:600">✓ Life Insurance</span>
           <span style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:#22d3ee;padding:.3rem .75rem;border-radius:16px;font-size:.8rem;font-weight:600">✓ Motor &amp; Vehicle</span>
           <span style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:#22d3ee;padding:.3rem .75rem;border-radius:16px;font-size:.8rem;font-weight:600">✓ 95%+ Success Rate</span>
-          <span style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:#22d3ee;padding:.3rem .75rem;border-radius:16px;font-size:.8rem;font-weight:600">✓ ₹999 one-time review available</span>
+          <span style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:#22d3ee;padding:.3rem .75rem;border-radius:16px;font-size:.8rem;font-weight:600">✓ ₹499 one-time review available</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:.75rem">
           <a href="https://nidaanpartner.com" target="_blank" style="display:inline-flex;align-items:center;gap:.5rem;background:#06b6d4;color:#fff;padding:.75rem 1.6rem;border-radius:10px;font-weight:700;font-size:.95rem;text-decoration:none;transition:background .2s" onmouseover="this.style.background='#0891b2'" onmouseout="this.style.background='#06b6d4'">🛡️ Visit Nidaan Partner →</a>
-          <a href="https://nidaanpartner.com/#get-reviewed" target="_blank" style="display:inline-flex;align-items:center;gap:.5rem;background:transparent;border:2px solid rgba(255,255,255,.4);color:#fff;padding:.73rem 1.4rem;border-radius:10px;font-weight:600;font-size:.92rem;text-decoration:none">⚖️ ₹999 Quick Review</a>
+          <a href="https://nidaanpartner.com/#get-reviewed" target="_blank" style="display:inline-flex;align-items:center;gap:.5rem;background:transparent;border:2px solid rgba(255,255,255,.4);color:#fff;padding:.73rem 1.4rem;border-radius:10px;font-weight:600;font-size:.92rem;text-decoration:none">⚖️ ₹499 Quick Review</a>
         </div>
       </div>
     </div>
@@ -2762,13 +2978,13 @@ const _T = {
   nav_dash: {en:'My Dashboard', hi:'मेरा डैशबोर्ड'},
   hero_badge: {en:'⚔️ Arjun had Krishna. You have Sarathi-AI.com', hi:'⚔️ अर्जुन के पास कृष्ण थे। आपके पास Sarathi-AI.com है'},
   hero_h1: {
-    en:'<span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Arjun had Krishna.</span><br><span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">You have Sarathi-AI.com</span><br><span style="color:var(--g800);font-size:.62em;font-weight:600;display:block;margin-top:8px">India\'s voice-first CRM — built for financial advisors who play to win.</span>',
-    hi:'<span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">अर्जुन के पास कृष्ण थे।</span><br><span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">आपके पास Sarathi-AI.com है।</span><br><span style="color:var(--g800);font-size:.62em;font-weight:600;display:block;margin-top:8px">भारत का Voice-First CRM — जीतने वाले Financial Advisors के लिए।</span>'
+    en:'<span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Arjun had Krishna.</span><br><span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">You have Sarathi-AI.com</span><br><span style="color:var(--g800);font-size:.62em;font-weight:600;display:block;margin-top:8px">India\'s WhatsApp Voice AI CRM — built for financial advisors who play to win.</span>',
+    hi:'<span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">अर्जुन के पास कृष्ण थे।</span><br><span style="background:linear-gradient(135deg,var(--teal),var(--indigo-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">आपके पास Sarathi-AI.com है।</span><br><span style="color:var(--g800);font-size:.62em;font-weight:600;display:block;margin-top:8px">भारत का WhatsApp Voice AI CRM — जीतने वाले Financial Advisors के लिए।</span>'
   },
   hero_title_1: {en:'Bolo. AI Samjhega.', hi:'बोलो। AI समझेगा।'},
   hero_title_2: {en:'Sab Apne Aap Ho Jayega.', hi:'सब अपने आप हो जाएगा।'},
   hero_tagline: {en:'Bolo. AI Samjhega. Sab Ho Jayega.', hi:'बोलो। AI समझेगा। सब हो जाएगा।'},
-  hero_sub: {en:'Tired of Excel, missed follow-ups, manual entries? Just talk — in Hindi or English. AI handles leads, reminders, pitches, reports. You sell, it does the rest.', hi:'Excel, छूटे follow-ups, manual entry से परेशान? बस बोलो — Hindi या English में। AI लीड, रिमाइंडर, पिच, रिपोर्ट सब सम्भालेगा। आप बेचो, बाकी AI करेगा।'},
+  hero_sub: {en:'WhatsApp pe voice note bhejo — lead ban jaayegi, follow-up set ho jaayega. Client message kare — AI auto-reply karega ya aapko alert karega. Hindi ya English mein. You sell, Sarathi handles the rest.', hi:'WhatsApp पे voice note भेजो — lead बन जाएगी, follow-up set हो जाएगा। Client message करे — AI auto-reply करेगा या आपको alert करेगा। Hindi या English में। आप बेचो, Sarathi बाकी सब करेगा।'},
   hero_desc: {en:'No commands. No forms. Just talk to your bot — in Hindi, English, or mix. Say "naya client aaya Sharma ji" and your lead is created. Say "kal Priya ko call" and reminder is set. Your AI assistant that actually listens.', hi:'कोई command नहीं। कोई form नहीं। बस bot से बात करो — Hindi, English, या mix। बोलो "naya client aaya Sharma ji" — lead बन जाएगी। बोलो "kal Priya ko call" — reminder set। AI assistant जो सचमुच सुनता है।'},
   hero_talk_label: {en:'Just Talk Mode — Type or Speak Anything', hi:'Just Talk Mode — कुछ भी टाइप/बोलो'},
   hero_talk_ex1: {en:'"Ramesh Patil, Nashik, health insurance chahiye, 50 lakh"', hi:'"Ramesh Patil, Nashik, health insurance चाहिये, 50 lakh"'},
@@ -2788,7 +3004,12 @@ const _T = {
   tb_3: {en:'AI Pitches & Lead Timeline', hi:'AI पिच और लीड टाइमलाइन'},
   tb_4: {en:'IRDAI Badge on Reports', hi:'रिपोर्ट पर IRDAI बैज'},
   tb_5: {en:'Hindi + English', hi:'हिन्दी + English'},
-  tb_6: {en:'₹199/month — No Hidden Cost', hi:'₹199/महीना — कोई छुपी लागत नहीं'},
+  tb_6: {en:'WhatsApp + Telegram Native', hi:'WhatsApp + Telegram Native'},
+  // Key Features i18n
+  kf3_t: {en:'WhatsApp Voice AI CRM', hi:'WhatsApp Voice AI CRM'},
+  kf3_d: {en:'Send a WhatsApp voice note — AI transcribes, creates lead, schedules follow-up. Client messages you? AI auto-replies or alerts you. All from WhatsApp. Zero typing.', hi:'WhatsApp पर voice note भेजो — AI transcribe करेगा, lead बनाएगा, follow-up set करेगा। Client message करे? AI auto-reply करेगा या आपको alert करेगा। सब WhatsApp से। Zero typing।'},
+  kf6_t: {en:'WhatsApp Smart AI Agent', hi:'WhatsApp Smart AI Agent'},
+  kf6_d: {en:'Leads WhatsApp aapko? AI reads the message, checks their profile, and either auto-replies confidently — or alerts you in Saved Messages so you can forward your reply in one tap. Advisor always in control.', hi:'Leads आपको WhatsApp करें? AI message पढ़ता है, profile देखता है, और या तो confident auto-reply भेजता है — या आपके Saved Messages में alert आता है। आप reply करो, एक tap में client को forward। Advisor हमेशा control में।'},
   // Before / After section
   ba_pill: {en:'🪞 The Reality Check', hi:'🪞 हकीकत जानें'},
   ba_title_1: {en:'Meeting ke baad', hi:'Meeting के बाद'},
@@ -2804,13 +3025,13 @@ const _T = {
   ba_b7: {en:'Client ko professional proposal bhejne mein time lagta hai', hi:'Client को professional proposal भेजने में टाइम लगता है'},
   ba_b8: {en:'Birthday, anniversary yaad nahi — personal touch khatam', hi:'Birthday, anniversary याद नहीं — personal touch खत्म'},
   ba_after_title: {en:'With Sarathi-AI — The Smart Financial Planner', hi:'Sarathi-AI के साथ — Smart Financial Planner'},
-  ba_a1: {en:'Voice note bhejo — "Sharma ji se mila, health plan chahiye" — lead, notes, follow-up sab auto', hi:'Voice note भेजो — "Sharma ji से मिला, health plan चाहिये" — lead, notes, follow-up सब auto'},
+  ba_a1: {en:'WhatsApp pe voice note bhejo — "Sharma ji se mila, health plan chahiye" — lead bani, notes save hue, follow-up auto set. Zero typing.', hi:'WhatsApp पे voice note भेजो — "Sharma ji से मिला, health plan चाहिये" — lead बनी, notes save हुए, follow-up auto set। Zero typing।'},
   ba_a2: {en:'"Kal Sharma ji ko call 4 baje" — time-based task with assignee, Done/Snooze, team accountability', hi:'"Kal Sharma ji को call 4 बजे" — टाइम-बेस्ड टास्क, असाइनी, Done/Snooze, टीम एकाउंटेबिलिटी'},
   ba_a3: {en:'12 financial calculators + branded PDF — 30 second mein WhatsApp pe bhejo', hi:'12 financial calculators + branded PDF — 30 second में WhatsApp पे भेजो'},
   ba_a4: {en:'AI pitch, lead scoring, policy recommendation — har client ke liye personalized', hi:'AI pitch, lead scoring, policy recommendation — हर client के लिए personalized'},
   ba_a5: {en:'Full team management — task assign karo, performance track karo, nudge bhejo', hi:'पूरा team management — task assign करो, performance track करो, nudge भेजो'},
   ba_a6: {en:'Auto birthday & anniversary greetings — WhatsApp pe branded wish, client impressed', hi:'Auto birthday & anniversary greetings — WhatsApp पे branded wish, client impressed'},
-  ba_a7: {en:'Your own Telegram bot — apna brand, apna CRM, setup 5 minute mein', hi:'अपना Telegram bot — अपना brand, अपना CRM, setup 5 मिनट में'},
+  ba_a7: {en:'WhatsApp AI Agent — client message kare, AI smart reply bheje ya aapko Saved Messages mein alert kare. Aap reply karo, automatically forward ho jaata hai.', hi:'WhatsApp AI Agent — client message kare, AI smart reply bheje ya Saved Messages mein alert kare। आप reply करो, automatically forward हो जाता है।'},
   ba_a8: {en:'Sab kuch ₹199/month se shuru — no hidden charges, cancel anytime', hi:'सब कुछ ₹199/month से शुरू — कोई hidden charges नहीं, cancel anytime'},
   ba_verdict: {en:'💡 Wahi 24 ghante. Ek advisor thaka hua hai. Doosra phone se deal close kar raha hai. Fark? Sirf ₹199/month.', hi:'💡 वही 24 घंटे। एक advisor थका हुआ है। दूसरा phone से deal close कर रहा है। फर्क? सिर्फ ₹199/month।'},
   // Comparison table
@@ -3129,6 +3350,7 @@ const _T = {
   ph_city: {en:'e.g., Indore, Bhopal, Jaipur', hi:'जैसे: इंदौर, भोपाल, जयपुर'},
   ph_irdai: {en:'For verified badge 🛡️', hi:'वेरिफाइड बैज के लिए 🛡️'},
   // ── Hero Tabs ──
+  htab_wa:  {en:'WhatsApp AI in Action', hi:'WhatsApp AI चलते हुए देखें'},
   htab_bot: {en:'Your Voice AI Assistant Bot', hi:'आपका वॉइस AI असिस्टेंट बोट'},
   htab_web: {en:'Your Voice AI Web Dashboard', hi:'आपका वॉइस AI वेब डैशबोर्ड'},
   htab_mob: {en:'Your Voice AI Mobile App', hi:'आपका वॉइस AI मोबाइल ऐप'},
@@ -3162,6 +3384,22 @@ const _T = {
   btn_share: {en:'📱 Share', hi:'📱 शेयर'},
   bot_hint: {en:'👆 Click any button to explore features live', hi:'👆 फ़ीचर्स देखने के लिए कोई भी बटन दबाएं'},
   bot_hint_m: {en:'👆 Tap any button to explore', hi:'👆 कोई भी बटन दबाकर देखें'},
+  // ── WA AI in Action right panel ──
+  waw_title: {en:'WhatsApp is your CRM', hi:'व्हाट्सएप ही आपका CRM है'},
+  waw_sub: {en:'Clients already use WhatsApp. Your AI is already there.', hi:'क्लाइंट पहले से WhatsApp इस्तेमाल करते हैं। आपका AI वहाँ मौजूद है।'},
+  waw_f1_t: {en:'Voice → Lead in 5 sec', hi:'आवाज़ → लीड 5 सेकंड में'},
+  waw_f1_s: {en:'Speak a name, get a CRM entry', hi:'नाम बोलें, CRM में लीड बन जाएगी'},
+  waw_f2_t: {en:'Auto-reply 24/7', hi:'24/7 ऑटो-रिप्लाई'},
+  waw_f2_s: {en:'AI handles client queries instantly', hi:'AI तुरंत क्लाइंट के सवालों का जवाब देता है'},
+  waw_f3_t: {en:'Full CRM on WhatsApp', hi:'पूरा CRM WhatsApp पर'},
+  waw_f3_s: {en:'Pipeline, follow-ups, reminders', hi:'पाइपलाइन, फॉलो-अप, रिमाइंडर'},
+  waw_f4_t: {en:'Renewal reminders', hi:'रिन्यूअल रिमाइंडर'},
+  waw_f4_s: {en:'Never miss a renewal again', hi:'कोई रिन्यूअल कभी नहीं छूटेगा'},
+  waw_f5_t: {en:'WA Blast campaigns', hi:'WA ब्लास्ट कैम्पेन'},
+  waw_f5_s: {en:'Reach all leads in one tap', hi:'एक टैप में सभी लीड्स तक पहुँचें'},
+  waw_f6_t: {en:'Branded PDF sender', hi:'ब्रांडेड PDF भेजें'},
+  waw_f6_s: {en:'Quotes & comparisons on WhatsApp', hi:'WhatsApp पर कोटेशन व तुलना'},
+  waw_now_lbl: {en:'▶ Now showing', hi:'▶ अभी दिखाया जा रहा है'},
 };
 
 let _lang = localStorage.getItem('sarathi_lang') || 'en';
@@ -3197,6 +3435,8 @@ function setLang(l) {
       s.classList.add('active');
   });
   document.documentElement.lang = l;
+  /* Refresh WA showcase if tab 0 is active */
+  try{if(typeof _heroTabIdx!=='undefined'&&_heroTabIdx===0&&typeof _playWAShowcase==='function'&&!_waScBusy){clearTimeout(_waScTimer);_playWAShowcase(_waScIdx);}}catch(e){}
 }
 
 // Apply saved language on load
@@ -3264,6 +3504,42 @@ window.addEventListener('scroll', () => {
 /* ══════════════════════════════════════════════════════════
    SIGNUP MODAL
    ══════════════════════════════════════════════════════════ */
+// ── Homepage billing toggle (Monthly / Yearly) ────────────────────────────────
+var _hpBillingYearly = false;
+var _hpPlans = [
+  { monthly: '199', yearly: '1,990', period_y: '/yr', savings: 'Save ₹398/yr  ·  ₹166/mo', old_y: '₹2,388/yr' },
+  { monthly: '799', yearly: '7,990', period_y: '/yr', savings: 'Save ₹1,598/yr  ·  ₹666/mo', old_y: '₹9,588/yr' },
+  { monthly: '1,999', yearly: '19,990', period_y: '/yr', savings: 'Save ₹3,998/yr  ·  ₹1,666/mo', old_y: '₹23,988/yr' },
+];
+
+function toggleBillingHome() {
+  _hpBillingYearly = !_hpBillingYearly;
+  var toggle = document.getElementById('homeBillingToggle');
+  toggle.classList.toggle('on', _hpBillingYearly);
+  for (var i = 0; i < 3; i++) {
+    var n = i + 1;
+    var p = _hpPlans[i];
+    if (_hpBillingYearly) {
+      document.getElementById('hp-amount-' + n).textContent = p.yearly;
+      document.getElementById('hp-period-' + n).textContent = p.period_y;
+      document.getElementById('hp-old-' + n).textContent = p.old_y;
+      document.getElementById('hp-savings-' + n).textContent = p.savings;
+    } else {
+      document.getElementById('hp-amount-' + n).textContent = p.monthly;
+      document.getElementById('hp-period-' + n).textContent = '/mo';
+      document.getElementById('hp-old-' + n).textContent = ['₹499/mo','₹1,499/mo','₹3,999/mo'][i];
+      document.getElementById('hp-savings-' + n).textContent = '';
+    }
+  }
+}
+
+function openSignupBilling(monthlyPlan, annualPlan) {
+  var plan = _hpBillingYearly ? annualPlan : monthlyPlan;
+  var names = {individual:'Solo Advisor',team:'Team',enterprise:'Enterprise',individual_annual:'Solo Advisor (Annual)',team_annual:'Team (Annual)',enterprise_annual:'Enterprise (Annual)'};
+  var prices = {individual:'₹199/mo',team:'₹799/mo',enterprise:'₹1,999/mo',individual_annual:'₹1,990/yr',team_annual:'₹7,990/yr',enterprise_annual:'₹19,990/yr'};
+  openSignup(plan, prices[plan] || '');
+}
+
 function openSignup(plan, priceLabel) {
   document.getElementById('planId').value = plan;
   const names = {individual:'Solo Advisor',team:'Team',enterprise:'Enterprise'};
@@ -3389,7 +3665,7 @@ async function submitSignup(e) {
     });
     const data = await res.json();
     if (!res.ok) {
-      const msg = data.detail || data.error || '';
+      const msg = _extractErr(data, '');
       if (res.status === 409 && msg.includes('trial was already used')) {
         errEl.textContent = msg;
         errEl.style.display = 'block';
@@ -3455,6 +3731,11 @@ async function sendSignupOTP() {
       body: JSON.stringify({email: email})
     });
     const data = await res.json();
+    // B1: backend may return 200 with {conflict: {...}} for existing-account cases
+    if (res.ok && data.conflict) {
+      showSignupConflict(data.conflict);
+      return;
+    }
     if (res.ok) {
       document.getElementById('signupEmailStep1').style.display = 'none';
       document.getElementById('signupEmailStep2').style.display = '';
@@ -3463,11 +3744,11 @@ async function sendSignupOTP() {
       document.getElementById('signupOtpMsg').textContent = otpMsg;
       document.getElementById('signupOTP').focus();
     } else if (res.status === 409) {
-      // Account already exists — redirect to login
-      errEl.textContent = data.detail || 'Account already exists. Please login.';
+      // Legacy fallback — account already exists, plain message
+      errEl.textContent = _extractErr(data, 'Account already exists. Please login.');
       errEl.style.display = 'block';
     } else {
-      errEl.textContent = data.detail || (_lang === 'hi' ? 'OTP भेजने में विफल' : 'Failed to send OTP');
+      errEl.textContent = _extractErr(data, _lang === 'hi' ? 'OTP भेजने में विफल' : 'Failed to send OTP');
       errEl.style.display = 'block';
     }
   } catch(e) {
@@ -3520,15 +3801,15 @@ async function verifySignupOTP() {
         if (lRes.ok && lData.access_token) {
           _handleSignupSuccess(lData, _signupEmail);
         } else {
-          errEl.textContent = sData.detail || 'Account already exists. Please login.';
+          errEl.textContent = _extractErr(sData, 'Account already exists. Please login.');
           errEl.style.display = 'block';
         }
       } else {
-        errEl.textContent = sData.detail || 'Signup failed.';
+        errEl.textContent = _extractErr(sData, 'Signup failed.');
         errEl.style.display = 'block';
       }
     } else {
-      errEl.textContent = vData.detail || (_lang === 'hi' ? 'गलत OTP' : 'Invalid OTP');
+      errEl.textContent = _extractErr(vData, _lang === 'hi' ? 'गलत OTP' : 'Invalid OTP');
       errEl.style.display = 'block';
     }
   } catch(e) {
@@ -3536,6 +3817,61 @@ async function verifySignupOTP() {
     errEl.style.display = 'block';
   }
   btn.disabled = false; btn.innerHTML = 'Verify & Create Account';
+}
+
+/* B1+B8: render a friendly conflict popup. The backend returns a
+   {conflict: {...}} object with title/message/title_hi/message_hi and
+   action shapes. We pick Hindi if _lang === 'hi'. Mobile-friendly:
+   modal is full-width on phones, buttons stack and have 44px tap targets. */
+function showSignupConflict(conflict, opts) {
+  opts = opts || {};
+  const c = conflict || {};
+  const isHi = (typeof _lang !== 'undefined' && _lang === 'hi');
+  const pickLabel = (a, fallback) => a ? ((isHi ? a.label_hi : a.label) || a.label || fallback) : fallback;
+  document.getElementById('signupConflictBg')?.remove();
+  const bg = document.createElement('div');
+  bg.id = 'signupConflictBg';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);' +
+    'z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  bg.onclick = function(e) { if (e.target === bg) bg.remove(); };
+  const primary = c.primary_action || {};
+  const secondary = c.secondary_action;
+  const title   = (isHi ? c.title_hi : c.title) || c.title || (isHi ? 'खाता पहले से है' : 'You already have an account');
+  const message = (isHi ? c.message_hi : c.message) || c.message || '';
+  bg.innerHTML =
+    '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;' +
+    'padding:1.4rem;box-shadow:0 12px 48px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">' +
+    '<h3 style="margin:0 0 .6rem;color:#0f172a;font-size:1.1rem;font-weight:700;line-height:1.3">' +
+      title + '</h3>' +
+    '<p style="color:#475569;font-size:.95rem;line-height:1.5;margin:0 0 1.2rem">' +
+      message + '</p>' +
+    '<div id="conflictActions" style="display:flex;gap:.55rem;justify-content:flex-end;flex-wrap:wrap">' +
+      (secondary ? '<button id="conflictSecondary" style="background:transparent;border:1px solid #cbd5e1;' +
+        'color:#475569;padding:.7rem 1.1rem;border-radius:8px;cursor:pointer;font-weight:600;min-height:44px;min-width:120px">' +
+        pickLabel(secondary, isHi ? 'रद्द करें' : 'Cancel') + '</button>' : '') +
+      '<button id="conflictPrimary" style="background:#0d9488;color:#fff;border:none;' +
+        'padding:.7rem 1.2rem;border-radius:8px;cursor:pointer;font-weight:700;min-height:44px;min-width:120px">' +
+        pickLabel(primary, isHi ? 'जारी रखें' : 'Continue') + '</button>' +
+    '</div></div>';
+  document.body.appendChild(bg);
+  // On narrow screens, stack the buttons full-width
+  if (window.innerWidth < 420) {
+    const actions = bg.querySelector('#conflictActions');
+    actions.style.flexDirection = 'column-reverse';
+    actions.querySelectorAll('button').forEach(b => b.style.width = '100%');
+  }
+  bg.querySelector('#conflictPrimary').onclick = function() {
+    if (typeof opts.onPrimary === 'function') return opts.onPrimary(c);
+    if (primary.deeplink) window.location.href = primary.deeplink;
+    else bg.remove();
+  };
+  if (secondary) {
+    bg.querySelector('#conflictSecondary').onclick = function() {
+      if (typeof opts.onSecondary === 'function') return opts.onSecondary(c);
+      if (secondary.deeplink) window.location.href = secondary.deeplink;
+      else bg.remove();
+    };
+  }
 }
 
 function _handleSignupSuccess(data, email) {
@@ -3594,12 +3930,33 @@ async function handleGoogleSignIn(response) {
         body: JSON.stringify({credential: response.credential, plan: plan, referral_code: refCode})
       });
       const data = await res.json();
+      // B1: backend now returns 200 with {conflict: {...}} for existing-account
+      // cases instead of 409. Show the friendly popup, auto-login on confirm.
+      if (res.ok && data.conflict) {
+        showSignupConflict(data.conflict, {
+          onPrimary: async function() {
+            // For Sarathi conflicts → auto-login via the same Google credential
+            const loginRes = await fetch('/api/auth/google', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({credential: response.credential})
+            });
+            const ld = await loginRes.json();
+            if (loginRes.ok && ld.access_token) {
+              _handleSignupSuccess(ld, ld.email || '');
+            } else if (data.conflict.primary_action && data.conflict.primary_action.deeplink) {
+              window.location.href = data.conflict.primary_action.deeplink;
+            }
+            document.getElementById('signupConflictBg')?.remove();
+          }
+        });
+        return;
+      }
       if (res.ok) {
         _handleSignupSuccess(data, data.email || '');
         return;
       }
+      // Legacy 409 fallback (for endpoints not yet migrated)
       if (res.status === 409 && data.detail && data.detail.includes('already exists')) {
-        // Account exists — do login instead
         const loginRes = await fetch('/api/auth/google', {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({credential: response.credential})
@@ -3610,7 +3967,7 @@ async function handleGoogleSignIn(response) {
           return;
         }
       }
-      errEl.textContent = data.detail || 'Google signup failed.';
+      errEl.textContent = _extractErr(data, 'Google signup failed.');
       errEl.style.display = 'block';
     } catch(e) {
       errEl.textContent = _lang === 'hi' ? 'नेटवर्क त्रुटि।' : 'Network error.';
@@ -3648,7 +4005,7 @@ async function handleGoogleSignIn(response) {
         const el = document.getElementById('loginMsg');
         el.innerHTML = (_lang === 'hi'
           ? 'खाता नहीं मिला। <a href="#pricing" onclick="closeLogin()" style="color:#0d9488;font-weight:600">फ्री ट्रायल शुरू करें</a>'
-          : (data.detail || 'No account found.') + ' <a href="#pricing" onclick="closeLogin()" style="color:#0d9488;font-weight:600">Start Free Trial →</a>');
+          : _extractErr(data, 'No account found.') + ' <a href="#pricing" onclick="closeLogin()" style="color:#0d9488;font-weight:600">Start Free Trial →</a>');
         el.style.color = '#dc2626';
       }
     } catch(e) {
@@ -3675,7 +4032,7 @@ async function startPayment(planKey) {
       body: JSON.stringify({ tenant_id: tenantId, plan: planKey }),
     });
     const data = await res.json();
-    if (!res.ok) { alert(data.detail || 'Failed to create order'); return; }
+    if (!res.ok) { alert(_extractErr(data, 'Failed to create order')); return; }
     const options = {
       key: data.razorpay_key_id, amount: data.amount, currency: data.currency,
       name: 'Sarathi-AI Business Technologies',
@@ -3946,6 +4303,175 @@ function _dismissHint(){
 let _heroTabIdx=0, _heroTabTimer=null, _innerTimer=null;
 const TAB_SCREEN_DURATION=4000; /* 4s per inner screen */
 
+/* ═══ WHATSAPP DEMO (Tab 0) — legacy _waMsgs removed; see _waScenarios below ═══ */
+/* ═══ WHATSAPP AUTOMATION SHOWCASE ═══════════════════ */
+const _waScenarios=[
+  {btnIdx:0,contact:'Anita Sharma',avatar:'AS',color:'#25d366',preview:'Lead added \u2713',msgs:[
+    {t:'in',txt:'Mujhe family health insurance chahiye. Budget \u20b98,000 yearly.',txtHi:'मुझे फैमिली हेल्थ इंश्योरेंस चाहिए। बजट ₹8,000 साल का।',time:'9:38 AM'},
+    {t:'typing',d:1100},
+    {t:'ai',txt:'\u2705 Lead Created!\n\n\ud83d\udc64 Anita Sharma\n\ud83c\udfe5 Health Insurance\n\ud83d\udcb0 Budget: \u20b98,000/yr\n\ud83d\udcc5 Follow-up: Tomorrow 10 AM\n\ud83d\udd14 WA Reminder set \u2713',txtHi:'✅ लीड बनाई!\n\n👤 अनीता शर्मा\n🏥 हेल्थ इंश्योरेंस\n💰 बजट: ₹8,000/साल\n📅 फॉलो-अप: कल सुबह 10 बजे\n🔔 WA रिमाइंडर सेट ✓',time:'9:38 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:1,contact:'Sarathi-AI Bot',avatar:'SA',color:'#128c7e',preview:'WA Status posted \u2713',msgs:[
+    {t:'out',txt:'/status \u2192 Diwali Health Offer',txtHi:'/status → दिवाली हेल्थ ऑफर',time:'9:15 AM'},
+    {t:'typing',d:1300},
+    {t:'ai',txt:'\ud83d\udce3 WA Status Posted!\n\n\ud83c\udf86 Diwali Special \u2014 Health Plan\n\ud83c\udfe5 HDFC Optima \u2014 \u20b98,240/yr\n\ud83d\udc41\ufe0f Visible to 247 contacts\n\n\u2705 Posted at 9:15 AM\n\ud83d\udcca Track views in 1 hour',txtHi:'📣 WA स्टेटस पोस्ट हुआ!\n\n🎆 दिवाली स्पेशल — हेल्थ प्लान\n🏥 HDFC Optima — ₹8,240/साल\n👁️ 247 कॉन्टैक्ट्स को दिखेगा\n\n✅ सुबह 9:15 बजे पोस्ट हुआ\n📊 1 घंटे में व्यूज़ ट्रैक करें',time:'9:15 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:2,contact:'Suresh Kumar',avatar:'SK',color:'#0369a1',preview:'Voice lead created \u2713',msgs:[
+    {t:'voice',dur:'0:11',time:'9:42 AM'},
+    {t:'typing',d:1200},
+    {t:'ai',txt:'\ud83c\udfa4 Voice Transcribed!\n\n\"Suresh Mehta ULIP \u20b95,000/month\"\n\n\u2705 Lead Created: Suresh Mehta\n\ud83d\udcbc ULIP \u2014 \u20b95,000/mo\n\ud83d\udcc5 Follow-up: Tomorrow 10 AM\n\ud83d\udd14 Reminder set \u2713',txtHi:'🎤 आवाज़ समझ ली!\n\n"सुरेश मेहता ULIP ₹5,000/महीना"\n\n✅ लीड बनाई: सुरेश मेहता\n💼 ULIP — ₹5,000/महीना\n📅 फॉलो-अप: कल सुबह 10 बजे\n🔔 रिमाइंडर सेट ✓',time:'9:42 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:3,contact:'Rajesh Verma',avatar:'RV',color:'#7c3aed',preview:'AI replied in <1s',msgs:[
+    {t:'in',txt:'Kya term insurance lena chahiye? 38 saal, 2 bacche hain.',txtHi:'क्या टर्म इंश्योरेंस लेना चाहिए? 38 साल, 2 बच्चे हैं।',time:'10:05 AM'},
+    {t:'typing',d:1400},
+    {t:'ai',txt:'\ud83c\udfaf AI Replied Instantly!\n\n\"Rajesh ji, 38 mein \u20b91Cr term\n= sirf \u20b9990/month!\n2 bacchon ka future secure\nkaro aaj hi. \ud83d\ude4f\"\n\n\ud83d\udccb 3 Objections handled auto\n\ud83d\udcc4 Comparison PDF attached',txtHi:'🎯 AI ने तुरंत जवाब दिया!\n\n"राजेश जी, 38 साल में ₹1Cr टर्म\n= सिर्फ ₹990/महीना!\n2 बच्चों का भविष्य सुरक्षित\nकरें आज ही। 🙏"\n\n📋 3 आपत्तियाँ ऑटो हैंडल हुईं\n📄 तुलना PDF अटैच की',time:'10:05 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:4,contact:'Sarathi-AI Bot',avatar:'SA',color:'#128c7e',preview:'Pipeline view \u2713',msgs:[
+    {t:'out',txt:'/pipeline',txtHi:'/pipeline',time:'9:50 AM'},
+    {t:'typing',d:900},
+    {t:'ai',txt:'\ud83d\udcc8 WA Pipeline Summary\n\n\ud83d\udfe2 12 New (from WA chat)\n\ud83d\udd35 8 AI Replied\n\ud83d\udfe1 5 PDF Sent\n\ud83d\udfe0 3 Quote Given\n\u2705 2 Closed \ud83c\udf89\n\n\ud83d\udcb0 \u20b918.5L pipeline\n\u26a1 3 hot leads today',txtHi:'📈 WA पाइपलाइन सारांश\n\n🟢 12 नए (WA चैट से)\n🔵 8 AI ने जवाब दिया\n🟡 5 PDF भेजे\n🟠 3 कोटेशन दी\n✅ 2 बंद 🎉\n\n💰 ₹18.5L पाइपलाइन\n⚡ आज 3 गर्म लीड्स',time:'9:50 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:5,contact:'Priya Mehta',avatar:'PM',color:'#b45309',preview:'Renewal reminder set \u2713',msgs:[
+    {t:'in',txt:'Meri LIC policy ka renewal kab hai?',txtHi:'मेरी LIC पॉलिसी का रिन्यूअल कब है?',time:'11:20 AM'},
+    {t:'typing',d:1000},
+    {t:'ai',txt:'\ud83d\udccb Priya ji \u2014 LIC Policy\n\n\u23f0 Renewal: 20 June 2026\n\ud83d\udcb0 Premium: \u20b924,800\n\ud83d\udcc5 25 days left!\n\n\ud83d\udd14 Reminder set: 5 June\n\u2705 WA alert to Priya ji \u2713\n\u2705 WA alert to you \u2713',txtHi:'📋 प्रिया जी — LIC पॉलिसी\n\n⏰ रिन्यूअल: 20 जून 2026\n💰 प्रीमियम: ₹24,800\n📅 25 दिन बचे हैं!\n\n🔔 रिमाइंडर सेट: 5 जून\n✅ प्रिया जी को WA अलर्ट ✓\n✅ आपको WA अलर्ट ✓',time:'11:20 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:6,contact:'Anand Nair',avatar:'AN',color:'#0891b2',preview:'PDF sent via WA \u2713',msgs:[
+    {t:'out',txt:'\"Send health comparison PDF to Anand ji\"',txtHi:'"आनंद जी को हेल्थ तुलना PDF भेजें"',time:'2:10 PM'},
+    {t:'typing',d:1200},
+    {t:'ai',txt:'\ud83d\udcc4 PDF Sent via WhatsApp!\n\n\ud83d\udc64 Anand Nair \u2014 98765xxxxx\n\ud83d\udcf9 Health Plan Comparison\n\ud83c\udfe2 Your branding + IRDAI logo\n\n\u2705 Delivered\n\ud83d\udc41\ufe0f Opened 1 min ago',txtHi:'📄 WhatsApp पर PDF भेजा!\n\n👤 आनंद नायर — 98765xxxxx\n📹 हेल्थ प्लान तुलना\n🏢 आपका ब्रांड + IRDAI लोगो\n\n✅ डिलीवर हुआ\n👁️ 1 मिनट पहले खोला',time:'2:10 PM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:7,contact:'Sarathi-AI Bot',avatar:'SA',color:'#128c7e',preview:'5 renewals due this week',msgs:[
+    {t:'out',txt:'/renewals this week',txtHi:'/renewals इस हफ़्ते',time:'9:05 AM'},
+    {t:'typing',d:900},
+    {t:'ai',txt:'\ud83d\udd14 Renewals This Week (5)\n\n1. Ramesh ji \u2014 LIC \u20b945K \u2192 3 Jun\n2. Priya M. \u2014 Star \u20b924K \u2192 5 Jun\n3. Gupta ji \u2014 HDFC \u20b938K \u2192 7 Jun\n4. Meena \u2014 Max \u20b918K \u2192 8 Jun\n5. Arjun \u2014 Niva \u20b929K \u2192 9 Jun\n\n\u26a1 Nudge All on WhatsApp?',txtHi:'🔔 इस हफ़्ते रिन्यूअल (5)\n\n1. रमेश जी — LIC ₹45K → 3 जून\n2. प्रिया M. — Star ₹24K → 5 जून\n3. गुप्ता जी — HDFC ₹38K → 7 जून\n4. मीना — Max ₹18K → 8 जून\n5. अर्जुन — Niva ₹29K → 9 जून\n\n⚡ सबको WhatsApp नज करें?',time:'9:05 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:8,contact:'Sarathi-AI Bot',avatar:'SA',color:'#128c7e',preview:'87 leads messaged \u2713',msgs:[
+    {t:'out',txt:'\"Blast monsoon health offer to all leads\"',txtHi:'"सभी लीड्स को मॉनसून हेल्थ ऑफर ब्लास्ट करें"',time:'8:30 AM'},
+    {t:'typing',d:1500},
+    {t:'ai',txt:'\ud83d\udce3 WA Blast Sent!\n\n\ud83d\udc65 Sent to: 87 leads\n\ud83c\udf27\ufe0f Monsoon Health Special\n\ud83d\udcac Hindi + English auto-send\n\n\u2705 87 Delivered\n\ud83d\udc41\ufe0f 43 Opened (49%)\n\ud83d\udcac 12 Replied already!',txtHi:'📣 WA ब्लास्ट भेजा!\n\n👥 भेजा: 87 लीड्स को\n🌧️ मॉनसून हेल्थ स्पेशल\n💬 हिंदी + इंग्लिश ऑटो-सेंड\n\n✅ 87 डिलीवर\n👁️ 43 ने खोला (49%)\n💬 12 ने पहले ही जवाब दिया!',time:'8:30 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:9,contact:'Meena Krishnan',avatar:'MK',color:'#be123c',preview:'Lead closed! \u20b99,100 won',msgs:[
+    {t:'in',txt:'Haan ji, main le lungi health plan. Payment kaise karein?',txtHi:'हाँ जी, मैं ले लूंगी हेल्थ प्लान। पेमेंट कैसे करें?',time:'3:45 PM'},
+    {t:'typing',d:900},
+    {t:'ai',txt:'\ud83c\udf89 Lead CLOSED! \u20b99,100 won!\n\n\ud83d\udc64 Meena Krishnan\n\ud83c\udfe5 Niva Bupa ReAssure\n\ud83d\udcb0 \u20b99,100/yr\n\n\ud83d\udd17 Payment link sent on WA \u2713\n\ud83d\udcc4 Policy doc in 24h\n\ud83c\udfc6 Commission: \u20b91,820',txtHi:'🎉 लीड CLOSED! ₹9,100 मिले!\n\n👤 मीना कृष्णन\n🏥 Niva Bupa ReAssure\n💰 ₹9,100/साल\n\n🔗 WA पर पेमेंट लिंक ✓\n📄 24h में पॉलिसी डॉक\n🏆 कमीशन: ₹1,820',time:'3:45 PM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:10,contact:'Suresh Kumar',avatar:'SK',color:'#0369a1',preview:'Aadhaar scanned + KYC done',msgs:[
+    {t:'photo',txt:'\ud83d\udcf8 aadhaar_suresh.jpg',time:'10:30 AM'},
+    {t:'typing',d:1300},
+    {t:'ai',txt:'\u2705 Document Scanned!\n\n\ud83d\udc64 Suresh Kumar\n\ud83c\uddf3\ud83c\udded Aadhaar: XXXX-XXXX-4821\n\ud83d\udccd Mumbai, Maharashtra\n\ud83d\udcc5 DOB: 14 Mar 1986\n\n\ud83d\udccb Added to CRM \u2713\n\ud83c\udfe5 Health KYC: \u2705 Complete',txtHi:'✅ दस्तावेज़ स्कैन हुआ!\n\n👤 सुरेश कुमार\n🇮🇳 आधार: XXXX-XXXX-4821\n📍 मुंबई, महाराष्ट्र\n📅 DOB: 14 मार्च 1986\n\n📋 CRM में जोड़ा ✓\n🏥 हेल्थ KYC: ✅ पूर्ण',time:'10:30 AM'},
+    {t:'tag'}
+  ]},
+  {btnIdx:11,contact:'Sarathi-AI Bot',avatar:'SA',color:'#128c7e',preview:'Bot capabilities overview',msgs:[
+    {t:'out',txt:'/start',txtHi:'/start',time:'9:00 AM'},
+    {t:'typing',d:900},
+    {t:'ai',txt:'\ud83d\udc4b Sarathi-AI WhatsApp Bot\nYour 24/7 AI on WhatsApp! \ud83e\udd16\n\n\ud83c\udfa4 Voice \u2192 Lead in 5 seconds\n\ud83d\udcac Auto-reply clients 24/7\n\ud83d\udcca Full CRM on WhatsApp\n\ud83d\udd14 Smart renewal reminders\n\ud83d\udce3 WA Blast & Status posts\n\ud83d\udcc4 Branded PDF on demand\n\nNo app. No training. Just WhatsApp!',txtHi:'👋 Sarathi-AI WhatsApp Bot\nआपका 24/7 AI WhatsApp पर! 🤖\n\n🎤 आवाज़ → लीड 5 सेकंड में\n💬 क्लाइंट को 24/7 ऑटो-रिप्लाई\n📊 WhatsApp पर पूरा CRM\n🔔 स्मार्ट रिन्यूअल रिमाइंडर\n📣 WA ब्लास्ट & स्टेटस पोस्ट\n📄 मांग पर ब्रांडेड PDF\n\nकोई ऐप नहीं। कोई ट्रेनिंग नहीं। बस WhatsApp!',time:'9:00 AM'},
+    {t:'tag'}
+  ]}
+];
+const _waLabels=['📋 Add Lead','📱 WA Status','🎤 Voice→Lead','💬 AI Reply','📊 Pipeline','⏰ Reminder','📄 Send PDF','🔔 Renewals','📣 WA Blast','✅ Close Lead','📸 Scan Doc','⚙️ Bot Menu'];
+const _waLabelsHi=['📋 लीड जोड़ें','📱 WA स्टेटस','🎤 आवाज़→लीड','💬 AI रिप्लाई','📊 पाइपलाइन','⏰ रिमाइंडर','📄 PDF भेजें','🔔 रिन्यूअल','📣 WA ब्लास्ट','✅ लीड क्लोज','📸 डॉक स्कैन','⚙️ बोट मेनू'];
+const _waPreviewHi=['लीड जोड़ी ✓','WA स्टेटस पोस्ट ✓','वॉइस लीड बनी ✓','AI ने <1s में जवाब दिया','पाइपलाइन व्यू ✓','रिन्यूअल रिमाइंडर सेट ✓','PDF भेजा WA पर ✓','5 रिन्यूअल इस हफ़्ते','87 लीड्स को मैसेज ✓','लीड क्लोज! ₹9,100 मिले','आधार स्कैन + KYC पूर्ण','बोट क्षमताएं — ओवरव्यू'];
+/* _waAiHi removed — inlined as txtHi in _waScenarios */
+let _waScIdx=0,_waScTimer=null,_waScBusy=false;
+function _playWAShowcase(idx){
+  _waScBusy=true;
+  const sc=_waScenarios[idx%_waScenarios.length];
+  /* update desc panel — bilingual */
+  const dnt=document.getElementById('wawDescNowText'),dnp=document.getElementById('wawDescNowPrev');
+  if(dnt){dnt.style.opacity='0';setTimeout(()=>{dnt.textContent=(_lang==='hi'?_waLabelsHi:_waLabels)[sc.btnIdx]||sc.contact;dnt.style.opacity='1';},250);}
+  if(dnp){dnp.style.opacity='0';setTimeout(()=>{dnp.textContent=(_lang==='hi'&&_waPreviewHi[sc.btnIdx])||sc.preview;dnp.style.opacity='1';},300);}
+  /* update header */
+  const av=document.getElementById('wawMainAv'),nm=document.getElementById('wawMainName');
+  if(av){av.textContent=sc.avatar;av.style.background=sc.color;}
+  if(nm)nm.textContent=sc.contact;
+  /* update sidebar active item */
+  const sbAv=document.getElementById('wawSbAv'),sbNm=document.getElementById('wawSbName'),sbPrev=document.getElementById('wawSbPreview');
+  if(sbAv){sbAv.textContent=sc.avatar;sbAv.style.background=sc.color;}
+  if(sbNm)sbNm.textContent=sc.contact;
+  if(sbPrev)sbPrev.textContent=(_lang==='hi'&&_waPreviewHi[sc.btnIdx])||sc.preview;
+  const c=document.getElementById('waDemoChat');
+  if(!c){_waScBusy=false;return;}
+  c.style.opacity='0';
+  setTimeout(()=>{
+    c.innerHTML='<div class="wa-date-div"><span>TODAY</span></div>';
+    c.style.opacity='1';
+    let delay=0;
+    sc.msgs.forEach((msg,i)=>{
+      delay+=(i===0?200:350);
+      if(msg.t==='typing'){
+        const td=delay;delay+=msg.d||1200;
+        setTimeout(()=>{
+          const el=document.createElement('div');el.className='wa-typing-row';
+          el.innerHTML='<div class="wa-typing-inner"><div class="wa-dot"></div><div class="wa-dot"></div><div class="wa-dot"></div></div>';
+          c.appendChild(el);c.scrollTop=c.scrollHeight;
+          setTimeout(()=>{if(el.parentNode)el.remove();},msg.d||1200);
+        },td);return;
+      }
+      if(msg.t==='tag'){
+        const d=delay;
+        setTimeout(()=>{
+          const el=document.createElement('div');el.className='wa-ai-tag';
+          el.innerHTML='⚡ Sarathi-AI automated this instantly';
+          c.appendChild(el);c.scrollTop=c.scrollHeight;
+        },d);return;
+      }
+      if(msg.t==='voice'){
+        const d=delay;
+        const bars=Array(14).fill(0).map((_,j)=>`<span style="height:${3+Math.round(Math.abs(Math.sin(j*.8)*12))}px;animation-delay:${(j*.04).toFixed(2)}s"></span>`).join('');
+        setTimeout(()=>{
+          const el=document.createElement('div');el.className='wa-msg out';
+          el.innerHTML=`<div class="wa-voice-bub"><span style="font-size:1em">🎤</span><div class="wa-waveform">${bars}</div><span style="font-size:.63em;color:#8696a0">${msg.dur}</span><div class="wa-meta"><span>${msg.time}</span><span class="wa-ticks">✓✓</span></div></div>`;
+          c.appendChild(el);c.scrollTop=c.scrollHeight;
+        },d);return;
+      }
+      if(msg.t==='photo'){
+        const d=delay;
+        setTimeout(()=>{
+          const el=document.createElement('div');el.className='wa-msg out';
+          el.innerHTML=`<div class="wa-voice-bub" style="min-width:120px"><span style="font-size:1.1em">📄</span><span style="font-size:.8em;color:#e9edef;flex:1">${msg.txt}</span><div class="wa-meta"><span>${msg.time}</span><span class="wa-ticks">✓✓</span></div></div>`;
+          c.appendChild(el);c.scrollTop=c.scrollHeight;
+        },d);return;
+      }
+      const cls=msg.t==='in'?'in':(msg.t==='ai'?'ai out':'out');
+      const meta=msg.t==='in'?`<span>${msg.time}</span>`:`<span>${msg.time}</span><span class="wa-ticks">✓✓</span>`;
+      const d=delay;
+      const _aiTxt=(_lang==='hi'&&msg.txtHi)?msg.txtHi:msg.txt;
+      setTimeout(()=>{
+        const el=document.createElement('div');el.className=`wa-msg ${cls}`;
+        el.innerHTML=`<div class="wa-bub">${_aiTxt.replace(/\n/g,'<br>')}<div class="wa-meta">${meta}</div></div>`;
+        c.appendChild(el);c.scrollTop=c.scrollHeight;
+      },d);
+    });
+    delay+=2200;
+    setTimeout(()=>{
+      _waScBusy=false;
+      const _nextWaIdx=(_waScIdx+1)%_waScenarios.length;
+      if(_nextWaIdx===0&&_heroTabIdx===0){
+        /* All 12 WA automations shown — advance to Bot tab */
+        clearTimeout(_heroTabTimer);
+        _heroTabTimer=setTimeout(()=>switchHeroTab(1),2000);
+      } else {
+        _waScTimer=setTimeout(()=>{
+          _waScIdx=_nextWaIdx;
+          _playWAShowcase(_waScIdx);
+        },1800); /* 1.8s pause between scenarios — slower, WA is USP */
+      }
+    },delay);
+  },120);
+}
+/* legacy _startWADemo + _waStep removed — replaced by _playWAShowcase */
+
 function switchHeroTab(idx){
   clearTimeout(_heroTabTimer);
   clearInterval(_innerTimer);
@@ -3955,7 +4481,9 @@ function switchHeroTab(idx){
   document.querySelectorAll('.hero-tab').forEach((t,i)=>{
     t.classList.toggle('active',i===idx);
     const prog=t.querySelector('.hero-tab-progress');
-    if(prog){prog.style.animation='none';prog.offsetHeight;prog.style.animation='';}
+    if(prog){prog.style.animation='none';prog.offsetHeight;
+      /* WA tab (0) stays ~75s showing all 12 automations; others 12s */
+      prog.style.animation=i===idx?`tabProgress ${i===0?'75':'12'}s linear forwards`:'';}
   });
 
   /* Update panels */
@@ -3965,12 +4493,16 @@ function switchHeroTab(idx){
 
   /* Start the demo for this tab */
   if(idx===0){
+    _waScBusy=false;clearTimeout(_waScTimer);
+    _waScIdx=0;_playWAShowcase(0); /* start from scenario 0, cycle all 12 */
+    _heroTabTimer=setTimeout(()=>switchHeroTab(1),80000); /* safety fallback ~80s */
+  } else if(idx===1){
     switchShowcase(11);
     /* Bot showcase handles its own cycling; auto-advance tab after 12s */
-    _heroTabTimer=setTimeout(()=>switchHeroTab(1), 12000);
-  } else if(idx===1){
-    _startWebDemo();
+    _heroTabTimer=setTimeout(()=>switchHeroTab(2), 12000);
   } else if(idx===2){
+    _startWebDemo();
+  } else if(idx===3){
     _startMobileDemo();
   }
 }
@@ -4085,7 +4617,7 @@ function _startWebDemo(){
   _showWebScreen();
   _innerTimer=setInterval(_showWebScreen, TAB_SCREEN_DURATION);
   /* Auto-advance to next tab after all 5 screens shown */
-  _heroTabTimer=setTimeout(()=>switchHeroTab(2), TAB_SCREEN_DURATION*5);
+  _heroTabTimer=setTimeout(()=>switchHeroTab(3), TAB_SCREEN_DURATION*5);
 }
 function _showWebScreen(){
   const screens=_webScreens();
@@ -4274,7 +4806,7 @@ function _initEarnCanvas(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
-  /* ── Start hero tab system — Tab 0 (Bot) first ── */
+  /* ── Start hero tab system — Tab 0 (WhatsApp) first ── */
   setTimeout(()=>switchHeroTab(0),300);
 
   /* ── Menu button click — clean standard handlers ── */
@@ -4283,22 +4815,22 @@ document.addEventListener('DOMContentLoaded',()=>{
       _dismissHint();
       const idx=parseInt(b.dataset.idx);
       if(!isNaN(idx)){
-        /* If not on bot tab, switch to it first */
-        if(_heroTabIdx!==0){
+        /* If not on bot tab (tab 1), switch to it first */
+        if(_heroTabIdx!==1){
           clearTimeout(_heroTabTimer);
           clearInterval(_innerTimer);
-          _heroTabIdx=0;
+          _heroTabIdx=1;
           document.querySelectorAll('.hero-tab').forEach((t,i)=>{
-            t.classList.toggle('active',i===0);
+            t.classList.toggle('active',i===1);
             const prog=t.querySelector('.hero-tab-progress');
             if(prog){prog.style.animation='none';prog.offsetHeight;prog.style.animation='';}
           });
-          document.querySelectorAll('.hero-tab-panel').forEach((p,i)=>p.classList.toggle('active',i===0));
+          document.querySelectorAll('.hero-tab-panel').forEach((p,i)=>p.classList.toggle('active',i===1));
         }
         switchShowcase(idx);
         /* Restart auto-advance after user interaction */
         clearTimeout(_heroTabTimer);
-        _heroTabTimer=setTimeout(()=>switchHeroTab(1), 12000);
+        _heroTabTimer=setTimeout(()=>switchHeroTab(2), 12000);
       }
     });
   });
@@ -4489,7 +5021,7 @@ async function sendLoginEmailOTP() {
       document.getElementById('loginOTP').focus();
       _loginMsg('');
     } else {
-      _loginMsg(data.detail || data.error || (_lang === 'hi' ? 'OTP भेजने में विफल' : 'Failed to send OTP'), true);
+      _loginMsg(_extractErr(data, _lang === 'hi' ? 'OTP भेजने में विफल' : 'Failed to send OTP'), true);
     }
   } catch(e) {
     if (!(e && e.message === 'TIMEOUT')) {
@@ -4530,7 +5062,7 @@ async function verifyLoginEmailOTP() {
       _loginMsg(_lang === 'hi' ? '✅ लॉगिन सफल!' : '✅ Login successful! Redirecting...', false);
       setTimeout(() => { closeLogin(); updateNavForAuth(); window.location.href = '/dashboard'; }, 800);
     } else {
-      _loginMsg(data.detail || data.error || (_lang === 'hi' ? 'गलत OTP' : 'Invalid OTP'), true);
+      _loginMsg(_extractErr(data, _lang === 'hi' ? 'गलत OTP' : 'Invalid OTP'), true);
     }
   } catch(e) {
     if (!(e && e.message === 'TIMEOUT')) {
@@ -4590,7 +5122,7 @@ async function recoverFindOptions() {
     });
     const data = await res.json();
     if (!res.ok) {
-      _recoverMsg(data.detail || (_lang === 'hi' ? 'अकाउंट नहीं मिला' : 'Account not found'), true);
+      _recoverMsg(_extractErr(data, _lang === 'hi' ? 'अकाउंट नहीं मिला' : 'Account not found'), true);
       btn.disabled = false; btn.textContent = orig; return;
     }
     document.getElementById('recoverOptMsg').textContent =
@@ -4641,7 +5173,7 @@ async function recoverSendOTP(channel) {
     });
     const data = await res.json();
     if (!res.ok) {
-      _recoverMsg(data.detail || (_lang === 'hi' ? 'भेजने में विफल' : 'Failed to send code'), true);
+      _recoverMsg(_extractErr(data, _lang === 'hi' ? 'भेजने में विफल' : 'Failed to send code'), true);
       return;
     }
     let msg = (_lang === 'hi'
@@ -4691,7 +5223,7 @@ async function recoverVerifyOTP() {
       _recoverMsg(_lang === 'hi' ? '✅ सफल! रीडायरेक्ट हो रहे…' : '✅ Verified! Redirecting…', false);
       setTimeout(() => { closeLogin(); updateNavForAuth(); window.location.href = '/dashboard'; }, 700);
     } else {
-      _recoverMsg(data.detail || (_lang === 'hi' ? 'गलत कोड' : 'Invalid code'), true);
+      _recoverMsg(_extractErr(data, _lang === 'hi' ? 'गलत कोड' : 'Invalid code'), true);
       btn.disabled = false; btn.textContent = orig;
     }
   } catch(e) {

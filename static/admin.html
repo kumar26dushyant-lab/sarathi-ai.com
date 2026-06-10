@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 :root {
   --blue: #0d9488;
@@ -527,7 +528,7 @@ async function doExtendTrial() {
       loadData();
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Failed', 'error');
+      showToast(_extractErr(d, 'Failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }
@@ -542,7 +543,7 @@ async function doActivate() {
       loadData();
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Failed', 'error');
+      showToast(_extractErr(d, 'Failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }
@@ -556,7 +557,7 @@ async function doDeactivate(tenantId) {
       loadData();
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Failed', 'error');
+      showToast(_extractErr(d, 'Failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }
@@ -585,7 +586,7 @@ async function doCreateFirm() {
       loadData();
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Failed', 'error');
+      showToast(_extractErr(d, 'Failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }
@@ -665,7 +666,7 @@ async function restartBot(tenantId) {
       setTimeout(loadBots, 1500);
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Restart failed', 'error');
+      showToast(_extractErr(d, 'Restart failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }
@@ -679,7 +680,7 @@ async function stopBot(tenantId) {
       setTimeout(loadBots, 1000);
     } else {
       const d = await res.json();
-      showToast(d.detail || 'Stop failed', 'error');
+      showToast(_extractErr(d, 'Stop failed'), 'error');
     }
   } catch (e) { showToast('Network error', 'error'); }
 }

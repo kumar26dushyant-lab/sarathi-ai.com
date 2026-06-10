@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>₹999 Claim Review — Nidaan Partner</title>
+<title>₹499 Claim Review — Nidaan Partner</title>
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<script src="/static/_err.js?v=1"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh}
@@ -52,6 +53,13 @@
     .features{grid-template-columns:1fr 1fr;gap:.6rem}
     .feat{font-size:.82rem;padding:.65rem .8rem}
   }
+  .otp-box{text-align:center;padding:.5rem 0 1rem}
+  .otp-box p{color:rgba(255,255,255,.65);font-size:.9rem;line-height:1.6;margin-bottom:1.1rem}
+  .otp-box input{max-width:200px;text-align:center;letter-spacing:.2em;font-size:1.3rem;font-weight:700;padding:.65rem 1rem}
+  .otp-hint{font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.75rem}
+  .link-btn{background:none;border:none;color:#22d3ee;cursor:pointer;font-size:.85rem;padding:0;text-decoration:underline}
+  .doc-upload-btn{display:inline-block;padding:.38rem .85rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;cursor:pointer;font-size:.84rem;color:rgba(255,255,255,.75);transition:.2s}
+  .doc-upload-btn:hover{background:rgba(255,255,255,.14)}
   @media(max-width:480px){
     .features{grid-template-columns:1fr}
     .row2{grid-template-columns:1fr}
@@ -84,10 +92,10 @@
   <h1 class="hi">अपना अस्वीकृत दावा हमारी<br>कानूनी टीम से समीक्षित कराएं</h1>
 
   <p class="sub en">
-    No subscription needed. Pay ₹999 once and our licensed insurance lawyers will review your client's rejected or disputed claim — and tell you exactly what to do next.
+    No subscription needed. Pay ₹499 once and our licensed insurance lawyers will review your client's rejected or disputed claim — and tell you exactly what to do next.
   </p>
   <p class="sub hi">
-    कोई सब्सक्रिप्शन नहीं। एकबार ₹999 दें और हमारे लाइसेंसी बीमा वकील आपके ग्राहक के अस्वीकृत या विवादित दावे की समीक्षा करेंगे — और आपको अगला कदम बताएंगे।
+    कोई सब्सक्रिप्शन नहीं। एकबार ₹499 दें और हमारे लाइसेंसी बीमा वकील आपके ग्राहक के अस्वीकृत या विवादित दावे की समीक्षा करेंगे — और आपको अगला कदम बताएंगे।
   </p>
 
   <div class="features">
@@ -105,35 +113,30 @@
 
   <div class="card" id="reviewForm">
     <div class="price-header">
-      <div class="price">₹999</div>
-      <div class="price-desc en">One-time · No subscription · Instant confirmation</div>
-      <div class="price-desc hi">एकमुश्त · कोई सब्सक्रिप्शन नहीं · तुरंत पुष्टि</div>
+      <div class="price">₹499</div>
+      <div class="price-desc en">One-time · No subscription · Pay after submitting details</div>
+      <div class="price-desc hi">एकमुश्त · कोई सब्सक्रिप्शन नहीं · विवरण भरने के बाद भुगतान करें</div>
     </div>
 
     <form id="form999" onsubmit="submitReview(event)">
       <div class="row2">
         <div class="field">
-          <label class="en">Your Name *</label>
-          <label class="hi">आपका नाम *</label>
-          <input type="text" id="advisorName" placeholder="Advisor name" required>
+          <label class="en">Your Full Name *</label>
+          <label class="hi">आपका पूरा नाम *</label>
+          <input type="text" id="userName" placeholder="As on policy" required>
         </div>
         <div class="field">
           <label class="en">Your Phone *</label>
-          <label class="hi">आपका फोन *</label>
-          <input type="tel" id="advisorPhone" placeholder="9876543210" required>
+          <label class="hi">आपका मोबाइल नंबर *</label>
+          <input type="tel" id="userPhone" placeholder="9876543210" pattern="[6-9][0-9]{9}" required>
         </div>
       </div>
       <div class="field">
-        <label class="en">Your Email *</label>
-        <label class="hi">आपका ईमेल *</label>
-        <input type="email" id="advisorEmail" placeholder="you@example.com" required>
+        <label class="en">Your Email * <span style="font-weight:400;color:rgba(255,255,255,.4)">(used to create your dashboard login)</span></label>
+        <label class="hi">आपका ईमेल * <span style="font-weight:400;color:rgba(255,255,255,.4)">(आपका डैशबोर्ड लॉगिन बनाने के लिए)</span></label>
+        <input type="email" id="userEmail" placeholder="you@example.com" required>
       </div>
       <div class="row2">
-        <div class="field">
-          <label class="en">Client / Insured Name *</label>
-          <label class="hi">ग्राहक का नाम *</label>
-          <input type="text" id="insuredName" placeholder="Client full name" required>
-        </div>
         <div class="field">
           <label class="en">Claim Type *</label>
           <label class="hi">क्लेम प्रकार *</label>
@@ -146,88 +149,260 @@
             <option value="other">Other</option>
           </select>
         </div>
-      </div>
-      <div class="row2">
         <div class="field">
-          <label class="en">Insurer Name</label>
-          <label class="hi">बीमाकर्ता का नाम</label>
-          <input type="text" id="insurerName" placeholder="e.g. HDFC Ergo">
-        </div>
-        <div class="field">
-          <label class="en">Disputed Amount (₹)</label>
-          <label class="hi">विवादित राशि (₹)</label>
-          <input type="number" id="disputedAmt" placeholder="e.g. 85000" min="0">
+          <label class="en">Insurance Company</label>
+          <label class="hi">बीमा कंपनी</label>
+          <input type="text" id="insurerName" placeholder="e.g. HDFC Ergo, LIC, Star Health">
         </div>
       </div>
       <div class="field">
-        <label class="en">Brief description of rejection reason</label>
-        <label class="hi">अस्वीकृति के कारण का संक्षिप्त विवरण</label>
-        <textarea id="notes" rows="3" placeholder="e.g. Claim rejected citing pre-existing condition clause…"></textarea>
+        <label class="en">Disputed / Rejected Amount (₹)</label>
+        <label class="hi">विवादित / अस्वीकृत राशि (₹)</label>
+        <input type="number" id="disputedAmt" placeholder="e.g. 85000" min="0">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="en">Advisor / Agent Code <span style="opacity:.55;font-weight:400">(as on policy)</span></label>
+          <label class="hi">सलाहकार / एजेंट कोड <span style="opacity:.55;font-weight:400">(पॉलिसी पर अंकित)</span></label>
+          <input type="text" id="intermediaryCode" placeholder="e.g. AGT/0012345" maxlength="60">
+        </div>
+        <div class="field">
+          <label class="en">Advisor / Agent Name <span style="opacity:.55;font-weight:400">(as printed on policy)</span></label>
+          <label class="hi">सलाहकार / एजेंट का नाम <span style="opacity:.55;font-weight:400">(पॉलिसी पर अंकित)</span></label>
+          <input type="text" id="intermediaryName" placeholder="As printed on the policy document" maxlength="120">
+        </div>
+      </div>
+      <div class="field">
+        <label class="en">Brief description — why was the claim rejected?</label>
+        <label class="hi">संक्षिप्त विवरण — क्लेम क्यों अस्वीकृत हुआ?</label>
+        <textarea id="notes" rows="3" placeholder="e.g. Claim rejected citing pre-existing condition clause, policy was 3 years old…"></textarea>
+      </div>
+      <!-- ── DPDP + IRDAI compliance disclaimer ────────────────────────── -->
+      <div class="field" style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);border-radius:10px;padding:.8rem 1rem;margin-top:.4rem">
+        <div style="font-size:.78rem;line-height:1.55;color:rgba(255,255,255,.78)">
+          <strong style="color:#22d3ee">🛡️ Your data is protected</strong>
+          <p class="en" style="margin:.35rem 0 0">
+            By submitting, you authorise <b>Nidaan – The Legal Consultants LLP</b> to use this information solely for assessing and pursuing your insurance claim dispute. Per the <b>Digital Personal Data Protection Act (DPDP)</b>, we collect only what's necessary, retain it for the duration of the legal engagement, and never share it with third parties without your consent. We comply with applicable <b>IRDAI</b> regulations on policyholder representation.
+          </p>
+          <p class="hi" style="margin:.35rem 0 0;display:none">
+            जमा करके आप <b>Nidaan – The Legal Consultants LLP</b> को इस जानकारी का उपयोग केवल आपके बीमा दावा विवाद के मूल्यांकन और पैरवी के लिए करने के लिए अधिकृत करते हैं। <b>डिजिटल पर्सनल डेटा प्रोटेक्शन (DPDP) अधिनियम</b> के अनुसार, हम केवल आवश्यक जानकारी एकत्र करते हैं, कानूनी संलग्नता की अवधि तक ही रखते हैं, और आपकी सहमति के बिना किसी तीसरे पक्ष के साथ साझा नहीं करते। <b>IRDAI</b> के पॉलिसीधारक प्रतिनिधित्व नियमों का पालन करते हैं।
+          </p>
+        </div>
+      </div>
+      <div class="field" id="docUploadField">
+        <label class="en">Upload Supporting Documents <span style="opacity:.55;font-weight:400">(optional)</span></label>
+        <label class="hi">सहायक दस्तावेज़ अपलोड करें <span style="opacity:.55;font-weight:400">(वैकल्पिक)</span></label>
+        <div style="margin-top:.45rem">
+          <label class="doc-upload-btn" for="reviewDocs" title="Attach files">📎 <span class="en">Attach Files</span><span class="hi">फ़ाइलें जोड़ें</span></label>
+          <input type="file" id="reviewDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="showReviewDocList()">
+          <div id="reviewDocList" style="margin-top:.4rem;font-size:.82rem"></div>
+          <p style="opacity:.4;font-size:.76rem;margin:.3rem 0 0">Claim rejection letter, policy document, insurer correspondence — PDF/JPG/PNG, max 10 MB each, up to 5 files</p>
+        </div>
       </div>
       <button type="submit" class="btn" id="submitBtn">
-        <span class="en">Pay ₹999 &amp; Submit for Review →</span>
-        <span class="hi">₹999 दें और समीक्षा के लिए सबमिट करें →</span>
+        <span class="en">Get Verification Code →</span>
+        <span class="hi">सत्यापन कोड प्राप्त करें →</span>
       </button>
       <div class="msg" id="msg"></div>
     </form>
 
-    <div id="successMsg" style="display:none;text-align:center;padding:1.5rem 0">
-      <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
-      <div style="font-size:1.1rem;font-weight:700;margin-bottom:.4rem" class="en">Request received!</div>
-      <div style="font-size:1.1rem;font-weight:700;margin-bottom:.4rem" class="hi">अनुरोध प्राप्त हुआ!</div>
-      <div style="color:rgba(255,255,255,.6);font-size:.9rem" class="en">Our team will contact you within 24 hours to confirm payment and begin the review.</div>
-      <div style="color:rgba(255,255,255,.6);font-size:.9rem" class="hi">हमारी टीम 24 घंटे में भुगतान की पुष्टि और समीक्षा शुरू करने के लिए संपर्क करेगी।</div>
+    <!-- OTP verification step (hidden until code is sent) -->
+    <div id="otpSection" style="display:none">
+      <div class="otp-box">
+        <p class="en">A 6-digit code has been sent to <b id="otpEmailDisplay"></b>.<br>Enter it below to verify your email and create your dashboard.</p>
+        <p class="hi"><b id="otpEmailDisplayHi"></b> पर 6-अंकीय कोड भेजा गया है।<br>अपना ईमेल सत्यापित करने के लिए नीचे दर्ज करें।</p>
+        <input type="text" id="otpInput" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" oninput="this.value=this.value.replace(/\D/g,'')">
+        <div class="otp-hint">
+          <span id="otpCountdown"></span>
+          <button class="link-btn" id="resendOtpBtn" onclick="sendVerifyOTP(true)" style="display:none" class="en">Resend code</button>
+        </div>
+      </div>
+      <button class="btn" id="verifyBtn" onclick="verifyAndSubmit()">
+        <span class="en">Verify &amp; Create Dashboard →</span>
+        <span class="hi">सत्यापित करें और डैशबोर्ड बनाएं →</span>
+      </button>
+      <div class="msg" id="msgOtp"></div>
+      <p style="text-align:center;margin-top:.85rem">
+        <button class="link-btn" onclick="backToForm()">← <span class="en">Back / change details</span><span class="hi">वापस जाएं</span></button>
+      </p>
     </div>
 
-    <p class="note en">Payment link will be sent to your email/WhatsApp after submission. Review delivered within 48–72 business hours.</p>
-    <p class="note hi">सबमिशन के बाद भुगतान लिंक आपके ईमेल/WhatsApp पर भेजा जाएगा। 48–72 कार्य घंटों में समीक्षा दी जाएगी।</p>
+    <p class="note en" id="notePayLater">Your dashboard will be created instantly. Pay ₹499 from your dashboard to start the legal review. No payment collected on this form.</p>
+    <p class="note hi" id="notePayLaterHi">आपका डैशबोर्ड तुरंत बनाया जाएगा। कानूनी समीक्षा शुरू करने के लिए अपने डैशबोर्ड से ₹499 का भुगतान करें। इस फ़ॉर्म पर कोई भुगतान नहीं लिया जाता।</p>
   </div>
 </main>
 
 <script>
+let _formData = null;
+let _otpCountdownTimer = null;
+
+// Step 1: validate form, send OTP to email
 async function submitReview(e) {
   e.preventDefault();
   const btn = document.getElementById('submitBtn');
   const msg = document.getElementById('msg');
-  btn.disabled = true;
   msg.className = 'msg';
 
-  // Collect data and send as per-claim purchase request
-  // Currently stores as a claim under a shared review account (backend can route)
-  const payload = {
-    advisor_name: document.getElementById('advisorName').value.trim(),
-    advisor_phone: document.getElementById('advisorPhone').value.trim(),
-    advisor_email: document.getElementById('advisorEmail').value.trim(),
-    insured_name: document.getElementById('insuredName').value.trim(),
-    claim_type: document.getElementById('claimType').value,
+  const name  = document.getElementById('userName').value.trim();
+  const phone = document.getElementById('userPhone').value.trim();
+  const email = document.getElementById('userEmail').value.trim().toLowerCase();
+  const claimType = document.getElementById('claimType').value;
+
+  if (!name || !phone || !email || !claimType) {
+    msg.className = 'msg err';
+    msg.textContent = 'Please fill all required fields.';
+    return;
+  }
+
+  _formData = {
+    name, phone, email,
+    claim_type: claimType,
     insurer_name: document.getElementById('insurerName').value.trim(),
     disputed_amount: parseInt(document.getElementById('disputedAmt').value) || null,
     notes: document.getElementById('notes').value.trim(),
-    review_type: 'per_claim_999'
+    intermediary_code: (document.getElementById('intermediaryCode')?.value || '').trim(),
+    intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim(),
   };
 
+  await sendVerifyOTP(false);
+}
+
+async function sendVerifyOTP(isResend) {
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('msg');
+  if (!isResend) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="en">Sending code…</span><span class="hi">कोड भेजा जा रहा है…</span>';
+  } else {
+    document.getElementById('resendOtpBtn').style.display = 'none';
+  }
+
   try {
-    const res = await fetch('/nidaan/api/review-request', {
+    const res = await fetch('/nidaan/api/send-verify-otp', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email: _formData.email})
     });
-    // If endpoint doesn't exist yet, treat as submitted (form captures lead)
-    if (res.status === 404 || res.ok) {
-      document.getElementById('form999').style.display = 'none';
-      document.getElementById('successMsg').style.display = 'block';
-      // Also send to email via contact form fallback
-      return;
-    }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Submission failed');
+    if (!res.ok) throw new Error(_extractErr(data, 'Failed to send code'));
+
+    // Show OTP section, hide form
     document.getElementById('form999').style.display = 'none';
-    document.getElementById('successMsg').style.display = 'block';
+    document.getElementById('submitBtn').style.display = 'none';
+    document.getElementById('notePayLater').style.display = 'none';
+    document.getElementById('notePayLaterHi').style.display = 'none';
+    document.getElementById('otpSection').style.display = '';
+    document.getElementById('otpEmailDisplay').textContent = _formData.email;
+    document.getElementById('otpEmailDisplayHi').textContent = _formData.email;
+    document.getElementById('otpInput').value = '';
+    document.getElementById('otpInput').focus();
+    startOtpCountdown(60);
   } catch(err) {
     msg.className = 'msg err';
     msg.textContent = err.message;
     btn.disabled = false;
+    btn.innerHTML = '<span class="en">Get Verification Code →</span><span class="hi">सत्यापन कोड प्राप्त करें →</span>';
   }
+}
+
+function startOtpCountdown(sec) {
+  const el = document.getElementById('otpCountdown');
+  const resendBtn = document.getElementById('resendOtpBtn');
+  resendBtn.style.display = 'none';
+  if (_otpCountdownTimer) clearInterval(_otpCountdownTimer);
+  let t = sec;
+  el.textContent = `Resend in ${t}s`;
+  _otpCountdownTimer = setInterval(() => {
+    t--;
+    if (t <= 0) {
+      clearInterval(_otpCountdownTimer);
+      el.textContent = '';
+      resendBtn.style.display = '';
+    } else {
+      el.textContent = `Resend in ${t}s`;
+    }
+  }, 1000);
+}
+
+// Step 2: verify OTP then create account
+async function verifyAndSubmit() {
+  const otp = document.getElementById('otpInput').value.trim();
+  const msgOtp = document.getElementById('msgOtp');
+  msgOtp.className = 'msg';
+
+  if (!otp || otp.length < 4) {
+    msgOtp.className = 'msg err';
+    msgOtp.textContent = 'Enter the 6-digit code from your email.';
+    return;
+  }
+
+  const btn = document.getElementById('verifyBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="en">Creating your dashboard…</span><span class="hi">डैशबोर्ड बन रहा है…</span>';
+
+  try {
+    const res = await fetch('/nidaan/api/review-signup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({..._formData, otp})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      // OTP wrong → let user retry
+      if (res.status === 401) {
+        msgOtp.className = 'msg err';
+        msgOtp.textContent = _extractErr(data, 'Invalid code. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<span class="en">Verify &amp; Create Dashboard →</span><span class="hi">सत्यापित करें और डैशबोर्ड बनाएं →</span>';
+        return;
+      }
+      throw new Error(_extractErr(data, 'Submission failed'));
+    }
+    localStorage.setItem('nidaan_token', data.token);
+    localStorage.setItem('nidaan_plan', 'per_claim');
+    // Upload any selected documents
+    const reviewFiles = document.getElementById('reviewDocs').files;
+    if (reviewFiles.length > 0 && data.purchase_id) {
+      try {
+        btn.innerHTML = '<span class="en">Uploading documents…</span><span class="hi">दस्तावेज़ अपलोड हो रहे हैं…</span>';
+        const fd = new FormData();
+        for (const f of reviewFiles) fd.append('files', f);
+        await fetch(`/nidaan/api/review/${data.purchase_id}/documents/upload`, {
+          method: 'POST',
+          headers: {'Authorization': 'Bearer ' + data.token},
+          body: fd
+        });
+      } catch(_) { /* non-fatal — dashboard will still load */ }
+    }
+    window.location.href = data.dashboard_url + '?new=1';
+  } catch(err) {
+    msgOtp.className = 'msg err';
+    msgOtp.textContent = err.message;
+    btn.disabled = false;
+    btn.innerHTML = '<span class="en">Verify &amp; Create Dashboard →</span><span class="hi">सत्यापित करें और डैशबोर्ड बनाएं →</span>';
+  }
+}
+
+function showReviewDocList() {
+  const files = document.getElementById('reviewDocs').files;
+  const list = document.getElementById('reviewDocList');
+  if (!files.length) { list.innerHTML = ''; return; }
+  list.innerHTML = Array.from(files).map(f =>
+    `<div>📄 ${f.name} <span style="opacity:.5">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+  ).join('');
+}
+
+function backToForm() {
+  if (_otpCountdownTimer) clearInterval(_otpCountdownTimer);
+  document.getElementById('form999').style.display = '';
+  document.getElementById('submitBtn').style.display = '';
+  document.getElementById('submitBtn').disabled = false;
+  document.getElementById('submitBtn').innerHTML = '<span class="en">Get Verification Code →</span><span class="hi">सत्यापन कोड प्राप्त करें →</span>';
+  document.getElementById('notePayLater').style.display = '';
+  document.getElementById('notePayLaterHi').style.display = '';
+  document.getElementById('otpSection').style.display = 'none';
+  document.getElementById('msg').className = 'msg';
+  document.getElementById('msgOtp').className = 'msg';
 }
 
 function setLang(l) {

@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter','Poppins',sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.7}
@@ -407,7 +408,7 @@ async function submitTicket(e) {
       alertDiv.innerHTML = msg;
       document.getElementById('ticketForm').reset();
     } else {
-      throw new Error(data.detail || 'Failed to submit ticket');
+      throw new Error(_extractErr(data, 'Failed to submit ticket'));
     }
   } catch(err) {
     alertDiv.className = 'alert alert-error';
@@ -507,7 +508,7 @@ async function sendReply() {
       openTicket(currentTicketId); // Refresh
     } else {
       const data = await r.json();
-      alert(data.detail || 'Failed to send reply');
+      alert(_extractErr(data, 'Failed to send reply'));
     }
   } catch(err) {
     alert('Error: ' + err.message);

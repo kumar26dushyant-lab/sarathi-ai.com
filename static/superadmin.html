@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
 <script src="/static/dark-mode.js?v=3"></script>
+<script src="/static/_err.js?v=1"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -522,7 +523,7 @@ async function doLogin(){
   try{
     const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password:pass}),credentials:'same-origin'});
     const d=await r.json();
-    if(!r.ok){showLoginErr(d.detail||'Login failed');return}
+    if(!r.ok){showLoginErr(_extractErr(d,'Login failed'));return}
     if(d.status==='authenticated'){TOKEN='cookie';localStorage.setItem('sa_token','cookie');enterApp()}
     else if(d.requires_otp){_loginRequestId=d.request_id;document.getElementById('loginStep1').style.display='none';document.getElementById('loginStep2').style.display='block';showLoginErr('')}
     else if(d.token){TOKEN=d.token;localStorage.setItem('sa_token',TOKEN);enterApp()}
@@ -535,7 +536,7 @@ async function verifyOTP(){
   try{
     const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:_loginRequestId,otp}),credentials:'same-origin'});
     const d=await r.json();
-    if(!r.ok){showLoginErr(d.detail||'Invalid OTP');return}
+    if(!r.ok){showLoginErr(_extractErr(d,'Invalid OTP'));return}
     if(d.status==='authenticated'){TOKEN='cookie';localStorage.setItem('sa_token','cookie');enterApp()}
     else if(d.token){TOKEN=d.token;localStorage.setItem('sa_token',TOKEN);enterApp()}
   }catch(e){showLoginErr('Network error')}
@@ -637,7 +638,8 @@ function renderTenants(){
     const ini=(t.firm_name||'?').slice(0,2).toUpperCase();
     const foundingBadge=t.founding_discount?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600">🏆</span>':'';
     const refBadge=t.referred_by?'<span style="background:#dbeafe;color:#1e40af;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px">🤝 '+esc(t.referred_by)+'</span>':'';
-    return`<div class="list-item" onclick="openTenant(${t.tenant_id})"><div class="list-avatar" style="background:${bgc}">${ini}</div><div class="list-body"><div class="list-title">${esc(t.firm_name||'Unknown')}${foundingBadge}${refBadge}</div><div class="list-sub">${esc(t.owner_name||'')} · ${esc(t.phone||'')}</div></div><div class="list-badge ${badge}">${st}</div></div>`;
+    const nidaanBadge=t.plan_source==='nidaan_bundle'?'<span style="background:#fdf4ff;color:#7c3aed;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600">🔗 Nidaan Bundle</span>':'';
+    return`<div class="list-item" onclick="openTenant(${t.tenant_id})"><div class="list-avatar" style="background:${bgc}">${ini}</div><div class="list-body"><div class="list-title">${esc(t.firm_name||'Unknown')}${foundingBadge}${refBadge}${nidaanBadge}</div><div class="list-sub">${esc(t.owner_name||'')} · ${esc(t.phone||'')}</div></div><div class="list-badge ${badge}">${st}</div></div>`;
   }).join('');
 }
 
@@ -713,7 +715,7 @@ async function tenantAction(id,action){
         return;
       }
       toast('✅ '+action+' done');loadTenants();openTenant(id)
-    }else{toast('❌ '+(d.detail||'Failed'))}
+    }else{toast('❌ '+_extractErr(d,'Failed'))}
   }catch(e){toast('❌ Network error')}
 }
 
@@ -856,13 +858,13 @@ async function saveAffEdit(id){
   const body={name,email:email||null,status,commission_pct:commission};
   if(phone&&phone.length===10)body.phone=phone;
   try{const r=await fetch(API+'/affiliates/'+id,{method:'PUT',headers:hdrs(),body:JSON.stringify(body)});
-  if(r.ok){toast('✅ Saved');closeOverlay('affEditOverlay');loadAffiliates()}else{const d=await r.json();toast('❌ '+(d.detail||'Failed'))}}catch(e){toast('❌ Network error')}
+  if(r.ok){toast('✅ Saved');closeOverlay('affEditOverlay');loadAffiliates()}else{const d=await r.json();toast('❌ '+_extractErr(d,'Failed'))}}catch(e){toast('❌ Network error')}
 }
 
 async function impersonateAffiliate(id){
   try{
     const r=await fetch(API+'/affiliate/'+id+'/impersonate',{method:'POST',headers:hdrs()});
-    if(!r.ok){const d=await r.json();toast('❌ '+(d.detail||'Failed'));return}
+    if(!r.ok){const d=await r.json();toast('❌ '+_extractErr(d,'Failed'));return}
     const d=await r.json();
     if(d.token){
       const imp=encodeURIComponent(d.token);
@@ -967,7 +969,7 @@ async function createFirm(){
   if(!firm||!owner||phone.length!==10){toast('❌ Fill all fields');return}
   try{const r=await fetch(API+'/create-firm',{method:'POST',headers:hdrs(),body:JSON.stringify({firm_name:firm,owner_name:owner,phone,email,plan})});const d=await r.json();
   if(r.ok){toast('✅ Firm created!');closeOverlay('createFirmOverlay');loadTenants();loadDashboard();['cfFirm','cfOwner','cfPhone','cfEmail'].forEach(id=>$(id).value='')}
-  else{toast('❌ '+(d.detail||'Failed'))}}catch(e){toast('❌ Network error')}
+  else{toast('❌ '+_extractErr(d,'Failed'))}}catch(e){toast('❌ Network error')}
 }
 
 /* ── Health Monitor ────────────────────────────────────────────── */
@@ -1039,7 +1041,7 @@ async function runHealthCheck(){
   toast('📡 Running health check...');
   try{const r=await fetch(API+'/health-monitor/run',{method:'POST',headers:hdrs()});const d=await r.json();
   if(r.ok){toast(`✅ Done: ${d.healthy||0} healthy, ${d.warnings||0} warnings, ${d.critical||0} critical`);loadMonitor()}
-  else{toast('❌ '+(d.detail||'Failed'))}}
+  else{toast('❌ '+_extractErr(d,'Failed'))}}
   catch(e){toast('❌ Network error')}
 }
 
