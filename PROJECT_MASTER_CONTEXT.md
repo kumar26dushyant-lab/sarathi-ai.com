@@ -1212,7 +1212,7 @@ RAZORPAY_KEY_SECRET=...
 SMTP_HOST=smtp.gmail.com           # CONFIGURED
 SMTP_PORT=587
 SMTP_USER=kumar26.dushyant@gmail.com
-SMTP_PASSWORD=bsyw****bdamgkuu    # Gmail App Password
+SMTP_PASSWORD=[REDACTED]          # Gmail App Password — see biz.env on server
 SMTP_FROM_EMAIL=info@sarathi-ai.com  # "Send mail as" via Cloudflare Email Routing + Gmail alias
 GOOGLE_CLIENT_ID=903535788143-...apps.googleusercontent.com
 SA_ALERT_EMAIL=kumar26.dushyant@gmail.com  # Health monitor alert recipient
@@ -2686,8 +2686,8 @@ WhatsApp Cloud API token was expired since Feb 20, 2026. To restore full WhatsAp
 | **Evolution API server** | Hetzner VPS `root@5.223.64.25`, Docker container `evolution`, Evolution API v2.2.3 |
 | **Evolution port** | `http://localhost:8080` (Hetzner-local), `http://5.223.64.25:8080` (Oracle-external) |
 | **Evolution instance** | `sarathi_t9`, connected via QR code (state: open, wuid: `918875674400@s.whatsapp.net`) |
-| **Evolution API key** | `adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b` |
-| **Webshare proxy** | SOCKS5 `63.141.58.29:6345`, user `bbozyqst`, pass `5xccuewy38va`, ASN: AS6079 RCN (US cable ISP — genuine residential, NOT datacenter) |
+| **Evolution API key** | `[REDACTED — value in biz.env on server; rotate if this doc was ever published]` |
+| **Webshare proxy** | SOCKS5 `63.141.58.29:6345`, user `[REDACTED]`, pass `[REDACTED]`, ASN: AS6079 RCN (US cable ISP — genuine residential, NOT datacenter). Credentials live in `biz.env` / Webshare dashboard; rotate if this doc was ever published. |
 | **redsocks** | v0.5 on Hetzner, transparently proxies Evolution container (172.18.0.0/16) outbound port 443 through Webshare |
 | **redsocks config** | `/etc/redsocks.conf` — `redirector=iptables`, `local_port=12345` |
 | **iptables rule** | REDIRECT 172.18.0.0/16 → port 443 → 12345 (redsocks) |
@@ -2708,7 +2708,7 @@ is_enabled()                                              # checks EVOLUTION_API
 Environment variables added to `biz.env`:
 ```env
 EVOLUTION_API_URL=http://5.223.64.25:8080
-EVOLUTION_API_KEY=adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b
+EVOLUTION_API_KEY=[REDACTED — see biz.env on server]
 ```
 
 DB table added (`wa_instances`):
@@ -2918,7 +2918,7 @@ Prevents accidental auto-replies inside group chats.
 - Customer asking "मेरा प्रीमियम कब है?" / "renewal date?" now gets factual answer instead of escalation
 - Marketed under the "AI-based decision, ask when confused, silent when unrelated" requirement
 
-**Evolution config recovery** — `biz.env` was missing all 4 EVOLUTION_* vars after Oracle migration. Fetched from Hetzner `/opt/evolution/.env` (`adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b`). Updated webhook URLs on each Hetzner instance via `POST /webhook/set/{instance}` to point at `https://sarathi-ai.com/api/whatsapp/v2/webhook`. Stale `sarathi_t6` row marked `disconnected`.
+**Evolution config recovery** — `biz.env` was missing all 4 EVOLUTION_* vars after Oracle migration. Fetched from Hetzner `/opt/evolution/.env` (key value redacted from this doc; it lives only in `biz.env` on the server). Updated webhook URLs on each Hetzner instance via `POST /webhook/set/{instance}` to point at `https://sarathi-ai.com/api/whatsapp/v2/webhook`. Stale `sarathi_t6` row marked `disconnected`.
 
 ### 36.4 Email deliverability fix (May 28)
 - **Root cause:** Yahoo/Gmail filtering emails to spam because SMTP_FROM=`info@sarathi-ai.com` was authenticated via Gmail (kumar26.dushyant@gmail.com) — SPF/DKIM unaligned with header-from domain
