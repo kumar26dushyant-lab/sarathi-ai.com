@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** May 2, 2026
+> **Last Updated:** June 10, 2026 (Section 38 covers June 10 — [object Object] error sweep, Nidaan top-ribbon UX, service-worker v2 cache fix, Sarathi homepage redesign drafts v2/v3/v4. Section 37 covers Phase B Lifecycle Hardening, June 7–9. Section 36 covers May 27–29 — Contabo migration, marketing studio v2, WhatsApp P0 fixes, Nidaan price change ₹999→₹499.)
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -41,6 +41,10 @@
 29. [PWA (Progressive Web App)](#29-pwa)
 30. [Production Infrastructure (Oracle Cloud)](#30-production-infrastructure)
 31. [Data Protection & Backward Compatibility](#31-data-protection)
+32–36. *(Migration + hardening, marketing studio v2, WhatsApp P0, Nidaan price drop)*
+37. [Phase B Lifecycle Hardening (June 7–9, 2026)](#37-lifecycle-hardening--phase-b-june-79-2026)
+38. [Post-Phase-B Work (June 10, 2026)](#38-post-phase-b-work--june-10-2026) — `[object Object]` sweep, Nidaan top ribbon, SW v2
+39. [Cybersecurity Track Plan](#39-cybersecurity-track--plan-kicked-off-june-10-2026) — Sprints D, E, F
 
 ---
 
@@ -73,7 +77,7 @@
 | **AI** | Google Gemini 2.5 Flash |
 | **Payments** | Razorpay (orders + subscriptions) |
 | **WhatsApp** | Meta Cloud API (Graph v21.0) |
-| **Email** | SMTP (Gmail App Passwords, "Send mail as" info@sarathi-ai.com via Cloudflare Email Routing) |
+| **Email** | Gmail SMTP via App Password (FROM = kumar26.dushyant@gmail.com after May 28 — direct sender for SPF/DKIM alignment); Brevo HTTPS API auto-takes over if BREVO_API_KEY is set (free 300/day) — Resend also supported via RESEND_API_KEY |
 | **PDF** | HTML → Browser PDF (custom branded templates) |
 | **Cloud Storage** | Google Drive OAuth2 |
 | **Rate Limiting** | slowapi (200/min default, per-endpoint overrides) |
@@ -106,7 +110,8 @@
 | `biz_calculators.py` | ~1,116 | 12 calculator functions + 12 @dataclass results + 9 format functions |
 | `biz_ai.py` | ~943 | Gemini AI: 8 features (scoring, pitch, recommendations, etc.) |
 | `biz_payments.py` | ~872 | Razorpay: orders, subscriptions, webhooks |
-| `biz_whatsapp.py` | ~718 | WhatsApp Cloud API: send/receive, wa.me fallback |
+| `biz_whatsapp.py` | ~718 | WhatsApp Cloud API: send/receive, wa.me fallback (Meta token expired — wa.me fallback in use) |
+| `biz_whatsapp_evolution.py` | ~200 | Evolution API v2.2.3 gateway: `send_text()`, `is_enabled()`, `_normalize_phone()` — primary WhatsApp automation channel |
 | `biz_auth.py` | ~573 | JWT + Email OTP + Google Sign-In + CSRF authentication, role-based access |
 | `biz_health_monitor.py` | ~479 | Tier 2 Health Monitor: 11 checks (server, DB, email, bots, queue, disk, data integrity, payments, auth), auto-fix, email alerts |
 | `biz_resilience.py` | ~471 | Retry decorator, message queue, health check |
@@ -459,6 +464,11 @@ POST /api/nudge|/api/nudge/broadcast|preview|bulk
 GET  /api/nudge/history|suggestions
 ```
 
+### Admin Automation (1)
+```
+POST /api/admin/trigger-scan  — Manually trigger automation scan (birthday|anniversary|renewal|followup|nurture). Owner-only.
+```
+
 ### Campaigns (7)
 ```
 POST /api/campaigns          — Create (Team+ only)
@@ -754,8 +764,9 @@ send_text_for_tenant(tenant, to, message)  # Multi-tenant
 ```
 
 ### Current Status
-- WhatsApp token **expired Feb 20, 2026** — wa.me link fallback active
-- Multi-tenant: per-tenant `wa_phone_id` + `wa_access_token`
+- **Evolution API (primary):** `biz_whatsapp_evolution.py` — Connected via instance `sarathi_t9` on Hetzner (`5.223.64.25:8080`), routed through Webshare residential proxy. State: open. Phone: `918875674400`.
+- **Meta Cloud API (secondary/fallback):** WhatsApp Cloud API token expired Feb 20, 2026. wa.me deep link used as final fallback when Evolution is not connected (503 response triggers browser redirect).
+- Multi-tenant: per-tenant `wa_phone_id` + `wa_access_token` (Meta) + `wa_instances` table rows (Evolution)
 
 ---
 
@@ -790,6 +801,48 @@ send_text_for_tenant(tenant, to, message)  # Multi-tenant
 | Individual (Solo Advisor) | ₹199 | 1 | CRM, 12 calculators, basic AI |
 | Team | ₹799 | Admin + 5 | + WhatsApp, AI tools, campaigns, GDrive |
 | Enterprise | ₹1,999 | Admin + 25 | + Priority, all features, custom branding, API |
+
+### Nidaan Bundle Integration (May 2026)
+
+Nidaan plans bundle Sarathi-AI CRM access. Bundled tenants are identified by `plan_source='nidaan_bundle'` and `bundled_until DATE`. `check_subscription_active()` in `biz_database.py` returns True if today ≤ `bundled_until` regardless of `subscription_status`.
+
+| Nidaan Plan | Sarathi Tier Bundled |
+|-------------|---------------------|
+| Silver / Silver Annual | Individual |
+| Gold / Gold Annual | Team |
+| Platinum / Platinum Annual | Enterprise |
+
+**Double-subscription block** — `POST /api/payments/create-subscription` checks if calling tenant already has an active Nidaan bundle matching the requested plan and returns HTTP 409 with `{blocked_by_bundle: true}`. Frontend shows a friendly message instead of opening Razorpay.
+
+**Magic-link SSO** — `POST /nidaan/api/sarathi/access`: Nidaan JWT → verifies active Nidaan sub + plan has `sarathi_bundle: True` → provisions Sarathi tenant on-demand → returns Sarathi JWT + redirect URL (`/dashboard?token=…`). Called by Nidaan dashboard "Open Sarathi CRM" button.
+
+### Payment Webhooks
+
+| Webhook | URL | Who |
+|---------|-----|-----|
+| Sarathi subscriptions | `POST /api/payments/webhook` | Razorpay events for Sarathi plans |
+| Nidaan subscriptions | `POST /nidaan/api/webhook` | Razorpay events for Nidaan plans; on activation calls `_provision_sarathi_bundle()` |
+
+### UPI Recovery Flow (May 2026)
+
+UPI payments on mobile cause browser context loss (app-switch) — Razorpay's `handler` never fires. Implemented a recovery pattern mirroring Nidaan's existing approach:
+
+1. **Frontend (dashboard.html)**: Before `rzp.open()`, saves `{order_id, plan, ts}` to `sessionStorage('sarathi_pending_order')`.
+2. **On success**: Removes sessionStorage, redirects to `/dashboard?payment=success` (toast banner instead of `alert()`).
+3. **On dashboard init**: If `?payment=success` in URL → shows 7-second success toast → cleans URL. Otherwise checks sessionStorage for pending order ≤30 min old → polls recovery endpoint.
+4. **Backend (GET /api/payments/check-order)**: Fetches order from Razorpay API, verifies `tenant_id` in notes matches caller (security), fetches captured payment, calls `activate_from_api_verified_payment()`.
+5. **`activate_from_api_verified_payment()` (biz_payments.py)**: Idempotent activation without HMAC — uses Razorpay API server-to-server verification. Checks `is_payment_processed()` first, then `record_payment_processed()` + `update_tenant()`.
+
+### Key Backend Functions (biz_payments.py)
+
+```python
+activate_from_api_verified_payment(tenant_id, plan_key, order_id, payment_id, amount_paise)
+  → {"activated": True, "plan": ..., "expires": ...}
+  → {"already_activated": True}   # idempotent
+verify_and_activate(...)           # HMAC-verified path (normal Razorpay handler flow)
+create_subscription(...)           # Razorpay Subscription API
+process_webhook_event(...)         # 8 event handlers
+```
 
 ### Flow (Recurring Subscriptions — v17k+)
 ```
@@ -1168,7 +1221,7 @@ GDRIVE_CLIENT_SECRET=
 GDRIVE_REDIRECT_URI=...
 # --- Nidaan Partner (add to /opt/sarathi/biz.env on server) ---
 NIDAAN_ADMIN_TOKEN=...             # random 32-byte hex; gates all /nidaan/api/admin/* routes
-NIDAAN_ADMIN_EMAIL=...             # email that receives ₹999 review-request notifications
+NIDAAN_ADMIN_EMAIL=...             # email that receives ₹499 review-request notifications
 # NIDAAN_RAZORPAY_KEY_ID + NIDAAN_RAZORPAY_KEY_SECRET can share the Sarathi Razorpay account or be separate; if omitted, Sarathi Razorpay creds are used.
 ```
 
@@ -1961,33 +2014,43 @@ Major payment architecture change: switched from Razorpay one-time orders to Raz
 - **Python:** 3.12 in `/opt/sarathi/venv/`
 
 ### Domain & DNS
-- **Domain:** sarathi-ai.com (Cloudflare registrar)
-- **DNS:** Cloudflare proxied A records (sarathi-ai.com + www → 140.238.246.0)
-- **SSL:** Cloudflare edge (Flexible mode — HTTPS at edge, HTTP to origin)
+- **Domains:** sarathi-ai.com + nidaanpartner.com (Cloudflare registrar)
+- **DNS:** Cloudflare proxied A records for both domains + `www.*` → **84.247.172.252** (Contabo, migrated May 28, 2026)
+- **SSL:** Cloudflare Full (Strict) + Let's Encrypt cert covering all 4 hostnames (sarathi-ai.com, www.sarathi-ai.com, nidaanpartner.com, www.nidaanpartner.com)
 
 ### Nginx (/etc/nginx/sites-enabled/sarathi)
-- Port 80 listener for sarathi-ai.com + www
+- Single config covers both domains (server_name list)
+- Port 443 listener + 80→443 redirect
 - Reverse proxy to `127.0.0.1:8001`
-- Static files served directly with 7d cache
+- Static files (`/static/`, `/uploads/`, `/api/video/file/`) served directly with cache
 - `Service-Worker-Allowed: /` header for SW scope
+- `**Permissions critical**: `/opt/sarathi` must be `755` (others have rx for nginx traversal); do NOT use `750` — that 403s everything
 
 ### systemd (sarathi.service)
 - `ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py`
-- `Restart=always`, `RestartSec=3`
+- `Restart=always`, `RestartSec=5`, `MemoryMax=8G`
 - `WorkingDirectory=/opt/sarathi`
-- Env file: `/opt/sarathi/biz.env`
+- Env file: `/opt/sarathi/biz.env` (mode 600)
 
 ### Deployment Flow
 ```
-Local: scp files → ubuntu@140.238.246.0:/tmp/sarathi_deploy/
-Server: sudo cp /tmp/sarathi_deploy/* /opt/sarathi/ (+ /static/)
-        sudo chown sarathi:sarathi
-        sudo systemctl restart sarathi
+# From Windows PowerShell:
+scp -o StrictHostKeyChecking=no <files> root@84.247.172.252:/tmp/
+ssh root@84.247.172.252 \
+  "cp /tmp/<file> /opt/sarathi/<dest> && chown sarathi:sarathi /opt/sarathi/<file> \
+   && systemctl restart sarathi && sleep 4 && curl -s http://localhost:8001/health"
 ```
 
 ### SSH Access
 ```
-ssh -i "C:\Users\imdus\Downloads\ssh-key-2026-03-03.key" ubuntu@140.238.246.0
+# Contabo (production, May 28, 2026 onward)
+ssh root@84.247.172.252           # uses ~/.ssh/id_ed25519
+
+# Hetzner (Evolution API + Webshare proxies, separate box)
+ssh -i ~/.ssh/id_ed25519 root@5.223.64.25
+
+# Oracle (stopped May 28; data retained as safety net — do NOT terminate yet)
+ssh -i ~/Downloads/ssh-key-2026-03-03.key ubuntu@140.238.246.0
 ```
 
 ---
@@ -2130,7 +2193,7 @@ ssh -i "C:\Users\imdus\Downloads\ssh-key-2026-03-03.key" ubuntu@140.238.246.0
 | **Platinum** | ₹6,000 | ₹24,000 | Unlimited (soft cap 100/yr) | Enterprise | Unlimited |
 
 - Nidaan subscription **bundles Sarathi-AI CRM access** at the matching tier.
-- **Per-claim direct-to-consumer review = ₹999** (one-time, for insured customers without an advisor — distinct from agent plans).
+- **Per-claim direct-to-consumer review = ₹499** (one-time, for insured customers without an advisor — distinct from agent plans).
 - Sarathi-AI-only customers do **not** automatically get Nidaan access; they can upgrade or buy a per-claim review.
 
 ### 30.3 Cross-product flows
@@ -2180,7 +2243,7 @@ ONE FastAPI app, ONE SQLite DB, ONE VM. Two Nginx server-blocks routed by Host: 
 | # | Decision | Value |
 |---|----------|-------|
 | 1 | Architecture | Plug-and-play v2 (separate `nidaan_*` tables + `product_link` bridge) |
-| 2 | Per-claim direct-to-consumer fee | **₹999** |
+| 2 | Per-claim direct-to-consumer fee | **₹499** |
 | 3 | SMS provider | **Fast2SMS** (Jio DLT registration in progress; awaiting approval) |
 | 4 | Sub-super-admin refund cap | **₹0** (all refunds via super-admin) |
 | 5 | Bilingual approach | Same as Sarathi (toggle + auto-detect from `navigator.language`); storage key `localStorage.nidaan_lang` |
@@ -2198,7 +2261,7 @@ ONE FastAPI app, ONE SQLite DB, ONE VM. Two Nginx server-blocks routed by Host: 
 3. `NIDAAN_CLAIM_NEW_OPS` — claim filed notification to Nidaan ops number
 4. `NIDAAN_STATUS_AGENT` — status change to advisor
 5. `NIDAAN_STATUS_INSURED` — status change to insured
-6. `NIDAAN_PERCLAIM_RECEIPT` — ₹999 review purchase receipt
+6. `NIDAAN_PERCLAIM_RECEIPT` — ₹499 review purchase receipt
 7. `NIDAAN_PERCLAIM_OUTCOME` — review outcome notification
 
 Sender ID: register `NIDAAN` (6-char transactional). DLT entity ID + per-template IDs go to env once Jio approves.
@@ -2211,7 +2274,7 @@ Sender ID: register `NIDAAN` (6-char transactional). DLT entity ID + per-templat
 - **Phase 1b — DB schema + `biz_nidaan.py` skeleton** ✅ COMPLETE (May 3, 2026) — 9 Nidaan tables, all helpers.
 - **Phase 2 — Auth + pages + Razorpay subscriptions + review endpoint + admin panel** ✅ COMPLETE (May 4, 2026). See §30.11.
 - **Phase 3 — Subscribe flow UI + Email OTP login + claim-status email + Nidaan domain nginx verify**.
-- **Phase 4 — ₹999 per-claim direct-to-consumer flow (full Razorpay payment) + admin review-status update**.
+- **Phase 4 — ₹499 per-claim direct-to-consumer flow (full Razorpay payment) + admin review-status update**.
 - **Phase 5 — Fast2SMS automation + Sarathi cross-promo (Claims CTA on homepage + dashboard tab)**.
 
 ### 30.10 Sprint 9 follow-up — security header fix (May 1, 2026)
@@ -2230,7 +2293,7 @@ Root cause of dashboard live-preview iframe failure: Nginx was adding `X-Frame-O
 | `nidaan_subscriptions` | Active/cancelled sub per account (plan, razorpay_sub_id, status, period_start/end) |
 | `nidaan_claims` | Claims filed (account_id, insured_name, insurer_name, claim_type, disputed_amount, notes, status) |
 | `nidaan_claim_status_log` | Immutable audit trail of every claim status change |
-| `nidaan_per_claim_purchase` | ₹999 review leads (advisor_*, claim_type, insurer, amount, status, razorpay_sub_id) |
+| `nidaan_per_claim_purchase` | ₹499 review leads (advisor_*, claim_type, insurer, amount, status, razorpay_sub_id) |
 | `nidaan_plan_quota` | Monthly quota tracking per account (claims_used, month) |
 | `product_link` | Bridge: `(nidaan_account_id, sarathi_tenant_id)` — enables bundled Sarathi access |
 | `nidaan_admins` | Nidaan staff accounts (email, role, pw_hash) |
@@ -2259,7 +2322,7 @@ Root cause of dashboard live-preview iframe failure: Nginx was adding `X-Frame-O
 - `GET  /nidaan/api/claims` — list own claims (auth required)
 - `GET  /nidaan/api/claims/{id}` — single claim + status log
 
-**₹999 Review (per-claim direct-to-consumer)**
+**₹499 Review (per-claim direct-to-consumer)**
 - `POST /nidaan/api/review-request` — lead capture (no auth) → saves to `nidaan_per_claim_purchase`, emails admin + advisor
 
 **Subscriptions**
@@ -2272,7 +2335,7 @@ Root cause of dashboard live-preview iframe failure: Nginx was adding `X-Frame-O
 - `GET  /nidaan/api/admin/stats` — `{total_accounts, active_subscriptions, total_claims, open_claims, pending_review_requests, plans{}}`
 - `GET  /nidaan/api/admin/claims` — all claims with account info (paginated)
 - `GET  /nidaan/api/admin/accounts` — all accounts with sub status (paginated)
-- `GET  /nidaan/api/admin/review-requests` — all ₹999 review leads (paginated)
+- `GET  /nidaan/api/admin/review-requests` — all ₹499 review leads (paginated)
 - `PATCH /nidaan/api/admin/claims/{id}/status` — inline status update, logs to `nidaan_claim_status_log`
 
 #### Key Business Logic (`biz_nidaan.py`)
@@ -2287,7 +2350,7 @@ NIDAAN_RAZORPAY_PLANS = {
 async def ensure_nidaan_plans(rzp_key_id, rzp_key_secret)   # idempotent plan creation
 async def create_nidaan_razorpay_subscription(...)          # returns {short_url, subscription_id}
 async def activate_from_razorpay_webhook(...)               # idempotent; sets sub active + quota
-async def create_review_request(...)                        # saves ₹999 lead
+async def create_review_request(...)                        # saves ₹499 lead
 async def get_admin_stats() -> dict                         # dashboard metrics
 async def get_all_accounts_admin(...)                       # LEFT JOIN with active sub
 async def get_review_requests_admin(...)                    # paginated leads list
@@ -2297,7 +2360,7 @@ async def get_review_requests_admin(...)                    # paginated leads li
 - Dark navy theme (`#0f172a` body, `#1e293b` cards)
 - Login gate: paste `NIDAAN_ADMIN_TOKEN` → calls all 4 admin APIs simultaneously
 - Stats row: 6 KPI cards
-- 3 tabs: Claims (inline status dropdown + update via `PATCH`), Accounts, ₹999 Reviews
+- 3 tabs: Claims (inline status dropdown + update via `PATCH`), Accounts, ₹499 Reviews
 - Status badges color-coded (intimated=blue, resolved_won=green, resolved_lost=red, pending_payment=amber)
 
 #### Mobile Nav (nidaan_index.html — Two-Row Layout)
@@ -2348,7 +2411,7 @@ async def get_review_requests_admin(...)                    # paginated leads li
 | 3 | **Subscribe flow in dashboard UI** | `nidaan_dashboard.html` has no "Subscribe" button. Need plan selector cards (silver/gold/platinum) → call `POST /nidaan/api/subscribe` → redirect to `short_url` |
 | 4 | **Email OTP login for Nidaan** | Add `POST /nidaan/api/send-email-otp` + `POST /nidaan/api/verify-email-otp` to `biz_nidaan.py`. Update `nidaan_login.html` to show Email OTP tab. |
 | 5 | **Claim status email to advisor** | `PATCH /nidaan/api/admin/claims/{id}/status` should fire email to advisor after status update |
-| 6 | **Admin review-request status update** | Admin can view ₹999 leads but can't mark them `in_review` / `completed` |
+| 6 | **Admin review-request status update** | Admin can view ₹499 leads but can't mark them `in_review` / `completed` |
 | 7 | **nidaanpartner.com nginx routing** | Verify domain DNS is pointing to server and Nginx `server_name nidaanpartner.com` block is active |
 | 8 | **Nidaan pages in sitemap** | `nidaanpartner.com` pages not in XML sitemap |
 
@@ -2446,7 +2509,7 @@ Bootstrap method: `sudo -u sarathi /opt/sarathi/venv/bin/python3 <script>` (DB i
 | 4 | Ops portal mobile sidebar | Hamburger menu; sidebar currently hidden on small screens |
 | 5 | Claims list pagination | Currently hardcoded `LIMIT 200` |
 | 6 | Sub-super_admin creation via UI | Dushyant/Ashwin can create team members; sub-admins need UI support |
-| 7 | Nidaan D2C ₹999 per-claim flow | Route and payment flow partially built; needs completion |
+| 7 | Nidaan D2C ₹499 per-claim flow | Route and payment flow partially built; needs completion |
 | 8 | Claim document uploads | PDF evidence uploads for each claim |
 
 ---
@@ -2606,4 +2669,575 @@ Instead of 3 separate services (Node.js + Python FastAPI + PostgreSQL), collapse
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
-*Last updated: May 11, 2026*
+*Last updated: May 25, 2026*
+
+---
+
+## 34. WHATSAPP EVOLUTION API INTEGRATION — May 13–14, 2026
+
+### 34.1 Overview
+
+WhatsApp Cloud API token was expired since Feb 20, 2026. To restore full WhatsApp automation, a self-hosted WhatsApp gateway was set up using **Evolution API v2.2.3** (open-source Baileys-based gateway) on a separate Hetzner server, routed through a **Webshare static residential IP** to pass WhatsApp's ASN checks.
+
+### 34.2 Infrastructure
+
+| Component | Details |
+|-----------|---------|
+| **Evolution API server** | Hetzner VPS `root@5.223.64.25`, Docker container `evolution`, Evolution API v2.2.3 |
+| **Evolution port** | `http://localhost:8080` (Hetzner-local), `http://5.223.64.25:8080` (Oracle-external) |
+| **Evolution instance** | `sarathi_t9`, connected via QR code (state: open, wuid: `918875674400@s.whatsapp.net`) |
+| **Evolution API key** | `adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b` |
+| **Webshare proxy** | SOCKS5 `63.141.58.29:6345`, user `bbozyqst`, pass `5xccuewy38va`, ASN: AS6079 RCN (US cable ISP — genuine residential, NOT datacenter) |
+| **redsocks** | v0.5 on Hetzner, transparently proxies Evolution container (172.18.0.0/16) outbound port 443 through Webshare |
+| **redsocks config** | `/etc/redsocks.conf` — `redirector=iptables`, `local_port=12345` |
+| **iptables rule** | REDIRECT 172.18.0.0/16 → port 443 → 12345 (redsocks) |
+
+**Why both Hetzner AND Webshare are needed (cannot remove either):**
+- **Webshare** = identity layer. WhatsApp checks the IP's ASN. Datacenter IPs (Oracle, Hetzner bare) are blocked. `63.141.58.29` is AS6079 RCN — a US cable ISP — which passes as a genuine residential connection.
+- **Hetzner** = execution layer. Oracle Cloud blocks outbound connections to WhatsApp servers on port 443. Evolution API must run on Hetzner. Total cost: Hetzner ~€10/mo + Webshare ~$5/mo ≈ ₹1,300/month for full WhatsApp automation.
+
+### 34.3 New Python Module: `biz_whatsapp_evolution.py`
+
+```python
+# Key functions:
+send_text(instance_name, to_phone, text, *, delay_ms=0)  # POSTs to /message/sendText/{instance}
+_normalize_phone(phone)                                   # → 91XXXXXXXXXX format
+is_enabled()                                              # checks EVOLUTION_API_URL configured
+```
+
+Environment variables added to `biz.env`:
+```env
+EVOLUTION_API_URL=http://5.223.64.25:8080
+EVOLUTION_API_KEY=adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b
+```
+
+DB table added (`wa_instances`):
+```sql
+CREATE TABLE wa_instances (
+    instance_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id          INTEGER NOT NULL,
+    evolution_instance TEXT NOT NULL,
+    phone_number       TEXT,
+    status             TEXT DEFAULT 'connecting',  -- open/connected/connecting/disconnected
+    paused_until       TEXT,
+    created_at         TEXT DEFAULT (datetime('now')),
+    updated_at         TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+);
+```
+
+### 34.4 Endpoints Fixed/Added (sarathi_biz.py)
+
+| Endpoint | Before | After |
+|----------|--------|-------|
+| `POST /api/wa/send` | Returned `_WA_DISABLED_RESPONSE` stub | Queries `wa_instances` for connected Evolution instance, calls `wa_evo.send_text()` |
+| `POST /api/wa/share-calc` | Returned `_WA_DISABLED_RESPONSE` stub | Sends calc summary + report URL via Evolution; falls back to `wa.me` if not connected |
+| `POST /api/wa/greeting` | Returned `_WA_DISABLED_RESPONSE` stub | Sends birthday/anniversary message via Evolution; falls back to `wa.me` if not connected |
+| `POST /api/nudge` | Telegram-only, crashed on non-numeric `telegram_id` (e.g. `'web_9'`) | Tries Telegram first; WhatsApp fallback to advisor's `wa_phone`/`phone` via Evolution |
+| `POST /api/nudge/broadcast` | Filtered to Telegram-only agents; silently skipped agents without Telegram | Includes all agents with phone number; tries Telegram first, WhatsApp fallback for others |
+| `POST /api/admin/trigger-scan` | Did not exist | New endpoint: manually fires `birthday`/`anniversary`/`renewal`/`followup`/`nurture` scans — owner-only, for testing without waiting for scheduler |
+
+### 34.5 Automated Scheduler — Evolution Integration
+
+`biz_reminders.py` already had `_evo_send_if_connected(agent_id, phone, message)` wired. All three scheduled scan functions use it:
+
+- **`run_birthday_scan()`** — queries `wa_instances` for agent's tenant, sends birthday WhatsApp directly to lead's phone
+- **`run_anniversary_scan()`** — same pattern for anniversaries
+- **`run_renewal_scan()`** — sends renewal reminders to client phones
+
+All three functions: try Evolution first → log `channel='whatsapp_evolution'` in `greetings_log` → fall back to Meta Cloud API if not connected.
+
+### 34.6 Dashboard — Direct WhatsApp Send Button
+
+In `dashboard.html`, the green **WhatsApp** pill button next to lead phone numbers was previously an `<a href="wa.me/...">` link (opened browser/app manually). Changed to:
+
+```javascript
+async function sendWaDirect(phone, name) {
+  // POSTs to /api/wa/send with {phone, message}
+  // On success: showToast("WhatsApp message sent ✓", 'success')
+  // On 503 (WA not connected): falls back to window.open(wa.me link)
+}
+function _waDirectBtn(phone, name, opts) {
+  // Returns <button onclick="sendWaDirect(...)"> instead of <a href="wa.me">
+}
+```
+
+Both desktop table and mobile card versions updated. Message sent: `"Hi {first_name}, this is {firm}. Do you have a couple of minutes to chat?"`
+
+### 34.7 Nurture/Drip — WhatsApp Direct Channel
+
+`biz_nurture.py` upgraded:
+
+**New channel type `whatsapp_customer`:**
+- Sends the step's `wa_template_en/hi` directly to lead's phone via Evolution API
+- No Telegram involvement
+
+**Upgraded `telegram_agent` channel:**
+- Now also auto-sends to lead's WhatsApp via Evolution (if connected) BEFORE notifying advisor
+- Telegram notification updated: says "✅ WhatsApp message sent automatically to lead." instead of showing a manual wa.me button
+- Manual wa.me button only shown if Evolution is not connected
+
+**New helper in `biz_nurture.py`:**
+```python
+async def _evo_send_direct(tenant_id, agent_id, phone, message) -> bool:
+    # Queries wa_instances for tenant's connected instance
+    # Calls wa_evo.send_text()
+```
+
+### 34.8 Known Issues / Next Steps
+
+| Item | Status |
+|------|--------|
+| WhatsApp connection via QR code | ✅ Connected (sarathi_t9, phone 918875674400) |
+| Pairing code (phone-side linking) | ⏳ Rate-limited — wait 24h between attempts, try only once |
+| Multi-tenant proxy | Current: single static residential IP serves all tenants. Works fine. For scale: each tenant may eventually need own IP. |
+| WhatsApp session persistence | Evolution maintains session in Docker volume. Reconnects automatically. |
+| Meta Cloud API | Still configured as fallback but token expired — wa.me link is actual fallback |
+
+### 34.9 Infrastructure Decision: Hetzner + Webshare (Keep Both)
+
+**Q: Can we drop Hetzner or Webshare to save cost?**
+
+| Service | Role | Can be dropped? |
+|---------|------|----------------|
+| **Hetzner VPS** (~€10/mo) | Runs Evolution API Docker container. Oracle Cloud blocks outbound WA traffic. | ❌ No — Evolution cannot run on Oracle |
+| **Webshare Static Residential** (~$5/mo) | Provides RCN cable ISP IP (AS6079). Without it, WhatsApp blocks the datacenter IP. | ❌ No — datacenter ASN is blocked by Meta |
+
+Both are required for the "solid wall" approach. Total: ~₹1,300/month. For context: one paying Sarathi Team plan customer (₹799/mo) nearly covers this cost. The infrastructure enables WhatsApp automation for ALL tenants.
+
+---
+
+## 35. NIDAAN-SARATHI BUNDLE MECHANICS — May 25, 2026
+
+> **Status:** ✅ Fully deployed. All bundle scenarios E2E tested.
+
+### 35.1 What Was Built This Session
+
+#### Bundle Mechanics Core
+
+| Component | File | Change |
+|-----------|------|--------|
+| PLAN_LIMITS | `biz_nidaan.py` | All 6 Nidaan plans now have `sarathi_bundle: True` (Silver & Silver Annual were previously `False`) |
+| `_provision_sarathi_bundle()` | `biz_nidaan.py` | 5 bugs fixed: wrong INSERT column (`status`→`subscription_status`), missing UPDATE of `subscription_status`, no `agents` owner record created for new tenants, missing Silver/Silver Annual in plan map (`silver`→`individual`), missing `@nidaanpartner.com` staff exclusion |
+| `check_subscription_active()` | `biz_database.py` | Added `bundled_until` priority check — if today ≤ `bundled_until`, returns `True` regardless of `subscription_status` (prevents bundled users being locked out) |
+| Cancellation grace | `sarathi_biz.py` | `subscription.cancelled/halted/completed` Nidaan webhook events now set `bundled_until = today + 5 days` on linked Sarathi tenant (was: just logging) |
+| Double-sub block | `sarathi_biz.py` | `POST /api/payments/create-subscription` blocks if active Nidaan bundle matches requested plan → HTTP 409 with `{blocked_by_bundle: true}` |
+| Magic-link SSO | `sarathi_biz.py` | `POST /nidaan/api/sarathi/access` — Nidaan JWT → on-demand provision → Sarathi JWT + redirect URL |
+| Signup fraud messaging | `sarathi_biz.py` | All 3 signup locations: removed "trial was already used" message; now always: "An account already exists. Please login instead." |
+
+#### Payment UX Fix (Sarathi)
+
+The Sarathi payment flow had 5 UX problems not present in the Nidaan flow (which had been fixed earlier). All fixed in this session:
+
+| Problem | Fix |
+|---------|-----|
+| `alert()` for success (native dialog, unprofessional) | Replaced with `showToast()` + redirect to `?payment=success` |
+| `location.reload()` — no confirmation after reload | User redirected to `/dashboard?payment=success`, success toast on reload |
+| No `sessionStorage` pending order | Added before `rzp.open()` — survives UPI app-switch context loss |
+| No `GET /api/payments/check-order` recovery endpoint | Added — mirrors Nidaan's `/nidaan/api/subscribe/check` pattern |
+| No `?payment=success` handler in dashboard init | Added — shows 7-second toast, cleans URL with `history.replaceState` |
+
+### 35.2 New API Endpoints Added
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /nidaan/api/sarathi/access` | Magic-link SSO: Nidaan JWT → Sarathi JWT + redirect |
+| `GET /api/payments/check-order` | UPI recovery: polls Razorpay API, activates tenant idempotently |
+
+### 35.3 New Functions Added
+
+| Function | File | Purpose |
+|----------|------|---------|
+| `activate_from_api_verified_payment()` | `biz_payments.py` | Idempotent activation via Razorpay API (no HMAC). Used by check-order endpoint for UPI recovery. |
+
+### 35.4 Files Changed & Deployed
+
+| File | Changes |
+|------|---------|
+| `biz_nidaan.py` | PLAN_LIMITS Silver fix + `_provision_sarathi_bundle()` 5-bug fix |
+| `biz_database.py` | `check_subscription_active()` — bundled_until priority |
+| `sarathi_biz.py` | Magic-link endpoint, cancellation grace, double-sub block, signup messaging, `GET /api/payments/check-order` |
+| `biz_payments.py` | `activate_from_api_verified_payment()` |
+| `static/dashboard.html` | sessionStorage pending order, success redirect, success toast on init, UPI recovery polling |
+
+## 36. MIGRATION + HARDENING SPRINT — May 27–29, 2026
+
+This was the largest infrastructure + product session since launch. Captures the move OFF Oracle, marketing studio v2 redesign, WhatsApp end-to-end fixes, Nidaan price drop, and email deliverability fix.
+
+### 36.1 Infrastructure migration: Oracle → Contabo
+- **Old:** Oracle Cloud A1.Flex (free tier) `140.238.246.0` — blocked by capacity shortage for upgrade
+- **New:** Contabo Cloud VPS 30 SSD (€11.20/mo) — Ubuntu 24.04 x86_64, 8 vCPU, 24GB RAM, 400GB SSD at `84.247.172.252`
+- **Migration files:** `deploy/setup-contabo.sh`, `deploy/migrate-to-contabo.sh` (in repo)
+- **DNS:** Cloudflare A records updated `sarathi-ai.com` + `www.sarathi-ai.com` + `nidaanpartner.com` + `www.nidaanpartner.com` → `84.247.172.252`. SSL/TLS mode = Full (Strict)
+- **SSL:** Let's Encrypt via certbot for all 4 domains (covered by one cert)
+- **Permissions:** `/opt/sarathi` is `755` (nginx www-data needs traversal to serve static); `biz.env` is `600`, `sarathi_biz.db` is `640`. **DO NOT** use `chmod 750` on `/opt/sarathi` — it causes nginx 403 on every static file
+- **SSH access:** `ssh root@84.247.172.252` (Contabo) — using `~/.ssh/id_ed25519` keypair
+- **Oracle:** Stopped (not terminated) — keeps data preserved as safety net
+
+### 36.2 Marketing Studio v2 (May 28–29)
+A complete redesign of image quality:
+- **Photo templates** at `static/templates/marketing/*.png` — overlaid with headline + body + advisor logo + soft IRDAI disclaimer
+- **Default content_type → template mapping** in `biz_marketing.py::_TEMPLATE_DEFAULT`:
+  - `scenario_insurance → imagen_health_hospital_bill`
+  - `scenario_investment → imagen_invest_growth_chart`
+  - `tip → imagen_invest_sip_chai`
+  - `product_pitch → imagen_claim_handshake_advisor`
+  - `festival → imagen_festival_diwali`
+  - `custom → imagen_advisor_meeting_with_couple`
+- **Imagen 4 stock library** generated one-time via `_tools/generate_imagen_templates.py` (script uses Gemini Imagen API, ~₹100 one-time for ~30 templates). Run with `python _tools/generate_imagen_templates.py [optional_slug]`. Note: **negative_prompt is NOT supported on Developer API tier** — must use pure scene descriptions, no quoted format hints, no "no text" instructions (Imagen will literally draw those words)
+- **Pexels fallback** via `biz_pexels.py` — if no template_id provided and no default matches, searches Pexels with content-type seed + title hint (`PEXELS_API_KEY` env var). Cached at `uploads/marketing/pexels/<sha>.jpg`
+- **Script-aware fonts** — `_font_for(text, size, bold)` detects Devanagari chars (U+0900–U+097F) and picks NotoSansDevanagari-Bold/Regular; everything else uses DejaVu Latin. Same logic in `biz_video.py` (Devanagari videos now render text correctly, no more "boxes")
+- **Emoji stripping** — `_strip_emojis()` cleans all Gemini-generated text before render (Pillow can't render color emoji glyphs reliably)
+- **Soft IRDAI disclaimer** at bottom: "General awareness post. Please consult your advisor before making a financial decision." (en/hi/mr) — placed by render code, not in source images
+- **Advisor logo + co-brand** — top-left = advisor's uploaded logo (or "Your logo here" placeholder); top-right = "by Sarathi AI" co-brand text
+- **Marathi (mr) support added** across `marketing_lang`, content prompts, title maps, schedule lang. Hindi remains primary
+- **New endpoints**: `POST /api/marketing/upload-logo` + `DELETE`; `GET /api/marketing/templates`
+- **New DB columns** (auto-migrated): `tenants.marketing_logo_path`
+
+### 36.3 WhatsApp end-to-end fixes
+4 critical fixes against user-stated requirements (C1–C4):
+
+**C1 — Group/broadcast JID filter** (`sarathi_biz.py` webhook handler):
+```python
+if "@g.us" in remote or remote.startswith("status@") or remote.endswith("@broadcast"):
+    return {"ok": True, "ignored": "group_or_broadcast"}
+```
+Prevents accidental auto-replies inside group chats.
+
+**C2 — EMI / premium-due wording for monthly mode** (`biz_reminders.py::run_renewal_scan`):
+- For `premium_mode == "monthly"`, message is now **"💳 Premium Due Reminder"** with amount + due date
+- For annual/quarterly, retains **"🔔 Policy Renewal Reminder"**
+- Trigger days already correct: `monthly = {7, 3, 1, 0}`, `annual = {60, 30, 15, 7, 3, 1, 0}`
+
+**C3 — Correct agent attribution for CRM commands**:
+- Was: always picked first agent of tenant → wrong attribution in multi-advisor teams
+- Now: reads `wa_instances.agent_id` (the SIM owner); falls back to first agent only if instance has none (with WARNING log)
+
+**C4 — Policies table injected into AI customer context** (`biz_wa_agent.py::get_lead_context_for_phone`):
+- Adds last 3 active policies to the prompt (policy_number, premium, premium_mode, renewal_date, sum_insured, plan_name, insurer)
+- Customer asking "मेरा प्रीमियम कब है?" / "renewal date?" now gets factual answer instead of escalation
+- Marketed under the "AI-based decision, ask when confused, silent when unrelated" requirement
+
+**Evolution config recovery** — `biz.env` was missing all 4 EVOLUTION_* vars after Oracle migration. Fetched from Hetzner `/opt/evolution/.env` (`adb34949947fbaa2aa0d26077328d21df7d7a6a8dfb49360ed49388ff6db4f6b`). Updated webhook URLs on each Hetzner instance via `POST /webhook/set/{instance}` to point at `https://sarathi-ai.com/api/whatsapp/v2/webhook`. Stale `sarathi_t6` row marked `disconnected`.
+
+### 36.4 Email deliverability fix (May 28)
+- **Root cause:** Yahoo/Gmail filtering emails to spam because SMTP_FROM=`info@sarathi-ai.com` was authenticated via Gmail (kumar26.dushyant@gmail.com) — SPF/DKIM unaligned with header-from domain
+- **Fix:** Changed `SMTP_FROM_EMAIL` / `SMTP_FROM_NOREPLY` / `SMTP_FROM_SUPPORT` to `kumar26.dushyant@gmail.com` so Gmail's own SPF/DKIM authenticates. Sacrifices brand; gains inbox delivery
+- **Module support added:** `biz_email.py` now supports 3 transports in priority: **Brevo** (free 300/day) > **Resend** ($20/mo, optional) > **Gmail SMTP** (current fallback). Add `BREVO_API_KEY` to biz.env when ready and the upgrade is silent
+- **Verified:** Test OTP arrived in `imdushyant19@yahoo.co.in` inbox (not spam). User confirmed: ₹499 (then ₹999) Nidaan payment + Sarathi affiliate OTP flows work
+
+### 36.5 Nidaan ₹999 → ₹499 price drop (May 29)
+**11 files updated** — all-in-one bulk replace of `₹999`/`Rs.999`/`99900` → `₹499`/`Rs.499`/`49900`. Surfaces:
+- `biz_nidaan.py` — DB `INSERT amount_paid=499` (2 sites)
+- `sarathi_biz.py` — Razorpay `amount=49900` (4 sites: review_pay, review_pay_create_order, etc.) + email subject/body strings
+- `static/nidaan_review.html`, `nidaan_dashboard.html`, `nidaan_index.html`, `nidaan_admin.html`, `nidaan_ops.html`, `nidaan_start.html`, `index.html` (Sarathi homepage Nidaan banner)
+- `NIDAAN_BUILD_PLAN.md`, `PROJECT_MASTER_CONTEXT.md`
+- Internal identifier strings kept unchanged for DB compat: `review_type="per_claim_999"`, Razorpay notes `product="nidaan_review_999"` (purely labels — DB rows reference these)
+
+### 36.6 Marketing pages bug fixes
+- **Partner page** (`/partner`): "Join Now" tab now hidden when logged in; "Logout" tab visible when logged in; mobile tabs scroll horizontally; touch targets ≥44px; auto-redirect to Dashboard on page load if already logged in
+- **Dashboard mobile**: orange "Complete your profile" banner moved from `position:fixed;top:0;z-index:9990` (was covering topbar) → `position:sticky;top:64px;z-index:40` (inside `.main`, BELOW topbar)
+- **Sidebar logout on mobile**: added `padding-bottom: 80px + safe-area-inset` so "🚪 Logout" item sits ABOVE the bottom-nav; also added 🚪 icon-collapse for topbar button under 480px
+
+### 36.7 Homepage WhatsApp demo i18n refactor B
+- Replaced legacy `_waMsgs` array + parallel `_waAiHi` arrays with **scenario-based bilingual structure** in `_waScenarios` — each message has inline `txt` + `txtHi`
+- 12 scenarios × ~3 messages each = 24 bilingual lines (user inputs + AI replies BOTH translate now, not just AI)
+- Render: `const _aiTxt = (_lang==='hi' && msg.txtHi) ? msg.txtHi : msg.txt`
+- Dead `_startWADemo` / `_waStep` / `_waMsgs` / `_waAiHi` legacy code removed (~3.5KB chars)
+
+### 36.8 What's still pending after this sprint
+| Item | Status |
+|---|---|
+| Mobile OTP via Jio Connect DLT | ⏸️ Paused — waiting on user's DLT header approval from Jio |
+| C5: Renewal-reminder idempotency (T-7 double-send protection) | Pending |
+| C6: Birthday/anniversary retry queue (parity with renewals) | Pending |
+| C7: Evolution instance failover (graceful degradation if instance down) | Pending |
+| C8: Inbound voice notes — distinguish speech transcription from non-speech audio | Pending |
+| DMARC TXT records published for both domains (`p=none` monitoring mode) | Pending — user to add in Cloudflare |
+| Remove email login completely (keep only Google + Mobile OTP) | Pending DLT |
+| Mobile thorough audit | Pending |
+
+### 36.9 Key files / paths (cheat-sheet)
+| Concern | Location |
+|---|---|
+| Marketing image render | `biz_marketing.py::generate_image()` |
+| Marketing templates folder | `/opt/sarathi/static/templates/marketing/` |
+| Pexels cache | `/opt/sarathi/uploads/marketing/pexels/<sha>.jpg` |
+| Imagen generator script | `_tools/generate_imagen_templates.py` |
+| WhatsApp webhook handler | `sarathi_biz.py:10380` (`/api/whatsapp/v2/webhook`) |
+| WA agent intent classifier | `biz_wa_agent.py::smart_inbound_handler` |
+| Evolution API client | `biz_whatsapp_evolution.py` (set on Hetzner `5.223.64.25:8080`) |
+| Reminders scheduler | `biz_reminders.py::run_renewal_scan / run_birthday_scan` |
+| Email transport | `biz_email.py::send_email` (Brevo → Resend → SMTP fallback) |
+| Razorpay Nidaan ₹499 order | `sarathi_biz.py::nidaan_review_pay_by_id` and `nidaan_review_pay` |
+
+---
+
+### 35.5 Bundle Scenario Matrix (All Verified)
+
+| Scenario | Behavior |
+|----------|----------|
+| New Nidaan signup (any plan incl. Silver) | `_provision_sarathi_bundle()` creates/reactivates Sarathi tenant, creates owner agent record |
+| "Open Sarathi CRM" from Nidaan dashboard | Magic-link SSO: issues Sarathi JWT, redirects to `/dashboard` |
+| Nidaan sub cancelled/halted | Sarathi gets 5-day grace period (`bundled_until = today+5`), then access expires |
+| Bundled Sarathi user tries to pay for matching plan | Blocked with 409 + friendly message linking to Nidaan dashboard |
+| Bundled Sarathi user pays for HIGHER plan | Allowed — they're upgrading beyond bundle |
+| Internal `@nidaanpartner.com` staff | Excluded from bundle provisioning |
+| Sarathi payment via UPI (mobile) | sessionStorage recovery → check-order endpoint → success toast on next load |
+
+---
+
+## 37. LIFECYCLE HARDENING — PHASE B (June 7–9, 2026)
+
+Re-architected the Sarathi-AI lifecycle from trial → subscription → cancel → refund → bundle → affiliate to be "guide, don't block" everywhere. Eight discrete units (B1–B8), all pre-flight-checked + live-SQL-tested before deploy.
+
+### Phase 0 — Clean slate
+- Backup at `/opt/sarathi/backups/pre-phase-b-wipe-20260608_114648.db`
+- Wiped: all `tenants`, `agents`, `leads`, `nidaan_accounts`, `nidaan_claims`, `nidaan_subscriptions`, `affiliates`, `affiliate_referrals`, `processed_payments`, `audit_log`, `webhook_failure_log`, and all dependent rows
+- Preserved: `nidaan_staff`, `nidaan_status_def` (28 statuses), `nidaan_status_transitions` (37 transitions), `nidaan_official_instances` (paired WhatsApp instances), `system_flags`, `provider_ratecards`
+- DB compacted 5.6 MB → 815 KB via VACUUM
+
+### B1 — Guide-don't-block anti-abuse
+New module `find_existing_sarathi_tenant` / `find_existing_nidaan_account` / `classify_signup_conflict(email, phone, google_sub, intent)` in `biz_database.py`. Detects 11 conflict types: `bundle_active` / `trial_active` / `sub_active` / `sub_cancelled_in_cycle` / `trial_expired` / `sub_expired` / `bundle_expired` / `nidaan_active_no_sarathi` / `nidaan_sub_active` / `sub_cancelled` / `no_sub`. Returns structured JSON with `title`, `message`, `primary_action`, `secondary_action`, deeplinks — NOT a 409 HTTP error. Frontend renders a friendly popup via `showSignupConflict(conflict)` in `index.html`.
+
+Wired into `/api/signup/google`, `/api/auth/send-signup-otp`, `/api/auth/send-email-otp`.
+
+### B2 — Sarathi refund pipeline (Policy A)
+New `sarathi_refunds` table. Policy A: full refund if cancelled within 7 days AND tenant has < 5 leads. Helpers in `biz_payments.py`:
+- `check_sarathi_refund_eligibility(tenant_id)`
+- `find_latest_paid_payment_for_tenant(tenant_id)` (sourced from `processed_payments`)
+- `create_sarathi_refund_row()`, `update_sarathi_refund_status()`, `get_sarathi_refund()`, `list_sarathi_refunds()`
+- `issue_razorpay_refund_for_sarathi(payment_id, amount_paise, notes)` (calls Razorpay `POST /payments/{id}/refund`)
+- `find_sarathi_eligible_unrefunded(days)` (reconciliation queue)
+
+Auto-triggered in `/api/subscription/cancel` (idempotent). Webhook handlers `refund.processed` / `refund.failed` / `refund.created` registered in `process_webhook_event`. SA endpoints: `GET /api/sa/refunds`, `POST /api/sa/refunds/{id}/retry`, `POST /api/sa/refunds/manual`.
+
+### B3 — Unified bundle teardown + 5-day grace + nudges
+Helper `nidaan.apply_bundle_teardown(account_id, reason, grace_days=5)` in `biz_nidaan.py`. Shortens `tenants.bundled_until` to `today + 5` (never extends). Also stamps `lifetime_trial_used = 1`. Called from THREE paths:
+1. Manual `/nidaan/api/subscribe/cancel`
+2. `refund_processed` completion (safety net)
+3. Razorpay webhook `subscription.cancelled` / `halted` / `completed`
+
+Scheduler (`biz_reminders.py`) fires email nudges once daily at 09:23 UTC for T-4, T-2, T-0 cohorts via `find_bundles_ending_in(N)`. Dashboard banner `#bundle-ending-banner` auto-renders on `loadOverview` when `bundled_until` ≤ 7 days; `/api/auth/me` now returns `bundled_until`, `plan_source`, `trial_ends_at`, `subscription_expires_at`, `lifetime_trial_used` to enable it.
+
+### B4 — Affiliate clawback automation
+Helper `db.auto_clawback_for_refund(tenant_id, reason)`:
+- **Unpaid commission** → calls existing `reverse_commission()` (deducts from `affiliates.total_earned`, marks `reversed`)
+- **Paid commission** → marks `clawback_owed` (SA must offset next payout — money was already paid, can't claw back retroactively)
+
+Auto-triggered in `/api/subscription/cancel` refund-processed branch AND `process_webhook_event("refund.processed")` (idempotent). SA endpoints: `GET /api/sa/affiliates/clawbacks`, `POST /api/sa/affiliates/clawbacks/settle`. Caught + fixed a pre-existing `sqlite3.Row.get()` bug in `reverse_commission` while implementing.
+
+### B5 — TEST_MODE bypass removed + recurring subscriptions on upgrade
+`verify_payment_signature` and `verify_subscription_signature` in `biz_payments.py` no longer accept the literal `"test_bypass"` signature shortcut — all production calls require valid HMAC-SHA256.
+
+Dashboard upgrade flow rewritten: `static/dashboard.html` now calls `/api/payments/create-subscription` instead of `/api/payments/create-order`. Razorpay options use `subscription_id` (recurring mandate) instead of `order_id` (one-time). Verify handler hits `/api/payments/verify-subscription`. Customers auto-renew monthly via mandate instead of silently expiring after one charge.
+
+The 409 `blocked_by_bundle` response from `create-subscription` opens the B1 conflict popup ("You already get this plan free → Open Sarathi") instead of a `alert()`.
+
+### B6 — Trial reuse prevention
+New columns on `tenants` (via ALTER, safe migration):
+- `lifetime_trial_used INTEGER DEFAULT 0`
+- `google_sub TEXT DEFAULT ''`
+
+Set to 1 in: `create_tenant_with_owner()` (every new tenant), `auto_fix_expired_trials()` (on natural expiry), `apply_bundle_teardown()` (on bundle end). `find_existing_sarathi_tenant` now matches on email OR phone OR google_sub — closing the email-alias bypass vector. The Google signup endpoint persists `google_sub` after tenant creation via `update_tenant`.
+
+Conflict response for expired-states (`trial_expired` / `sub_expired` / `bundle_expired`) includes `lifetime_trial_used: bool` so the frontend can show "Free trials are once-per-customer" copy.
+
+### B7 — "Open Sarathi" CTA on Nidaan dashboard + magic-link redirect handling
+Prominent teal-gradient card `#sarathiAccessCard` on Nidaan dashboard. Shown when active Nidaan plan is `silver/gold/platinum` (any tier with `sarathi_bundle: True`). Click handler `openSarathiCRM` calls `POST /nidaan/api/sarathi/access` → backend mints Sarathi JWT → returns `{access_token, redirect_url, firm_name}` → opens `https://sarathi-ai.com/dashboard?token=…` in a new tab.
+
+`/dashboard` route updated to detect `?token=` (no cookie), validate the JWT, plant a `sarathi_token` cookie (24h, Secure, SameSite=lax), and 302-redirect to clean `/dashboard` — keeps the JWT out of address bar / browser history / Referer headers.
+
+Direct sign-in at sarathi-ai.com (Google / email-OTP / phone-OTP) still works for bundle users — B1 detects `bundle_active` and guides them to login, doesn't block.
+
+### B8 — Messaging polish + bilingual
+Every conflict response now includes `title_hi` + `message_hi` + per-action `label_hi` alongside the English fields. Popup component (`showSignupConflict`) picks Hindi when `_lang === 'hi'`. Mobile: actions stack column-reverse on `window.innerWidth < 420`, tap targets ≥ 44px. Banner mobile rules added for `#bundle-ending-banner` (Sarathi dashboard) and `#sarathiAccessCard` (Nidaan dashboard).
+
+### Webhook monitor false-alarm fix (between B5 and B6)
+`webhook_failure_log` gained a `user_agent` column. The 4 webhook-failure call sites now pass the request's UA. `_check_webhook_failure_alert` only counts failures where `user_agent LIKE '%razorpay-webhook%'` — our smoke tests with `curl` no longer fire the alert. Replaced literal `$(hostname)` shell-var with `socket.gethostname()`.
+
+### Schema additions in Phase B
+```
+tenants: lifetime_trial_used INTEGER DEFAULT 0
+tenants: google_sub          TEXT    DEFAULT ''
+sarathi_refunds              (12 columns; mirrors nidaan_refunds shape)
+affiliate_referrals          (statuses extended: clawback_owed, clawback_settled)
+webhook_failure_log: user_agent TEXT DEFAULT ''
+```
+
+### Files changed in Phase B
+- `biz_database.py` — conflict detection, refund schema, audit log helper, clawback helpers
+- `biz_payments.py` — Sarathi refund helpers, refund webhook handlers, TEST_MODE removal
+- `biz_nidaan.py` — `apply_bundle_teardown`, `find_bundles_ending_in`
+- `biz_reminders.py` — bundle nudges scheduler, monitor UA filtering
+- `sarathi_biz.py` — manual cancel → refund + clawback + teardown, magic-link `?token=` handling, SA refund/clawback endpoints, Google sub persistence
+- `static/index.html` — bilingual popup, mobile-responsive
+- `static/dashboard.html` — bundle banner + mobile rules, recurring subscription flow on upgrade
+- `static/nidaan_dashboard.html` — Sarathi-access CTA card + handler + mobile rules
+
+### Live-verified at deploy (B1–B8 combined)
+| Endpoint | Status |
+|---|---|
+| Public homepage, `/nidaan/start`, `/nidaan/dashboard`, `/nidaan/ops` | 200 |
+| `/api/signup/google` returns `conflict` object (not 409) on existing email | ✓ |
+| `/api/sa/refunds*`, `/api/sa/affiliates/clawbacks*` | 401 unauth |
+| Razorpay webhook bad signature | 400 |
+| Magic-link `/dashboard?token=<valid>` | 302 + Set-Cookie + Location |
+| `verify_payment_signature("test_bypass")` post-B5 | False |
+| `lifetime_trial_used` + `google_sub` columns exist on `tenants` | ✓ |
+| `apply_bundle_teardown` shortens `bundled_until` to +5, idempotent | ✓ |
+| `auto_clawback_for_refund` unpaid → reversed, paid → clawback_owed | ✓ |
+| `classify_signup_conflict` returns Hindi `title_hi`/`message_hi`/`label_hi` | ✓ |
+
+### Operational notes
+- The webhook secret env var: `RAZORPAY_WEBHOOK_SECRET` (separate from `RAZORPAY_KEY_SECRET`). Set both equal on Dashboard + biz.env to keep things simple.
+- Phase 0 backup: restore via `cp /opt/sarathi/backups/pre-phase-b-wipe-20260608_114648.db /opt/sarathi/sarathi_biz.db; systemctl restart sarathi`.
+- Bundle teardown nudge schedule: 09:23 UTC ≈ 14:53 IST. Override via WEBHOOK_FAILURE_* env vars not applicable here (separate concern). To shift the nudge time, edit `biz_reminders.py:_fire_bundle_teardown_nudges` calling block.
+
+---
+
+## 38. POST-PHASE-B WORK — JUNE 10, 2026
+
+A 3-block session covering an info-disclosure sweep, a pricing-UX regression in production, and a homepage redesign exploration.
+
+### 38.1 `[object Object]` error info-disclosure sweep (highest priority — completed)
+
+**Triggering bug:** User reported `[object Object]` rendered as the error message under the Nidaan signup form. Root cause: `throw new Error(data.detail || 'X')` — but FastAPI's `detail` can be a **string** (HTTPException), a **Pydantic 422 array** (`[{loc:[...], msg:"...", type:"..."}, ...]`), or a **structured object** (custom conflict responses from B1). When `detail` is an array or object, `new Error(arr).message` becomes the literal string `"[object Object]"` — exposing zero information AND violating DPDP transparent-error-messaging norms.
+
+**Concrete cause for the user's specific report (June 10 nginx access log, 11:10–11:13):**
+
+```
+POST /nidaan/api/signup HTTP/2.0  422  221b
+```
+
+Three consecutive 422s. The frontend stored email + OTP in module-level vars (`_email`, `_regVerifiedOtp`) during step 1; on page refresh / direct nav to step 2 these reset to empty string. The empty `email: ""` triggered Pydantic to reject the body. The 422 returned an array; the frontend rendered `[object Object]`.
+
+**Fix shipped (15 frontend files patched):**
+
+1. **`static/_err.js`** (new, 2,089 bytes) — shared robust extractor exported as `window._extractErr(data, fallback)`. Handles all three shapes:
+   - String detail → returned as-is
+   - Pydantic array → `"field: message; field: message"`
+   - Object → tries `message`, `msg`, `error`, `title` keys
+2. **`static/nidaan_start.html`** — added inline copy of helper + **session-state guard** at top of `doRegister()`: if `_email` or `_regVerifiedOtp` is empty, send the user back to step 1 with a clean message instead of letting the backend 422.
+3. **Patched files** using `<script src="/static/_err.js?v=1"></script>` include + `data.detail || X → _extractErr(data, X)` replacement (130 patterns total):
+
+| File | Patches |
+|---|---|
+| nidaan_start.html (inline helper) | 15 |
+| nidaan_login.html (inline helper) | 5 |
+| nidaan_signup.html (inline helper) | 3 |
+| nidaan_dashboard.html | 12 |
+| nidaan_ops.html | 18 |
+| nidaan_review.html | 3 |
+| dashboard.html (Sarathi) | 27 |
+| index.html (Sarathi) | 14 |
+| partner.html | 9 |
+| admin.html | 6 |
+| superadmin.html | 8 |
+| onboarding.html | 3 |
+| invite.html | 3 |
+| getting-started.html | 2 |
+| support.html | 2 |
+
+4. **Audit-confirmed no frontend → backend dead code:** Every fetch endpoint in `nidaan_dashboard.html` (14 endpoints) and `nidaan_ops.html` (27 endpoints) maps to a live FastAPI handler in `sarathi_biz.py`. No "endpoint removed but frontend still calls it" risk.
+5. **Code-cleanup note:** Three nidaan auth files (`nidaan_start.html`, `nidaan_login.html`, `nidaan_signup.html`) carry an inlined copy of `_extractErr` instead of using the shared `_err.js`. Identical function signature, identical logic — both work. Deferred consolidation to a future "code quality" pass.
+
+### 38.2 Nidaan ₹499 visibility — top ribbon + dashboard single-claim CTA + service-worker cache fix
+
+**(a) Dashboard showing "Pay ₹999 Now" despite May-29 price change.** Local + prod HTML correctly say `₹499`. Root cause: `static/nidaan-sw.js` (May 6) used **cache-first** strategy with cache name `nidaan-v1` and pre-cached `/nidaan/dashboard` at install. After the May-29 code change, the dashboard fetch was intercepted and served from cache. Identifying signal: `Cf-Cache-Status: DYNAMIC` from Cloudflare (not edge-cached), prod file mtime `2026-06-10 14:11`, prod content correct — so staleness was definitively in the user's service worker.
+
+**Fix:** Rewrote `nidaan-sw.js` as v2:
+
+- `CACHE_NAME = 'nidaan-v2'` — activate handler purges all non-matching cache versions
+- Removed `/nidaan/dashboard` from `STATIC_ASSETS` pre-cache list (HTML should never be pre-cached if copy changes weekly)
+- **HTML pages → network-first** (with cached copy as offline fallback). Detection: `event.request.mode === 'navigate'` or `Accept: text/html`
+- **`/static/*` assets → cache-first** (cache-warm logo, manifest, fonts)
+- `/nidaan/api/*`, `/internal/*`, `/nidaan/login|logout|signup|start` → bypass SW entirely
+
+Result: future product copy/price changes propagate immediately on next page load. The browser auto-fetches the new SW on navigation; the new SW activates → purges `nidaan-v1` cache → next request is network-first → user sees current HTML.
+
+**(b) ₹499 vs subscribe plans not visible on homepage.** User feedback: "below hero section doesn't catch eye if someone randomly scrolls."
+
+**Fix:** Added a **top-ribbon** (sits between `</nav>` and hero `<section>`) showing both paths side-by-side:
+
+- LEFT card: ⚡ FASTEST badge, "Get a single claim reviewed", "₹499 / claim", → `/nidaan/start#review-section`
+- RIGHT card: 🛡 MULTI-CLAIM badge, "Silver · Gold · Platinum plans", "From ₹1,500 / quarter", → `/nidaan/start`
+
+Top border is a half-orange / half-cyan stripe; ribbon background is a soft amber gradient with a "Choose how you want to start" label and a pulsing green status dot. **Mobile** (≤780px): single column, `.path-sub-line` hidden, smaller text — still both CTAs accessible without scroll.
+
+**(c) Dashboard offered only "View Plans" for non-subscribers.** Non-subscribers landing on dashboard had no single-claim affordance.
+
+**Fix:** Lock-overlay on the claims table now shows two CTAs side-by-side:
+
+- `[View Plans →]` (existing cyan button)
+- `⚡ Pay ₹499 for single review` (gold gradient button → `/nidaan/start#review-section`)
+
+Sub-copy updated bilingually: "Choose a plan below — or get a single claim reviewed for ₹499".
+
+**(d) Upgrade/downgrade verified working.** Profile tab → "Available Plans" section has Silver / Gold / Platinum cards with `onclick="switchPlan('silver|gold|platinum')"`. `switchPlan` opens the subscribe modal with that plan pre-selected; backend at `/nidaan/api/subscribe/recurring` (sarathi_biz.py:1893) creates a new Razorpay subscription. No bugs found.
+
+### 38.3 Sarathi-AI homepage redesign — preview drafts (NOT live)
+
+User wants the live `static/index.html` aesthetic upgraded. **Constraint:** "Don't touch live pages — make a copy first, compare, then decide." Three preview files were created at `/static/index_v{2,3,4}.html`, deployed under those paths only (live `/` untouched).
+
+| Draft | Aesthetic direction | Key features |
+|---|---|---|
+| `index_v2.html` (84K) | Apple + Stripe — heavy serif italic accents, gradient text, animated phone | "Speak your CRM into existence" headline; voice-mic SVG with concentric pulse rings; story panels |
+| `index_v3.html` (68K) | **Indian institutional fintech** (Nuvama + Groww + Waterfield) — based on user-supplied research on what Indian financial advisors trust visually | Deep navy + emerald + corporate gold; SEBI · IRDAI · AMFI trust strip above topbar; bordered structural grids; editorial pull-quote in About; dark institutional metrics band |
+| `index_v4.html` (84K) | v3 aesthetic + **live agentic-AI stage** with BIG logo + 4-channel orbit | 3-column stage below hero: (1) Voice waveform card with live Hindi transcript, (2) Big floating Sarathi logo at 280px with dual orbit rings + halo glow, (3) 4 channel surfaces animating in sequence — WhatsApp / Telegram / Dashboard / Mobile |
+
+**User feedback:** v3 aesthetic accepted ("good looking at Indian professional target customers"); v4 inflates with live multi-surface scene + restored big logo from live site's hero-2 (483px). Decision on live cutover **deferred** — user paused this thread to fix the Nidaan pricing issue, then directed attention to cybersecurity.
+
+### 38.4 Files changed (June 10 session)
+
+| File | Change |
+|---|---|
+| static/_err.js | New — shared error extractor |
+| static/nidaan-sw.js | Rewrote v1 → v2 (network-first for HTML) |
+| static/nidaan_index.html | Top-ribbon ₹499/subscribe cards above hero |
+| static/nidaan_dashboard.html | Lock-overlay dual-CTA; 12 `data.detail` patches |
+| static/nidaan_start.html, nidaan_login.html, nidaan_signup.html, nidaan_review.html, nidaan_ops.html | _extractErr sweep + nidaan_start state guard |
+| static/dashboard.html, index.html, partner.html, admin.html, superadmin.html, onboarding.html, invite.html, getting-started.html, support.html | `<script src="/static/_err.js">` + `_extractErr` swaps |
+| static/index_v2.html, index_v3.html, index_v4.html | New — Sarathi homepage redesign preview drafts |
+
+### 38.5 What's pending (handoff to next session)
+
+| Item | Status |
+|---|---|
+| Consolidate inline `_extractErr` in 3 nidaan auth files to shared `_err.js` | Deferred — safe to swap; identical logic |
+| Decide whether to push v3 or v4 homepage live, or keep current | Awaiting user decision |
+| Demo/affiliate/dashboard pages in v3/v4 aesthetic | Awaiting v3/v4 sign-off first |
+| Cybersecurity Sprint 1–3 (see §39) | Approved by user, full execution authorized |
+
+---
+
+## 39. CYBERSECURITY TRACK — PLAN (kicked off June 10, 2026)
+
+User-authorized full execution of all three recommended cybersecurity sprints. Goal: "No spammer, hacker, or anyone should make any harm or get invalid entry. Privacy and cybersecurity should be top-notch."
+
+### 39.1 Phasing
+
+| Sprint | Scope | Status |
+|---|---|---|
+| **D — Quick wins** | DMARC publish, `pip-audit`, git secrets-scan, IDOR audit on top 20 endpoints | Pending |
+| **E — Formal hardening** | Auth/RBAC review, rate-limit audit, CSRF coverage, security headers (CSP/HSTS), Cloudflare WAF rules, secrets rotation, dependency pinning | Pending |
+| **F — Pen-test readiness** | OWASP Top 10 walkthrough on actual endpoints, DPDP compliance audit (data export/delete on request, consent log immutability), disaster-recovery drill | Pending |
+
+### 39.2 Why phased
+
+Sprint D is "low-effort, high-information" — surfaces unknowns BEFORE we commit to a multi-session formal sprint. Sprints E and F then attack the actual findings rather than a generic checklist.
+
+### 39.3 Acceptance criteria (to be expanded per sprint)
+
+- No `[object Object]` or generic `Error` strings reach end users (✓ done June 10)
+- No secrets in `git log -p`
+- All non-public endpoints have RBAC checks demonstrably present
+- All Pydantic models reject unexpected fields (`extra='forbid'`)
+- Auth endpoints have rate limits applied
+- DMARC records published, SPF + DKIM aligned with header-from
+- Disaster recovery: can restore DB from `git-backup` + `backup-db` artifacts within 30 minutes
+
+---
+
+*This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
+

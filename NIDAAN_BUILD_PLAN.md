@@ -14,7 +14,7 @@
 | 2 | Domain | `nidaanpartner.com` (just purchased on Cloudflare; DNS not yet pointed). |
 | 3 | Sarathi schema impact | **2 columns only**: `tenants.plan_source` ('self_paid'\|'nidaan_bundle') + `tenants.bundled_until` DATE. |
 | 4 | Bundling rule | Nidaan plan auto-grants matching Sarathi tier (Silver→Solo, Gold→Team, Platinum→Enterprise). Daily cron downgrades Sarathi to trial 30 days after Nidaan sub lapses. |
-| 5 | Per-claim direct-to-consumer fee | **₹999** one-time legal review. |
+| 5 | Per-claim direct-to-consumer fee | **₹499** one-time legal review. |
 | 6 | SMS provider | **Fast2SMS** (DLT registration in progress; awaiting Jio response). |
 | 7 | Sub-super-admin spending cap | **₹0** — all refunds require super-admin approval. |
 | 8 | Bilingual | EN + HI on every Nidaan-facing page; same toggle pattern as Sarathi (`localStorage.nidaan_lang`, auto-detect from `navigator.language`). |
@@ -183,7 +183,7 @@ CREATE TABLE nidaan_admins (
   last_login_at     TIMESTAMP
 );
 
--- Direct-to-consumer per-claim review (₹999)
+-- Direct-to-consumer per-claim review (₹499)
 CREATE TABLE nidaan_per_claim_purchase (
   purchase_id       INTEGER PRIMARY KEY AUTOINCREMENT,
   insured_name      TEXT NOT NULL,
@@ -193,7 +193,7 @@ CREATE TABLE nidaan_per_claim_purchase (
   policy_no         TEXT,
   disputed_amount   INTEGER,
   brief_description TEXT,
-  amount_paid       INTEGER NOT NULL,   -- 99900 paise
+  amount_paid       INTEGER NOT NULL,   -- 49900 paise
   razorpay_order_id TEXT,
   review_outcome    TEXT DEFAULT 'pending', -- pending|positive|negative
   review_note       TEXT,
@@ -375,7 +375,7 @@ All templates bilingual (we register HI + EN variants separately under Fast2SMS 
 | `NIDAAN_CLAIM_NEW_OPS` | Claim filed | "New claim #{var1} | {var2} | {var3} | Disputed Rs.{var4}. Insured: {var5} {var6}" |
 | `NIDAAN_STATUS_AGENT` | Status change | "Claim #{var1} status: {var2}. Notes: {var3}" |
 | `NIDAAN_STATUS_INSURED` | Status change | "Update on your claim #{var1}: {var2}. {var3}" |
-| `NIDAAN_PERCLAIM_RECEIPT` | ₹999 review purchase | "Payment received Rs.999. Review #{var1}. Outcome by {var2}" |
+| `NIDAAN_PERCLAIM_RECEIPT` | ₹499 review purchase | "Payment received Rs.499. Review #{var1}. Outcome by {var2}" |
 | `NIDAAN_PERCLAIM_OUTCOME` | Review done | "Review #{var1} outcome: {var2}. {var3}" |
 
 **Sender ID:** Apply for `NIDAAN` (6 chars, transactional). Your Jio DLT registration unlocks this. Once Jio confirms, we'll register all 7 templates on Fast2SMS dashboard.
@@ -507,7 +507,7 @@ All templates bilingual (we register HI + EN variants separately under Fast2SMS 
 ### Phase 4 — Per-claim direct-to-consumer + analytics
 
 **Acceptance criteria:**
-- Public page `nidaanpartner.com/get-claim-reviewed` accepts insured details + ₹999 Razorpay payment.
+- Public page `nidaanpartner.com/get-claim-reviewed` accepts insured details + ₹499 Razorpay payment.
 - On payment success, super-admin sees the entry in `nidaan_per_claim_purchase`.
 - Outcome update by admin sends bilingual SMS + email.
 - Revenue dashboard shows MRR, claims-by-status, conversion.
@@ -549,7 +549,7 @@ Bilingual EN+HI. Toggle in nav + auto-detect from `navigator.language`. Storage 
 8. **Trust strip** — case studies (anonymized), Nidaan LLP credentials, IRDAI Ombudsman win-rate.
 9. **Testimonials** — 3 placeholders to start.
 10. **FAQ** — 10–12 questions.
-11. **Direct-to-consumer block** — "Are you an insurance customer with a rejected claim? Get a paid legal review for ₹999 →".
+11. **Direct-to-consumer block** — "Are you an insurance customer with a rejected claim? Get a paid legal review for ₹499 →".
 12. **Footer** — Nidaan LLP credentials, CIN, contact, privacy, terms.
 
 ---
