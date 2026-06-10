@@ -50,6 +50,8 @@ gTTS>=2.5.0
 qrcode[pil]>=7.4.0
 
 # Video Studio — generates themed marketing reels (Team / Enterprise)
-moviepy>=2.0.0
-Pillow>=11.0.0
+moviepy>=2.2.1
+# Pillow 12.2.0+ closes 7 CVEs from 11.x line (CVE-2026-25990, 40192, 42309/10/11, PYSEC-2026-165).
+# moviepy 2.2.1 declares pillow<12 in its metadata but works fine at runtime — verified on prod.
+Pillow>=12.2.0
 python-multipart>=0.0.9
