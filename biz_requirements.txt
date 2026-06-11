@@ -3,55 +3,85 @@
 # =============================================================================
 #  Install: py -3.12 -m pip install -r biz_requirements.txt
 # =============================================================================
+#
+# Pinning strategy (Sprint E.2 hardening, 2026-06-11):
+#
+#  ==X.Y.Z   = STRICT pin. Used for security-critical / auth / web-layer libs.
+#              Locks production to the exact version we tested. CI / Dependabot
+#              should auto-PR upgrades; never bump these manually without testing.
+#
+#  >=X.Y.Z   = MINIMUM with auto-upgrade allowed. Used for utility libs where
+#              backward-compatible improvements are safe.
+#
+# Last verified working set on prod: see `pip freeze` output stored at
+# deploy/SECURITY_AUDIT_SPRINT_E1.md.
+# =============================================================================
 
-# Web server
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
+# ── Web layer (STRICT — auth surface) ────────────────────────────────────────
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+starlette==1.1.0
+pydantic==2.13.4
+python-multipart==0.0.29
 
-# Telegram bot
-python-telegram-bot[job-queue]>=21.0
+# ── Rate limiting (STRICT — critical: SlowAPIMiddleware was missed in earlier
+#                   setup, so we want the exact version we've tested) ─────────
+slowapi==0.1.9
 
-# HTTP client (WhatsApp API, etc.)
-httpx>=0.27.0
+# ── Authentication & cryptography (STRICT) ───────────────────────────────────
+PyJWT==2.13.0
+bcrypt==5.0.0
+cryptography>=48.0.0,<49.0.0    # allow security patches in 48.x
 
-# Environment variables
+# ── HTTP clients (STRICT — used for payments, webhooks, OAuth) ───────────────
+httpx==0.28.1
+
+# ── Database (STRICT — production data layer) ────────────────────────────────
+aiosqlite==0.22.1
+
+# ── Telegram bot (STRICT — auth flow goes through it) ────────────────────────
+python-telegram-bot[job-queue]==22.7
+
+# ── AI provider (STRICT — billed by token; bad upgrade = surprise bill) ──────
+google-genai==2.6.0
+
+# ── Environment variables ────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 
-# Async SQLite CRM database
-aiosqlite>=0.20.0
-
-# Google Gemini AI (greeting generation)
-google-genai>=1.0.0
-
-# Timezone support
+# ── Timezone support ─────────────────────────────────────────────────────────
 pytz>=2024.1
 
-# Authentication & security
-PyJWT>=2.8.0
-slowapi>=0.1.9
-bleach>=6.0.0
-bcrypt>=4.0.0
-
-# Email
+# ── Email ────────────────────────────────────────────────────────────────────
 aiosmtplib>=3.0.0
 
-# Google Drive (OAuth2 + API via httpx — no extra deps needed)
+# ── HTML sanitization (XSS defence — keep modern but allow patches) ──────────
+bleach>=6.0.0
 
-# Excel (.xlsx) reading for bulk lead import
+# ── Excel (.xlsx) reading for bulk lead import ───────────────────────────────
 openpyxl>=3.1.0
 
-# PDF text extraction for policy documents
+# ── PDF text extraction for policy documents ─────────────────────────────────
 PyMuPDF>=1.24.0
 
-# Text-to-Speech for audio help clips
+# ── Text-to-Speech for audio help clips ──────────────────────────────────────
 gTTS>=2.5.0
 
-# Microsite QR codes (Feature 4)
+# ── Microsite QR codes (Feature 4) ───────────────────────────────────────────
 qrcode[pil]>=7.4.0
 
-# Video Studio — generates themed marketing reels (Team / Enterprise)
+# ── Video Studio — themed marketing reels (Team / Enterprise) ────────────────
+# Note: moviepy 2.2.1's metadata declares pillow<12 but the actual code works
+# fine with pillow 12.x (verified in production smoke tests). Production has
+# both installed together. We keep these as FLOORS (not strict ==) so a fresh
+# install can resolve — strict pinning would deadlock the resolver because of
+# the metadata mismatch.
+#
+# For a fresh install, recommended sequence to ensure Pillow doesn't downgrade:
+#   1. pip install 'moviepy>=2.2.1'
+#   2. pip install --upgrade 'Pillow>=12.2.0'    # forces Pillow >= 12
+#   3. pip install -r biz_requirements.txt        # installs everything else
+#
 moviepy>=2.2.1
-# Pillow 12.2.0+ closes 7 CVEs from 11.x line (CVE-2026-25990, 40192, 42309/10/11, PYSEC-2026-165).
-# moviepy 2.2.1 declares pillow<12 in its metadata but works fine at runtime — verified on prod.
+# Pillow 12.2.0+ closes 7 CVEs from 11.x (CVE-2026-25990, 40192, 42309/10/11,
+# PYSEC-2026-165).
 Pillow>=12.2.0
-python-multipart>=0.0.9
