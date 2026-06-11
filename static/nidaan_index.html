@@ -222,12 +222,6 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .faq-item.open .faq-a{display:block}
 .faq-item.open .faq-arrow{transform:rotate(180deg)}
 
-/* DIRECT TO CONSUMER */
-.d2c{background:linear-gradient(135deg,#fef3c7,#ecfeff);border-top:2px dashed #fcd34d}
-.d2c-inner{max-width:700px;margin:0 auto;text-align:center}
-.d2c-price{font-size:3rem;font-weight:800;color:var(--navy);font-family:'Poppins',sans-serif;margin:.5rem 0}
-.d2c-desc{font-size:.95rem;color:#374151;margin-bottom:1.5rem;line-height:1.75}
-
 /* OFFICES */
 .offices-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;margin-top:1.5rem}
 .office-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem}
@@ -318,10 +312,6 @@ span.hi-inline{display:none}
   /* Testimonials */
   .testi-grid{grid-template-columns:1fr;gap:1rem}
 
-  /* D2C */
-  .d2c-price{font-size:2.4rem}
-  .d2c-inner{padding:0 .5rem}
-
   /* FAQ */
   .faq-q{font-size:.9rem;padding:.9rem 0}
 
@@ -356,8 +346,6 @@ span.hi-inline{display:none}
   .sticky-cta a{padding:.4rem .7rem;font-size:.76rem}
   /* Bundle features 1 col */
   .bundle-features{grid-template-columns:1fr}
-  /* D2C price */
-  .d2c-price{font-size:2rem}
   /* Plan card padding */
   .plan-card{padding:1.4rem 1.1rem}
   .plan-price{font-size:1.8rem}
@@ -1115,29 +1103,6 @@ span.hi-inline{display:none}
   </div>
 </section>
 
-<!-- ══════════ DIRECT TO CONSUMER ══════════ -->
-<section class="section d2c" id="get-reviewed">
-  <div class="d2c-inner">
-    <div class="tag en" style="background:#fef3c7;color:#92400e">For Insurance Customers</div>
-    <div class="tag hi" style="display:none;background:#fef3c7;color:#92400e">बीमा ग्राहकों के लिए</div>
-    <h2 class="section-title en">Your claim was rejected. We'll review it.</h2>
-    <h2 class="section-title hi" style="display:none">आपका क्लेम रिजेक्ट हुआ। हम समीक्षा करेंगे।</h2>
-    <div class="d2c-price">₹499</div>
-    <p class="d2c-desc en">No advisor? No subscription? No problem.<br>Get a <strong>one-time legal review</strong> of your rejected or underpaid insurance claim by Nidaan's experts.<br>We'll tell you if you have a case — and if you do, our team will take it forward.</p>
-    <p class="d2c-desc hi" style="display:none">कोई एडवाइजर नहीं? कोई सब्सक्रिप्शन नहीं? कोई बात नहीं।<br>Nidaan के विशेषज्ञों से अपने रिजेक्ट या कम भुगतान किए गए बीमा क्लेम की <strong>एकमुश्त कानूनी समीक्षा</strong> करवाएं।<br>हम बताएंगे — अगर मामला बनता है तो टीम आगे बढ़ाएगी।</p>
-    <a href="/nidaan/get-reviewed" class="btn-primary" style="margin:0 auto;display:inline-flex">
-      <span class="en">Get My Claim Reviewed — ₹499</span>
-      <span class="hi" style="display:none">मेरा क्लेम समीक्षा करवाएं — ₹499</span>
-    </a>
-    <div style="margin-top:1.75rem;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:1rem 1.25rem;font-size:.88rem;color:#1e3a8a;line-height:1.7;text-align:left">
-      💡 <strong class="en">Already a Sarathi-AI.com advisor?</strong>
-      <strong class="hi" style="display:none">पहले से Sarathi-AI.com एडवाइजर हैं?</strong>
-      <span class="en"> You can use this ₹499 review for your clients too — no Nidaan subscription required. Share the link directly, or log in with your Sarathi credentials.</span>
-      <span class="hi" style="display:none"> आप भी अपने क्लाइंट के लिए ₹499 की यह समीक्षा ले सकते हैं — कोई Nidaan सब्सक्रिप्शन ज़रूरी नहीं। लिंक सीधे शेयर करें या Sarathi क्रेडेंशियल से लॉगिन करें।</span>
-    </div>
-  </div>
-</section>
-
 <!-- ══════════ OFFICES ══════════ -->
 <section class="section" style="padding-top:3rem;padding-bottom:3rem">
   <div class="section-inner">
@@ -1193,7 +1158,7 @@ span.hi-inline{display:none}
         <li><a href="#how-it-works" class="en">How It Works</a><a href="#how-it-works" class="hi" style="display:none">कैसे काम करता है</a></li>
         <li><a href="#plans" class="en">Plans &amp; Pricing</a><a href="#plans" class="hi" style="display:none">प्लान और मूल्य</a></li>
         <li><a href="#faq" class="en">FAQ</a><a href="#faq" class="hi" style="display:none">FAQ</a></li>
-        <li><a href="#get-reviewed" class="en">Get Claim Reviewed</a><a href="#get-reviewed" class="hi" style="display:none">क्लेम समीक्षा</a></li>
+        <li><a href="/nidaan/start#review-section" class="en">Get Claim Reviewed</a><a href="/nidaan/start#review-section" class="hi" style="display:none">क्लेम समीक्षा</a></li>
         <li><a href="/nidaan/start" class="en">Get Started</a><a href="/nidaan/start" class="hi" style="display:none">शुरू करें</a></li>
         <li><a href="https://sarathi-ai.com" target="_blank" rel="noopener">Sarathi-AI CRM</a></li>
       </ul>
