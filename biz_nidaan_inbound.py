@@ -49,6 +49,96 @@ async def _find_account_by_phone(phone10: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+# ── Two-party identity resolution (WhatsApp Journey, Phase 1) ────────────────
+# An inbound WhatsApp can come from either the ACCOUNT HOLDER (the advisor in an
+# advisor-managed case, or the insured in self-service) OR the CUSTOMER (the
+# insured when an advisor subscribed on their behalf — a different phone from the
+# account holder). The role + claim binding is resolved EXPLICITLY here and never
+# inferred from message content. This is the wrong-person-safety foundation.
+
+ROLE_ACCOUNT_HOLDER = "account_holder"   # advisor (advisor-managed) or insured (self-service)
+ROLE_CUSTOMER = "customer"               # the insured, when ≠ account holder
+ROLE_UNKNOWN = "unknown"
+
+_PHONE_LAST10 = "SUBSTR(REPLACE(REPLACE(REPLACE({col}, '+',''),' ',''),'-',''), -10)"
+
+
+async def resolve_inbound_identity(phone10: str) -> dict:
+    """Resolve an inbound sender phone to (role, account_id, claim_ids).
+
+    Returns a dict:
+      {
+        "role": ROLE_ACCOUNT_HOLDER | ROLE_CUSTOMER | ROLE_UNKNOWN,
+        "phone10": str,
+        "account_id": int | None,         # set when unambiguous
+        "claim_ids": [int, ...],          # active claims this person is party to
+        "ambiguous_account_ids": [int],   # >1 account matched (customer under
+                                          # multiple advisors) — caller disambiguates
+      }
+
+    Resolution order (per spec §2):
+      1. account.phone == P            → ACCOUNT_HOLDER
+      2. claim.insured_phone == P      → CUSTOMER (active claims only)
+      3. else                          → UNKNOWN
+    """
+    result = {
+        "role": ROLE_UNKNOWN,
+        "phone10": phone10,
+        "account_id": None,
+        "claim_ids": [],
+        "ambiguous_account_ids": [],
+    }
+    if not phone10:
+        return result
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+
+        # 1. Account holder?
+        acc_sql = (
+            "SELECT account_id FROM nidaan_accounts "
+            f"WHERE {_PHONE_LAST10.format(col='phone')} = ? LIMIT 1"
+        )
+        cur = await conn.execute(acc_sql, (phone10,))
+        acc = await cur.fetchone()
+        if acc:
+            result["role"] = ROLE_ACCOUNT_HOLDER
+            result["account_id"] = acc["account_id"]
+            # All active (non-closed) claims under this account
+            c2 = await conn.execute(
+                "SELECT claim_id FROM nidaan_claims "
+                "WHERE account_id = ? AND COALESCE(stage,'') != 'closed' "
+                "ORDER BY created_at DESC",
+                (acc["account_id"],),
+            )
+            result["claim_ids"] = [r["claim_id"] for r in await c2.fetchall()]
+            return result
+
+        # 2. Customer (insured on an active claim)?
+        cust_sql = (
+            "SELECT claim_id, account_id FROM nidaan_claims "
+            f"WHERE {_PHONE_LAST10.format(col='insured_phone')} = ? "
+            "AND COALESCE(stage,'') != 'closed' "
+            "ORDER BY created_at DESC"
+        )
+        cur = await conn.execute(cust_sql, (phone10,))
+        rows = await cur.fetchall()
+        if rows:
+            result["role"] = ROLE_CUSTOMER
+            result["claim_ids"] = [r["claim_id"] for r in rows]
+            account_ids = sorted({r["account_id"] for r in rows})
+            if len(account_ids) == 1:
+                result["account_id"] = account_ids[0]
+            else:
+                # Customer's number appears under multiple advisor accounts —
+                # ambiguous; caller must disambiguate before any account-scoped action.
+                result["ambiguous_account_ids"] = account_ids
+            return result
+
+    # 3. Unknown
+    return result
+
+
 async def _active_claims_for_account(account_id: int) -> list[dict]:
     """Active = not terminal stage 'closed'."""
     async with aiosqlite.connect(db.DB_PATH) as conn:

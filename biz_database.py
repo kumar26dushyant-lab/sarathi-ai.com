@@ -1148,6 +1148,12 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN intermediary_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN intermediary_code TEXT DEFAULT ''",
             "ALTER TABLE nidaan_per_claim_purchase ADD COLUMN intermediary_name TEXT DEFAULT ''",
+            # WhatsApp Journey (Jun 2026): preferred communication language for
+            # WhatsApp/email templates + AI replies. en | hi | mr.
+            # Account-level default; per-claim override for advisor-managed cases
+            # where the customer may prefer a different language than the advisor.
+            "ALTER TABLE nidaan_subscriber_prefs ADD COLUMN comm_lang TEXT DEFAULT 'en'",
+            "ALTER TABLE nidaan_claims ADD COLUMN comm_lang TEXT DEFAULT ''",
         ]
         for m in nidaan_migrations:
             try:
@@ -1479,6 +1485,7 @@ async def init_db():
                 wa_opt_in_at            TIMESTAMP,
                 email_enabled           INTEGER DEFAULT 1,
                 saved_official_numbers_at TIMESTAMP,
+                comm_lang               TEXT DEFAULT 'en',
                 created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
