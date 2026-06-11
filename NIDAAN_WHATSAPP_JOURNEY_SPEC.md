@@ -134,6 +134,30 @@ audit.
 
 ---
 
+## 7b. Voice-note input on WhatsApp (APPROVED — added 2026-06-12)
+
+People are lazy to type — many will send a **voice note** instead. The bot must
+handle it:
+
+- **Inbound voice note** → download the audio via Evolution → transcribe with
+  Gemini (same engine the Sarathi voice-CRM already uses) → feed the transcript
+  through the SAME constrained-AI intent classifier (§7). The bot then replies in
+  **text** (template-filled), in the user's `comm_lang`.
+- **Anti-hallucination still applies**: transcription + intent-classify + template
+  or escalate. The AI never narrates claim facts from a voice note any more than
+  from typed text.
+- **Language**: Gemini transcribes hi/en/mr; if `comm_lang` not yet set, the
+  transcript's detected language can pre-seed the welcome/language step.
+- **Voice-note REPLY (text→speech) — exploratory, Phase 4+**: returning a spoken
+  reply against a voice note is feasible (TTS, e.g. gTTS which is already a dep)
+  but adds TTS quality/latency/cost concerns and harder anti-hallucination review
+  of spoken output. Decision: **text reply first**; spoken reply is a later
+  opt-in experiment, discussed before shipping.
+- Build lands in **Phase 4** (alongside the constrained AI), reusing the Sarathi
+  transcription path.
+
+---
+
 ## 8. Evolution API fallback (already built — verify in Phase 5)
 
 - `dispatch()` tries WhatsApp via the account's pinned slot; on failure falls
