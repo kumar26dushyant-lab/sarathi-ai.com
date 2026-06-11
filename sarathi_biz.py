@@ -333,6 +333,13 @@ async def nidaan_start_page(request: Request):
     return _nidaan_page("nidaan_start.html")
 
 
+@app.get("/nidaan/about", response_class=HTMLResponse)
+async def nidaan_about_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_about.html")
+
+
 @app.get("/nidaan-sw.js")
 async def nidaan_service_worker():
     """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About Us — Nidaan – The Legal Consultants LLP | Who We Are</title>
+<link rel="stylesheet" href="/static/nidaan_design.css?v=1">
+<link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
+<meta name="description" content="Meet the team behind NidaanPartner.com — decades of insurance claims and enterprise-technology leadership, now fighting for India's policyholders. Founders Ashwin Kaushal (ex-Star Health) and Dushyant Sharma (The Institutes-certified, ex-Genpact/DXC/Hexaware).">
+<link rel="canonical" href="https://nidaanpartner.com/nidaan/about">
+<meta property="og:type" content="website">
+<meta property="og:title" content="About Nidaan — Who We Are">
+<meta property="og:description" content="Decades on the inside of insurance and enterprise technology — now fighting for you.">
+<meta property="og:image" content="https://nidaanpartner.com/static/nidaan_logo.png">
+<meta name="theme-color" content="#1e3a8a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;line-height:1.7;overflow-x:hidden;background:#fff}
+a{text-decoration:none;color:inherit}
+img{max-width:100%}
+h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
+:root{
+  --navy:#1e3a8a;--navy-dark:#1e3070;--navy-light:#2563eb;
+  --cyan:#06b6d4;--cyan-dark:#0891b2;--cyan-light:#22d3ee;--cyan-50:#ecfeff;
+  --gold:#f59e0b;--slate:#64748b;--slate-50:#f8fafc;
+}
+/* lang toggle */
+body.hi .en{display:none!important}
+body.hi .hi{display:block!important}
+body.hi .hi-inline{display:inline!important}
+body.en .hi{display:none!important}
+body.en .en{display:block!important}
+span.hi{display:none}
+
+/* NAV (matches homepage) */
+.nav{position:sticky;top:0;z-index:100;background:rgba(30,58,138,0.97);backdrop-filter:blur(10px);padding:0 1.5rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px;gap:1rem}
+.nav-brand{display:flex;align-items:center;gap:.6rem;color:#fff;font-family:'Poppins',sans-serif;font-size:1.1rem;font-weight:700}
+.nav-brand img{height:56px;border-radius:8px}
+.nav-brand .brand-sub{font-size:.65rem;font-weight:500;color:var(--cyan-light);letter-spacing:.04em;display:block;line-height:1.2}
+.nav-links{display:flex;align-items:center;gap:1.5rem}
+.nav-links a{color:rgba(255,255,255,.85);font-size:.88rem;font-weight:500;transition:color .2s}
+.nav-links a:hover,.nav-links a.active{color:var(--cyan-light)}
+.lang-toggle{display:flex;gap:.25rem}
+.lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:600;border:1.5px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
+.lang-btn.active{background:var(--cyan);border-color:var(--cyan);color:#fff}
+.nav-cta{padding:.45rem 1.1rem;background:var(--cyan);color:#fff;border-radius:8px;font-weight:600;font-size:.88rem;transition:background .2s}
+.nav-cta:hover{background:var(--cyan-dark)}
+@media(max-width:768px){
+  .nav{padding:0 .85rem}
+  .nav-inner{flex-direction:column;height:auto;padding:.45rem 0;gap:0;align-items:stretch}
+  .nav-brand{padding:.1rem 0;font-size:.95rem}.nav-brand img{height:36px;border-radius:6px}.nav-brand .brand-sub{display:none}
+  .nav-links{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-wrap:nowrap;gap:.4rem;justify-content:flex-start;padding:.38rem 0 .3rem}
+  .nav-links::-webkit-scrollbar{display:none}
+  .nav-links a{font-size:.77rem!important;white-space:nowrap;padding:.28rem .65rem}
+  .nav-cta{padding:.3rem .75rem!important;font-size:.77rem!important}
+  .lang-btn{padding:.22rem .45rem;font-size:.74rem}
+}
+
+/* ABOUT HERO */
+.about-hero{background:linear-gradient(135deg,#0f1f5c 0%,#1e3a8a 50%,#164e63 100%);color:#fff;padding:4rem 1.5rem 3.5rem;position:relative;overflow:hidden}
+.about-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 75% 25%,rgba(6,182,212,.16) 0%,transparent 60%);pointer-events:none}
+.about-hero-inner{max-width:880px;margin:0 auto;text-align:center;position:relative;z-index:1}
+.about-hero .eyebrow{display:inline-block;background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);color:var(--cyan-light);padding:.35rem .9rem;border-radius:20px;font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.25rem}
+.about-hero h1{font-size:clamp(1.9rem,5vw,3rem);font-weight:800;line-height:1.2;margin-bottom:1.1rem}
+.about-hero p{font-size:clamp(1rem,2.5vw,1.18rem);color:rgba(255,255,255,.82);max-width:720px;margin:0 auto;line-height:1.7}
+
+/* SECTIONS */
+.section{padding:4rem 1.5rem}
+.section-inner{max-width:1100px;margin:0 auto}
+.section-tag{display:inline-block;background:var(--cyan-50);color:var(--cyan-dark);padding:.3rem .85rem;border-radius:20px;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:1rem}
+.section-title{font-size:clamp(1.5rem,3.5vw,2.1rem);font-weight:800;color:var(--navy);line-height:1.25;margin-bottom:.75rem}
+.section-sub{color:var(--slate);font-size:1.02rem;line-height:1.8;max-width:760px}
+
+/* MISSION band */
+.mission-band{background:linear-gradient(135deg,#eff6ff,#ecfeff);border:1px solid #bfdbfe;border-radius:18px;padding:2.5rem 2.25rem;text-align:center;max-width:860px;margin:2.5rem auto 0}
+.mission-band .ml{font-size:.8rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan-dark);margin-bottom:.7rem}
+.mission-band p{font-size:1.2rem;font-weight:600;color:var(--navy);line-height:1.6}
+
+/* LEADERSHIP */
+.leaders{display:grid;grid-template-columns:1fr;gap:2rem;margin-top:2.5rem}
+.leader{display:grid;grid-template-columns:260px 1fr;gap:2rem;background:#fff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;box-shadow:0 8px 30px rgba(15,31,92,.07)}
+.leader-photo{position:relative;min-height:320px;background:linear-gradient(135deg,#1e3a8a,#0891b2);display:flex;align-items:center;justify-content:center}
+.leader-photo img{width:100%;height:100%;object-fit:cover;object-position:top center;position:absolute;inset:0}
+.leader-photo .initials{font-family:'Poppins';font-size:3.5rem;font-weight:800;color:rgba(255,255,255,.92)}
+.leader-body{padding:2rem 2rem 2rem 0}
+.leader-name{font-size:1.5rem;font-weight:800;color:var(--navy);margin-bottom:.25rem}
+.leader-role{font-size:.92rem;font-weight:700;color:var(--cyan-dark);margin-bottom:.4rem;line-height:1.5}
+.leader-tags{display:flex;flex-wrap:wrap;gap:.4rem;margin:.75rem 0 1rem}
+.leader-tag{background:var(--slate-50);border:1px solid #e2e8f0;color:#334155;font-size:.74rem;font-weight:600;padding:.25rem .65rem;border-radius:14px}
+.leader-bio{color:#475569;font-size:.96rem;line-height:1.8;margin-bottom:1rem}
+.leader-link{display:inline-flex;align-items:center;gap:.4rem;font-size:.86rem;font-weight:700;color:#0a66c2}
+@media(max-width:760px){
+  .leader{grid-template-columns:1fr}
+  .leader-photo{min-height:300px;aspect-ratio:4/5}
+  .leader-body{padding:1.5rem}
+}
+
+/* PRODUCTS */
+.products{background:var(--slate-50)}
+.product-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2.5rem}
+.product-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:2rem;box-shadow:0 4px 18px rgba(15,31,92,.05)}
+.product-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem}
+.product-name{font-size:1.3rem;font-weight:800;color:var(--navy)}
+.product-tagline{font-size:.9rem;color:var(--cyan-dark);font-weight:600;font-style:italic;margin-bottom:1.25rem}
+.product-row{margin-bottom:.9rem}
+.product-row .lbl{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--slate)}
+.product-row .txt{font-size:.92rem;color:#475569;line-height:1.7;margin-top:.15rem}
+.product-cta{display:inline-flex;align-items:center;gap:.4rem;margin-top:.75rem;font-weight:700;color:var(--cyan-dark);font-size:.9rem}
+@media(max-width:760px){.product-grid{grid-template-columns:1fr}}
+
+/* CTA */
+.about-cta{background:linear-gradient(135deg,#0f1f5c,#164e63);color:#fff;text-align:center;padding:4rem 1.5rem}
+.about-cta h2{font-size:clamp(1.6rem,3.5vw,2.2rem);font-weight:800;margin-bottom:.85rem}
+.about-cta p{color:rgba(255,255,255,.82);max-width:600px;margin:0 auto 1.75rem;font-size:1.05rem}
+.btn-primary{display:inline-flex;align-items:center;gap:.5rem;background:var(--cyan);color:#fff;padding:.95rem 2rem;border-radius:10px;font-weight:700;font-size:1rem;transition:all .2s}
+.btn-primary:hover{background:var(--cyan-dark);transform:translateY(-1px)}
+
+/* FOOTER */
+.footer{background:#0f1f3a;color:rgba(255,255,255,.75);padding:3rem 1.5rem 1.5rem}
+.footer-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem}
+.footer h3{color:#fff;font-size:1.05rem;margin-bottom:.6rem}
+.footer h4{color:#fff;font-size:.95rem;margin-bottom:.6rem}
+.footer a{color:rgba(255,255,255,.7)}.footer a:hover{color:var(--cyan-light)}
+.footer ul{list-style:none}.footer li{margin-bottom:.4rem;font-size:.88rem}
+.footer-bottom{max-width:1100px;margin:2rem auto 0;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.1);font-size:.8rem;color:rgba(255,255,255,.5);text-align:center}
+@media(max-width:760px){.footer-inner{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="en">
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
+      <div>Nidaan<span class="brand-sub">The Legal Consultants LLP</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/#how-it-works" class="en">How It Works</a><a href="/#how-it-works" class="hi" style="display:none">कैसे काम करता है</a>
+      <a href="/#plans" class="en">Plans</a><a href="/#plans" class="hi" style="display:none">प्लान</a>
+      <a href="/nidaan/about" class="active en">About Us</a><a href="/nidaan/about" class="active hi" style="display:none">हमारे बारे में</a>
+      <a href="/#faq" class="en">FAQ</a><a href="/#faq" class="hi" style="display:none">सवाल-जवाब</a>
+      <div class="lang-toggle">
+        <button class="lang-btn active" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" onclick="setLang('hi')">हिं</button>
+      </div>
+      <a href="/nidaan/start#get-reviewed" class="nav-cta en">Get Claim Reviewed</a>
+      <a href="/nidaan/start#get-reviewed" class="nav-cta hi" style="display:none">क्लेम रिव्यू कराएँ</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="about-hero">
+  <div class="about-hero-inner">
+    <div class="eyebrow"><span class="en">Who We Are</span><span class="hi">हम कौन हैं</span></div>
+    <h1>
+      <span class="en">Decades on the inside of insurance.<br>Now fighting for you.</span>
+      <span class="hi">दशकों तक बीमा के अंदर।<br>अब आपके लिए लड़ते हुए।</span>
+    </h1>
+    <p>
+      <span class="en">Nidaan was founded by people who spent their careers inside the insurance and enterprise-technology worlds — managing claims, auditing TPAs, and building large-scale systems. We know exactly where the process breaks down for ordinary policyholders, and we built NidaanPartner.com to fix it.</span>
+      <span class="hi">Nidaan की स्थापना उन लोगों ने की जिन्होंने अपना करियर बीमा और एंटरप्राइज़-टेक्नोलॉजी की दुनिया के अंदर बिताया — क्लेम संभाले, TPA का ऑडिट किया, और बड़े पैमाने के सिस्टम बनाए। हम जानते हैं कि आम पॉलिसीधारक के लिए प्रक्रिया कहाँ टूटती है, और हमने उसे ठीक करने के लिए NidaanPartner.com बनाया।</span>
+    </p>
+  </div>
+</section>
+
+<!-- MISSION -->
+<section class="section" style="padding-bottom:1rem">
+  <div class="section-inner" style="text-align:center">
+    <div class="section-tag"><span class="en">Our Mission</span><span class="hi">हमारा मिशन</span></div>
+    <div class="mission-band">
+      <div class="ml"><span class="en">Why we exist</span><span class="hi">हम क्यों हैं</span></div>
+      <p>
+        <span class="en">No family should lose money they're rightfully owed simply because the claims process is built to wear them down. Our mission is to give every policyholder — with or without an advisor — the same expert claim defense that big institutions have. <strong>Fair claims, fairly fought.</strong></span>
+        <span class="hi">किसी भी परिवार को अपना हक़ का पैसा सिर्फ़ इसलिए नहीं गँवाना चाहिए क्योंकि क्लेम प्रक्रिया उन्हें थका देने के लिए बनी है। हमारा मिशन है हर पॉलिसीधारक को — एडवाइज़र के साथ या बिना — वही विशेषज्ञ क्लेम बचाव देना जो बड़े संस्थानों के पास होता है। <strong>न्यायसंगत क्लेम, न्यायसंगत लड़ाई।</strong></span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- LEADERSHIP -->
+<section class="section">
+  <div class="section-inner">
+    <div style="text-align:center">
+      <div class="section-tag"><span class="en">Executive Leadership</span><span class="hi">कार्यकारी नेतृत्व</span></div>
+      <h2 class="section-title"><span class="en">The people fighting in your corner</span><span class="hi">वे लोग जो आपकी तरफ़ से लड़ते हैं</span></h2>
+    </div>
+
+    <div class="leaders">
+      <!-- Ashwin -->
+      <div class="leader">
+        <div class="leader-photo">
+          <span class="initials">AK</span>
+          <img src="/static/team/ashwin.jpg" alt="Ashwin Kaushal" onerror="this.style.display='none'">
+        </div>
+        <div class="leader-body">
+          <div class="leader-name">Ashwin Kaushal</div>
+          <div class="leader-role">
+            <span class="en">Managing Director, Nidaan – The Legal Consultants LLP<br>Co-Founder, NidaanPartner.com &amp; Sarathi-AI.com</span>
+            <span class="hi">प्रबंध निदेशक, Nidaan – The Legal Consultants LLP<br>सह-संस्थापक, NidaanPartner.com और Sarathi-AI.com</span>
+          </div>
+          <div class="leader-tags">
+            <span class="leader-tag">20+ <span class="en hi-inline">years</span><span class="hi hi-inline">वर्ष</span></span>
+            <span class="leader-tag">Ex–Star Health (11 yrs)</span>
+            <span class="leader-tag">TPA &amp; Claims Audit</span>
+            <span class="leader-tag">Hospital Operations</span>
+          </div>
+          <p class="leader-bio">
+            <span class="en">Ashwin is a veteran insurance-claims authority with over two decades navigating the complex intersection of healthcare administration and insurance verification. For <strong>11 years he was a Claims Manager at Star Health and Allied Insurance</strong>, where he engineered strategies to manage claim ratios, audit complex third-party administrator (TPA) exclusions, and resolve intensive customer grievances. His grounding in hospital operations and TPA empanelments lets him see exactly where legacy infrastructure breaks down for clients — and design ecosystem-wide solutions that fix it. As Managing Director of Nidaan and Co-Founder across the NidaanPartner and Sarathi-AI ecosystems, he steers the group's operational grit, partner networks, and strategic vision.</span>
+            <span class="hi">अश्विन दो दशकों से अधिक अनुभव वाले बीमा-क्लेम विशेषज्ञ हैं, जिन्होंने हेल्थकेयर प्रशासन और बीमा सत्यापन के जटिल मेल को संभाला है। <strong>11 वर्षों तक वे Star Health and Allied Insurance में क्लेम मैनेजर रहे</strong>, जहाँ उन्होंने क्लेम अनुपात संभालने, जटिल TPA बहिष्करणों का ऑडिट करने और गंभीर ग्राहक शिकायतों को सुलझाने की रणनीतियाँ बनाईं। अस्पताल संचालन और TPA एम्पैनलमेंट की उनकी समझ उन्हें ठीक वहाँ देखने देती है जहाँ पुरानी व्यवस्था टूटती है — और उसे ठीक करने वाले समाधान बनाने देती है। Nidaan के प्रबंध निदेशक और दोनों प्लेटफ़ॉर्म के सह-संस्थापक के रूप में वे समूह की रणनीतिक दिशा का नेतृत्व करते हैं।</span>
+          </p>
+          <a href="https://www.linkedin.com/in/ashwin-kaushal-7b908523/" target="_blank" rel="noopener" class="leader-link">in <span class="en hi-inline">LinkedIn profile</span><span class="hi hi-inline">लिंक्डइन</span> ↗</a>
+        </div>
+      </div>
+
+      <!-- Dushyant -->
+      <div class="leader">
+        <div class="leader-photo">
+          <span class="initials">DS</span>
+          <img src="/static/team/dushyant.jpg" alt="Dushyant Sharma" onerror="this.style.display='none'">
+        </div>
+        <div class="leader-body">
+          <div class="leader-name">Dushyant Sharma</div>
+          <div class="leader-role">
+            <span class="en">Co-Founder &amp; Technology Architect, NidaanPartner.com &amp; Sarathi-AI.com</span>
+            <span class="hi">सह-संस्थापक और प्रौद्योगिकी आर्किटेक्ट, NidaanPartner.com और Sarathi-AI.com</span>
+          </div>
+          <div class="leader-tags">
+            <span class="leader-tag">20+ <span class="en hi-inline">years</span><span class="hi hi-inline">वर्ष</span></span>
+            <span class="leader-tag">The Institutes (USA) Certified</span>
+            <span class="leader-tag">Ex–Genpact · DXC · Hexaware</span>
+            <span class="leader-tag">Full-Stack AI Architect</span>
+          </div>
+          <p class="leader-bio">
+            <span class="en">Dushyant is a <strong>General Insurance specialist certified by The Institutes Knowledge Group (Malvern, PA, USA)</strong>, uniquely pairing 20+ years of deep insurance-domain expertise with a formidable enterprise-technology track record. As Co-Founder and Technology Architect, he engineers the entire digital infrastructure behind NidaanPartner.com and Sarathi-AI.com — translating intricate insurance workflows into secure, human-in-the-loop systems. A global support-operations leader and full-stack AI context engineer, he draws on technology-leadership experience at enterprise giants <strong>Genpact, DXC Technology, and Hexaware Technologies</strong> to drive the next generation of voice-first, high-availability, multi-tenant financial architecture.</span>
+            <span class="hi">दुष्यंत एक <strong>जनरल इंश्योरेंस विशेषज्ञ हैं, जो The Institutes Knowledge Group (Malvern, PA, USA) से प्रमाणित हैं</strong>, और 20+ वर्षों की बीमा-डोमेन विशेषज्ञता को एंटरप्राइज़-टेक्नोलॉजी के मज़बूत अनुभव के साथ जोड़ते हैं। सह-संस्थापक और प्रौद्योगिकी आर्किटेक्ट के रूप में वे NidaanPartner.com और Sarathi-AI.com की पूरी डिजिटल अवसंरचना बनाते हैं — जटिल बीमा वर्कफ़्लो को सुरक्षित, human-in-the-loop सिस्टम में बदलते हैं। एक वैश्विक सपोर्ट-ऑपरेशंस लीडर और फुल-स्टैक AI इंजीनियर, वे <strong>Genpact, DXC Technology और Hexaware Technologies</strong> जैसे दिग्गजों के अनुभव से voice-first, उच्च-उपलब्धता वाली वित्तीय आर्किटेक्चर की अगली पीढ़ी बनाते हैं।</span>
+          </p>
+          <a href="https://www.linkedin.com/in/dushyant-sharma-89659b23/" target="_blank" rel="noopener" class="leader-link">in <span class="en hi-inline">LinkedIn profile</span><span class="hi hi-inline">लिंक्डइन</span> ↗</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUCTS -->
+<section class="section products">
+  <div class="section-inner">
+    <div style="text-align:center">
+      <div class="section-tag"><span class="en">Our Products</span><span class="hi">हमारे उत्पाद</span></div>
+      <h2 class="section-title"><span class="en">Two platforms, one purpose: expertise made reachable</span><span class="hi">दो प्लेटफ़ॉर्म, एक उद्देश्य: विशेषज्ञता सबकी पहुँच में</span></h2>
+    </div>
+    <div class="product-grid">
+      <!-- Nidaan -->
+      <div class="product-card">
+        <div class="product-head">
+          <div class="product-name">✦ NidaanPartner.com</div>
+        </div>
+        <div class="product-tagline"><span class="en">Democratizing expert insurance claim resolution</span><span class="hi">विशेषज्ञ बीमा क्लेम समाधान सबके लिए</span></div>
+        <div class="product-row"><div class="lbl"><span class="en">The Problem</span><span class="hi">समस्या</span></div><div class="txt"><span class="en">Claim-dispute resolution is fractured, legally dense, and out of reach for ordinary consumers and independent advisors who aren't doctors or lawyers.</span><span class="hi">क्लेम-विवाद समाधान बिखरा, कानूनी रूप से जटिल, और आम उपभोक्ताओं व स्वतंत्र सलाहकारों की पहुँच से बाहर है, जो न डॉक्टर हैं न वकील।</span></div></div>
+        <div class="product-row"><div class="lbl"><span class="en">What We Do</span><span class="hi">हम क्या करते हैं</span></div><div class="txt"><span class="en">A digital gateway that makes specialized claim-dispute resolution reachable for every Indian from any device — expert medical-legal auditing, policy sub-limit analysis, and structured rebuttals that turn unfair rejections into successful resolutions.</span><span class="hi">एक डिजिटल द्वार जो विशेष क्लेम-विवाद समाधान को हर भारतीय की पहुँच में लाता है — विशेषज्ञ मेडिकल-लीगल ऑडिट, पॉलिसी सब-लिमिट विश्लेषण, और संरचित खंडन जो अनुचित अस्वीकृति को सफल समाधान में बदलते हैं।</span></div></div>
+        <a href="/" class="product-cta"><span class="en">Visit NidaanPartner.com →</span><span class="hi">NidaanPartner.com पर जाएँ →</span></a>
+      </div>
+      <!-- Sarathi -->
+      <div class="product-card">
+        <div class="product-head">
+          <div class="product-name">✦ Sarathi-AI.com</div>
+        </div>
+        <div class="product-tagline"><span class="en">India's first voice-first CRM for financial professionals</span><span class="hi">वित्तीय पेशेवरों के लिए भारत का पहला वॉइस-फर्स्ट CRM</span></div>
+        <div class="product-row"><div class="lbl"><span class="en">The Problem</span><span class="hi">समस्या</span></div><div class="txt"><span class="en">Indian agents, wealth managers, and consultants lose hours every day to manual admin, lead logging, and chasing renewals across fragmented apps.</span><span class="hi">भारतीय एजेंट, वेल्थ मैनेजर और सलाहकार हर दिन घंटों मैनुअल काम, लीड लॉगिंग और रिन्यूअल का पीछा करने में गँवाते हैं।</span></div></div>
+        <div class="product-row"><div class="lbl"><span class="en">What We Do</span><span class="hi">हम क्या करते हैं</span></div><div class="txt"><span class="en">A headless, voice-first CRM with a bilingual (Hinglish) voice interface. Just speak to it — log leads, trigger renewal reminders, manage tasks, and generate AI pitches or branded calculations on the fly.</span><span class="hi">एक headless, वॉइस-फर्स्ट CRM जिसमें द्विभाषी (हिंग्लिश) वॉइस इंटरफ़ेस है। बस बोलिए — लीड लॉग करें, रिन्यूअल रिमाइंडर सेट करें, टास्क संभालें, और तुरंत AI पिच या ब्रांडेड गणनाएँ बनाएँ।</span></div></div>
+        <a href="https://sarathi-ai.com" target="_blank" rel="noopener" class="product-cta"><span class="en">Visit Sarathi-AI.com →</span><span class="hi">Sarathi-AI.com पर जाएँ →</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="about-cta">
+  <h2><span class="en">Your claim deserves an expert in its corner.</span><span class="hi">आपके क्लेम को एक विशेषज्ञ का साथ चाहिए।</span></h2>
+  <p><span class="en">For just ₹499, find out if your rejected or underpaid claim can be reopened and won.</span><span class="hi">सिर्फ़ ₹499 में जानिए कि आपका रिजेक्ट या कम-भुगतान वाला क्लेम दोबारा खुलवाकर जीता जा सकता है या नहीं।</span></p>
+  <a href="/nidaan/start#get-reviewed" class="btn-primary">🛡️ <span class="en">Check My Claim — ₹499</span><span class="hi">मेरा क्लेम जाँचें — ₹499</span> →</a>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <h3>Nidaan – The Legal Consultants LLP</h3>
+      <p style="font-size:.88rem"><span class="en">Registered under the Ministry of Corporate Affairs (MCA), Government of India.<br>Serving MP · Chhattisgarh · Rajasthan</span><span class="hi">भारत सरकार के कॉर्पोरेट कार्य मंत्रालय (MCA) के तहत पंजीकृत।<br>सेवा क्षेत्र: MP · छत्तीसगढ़ · राजस्थान</span></p>
+      <p style="margin-top:.75rem;font-size:.85rem">📞 +91-98272 84804 · 98260 11116 · 95844 68804<br>📧 <a href="mailto:nidaanhelp@gmail.com">nidaanhelp@gmail.com</a></p>
+    </div>
+    <div>
+      <h4><span class="en">Company</span><span class="hi">कंपनी</span></h4>
+      <ul>
+        <li><a href="/"><span class="en">Home</span><span class="hi">होम</span></a></li>
+        <li><a href="/nidaan/about"><span class="en">About Us</span><span class="hi">हमारे बारे में</span></a></li>
+        <li><a href="/#plans"><span class="en">Plans</span><span class="hi">प्लान</span></a></li>
+        <li><a href="https://sarathi-ai.com" target="_blank" rel="noopener">Sarathi-AI CRM</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4><span class="en">Legal</span><span class="hi">कानूनी</span></h4>
+      <ul>
+        <li><a href="/nidaan/privacy"><span class="en">Privacy Policy</span><span class="hi">गोपनीयता नीति</span></a></li>
+        <li><a href="/nidaan/terms"><span class="en">Terms of Service</span><span class="hi">सेवा शर्तें</span></a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 Nidaan – The Legal Consultants LLP · NidaanPartner.com</div>
+</footer>
+
+<script>
+function setLang(l){
+  document.body.className = l;
+  localStorage.setItem('nidaan_lang', l);
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l === 'hi' ? 'हिं' : 'EN')));
+}
+(function(){
+  var saved = localStorage.getItem('nidaan_lang');
+  var sys = (navigator.language || '').startsWith('hi') ? 'hi' : 'en';
+  setLang(saved || sys);
+})();
+</script>
+</body>
+</html>
