@@ -400,6 +400,7 @@ class NidaanLoginReq(BaseModel):
 
 
 class NidaanClaimReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     claim_type: str
     insured_name: str
     insured_phone: str
@@ -414,10 +415,12 @@ class NidaanClaimReq(BaseModel):
 
 
 class NidaanSendOTPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str
 
 
 class NidaanVerifyOTPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str
     otp: str
 
@@ -429,6 +432,7 @@ class NidaanGoogleReq(BaseModel):
 
 
 class NidaanCheckEmailReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str
 
 
@@ -896,6 +900,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
 # ── Review Request (₹499 per-claim, no subscription) ──────────────────────────
 
 class NidaanReviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     advisor_name: str
     advisor_phone: str
     advisor_email: str
@@ -910,6 +915,7 @@ class NidaanReviewReq(BaseModel):
 
 
 class NidaanReviewSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     """Direct-insured signup: submit claim details first, pay later from dashboard."""
     name: str
     phone: str
@@ -924,11 +930,13 @@ class NidaanReviewSignupReq(BaseModel):
 
 
 class NidaanReviewPayByIdReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     """Create Razorpay order for a specific pending purchase (dashboard-initiated)."""
     purchase_id: int
 
 
 class NidaanReviewVerifyByIdReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     """Verify Razorpay payment for a specific purchase_id."""
     purchase_id: int
     razorpay_order_id: str
@@ -1285,6 +1293,7 @@ async def nidaan_get_review_docs(purchase_id: int, request: Request):
 
 
 class NidaanReviewPayReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     """Create a Razorpay order for ₹499 review — payment first, review created after."""
     advisor_name: str
     advisor_phone: str
@@ -1299,6 +1308,7 @@ class NidaanReviewPayReq(BaseModel):
 
 
 class NidaanReviewVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
@@ -1837,6 +1847,7 @@ async def nidaan_subscribe_check(order_id: str, request: Request):
 # ── Nidaan: Verify inline-checkout payment ─────────────────────────────────────
 
 class NidaanVerifyPaymentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     razorpay_payment_id: str
     razorpay_order_id: str          # Razorpay order_id (for one-time order flow)
     razorpay_signature: str
@@ -1945,6 +1956,7 @@ async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request)
 # ── Nidaan: Verify recurring subscription payment ──────────────────────────────
 
 class NidaanVerifySubscriptionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     razorpay_payment_id: str
     razorpay_subscription_id: str
     razorpay_signature: str
@@ -2259,6 +2271,7 @@ async def nidaan_api_admin_reviews(
 
 
 class NidaanReviewStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_status: str
     note: str = ""
 
@@ -2287,6 +2300,7 @@ async def nidaan_api_admin_update_review(
 
 
 class NidaanClaimStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_status: str
     note: str = ""
 
@@ -2394,6 +2408,7 @@ async def ops_me(request: Request):
 
 
 class _StaffSavedNumbersReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = ""
 
 @app.post("/nidaan/ops/api/me/saved-numbers")
@@ -2418,12 +2433,14 @@ async def ops_me_saved_numbers(body: _StaffSavedNumbersReq, request: Request):
 # ── Staff management (super_admin only) ───────────────────────────────────────
 
 class CreateStaffReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str
     email: str
     password: str = Field(min_length=8)
     role: str
 
 class UpdateStaffReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
@@ -2536,6 +2553,7 @@ async def ops_get_claim(claim_id: int, request: Request):
 
 
 class OpsClaimAssign(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     staff_id: int
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/assign")
@@ -2572,6 +2590,7 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
 
 
 class OpsClaimStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_status: str
     note: str = ""
 
@@ -2637,6 +2656,7 @@ async def ops_list_review_requests(
 
 
 class OpsReviewStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_status: str
     note: str = ""
     findings_note: str = ""
@@ -2670,6 +2690,7 @@ async def ops_update_review_status(
 # ── Notes ─────────────────────────────────────────────────────────────────────
 
 class OpsAddNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     note: str
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/notes")
@@ -2692,6 +2713,7 @@ async def ops_get_notes(claim_id: int, request: Request):
 # ── Follow-ups ────────────────────────────────────────────────────────────────
 
 class OpsAddFollowup(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     due_date: str        # YYYY-MM-DD
     note: str = ""
 
@@ -2725,12 +2747,14 @@ async def ops_my_followups(request: Request, status: str = "pending"):
 # ── Advisor accounts (super_admin) ────────────────────────────────────────────
 
 class OpsCreateAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     owner_name: str
     email: str
     phone: str
     firm_name: str = ""
 
 class OpsUpdateAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     owner_name: Optional[str] = None
     firm_name: Optional[str] = None
     phone: Optional[str] = None
@@ -2911,6 +2935,7 @@ async def ops_refunds_list(request: Request, status: Optional[str] = None, limit
 
 
 class _ManualRefundReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     sub_id: int
     amount: Optional[int] = None  # rupees; defaults to full subscription amount
     reason: str = "manual_sa_override"
@@ -3090,6 +3115,7 @@ async def ops_escalations(request: Request):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _QuickTaskCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     title: str = Field(min_length=2, max_length=200)
     description: str = ""
     assigned_to_staff_id: Optional[int] = None
@@ -3100,11 +3126,13 @@ class _QuickTaskCreateReq(BaseModel):
 
 
 class _QuickTaskUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     status: Optional[str] = Field(None, pattern=r"^(open|in_progress|done|cancelled)$")
     assigned_to_staff_id: Optional[int] = None
 
 
 class _QuickTaskNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     note: str = Field(min_length=1, max_length=4000)
     parent_note_id: Optional[int] = None
 
@@ -3299,6 +3327,7 @@ def _task_visible_to_staff(task: dict, staff: dict) -> bool:
 
 
 class _TaskCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     claim_id: int
     title: str = Field(min_length=2, max_length=200)
     description: str = ""
@@ -3312,6 +3341,7 @@ class _TaskCreateReq(BaseModel):
 
 
 class _TaskUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     title: Optional[str] = Field(None, min_length=2, max_length=200)
     description: Optional[str] = None
     priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
@@ -3320,31 +3350,37 @@ class _TaskUpdateReq(BaseModel):
 
 
 class _TaskTransitionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     to_status: str
     note: str = ""
 
 
 class _TaskNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     note: str = Field(min_length=1, max_length=4000)
     is_internal: bool = True
     parent_note_id: Optional[int] = None  # 1-level reply threading
 
 
 class _TaskAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     assigned_to_staff_id: Optional[int] = None  # None = unassign
 
 
 class _TaskApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     approve: bool
     note: str = ""
 
 
 class _TaskQCReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     approve: bool
     note: str = ""
 
 
 class _StatusUpsertReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z][a-z0-9_]+$")
     label_en: str = Field(min_length=1, max_length=80)
     label_hi: str = ""
@@ -3360,6 +3396,7 @@ class _StatusUpsertReq(BaseModel):
 
 
 class _SystemFlagReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     flag_key: str = Field(min_length=2, max_length=60)
     flag_value: str
     description: str = ""
@@ -3655,6 +3692,7 @@ import biz_nidaan_notifications as nnot
 
 
 class _OfficialInstanceUpsertReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     instance_slot: int = Field(ge=1, le=3)
     evolution_instance: str = Field(min_length=2, max_length=80)
     display_name: str = ""
@@ -3662,6 +3700,7 @@ class _OfficialInstanceUpsertReq(BaseModel):
 
 
 class _SubscriberPrefsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     wa_opt_in: Optional[bool] = None
     email_enabled: Optional[bool] = None
     saved_numbers: Optional[bool] = None
@@ -3819,6 +3858,7 @@ async def nidaan_vcard():
 # =============================================================================
 
 class _WAAgentSettingsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     auto_reply: Optional[bool] = None
     business_hours: Optional[dict] = None
     takeover_keywords: Optional[List[str]] = None
@@ -4117,13 +4157,16 @@ async def _verify_csrf(request: Request, tenant_id: int = None):
 
 
 class SendOTPRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
 
 class VerifyOTPRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
     otp: str = Field(..., min_length=6, max_length=6)
 
 class RefreshTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     refresh_token: str
 
 
@@ -4324,9 +4367,11 @@ async def api_refresh_token(req: RefreshTokenRequest, request: Request):
 # ── Email OTP Login ──────────────────────────────────────────────────────────
 
 class SendEmailOTPRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
 
 class VerifyEmailOTPRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
     otp: str = Field(..., min_length=6, max_length=6)
 
@@ -4338,9 +4383,11 @@ class GoogleSignInRequest(BaseModel):
 # ── Account Recovery (lost access to email) ──────────────────────────────────
 
 class RecoverOptionsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
 
 class RecoverSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
     channel: str = Field(..., pattern=r"^(sms|telegram)$")
 
@@ -5230,6 +5277,7 @@ async def api_admin_stop_bot(tenant_id: int, _admin=Depends(auth.require_admin))
 # ── Admin: Create Firm (DEPRECATED) ─────────────────────────────────────────
 
 class CreateFirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     firm_name: str = Field(..., min_length=2, max_length=200)
     owner_name: str = Field(..., min_length=2, max_length=100)
     phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
@@ -5649,6 +5697,7 @@ async def sa_refund_retry(refund_id: int, sa=Depends(auth.require_superadmin)):
 
 
 class _SaManualRefundReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     amount: Optional[int] = None  # rupees; default = full latest payment
     reason: str = "sa_manual"
@@ -5695,6 +5744,7 @@ async def sa_affiliate_clawbacks_list(sa=Depends(auth.require_superadmin)):
 
 
 class _SettleClawbackReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     referral_id: int
     note: str = "Offset from next payout"
 
@@ -6596,6 +6646,7 @@ async def sa_export_affiliates(request: Request, sa=Depends(auth.require_superad
 # =============================================================================
 
 class BulkIdsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     ids: list[int] = Field(..., min_length=1, max_length=100)
 
 @app.post("/api/sa/tenants/bulk-activate")
@@ -6869,6 +6920,7 @@ async def sa_health_monitor_run(sa=Depends(auth.require_superadmin)):
 # =============================================================================
 
 class TicketCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     subject: str = Field(..., min_length=3, max_length=200)
     description: str = Field(..., min_length=10, max_length=5000)
     category: str = Field("general", pattern=r"^(general|billing|technical|bug|feature|other)$")
@@ -6994,6 +7046,7 @@ async def get_support_ticket(ticket_id: int, request: Request):
 
 
 class TicketReplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     message: str = Field(..., min_length=1, max_length=5000)
 
 @app.post("/api/support/tickets/{ticket_id}/reply")
@@ -7058,6 +7111,7 @@ async def sa_get_ticket(ticket_id: int, sa=Depends(auth.require_superadmin)):
 
 
 class SATicketUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     status: Optional[str] = Field(None, pattern=r"^(open|in_progress|resolved|closed)$")
     priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
     assigned_to: Optional[str] = Field(None, max_length=100)
@@ -7174,6 +7228,7 @@ async def affiliate_register(req: AffiliateRegisterRequest, request: Request):
 
 
 class AffiliateVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
     otp: str = Field(..., min_length=4, max_length=6)
 
@@ -7213,6 +7268,7 @@ async def affiliate_verify(req: AffiliateVerifyRequest, request: Request):
 
 
 class AffiliateLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
 
 
@@ -7244,6 +7300,7 @@ async def affiliate_login(req: AffiliateLoginRequest, request: Request):
 
 
 class AffiliateLoginVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
     otp: str = Field(..., min_length=4, max_length=6)
 
@@ -7545,6 +7602,7 @@ async def sa_affiliate_stats(sa=Depends(auth.require_superadmin)):
 
 
 class SACreateAffiliateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str = Field(..., min_length=2, max_length=100)
     phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
     email: str = Field("", max_length=200)
@@ -7569,6 +7627,7 @@ async def sa_create_affiliate(req: SACreateAffiliateRequest,
 
 
 class SAUpdateAffiliateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     phone: Optional[str] = Field(None, pattern=r"^[6-9]\d{9}$")
     email: Optional[str] = Field(None, max_length=200)
@@ -7697,6 +7756,7 @@ async def sa_payout_queue(sa=Depends(auth.require_superadmin)):
 
 
 class InitiatePayoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     affiliate_id: int
     amount: float = Field(..., gt=0)
     method: str = Field("upi", pattern=r"^(upi|bank)$")
@@ -7735,6 +7795,7 @@ async def sa_initiate_payout(req: InitiatePayoutRequest,
 
 
 class CompletePayoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     reference_id: Optional[str] = None
 
 
@@ -7774,6 +7835,7 @@ async def sa_reverse_commission(referral_id: int, reason: str = Query("chargebac
 # ── Affiliate self-service: update payout info ──────────────────────────────
 
 class AffiliatePayoutInfoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     upi_id: Optional[str] = Field(None, max_length=100)
     bank_account: Optional[str] = Field(None, max_length=30)
     ifsc_code: Optional[str] = Field(None, pattern=r"^[A-Z]{4}0[A-Z0-9]{6}$")
@@ -7817,6 +7879,7 @@ async def affiliate_get_payouts(request: Request):
 # ── Affiliate Support Tickets ──────────────────────────────────────────────
 
 class AffiliateTicketRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     subject: str = Field(..., min_length=3, max_length=200)
     message: str = Field(..., min_length=5, max_length=2000)
     category: str = Field("general", pattern=r"^(general|payout|commission|technical|other)$")
@@ -8543,6 +8606,7 @@ class CreateOrderRequest(BaseModel):
 
 
 class VerifyPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     plan: str = Field(..., pattern=r"^(individual|team|enterprise)$")
     razorpay_order_id: str
@@ -8551,6 +8615,7 @@ class VerifyPaymentRequest(BaseModel):
 
 
 class VerifySubscriptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     plan: str = Field(..., pattern=r"^(individual|team|enterprise)$")
     razorpay_payment_id: str
@@ -8964,6 +9029,7 @@ _WA_DISABLED_RESPONSE = JSONResponse(
 )
 
 class WhatsAppConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     wa_phone_id: str = Field("", max_length=50, pattern=r"^(\d+)?$")
     wa_access_token: str = Field("", max_length=500)
@@ -9036,6 +9102,7 @@ async def api_wa_verify_credentials(
 # ── Telegram Bot Token (per-tenant bot) ──
 
 class TelegramBotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     tg_bot_token: str = Field(..., min_length=30, max_length=100)
 
@@ -9116,6 +9183,7 @@ async def api_onboarding_telegram_bot(req: TelegramBotRequest, request: Request,
 
 
 class BrandingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     tagline: str = Field("", max_length=300)
     cta: str = Field("", max_length=300)
@@ -9519,6 +9587,7 @@ async def api_microsite_settings_get(tenant: dict = Depends(auth.require_owner))
 
 
 class MicrositeSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     slug: str | None = None
     bio: str | None = None
     primary_color: str | None = None
@@ -9638,6 +9707,7 @@ async def api_microsite_upload_photo(request: Request,
 
 
 class MicrositeLeadIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str
     phone: str
     city: str | None = ""
@@ -9770,6 +9840,7 @@ async def api_microsite_check_slug(request: Request, slug: str = Query(...),
 import biz_marketing as mkt
 
 class MarketingSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     enabled: Optional[bool] = None
     autopost_enabled: Optional[bool] = None
     autopost_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
@@ -9914,6 +9985,7 @@ async def api_marketing_library(
 
 
 class MarketingGenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     content_type: str = Field("tip", pattern=r"^(scenario_insurance|scenario_investment|tip|product_pitch|festival|custom)$")
     lang: str = Field("en", pattern=r"^(en|hi|mr)$")
     festival_date: Optional[str] = None
@@ -9981,6 +10053,7 @@ async def api_marketing_generate(
 
 # ── Content Calendar: Schedule ─────────────────────────────────────────────
 class MarketingScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     content_type: str = Field("tip", pattern=r"^(scenario_insurance|scenario_investment|tip|product_pitch|festival|custom)$")
     lang: str = Field("en", pattern=r"^(en|hi|mr)$")
     fire_at: str          # ISO datetime "YYYY-MM-DDTHH:MM"
@@ -10054,6 +10127,7 @@ async def api_marketing_schedule_delete(
 
 # ── Lead Segments ──────────────────────────────────────────────────────────
 class SegmentFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     stage: Optional[str] = None          # lead stage
     city: Optional[str] = None
     need_type: Optional[str] = None
@@ -10063,6 +10137,7 @@ class SegmentFilters(BaseModel):
 
 
 class MarketingSegmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str = Field(..., min_length=1, max_length=80)
     filters: SegmentFilters
 
@@ -10165,6 +10240,7 @@ async def api_marketing_segment_preview(
 
 
 class SegmentSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     content_id: int
     message: Optional[str] = None    # override body_text if provided
 
@@ -10275,6 +10351,7 @@ async def api_marketing_send_telegram(content_id: int,
 
 
 class MarketingDMRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     lead_ids: list[int] = Field(..., min_length=1, max_length=200)
     message: str = Field(..., min_length=1, max_length=1000)
     content_id: Optional[int] = None   # attach image from existing content
@@ -10347,11 +10424,13 @@ import biz_video as vid
 
 
 class VideoGenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     theme_id: str
     fmt: str = "square"    # "square" | "reels"
 
 
 class VideoCustomRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     topic: str = Field(..., min_length=5, max_length=200)
     fmt: str = Field("square", pattern=r"^(square|reels)$")
     lang: str = Field("en", pattern=r"^(en|hi)$")
@@ -11005,10 +11084,12 @@ def _empty_dashboard():
 # =============================================================================
 
 class WaSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., pattern=r"^(91)?[6-9]\d{9}$", description="Recipient phone (10-digit or 91XXXXXXXXXX)")
     message: str = Field(..., min_length=1, max_length=4096, description="Message text")
 
 class WaCalcShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., description="Recipient phone")
     client_name: str = Field("Client", description="Client name")
     calc_type: str = Field("general", description="Calculator type (inflation/hlv/retirement/emi/health/sip)")
@@ -11016,6 +11097,7 @@ class WaCalcShareRequest(BaseModel):
     report_url: str = Field("", description="URL to the generated PDF report")
 
 class WaGreetingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., description="Recipient phone")
     client_name: str = Field(..., description="Client name")
     greeting_type: str = Field("birthday", description="birthday or anniversary")
@@ -11401,12 +11483,14 @@ async def api_gdrive_sheet_import(
 
 
 class WhatsAppSetupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     sim_type: str = Field("dedicated", pattern=r"^(dedicated|personal)$",
                           description="dedicated = new Sarathi SIM | personal = agent's own number")
     display_name: str = Field("", max_length=80)
 
 
 class WhatsAppAcknowledgeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     accepted_personal_risk: bool = False
     accepted_no_bulk: bool = False
     accepted_compliance: bool = False
@@ -11600,6 +11684,7 @@ async def api_wa_v2_disconnect(request: Request,
 
 
 class WhatsAppPairingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = Field(..., min_length=10, max_length=15,
                        description="Phone number for pairing code (10-digit Indian or E.164)")
 
@@ -12385,6 +12470,7 @@ async def api_wa_v2_webhook(request: Request):
 # =============================================================================
 
 class CampaignCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     title: str = Field(..., min_length=2, max_length=200, description="Campaign title")
     message: str = Field(..., min_length=5, max_length=5000, description="Message template. Use {name} and {first_name} for personalization.")
     campaign_type: str = Field("custom", pattern=r"^(birthday|festival|announcement|promotion|custom)$", description="Type")
@@ -12507,6 +12593,7 @@ import biz_nurture as nurture
 
 
 class NurtureSequenceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str
     description: Optional[str] = ""
     trigger_event: str = "lead_stage_change"  # lead_stage_change | manual
@@ -12514,6 +12601,7 @@ class NurtureSequenceCreate(BaseModel):
 
 
 class NurtureSequenceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: Optional[str] = None
     description: Optional[str] = None
     trigger_event: Optional[str] = None
@@ -12522,6 +12610,7 @@ class NurtureSequenceUpdate(BaseModel):
 
 
 class NurtureStepCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     step_order: int
     delay_days: int = 0
     delay_hours: int = 0
@@ -12658,6 +12747,7 @@ async def api_nurture_test_tick(request: Request,
 
 
 class NurtureBulkEnrolReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     sequence_id: int
     lead_ids: list = []   # empty = enrol ALL active leads for this tenant
 
@@ -12715,6 +12805,7 @@ import biz_quotes as quotes
 
 
 class QuoteCompareTermReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     age: int
     sum_insured: int
     smoker: bool = False
@@ -12723,6 +12814,7 @@ class QuoteCompareTermReq(BaseModel):
 
 
 class QuoteCompareHealthReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     age: int
     sum_insured: int
     family_size: int = 1
@@ -12730,6 +12822,7 @@ class QuoteCompareHealthReq(BaseModel):
 
 
 class QuotePdfReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     product_type: str  # term | health | endowment | ulip | sip
     inputs: dict
     client_name: Optional[str] = "Client"
@@ -12737,18 +12830,21 @@ class QuotePdfReq(BaseModel):
 
 
 class QuoteCompareEndowmentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     age: int
     sum_insured: int
     term_years: int = 20
 
 
 class QuoteCompareUlipReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     age: int
     annual_investment: int
     term_years: int = 15
 
 
 class QuoteCompareSipReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     monthly_sip: int
     years: int = 10
 
@@ -14047,6 +14143,7 @@ async def api_ai_voice_suggestions(request: Request,
 # =============================================================================
 
 class NudgeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     lead_id: int
     target_agent_id: int
     nudge_type: str = Field("followup")  # followup, new_lead, renewal, custom
@@ -14054,6 +14151,7 @@ class NudgeRequest(BaseModel):
 
 
 class BroadcastNudgeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     message: str = Field(..., min_length=5, max_length=1000)
     agent_ids: Optional[List[int]] = None  # None = all active agents
 
@@ -14579,6 +14677,7 @@ async def api_nudge_suggestions(request: Request,
 # =============================================================================
 
 class ProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     email: Optional[str] = Field(None, max_length=100)
     phone: Optional[str] = Field(None, max_length=15)
@@ -14690,6 +14789,7 @@ async def api_update_profile(req: ProfileUpdateRequest, request: Request,
 
 
 class BrandingUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     brand_tagline: Optional[str] = Field(None, max_length=200)
     brand_cta: Optional[str] = Field(None, max_length=200)
     brand_phone: Optional[str] = Field(None, max_length=15)
@@ -14826,6 +14926,7 @@ async def api_public_branding(tenant_id: int):
 # =============================================================================
 
 class TriggerScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     scan_type: str  # birthday | anniversary | renewal | followup | nurture
 
 @app.post("/api/admin/trigger-scan")
@@ -14946,6 +15047,7 @@ async def api_admin_leads(stage: str = Query(None),
 
 
 class AdminAddLeadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str = Field(..., min_length=2, max_length=100)
     phone: Optional[str] = Field(None, max_length=15)
     email: Optional[str] = Field(None, max_length=100)
@@ -14988,6 +15090,7 @@ async def api_admin_add_lead(req: AdminAddLeadRequest, request: Request,
 
 
 class AdminEditLeadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: Optional[str] = Field(None, max_length=100)
     phone: Optional[str] = Field(None, max_length=15)
     email: Optional[str] = Field(None, max_length=100)
@@ -15070,6 +15173,7 @@ async def api_admin_change_stage(lead_id: int, request: Request,
 
 
 class ReassignLeadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_agent_id: int
 
 
@@ -15103,6 +15207,7 @@ async def api_admin_policies(status: str = Query(None),
 
 
 class AdminAddPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     lead_id: int
     policy_number: Optional[str] = Field(None, max_length=100)
     insurer: Optional[str] = Field(None, max_length=200)
@@ -15152,6 +15257,7 @@ async def api_admin_add_policy(req: AdminAddPolicyRequest, request: Request,
 
 
 class AdminEditPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     policy_number: Optional[str] = Field(None, max_length=100)
     insurer: Optional[str] = Field(None, max_length=200)
     plan_name: Optional[str] = Field(None, max_length=200)
@@ -15390,6 +15496,7 @@ async def api_admin_generate_invite(request: Request,
 
 
 class InviteAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     code: str = Field(..., min_length=4, max_length=20)
     name: str = Field(..., min_length=2, max_length=100)
     phone: str = Field("", max_length=15)
@@ -15472,6 +15579,7 @@ async def api_invite_validate(code: str, request: Request):
 # =============================================================================
 
 class PlanChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_plan: str = Field(..., description="New plan: individual, team, or enterprise")
 
 
@@ -15664,6 +15772,7 @@ async def api_delete_agent_photo(agent_id: int,
 
 
 class AgentTransferRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     from_agent_id: int
     to_agent_id: int
 
@@ -15687,6 +15796,7 @@ async def _require_team_plan(tenant_id: int) -> None:
 
 
 class AgentEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str = None
     phone: str = None
     email: str = None
@@ -15832,6 +15942,7 @@ async def api_remove_agent(agent_id: int, request: Request,
 # =============================================================================
 
 class RoleCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     role_slug: str = Field(..., min_length=2, max_length=40,
                            pattern=r"^[a-z0-9_]+$",
                            description="Unique slug for this role, e.g. 'senior_associate'")
@@ -15845,6 +15956,7 @@ class RoleCreateReq(BaseModel):
 
 
 class RoleUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     role_label: str = None
     role_label_hi: str = None
     permissions: dict = None
@@ -16205,6 +16317,7 @@ async def api_get_contact_pref(lead_id: int,
 
 
 class ContactPrefRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     max_messages_per_week: int = Field(3, ge=0, le=20)
     preferred_channel: str = Field("whatsapp")
     preferred_time: Optional[str] = Field(None)
@@ -16282,6 +16395,7 @@ async def api_get_tasks(request: Request,
 # ═══════════ SET FOLLOW-UP ON A LEAD ═══════════
 
 class FollowupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     type: str = Field("call")
     date: str = Field(...)
     time: Optional[str] = Field(None)
@@ -16388,6 +16502,7 @@ async def api_lead_timeline(lead_id: int, limit: int = 50,
 
 
 class NoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     note_text: str = Field(...)
     interaction_id: Optional[int] = Field(None)
     parent_note_id: Optional[int] = Field(None)
@@ -16454,6 +16569,7 @@ async def api_followup_done(lead_id: int, interaction_id: int,
 
 
 class FollowupEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     date: Optional[str] = Field(None)
     time: Optional[str] = Field(None)
     notes: Optional[str] = Field(None)
