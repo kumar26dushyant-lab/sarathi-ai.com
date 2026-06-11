@@ -836,11 +836,14 @@ if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-revi
   setTimeout(_initGoogle, 2500);
 })();
 
-// ── Show #get-reviewed section if anchored ────────────────────────────────────
+// ── Show review section if anchored (#get-reviewed or #review-section) ────────
 (function() {
-  if (location.hash.startsWith('#get-reviewed')) {
-    document.getElementById('login-section').style.display = 'none';
-    document.getElementById('review-section').style.display = 'flex';
+  const h = location.hash || '';
+  if (h.startsWith('#get-reviewed') || h.startsWith('#review-section')) {
+    const login = document.getElementById('login-section');
+    const review = document.getElementById('review-section');
+    if (login) login.style.display = 'none';
+    if (review) review.style.display = 'flex';
   }
 })();
 </script>
