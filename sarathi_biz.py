@@ -34,6 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
@@ -97,9 +98,14 @@ app = FastAPI(
 )
 
 # ── Rate Limiting ────────────────────────────────────────────────────────────
+# IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
+# to actually fire. Without it, the decorators are silently inert. Discovered
+# during Sprint E.2 hardening (2026-06-11) — every "rate limited" endpoint was
+# wide open until this line was added.
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -439,6 +445,7 @@ async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
 
 
 @app.post("/nidaan/api/signup")
+@limiter.limit("5/minute")
 async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -481,6 +488,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
 
 
 @app.post("/nidaan/api/login")
+@limiter.limit("10/minute")
 async def nidaan_api_login(body: NidaanLoginReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1491,6 +1499,7 @@ class NidaanSubscribeReq(BaseModel):
 
 
 @app.post("/nidaan/api/subscribe")
+@limiter.limit("5/minute")
 async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
     """Create a Razorpay ORDER (one-time) for an authenticated Nidaan account.
     Orders support UPI, cards, wallets, net banking — unlike subscriptions which block UPI.
@@ -1606,6 +1615,7 @@ async def nidaan_sarathi_access(request: Request):
 # ── Nidaan Razorpay Webhook ────────────────────────────────────────────────────
 
 @app.post("/nidaan/api/webhook")
+@limiter.limit("60/minute")
 async def nidaan_razorpay_webhook(request: Request):
     """Razorpay webhook for Nidaan events.
     Handles both legacy subscription events AND order payment.captured events.
@@ -1829,6 +1839,7 @@ class NidaanVerifyPaymentReq(BaseModel):
 
 
 @app.post("/nidaan/api/subscribe/verify")
+@limiter.limit("10/minute")
 async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request):
     """Verify Razorpay order payment signature, activate 90-day subscription, return new JWT."""
     import hmac as _hmac_mod, hashlib as _hs
@@ -1891,6 +1902,7 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
 # ── Nidaan: Create recurring subscription (quarterly auto-renew) ───────────────
 
 @app.post("/nidaan/api/subscribe/recurring")
+@limiter.limit("5/minute")
 async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request):
     """Create a Razorpay recurring subscription for quarterly Nidaan plans.
     Annual plans are not supported — use /nidaan/api/subscribe for those.
@@ -1935,6 +1947,7 @@ class NidaanVerifySubscriptionReq(BaseModel):
 
 
 @app.post("/nidaan/api/subscribe/recurring/verify")
+@limiter.limit("10/minute")
 async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, request: Request):
     """Verify Razorpay subscription payment signature, activate subscription, return new JWT."""
     if not _is_nidaan_host(request):
@@ -1978,6 +1991,7 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
 # ── Nidaan: Cancel subscription ────────────────────────────────────────────────
 
 @app.post("/nidaan/api/subscribe/cancel")
+@limiter.limit("5/minute")
 async def nidaan_subscribe_cancel(request: Request):
     """Cancel current Nidaan subscription + auto-refund if Policy A eligible.
 
@@ -2347,6 +2361,7 @@ class OpsLoginReq(BaseModel):
     password: str
 
 @app.post("/nidaan/ops/api/login")
+@limiter.limit("5/minute")
 async def ops_login(body: OpsLoginReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -5056,7 +5071,8 @@ async def api_logout():
 
 
 @app.get("/api/auth/telegram-login")
-async def api_telegram_login(token: str = None):
+@limiter.limit("10/minute")
+async def api_telegram_login(request: Request, token: str = None):
     """Validate a Telegram-generated login token and redirect to dashboard with session."""
     if not token:
         return HTMLResponse(
@@ -5827,7 +5843,8 @@ async def sa_change_plan(tenant_id: int, plan: str = Query(...), sa=Depends(auth
 
 
 @app.post("/api/sa/tenant/{tenant_id}/force-plan-change")
-async def sa_force_plan_change(tenant_id: int, plan: str = Query(...),
+@limiter.limit("5/minute")
+async def sa_force_plan_change(tenant_id: int, request: Request, plan: str = Query(...),
                                 sa=Depends(auth.require_superadmin)):
     """SA: Force-apply a plan change immediately, clearing any pending schedule."""
     tenant = await db.get_tenant(tenant_id)
@@ -6003,7 +6020,8 @@ async def sa_bots(sa=Depends(auth.require_superadmin)):
 
 
 @app.post("/api/sa/tenant/{tenant_id}/bot/restart")
-async def sa_restart_bot(tenant_id: int, sa=Depends(auth.require_superadmin)):
+@limiter.limit("5/minute")
+async def sa_restart_bot(tenant_id: int, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Restart a tenant bot."""
     tenant = await db.get_tenant(tenant_id)
     if not tenant:
@@ -6029,7 +6047,8 @@ async def sa_stop_bot(tenant_id: int, sa=Depends(auth.require_superadmin)):
 
 
 @app.post("/api/sa/restart-server")
-async def sa_restart_server(sa=Depends(auth.require_superadmin)):
+@limiter.limit("2/minute")
+async def sa_restart_server(request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Restart the entire server process (re-reads all code from disk)."""
     await db.add_audit_log(0, None, "sa_server_restart", "Full server restart by super admin")
     logger.warning("🔄 Full server restart requested by SA — spawning new process...")
@@ -6118,7 +6137,8 @@ async def sa_edit_agent(agent_id: int, request: Request, sa=Depends(auth.require
 
 
 @app.post("/api/sa/agent/{agent_id}/toggle")
-async def sa_toggle_agent(agent_id: int, sa=Depends(auth.require_superadmin)):
+@limiter.limit("10/minute")
+async def sa_toggle_agent(agent_id: int, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Toggle agent active/inactive."""
     agent = await db.get_agent_by_id(agent_id)
     if not agent:
@@ -6567,7 +6587,8 @@ class BulkIdsRequest(BaseModel):
     ids: list[int] = Field(..., min_length=1, max_length=100)
 
 @app.post("/api/sa/tenants/bulk-activate")
-async def sa_bulk_activate(body: BulkIdsRequest, sa=Depends(auth.require_superadmin)):
+@limiter.limit("2/minute")
+async def sa_bulk_activate(body: BulkIdsRequest, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Activate multiple tenants at once."""
     ok, fail = [], []
     for tid in body.ids:
@@ -6584,7 +6605,8 @@ async def sa_bulk_activate(body: BulkIdsRequest, sa=Depends(auth.require_superad
 
 
 @app.post("/api/sa/tenants/bulk-deactivate")
-async def sa_bulk_deactivate(body: BulkIdsRequest, sa=Depends(auth.require_superadmin)):
+@limiter.limit("2/minute")
+async def sa_bulk_deactivate(body: BulkIdsRequest, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Deactivate multiple tenants at once."""
     ok, fail = [], []
     for tid in body.ids:
@@ -6629,7 +6651,8 @@ async def sa_bulk_delete(body: BulkIdsRequest, request: Request,
 
 
 @app.post("/api/sa/tenants/bulk-plan")
-async def sa_bulk_change_plan(body: BulkIdsRequest, plan: str = Query(...),
+@limiter.limit("2/minute")
+async def sa_bulk_change_plan(body: BulkIdsRequest, request: Request, plan: str = Query(...),
                               sa=Depends(auth.require_superadmin)):
     """SA: Change plan for multiple tenants at once."""
     valid_plans = ('individual', 'team', 'enterprise')
@@ -6656,7 +6679,8 @@ async def sa_bulk_change_plan(body: BulkIdsRequest, plan: str = Query(...),
 # =============================================================================
 
 @app.post("/api/sa/tenant/{tenant_id}/impersonate")
-async def sa_impersonate_tenant(tenant_id: int, sa=Depends(auth.require_superadmin)):
+@limiter.limit("5/minute")
+async def sa_impersonate_tenant(tenant_id: int, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Get a short-lived access token to view dashboard as tenant owner.
     Token has 1-hour expiry and is marked as impersonation session."""
     tenant = await db.get_tenant(tenant_id)
@@ -6691,7 +6715,8 @@ async def sa_impersonate_tenant(tenant_id: int, sa=Depends(auth.require_superadm
 # =============================================================================
 
 @app.post("/api/sa/affiliate/{affiliate_id}/impersonate")
-async def sa_impersonate_affiliate(affiliate_id: int, sa=Depends(auth.require_superadmin)):
+@limiter.limit("5/minute")
+async def sa_impersonate_affiliate(affiliate_id: int, request: Request, sa=Depends(auth.require_superadmin)):
     """SA: Get a short-lived affiliate JWT to view partner dashboard as this affiliate."""
     aff = await db.get_affiliate(affiliate_id)
     if not aff:
@@ -6741,7 +6766,8 @@ async def sa_resolve_event(event_id: int, sa=Depends(auth.require_superadmin)):
 
 
 @app.post("/api/sa/events/bulk-resolve")
-async def sa_bulk_resolve_events(body: BulkIdsRequest,
+@limiter.limit("5/minute")
+async def sa_bulk_resolve_events(body: BulkIdsRequest, request: Request,
                                  sa=Depends(auth.require_superadmin)):
     """SA: Resolve multiple events at once."""
     count = await db.bulk_resolve_system_events(body.ids)
