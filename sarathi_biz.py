@@ -31,7 +31,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, Depends, HTTPException, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
@@ -383,6 +383,7 @@ async def nidaan_logout(request: Request):
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class NidaanSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     owner_name: str
     email: str
     phone: str
@@ -393,6 +394,7 @@ class NidaanSignupReq(BaseModel):
 
 
 class NidaanLoginReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
     email: str
     password: str
 
@@ -421,6 +423,7 @@ class NidaanVerifyOTPReq(BaseModel):
 
 
 class NidaanGoogleReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     credential: str = Field(..., min_length=10)
     plan: str = "free"  # only used during signup
 
@@ -629,6 +632,7 @@ async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request)
 # ── Password reset via OTP (Nidaan) ──────────────────────────────────────────
 
 class NidaanResetPasswordReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str
     otp: str
     new_password: str = Field(..., min_length=8)
@@ -1495,6 +1499,7 @@ async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
 # ── Razorpay Subscription (Nidaan) ────────────────────────────────────────────
 
 class NidaanSubscribeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     plan: str  # silver | gold | platinum
 
 
@@ -2114,6 +2119,7 @@ async def nidaan_subscribe_cancel(request: Request):
 # ── Nidaan: Update profile ─────────────────────────────────────────────────────
 
 class NidaanProfileUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     owner_name: Optional[str] = None
     firm_name: Optional[str] = None
     phone: Optional[str] = None
@@ -2142,6 +2148,7 @@ async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
 # ── Nidaan: Change password ────────────────────────────────────────────────────
 
 class NidaanChangePasswordReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     current_password: str
     new_password: str = Field(min_length=8)
 
@@ -2357,6 +2364,7 @@ async def nidaan_ops_page(request: Request):
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 class OpsLoginReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
     email: str
     password: str
 
@@ -4323,6 +4331,7 @@ class VerifyEmailOTPRequest(BaseModel):
     otp: str = Field(..., min_length=6, max_length=6)
 
 class GoogleSignInRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     credential: str = Field(..., min_length=10)
 
 
@@ -4336,6 +4345,7 @@ class RecoverSendRequest(BaseModel):
     channel: str = Field(..., pattern=r"^(sms|telegram)$")
 
 class RecoverVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     email: str = Field(..., min_length=5, max_length=254)
     channel: str = Field(..., pattern=r"^(sms|telegram)$")
     otp: str = Field(..., min_length=6, max_length=6)
@@ -4809,6 +4819,7 @@ async def api_recover_verify(req: RecoverVerifyRequest, request: Request):
 # ── Google Sign-In ───────────────────────────────────────────────────────────
 
 class GoogleSignUpRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     credential: str = Field(..., min_length=10)
     plan: str = Field("individual", pattern=r"^(individual|team|enterprise)$")
     referral_code: str = ""
@@ -5278,6 +5289,7 @@ async def nidaan_admins_page(request: Request):
 
 
 class SALoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
     phone: str
     password: str
 
@@ -7108,6 +7120,7 @@ async def partner_page():
 
 
 class AffiliateRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     name: str = Field(..., min_length=2, max_length=100)
     phone: str = Field("", max_length=15)  # optional
     email: str = Field(..., min_length=5, max_length=200)
@@ -8368,6 +8381,7 @@ async def demo_page():
 # =============================================================================
 
 class SignupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     firm_name: str = Field(..., min_length=2, max_length=200)
     owner_name: str = Field(..., min_length=2, max_length=100)
     phone: str = Field("", max_length=15)  # optional — email is primary
@@ -8523,6 +8537,7 @@ async def api_signup(req: SignupRequest, request: Request):
 # =============================================================================
 
 class CreateOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     tenant_id: int
     plan: str = Field(..., pattern=r"^(individual|team|enterprise)$")
 
@@ -8783,6 +8798,7 @@ async def api_payment_plans():
 # =============================================================================
 
 class CancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
     reason: str = ""
 
 @app.post("/api/subscription/cancel")
