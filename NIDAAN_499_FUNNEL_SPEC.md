@@ -146,40 +146,43 @@ fallback reminders).
 > India (DPDP Act 2023) data-protection rules — no leaks, no sharing, and your
 > files are securely destroyed after your case is resolved."*
 
-**1. Health / Medical (the "hospital case")** — prove treatment was necessary & covered
-- `rejection_letter` — *The "No" letter*: the official rejection / partial-payment letter. *(Some insurers send by default, some only on request.)*
-- `policy_document` — *The "rule book"*: your policy with terms — especially the Exclusions page.
-- `discharge_summary` — *The hospital story*: the discharge summary (the single most important hospital paper).
-- `itemized_bills` — *The money list*: original itemized bills (room rent, medicines, doctor fees shown separately).
-- `prior_medical` *(conditional)* — *Proof of history*: if they allege a "pre-existing disease," old medical files / a doctor's certificate from before the policy.
+Labels use the **real document names people actually say** (primary), with a
+short plain-language hint + "why" for trust. Doc `key` is the stable internal id.
 
-**2. Life (the "death or maturity case")** — prove cause is covered & nothing was hidden
-- `decision_letter` — *The "No" letter*: the insurer's decision letter.
-- `policy_bond` — *The "rule book"*: the original policy bond.
-- `death_certificate` — *The official record*: Municipal Corporation death certificate.
-- `cause_of_death` — *The medical link*: hospital death summary / "cause of death" certificate.
-- `proposal_form` — *The disclosure proof*: original proposal form + past medical history (proves truthful disclosure at purchase).
+**1. Health / Medical** — prove treatment was necessary & covered
+- `rejection_letter` — **Rejection / Underpaid Settlement Letter** — the insurer's letter saying no or paying less. *(Some insurers send by default, some only on request.)*
+- `policy_document` — **Policy Document (with T&C page) / Policy Copy** — especially the terms & exclusions page.
+- `discharge_summary` — **Discharge Summary / Discharge Documents** — the hospital's discharge paper (the single most important hospital document).
+- `itemized_bills` — **Itemised Hospital Bills** — original bills with room rent, medicines, doctor fees shown separately.
+- `prior_medical` *(conditional)* — **Past Medical Records / Doctor's Certificate** — only if a "pre-existing disease" is alleged; records from before the policy started.
 
-**3. Property / Fire (the "asset loss case")** — prove the loss happened & the amount is right
-- `rejection_or_survey_letter` — *The "No" letter*: rejection / surveyor's assessment letter.
-- `policy_schedule` — *The "rule book"*: schedule showing Sum Insured (building + contents).
-- `incident_proof` — *The incident proof*: FIR (fire/theft) or Fire Brigade report.
-- `damage_evidence` — *The damage evidence*: photos/videos taken right after, before cleanup.
-- `purchase_bills` — *The purchase proof*: original bills/invoices for damaged items (proves value).
-- `surveyor_report` — *The surveyor's report*: what the insurer's surveyor wrote after visiting (needed to contest underpayment).
+**2. Life** — prove cause is covered & nothing was hidden
+- `decision_letter` — **Rejection / Claim Decision Letter** — the insurer's decision letter.
+- `policy_bond` — **Original Policy Bond / Policy Document** — the policy with its terms.
+- `death_certificate` — **Death Certificate** — issued by the Municipal Corporation.
+- `cause_of_death` — **Cause-of-Death Certificate / Hospital Death Summary** — from the attending doctor/hospital.
+- `proposal_form` — **Proposal Form (Application) + Past Medical History** — proves everything was disclosed truthfully at purchase.
 
-**4. Marine / Transit (the "goods damage case")** — prove damage in transit
-- `rejection_letter` — *The "No" letter*: rejection for damage/shortage.
-- `marine_policy` — *The "rule book"*: Marine Policy / Open Cover certificate.
-- `transit_papers` — *The paper trail*: Bill of Lading, Packing List, Invoices.
-- `survey_report` — *The loss proof*: survey report (at port/destination).
-- `delivery_protest` — *The delivery note*: protest/remark at delivery (e.g. damage noted on courier receipt).
+**3. Property / Fire** — prove the loss happened & the amount is right
+- `rejection_or_survey_letter` — **Rejection Letter / Surveyor's Assessment Letter**.
+- `policy_schedule` — **Policy Schedule** — showing the Sum Insured (building + contents).
+- `incident_proof` — **FIR Copy / Fire Brigade Report** — for fire or theft.
+- `damage_evidence` — **Photos / Videos of the Damage** — taken right after, before cleanup.
+- `purchase_bills` — **Purchase Bills / Invoices** — for the damaged items, to prove value.
+- `surveyor_report` — **Surveyor's Report** — what the insurer's surveyor wrote after visiting (needed to contest underpayment).
 
-**5. Travel (the "trip trouble case")** — prove the event happened as claimed
-- `refusal_letter` — *The "No" letter*: refusal of the travel claim.
-- `travel_certificate` — *The "rule book"*: the travel insurance certificate for the trip.
-- `trip_proof` — *The trip proof*: flight tickets, boarding passes, passport (entry/exit stamps).
-- `incident_proof` — *The incident proof*: airline delay certificate (delay) / Property Irregularity Report "PIR" (lost baggage) / original overseas medical bills (medical).
+**4. Marine / Transit** — prove damage happened in transit
+- `rejection_letter` — **Rejection Letter** — for the damage or shortage.
+- `marine_policy` — **Marine Policy / Open Cover Certificate**.
+- `transit_papers` — **Bill of Lading + Packing List + Invoices**.
+- `survey_report` — **Survey Report** — done at the port / destination.
+- `delivery_protest` — **Delivery Protest Note** — remark made at delivery (e.g. damage noted on the courier receipt).
+
+**5. Travel** — prove the event happened as claimed
+- `refusal_letter` — **Travel Claim Refusal Letter**.
+- `travel_certificate` — **Travel Insurance Certificate** — for that trip.
+- `trip_proof` — **Tickets / Boarding Passes / Passport** — with entry/exit stamps.
+- `incident_proof` — **Incident Proof** — Airline Delay Certificate (delay) / Property Irregularity Report "PIR" (lost baggage) / Overseas Medical Bills (medical).
 
 Engine notes:
 - `conditional` items are required only if a trigger applies (e.g. pre-existing
@@ -234,6 +237,18 @@ work, **audit and tighten**:
 - Per-plan **feature gating** (which features each tier unlocks).
 - Confirm caps can't be bypassed (server-side check on every claim create), and
   surface remaining quota in the advisor dashboard.
+
+**Shared document checklist (both funnels):** the review needs the **same
+documents regardless of who pays** — so the §8 checklist engine + the
+`pending_required_docs()` de-dup + the document-collection UX (dashboard +
+WhatsApp smart-chase) are **shared by both the ₹499 retail funnel and the advisor
+subscription funnel**. The only differences are:
+- **Payment gate**: ₹499 funnel asks for ₹499 once docs are complete; subscription
+  funnel consumes one of the advisor's monthly claim-cap slots instead (no
+  per-claim payment), gated by the cap check.
+- **Recipient routing**: advisor-managed claims follow the WhatsApp bifurcation
+  matrix (advisor + customer); retail self-service is single-party.
+Building the checklist engine once, used by both, is the non-duplication win.
 
 ---
 
