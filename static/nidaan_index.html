@@ -533,7 +533,7 @@ span.hi-inline{display:none}
 <!-- ══════════ COMPACT TOP RIBBON — quick price chips above hero ══════════ -->
 <div class="paths-strip">
   <div class="paths-strip-inner">
-    <a href="/nidaan/start#review-section" class="path-chip path-chip-499">
+    <a href="/nidaan/start#get-reviewed" class="path-chip path-chip-499">
       ⚡ <span class="en">One review</span><span class="hi" style="display:none">एक समीक्षा</span>
       <span class="divider">·</span>
       <span class="price">₹499</span>
@@ -960,7 +960,7 @@ span.hi-inline{display:none}
             <div style="font-size:3rem;font-weight:800;color:#b45309;font-family:'Poppins',sans-serif;line-height:1">₹499</div>
             <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="en">one-time · no commitment</div>
             <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="hi" style="display:none">एकमुश्त · कोई वचनबद्धता नहीं</div>
-            <button class="plan-cta" style="background:#f59e0b;color:#1c1917;font-weight:700" onclick="window.location='/nidaan/get-reviewed'">
+            <button class="plan-cta" style="background:#f59e0b;color:#1c1917;font-weight:700" onclick="window.location='/nidaan/start#get-reviewed'">
               <span class="en">Get Reviewed Now →</span><span class="hi" style="display:none">समीक्षा करवाएं →</span>
             </button>
           </div>
@@ -1187,8 +1187,8 @@ span.hi-inline{display:none}
           <span class="hi" style="display:none">क्या मैं अपने खुद के रिजेक्ट क्लेम के लिए इसका उपयोग कर सकता/सकती हूं?</span>
           <span class="faq-arrow">▾</span>
         </button>
-        <div class="faq-a en">Yes — scroll down to our "Get Your Claim Reviewed" section for a one-time ₹499 legal review, with no subscription required.</div>
-        <div class="faq-a hi" style="display:none">हाँ — "अपना क्लेम समीक्षा कराएं" सेक्शन में जाएं। एकमुश्त ₹499 में कानूनी समीक्षा, कोई सब्सक्रिप्शन नहीं।</div>
+        <div class="faq-a en">Yes — <a href="/nidaan/start#get-reviewed" style="color:var(--cyan-dark);font-weight:600">submit your claim for review here</a>. A one-time ₹499 legal review, no subscription required.</div>
+        <div class="faq-a hi" style="display:none">हाँ — <a href="/nidaan/start#get-reviewed" style="color:var(--cyan-dark);font-weight:600">यहाँ अपना क्लेम समीक्षा के लिए जमा करें</a>। एकमुश्त ₹499 में कानूनी समीक्षा, कोई सब्सक्रिप्शन नहीं।</div>
       </div>
 
       <div class="faq-item">
@@ -1260,7 +1260,7 @@ span.hi-inline{display:none}
         <li><a href="#how-it-works" class="en">How It Works</a><a href="#how-it-works" class="hi" style="display:none">कैसे काम करता है</a></li>
         <li><a href="#plans" class="en">Plans &amp; Pricing</a><a href="#plans" class="hi" style="display:none">प्लान और मूल्य</a></li>
         <li><a href="#faq" class="en">FAQ</a><a href="#faq" class="hi" style="display:none">FAQ</a></li>
-        <li><a href="/nidaan/start#review-section" class="en">Get Claim Reviewed</a><a href="/nidaan/start#review-section" class="hi" style="display:none">क्लेम समीक्षा</a></li>
+        <li><a href="/nidaan/start#get-reviewed" class="en">Get Claim Reviewed</a><a href="/nidaan/start#get-reviewed" class="hi" style="display:none">क्लेम समीक्षा</a></li>
         <li><a href="/nidaan/start" class="en">Get Started</a><a href="/nidaan/start" class="hi" style="display:none">शुरू करें</a></li>
         <li><a href="https://sarathi-ai.com" target="_blank" rel="noopener">Sarathi-AI CRM</a></li>
       </ul>
@@ -1390,7 +1390,38 @@ function triggerInstall() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
 }
+
+// ── Scroll up / down quick-nav buttons ──
+(function(){
+  var up = document.getElementById('scrollUpBtn');
+  var down = document.getElementById('scrollDownBtn');
+  if (!up || !down) return;
+  function atBottom(){ return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80); }
+  function update(){
+    var y = window.scrollY;
+    up.style.display = y > 300 ? 'flex' : 'none';
+    down.style.display = atBottom() ? 'none' : 'flex';
+  }
+  up.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
+  down.addEventListener('click', function(){ window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); });
+  window.addEventListener('scroll', update, {passive:true});
+  window.addEventListener('resize', update, {passive:true});
+  update();
+})();
 </script>
+
+<!-- Scroll quick-nav -->
+<style>
+  .scroll-navfab{position:fixed;right:16px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:.5rem}
+  .scroll-navfab button{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;background:var(--navy,#1e3a8a);color:#fff;font-size:1.2rem;line-height:1;box-shadow:0 4px 14px rgba(15,31,92,.35);transition:transform .15s,background .15s;align-items:center;justify-content:center}
+  .scroll-navfab button:hover{background:var(--cyan-dark,#0891b2);transform:translateY(-2px)}
+  @media(max-width:768px){.scroll-navfab{right:12px;bottom:14px}.scroll-navfab button{width:40px;height:40px;font-size:1.05rem}}
+</style>
+<div class="scroll-navfab" aria-hidden="true">
+  <button id="scrollUpBtn" title="Scroll to top" aria-label="Scroll to top" style="display:none">↑</button>
+  <button id="scrollDownBtn" title="Scroll to bottom" aria-label="Scroll to bottom">↓</button>
+</div>
+
 <script src="/static/nidaan_ui.js?v=2"></script>
 </body>
 </html>
