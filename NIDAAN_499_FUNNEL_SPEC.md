@@ -1,8 +1,7 @@
 # Nidaan ₹499 Claim-Review Funnel — "Value-First, Pay-to-Unlock" Redesign
 
-> Status: DISCUSSION (proposed 2026-06-12). Do NOT build until decisions in §6
-> are confirmed. This reshapes signup, dashboard, documents, payment, WhatsApp,
-> and the ops portal — so it is specced end-to-end (all pipes) before any code,
+> Status: **DECISIONS LOCKED 2026-06-12** (see §6). Ready to build in the §7
+> sequence — checklist engine first. Specced end-to-end (all pipes) before code,
 > per the first-pass-yield rule.
 
 ---
@@ -113,34 +112,128 @@ Building this touches every layer — each must be wired + tested, not assumed:
 
 ---
 
-## 6. Decisions needed before build (these determine correctness)
+## 6. Decisions — LOCKED (2026-06-12)
 
-1. **Required-document lists per claim type.** What documents are *required* to
-   complete a review for: health, motor, life, property, travel, other? (Give me
-   the lists, or approve a sensible default and we refine.) This is the engine of
-   both the de-dup and the pay-gate.
+1. **Required-document lists per claim type → see §8** (full templates with
+   everyday-language names + trust explanations, provided by user).
+2. **What "see the report" delivers → Option A**: payment unlocks the human
+   review ("under review, 48 hrs"). BUT the funnel must build **psychological
+   pull** so the user pictures the BIG outcome (their full claim recovered) and
+   ₹499 feels trivial — see §9 (conversion framing).
+3. **Replace or both → REPLACE.** One clean value-first funnel for the ₹499 path.
+4. **Unpaid-lead lifecycle → keep, nudge logically, then DPDP-delete with a
+   trust-building heads-up FIRST** (intimate before deletion; they may pay later)
+   — see §9 (notification cadence) + §10 (retention).
+5. **Advisors → separate.** Anyone choosing the **₹499 path uses this funnel**
+   (advisor or insured). **Advisors who subscribe** use the standard
+   **subscription funnel** (register multiple claims, monthly claim cap, feature
+   gating per plan). Also: audit + tighten the per-plan claim caps + feature
+   restrictions as part of this work.
 
-2. **What does "see the review report" deliver?** Two options:
-   - (a) **Payment unlocks the human review process** (no instant report). The
-     curiosity line is marketing; after paying they see "under review, 48 hrs."
-     *(This matches your description and is simplest + honest.)*
-   - (b) Payment also reveals an **instant auto-generated preliminary assessment**
-     (rules/AI) as the "report," with the human review following.
-   Which one? (I recommend (a) for launch — no risk of an AI saying something
-   wrong about a legal claim; (b) can come later as a teaser.)
+---
 
-3. **Replace or run both?** Do we **replace** the current pay-first flow entirely
-   with this value-first funnel, or keep pay-first available too? (I recommend
-   replace — one clean funnel.)
+## 8. Required-document checklist templates (the engine data)
 
-4. **Unpaid-lead lifecycle.** If they complete docs but don't pay within 48 hrs:
-   what happens? Nudge cadence (e.g., WhatsApp reminder at 24h, 48h)? After how
-   long do we archive the lead and (per DPDP) delete uploaded documents?
+Seeded into `nidaan_claim_doc_checklist` when a claim is created, by claim_type.
+Names use everyday language; each has a short "why" to build trust. A signed
+**"Document Receipt Checklist"** is generated so the user sees what's "in the bag"
+vs "still missing" — and the dashboard + WhatsApp automation smart-chase only the
+**missing** items (people submit in parts, so the chase must be incremental, with
+fallback reminders).
 
-5. **Advisors in this funnel.** Does the same free-first funnel apply when an
-   **advisor** submits on a client's behalf, or do advisors stay on the
-   subscription model? (Likely: retail insured = this funnel; advisors =
-   subscription. Confirm.)
+> Trust line shown alongside every upload ask (en/hi/mr):
+> *"🔒 Your documents are used only to fight your claim. We follow Government of
+> India (DPDP Act 2023) data-protection rules — no leaks, no sharing, and your
+> files are securely destroyed after your case is resolved."*
+
+**1. Health / Medical (the "hospital case")** — prove treatment was necessary & covered
+- `rejection_letter` — *The "No" letter*: the official rejection / partial-payment letter. *(Some insurers send by default, some only on request.)*
+- `policy_document` — *The "rule book"*: your policy with terms — especially the Exclusions page.
+- `discharge_summary` — *The hospital story*: the discharge summary (the single most important hospital paper).
+- `itemized_bills` — *The money list*: original itemized bills (room rent, medicines, doctor fees shown separately).
+- `prior_medical` *(conditional)* — *Proof of history*: if they allege a "pre-existing disease," old medical files / a doctor's certificate from before the policy.
+
+**2. Life (the "death or maturity case")** — prove cause is covered & nothing was hidden
+- `decision_letter` — *The "No" letter*: the insurer's decision letter.
+- `policy_bond` — *The "rule book"*: the original policy bond.
+- `death_certificate` — *The official record*: Municipal Corporation death certificate.
+- `cause_of_death` — *The medical link*: hospital death summary / "cause of death" certificate.
+- `proposal_form` — *The disclosure proof*: original proposal form + past medical history (proves truthful disclosure at purchase).
+
+**3. Property / Fire (the "asset loss case")** — prove the loss happened & the amount is right
+- `rejection_or_survey_letter` — *The "No" letter*: rejection / surveyor's assessment letter.
+- `policy_schedule` — *The "rule book"*: schedule showing Sum Insured (building + contents).
+- `incident_proof` — *The incident proof*: FIR (fire/theft) or Fire Brigade report.
+- `damage_evidence` — *The damage evidence*: photos/videos taken right after, before cleanup.
+- `purchase_bills` — *The purchase proof*: original bills/invoices for damaged items (proves value).
+- `surveyor_report` — *The surveyor's report*: what the insurer's surveyor wrote after visiting (needed to contest underpayment).
+
+**4. Marine / Transit (the "goods damage case")** — prove damage in transit
+- `rejection_letter` — *The "No" letter*: rejection for damage/shortage.
+- `marine_policy` — *The "rule book"*: Marine Policy / Open Cover certificate.
+- `transit_papers` — *The paper trail*: Bill of Lading, Packing List, Invoices.
+- `survey_report` — *The loss proof*: survey report (at port/destination).
+- `delivery_protest` — *The delivery note*: protest/remark at delivery (e.g. damage noted on courier receipt).
+
+**5. Travel (the "trip trouble case")** — prove the event happened as claimed
+- `refusal_letter` — *The "No" letter*: refusal of the travel claim.
+- `travel_certificate` — *The "rule book"*: the travel insurance certificate for the trip.
+- `trip_proof` — *The trip proof*: flight tickets, boarding passes, passport (entry/exit stamps).
+- `incident_proof` — *The incident proof*: airline delay certificate (delay) / Property Irregularity Report "PIR" (lost baggage) / original overseas medical bills (medical).
+
+Engine notes:
+- `conditional` items are required only if a trigger applies (e.g. pre-existing
+  disease alleged); the ops/legal reviewer can toggle an item required/not.
+- The checklist is the single source of truth: dashboard banner + WhatsApp chase
+  + pay-gate all read `pending_required_docs(claim_id)`.
+
+---
+
+## 9. Conversion framing + notification logic (anti-spam, trust-first)
+
+**Psychological pull (Option A done right):** throughout the funnel, anchor on the
+BIG outcome, not the ₹499. Examples (en/hi/mr templates):
+- After docs complete: *"Your claim looks strong enough to fight. People in cases
+  like yours have recovered their FULL claim amount. Unlock your expert review for
+  just ₹499 — a tiny step toward what's rightfully yours."*
+- Make ₹499 feel trivial vs the claim value: show *"Disputed amount: ₹X,XX,XXX"*
+  next to *"Review: ₹499"*.
+- Urgency without pressure: *"Insurers count on people giving up. Don't leave your
+  money on the table."*
+
+**Payment-notification cadence (must NOT trigger spam reports):**
+- Docs complete → **1** "unlock your review" message (dashboard + WhatsApp) with a
+  one-tap payment link, and the report is delivered on WhatsApp after payment.
+- If unpaid: **at most** a gentle reminder at **~24h** and **~48h** (2 nudges
+  total), each with the quick-pay link. Then **stop** — no more payment nudges.
+- Every nudge carries an easy opt-out ("Reply STOP"). Respect STOP immediately.
+- All nudges are rate-capped by the existing WhatsApp caps + quiet hours.
+
+**Quick-pay link:** a tokenized, expiring deep link to the Razorpay checkout for
+that claim, so payment is one tap from WhatsApp; report auto-delivered on success.
+
+---
+
+## 10. DPDP retention + trust (unpaid leads)
+
+- Keep an unpaid lead's data while it's "live." If no payment after the nudge
+  window + a grace period, send a **heads-up**: *"We'll securely delete the
+  documents you shared for your claim in N days as per data-protection rules. If
+  you'd still like us to review it, you can unlock anytime here: <link>."*
+- After the grace period with no action → **securely delete uploaded documents**
+  (DPDP), keep only minimal lead metadata (or fully anonymize) per policy.
+- This heads-up both honours DPDP and is a final, trust-building re-engagement.
+
+---
+
+## 11. Advisor subscription funnel (separate track — audit + tighten)
+
+Advisors who subscribe (not ₹499) keep the subscription model. As part of this
+work, **audit and tighten**:
+- Per-plan **monthly claim caps** (Silver/Gold/Platinum) — enforce server-side.
+- Per-plan **feature gating** (which features each tier unlocks).
+- Confirm caps can't be bypassed (server-side check on every claim create), and
+  surface remaining quota in the advisor dashboard.
 
 ---
 
