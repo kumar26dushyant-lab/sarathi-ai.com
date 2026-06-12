@@ -1016,6 +1016,25 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_nidaan_claims_created
                 ON nidaan_claims(created_at);
 
+            -- Required-document checklist per claim (₹499 funnel spine).
+            -- One row per required/optional document; drives cross-channel
+            -- de-dup (dashboard + WhatsApp) and the pay-gate. See
+            -- biz_nidaan_doc_checklist.py + NIDAAN_499_FUNNEL_SPEC.md §8.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_doc_checklist (
+                claim_id          INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                doc_key           TEXT NOT NULL,
+                required          INTEGER DEFAULT 1,
+                conditional       INTEGER DEFAULT 0,
+                received          INTEGER DEFAULT 0,
+                received_via      TEXT,            -- 'dashboard' | 'whatsapp'
+                received_doc_id   INTEGER,         -- FK to nidaan_documents
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, doc_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_doc_checklist_claim
+                ON nidaan_claim_doc_checklist(claim_id);
+
             -- Claim status history
             CREATE TABLE IF NOT EXISTS nidaan_claim_status_log (
                 log_id            INTEGER PRIMARY KEY AUTOINCREMENT,
