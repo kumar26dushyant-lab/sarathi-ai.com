@@ -833,13 +833,23 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    # Server-side subscription gate — do not rely on client-side lock alone
-    _sub_check = await nidaan.get_active_subscription(payload["sub"])
-    _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
-    if not _sub_check and not (_per_claim_check and _per_claim_check.get("status") == "paid"):
-        raise HTTPException(status_code=402, detail="Active subscription required to submit a claim. Please subscribe at nidaanpartner.com")
     if not body.claim_type or not body.insured_name or not body.insured_phone:
         raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
+    # ₹499 value-first funnel: determine the payment path.
+    #   • Active subscription  → 'subscription' (consumes quota, review starts now)
+    #   • Paid ₹499 per-claim  → 'paid'         (review starts now)
+    #   • Neither              → 'unpaid_lead'  → FREE submission; the claim is a
+    #       lead awaiting ₹499. Review does NOT start until payment (no auto-task,
+    #       no legal notification). The lead is still recorded + visible in ops.
+    _sub_check = await nidaan.get_active_subscription(payload["sub"])
+    _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
+    _is_paid = bool(_per_claim_check and _per_claim_check.get("status") == "paid")
+    if _sub_check:
+        _pay_status, _skip_elig = "subscription", False
+    elif _is_paid:
+        _pay_status, _skip_elig = "paid", False
+    else:
+        _pay_status, _skip_elig = "unpaid_lead", True
     claim_id, reason = await nidaan.submit_claim(
         account_id=payload["sub"],
         user_id=None,
@@ -854,9 +864,22 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         notes_from_agent=body.notes_from_agent,
         intermediary_code=body.intermediary_code,
         intermediary_name=body.intermediary_name,
+        payment_status=_pay_status,
+        skip_eligibility=_skip_elig,
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
+    # Seed the required-document checklist for this claim (all paths) — the spine
+    # of the de-dup + pay-gate. Non-fatal if it fails.
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.seed_checklist_for_claim(claim_id, body.claim_type)
+    except Exception as _ce:
+        logger.warning("checklist seed failed for claim %s: %s", claim_id, _ce)
+    # Unpaid leads: stop here. No review task, no legal notification — the review
+    # only starts after the ₹499 is paid (handled in the payment-verify step).
+    if _pay_status == "unpaid_lead":
+        return {"claim_id": claim_id, "status": "lead", "payment_status": "unpaid_lead"}
     # Phase 3+4: auto-create initial review task + fan out claim-filed notification.
     try:
         _create_flag = await ntasks.get_flag("auto_create_initial_task", "1")

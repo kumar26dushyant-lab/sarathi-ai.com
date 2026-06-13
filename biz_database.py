@@ -1173,6 +1173,14 @@ async def init_db():
             # where the customer may prefer a different language than the advisor.
             "ALTER TABLE nidaan_subscriber_prefs ADD COLUMN comm_lang TEXT DEFAULT 'en'",
             "ALTER TABLE nidaan_claims ADD COLUMN comm_lang TEXT DEFAULT ''",
+            # ₹499 value-first funnel: how this claim is paid for.
+            #   'unpaid_lead'  — free submission, awaiting ₹499 (the new funnel)
+            #   'paid'         — ₹499 one-time review paid
+            #   'subscription' — covered by an advisor subscription
+            # DEFAULT 'paid' so all PRE-EXISTING claims (which were gated behind
+            # payment/subscription before this column existed) are correctly
+            # treated as paid; new claims set the value explicitly in submit_claim.
+            "ALTER TABLE nidaan_claims ADD COLUMN payment_status TEXT DEFAULT 'paid'",
         ]
         for m in nidaan_migrations:
             try:

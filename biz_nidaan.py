@@ -441,6 +441,8 @@ async def submit_claim(
     notes_from_agent: str = "",
     intermediary_code: str = "",
     intermediary_name: str = "",
+    payment_status: str = "subscription",
+    skip_eligibility: bool = False,
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -449,10 +451,18 @@ async def submit_claim(
 
     intermediary_code/intermediary_name: as printed on the policy. Required at
     intake for legal correspondence (IRDAI compliance).
+
+    payment_status: 'unpaid_lead' | 'paid' | 'subscription' — the ₹499 funnel
+        path. Persisted on the claim.
+    skip_eligibility: when True (free-lead funnel) the quota/subscription
+        eligibility check is skipped — a free submission is always allowed; the
+        ₹499 is collected later. Quota increment + purchase-link below are
+        naturally skipped too (no subscription, no purchase).
     """
-    allowed, reason = await can_submit_claim(account_id)
-    if not allowed:
-        return None, reason
+    if not skip_eligibility:
+        allowed, reason = await can_submit_claim(account_id)
+        if not allowed:
+            return None, reason
 
     type_specific_json = json.dumps(type_specific or {})
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -461,12 +471,13 @@ async def submit_claim(
                (account_id, user_id, claim_type, insured_name, insured_phone,
                 insured_email, insurer_name, policy_no, disputed_amount,
                 claim_event_date, type_specific, notes_from_agent,
-                intermediary_code, intermediary_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                intermediary_code, intermediary_name, payment_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, type_specific_json, notes_from_agent,
-             (intermediary_code or "").strip(), (intermediary_name or "").strip()),
+             (intermediary_code or "").strip(), (intermediary_name or "").strip(),
+             payment_status),
         )
         claim_id = cur.lastrowid
         await conn.execute(
