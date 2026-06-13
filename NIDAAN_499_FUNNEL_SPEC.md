@@ -132,6 +132,53 @@ Building this touches every layer — each must be wired + tested, not assumed:
 
 ---
 
+## 7c. Refinements locked 2026-06-13 (entry, WhatsApp parity, SLA, superadmin)
+
+**Entry wording (hide the price).** Homepage entry buttons (top ribbon, hero) say
+**"Check if you have a case — Free submission"** — NOT "₹499". This is deliberate
+and honest: *submission* is free; the ₹499 unlocks the report. Clicking → the
+signup form (no price shown).
+
+**Signup page = hope/hook real estate.** The signup page has room — use it for
+the big-picture framing (success rate, "recover your full claim", reassurance)
+so the user is emotionally invested before they reach the dashboard.
+
+**Homepage transparency.** NO ₹499 banner at the top of the homepage. BUT the
+**plan section keeps the ₹499 one-time-review line** for transparency — and it
+follows the **same** funnel (its button also → the free-submission signup flow,
+already unified to one destination).
+
+**WhatsApp parity (critical — people won't return to the dashboard).** Everything
+the dashboard says/does, WhatsApp mirrors:
+- As soon as documents are in + the dashboard is created → send the **hope/hook on
+  WhatsApp too**: *"Your claim looks strong enough to fight 💪. Disputed amount:
+  ₹X,XX,XXX — your expert review is just ₹499. Don't leave your money on the table."*
+- The **Pay ₹499** ask appears on WhatsApp with a **one-tap pay link** (pay without
+  opening the dashboard).
+- After payment, the **report is delivered on WhatsApp** (and dashboard) — tell them
+  up front *"you'll get your report right here on WhatsApp"* so it feels effortless.
+- Every dashboard notification/status update also fires on WhatsApp (single
+  `dispatch()` per event → both channels, language-aware).
+- **Non-payer trust track:** if they don't pay, switch to the trust/data-deletion
+  messaging (§10) — *"we'll securely delete your documents per DPDP… you can still
+  unlock anytime."* Builds goodwill for a future return.
+
+**SLA = 48 BUSINESS hours (exclude Sat & Sun).** The "48 hours" promised to paid
+customers is **business** hours — the SLA clock skips weekends. All paid-customer
+messaging uses business-hour wording, and the ops SLA timer computes against a
+business-day calendar (not raw 48h).
+
+**Superadmin / ops visibility (end-to-end wiring — must be verified):**
+- A claim **submitted but not paid** is visible in the **superadmin + ops portal
+  as a Lead** (`lead_ready_unpaid` etc.) the moment it's created — not only after
+  payment.
+- On payment → status flips to **`paid_under_review`**, the **48-business-hour SLA
+  starts**, and SA + admin get an assignment notification; the case is prioritized.
+- This pipe (signup → unpaid lead in superadmin → pay → converts → SLA + notify)
+  is part of the build and gets an **end-to-end test**, not assumed.
+
+---
+
 ## 8. Required-document checklist templates (the engine data)
 
 Seeded into `nidaan_claim_doc_checklist` when a claim is created, by claim_type.
