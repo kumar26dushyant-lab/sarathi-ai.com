@@ -1181,6 +1181,8 @@ async def init_db():
             # payment/subscription before this column existed) are correctly
             # treated as paid; new claims set the value explicitly in submit_claim.
             "ALTER TABLE nidaan_claims ADD COLUMN payment_status TEXT DEFAULT 'paid'",
+            # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
+            "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
         ]
         for m in nidaan_migrations:
             try:

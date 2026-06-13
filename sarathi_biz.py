@@ -859,6 +859,134 @@ async def nidaan_api_claim_checklist(claim_id: int, request: Request):
     return st
 
 
+@app.post("/nidaan/api/claims/{claim_id}/pay")
+@limiter.limit("10/minute")
+async def nidaan_claim_pay(claim_id: int, request: Request):
+    """₹499 funnel: create a Razorpay order to unlock the review of a free-lead
+    claim. Server-side guards: claim is owned, still 'unpaid_lead', and the
+    required-document checklist is COMPLETE (can't pay before docs are in)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_type, payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))
+        claim = await _cur.fetchone()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim["payment_status"] != "unpaid_lead":
+        raise HTTPException(status_code=400, detail=f"Claim is already '{claim['payment_status']}'")
+    import biz_nidaan_doc_checklist as _ck
+    _st = await _ck.checklist_status(claim_id, claim["claim_type"])
+    if not _st["complete"]:
+        raise HTTPException(status_code=409, detail="Please upload all required documents first")
+    import httpx as _httpx2, time as _time2
+    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    receipt = f"nc_{claim_id}_{int(_time2.time())}"[:40]
+    async with _httpx2.AsyncClient() as _client2:
+        _r = await _client2.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": 49900, "currency": "INR", "receipt": receipt,
+                  "notes": {"product": "nidaan_claim_499", "claim_id": str(claim_id)}},
+            timeout=20.0)
+        result = _r.json()
+    if "id" not in result:
+        raise HTTPException(status_code=502, detail=result.get("error", {}).get("description", "Order creation failed"))
+    return {"order_id": result["id"], "amount": 49900, "currency": "INR", "razorpay_key_id": rzp_key_id}
+
+
+class NidaanClaimPayVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/api/claims/{claim_id}/pay-verify")
+@limiter.limit("5/minute")
+async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, request: Request):
+    """Verify the ₹499 payment, flip the claim to paid, START the review (task +
+    notifications), and begin the 48-BUSINESS-hour SLA."""
+    import hmac as _hm, hashlib as _hs2, asyncio as _asyncio_cpv
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(rzp_key_secret.encode(), _msg, _hs2.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Flip status atomically; guard against double-processing.
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT * FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))
+        claim = await _cur.fetchone()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found")
+        if claim["payment_status"] == "paid":
+            return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
+        await _conn.execute(
+            "UPDATE nidaan_claims SET payment_status='paid', paid_at=CURRENT_TIMESTAMP, "
+            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=?", (claim_id,))
+        await _conn.execute(
+            "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
+            "VALUES (?, 'intimated', '₹499 paid — review unlocked', 'system', ?)",
+            (claim_id, payload["sub"]))
+        await _conn.commit()
+    # Compute 48-business-hour SLA deadline.
+    from datetime import datetime as _dt
+    sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
+    # START the review now (was deferred while unpaid): initial task + notify.
+    try:
+        _flag = await ntasks.get_flag("auto_create_initial_task", "1")
+        if ntasks._flag_truthy(_flag):
+            _tid = await ntasks.create_task(
+                claim_id=claim_id,
+                title=f"PAID ₹499 — review {claim['insured_name']}'s {claim['claim_type']} claim",
+                description=(claim["notes_from_agent"] or "")[:400],
+                status_slug="initial_review", priority="high",
+                created_by_staff_id=None)
+            try:
+                import biz_nidaan_notifications as _nnot
+                _asyncio_cpv.create_task(_nnot.on_task_assigned(_tid))
+            except Exception:
+                pass
+    except Exception as _te:
+        logger.warning("paid-claim task create failed for %s: %s", claim_id, _te)
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio_cpv.create_task(_nnot.on_claim_filed(claim_id, payload["sub"]))
+    except Exception:
+        pass
+    # Email ops: a PAID case to assign now.
+    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if _admin_email:
+        _asyncio_cpv.create_task(email_svc.send_email(
+            to_email=_admin_email,
+            subject=f"[Nidaan] ₹499 PAID — claim #{claim_id} — assign + begin review",
+            html_body=(f"<p><b>PAID claim #{claim_id}</b> — {claim['insured_name']} · "
+                       f"{claim['claim_type']} · disputed ₹{claim['disputed_amount'] or 'N/A'}</p>"
+                       f"<p>Payment: {body.razorpay_payment_id}. SLA (48 business hrs) due ~"
+                       f"{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>")))
+    return {"status": "paid", "claim_id": claim_id,
+            "sla_due_utc": sla_due.isoformat(),
+            "message": "Payment confirmed. Your expert review starts now and will be delivered within 48 business hours — here and on WhatsApp."}
+
+
 @app.post("/nidaan/api/claims/submit")
 async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)

@@ -338,6 +338,20 @@ async def get_active_per_claim_purchase(account_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def business_hours_deadline(start: datetime, hours: int = 48) -> datetime:
+    """`start` + `hours` of BUSINESS time, skipping Sat & Sun entirely.
+    The clock only advances on weekdays (Mon–Fri), so a Friday-evening payment's
+    48-business-hour SLA lands mid-week, not on the weekend. Hour-by-hour walk
+    (≤ a few hundred iterations for 48h) — simple and exact."""
+    cur = start
+    remaining = max(0, int(hours))
+    while remaining > 0:
+        cur += timedelta(hours=1)
+        if cur.weekday() < 5:  # Mon=0 … Fri=4 count; Sat/Sun skipped
+            remaining -= 1
+    return cur
+
+
 async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     """
     Returns (allowed, reason).
