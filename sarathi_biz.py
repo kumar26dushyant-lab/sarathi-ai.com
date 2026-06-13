@@ -828,6 +828,37 @@ async def nidaan_api_claim_detail(claim_id: int, request: Request):
     return claim
 
 
+@app.get("/nidaan/api/claims/{claim_id}/checklist")
+async def nidaan_api_claim_checklist(claim_id: int, request: Request):
+    """Document checklist + progress + pay-gate state for a claim (₹499 funnel).
+    Read by the dashboard (and mirrored to WhatsApp): which docs are needed,
+    which are received, and whether the Pay-₹499 gate should show."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_type, payment_status, disputed_amount, comm_lang "
+            "FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id))
+        row = await _cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_doc_checklist as _ck
+    lang = (row["comm_lang"] or "en")
+    st = await _ck.checklist_status(claim_id, row["claim_type"])
+    for it in st["items"]:
+        it["label"] = it.get(lang) or it["en"]   # localized display label
+    st["payment_status"] = row["payment_status"]
+    st["disputed_amount"] = row["disputed_amount"]
+    st["trust_line"] = _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])
+    # Pay-gate shows ONLY when all required docs are in AND it's still an unpaid lead.
+    st["show_pay_gate"] = bool(st["complete"] and row["payment_status"] == "unpaid_lead")
+    return st
+
+
 @app.post("/nidaan/api/claims/submit")
 async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
@@ -1210,8 +1241,12 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
 
 @app.post("/nidaan/api/claims/{claim_id}/documents/upload")
 @limiter.limit("20/minute")
-async def nidaan_upload_claim_doc(claim_id: int, request: Request, files: list[UploadFile] = File(...)):
-    """Authenticated: upload supporting documents for a regular claim."""
+async def nidaan_upload_claim_doc(claim_id: int, request: Request,
+                                  files: list[UploadFile] = File(...),
+                                  doc_key: str = Form("")):
+    """Authenticated: upload supporting documents for a claim.
+    If doc_key is given (a checklist item), the upload marks that item received
+    so the de-dup + pay-gate update (₹499 funnel)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
@@ -1248,7 +1283,31 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request, files: list[U
             claim_id=claim_id,
         )
         saved.append({"doc_id": doc_id, "original_name": f.filename, "size": len(content)})
-    return {"uploaded": saved, "count": len(saved)}
+    # ₹499 funnel: if this upload satisfies a checklist item, mark it received
+    # (cross-channel de-dup source). Non-fatal if it fails.
+    checklist = None
+    if doc_key and saved:
+        try:
+            import biz_nidaan_doc_checklist as _ck
+            await _ck.mark_doc_received(claim_id, doc_key, via=_ck.VIA_DASHBOARD,
+                                        doc_id=saved[0]["doc_id"])
+            # return fresh checklist status so the UI can update the pay-gate inline
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c2:
+                _c2.row_factory = __import__("aiosqlite").Row
+                _r = await (await _c2.execute(
+                    "SELECT claim_type, payment_status FROM nidaan_claims WHERE claim_id=?",
+                    (claim_id,))).fetchone()
+            if _r:
+                _st = await _ck.checklist_status(claim_id, _r["claim_type"])
+                checklist = {
+                    "complete": _st["complete"],
+                    "received_required": _st["received_required"],
+                    "required_total": _st["required_total"],
+                    "show_pay_gate": bool(_st["complete"] and _r["payment_status"] == "unpaid_lead"),
+                }
+        except Exception as _me:
+            logger.warning("checklist mark failed for claim %s key %s: %s", claim_id, doc_key, _me)
+    return {"uploaded": saved, "count": len(saved), "doc_key": doc_key, "checklist": checklist}
 
 
 @app.get("/nidaan/ops/api/review-requests/{purchase_id}/documents")
