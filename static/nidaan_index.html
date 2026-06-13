@@ -1392,30 +1392,36 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Scroll up / down quick-nav buttons ──
-(function(){
+// Must run AFTER the buttons exist in the DOM (they're defined below this script),
+// so init on DOMContentLoaded — otherwise getElementById returns null and nothing wires.
+function _initScrollNav(){
   var up = document.getElementById('scrollUpBtn');
   var down = document.getElementById('scrollDownBtn');
   if (!up || !down) return;
-  function atBottom(){ return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80); }
+  function atBottom(){ return (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 80); }
   function update(){
-    var y = window.scrollY;
-    up.style.display = y > 300 ? 'flex' : 'none';
+    up.style.display = window.scrollY > 300 ? 'flex' : 'none';
     down.style.display = atBottom() ? 'none' : 'flex';
   }
   up.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
-  down.addEventListener('click', function(){ window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); });
+  down.addEventListener('click', function(){ window.scrollTo({top:document.documentElement.scrollHeight, behavior:'smooth'}); });
   window.addEventListener('scroll', update, {passive:true});
   window.addEventListener('resize', update, {passive:true});
   update();
-})();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initScrollNav);
+else _initScrollNav();
 </script>
 
 <!-- Scroll quick-nav -->
 <style>
-  .scroll-navfab{position:fixed;right:16px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:.5rem}
-  .scroll-navfab button{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;background:var(--navy,#1e3a8a);color:#fff;font-size:1.2rem;line-height:1;box-shadow:0 4px 14px rgba(15,31,92,.35);transition:transform .15s,background .15s;align-items:center;justify-content:center}
+  /* Right-middle edge — clears the full-width bottom .sticky-cta (z-index 90),
+     the pwa banner, and the bottom-left walkthrough button. z-index above the
+     sticky-cta so it's never covered. */
+  .scroll-navfab{position:fixed;right:14px;top:50%;transform:translateY(-50%);z-index:95;display:flex;flex-direction:column;gap:.6rem}
+  .scroll-navfab button{width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;background:var(--navy,#1e3a8a);color:#fff;font-size:1.15rem;line-height:1;box-shadow:0 4px 14px rgba(15,31,92,.4);transition:transform .15s,background .15s;display:flex;align-items:center;justify-content:center}
   .scroll-navfab button:hover{background:var(--cyan-dark,#0891b2);transform:translateY(-2px)}
-  @media(max-width:768px){.scroll-navfab{right:12px;bottom:14px}.scroll-navfab button{width:40px;height:40px;font-size:1.05rem}}
+  @media(max-width:768px){.scroll-navfab{right:10px}.scroll-navfab button{width:38px;height:38px;font-size:1rem}}
 </style>
 <div class="scroll-navfab" aria-hidden="true">
   <button id="scrollUpBtn" title="Scroll to top" aria-label="Scroll to top" style="display:none">↑</button>
