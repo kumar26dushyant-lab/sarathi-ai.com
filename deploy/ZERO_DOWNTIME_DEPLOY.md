@@ -33,7 +33,23 @@ Run as a sudo-capable user on the server. **Do the steps in this order** — the
 old `sarathi.service` keeps the bots until the very end, so we never have two bot
 pollers at once.
 
-### 1. Install the units
+> **Host gotcha (learned in the live cutover, 2026-06-14):** on this box the app
+> already runs on **port 8001** (`SERVER_PORT=8001` in `biz.env`), and systemd
+> here lets `EnvironmentFile=` (biz.env) WIN over `Environment=`. So you can't set
+> the per-instance port with `Environment=SERVER_PORT=…` — biz.env clobbers it.
+> The units instead read the port from a **later** `EnvironmentFile`. Create them:
+> ```bash
+> sudo mkdir -p /etc/sarathi
+> echo 'SERVER_PORT=8001' | sudo tee /etc/sarathi/sarathi-web-1.env
+> echo 'SERVER_PORT=8002' | sudo tee /etc/sarathi/sarathi-web-2.env
+> echo 'SERVER_PORT=8100' | sudo tee /etc/sarathi/sarathi-worker.env
+> ```
+> Also: never put an nginx backup inside `sites-enabled/` — the `*` include loads
+> it as a second config (duplicate-zone error). Back up to `/root/nginx-backups/`.
+> Because the live app holds 8001, bring up **web@2 first**, switch nginx to the
+> pool, THEN swap the old service for web@1 + worker (sequence below).
+
+### 1. Install the units (+ the port env files above)
 ```bash
 cd /opt/sarathi
 sudo cp deploy/sarathi-worker.service /etc/systemd/system/

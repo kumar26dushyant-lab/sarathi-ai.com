@@ -23,10 +23,15 @@ User=sarathi
 Group=sarathi
 WorkingDirectory=/opt/sarathi
 EnvironmentFile=/opt/sarathi/biz.env
-# Override AFTER EnvironmentFile so these win over biz.env:
+# NOTE: on this host, EnvironmentFile values WIN over `Environment=` for any var
+# they define — and biz.env sets SERVER_PORT=8001. So the per-instance port MUST
+# come from a LATER EnvironmentFile (later EnvironmentFile overrides earlier),
+# NOT from `Environment=SERVER_PORT=...` (which biz.env would clobber).
+# Create /etc/sarathi/sarathi-web-1.env -> "SERVER_PORT=8001"
+#        /etc/sarathi/sarathi-web-2.env -> "SERVER_PORT=8002"
 Environment=APP_ROLE=web
 Environment=SERVER_HOST=127.0.0.1
-Environment=SERVER_PORT=800%i
+EnvironmentFile=/etc/sarathi/sarathi-web-%i.env
 ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
 Restart=always
 RestartSec=3

@@ -22,10 +22,12 @@ User=sarathi
 Group=sarathi
 WorkingDirectory=/opt/sarathi
 EnvironmentFile=/opt/sarathi/biz.env
-# These override anything in biz.env (declared AFTER EnvironmentFile):
+# biz.env sets SERVER_PORT=8001 and (on this host) EnvironmentFile wins over
+# `Environment=`, so the port override must be a LATER EnvironmentFile.
+# Create /etc/sarathi/sarathi-worker.env -> "SERVER_PORT=8100"
 Environment=APP_ROLE=worker
 Environment=SERVER_HOST=127.0.0.1
-Environment=SERVER_PORT=8100
+EnvironmentFile=/etc/sarathi/sarathi-worker.env
 ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
 Restart=always
 RestartSec=5
