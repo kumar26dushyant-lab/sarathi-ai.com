@@ -97,13 +97,31 @@ echo 'sarathi ALL=(root) NOPASSWD: /usr/bin/systemctl restart sarathi-worker, /u
 sudo visudo -cf /etc/sudoers.d/sarathi-deploy   # syntax check
 ```
 
-### 6. Switch the deploy script to the rolling one
-The webhook runs `deploy/auto-deploy.sh`. Swap in the zero-downtime version:
-```bash
-cp /opt/sarathi/deploy/auto-deploy.sh /opt/sarathi/deploy/auto-deploy.legacy.sh
-cp /opt/sarathi/deploy/auto-deploy-zerodowntime.sh /opt/sarathi/deploy/auto-deploy.sh
-chmod +x /opt/sarathi/deploy/auto-deploy.sh
-```
+### 6. Deploy mechanism — rolling script + dedicated oneshot unit
+`deploy/auto-deploy.sh` in the repo **is** the rolling script now (the deploy does
+`git reset --hard`, so a pkill-all version here would come back and cause a 502 —
+keep it rolling). Two things make the **webhook** path zero-downtime:
+
+1. **Run it in its own cgroup.** The webhook handler lives inside a web instance,
+   so running the script directly puts it in that instance's cgroup — and
+   `systemctl restart sarathi-web@N` (KillMode=control-group) kills the deploy
+   mid-roll. So `_run_deploy` triggers a **oneshot unit** instead:
+   ```bash
+   sudo cp deploy/sarathi-deploy.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo touch /var/log/sarathi-deploy.log && sudo chown sarathi:sarathi /var/log/sarathi-deploy.log
+   ```
+2. **Sudoers** must allow the `sarathi` user to start it + restart the units:
+   ```
+   sarathi ALL=(root) NOPASSWD: /usr/bin/systemctl restart sarathi-worker, \
+     /usr/bin/systemctl restart sarathi-web@1, /usr/bin/systemctl restart sarathi-web@2, \
+     /usr/bin/systemctl start sarathi-deploy.service, \
+     /usr/bin/systemctl start --no-block sarathi-deploy.service
+   ```
+The webhook now does `sudo -n systemctl start --no-block sarathi-deploy.service`
+→ the deploy runs in its own cgroup → the rolling web restarts can't kill it.
+Verified live: oneshot deploy completes (~35s), each web instance health-gated,
+both sites stay up.
 
 ---
 
