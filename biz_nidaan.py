@@ -749,6 +749,37 @@ def verify_nidaan_token(token: str) -> Optional[dict]:
         return None
 
 
+def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
+    """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
+    Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one
+    claim — it is NOT a session token and grants no dashboard access by itself."""
+    payload = {
+        "typ": "nidaan_paylink",
+        "sub": str(account_id),
+        "cid": int(claim_id),
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int((datetime.utcnow() + timedelta(hours=hours)).timestamp()),
+    }
+    return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
+
+
+def verify_pay_link_token(token: str, claim_id: int) -> Optional[dict]:
+    """Verify a one-tap pay-link token AND that it is bound to claim_id.
+    Returns {account_id, claim_id} or None."""
+    try:
+        payload = _jwt_lib.decode(
+            token, _nidaan_secret(), algorithms=["HS256"],
+            options={"verify_sub": False})
+        if payload.get("typ") != "nidaan_paylink":
+            return None
+        if int(payload.get("cid", -1)) != int(claim_id):
+            return None
+        return {"account_id": int(payload["sub"]), "claim_id": int(payload["cid"])}
+    except Exception as e:
+        logger.debug("Nidaan pay-link token verify failed: %s", e)
+        return None
+
+
 # =============================================================================
 #  REVIEW REQUESTS (₹499 per-claim, no subscription needed)
 # =============================================================================

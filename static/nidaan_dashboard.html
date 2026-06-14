@@ -987,8 +987,18 @@ async function loadDashboard() {
   // subscription/per-claim banner logic below.
   const _leadClaim = (claimsData.claims || []).find(c => c.payment_status === 'unpaid_lead');
   try {
-    if (_leadClaim) { await renderLeadChecklist(_leadClaim.claim_id); }
-    else { const _lc = document.getElementById('leadChecklistCard'); if (_lc) _lc.style.display = 'none'; }
+    if (_leadClaim) {
+      await renderLeadChecklist(_leadClaim.claim_id);
+      // One-tap pay link from WhatsApp lands here as ?pay=<claim_id>. If the
+      // pay-gate is open, auto-launch Razorpay; otherwise show the checklist.
+      const _payParam = new URLSearchParams(location.search).get('pay');
+      if (_payParam && String(_leadClaim.claim_id) === String(_payParam)) {
+        history.replaceState({}, '', '/nidaan/dashboard');
+        const _gate = document.getElementById('lcPayGate');
+        if (_gate && _gate.style.display !== 'none') { setTimeout(() => payClaim(_leadClaim.claim_id), 350); }
+        else { document.getElementById('leadChecklistCard')?.scrollIntoView({ behavior: 'smooth' }); }
+      }
+    } else { const _lc = document.getElementById('leadChecklistCard'); if (_lc) _lc.style.display = 'none'; }
   } catch (e) { console.warn('lead checklist render failed', e); }
 
   // New signup welcome toast (from ?new=1 redirect after review form)

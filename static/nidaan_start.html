@@ -958,6 +958,11 @@ async function _prefillClaimForm() {
       </div>
     </fieldset>
 
+    <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
+      <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.15rem;flex-shrink:0;width:16px;height:16px;accent-color:#06b6d4">
+      <span>Send me updates about this claim on <strong style="color:rgba(255,255,255,.8)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span>
+    </label>
+
     <div id="rev-msg"></div>
 
     <button class="btn-pay" id="revSubmitBtn" onclick="submitFreeClaim()">
@@ -994,6 +999,11 @@ async function submitFreeClaim() {
   if (insured_phone.length < 10) { showRevMsg('err', 'Please enter a valid 10-digit contact phone.'); return; }
   if (!claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
 
+  // Preferred comms language carries from the dashboard/homepage toggle (en|hi|mr).
+  const _ll = (localStorage.getItem('nidaan_lang') || 'en');
+  const comm_lang = ['en', 'hi', 'mr'].includes(_ll) ? _ll : 'en';
+  const wa_consent = document.getElementById('rv_wa_consent').checked;
+
   // Body MUST match NidaanClaimReq exactly (extra="forbid").
   const body = {
     claim_type,
@@ -1002,6 +1012,8 @@ async function submitFreeClaim() {
     insurer_name: document.getElementById('rv_insurer_name').value.trim(),
     disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
     notes_from_agent: document.getElementById('rv_notes').value.trim(),
+    comm_lang,
+    wa_consent,
   };
 
   btn.disabled = true;

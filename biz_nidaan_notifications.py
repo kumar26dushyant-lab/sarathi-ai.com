@@ -353,6 +353,19 @@ async def set_subscriber_pref(account_id: int, *, wa_opt_in: Optional[bool] = No
     return await get_subscriber_prefs(account_id)
 
 
+async def set_comm_lang(account_id: int, lang: str) -> None:
+    """Persist the subscriber's preferred comm language (en|hi|mr) for templates."""
+    lang = lang if lang in ("en", "hi", "mr") else "en"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("""
+            INSERT INTO nidaan_subscriber_prefs (account_id, comm_lang)
+            VALUES (?, ?)
+            ON CONFLICT(account_id) DO UPDATE SET comm_lang=excluded.comm_lang,
+              updated_at=datetime('now')
+        """, (account_id, lang))
+        await conn.commit()
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  Notification log helpers
 # ═════════════════════════════════════════════════════════════════════════════
@@ -819,6 +832,211 @@ async def on_sla_overdue(task_id: int):
                       f"Due: {task.get('sla_due_at','—')}\n\n"
                       f"Take action: /nidaan/ops"),
                 claim_id=task.get("claim_id"), task_id=task_id)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  ₹499 value-first FUNNEL — WhatsApp parity (mirrors the dashboard journey)
+#  Template-first (anti-hallucination): every message is a fixed template filled
+#  from the DB. en/hi/mr. The dashboard and WhatsApp say the SAME thing.
+# ═════════════════════════════════════════════════════════════════════════════
+NIDAAN_BASE_URL = os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com")
+
+
+def _inr(n) -> str:
+    """Indian-grouped rupee string: 400000 -> '4,00,000'."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return "—"
+    s = str(abs(n))
+    if len(s) > 3:
+        head, tail = s[:-3], s[-3:]
+        import re as _re
+        head = _re.sub(r"(\d)(?=(\d\d)+$)", r"\1,", head)
+        s = head + "," + tail
+    return ("-" if n < 0 else "") + s
+
+
+def _funnel_lang(lang: str) -> str:
+    return lang if lang in ("en", "hi", "mr") else "en"
+
+
+def _doc_lines(pending: list[dict], claim_type: str, lang: str) -> str:
+    import biz_nidaan_doc_checklist as _ck
+    if not pending:
+        return ""
+    return "\n".join(f"  • {_ck.label(d['key'], claim_type, lang)}" for d in pending)
+
+
+async def on_lead_filed(claim_id: int, account_id: int):
+    """Free ₹499 lead submitted (unpaid_lead). WhatsApp + email: warm welcome,
+    save-our-number, the documents still needed, and the hope/hook — mirroring
+    the dashboard checklist card. No price pressure yet; pay-gate comes after docs."""
+    import biz_nidaan_doc_checklist as _ck
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    ctype = claim.get("claim_type", "")
+    pending = await _ck.pending_required_docs(claim_id, ctype)
+    docs = _doc_lines(pending, ctype, lang)
+    name = (claim.get("owner_name") or "").split(" ")[0]
+    dash = f"{NIDAAN_BASE_URL}/nidaan/dashboard"
+    disp = _inr(claim.get("disputed_amount")) if claim.get("disputed_amount") else ""
+
+    if lang == "hi":
+        body = (f"नमस्ते {name} 🙏\n\n"
+                f"हमें आपका *{claim.get('insured_name','')}* का क्लेम मिल गया है। "
+                f"कृपया इस नंबर को *Nidaan* नाम से सेव कर लें ताकि सभी अपडेट यहीं भरोसे के साथ मिलें।\n\n"
+                f"📋 *अभी ये दस्तावेज़ बाकी हैं:*\n{docs}\n\n"
+                f"इन्हें यहाँ अपलोड करें: {dash}\n\n"
+                f"एक बार दस्तावेज़ पूरे होते ही हमारे कानूनी विशेषज्ञ आपके केस की समीक्षा शुरू कर देंगे। "
+                f"रिजेक्शन का अंत यहीं नहीं है — आपके क्लेम में अब भी दम बाकी है। 💪\n\n"
+                f"बंद करने के लिए STOP भेजें।\n— Nidaan – The Legal Consultants LLP")
+    elif lang == "mr":
+        body = (f"नमस्कार {name} 🙏\n\n"
+                f"आम्हाला तुमचा *{claim.get('insured_name','')}* चा क्लेम मिळाला आहे. "
+                f"कृपया हा नंबर *Nidaan* नावाने सेव्ह करा म्हणजे सर्व अपडेट्स विश्वासाने इथेच मिळतील.\n\n"
+                f"📋 *अजून हे कागदपत्र बाकी आहेत:*\n{docs}\n\n"
+                f"ती इथे अपलोड करा: {dash}\n\n"
+                f"कागदपत्र पूर्ण होताच आमचे कायदेतज्ज्ञ तुमच्या केसची समीक्षा सुरू करतील. "
+                f"नकार म्हणजे शेवट नाही — तुमच्या क्लेममध्ये अजून ताकद आहे. 💪\n\n"
+                f"थांबवण्यासाठी STOP पाठवा.\n— Nidaan – The Legal Consultants LLP")
+    else:
+        body = (f"Hello {name} 🙏\n\n"
+                f"We've received your claim for *{claim.get('insured_name','')}*. "
+                f"Please save this number as *Nidaan* so every update reaches you here, trusted.\n\n"
+                f"📋 *Documents still needed:*\n{docs}\n\n"
+                f"Upload them here: {dash}\n\n"
+                f"The moment your documents are in, our legal experts start reviewing your case. "
+                f"A rejection isn't the end — your claim still has a fighting chance. 💪\n\n"
+                f"Reply STOP to opt out.\n— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="funnel.lead_filed", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject="Your claim is in — a few documents to upload",
+        body=body, claim_id=claim_id)
+
+
+async def on_funnel_pay_ready(claim_id: int, account_id: int):
+    """All required documents are in (pay-gate). WhatsApp + email: hope/hook
+    (disputed amount vs ₹499) + a ONE-TAP pay link so the user never has to
+    return to the dashboard. Mirrors the dashboard pay-gate card."""
+    import biz_nidaan as _nd
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    if claim.get("payment_status") != "unpaid_lead":
+        return  # already paid/subscription — no pay nudge
+    # Idempotent: only the FIRST time the pay-gate opens for this claim.
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        seen = await (await conn.execute(
+            "SELECT 1 FROM nidaan_notifications WHERE claim_id=? AND event_key='funnel.pay_ready' LIMIT 1",
+            (claim_id,))).fetchone()
+    if seen:
+        return
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    name = (claim.get("owner_name") or "").split(" ")[0]
+    disp = _inr(claim.get("disputed_amount")) if claim.get("disputed_amount") else ""
+    tok = _nd.create_pay_link_token(claim_id, account_id)
+    pay_link = f"{NIDAAN_BASE_URL}/nidaan/pay/{claim_id}?t={tok}"
+
+    if lang == "hi":
+        contrast = (f"आपका विवादित क्लेम *₹{disp}* — समीक्षा सिर्फ़ *₹499*।\n\n" if disp
+                    else "आपकी समीक्षा सिर्फ़ *₹499*।\n\n")
+        body = (f"शाबाश {name}! ✅ आपके सभी दस्तावेज़ मिल गए।\n\n"
+                f"🎯 आपका क्लेम लड़ने लायक मज़बूत दिखता है।\n"
+                f"{contrast}"
+                f"अभी ₹499 दें और अपनी विशेषज्ञ समीक्षा शुरू करें — रिपोर्ट *48 कार्य-घंटों* में, "
+                f"यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
+                f"👉 एक टैप में भुगतान करें: {pay_link}\n\n"
+                f"अपना पैसा यूँ ही मत छोड़िए।\n— Nidaan – The Legal Consultants LLP")
+    elif lang == "mr":
+        contrast = (f"तुमचा वादातील क्लेम *₹{disp}* — समीक्षा फक्त *₹499*।\n\n" if disp
+                    else "तुमची समीक्षा फक्त *₹499*।\n\n")
+        body = (f"छान {name}! ✅ तुमची सर्व कागदपत्रे मिळाली.\n\n"
+                f"🎯 तुमचा क्लेम लढण्याइतका मजबूत दिसतो.\n"
+                f"{contrast}"
+                f"आता ₹499 भरा आणि तुमची तज्ज्ञ समीक्षा सुरू करा — अहवाल *48 कामकाजाच्या तासांत*, "
+                f"इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
+                f"👉 एका टॅपमध्ये पैसे भरा: {pay_link}\n\n"
+                f"तुमचे पैसे असेच सोडू नका.\n— Nidaan – The Legal Consultants LLP")
+    else:
+        contrast = (f"Your disputed claim is *₹{disp}* — the review is just *₹499*.\n\n" if disp
+                    else "Your review is just *₹499*.\n\n")
+        body = (f"Well done {name}! ✅ We have all your documents.\n\n"
+                f"🎯 Your claim looks strong enough to fight.\n"
+                f"{contrast}"
+                f"Pay ₹499 now to start your expert review — your report arrives within "
+                f"*48 business hours*, here on WhatsApp and on your dashboard.\n\n"
+                f"👉 Pay in one tap: {pay_link}\n\n"
+                f"Don't leave your money on the table.\n— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="funnel.pay_ready", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject="Your case is ready — pay ₹499 to start your review",
+        body=body, claim_id=claim_id)
+
+
+async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
+    """₹499 paid → review started. WhatsApp + email confirmation mirroring the
+    dashboard: review has begun, report within 48 business hours, here + WhatsApp."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    name = (claim.get("owner_name") or "").split(" ")[0]
+
+    if lang == "hi":
+        body = (f"धन्यवाद {name}! ✅ आपका ₹499 भुगतान मिल गया।\n\n"
+                f"आपके *{claim.get('insured_name','')}* के क्लेम की विशेषज्ञ समीक्षा अभी शुरू हो गई है। "
+                f"आपकी विस्तृत रिपोर्ट *48 कार्य-घंटों* में मिलेगी — यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
+                f"— Nidaan – The Legal Consultants LLP")
+    elif lang == "mr":
+        body = (f"धन्यवाद {name}! ✅ तुमचे ₹499 पेमेंट मिळाले.\n\n"
+                f"तुमच्या *{claim.get('insured_name','')}* च्या क्लेमची तज्ज्ञ समीक्षा आता सुरू झाली आहे. "
+                f"तुमचा सविस्तर अहवाल *48 कामकाजाच्या तासांत* मिळेल — इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
+                f"— Nidaan – The Legal Consultants LLP")
+    else:
+        body = (f"Thank you {name}! ✅ Your ₹499 payment is confirmed.\n\n"
+                f"The expert review of your *{claim.get('insured_name','')}* claim has started now. "
+                f"Your detailed report arrives within *48 business hours* — here on WhatsApp and on your dashboard.\n\n"
+                f"— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="funnel.paid", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject="Payment confirmed — your review has started",
+        body=body, claim_id=claim_id)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

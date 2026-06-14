@@ -419,6 +419,8 @@ class NidaanClaimReq(BaseModel):
     notes_from_agent: str = ""
     intermediary_code: str = ""
     intermediary_name: str = ""
+    comm_lang: str = ""          # en|hi|mr — preferred WhatsApp/email language
+    wa_consent: bool = True      # ₹499 funnel: opt-in to WhatsApp updates for this claim
 
 
 class NidaanSendOTPReq(BaseModel):
@@ -969,7 +971,10 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
         logger.warning("paid-claim task create failed for %s: %s", claim_id, _te)
     try:
         import biz_nidaan_notifications as _nnot
-        _asyncio_cpv.create_task(_nnot.on_claim_filed(claim_id, payload["sub"]))
+        # Funnel-accurate confirmation (review started, 48 business-hr SLA, here +
+        # WhatsApp) — mirrors the dashboard. Admins are alerted via the ops email
+        # + the task-assignment notification below, so no generic claim.filed here.
+        _asyncio_cpv.create_task(_nnot.on_funnel_paid(claim_id, payload["sub"], sla_due.isoformat()))
     except Exception:
         pass
     # Email ops: a PAID case to assign now.
@@ -985,6 +990,62 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
     return {"status": "paid", "claim_id": claim_id,
             "sla_due_utc": sla_due.isoformat(),
             "message": "Payment confirmed. Your expert review starts now and will be delivered within 48 business hours — here and on WhatsApp."}
+
+
+@app.get("/nidaan/pay/{claim_id}", response_class=HTMLResponse)
+async def nidaan_one_tap_pay(claim_id: int, request: Request, t: str = ""):
+    """WhatsApp one-tap pay link. Validates the claim-bound pay token, mints a
+    short dashboard session, and lands the user on the dashboard with the pay-gate
+    auto-opening. The token is purpose-scoped — it can ONLY pay this one claim,
+    grants no other dashboard power, and expires."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    info = nidaan.verify_pay_link_token(t, claim_id)
+
+    def _msg_page(title: str, sub: str, code: int = 200):
+        return HTMLResponse(
+            f"<!doctype html><html><head><meta charset='utf-8'>"
+            f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>Nidaan</title><style>body{{font-family:system-ui,sans-serif;background:#0a1628;"
+            f"color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;"
+            f"margin:0;padding:24px;text-align:center}}.c{{max-width:420px}}h1{{font-size:1.3rem;margin:.4rem 0}}"
+            f"p{{color:#94a3b8;line-height:1.6;font-size:.95rem}}a{{color:#22d3ee}}</style></head>"
+            f"<body><div class='c'><div style='font-size:2.4rem'>🛡️</div><h1>{title}</h1>"
+            f"<p>{sub}</p><p><a href='/nidaan/dashboard'>Go to your dashboard →</a></p></div></body></html>",
+            status_code=code)
+
+    if not info:
+        return _msg_page("This payment link is invalid or expired",
+                         "For your security, pay links expire. Please open your dashboard to pay.", 400)
+    account_id = info["account_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        row = await (await _conn.execute(
+            "SELECT c.payment_status, a.email AS account_email "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=? AND c.account_id=?", (claim_id, account_id))).fetchone()
+    if not row:
+        return _msg_page("Claim not found", "We couldn't find this claim on your account.", 404)
+    if row["payment_status"] == "paid":
+        return _msg_page("Already paid ✅",
+                         "Your review is already underway. Your report arrives within 48 business hours — here and on WhatsApp.")
+    if row["payment_status"] != "unpaid_lead":
+        return _msg_page("Nothing to pay",
+                         "This claim is covered by your plan — no payment needed.")
+    # Mint a normal dashboard session and hand off to the pay-gate (auto-opens).
+    token = nidaan.create_nidaan_token(account_id, row["account_email"] or "", "")
+    import json as _json
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Opening your payment…</title>"
+        "<style>body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;"
+        "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}"
+        "</style></head><body><div>🛡️ Opening your secure payment…</div>"
+        "<script>try{localStorage.setItem('nidaan_token'," + _json.dumps(token) + ");}catch(e){}"
+        "location.replace('/nidaan/dashboard?pay=" + str(claim_id) + "');</script>"
+        "</body></html>")
+    return HTMLResponse(html)
 
 
 @app.post("/nidaan/api/claims/submit")
@@ -1038,6 +1099,16 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     # Unpaid leads: stop here. No review task, no legal notification — the review
     # only starts after the ₹499 is paid (handled in the payment-verify step).
     if _pay_status == "unpaid_lead":
+        # ₹499 funnel: capture language + WhatsApp consent, then mirror the
+        # dashboard to WhatsApp/email (welcome + doc-chase + hope/hook).
+        try:
+            import biz_nidaan_notifications as _nnot
+            if body.comm_lang:
+                await _nnot.set_comm_lang(payload["sub"], body.comm_lang)
+            await _nnot.set_subscriber_pref(payload["sub"], wa_opt_in=bool(body.wa_consent))
+            asyncio.create_task(_nnot.on_lead_filed(claim_id, payload["sub"]))
+        except Exception as _le:
+            logger.warning("on_lead_filed dispatch failed for claim %s: %s", claim_id, _le)
         return {"claim_id": claim_id, "status": "lead", "payment_status": "unpaid_lead"}
     # Phase 3+4: auto-create initial review task + fan out claim-filed notification.
     try:
@@ -1433,6 +1504,14 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
                     "required_total": _st["required_total"],
                     "show_pay_gate": bool(_st["complete"] and _r["payment_status"] == "unpaid_lead"),
                 }
+                # ₹499 funnel: pay-gate just opened → mirror to WhatsApp/email
+                # (hope/hook + one-tap pay link). Handler is idempotent (fires once).
+                if checklist["show_pay_gate"]:
+                    try:
+                        import biz_nidaan_notifications as _nnot
+                        asyncio.create_task(_nnot.on_funnel_pay_ready(claim_id, payload["sub"]))
+                    except Exception as _pe:
+                        logger.warning("on_funnel_pay_ready dispatch failed for claim %s: %s", claim_id, _pe)
         except Exception as _me:
             logger.warning("checklist mark failed for claim %s key %s: %s", claim_id, doc_key, _me)
     return {"uploaded": saved, "count": len(saved), "doc_key": doc_key, "checklist": checklist}
