@@ -17397,18 +17397,29 @@ _DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
 
 
 def _run_deploy():
-    """Start deploy script fully detached so it survives when it kills this process."""
+    """Trigger the deploy. PREFER the dedicated oneshot unit (sarathi-deploy.service)
+    so the rolling deploy runs in its OWN cgroup and survives the web-instance
+    restarts it performs — otherwise `systemctl restart sarathi-web@N` (KillMode=
+    control-group) would kill this very script mid-roll and collapse the rolling
+    guarantee into a both-down 502. Falls back to a direct detached run if the unit
+    isn't installed (e.g. legacy single-process host)."""
     try:
-        log_path = "/tmp/sarathi-deploy.log"
-        # Use shell redirect so the script's exec >> LOG writes correctly
+        rc = _subprocess.call(
+            "sudo -n systemctl start --no-block sarathi-deploy.service",
+            shell=True, stdin=_subprocess.DEVNULL,
+            stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL)
+        if rc == 0:
+            logger.info("🚀 deploy triggered via sarathi-deploy.service (own cgroup)")
+            return
+        logger.warning("sarathi-deploy.service unavailable (rc=%s) — direct fallback", rc)
+    except Exception as exc:
+        logger.warning("deploy unit trigger failed (%s) — direct fallback", exc)
+    try:
         _subprocess.Popen(
-            f"bash '{_DEPLOY_SCRIPT}' >> '{log_path}' 2>&1",
-            shell=True,
-            start_new_session=True,
-            close_fds=True,
-            stdin=_subprocess.DEVNULL,
-        )
-        logger.info("🚀 deploy script started (detached), log: %s", log_path)
+            f"bash '{_DEPLOY_SCRIPT}' >> '/tmp/sarathi-deploy.log' 2>&1",
+            shell=True, start_new_session=True, close_fds=True,
+            stdin=_subprocess.DEVNULL)
+        logger.info("🚀 deploy script started (direct fallback)")
     except Exception as exc:
         logger.error("deploy script error: %s", exc)
 

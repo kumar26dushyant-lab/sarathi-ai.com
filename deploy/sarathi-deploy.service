@@ -1,0 +1,32 @@
+# =============================================================================
+#  sarathi-deploy.service — runs the rolling deploy in ITS OWN cgroup
+# =============================================================================
+#  Critical for true zero-downtime: the webhook handler lives inside a web
+#  instance. If it ran auto-deploy.sh directly, that script would sit in the web
+#  instance's cgroup — and `systemctl restart sarathi-web@N` (KillMode=
+#  control-group) would KILL the deploy mid-roll, collapsing the rolling
+#  guarantee (both web instances end up down together → 502).
+#
+#  By triggering this oneshot unit instead (systemctl start --no-block), the
+#  deploy runs in its own cgroup and survives the web restarts, so the rolling
+#  restart actually rolls.
+#
+#  Install:
+#    sudo cp deploy/sarathi-deploy.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+# =============================================================================
+[Unit]
+Description=Sarathi-AI — rolling deploy (own cgroup; survives web restarts)
+
+[Service]
+Type=oneshot
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+EnvironmentFile=/opt/sarathi/biz.env
+ExecStart=/opt/sarathi/deploy/auto-deploy.sh
+TimeoutStartSec=420
+StandardOutput=append:/var/log/sarathi-deploy.log
+StandardError=append:/var/log/sarathi-deploy.log
+
+# NOTE: no [Install] — this is started on demand by the webhook, never enabled.
