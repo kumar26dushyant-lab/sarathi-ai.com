@@ -996,7 +996,7 @@ async function loadDashboard() {
     history.replaceState({}, '', '/nidaan/dashboard');
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;top:1.25rem;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;border:1px solid #10b981;border-radius:10px;padding:.85rem 1.5rem;color:#d1fae5;font-weight:600;font-size:.9rem;box-shadow:0 8px 32px rgba(0,0,0,.4);text-align:center;max-width:90vw';
-    toast.innerHTML = '✅ Your claim has been submitted! <br><span style="font-weight:400;font-size:.82rem">Pay ₹499 below to start your legal review.</span>';
+    toast.innerHTML = '✅ Your claim has been submitted! <br><span style="font-weight:400;font-size:.82rem">Upload your documents below so our experts can review your case.</span>';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 6000);
   }
