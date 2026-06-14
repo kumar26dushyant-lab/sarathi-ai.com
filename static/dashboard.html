@@ -3681,6 +3681,22 @@ function showToast(msg, type='info', ms=3500) {
     if (impFirm && impFirm !== 'undefined') document.getElementById('imp-firm-name').textContent = impFirm;
   }
 })();
+// Magic-link SSO (e.g. "Open Sarathi-AI" from the Nidaan dashboard): the server
+// validates the token and plants a `sarathi_token` cookie (httponly=False), then
+// redirects to a clean /dashboard. The SPA auth guard below reads localStorage,
+// so hydrate it from that cookie — otherwise a valid SSO session bounces to the
+// homepage. Also accept a raw ?token= in case the cookie redirect was skipped.
+(function() {
+  if (localStorage.getItem('sarathi_token')) return;
+  const urlTok = new URLSearchParams(window.location.search).get('token');
+  if (urlTok && urlTok.length > 20) {
+    localStorage.setItem('sarathi_token', urlTok);
+    window.history.replaceState({}, '', '/dashboard');
+    return;
+  }
+  const m = document.cookie.match(/(?:^|;\s*)sarathi_token=([^;]+)/);
+  if (m && m[1]) localStorage.setItem('sarathi_token', decodeURIComponent(m[1]));
+})();
 const _tok = localStorage.getItem('sarathi_token');
 if (!_tok) window.location.href = '/?login=1';
 
