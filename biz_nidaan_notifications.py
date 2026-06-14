@@ -1039,6 +1039,96 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
         body=body, claim_id=claim_id)
 
 
+async def on_lead_deletion_notice(claim_id: int, account_id: int, purge_on: str):
+    """DPDP trust track: heads-up BEFORE we delete an unpaid lead's documents.
+    Honest, calm, and gives a one-tap way to keep the case alive (pay → review)."""
+    import biz_nidaan as _nd
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    name = (claim.get("owner_name") or "").split(" ")[0]
+    tok = _nd.create_pay_link_token(claim_id, account_id, hours=24 * 14)
+    pay_link = f"{NIDAAN_BASE_URL}/nidaan/pay/{claim_id}?t={tok}"
+
+    if lang == "hi":
+        body = (f"नमस्ते {name},\n\n"
+                f"आपने *{claim.get('insured_name','')}* का क्लेम जमा किया था पर समीक्षा अभी शुरू नहीं हुई। "
+                f"DPDP Act 2023 के तहत हम आपके दस्तावेज़ ज़रूरत से ज़्यादा नहीं रखते — इसलिए *{purge_on}* को "
+                f"वे सुरक्षित रूप से हटा दिए जाएँगे।\n\n"
+                f"अपना केस जारी रखना है? एक टैप में ₹499 दें और समीक्षा शुरू करें:\n{pay_link}\n\n"
+                f"कोई कार्रवाई न करें तो भी ठीक है — आपका डेटा कभी साझा नहीं होता।\n— Nidaan – The Legal Consultants LLP")
+    elif lang == "mr":
+        body = (f"नमस्कार {name},\n\n"
+                f"तुम्ही *{claim.get('insured_name','')}* चा क्लेम सबमिट केला होता पण समीक्षा अजून सुरू झाली नाही. "
+                f"DPDP Act 2023 नुसार आम्ही तुमची कागदपत्रे गरजेपेक्षा जास्त ठेवत नाही — म्हणून *{purge_on}* रोजी "
+                f"ती सुरक्षितपणे हटवली जातील.\n\n"
+                f"केस सुरू ठेवायचा? एका टॅपमध्ये ₹499 भरा आणि समीक्षा सुरू करा:\n{pay_link}\n\n"
+                f"काहीही न केल्यासही हरकत नाही — तुमचा डेटा कधीही शेअर होत नाही.\n— Nidaan – The Legal Consultants LLP")
+    else:
+        body = (f"Hello {name},\n\n"
+                f"You submitted a claim for *{claim.get('insured_name','')}* but the review hasn't started yet. "
+                f"Under the DPDP Act 2023 we don't keep your documents longer than needed — so on *{purge_on}* "
+                f"they'll be securely deleted.\n\n"
+                f"Want to keep your case going? Start your review for ₹499 in one tap:\n{pay_link}\n\n"
+                f"No action is fine too — your data is never shared.\n— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="funnel.lead_deletion_notice", priority=PRIORITY_P2,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject="Your uploaded documents will be securely deleted soon",
+        body=body, claim_id=claim_id)
+
+
+async def on_lead_data_purged(claim_id: int, account_id: int):
+    """DPDP trust track: confirm we kept our word and deleted the documents."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    name = (claim.get("owner_name") or "").split(" ")[0]
+
+    if lang == "hi":
+        body = (f"नमस्ते {name},\n\n"
+                f"जैसा वादा था — हमने *{claim.get('insured_name','')}* के क्लेम से जुड़े आपके दस्तावेज़ "
+                f"सुरक्षित रूप से हटा दिए हैं। आपका डेटा कभी साझा नहीं हुआ।\n\n"
+                f"भविष्य में कभी ज़रूरत हो तो आपका स्वागत है।\n— Nidaan – The Legal Consultants LLP")
+    elif lang == "mr":
+        body = (f"नमस्कार {name},\n\n"
+                f"वचन दिल्याप्रमाणे — आम्ही *{claim.get('insured_name','')}* च्या क्लेमशी संबंधित तुमची कागदपत्रे "
+                f"सुरक्षितपणे हटवली आहेत. तुमचा डेटा कधीही शेअर झाला नाही.\n\n"
+                f"भविष्यात कधीही गरज लागल्यास तुमचे स्वागत आहे.\n— Nidaan – The Legal Consultants LLP")
+    else:
+        body = (f"Hello {name},\n\n"
+                f"As promised, we've securely deleted the documents you uploaded for the "
+                f"*{claim.get('insured_name','')}* claim. Your data was never shared.\n\n"
+                f"You're always welcome back whenever you need us.\n— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="funnel.lead_data_purged", priority=PRIORITY_P2,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject="Your documents have been securely deleted",
+        body=body, claim_id=claim_id)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  Deferred-queue retry — called by the existing scheduler every minute
 # ═════════════════════════════════════════════════════════════════════════════

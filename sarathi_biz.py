@@ -17281,6 +17281,20 @@ async def main():
                     logger.error("Plan change applier error: %s", e)
 
         plan_change_task = asyncio.create_task(plan_change_applier())
+
+        # Step 6d: ₹499 lead DPDP retention — daily sweep (pre-notice then purge).
+        async def lead_retention_loop():
+            import biz_nidaan_retention as _ret
+            await asyncio.sleep(180)  # let startup settle before first sweep
+            while True:
+                try:
+                    await _ret.run_lead_retention()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Lead retention sweep error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily
+        asyncio.create_task(lead_retention_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 

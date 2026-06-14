@@ -1201,6 +1201,11 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN payment_status TEXT DEFAULT 'paid'",
             # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
             "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
+            # DPDP retention for unpaid leads: we keep their documents only while the
+            # lead is live, then securely delete them after a grace window — with a
+            # trust-building heads-up FIRST. These track that lifecycle.
+            "ALTER TABLE nidaan_claims ADD COLUMN lead_notice_at TIMESTAMP",  # deletion pre-notice sent
+            "ALTER TABLE nidaan_claims ADD COLUMN lead_purged_at TIMESTAMP",  # documents purged
         ]
         for m in nidaan_migrations:
             try:
