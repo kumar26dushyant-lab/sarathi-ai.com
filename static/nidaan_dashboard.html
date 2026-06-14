@@ -348,6 +348,41 @@
 
   <!-- ── DASHBOARD TAB ─────────────────────────────────────────────── -->
   <div class="tab-panel active" id="tab-dashboard">
+
+  <!-- ₹499 funnel: free-lead claim — document checklist + pay-gate -->
+  <div id="leadChecklistCard" style="display:none;background:#0f1e3a;border:1px solid rgba(34,211,238,.25);border-radius:16px;padding:1.4rem 1.5rem;margin-bottom:1.3rem;box-shadow:0 8px 28px rgba(0,0,0,.35)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:1.15rem;font-weight:800;color:#fff">📋 <span class="en">Complete your claim review</span><span class="hi">अपनी क्लेम समीक्षा पूरी करें</span></div>
+        <div style="font-size:.85rem;color:rgba(255,255,255,.6);margin-top:.25rem"><span class="en">Upload these documents so our legal experts can build your case.</span><span class="hi">ये दस्तावेज़ अपलोड करें ताकि हमारे कानूनी विशेषज्ञ आपका केस तैयार कर सकें।</span></div>
+      </div>
+      <div style="text-align:right;min-width:120px">
+        <div id="lcProgressText" style="font-size:.8rem;font-weight:700;color:#22d3ee"></div>
+        <div style="width:120px;height:7px;background:rgba(255,255,255,.1);border-radius:99px;margin-top:.35rem;overflow:hidden"><div id="lcBarFill" style="height:100%;width:0;background:linear-gradient(90deg,#06b6d4,#22d3ee);transition:width .3s"></div></div>
+      </div>
+    </div>
+    <div id="lcTrust" style="font-size:.78rem;color:rgba(255,255,255,.5);background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);border-radius:8px;padding:.55rem .75rem;margin:.9rem 0;line-height:1.5"></div>
+    <div id="lcSlots" style="display:flex;flex-direction:column;gap:.6rem"></div>
+    <!-- pay-gate (hope/hook) — shown only when all required docs are in -->
+    <div id="lcPayGate" style="display:none;margin-top:1.1rem;background:linear-gradient(135deg,#065f46,#0f766e);border:1px solid #10b981;border-radius:14px;padding:1.4rem 1.5rem;text-align:center">
+      <div style="font-size:1.25rem;font-weight:800;color:#fff">🎯 <span class="en">Your claim looks strong enough to fight</span><span class="hi">आपका क्लेम लड़ने लायक मज़बूत दिखता है</span></div>
+      <div style="font-size:.92rem;color:rgba(255,255,255,.85);margin:.6rem auto 0;max-width:520px;line-height:1.6">
+        <span class="en">You've given us everything we need. Our legal experts are ready to audit the rejection and fight for your rightful settlement.</span>
+        <span class="hi">आपने हमें वह सब दे दिया जो ज़रूरी था। हमारे कानूनी विशेषज्ञ अस्वीकृति का ऑडिट कर आपके हक़ की लड़ाई के लिए तैयार हैं।</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:1.5rem;flex-wrap:wrap;margin:1.1rem 0 .4rem">
+        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your disputed claim</span><span class="hi">आपका विवादित क्लेम</span></div><div id="lcDisputed" style="font-size:1.8rem;font-weight:800;color:#fff;font-family:'Poppins',sans-serif"></div></div>
+        <div style="font-size:1.6rem;color:rgba(255,255,255,.5)">vs</div>
+        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your review</span><span class="hi">आपकी समीक्षा</span></div><div style="font-size:1.8rem;font-weight:800;color:#fcd34d;font-family:'Poppins',sans-serif">₹499</div></div>
+      </div>
+      <div style="font-size:.85rem;color:#fcd34d;font-weight:600;margin-bottom:1rem"><span class="en">Don't leave your money on the table.</span><span class="hi">अपना पैसा यूँ ही मत छोड़िए।</span></div>
+      <button id="lcPayBtn" style="background:#fcd34d;color:#1c1917;border:none;border-radius:10px;padding:.85rem 2rem;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 6px 18px rgba(252,211,77,.3)">
+        <span class="en">Pay ₹499 &amp; Start My Review</span><span class="hi">₹499 दें और मेरी समीक्षा शुरू करें</span> →
+      </button>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.6);margin-top:.7rem"><span class="en">Your report arrives within 48 business hours — here and on WhatsApp.</span><span class="hi">आपकी रिपोर्ट 48 कार्य-घंटों में — यहाँ और WhatsApp पर।</span></div>
+    </div>
+  </div>
+
   <div class="sub-banner sub-none" id="subBanner">
     <div class="sub-banner-text">
       <strong class="en">No active subscription</strong>
@@ -946,6 +981,15 @@ async function loadDashboard() {
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
+
+  // ₹499 funnel: if any claim is still a free unpaid lead, show its document
+  // checklist + pay-gate card at the top of the dashboard. Independent of the
+  // subscription/per-claim banner logic below.
+  try {
+    const leadClaim = (claimsData.claims || []).find(c => c.payment_status === 'unpaid_lead');
+    if (leadClaim) { await renderLeadChecklist(leadClaim.claim_id); }
+    else { const _lc = document.getElementById('leadChecklistCard'); if (_lc) _lc.style.display = 'none'; }
+  } catch (e) { console.warn('lead checklist render failed', e); }
 
   // New signup welcome toast (from ?new=1 redirect after review form)
   if (new URLSearchParams(location.search).get('new') === '1') {
@@ -1903,6 +1947,95 @@ function doLogout() {
 }
 
 // ── ₹499 Pay from dashboard ───────────────────────────────────────────────────
+// ── ₹499 funnel: free-lead claim document checklist + pay-gate ────────────────
+async function renderLeadChecklist(claimId) {
+  const card = document.getElementById('leadChecklistCard');
+  if (!card) return;
+  const r = await api('/nidaan/api/claims/' + claimId + '/checklist');
+  if (!r || !r.ok) { card.style.display = 'none'; return; }
+  const d = await r.json();
+  card.style.display = 'block';
+  document.getElementById('lcTrust').textContent = d.trust_line || '';
+  const done = d.received_required, total = d.required_total;
+  document.getElementById('lcProgressText').textContent = done + ' / ' + total;
+  document.getElementById('lcBarFill').style.width = total ? Math.round(done / total * 100) + '%' : '0%';
+  const slots = document.getElementById('lcSlots');
+  slots.innerHTML = '';
+  (d.items || []).filter(it => it.required_effective).forEach(it => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:.75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.7rem .85rem';
+    if (it.received) {
+      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1"><div style="font-weight:600;color:#fff;font-size:.9rem">${esc(it.label)}</div><div style="font-size:.75rem;color:#34d399"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>`;
+    } else {
+      const inputId = 'lcfile_' + it.key;
+      row.innerHTML = `<div style="font-size:1.1rem">📄</div>
+        <div style="flex:1"><div style="font-weight:600;color:#fff;font-size:.9rem">${esc(it.label)}</div><div style="font-size:.74rem;color:rgba(255,255,255,.5);line-height:1.4">${esc(it.why_en || '')}</div></div>
+        <input type="file" id="${inputId}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="uploadChecklistDoc('${claimId}','${it.key}',this)">
+        <button type="button" onclick="document.getElementById('${inputId}').click()" style="background:#0891b2;color:#fff;border:none;border-radius:7px;padding:.45rem .9rem;font-weight:700;font-size:.82rem;cursor:pointer;white-space:nowrap"><span class="en">Upload</span><span class="hi">अपलोड</span></button>`;
+    }
+    slots.appendChild(row);
+  });
+  const gate = document.getElementById('lcPayGate');
+  if (d.show_pay_gate) {
+    gate.style.display = 'block';
+    document.getElementById('lcDisputed').textContent = d.disputed_amount ? '₹' + Number(d.disputed_amount).toLocaleString('en-IN') : '—';
+    document.getElementById('lcPayBtn').onclick = function(){ payClaim(claimId); };
+  } else {
+    gate.style.display = 'none';
+  }
+}
+
+async function uploadChecklistDoc(claimId, docKey, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const btn = inputEl.nextElementSibling;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const fd = new FormData();
+  fd.append('files', file);
+  fd.append('doc_key', docKey);
+  try {
+    const r = await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY) }, body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(_extractErr(d, 'Upload failed')); if (btn) { btn.disabled = false; btn.textContent = 'Upload'; } return; }
+    await renderLeadChecklist(claimId);   // reflects received + pay-gate
+  } catch(e) {
+    alert('Upload error. Please try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Upload'; }
+  }
+}
+
+async function payClaim(claimId) {
+  const btn = document.getElementById('lcPayBtn');
+  if (btn) { btn.disabled = true; }
+  try {
+    const r = await api('/nidaan/api/claims/' + claimId + '/pay', { method: 'POST' });
+    if (!r || !r.ok) { const e = r ? await r.json() : {}; alert(_extractErr(e, 'Could not start payment')); if (btn) btn.disabled = false; return; }
+    const data = await r.json();
+    const options = {
+      key: data.razorpay_key_id, amount: data.amount, currency: data.currency,
+      name: 'Nidaan Partner', description: '₹499 Claim Review', image: '/static/nidaan_logo.png',
+      order_id: data.order_id,
+      prefill: { name: _meCache ? _meCache.owner_name : '', email: _meCache ? _meCache.email : '', contact: _meCache ? _meCache.phone : '' },
+      theme: { color: '#0891b2' },
+      handler: async function(response) {
+        try {
+          const vr = await api('/nidaan/api/claims/' + claimId + '/pay-verify', {
+            method: 'POST',
+            body: JSON.stringify({ razorpay_order_id: response.razorpay_order_id, razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature }) });
+          const vd = vr ? await vr.json() : {};
+          if (vr && vr.ok && vd.status === 'paid') { location.reload(); }
+          else { alert('Payment received but verification failed. Contact support with Payment ID: ' + response.razorpay_payment_id); }
+        } catch(err) { alert('Verification error. Contact support with Payment ID: ' + response.razorpay_payment_id); }
+      },
+      modal: { ondismiss: function(){ if (btn) btn.disabled = false; } },
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function(resp){ alert('Payment failed: ' + (resp.error ? resp.error.description : '')); if (btn) btn.disabled = false; });
+    rzp.open();
+  } catch(e) { alert('Error: ' + e.message); if (btn) btn.disabled = false; }
+}
+
 async function payForReview(purchaseId) {
   const btn = document.getElementById('payNowBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Loading payment…'; }
