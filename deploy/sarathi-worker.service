@@ -1,0 +1,46 @@
+# =============================================================================
+#  sarathi-worker.service — the SINGLETON tier (zero-downtime architecture)
+# =============================================================================
+#  Runs EXACTLY ONCE. Owns the in-process singletons that must never be
+#  duplicated: Telegram master + tenant bots, the reminder scheduler, and the
+#  plan-change applier. Binds HTTP on 8100 for its own /health only — nginx does
+#  NOT route public traffic here (keeps its in-memory OTP/CSRF store out of the
+#  user-facing pool).
+#
+#  Install:
+#    sudo cp deploy/sarathi-worker.service /etc/systemd/system/
+#    sudo systemctl daemon-reload && sudo systemctl enable --now sarathi-worker
+# =============================================================================
+[Unit]
+Description=Sarathi-AI — Worker (bots + scheduler singletons)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+EnvironmentFile=/opt/sarathi/biz.env
+# These override anything in biz.env (declared AFTER EnvironmentFile):
+Environment=APP_ROLE=worker
+Environment=SERVER_HOST=127.0.0.1
+Environment=SERVER_PORT=8100
+ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sarathi
+PrivateTmp=true
+LimitNOFILE=65535
+MemoryMax=6G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sarathi-worker
+
+[Install]
+WantedBy=multi-user.target

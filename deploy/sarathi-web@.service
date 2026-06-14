@@ -1,0 +1,47 @@
+# =============================================================================
+#  sarathi-web@.service — the HTTP WEB tier (zero-downtime architecture)
+# =============================================================================
+#  Templated unit: run TWO instances (sarathi-web@1, sarathi-web@2) on ports
+#  8001 and 8002. APP_ROLE=web → NO bots, NO scheduler (those live in the single
+#  sarathi-worker), so multiple copies are safe. nginx load-balances both with
+#  ip_hash (sticky) and the deploy script rolling-restarts them one at a time,
+#  so at least one is always serving → no 502.
+#
+#  Install:
+#    sudo cp deploy/sarathi-web@.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now sarathi-web@1 sarathi-web@2
+# =============================================================================
+[Unit]
+Description=Sarathi-AI — Web instance %i (HTTP only, port 800%i)
+After=network-online.target sarathi-worker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+EnvironmentFile=/opt/sarathi/biz.env
+# Override AFTER EnvironmentFile so these win over biz.env:
+Environment=APP_ROLE=web
+Environment=SERVER_HOST=127.0.0.1
+Environment=SERVER_PORT=800%i
+ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sarathi
+PrivateTmp=true
+LimitNOFILE=65535
+MemoryMax=3G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sarathi-web@%i
+
+[Install]
+WantedBy=multi-user.target

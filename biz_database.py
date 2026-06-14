@@ -27,6 +27,12 @@ async def _get_db():
     """Async context manager that yields an aiosqlite connection."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
+        # Wait (don't error) if another process holds the write lock — matters
+        # under the multi-process zero-downtime model. WAL itself is set in init_db.
+        try:
+            await conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
         yield conn
 
 # =============================================================================
@@ -493,6 +499,18 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_agent ON ai_usage_log(agent_id, created_
 async def init_db():
     """Create all tables and run migrations (idempotent)."""
     async with aiosqlite.connect(DB_PATH) as conn:
+        # WAL is PERSISTENT at the database-file level: once set it applies to
+        # every connection (incl. modules that open aiosqlite directly), which is
+        # what makes the multi-process zero-downtime model (worker + 2 web) safe —
+        # concurrent readers never block the writer and vice-versa. synchronous=
+        # NORMAL is the recommended durable+fast pairing for WAL. busy_timeout
+        # makes a writer wait for the lock instead of erroring under contention.
+        try:
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA synchronous=NORMAL")
+            await conn.execute("PRAGMA busy_timeout=5000")
+        except Exception as _pe:
+            logger.warning("Could not set WAL pragmas: %s", _pe)
         await conn.executescript(SCHEMA)
 
         # --- Migrations (safe to re-run) ---

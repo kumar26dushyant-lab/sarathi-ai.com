@@ -85,6 +85,17 @@ SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 SERVER_URL = os.getenv("SERVER_URL", f"http://localhost:{SERVER_PORT}")
 
+# Process role for zero-downtime (blue-green) deploys:
+#   full   — everything (DEFAULT, = legacy single-process behaviour)
+#   worker — the in-process SINGLETONS only (Telegram master+tenant bots,
+#            reminder scheduler, plan-change applier). Exactly ONE worker runs.
+#   web    — HTTP only, NO singletons → safe to run 2+ behind nginx and
+#            blue-green rolling-restart without double bots / double schedulers.
+# Unset → 'full' so existing deployments behave exactly as before until the new
+# systemd units (which set APP_ROLE) are installed.
+APP_ROLE = os.getenv("APP_ROLE", "full").strip().lower()
+RUN_SINGLETONS = APP_ROLE in ("full", "worker")
+
 # =============================================================================
 #  FASTAPI APP
 # =============================================================================
@@ -17141,19 +17152,25 @@ async def main():
     else:
         logger.warning("⚠️ Razorpay not configured — payments disabled")
 
-    # Step 4: Start Telegram bots (master + per-tenant)
-    #   Use webhook mode in production (HTTPS), polling in local dev
-    use_webhook = SERVER_URL.startswith("https://")
-    webhook_base = SERVER_URL if use_webhook else ""
-    bot_mode = "webhook" if use_webhook else "polling"
-    logger.info("🤖 Starting master Telegram bot (%s mode)...", bot_mode)
+    # Step 4: Start Telegram bots (master + per-tenant) — SINGLETONS.
+    #   Use webhook mode in production (HTTPS), polling in local dev.
+    #   Only the 'full'/'worker' role runs these; 'web' instances skip them so
+    #   multiple web instances never spawn duplicate Telegram pollers (409s).
     mgr = botmgr.bot_manager
-    await mgr.start_master_bot(TELEGRAM_TOKEN, webhook_base_url=webhook_base)
-    logger.info("✅ Master bot ready (Sarathi-AI.com / @SarathiBizBot)")
+    tenant_count = 0
+    if RUN_SINGLETONS:
+        use_webhook = SERVER_URL.startswith("https://")
+        webhook_base = SERVER_URL if use_webhook else ""
+        bot_mode = "webhook" if use_webhook else "polling"
+        logger.info("🤖 Starting master Telegram bot (%s mode)...", bot_mode)
+        await mgr.start_master_bot(TELEGRAM_TOKEN, webhook_base_url=webhook_base)
+        logger.info("✅ Master bot ready (Sarathi-AI.com / @SarathiBizBot)")
 
-    logger.info("🤖 Starting tenant bots...")
-    tenant_count = await mgr.start_all_tenant_bots()
-    logger.info("✅ %d tenant bot(s) started", tenant_count)
+        logger.info("🤖 Starting tenant bots...")
+        tenant_count = await mgr.start_all_tenant_bots()
+        logger.info("✅ %d tenant bot(s) started", tenant_count)
+    else:
+        logger.info("🌐 APP_ROLE=%s — skipping Telegram bots (web-only instance)", APP_ROLE)
 
     # Step 5: Register reminder callback (smart routing: tenant bot → master)
     async def telegram_alert(telegram_id: str, message: str, reply_markup=None):
@@ -17199,25 +17216,31 @@ async def main():
             logger.error("Queue processor error: %s", e)
     reminders.set_queue_callback(process_queued_messages)
 
-    # Step 6: Start reminder scheduler in background
-    logger.info("⏰ Starting reminder scheduler...")
-    scheduler_task = asyncio.create_task(reminders.start_scheduler())
+    # Step 6: Start reminder scheduler in background — SINGLETON (one runner only,
+    # else reminders/SLA actions fire N times). Skipped on 'web' instances.
+    scheduler_task = None
+    plan_change_task = None
+    if RUN_SINGLETONS:
+        logger.info("⏰ Starting reminder scheduler...")
+        scheduler_task = asyncio.create_task(reminders.start_scheduler())
 
-    # Step 6b: Background task to apply scheduled plan changes
-    async def plan_change_applier():
-        """Check and apply pending plan changes every hour."""
-        while True:
-            try:
-                await asyncio.sleep(3600)  # Check every hour
-                applied = await db.apply_pending_plan_changes()
-                if applied:
-                    logger.info("📋 Applied %d scheduled plan change(s)", len(applied))
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error("Plan change applier error: %s", e)
+        # Step 6b: Background task to apply scheduled plan changes
+        async def plan_change_applier():
+            """Check and apply pending plan changes every hour."""
+            while True:
+                try:
+                    await asyncio.sleep(3600)  # Check every hour
+                    applied = await db.apply_pending_plan_changes()
+                    if applied:
+                        logger.info("📋 Applied %d scheduled plan change(s)", len(applied))
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Plan change applier error: %s", e)
 
-    plan_change_task = asyncio.create_task(plan_change_applier())
+        plan_change_task = asyncio.create_task(plan_change_applier())
+    else:
+        logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 
     # Step 6c: OTP cleanup task (prevent memory leak from expired OTPs)
     async def otp_cleanup_task():
@@ -17288,16 +17311,14 @@ async def main():
         await server.serve()
     finally:
         logger.info("🧹 Shutting down...")
-        scheduler_task.cancel()
-        plan_change_task.cancel()
-        try:
-            await scheduler_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await plan_change_task
-        except asyncio.CancelledError:
-            pass
+        for _bg in (scheduler_task, plan_change_task):
+            if _bg is None:   # web-only instances never started these
+                continue
+            _bg.cancel()
+            try:
+                await _bg
+            except asyncio.CancelledError:
+                pass
         await mgr.stop_all()
         # Close WhatsApp HTTP client pool
         try:
