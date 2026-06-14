@@ -132,6 +132,12 @@ input::placeholder{color:rgba(255,255,255,.25)}
       <h1>Welcome to Nidaan Partner</h1>
       <p class="card-sub">Enter your email to sign in or create a free account in seconds.</p>
 
+      <!-- Funnel framing: shown only when arriving via "Check if you have a case" -->
+      <div id="funnel-auth-note" style="display:none;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.22);border-radius:12px;padding:.85rem 1rem;margin-bottom:1.1rem;text-align:left">
+        <div style="font-weight:700;color:#22d3ee;font-size:.9rem;margin-bottom:.25rem">📋 Let's check if you have a case</div>
+        <div style="font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5">Create your free account to submit your rejected or underpaid claim. <strong style="color:rgba(255,255,255,.85)">No payment to start</strong> — our legal experts review it first.</div>
+      </div>
+
       <!-- Google first -->
       <div id="googleAreaStep1">
         <div class="google-stub" id="googleStub1">Loading Google Sign-In…</div>
@@ -302,6 +308,7 @@ input::placeholder{color:rgba(255,255,255,.25)}
 // ── URL param: ?plan=silver etc. carried through to dashboard for post-signup subscribe prompt
 const _plan = new URLSearchParams(location.search).get('plan') || '';
 let _email = '';
+let _funnelMode = false;  // true when arriving via #get-reviewed (free-claim funnel)
 
 // ── Robust error extraction ──────────────────────────────────────────────────
 // FastAPI errors can have `detail` as: (a) string, (b) array of {loc,msg,...} from
@@ -715,6 +722,8 @@ function _loginSuccess(data) {
   const plan  = data.plan || data.account?.plan || '';
   localStorage.setItem('nidaan_token', token);
   localStorage.setItem('nidaan_plan',  plan);
+  // Free-claim funnel: don't bounce to dashboard — reveal the claim form right here.
+  if (_funnelMode) { enterClaimForm(); return; }
   // If they came from a plan card, go to dashboard and open subscribe modal
   const dest = '/nidaan/dashboard' + (_plan ? '?subscribe=' + _plan : '');
   window.location.href = dest;
@@ -841,14 +850,40 @@ if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-revi
 // NOTE: #review-section is defined LATER in the document than this script, so we
 // must wait for the DOM to finish parsing — otherwise getElementById('review-section')
 // returns null, login stays hidden, and the page renders blank (bug fixed 2026-06-12).
+// Reveal the claim form (logged-in only). Used by the funnel + post-auth.
+function enterClaimForm() {
+  const login = document.getElementById('login-section');
+  const review = document.getElementById('review-section');
+  if (login) login.style.display = 'none';
+  if (review) review.style.display = 'flex';
+  if (location.hash) history.replaceState({}, '', location.pathname);  // clean #get-reviewed
+  _prefillClaimForm();
+}
+
+// Prefill insured name/phone from the logged-in account (editable for family claims).
+async function _prefillClaimForm() {
+  try {
+    const r = await fetch('/nidaan/api/me', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('nidaan_token') } });
+    if (!r.ok) return;
+    const me = await r.json();
+    const n = document.getElementById('rv_insured_name');
+    const p = document.getElementById('rv_insured_phone');
+    if (n && !n.value && me.owner_name) n.value = me.owner_name;
+    if (p && !p.value && me.phone) p.value = me.phone;
+  } catch (e) {}
+}
+
 (function() {
   const h = location.hash || '';
   if (!(h.startsWith('#get-reviewed') || h.startsWith('#review-section'))) return;
+  _funnelMode = true;
   function reveal() {
-    const login = document.getElementById('login-section');
-    const review = document.getElementById('review-section');
-    if (login) login.style.display = 'none';
-    if (review) review.style.display = 'flex';
+    if (localStorage.getItem('nidaan_token')) {
+      enterClaimForm();                              // already logged in → claim form
+    } else {
+      const note = document.getElementById('funnel-auth-note');  // need account first
+      if (note) note.style.display = 'block';
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', reveal);
@@ -888,23 +923,22 @@ if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-revi
 <section id="review-section">
   <div class="rev-card">
     <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
-    <h2>Get a ₹499 Claim Review</h2>
-    <p class="rev-sub">Submit your client's claim details. Our legal experts review within 48–72 business hours and send you a detailed written assessment.</p>
-    <div class="rev-badge">🔒 One-time · Secure Payment · 48–72 hr turnaround</div>
+    <h2>Check if you have a case</h2>
+    <p class="rev-sub">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:rgba(255,255,255,.75)">free to submit, no payment to start.</strong></p>
+    <div class="rev-badge">🔒 Free to submit · Protected under the DPDP Act 2023</div>
 
     <fieldset>
-      <legend>Your Details (Advisor)</legend>
-      <div class="field"><label>Full Name *</label><input type="text" id="rv_advisor_name" placeholder="Your name" autocomplete="name"></div>
+      <legend>Who is this claim for?</legend>
       <div class="rev-row2">
-        <div class="field"><label>Phone *</label><input type="tel" id="rv_advisor_phone" placeholder="+91 XXXXX XXXXX" autocomplete="tel" inputmode="tel"></div>
-        <div class="field"><label>Email *</label><input type="email" id="rv_advisor_email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
+        <div class="field"><label>Insured Name *</label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
+        <div class="field"><label>Contact Phone *</label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
       </div>
+      <p style="font-size:.74rem;color:rgba(255,255,255,.35);margin:.15rem 0 0;line-height:1.5">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</p>
     </fieldset>
 
     <fieldset>
       <legend>Claim Details</legend>
       <div class="rev-row2">
-        <div class="field"><label>Client / Insured Name *</label><input type="text" id="rv_insured_name" placeholder="Client full name"></div>
         <div class="field"><label>Claim Type *</label>
           <select id="rv_claim_type" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
             <option value="">Select type…</option>
@@ -916,117 +950,83 @@ if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-revi
             <option value="other">Other</option>
           </select>
         </div>
-      </div>
-      <div class="rev-row2">
         <div class="field"><label>Insurer / Company Name</label><input type="text" id="rv_insurer_name" placeholder="e.g. HDFC Ergo"></div>
-        <div class="field"><label>Disputed Amount (₹)</label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
       </div>
+      <div class="field"><label>Disputed Amount (₹)</label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
       <div class="field"><label>Brief Description / Notes</label>
-        <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, rejection reason, or what you need the review to cover…"></textarea>
+        <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
       </div>
     </fieldset>
 
-    <div class="rev-price-line">
-      <div class="rev-label">One-time review fee<br><span style="font-size:.72rem;color:rgba(255,255,255,.35)">All UPI, cards, net banking accepted</span></div>
-      <div class="rev-amount">₹499</div>
-    </div>
-
     <div id="rev-msg"></div>
 
-    <button class="btn-pay" id="revPayBtn" onclick="startReviewPayment()">
-      <span>🔒</span> Pay ₹499 &amp; Submit Request
+    <button class="btn-pay" id="revSubmitBtn" onclick="submitFreeClaim()">
+      <span>📋</span> Submit &amp; See My Next Steps →
     </button>
-    <p class="rev-note">Payment is collected via Razorpay. After successful payment, you'll receive a confirmation email and the legal review within 48–72 business hours.</p>
+    <p class="rev-note">No payment now. After you submit, we'll show you the few documents to upload so our experts can build your case — then a one-time ₹499 unlocks your full review (delivered within 48 business hours, here and on WhatsApp).</p>
   </div>
 </section>
 
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
-async function startReviewPayment() {
-  const btn = document.getElementById('revPayBtn');
+// ₹499 value-first funnel: submit the claim as a FREE unpaid lead (no payment
+// now). The account must already exist (funnel gates login before this form).
+// On success → dashboard, where the document checklist + pay-gate take over.
+const _SUBMIT_LABEL = '<span>📋</span> Submit &amp; See My Next Steps →';
+async function submitFreeClaim() {
+  const btn = document.getElementById('revSubmitBtn');
   const msg = document.getElementById('rev-msg');
   msg.className = ''; msg.style.display = 'none';
 
-  const fields = {
-    advisor_name: document.getElementById('rv_advisor_name').value.trim(),
-    advisor_phone: document.getElementById('rv_advisor_phone').value.trim(),
-    advisor_email: document.getElementById('rv_advisor_email').value.trim(),
-    insured_name: document.getElementById('rv_insured_name').value.trim(),
-    claim_type: document.getElementById('rv_claim_type').value,
+  const token = localStorage.getItem('nidaan_token');
+  if (!token) {  // safety net — funnel should have gated this already
+    showRevMsg('err', 'Please create your free account first.');
+    document.getElementById('login-section').style.display = '';
+    document.getElementById('review-section').style.display = 'none';
+    return;
+  }
+
+  const insured_name = document.getElementById('rv_insured_name').value.trim();
+  const insured_phone = document.getElementById('rv_insured_phone').value.replace(/\D/g, '');
+  const claim_type = document.getElementById('rv_claim_type').value;
+
+  if (!insured_name) { showRevMsg('err', 'Please enter the insured name.'); return; }
+  if (insured_phone.length < 10) { showRevMsg('err', 'Please enter a valid 10-digit contact phone.'); return; }
+  if (!claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
+
+  // Body MUST match NidaanClaimReq exactly (extra="forbid").
+  const body = {
+    claim_type,
+    insured_name,
+    insured_phone,
     insurer_name: document.getElementById('rv_insurer_name').value.trim(),
     disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
-    notes: document.getElementById('rv_notes').value.trim(),
+    notes_from_agent: document.getElementById('rv_notes').value.trim(),
   };
 
-  if (!fields.advisor_name) { showRevMsg('err', 'Please enter your name.'); return; }
-  if (!fields.advisor_phone) { showRevMsg('err', 'Please enter your phone number.'); return; }
-  if (!fields.advisor_email || !fields.advisor_email.includes('@')) { showRevMsg('err', 'Please enter a valid email.'); return; }
-  if (!fields.insured_name) { showRevMsg('err', 'Please enter the client / insured name.'); return; }
-  if (!fields.claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
-
   btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Creating order…';
-
+  btn.innerHTML = '<span>⏳</span> Submitting…';
   try {
-    const res = await fetch('/nidaan/api/review-request/pay', {
+    const res = await fetch('/nidaan/api/claims/submit', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(fields),
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Failed to create payment order.'));
-
-    const rzp = new Razorpay({
-      key: data.razorpay_key_id,
-      amount: data.amount,
-      currency: data.currency,
-      order_id: data.order_id,
-      name: 'Nidaan Partner',
-      description: 'Claim Review — ₹499',
-      image: '/static/nidaan_logo.png',
-      prefill: { name: fields.advisor_name, email: fields.advisor_email, contact: fields.advisor_phone },
-      theme: { color: '#06b6d4' },
-      handler: async function(resp) {
-        btn.innerHTML = '<span>⏳</span> Verifying payment…';
-        try {
-          const vRes = await fetch('/nidaan/api/review-request/verify', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              razorpay_order_id: resp.razorpay_order_id,
-              razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_signature: resp.razorpay_signature,
-              ...fields,
-            }),
-          });
-          const vData = await vRes.json();
-          if (!vRes.ok) throw new Error(_extractErr(vData, 'Verification failed.'));
-          if (vData.dashboard_token) {
-            localStorage.setItem('nidaan_token', vData.dashboard_token);
-            showRevMsg('ok', '✅ Payment confirmed! Redirecting to your Nidaan dashboard…');
-            setTimeout(() => { window.location.href = '/nidaan/dashboard?payment=success'; }, 2200);
-          } else {
-            showRevMsg('ok', '✅ Payment confirmed! Your review request has been submitted. Check your email. Reference: #' + vData.purchase_id);
-          }
-          btn.style.display = 'none';
-        } catch(e) {
-          showRevMsg('err', 'Payment received but verification failed. Please contact support with Payment ID: ' + resp.razorpay_payment_id);
-          btn.disabled = false;
-          btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
-        }
-      },
-      modal: {
-        ondismiss: function() {
-          btn.disabled = false;
-          btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
-        }
-      }
-    });
-    rzp.open();
+    if (res.status === 401) {  // token expired → back to login
+      showRevMsg('err', 'Your session expired. Please sign in again.');
+      localStorage.removeItem('nidaan_token');
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+    if (!res.ok) throw new Error(_extractErr(data, 'Could not submit your claim.'));
+    showRevMsg('ok', '✅ Claim submitted! Taking you to your dashboard to upload your documents…');
+    btn.style.display = 'none';
+    setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 1400);
   } catch(e) {
     showRevMsg('err', e.message);
     btn.disabled = false;
-    btn.innerHTML = '<span>🔒</span> Pay ₹499 &amp; Submit Request';
+    btn.innerHTML = _SUBMIT_LABEL;
   }
 }
 

@@ -985,9 +985,9 @@ async function loadDashboard() {
   // ₹499 funnel: if any claim is still a free unpaid lead, show its document
   // checklist + pay-gate card at the top of the dashboard. Independent of the
   // subscription/per-claim banner logic below.
+  const _leadClaim = (claimsData.claims || []).find(c => c.payment_status === 'unpaid_lead');
   try {
-    const leadClaim = (claimsData.claims || []).find(c => c.payment_status === 'unpaid_lead');
-    if (leadClaim) { await renderLeadChecklist(leadClaim.claim_id); }
+    if (_leadClaim) { await renderLeadChecklist(_leadClaim.claim_id); }
     else { const _lc = document.getElementById('leadChecklistCard'); if (_lc) _lc.style.display = 'none'; }
   } catch (e) { console.warn('lead checklist render failed', e); }
 
@@ -1173,6 +1173,17 @@ async function loadDashboard() {
     _isSubscribed = false;
     // Mark gated tabs visually with lock icon
     document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
+    if (_leadClaim) {
+      // Free-lead user mid-funnel: keep it on-message — the checklist card above
+      // is the CTA, not a subscription pitch.
+      banner.className = 'sub-banner sub-active';
+      banner.innerHTML = `
+        <div class="sub-banner-text">
+          <strong class="en">Your claim is in 📋</strong><strong class="hi">आपका क्लेम दर्ज है 📋</strong>
+          <span class="en">Finish uploading your documents above to unlock your expert review.</span>
+          <span class="hi">अपनी विशेषज्ञ समीक्षा अनलॉक करने के लिए ऊपर दस्तावेज़ अपलोड पूरा करें।</span>
+        </div>`;
+    }
     // Unsubscribed — lock the claims section visually
     lockOverlay.style.display = 'flex';
     claimCard.style.minHeight = '220px';
