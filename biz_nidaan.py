@@ -2465,10 +2465,14 @@ async def get_claims_ops(
     assigned_to: Optional[int] = None,
     claim_type: Optional[str] = None,
     search: Optional[str] = None,
+    payment_status: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
-    """Fetch claims for ops portal. team_member sees only their assigned claims."""
+    """Fetch claims for ops portal. team_member sees only their assigned claims.
+    Paid/subscription claims (active reviews with a running SLA) sort ABOVE
+    unpaid leads — the review team works paid first; leads are the conversion
+    pipeline. Filter payment_status='unpaid_lead' to see just the lead funnel."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         conditions = []
@@ -2484,6 +2488,9 @@ async def get_claims_ops(
         if status:
             conditions.append("c.status=?")
             params.append(status)
+        if payment_status:
+            conditions.append("c.payment_status=?")
+            params.append(payment_status)
         if claim_type:
             conditions.append("c.claim_type=?")
             params.append(claim_type)
@@ -2505,7 +2512,8 @@ async def get_claims_ops(
                JOIN nidaan_accounts a ON a.account_id = c.account_id
                LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
                {where}
-               ORDER BY c.created_at DESC LIMIT ? OFFSET ?""",
+               ORDER BY (c.payment_status='unpaid_lead') ASC, c.created_at DESC
+               LIMIT ? OFFSET ?""",
             params + [limit, offset],
         )
         return [dict(r) for r in await cur.fetchall()]

@@ -1404,6 +1404,27 @@ _ALLOWED_MIME = {
 _NIDAAN_DOCS_DIR = Path(__file__).parent / "uploads" / "nidaan-docs"
 _NIDAAN_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 _MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
+_MAX_DOCS_PER_CLAIM = 40          # storage-DoS guard for free leads
+
+
+def _doc_magic_ok(content: bytes) -> bool:
+    """Defense-in-depth: client Content-Type is spoofable, so confirm the bytes
+    actually look like an allowed document (PDF / JPEG / PNG / WEBP / DOC / DOCX)."""
+    if len(content) < 8:
+        return False
+    if content[:4] == b"%PDF":
+        return True
+    if content[:3] == b"\xff\xd8\xff":                       # JPEG
+        return True
+    if content[:8] == b"\x89PNG\r\n\x1a\n":                  # PNG
+        return True
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":  # WEBP
+        return True
+    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # legacy .doc (OLE)
+        return True
+    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):  # docx (zip)
+        return True
+    return False
 
 
 @app.post("/nidaan/api/review/{purchase_id}/documents/upload")
@@ -1434,6 +1455,8 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
             raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
         if f.content_type not in _ALLOWED_MIME:
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
         ext = Path(f.filename or "file").suffix.lower() or ".bin"
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
@@ -1472,6 +1495,11 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
         )
         if not await _cur.fetchone():
             raise HTTPException(status_code=404, detail="Claim not found")
+        # Storage-DoS guard: cap total documents per claim (free leads can upload).
+        _dc = await (await _conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=?", (claim_id,))).fetchone()
+        if _dc and _dc[0] + len(files) > _MAX_DOCS_PER_CLAIM:
+            raise HTTPException(status_code=429, detail=f"Document limit reached ({_MAX_DOCS_PER_CLAIM} per claim).")
     if len(files) > 5:
         raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
     saved = []
@@ -1481,6 +1509,8 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
         if f.content_type not in _ALLOWED_MIME:
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
         ext = Path(f.filename or "file").suffix.lower() or ".bin"
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
@@ -2808,6 +2838,7 @@ async def ops_list_claims(
     assigned_to: Optional[int] = None,
     claim_type: Optional[str] = None,
     search: Optional[str] = None,
+    payment_status: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ):
@@ -2818,9 +2849,20 @@ async def ops_list_claims(
         staff_id=staff["staff_id"], role=staff["role"],
         status=status, assigned_to=assigned_to,
         claim_type=claim_type, search=search,
+        payment_status=payment_status,
         limit=limit, offset=offset,
     )
-    return {"claims": claims, "count": len(claims)}
+    # Pipeline counters (global, independent of the active filter) so the ops UI
+    # can badge the unpaid-lead funnel vs paid work and keep counts while filtering.
+    counts = {"unpaid_lead": 0, "paid": 0, "subscription": 0}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        # team_member sees only their own assigned scope; admins see everything.
+        _scope = "" if staff["role"] != "team_member" else f" WHERE assigned_to_staff_id={int(staff['staff_id'])}"
+        for r in await (await _c.execute(
+                f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
+            counts[r["payment_status"] or "paid"] = r["n"]
+    return {"claims": claims, "count": len(claims), "pipeline": counts}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}")

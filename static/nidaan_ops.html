@@ -1516,20 +1516,43 @@ function _widgetRecentComments(comments) {
 }
 
 // ── Inline Active Claims widget renderer (Option B) ──────────────────────────
+// ₹499 funnel: distinguish unpaid leads (conversion pipeline) from paid/active work.
+let _opsPayFilter = '';   // '' | 'unpaid_lead' | 'paid' | 'subscription'
+function _payBadge(ps) {
+  if (ps === 'unpaid_lead') return '<span title="Free lead — not yet paid" style="background:#7c2d12;color:#fdba74;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px;letter-spacing:.04em">LEAD</span>';
+  if (ps === 'subscription') return '<span title="Covered by subscription" style="background:#1e3a8a;color:#93c5fd;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">SUB</span>';
+  return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:#6ee7b7;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
+}
+function setOpsPayFilter(ps) {
+  _opsPayFilter = (_opsPayFilter === ps) ? '' : ps;  // toggle
+  renderActiveClaimsWidget(window._ovStatusFilter || '', window._ovSearch || '');
+}
+
 async function renderActiveClaimsWidget(statusFilter, search) {
+  window._ovStatusFilter = statusFilter; window._ovSearch = search;  // remember for filter toggles
   const body = document.getElementById('ovClaimsBody');
   if (!body) return;
   body.innerHTML = '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>';
   const params = new URLSearchParams();
   if (statusFilter) params.set('status', statusFilter);
   if (search) params.set('search', search);
+  if (_opsPayFilter) params.set('payment_status', _opsPayFilter);
   params.set('limit', '30');
   const r = await API('/claims?' + params);
   if (!r.ok) { body.innerHTML = '<div style="padding:1rem;color:#fca5a5;font-size:.85rem">Failed to load</div>'; return; }
   const d = await r.json();
   const claims = d.claims || [];
+  const pl = d.pipeline || {};
+  // Pipeline summary bar — paid/active work vs the unpaid-lead funnel.
+  const chip = (ps, label, n, on) => `<button onclick="setOpsPayFilter('${ps}')" style="cursor:pointer;border:1px solid ${on?'#22d3ee':'rgba(255,255,255,.12)'};background:${on?'rgba(34,211,238,.12)':'transparent'};color:#e2e8f0;border-radius:999px;padding:.25rem .7rem;font-size:.72rem;font-weight:700">${label} <span style="opacity:.7">${n||0}</span></button>`;
+  const bar = (pl.unpaid_lead !== undefined) ? `<div style="display:flex;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
+      ${chip('', 'All', (pl.unpaid_lead||0)+(pl.paid||0)+(pl.subscription||0), _opsPayFilter==='')}
+      ${chip('unpaid_lead', '🟠 Leads', pl.unpaid_lead, _opsPayFilter==='unpaid_lead')}
+      ${chip('paid', '🟢 Paid', pl.paid, _opsPayFilter==='paid')}
+      ${chip('subscription', '🔵 Sub', pl.subscription, _opsPayFilter==='subscription')}
+    </div>` : '';
   if (!claims.length) {
-    body.innerHTML = '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No claims match these filters.</div>';
+    body.innerHTML = bar + '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No claims match these filters.</div>';
     return;
   }
   const rows = claims.map(c => `
@@ -1539,16 +1562,17 @@ async function renderActiveClaimsWidget(statusFilter, search) {
       <td>${esc(c.claim_type||'—')}</td>
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
+      <td>${_payBadge(c.payment_status)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td style="font-size:.75rem;color:rgba(255,255,255,.5)">${esc(c.owner_name||'—')}</td>
       <td style="font-size:.75rem;color:rgba(255,255,255,.5)">${esc(c.assigned_staff_name||'—')}</td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(c.created_at)}</td>
     </tr>`).join('');
-  body.innerHTML = `
+  body.innerHTML = bar + `
     <div class="table-wrap" style="max-height:480px;overflow-y:auto">
       <table>
         <thead>
-          <tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr>
+          <tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Pay</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
