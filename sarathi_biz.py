@@ -2345,6 +2345,57 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
 
 # ── Nidaan: Cancel subscription ────────────────────────────────────────────────
 
+@app.post("/nidaan/api/account/delete")
+@limiter.limit("3/minute")
+async def nidaan_account_delete(request: Request):
+    """DPDP right-to-erasure: user requests account deletion. Stops billing now,
+    soft-deletes with a grace window for undo; a daily sweep hard-purges the PII."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    result = await nidaan.request_account_deletion(account["account_id"])
+    # DPDP record + confirmation to the user.
+    try:
+        asyncio.create_task(email_svc.send_email(
+            to_email=account["email"],
+            subject="Your Nidaan account deletion request",
+            html_body=(f"<p>Hello {account.get('owner_name','')},</p>"
+                       f"<p>We've received your request to delete your Nidaan Partner account. "
+                       f"Any active subscription has been cancelled, and your data will be "
+                       f"permanently and securely deleted on <b>{result['purge_on']}</b>.</p>"
+                       f"<p>Changed your mind? Sign in before then and choose <b>Keep my account</b> "
+                       f"to cancel the deletion.</p><p>— Nidaan – The Legal Consultants LLP</p>")))
+    except Exception:
+        pass
+    return {"status": "deletion_pending", "purge_on": result["purge_on"],
+            "grace_days": result["grace_days"],
+            "message": f"Account scheduled for deletion on {result['purge_on']}. "
+                       f"Sign in before then to undo."}
+
+
+@app.post("/nidaan/api/account/delete/cancel")
+@limiter.limit("5/minute")
+async def nidaan_account_delete_cancel(request: Request):
+    """Undo a pending account deletion within the grace window."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await nidaan.get_account_by_email(payload["email"])
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ok = await nidaan.cancel_account_deletion(account["account_id"])
+    if not ok:
+        raise HTTPException(status_code=400, detail="No pending deletion to cancel")
+    return {"status": "active", "message": "Your account deletion has been cancelled."}
+
+
 @app.post("/nidaan/api/subscribe/cancel")
 @limiter.limit("5/minute")
 async def nidaan_subscribe_cancel(request: Request):
@@ -17296,6 +17347,20 @@ async def main():
                     logger.error("Lead retention sweep error: %s", e)
                 await asyncio.sleep(24 * 3600)  # daily
         asyncio.create_task(lead_retention_loop())
+
+        # Step 6e: DPDP account-erasure sweep — hard-purge accounts past their
+        # deletion grace window. Daily, worker-only (singleton).
+        async def account_erasure_loop():
+            await asyncio.sleep(300)
+            while True:
+                try:
+                    await nidaan.run_account_erasure_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Account erasure sweep error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily
+        asyncio.create_task(account_erasure_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 

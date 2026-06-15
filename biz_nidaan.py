@@ -2022,6 +2022,123 @@ async def cancel_nidaan_subscription(account_id: int) -> bool:
 
 
 # =============================================================================
+#  DPDP — Right-to-erasure (user-requested account deletion)
+# =============================================================================
+def _deletion_grace_days() -> int:
+    try:
+        return max(0, int(os.getenv("NIDAAN_DELETION_GRACE_DAYS", "7")))
+    except ValueError:
+        return 7
+
+
+async def request_account_deletion(account_id: int) -> dict:
+    """DPDP right-to-erasure: the user asks to delete their account. Billing stops
+    IMMEDIATELY (Razorpay subscription cancelled + local record + Sarathi bundle
+    torn down); the account is soft-deleted ('deletion_pending') with a grace
+    window for undo. A scheduled sweep hard-purges the PII after the grace."""
+    sub = await get_active_subscription(account_id)
+    rzp_sub = (sub or {}).get("razorpay_subscription_id", "") or ""
+    if rzp_sub.startswith("sub_"):
+        try:
+            import httpx
+            kid = os.getenv("RAZORPAY_KEY_ID", ""); ksec = os.getenv("RAZORPAY_KEY_SECRET", "")
+            if kid and ksec:
+                async with httpx.AsyncClient() as c:
+                    await c.post(f"https://api.razorpay.com/v1/subscriptions/{rzp_sub}/cancel",
+                                 auth=(kid, ksec), json={"cancel_at_cycle_end": 0}, timeout=20)
+        except Exception as e:
+            logger.warning("Razorpay cancel during deletion failed (acct %d): %s", account_id, e)
+    await cancel_nidaan_subscription(account_id)
+    try:
+        await apply_bundle_teardown(account_id, reason="account_deleted", grace_days=0)
+    except Exception:
+        pass
+    grace = _deletion_grace_days()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_accounts SET status='deletion_pending', deletion_requested_at=CURRENT_TIMESTAMP "
+            "WHERE account_id=? AND deleted_at IS NULL", (account_id,))
+        await conn.commit()
+    from datetime import datetime as _dt
+    purge_on = (_dt.utcnow() + timedelta(days=grace)).strftime("%d %b %Y")
+    logger.info("Account deletion requested: account=%d purge_on=%s", account_id, purge_on)
+    return {"status": "deletion_pending", "purge_on": purge_on, "grace_days": grace}
+
+
+async def cancel_account_deletion(account_id: int) -> bool:
+    """Undo a pending deletion within the grace window (re-activate the account)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_accounts SET status='active', deletion_requested_at=NULL "
+            "WHERE account_id=? AND status='deletion_pending' AND deleted_at IS NULL", (account_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def execute_account_erasure(account_id: int) -> dict:
+    """Hard purge: delete the account's documents + all PII rows, anonymise the
+    account row. KEEPS nidaan_subscriptions (financial record) — those reference
+    only account_id, which now points at an anonymised shell."""
+    from pathlib import Path as _Path
+    async with aiosqlite.connect(DB_PATH) as conn:
+        claim_ids = [r[0] for r in await (await conn.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE account_id=?", (account_id,))).fetchall()]
+        doc_names = [r[0] for r in await (await conn.execute(
+            "SELECT stored_name FROM nidaan_claim_documents WHERE account_id=?", (account_id,))).fetchall()]
+    docs_dir = _Path(__file__).parent / "uploads" / "nidaan-docs"
+    files_deleted = 0
+    for n in doc_names:
+        try:
+            (docs_dir / n).unlink(missing_ok=True); files_deleted += 1
+        except Exception:
+            pass
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for cid in claim_ids:
+            for t in ("nidaan_claim_documents", "nidaan_claim_doc_checklist", "nidaan_claim_notes",
+                      "nidaan_claim_status_log", "nidaan_tasks", "nidaan_notifications"):
+                try:
+                    await conn.execute(f"DELETE FROM {t} WHERE claim_id=?", (cid,))
+                except Exception:
+                    pass
+        # account-level PII rows
+        await conn.execute("DELETE FROM nidaan_claim_documents WHERE account_id=?", (account_id,))
+        await conn.execute("DELETE FROM nidaan_subscriber_prefs WHERE account_id=?", (account_id,))
+        try:
+            await conn.execute("DELETE FROM nidaan_notifications WHERE recipient_type='subscriber' AND recipient_id=?", (account_id,))
+        except Exception:
+            pass
+        await conn.execute("DELETE FROM nidaan_claims WHERE account_id=?", (account_id,))
+        # anonymise the account (row kept for FK integrity with retained billing records)
+        await conn.execute(
+            "UPDATE nidaan_accounts SET owner_name='[deleted]', firm_name=NULL, "
+            "email='deleted_'||account_id||'@deleted.invalid', phone='', password_hash=NULL, "
+            "google_sub=NULL, notes=NULL, status='deleted', deleted_at=CURRENT_TIMESTAMP "
+            "WHERE account_id=?", (account_id,))
+        await conn.commit()
+    logger.info("Account ERASED: account=%d (%d files, %d claims)", account_id, files_deleted, len(claim_ids))
+    return {"erased": True, "files_deleted": files_deleted, "claims_deleted": len(claim_ids)}
+
+
+async def run_account_erasure_sweep() -> int:
+    """Daily: hard-purge accounts whose deletion grace window has elapsed."""
+    grace = _deletion_grace_days()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        due = [r[0] for r in await (await conn.execute(
+            "SELECT account_id FROM nidaan_accounts WHERE status='deletion_pending' "
+            "AND deleted_at IS NULL AND deletion_requested_at <= datetime('now', ?)",
+            (f"-{grace} days",))).fetchall()]
+    n = 0
+    for aid in due:
+        try:
+            await execute_account_erasure(aid); n += 1
+        except Exception as e:
+            logger.warning("account erasure failed for %d: %s", aid, e)
+    if n:
+        logger.info("Account erasure sweep: %d account(s) purged", n)
+    return n
+
+
+# =============================================================================
 #  B3 — BUNDLE TEARDOWN (one helper called from every Nidaan-cancel path)
 # =============================================================================
 

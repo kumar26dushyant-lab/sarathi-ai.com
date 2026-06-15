@@ -691,6 +691,28 @@
       </div>
     </div>
 
+    <!-- Delete account (DPDP right-to-erasure) -->
+    <div class="info-card settings-section" style="border-color:rgba(239,68,68,.3)">
+      <h3 class="en" style="color:#fca5a5">Delete my account</h3>
+      <h3 class="hi" style="color:#fca5a5">मेरा खाता हटाएं</h3>
+      <div id="del-pending-banner" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:.85rem 1rem;margin-bottom:.85rem">
+        <div style="color:#fca5a5;font-weight:700;font-size:.9rem" id="del-pending-text"></div>
+        <button class="btn btn-primary" style="margin-top:.6rem;font-size:.85rem" onclick="undoAccountDeletion()">
+          <span class="en">↺ Keep my account</span><span class="hi">↺ मेरा खाता रखें</span>
+        </button>
+      </div>
+      <div id="del-default">
+        <p style="font-size:.82rem;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:.75rem">
+          <span class="en">Permanently delete your account and all your data (claims, documents, messages). Any active subscription is cancelled. Under the DPDP Act, this is irreversible after a 7-day grace period. Financial records may be retained in anonymised form as required by law.</span>
+          <span class="hi">अपना खाता और सारा डेटा (क्लेम, दस्तावेज़, संदेश) स्थायी रूप से हटाएं। कोई भी सक्रिय सदस्यता रद्द हो जाएगी। DPDP अधिनियम के तहत, 7-दिन की छूट अवधि के बाद यह अपरिवर्तनीय है।</span>
+        </p>
+        <div class="msg" id="delMsg"></div>
+        <button class="btn-danger" onclick="requestAccountDeletion()">
+          <span class="en">Delete My Account</span><span class="hi">मेरा खाता हटाएं</span>
+        </button>
+      </div>
+    </div>
+
   </div><!-- /tab-settings -->
 
 </div><!-- /container -->
@@ -976,6 +998,7 @@ async function loadDashboard() {
 
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
+  if (me.status === 'deletion_pending') { try { _showDeletionPending(''); } catch (e) {} }
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
 
   // ₹499 funnel: if any claim is still a free unpaid lead, show its document
@@ -1961,6 +1984,41 @@ function doLogout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('nidaan_plan');
   location.href = '/nidaan/start';
+}
+
+// ── DPDP right-to-erasure: account deletion (soft-delete + 7-day undo) ─────────
+async function requestAccountDeletion() {
+  const isHi = document.body.classList.contains('hi');
+  const ans = prompt(isHi
+    ? 'क्या आप वाकई अपना खाता हटाना चाहते हैं? आपका सारा डेटा 7 दिनों में स्थायी रूप से हट जाएगा।\n\nपुष्टि के लिए DELETE टाइप करें:'
+    : 'This permanently deletes your account and all data in 7 days, and cancels any subscription.\n\nType DELETE to confirm:', '');
+  if (ans === null) return;
+  if (ans.trim().toUpperCase() !== 'DELETE') { alert(isHi ? 'पुष्टि के लिए DELETE टाइप करें।' : 'Please type DELETE to confirm.'); return; }
+  const r = await api('/nidaan/api/account/delete', { method: 'POST' });
+  const d = r ? await r.json() : {};
+  if (!r || !r.ok) { const m = document.getElementById('delMsg'); m.className = 'msg err'; m.textContent = _extractErr(d, 'Could not process the request'); return; }
+  _showDeletionPending(d.purge_on);
+}
+
+function _showDeletionPending(purgeOn) {
+  const dflt = document.getElementById('del-default');
+  const b = document.getElementById('del-pending-banner');
+  if (!b) return;
+  if (dflt) dflt.style.display = 'none';
+  b.style.display = 'block';
+  const isHi = document.body.classList.contains('hi');
+  document.getElementById('del-pending-text').textContent = isHi
+    ? `आपका खाता${purgeOn ? ' ' + purgeOn + ' को' : ''} हटाने के लिए निर्धारित है। पहले रद्द करने के लिए नीचे चुनें।`
+    : `Your account is scheduled for deletion${purgeOn ? ' on ' + purgeOn : ''}. Undo below before then.`;
+}
+
+async function undoAccountDeletion() {
+  const r = await api('/nidaan/api/account/delete/cancel', { method: 'POST' });
+  if (r && r.ok) {
+    const b = document.getElementById('del-pending-banner'); if (b) b.style.display = 'none';
+    const dflt = document.getElementById('del-default'); if (dflt) dflt.style.display = 'block';
+    alert(document.body.classList.contains('hi') ? 'आपके खाते का विलोपन रद्द कर दिया गया है।' : 'Your account deletion has been cancelled.');
+  }
 }
 
 // ── ₹499 Pay from dashboard ───────────────────────────────────────────────────

@@ -1206,6 +1206,11 @@ async def init_db():
             # trust-building heads-up FIRST. These track that lifecycle.
             "ALTER TABLE nidaan_claims ADD COLUMN lead_notice_at TIMESTAMP",  # deletion pre-notice sent
             "ALTER TABLE nidaan_claims ADD COLUMN lead_purged_at TIMESTAMP",  # documents purged
+            # DPDP right-to-erasure: a user-requested account deletion. Soft-delete
+            # (status='deletion_pending') with a grace window for undo, then a
+            # scheduled hard-purge anonymises the account + removes all PII.
+            "ALTER TABLE nidaan_accounts ADD COLUMN deletion_requested_at TIMESTAMP",
+            "ALTER TABLE nidaan_accounts ADD COLUMN deleted_at TIMESTAMP",
         ]
         for m in nidaan_migrations:
             try:
