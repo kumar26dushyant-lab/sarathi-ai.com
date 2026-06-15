@@ -1060,6 +1060,7 @@ async def nidaan_one_tap_pay(claim_id: int, request: Request, t: str = ""):
 
 
 @app.post("/nidaan/api/claims/submit")
+@limiter.limit("10/minute")
 async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
