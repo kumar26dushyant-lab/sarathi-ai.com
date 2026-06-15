@@ -783,18 +783,14 @@
 
     <p class="sub-info en" id="nidaan-sub-info-q">One-time payment for 3 months access. Renew anytime. UPI, cards, net banking accepted.</p>
     <p class="sub-info hi" id="nidaan-sub-info-q-hi">3 महीने की एक्सेस के लिए एकमुश्त भुगतान। UPI, कार्ड, नेट बैंकिंग स्वीकार्य।</p>
-    <p class="sub-info en" id="nidaan-sub-info-y" style="display:none">One-time payment for 12 months access. Renew anytime. All payment methods accepted.</p>
-    <p class="sub-info hi" id="nidaan-sub-info-y-hi" style="display:none">12 महीने की एक्सेस के लिए एकमुश्त भुगतान। सभी भुगतान विधियाँ स्वीकार्य।</p>
+    <p class="sub-info en" id="nidaan-sub-info-y" style="display:none">Auto-renews yearly — cancel anytime. All payment methods accepted.</p>
+    <p class="sub-info hi" id="nidaan-sub-info-y-hi" style="display:none">वार्षिक स्वतः नवीनीकरण — कभी भी रद्द करें। सभी भुगतान विधियाँ स्वीकार्य।</p>
 
-    <!-- Auto-renew toggle (only shown for quarterly plans) -->
-    <div id="autoRenewRow" style="display:flex;align-items:center;gap:10px;justify-content:center;margin:10px 0;padding:10px 14px;background:rgba(255,255,255,.07);border-radius:10px">
-      <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;flex-shrink:0">
-        <input type="checkbox" id="autoRenewToggle" onchange="toggleAutoRenew()" style="opacity:0;width:0;height:0">
-        <span style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:22px;transition:.3s" id="arTrack"></span>
-        <span style="position:absolute;left:3px;top:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.3s" id="arThumb"></span>
-      </label>
-      <span class="en" style="font-size:.82em;color:rgba(255,255,255,.75)">Auto-renew quarterly — cancel anytime from dashboard</span>
-      <span class="hi" style="font-size:.82em;color:rgba(255,255,255,.75)">तिमाही ऑटो-नवीनीकरण — डैशबोर्ड से कभी भी रद्द करें</span>
+    <!-- All subscriptions are recurring (auto-renew). Informational, not a toggle. -->
+    <div id="autoRenewRow" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0;padding:10px 14px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);border-radius:10px">
+      <span style="font-size:1.05em">🔄</span>
+      <span class="en" id="autoRenewLabelEn" style="font-size:.82em;color:rgba(255,255,255,.8)">Auto-renews automatically — cancel anytime from your dashboard</span>
+      <span class="hi" id="autoRenewLabelHi" style="font-size:.82em;color:rgba(255,255,255,.8)">स्वतः नवीनीकरण — डैशबोर्ड से कभी भी रद्द करें</span>
     </div>
 
     <div class="msg" id="subMsg"></div>
@@ -1640,18 +1636,16 @@ function toggleNidaanBilling() {
   document.getElementById('nidaan-sub-info-q-hi').style.display = isYearly ? 'none' : '';
   document.getElementById('nidaan-sub-info-y').style.display = isYearly ? '' : 'none';
   document.getElementById('nidaan-sub-info-y-hi').style.display = isYearly ? '' : 'none';
-  // Auto-renew toggle only visible for quarterly
-  document.getElementById('autoRenewRow').style.display = isYearly ? 'none' : '';
+  // Recurring badge: shown for BOTH cadences now; label adapts.
+  document.getElementById('autoRenewRow').style.display = '';
+  const _enL = document.getElementById('autoRenewLabelEn');
+  const _hiL = document.getElementById('autoRenewLabelHi');
+  if (_enL) _enL.textContent = (isYearly ? 'Auto-renews yearly' : 'Auto-renews quarterly') + ' — cancel anytime from your dashboard';
+  if (_hiL) _hiL.textContent = (isYearly ? 'वार्षिक स्वतः नवीनीकरण' : 'तिमाही स्वतः नवीनीकरण') + ' — डैशबोर्ड से कभी भी रद्द करें';
   // Deselect plan when toggling
   _selectedPlan = null;
   document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('subBtn').disabled = true;
-}
-
-function toggleAutoRenew() {
-  const tog = document.getElementById('autoRenewToggle');
-  document.getElementById('arTrack').style.background = tog.checked ? '#06b6d4' : 'rgba(255,255,255,.2)';
-  document.getElementById('arThumb').style.left = tog.checked ? '21px' : '3px';
 }
 
 function selectPlan(plan) {
@@ -1666,8 +1660,9 @@ function selectPlan(plan) {
 
 async function doSubscribe() {
   if (!_selectedPlan) return;
-  const isAutoRenew = !_selectedPlan.endsWith('_annual') &&
-    document.getElementById('autoRenewToggle').checked;
+  // All subscription plans are RECURRING (auto-renew) — quarterly or yearly.
+  // The only one-time payment in the product is the ₹499 single review.
+  const isAutoRenew = true;
   const btn = document.getElementById('subBtn');
   const msg = document.getElementById('subMsg');
   btn.disabled = true;
@@ -1676,7 +1671,7 @@ async function doSubscribe() {
   try {
     // Branch: subscription (auto-renew) vs one-time order
     if (isAutoRenew) {
-      // ── Razorpay Subscription flow (auto-renews quarterly) ────────────────
+      // ── Razorpay Subscription flow (auto-renews quarterly OR yearly) ──────
       const res = await api('/nidaan/api/subscribe/recurring', {
         method: 'POST',
         body: JSON.stringify({ plan: _selectedPlan })
@@ -1685,13 +1680,14 @@ async function doSubscribe() {
       const data = await res.json();
       if (!res.ok) throw new Error(_extractErr(data, 'Subscription creation failed'));
 
-      const planLabel = _selectedPlan.charAt(0).toUpperCase() + _selectedPlan.slice(1);
+      const _isAnnual = _selectedPlan.endsWith('_annual');
+      const planLabel = _selectedPlan.replace('_annual', '').charAt(0).toUpperCase() + _selectedPlan.replace('_annual', '').slice(1);
       closeSubscribeModal();
       const rzpSub = new Razorpay({
         key: data.razorpay_key_id,
         subscription_id: data.subscription_id,
         name: 'Nidaan Partner',
-        description: planLabel + ' Plan — Auto-renews quarterly',
+        description: planLabel + (_isAnnual ? ' Plan — Auto-renews yearly' : ' Plan — Auto-renews quarterly'),
         image: '/static/nidaan_logo.png',
         theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
         prefill: {

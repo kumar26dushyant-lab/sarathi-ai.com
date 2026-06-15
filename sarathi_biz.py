@@ -2257,18 +2257,17 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
 @app.post("/nidaan/api/subscribe/recurring")
 @limiter.limit("5/minute")
 async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request):
-    """Create a Razorpay recurring subscription for quarterly Nidaan plans.
-    Annual plans are not supported — use /nidaan/api/subscribe for those.
-    """
+    """Create a Razorpay recurring subscription for ANY Nidaan plan — quarterly
+    (auto-renews every 3 months) or annual (auto-renews yearly). All subscriptions
+    are recurring; only the ₹499 single review is one-time."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if body.plan.endswith("_annual"):
-        raise HTTPException(status_code=400, detail="Annual plans use one-time payment")
-    _valid_quarterly = ("silver", "gold", "platinum")
-    if body.plan not in _valid_quarterly:
+    _valid_sub_plans = ("silver", "gold", "platinum",
+                        "silver_annual", "gold_annual", "platinum_annual")
+    if body.plan not in _valid_sub_plans:
         raise HTTPException(status_code=400, detail="Invalid plan for recurring subscription")
     account = await nidaan.get_account_by_email(payload["email"])
     if not account:
@@ -2309,7 +2308,8 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    _valid = ("silver", "gold", "platinum")
+    _valid = ("silver", "gold", "platinum",
+              "silver_annual", "gold_annual", "platinum_annual")
     if body.plan not in _valid:
         raise HTTPException(status_code=400, detail=f"Invalid plan '{body.plan}'")
     account = await nidaan.get_account_by_email(payload["email"])

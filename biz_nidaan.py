@@ -1557,13 +1557,17 @@ async def get_admin_stats() -> dict:
 # =============================================================================
 
 NIDAAN_RAZORPAY_PLANS = {
-    "silver":          {"amount_paise": 150000,  "display": "₹1,500/quarter",  "period_days": 92},
-    "gold":            {"amount_paise": 300000,  "display": "₹3,000/quarter",  "period_days": 92},
-    "platinum":        {"amount_paise": 600000,  "display": "₹6,000/quarter",  "period_days": 92},
-    # Annual plans — ~10% savings vs 4 quarters
-    "silver_annual":   {"amount_paise": 540000,  "display": "₹5,400/year",     "period_days": 365},
-    "gold_annual":     {"amount_paise": 1080000, "display": "₹10,800/year",    "period_days": 365},
-    "platinum_annual": {"amount_paise": 2160000, "display": "₹21,600/year",    "period_days": 365},
+    # period/interval are the Razorpay recurring-plan cadence: quarterly billing
+    # is period="monthly" interval=3 (Razorpay has no "quarterly"); annual is
+    # period="yearly" interval=1. These MATCH the live plans already created
+    # (silver/gold/platinum = monthly/3), so existing plans are reused, not dup'd.
+    "silver":          {"amount_paise": 150000,  "display": "₹1,500/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
+    "gold":            {"amount_paise": 300000,  "display": "₹3,000/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
+    "platinum":        {"amount_paise": 600000,  "display": "₹6,000/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
+    # Annual plans — recurring yearly (~10% savings vs 4 quarters)
+    "silver_annual":   {"amount_paise": 540000,  "display": "₹5,400/year",     "period_days": 365, "period": "yearly",  "interval": 1},
+    "gold_annual":     {"amount_paise": 1080000, "display": "₹10,800/year",    "period_days": 365, "period": "yearly",  "interval": 1},
+    "platinum_annual": {"amount_paise": 2160000, "display": "₹21,600/year",    "period_days": 365, "period": "yearly",  "interval": 1},
 }
 
 # Cache: plan_key → razorpay_plan_id
@@ -1599,7 +1603,7 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
                     "https://api.razorpay.com/v1/plans",
                     auth=(rzp_key_id, rzp_key_secret),
                     json={
-                        "period": "monthly",
+                        "period": info["period"],
                         "interval": info["interval"],
                         "item": {
                             "name": f"Nidaan {plan_key.title()} Plan",
@@ -1821,14 +1825,12 @@ async def create_nidaan_recurring_subscription(
     phone: str,
 ) -> dict:
     """
-    Create a Razorpay recurring subscription for quarterly Nidaan plans.
-    Annual plans are not supported here — use create_nidaan_razorpay_order for those.
+    Create a Razorpay recurring subscription for any Nidaan plan — quarterly
+    (period=monthly interval=3) OR annual (period=yearly interval=1). Every
+    subscription is recurring; only the ₹499 single review is a one-time order.
     Returns {subscription_id, razorpay_key_id, plan, amount_display, ...}
     """
     import httpx, time
-    if plan.endswith("_annual"):
-        return {"error": "Annual plans use one-time payment. Use create_nidaan_razorpay_order."}
-
     info = NIDAAN_RAZORPAY_PLANS.get(plan)
     if not info:
         return {"error": f"Unknown plan: {plan}"}
@@ -1851,16 +1853,15 @@ async def create_nidaan_recurring_subscription(
             logger.warning("Nidaan plan lookup failed for %s: %s", plan, e)
 
     if not razorpay_plan_id:
-        # Create the Razorpay plan now
-        rzp_period = "quarterly"
+        # Create the Razorpay plan now (quarterly = monthly/3, annual = yearly/1)
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(
                     "https://api.razorpay.com/v1/plans",
                     auth=(rzp_key_id, rzp_key_secret),
                     json={
-                        "period": rzp_period,
-                        "interval": 1,
+                        "period": info["period"],
+                        "interval": info["interval"],
                         "item": {
                             "name": f"Nidaan {plan.title()} Plan",
                             "amount": info["amount_paise"],
@@ -1888,7 +1889,8 @@ async def create_nidaan_recurring_subscription(
                 auth=(rzp_key_id, rzp_key_secret),
                 json={
                     "plan_id": razorpay_plan_id,
-                    "total_count": 40,  # up to 10 years of quarters
+                    # max billing cycles: ~10 years either cadence (annual=10, quarterly=40)
+                    "total_count": 10 if info["period"] == "yearly" else 40,
                     "quantity": 1,
                     "notify_info": {"notify_phone": phone, "notify_email": email},
                     "notes": {
