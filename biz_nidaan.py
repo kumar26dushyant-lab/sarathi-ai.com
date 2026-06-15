@@ -1588,8 +1588,8 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
                     auth=(rzp_key_id, rzp_key_secret), timeout=15.0,
                 )
                 for p in r.json().get("items", []):
-                    notes = p.get("notes", {})
-                    if notes.get("nidaan_plan") == plan_key:
+                    notes = p.get("notes")
+                    if isinstance(notes, dict) and notes.get("nidaan_plan") == plan_key:
                         _nidaan_plan_ids[plan_key] = p["id"]
                         break
         except Exception as e:
@@ -1845,7 +1845,8 @@ async def create_nidaan_recurring_subscription(
                     auth=(rzp_key_id, rzp_key_secret), timeout=15.0,
                 )
                 for p in r.json().get("items", []):
-                    if p.get("notes", {}).get("nidaan_plan") == plan:
+                    _n = p.get("notes")
+                    if isinstance(_n, dict) and _n.get("nidaan_plan") == plan:
                         razorpay_plan_id = p["id"]
                         _nidaan_plan_ids[plan] = razorpay_plan_id
                         break
