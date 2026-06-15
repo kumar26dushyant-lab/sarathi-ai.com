@@ -49,6 +49,30 @@ rm -rf "$BACKUP_TMP"
 ARCHIVE_SIZE=$(du -sh "$ARCHIVE" | cut -f1)
 log "      Archive: $ARCHIVE ($ARCHIVE_SIZE)"
 
+# ── 4. OFFSITE copy (encrypted) — survives total server/disk loss ───────────
+# The local backups above live on the SAME disk as the DB. For real DR, push an
+# ENCRYPTED copy offsite. Configure in biz.env (sourced by the service):
+#   BACKUP_GPG_PASSPHRASE  — symmetric encryption key (store it somewhere safe!)
+#   BACKUP_RCLONE_REMOTE   — e.g. "b2:my-bucket/sarathi" (run `rclone config` first)
+# Backups contain customer documents (PII) → encryption is mandatory (DPDP).
+if [ -n "${BACKUP_GPG_PASSPHRASE:-}" ] && [ -n "${BACKUP_RCLONE_REMOTE:-}" ] \
+   && command -v gpg >/dev/null && command -v rclone >/dev/null; then
+    ENC="${ARCHIVE}.gpg"
+    if gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
+           --cipher-algo AES256 -c -o "$ENC" "$ARCHIVE" 2>>"$LOG_FILE"; then
+        if rclone copy "$ENC" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
+            log "      Offsite ✓ $(basename "$ENC") → $BACKUP_RCLONE_REMOTE"
+        else
+            log "      ⚠️ Offsite rclone FAILED — check $LOG_FILE"
+        fi
+        rm -f "$ENC"
+    else
+        log "      ⚠️ Offsite gpg encryption FAILED"
+    fi
+else
+    log "      (offsite skipped — set BACKUP_GPG_PASSPHRASE + BACKUP_RCLONE_REMOTE + install gpg/rclone)"
+fi
+
 # ── Prune old backups ───────────────────────────────────────────────────────
 DELETED=$(find "$BACKUP_DIR" -name "sarathi_backup_*.tar.gz" -mtime +${KEEP_DAYS} -print -delete | wc -l)
 [ "$DELETED" -gt 0 ] && log "Pruned $DELETED backup(s) older than ${KEEP_DAYS} days"

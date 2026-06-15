@@ -6,6 +6,8 @@ After=network.target
 Type=oneshot
 User=sarathi
 Group=sarathi
+# Makes BACKUP_GPG_PASSPHRASE + BACKUP_RCLONE_REMOTE (offsite) available to backup.sh
+EnvironmentFile=-/opt/sarathi/biz.env
 ExecStart=/opt/sarathi/deploy/backup.sh
 StandardOutput=journal
 StandardError=journal
