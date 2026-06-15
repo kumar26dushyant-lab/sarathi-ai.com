@@ -1,0 +1,23 @@
+# =============================================================================
+#  sarathi-deploy.path — privilege-free deploy trigger
+# =============================================================================
+#  The web instances run with NoNewPrivileges=true, so they CANNOT `sudo
+#  systemctl start sarathi-deploy.service`. Instead the webhook handler touches
+#  /opt/sarathi/.deploy-trigger (which the `sarathi` user owns), and THIS path
+#  unit — owned by root — reacts by starting the oneshot rolling deploy. That
+#  keeps the web tier locked down while still allowing automated deploys.
+#
+#  Install:
+#    sudo cp deploy/sarathi-deploy.path /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now sarathi-deploy.path
+# =============================================================================
+[Unit]
+Description=Watch deploy-trigger file → start the rolling deploy
+
+[Path]
+PathModified=/opt/sarathi/.deploy-trigger
+Unit=sarathi-deploy.service
+
+[Install]
+WantedBy=multi-user.target

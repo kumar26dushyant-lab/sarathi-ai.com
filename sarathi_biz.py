@@ -17463,12 +17463,19 @@ _DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
 
 
 def _run_deploy():
-    """Trigger the deploy. PREFER the dedicated oneshot unit (sarathi-deploy.service)
-    so the rolling deploy runs in its OWN cgroup and survives the web-instance
-    restarts it performs — otherwise `systemctl restart sarathi-web@N` (KillMode=
-    control-group) would kill this very script mid-roll and collapse the rolling
-    guarantee into a both-down 502. Falls back to a direct detached run if the unit
-    isn't installed (e.g. legacy single-process host)."""
+    """Trigger the deploy. PRIMARY: touch a trigger file watched by
+    sarathi-deploy.path, which starts the oneshot sarathi-deploy.service rolling
+    deploy in its OWN (unrestricted) cgroup. This is privilege-free — the web
+    instances run with NoNewPrivileges=true, so they CANNOT sudo; a file touch is
+    the only reliable trigger. Falls back to sudo, then a direct detached run."""
+    import time as _t
+    try:
+        trigger = Path(__file__).parent / ".deploy-trigger"
+        trigger.write_text(str(_t.time()))
+        logger.info("🚀 deploy triggered via path-unit (%s)", trigger)
+        return
+    except Exception as exc:
+        logger.warning("trigger-file deploy failed (%s) — trying sudo", exc)
     try:
         rc = _subprocess.call(
             "sudo -n systemctl start --no-block sarathi-deploy.service",

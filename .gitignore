@@ -67,3 +67,6 @@ test_final*.txt
 prelaunch_output*.txt
 prelaunch_results*.txt
 prelaunch_run*.txt
+
+# runtime deploy trigger (watched by sarathi-deploy.path)
+.deploy-trigger
