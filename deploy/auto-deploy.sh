@@ -63,3 +63,5 @@ for inst in 1 2; do
 done
 
 echo "=== $(date '+%F %T') Rolling deploy complete ==="
+
+# deploy-automation self-test: 20260615T192415Z
