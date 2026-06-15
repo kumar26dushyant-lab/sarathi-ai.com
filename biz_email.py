@@ -178,14 +178,18 @@ async def send_email(to_email: str, subject: str, html_body: str,
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
+        # Port 465 = implicit TLS (use_tls); 587/others = STARTTLS. Many cloud
+        # hosts block 587 outbound, so 465 is the reliable path.
+        _implicit_tls = (int(SMTP_PORT) == 465)
         await aiosmtplib.send(
             msg,
             hostname=SMTP_HOST,
             port=SMTP_PORT,
             username=SMTP_USER,
             password=SMTP_PASSWORD,
-            use_tls=False,
-            start_tls=True,
+            use_tls=_implicit_tls,
+            start_tls=(not _implicit_tls),
+            timeout=30,
         )
         logger.info("📧 SMTP ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
         return True
