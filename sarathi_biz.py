@@ -3040,6 +3040,42 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
     return {"claim_id": claim_id, "status": body.new_status}
 
 
+class OpsDeliverReviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str   # 'can_fight' | 'no_scope'
+    findings: str  # the assessment text shared with the customer
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/deliver-review")
+@limiter.limit("20/minute")
+async def ops_deliver_review(claim_id: int, body: OpsDeliverReviewReq, request: Request):
+    """Ops delivers the legal assessment: sets status='review_delivered', records
+    outcome + findings, and notifies the customer (dashboard + WhatsApp + email)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    if staff["role"] == "team_member":
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+            if not row or row[0] != staff["staff_id"]:
+                raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    try:
+        ok = await nidaan.deliver_review(
+            claim_id=claim_id, outcome=body.outcome, findings=body.findings,
+            changed_by_type=staff["role"], changed_by_id=staff["staff_id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_report_ready(claim_id))
+    except Exception as _e:
+        logger.warning("on_report_ready dispatch failed for claim %s: %s", claim_id, _e)
+    return {"claim_id": claim_id, "status": "review_delivered", "outcome": body.outcome}
+
+
 # ── Review Requests ₹499 (ops staff, sub_super_admin+) ───────────────────────
 
 @app.get("/nidaan/ops/api/review-requests")

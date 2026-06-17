@@ -952,12 +952,14 @@ async function api(path, opts = {}) {
 // ── Status pill ───────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
   intimated:'Intimated', assigned:'Assigned', in_review:'In Review',
-  in_negotiation:'Negotiating', resolved_won:'Won ✓', resolved_lost:'Lost',
+  in_negotiation:'Negotiating', review_delivered:'Review Delivered ✓',
+  resolved_won:'Won ✓', resolved_lost:'Lost',
   closed:'Closed', withdrawn:'Withdrawn'
 };
 const STATUS_LABELS_HI = {
   intimated:'अधिसूचित', assigned:'सौंपा गया', in_review:'समीक्षा में',
-  in_negotiation:'वार्ता में', resolved_won:'जीता ✓', resolved_lost:'हारा',
+  in_negotiation:'वार्ता में', review_delivered:'समीक्षा दी गई ✓',
+  resolved_won:'जीता ✓', resolved_lost:'हारा',
   closed:'बंद', withdrawn:'वापस लिया'
 };
 function pillHtml(s) {
@@ -1430,7 +1432,8 @@ async function uploadRvDocs(id, type) {
 // ── Claim Detail Drawer ───────────────────────────────────────────────────────
 const STATUS_LABELS_FULL = {
   intimated:'Intimated', assigned:'Assigned to Legal Team', in_review:'Under Review',
-  in_negotiation:'In Negotiation', resolved_won:'Resolved — Won', resolved_lost:'Resolved — Lost',
+  in_negotiation:'In Negotiation', review_delivered:'Review Delivered',
+  resolved_won:'Resolved — Won', resolved_lost:'Resolved — Lost',
   closed:'Closed', withdrawn:'Withdrawn'
 };
 
@@ -1474,11 +1477,33 @@ async function openClaimDrawer(claim_id) {
     </div>`;
   }).join('') : '<div class="tl-empty">No status history yet</div>';
 
+  // Legal assessment (the deliverable) — shown once ops marks the review delivered.
+  let reviewSection = '';
+  if (c.review_outcome && c.review_findings) {
+    const canFight = c.review_outcome === 'can_fight';
+    const banner = canFight
+      ? (isHi ? '🎯 आपका क्लेम लड़ने लायक है — Nidaan की कानूनी टीम जल्द ही आपसे संपर्क करेगी।'
+              : "🎯 Your claim can be challenged — Nidaan's legal team will contact you shortly to take it forward.")
+      : (isHi ? 'इस क्लेम में लड़ने का पर्याप्त आधार नहीं — दावा उचित रूप से निपटाया गया प्रतीत होता है।'
+              : 'No strong basis to challenge this claim — it appears to have been settled fairly.');
+    const col = canFight ? '#34d399' : '#fbbf24';
+    const bg = canFight ? 'rgba(16,185,129,.10)' : 'rgba(251,191,36,.08)';
+    reviewSection = `
+    <div class="drawer-section">
+      <h4>${isHi ? 'कानूनी समीक्षा ✅' : 'Legal Assessment ✅'}</h4>
+      <div style="background:${bg};border:1px solid ${col}55;border-radius:10px;padding:.85rem 1rem;margin-bottom:.6rem">
+        <div style="font-weight:700;color:${col};font-size:.9rem;line-height:1.5">${banner}</div>
+      </div>
+      <div style="font-size:.86rem;color:rgba(255,255,255,.82);line-height:1.6;white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
+    </div>`;
+  }
+
   document.getElementById('drawerBody').innerHTML = `
     <div class="drawer-section">
       <h4>${isHi ? 'विवरण' : 'Claim Details'}</h4>
       ${detailRows}
     </div>
+    ${reviewSection}
     <div class="drawer-section">
       <h4>${isHi ? 'दस्तावेज़' : 'Documents'}</h4>
       <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:rgba(255,255,255,.5)">Loading documents…</div>

@@ -1780,6 +1780,20 @@ async function openClaimDrawer(claimId) {
       </div>
       <div class="msg" id="statusMsg_${c.claim_id}"></div>
     </div>`:''}
+    ${canStatus?`<div class="drawer-section" style="border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:.85rem">
+      <h4>📋 Deliver Legal Assessment</h4>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">Sets status to <b>Review Delivered</b> and notifies the customer (dashboard + WhatsApp + email).</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        <select id="rvOutcomeSel_${c.claim_id}" class="form-input">
+          <option value="">Select outcome…</option>
+          <option value="can_fight">✅ Can be challenged — legal team will contact customer</option>
+          <option value="no_scope">⚠️ Settled / no scope to challenge</option>
+        </select>
+        <textarea id="rvFindings_${c.claim_id}" class="note-input" style="min-height:90px" placeholder="Assessment shared with the customer (shown on their dashboard + sent to them). Be clear and professional."></textarea>
+        <button class="btn btn-primary" onclick="deliverReview(${c.claim_id})">Deliver Review to Customer →</button>
+      </div>
+      <div class="msg" id="rvMsg_${c.claim_id}"></div>
+    </div>`:''}
     ${canAssign?`<div class="drawer-section">
       <h4>Assign To Staff</h4>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
@@ -1872,6 +1886,19 @@ async function updateStatus(claimId) {
   } else {
     msgEl.className='msg err'; msgEl.textContent=_extractErr(d,'Failed');
   }
+}
+
+async function deliverReview(claimId) {
+  const outcome = document.getElementById('rvOutcomeSel_'+claimId).value;
+  const findings = (document.getElementById('rvFindings_'+claimId).value || '').trim();
+  const msgEl = document.getElementById('rvMsg_'+claimId);
+  if (!outcome) { msgEl.className='msg err'; msgEl.textContent='Select an outcome.'; return; }
+  if (!findings) { msgEl.className='msg err'; msgEl.textContent='Enter the assessment to share with the customer.'; return; }
+  if (!confirm('Deliver this review to the customer? They will be notified on dashboard + WhatsApp + email.')) return;
+  const r = await API('/claims/'+claimId+'/deliver-review', { method:'POST', body: JSON.stringify({outcome, findings}) });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { msgEl.className='msg ok'; msgEl.textContent='Review delivered ✓ Customer notified.'; setTimeout(()=>openClaimDrawer(claimId),1100); }
+  else { msgEl.className='msg err'; msgEl.textContent=_extractErr(d,'Failed to deliver'); }
 }
 
 async function assignClaim(claimId) {

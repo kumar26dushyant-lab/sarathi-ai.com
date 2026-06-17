@@ -1211,6 +1211,14 @@ async def init_db():
             # scheduled hard-purge anonymises the account + removes all PII.
             "ALTER TABLE nidaan_accounts ADD COLUMN deletion_requested_at TIMESTAMP",
             "ALTER TABLE nidaan_accounts ADD COLUMN deleted_at TIMESTAMP",
+            # 'Review delivered' — NidaanPartner only does the legal ASSESSMENT
+            # (can this claim be fought or not). On delivery, ops records the
+            # outcome + the assessment shared with the customer.
+            #   review_outcome: 'can_fight' (→ Nidaan legal team contacts offline)
+            #                 | 'no_scope'  (settled / no basis to challenge)
+            "ALTER TABLE nidaan_claims ADD COLUMN review_outcome TEXT",
+            "ALTER TABLE nidaan_claims ADD COLUMN review_findings TEXT",
+            "ALTER TABLE nidaan_claims ADD COLUMN review_delivered_at TIMESTAMP",
         ]
         for m in nidaan_migrations:
             try:

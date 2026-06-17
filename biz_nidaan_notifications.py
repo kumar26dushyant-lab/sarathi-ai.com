@@ -1039,6 +1039,65 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
         body=body, claim_id=claim_id)
 
 
+async def on_report_ready(claim_id: int):
+    """The legal ASSESSMENT was delivered. Notify the customer (dashboard +
+    WhatsApp + email) with the outcome — can_fight (Nidaan legal team will
+    contact) or no_scope (settled / no basis) — + a link to read it. en/hi/mr."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.owner_name, a.email AS account_email, a.phone AS account_phone "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return
+    claim = dict(row)
+    account_id = claim["account_id"]
+    prefs = await get_subscriber_prefs(account_id)
+    lang = _funnel_lang(prefs.get("comm_lang") or "en")
+    name = (claim.get("owner_name") or "").split(" ")[0]
+    insured = claim.get("insured_name", "")
+    outcome = claim.get("review_outcome")
+    dash = f"{NIDAAN_BASE_URL}/nidaan/dashboard"
+
+    if outcome == "can_fight":
+        subject = "Your claim review is ready — it can be challenged"
+        if lang == "hi":
+            body = (f"शुभ समाचार {name}! 🎯\n\n*{insured}* के क्लेम की हमारी कानूनी समीक्षा पूरी हो गई — "
+                    f"और इसमें लड़ने का मज़बूत आधार है। Nidaan की कानूनी टीम जल्द ही आपसे संपर्क करके आगे की प्रक्रिया संभालेगी।\n\n"
+                    f"पूरी समीक्षा यहाँ पढ़ें: {dash}\n\n— Nidaan – The Legal Consultants LLP")
+        elif lang == "mr":
+            body = (f"आनंदाची बातमी {name}! 🎯\n\n*{insured}* च्या क्लेमची आमची कायदेशीर समीक्षा पूर्ण झाली — "
+                    f"आणि तो लढण्यासाठी भक्कम आधार आहे. Nidaan ची कायदेशीर टीम लवकरच तुमच्याशी संपर्क साधेल.\n\n"
+                    f"संपूर्ण समीक्षा इथे वाचा: {dash}\n\n— Nidaan – The Legal Consultants LLP")
+        else:
+            body = (f"Good news {name}! 🎯\n\nWe've completed the legal review of the *{insured}* claim — "
+                    f"and it has a strong basis to be challenged. Nidaan's legal team will contact you shortly to take it forward.\n\n"
+                    f"Read the full assessment here: {dash}\n\n— Nidaan – The Legal Consultants LLP")
+    else:  # no_scope (or anything else → treat as completed assessment)
+        subject = "Your claim review is ready"
+        if lang == "hi":
+            body = (f"नमस्ते {name},\n\n*{insured}* के क्लेम की हमारी कानूनी समीक्षा पूरी हो गई। हमारे आकलन के अनुसार, "
+                    f"इस मामले में बीमा कंपनी से लड़ने का पर्याप्त आधार नहीं है — दावा उचित रूप से निपटाया गया प्रतीत होता है।\n\n"
+                    f"पूरा आकलन यहाँ पढ़ें: {dash}\n\nआपके भरोसे के लिए धन्यवाद।\n— Nidaan – The Legal Consultants LLP")
+        elif lang == "mr":
+            body = (f"नमस्कार {name},\n\n*{insured}* च्या क्लेमची आमची कायदेशीर समीक्षा पूर्ण झाली. आमच्या मूल्यांकनानुसार, "
+                    f"विमा कंपनीशी लढण्यासाठी पुरेसा आधार नाही — दावा योग्यरीत्या निकाली निघाल्याचे दिसते.\n\n"
+                    f"संपूर्ण मूल्यांकन इथे वाचा: {dash}\n\nविश्वासाबद्दल धन्यवाद.\n— Nidaan – The Legal Consultants LLP")
+        else:
+            body = (f"Hello {name},\n\nWe've completed the legal review of the *{insured}* claim. Based on our "
+                    f"assessment, there isn't a strong basis to challenge the insurer here — the claim appears to "
+                    f"have been settled fairly.\n\nRead the full assessment here: {dash}\n\n"
+                    f"Thank you for trusting us.\n— Nidaan – The Legal Consultants LLP")
+
+    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    await dispatch(
+        event_key="claim.review_delivered", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+        recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+        subject=subject, body=body, claim_id=claim_id)
+
+
 async def on_lead_deletion_notice(claim_id: int, account_id: int, purge_on: str):
     """DPDP trust track: heads-up BEFORE we delete an unpaid lead's documents.
     Honest, calm, and gives a one-tap way to keep the case alive (pay → review)."""

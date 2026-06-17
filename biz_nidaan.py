@@ -42,8 +42,10 @@ PLAN_LIMITS: dict[str, dict] = {
 
 CLAIM_STATUSES = (
     "intimated", "assigned", "in_review", "in_negotiation",
+    "review_delivered",  # legal assessment delivered to customer (can_fight | no_scope)
     "resolved_won", "resolved_lost", "closed", "withdrawn",
 )
+REVIEW_OUTCOMES = ("can_fight", "no_scope")
 
 
 # =============================================================================
@@ -555,6 +557,36 @@ async def update_claim_status(
                VALUES (?, ?, ?, ?, ?, ?)""",
             (claim_id, old_status, new_status, note, changed_by_type, changed_by_id),
         )
+        await conn.commit()
+    return True
+
+
+async def deliver_review(claim_id: int, outcome: str, findings: str,
+                         changed_by_type: str, changed_by_id: int) -> bool:
+    """Ops delivers the legal ASSESSMENT to the customer (NidaanPartner only does
+    the review — fighting the claim is handled offline by the legal team).
+    Sets status='review_delivered', records the outcome + the findings shared with
+    the customer, and logs it. Caller fires on_report_ready for notifications."""
+    if outcome not in REVIEW_OUTCOMES:
+        raise ValueError(f"Invalid review outcome: {outcome}")
+    findings = (findings or "").strip()
+    if not findings:
+        raise ValueError("findings (the assessment shared with the customer) is required")
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT status FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not row:
+            return False
+        old_status = row[0]
+        await conn.execute(
+            "UPDATE nidaan_claims SET status='review_delivered', review_outcome=?, "
+            "review_findings=?, review_delivered_at=?, last_status_at=? WHERE claim_id=?",
+            (outcome, findings, now, now, claim_id))
+        await conn.execute(
+            "INSERT INTO nidaan_claim_status_log (claim_id, from_status, to_status, note, "
+            "changed_by_type, changed_by_id) VALUES (?, ?, 'review_delivered', ?, ?, ?)",
+            (claim_id, old_status, f"outcome={outcome}", changed_by_type, changed_by_id))
         await conn.commit()
     return True
 
