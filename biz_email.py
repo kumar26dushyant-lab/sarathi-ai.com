@@ -80,6 +80,11 @@ async def send_email(to_email: str, subject: str, html_body: str,
     sender_email = from_email or FROM_NOREPLY
     sender_name = from_name or FROM_NAME
 
+    # Allow comma/semicolon-separated recipients (e.g. NIDAAN_ADMIN_EMAIL with
+    # multiple ops addresses). First address is the canonical "To".
+    _recips = [e.strip() for e in (to_email or "").replace(";", ",").split(",") if e.strip()]
+    to_email = _recips[0] if _recips else to_email
+
     # Prepare a text body for deliverability if not given (used by both paths)
     import re as _re
     plain = text_body
@@ -97,7 +102,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
             import httpx
             payload = {
                 "sender": {"name": sender_name, "email": sender_email},
-                "to": [{"email": to_email}],
+                "to": [{"email": e} for e in _recips] or [{"email": to_email}],
                 "subject": subject,
                 "htmlContent": html_body,
                 "textContent": plain,
@@ -164,7 +169,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
 
         msg = MIMEMultipart("alternative")
         msg["From"] = f"{sender_name} <{sender_email}>"
-        msg["To"] = to_email
+        msg["To"] = ", ".join(_recips) if _recips else to_email
         msg["Subject"] = subject
         msg["Reply-To"] = reply_to or FROM_NOREPLY or sender_email
         # Sender header: tells RFC-compliant clients who actually sent (on behalf of From)
