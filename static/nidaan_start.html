@@ -830,7 +830,8 @@ async function _handleGoogleSignup(response) {
 
 // ── Auto-detect if already logged in ─────────────────────────────────────────
 // Don't auto-redirect if arriving on #get-reviewed
-if (localStorage.getItem('nidaan_token') && !location.hash.startsWith('#get-reviewed')) {
+if (localStorage.getItem('nidaan_token') &&
+    !((location.hash || '').startsWith('#get-reviewed') || (location.hash || '').startsWith('#review-section'))) {
   window.location.replace('/nidaan/dashboard');
 }
 
