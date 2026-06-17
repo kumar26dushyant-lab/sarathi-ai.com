@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** June 10, 2026 (Section 38 covers June 10 — [object Object] error sweep, Nidaan top-ribbon UX, service-worker v2 cache fix, Sarathi homepage redesign drafts v2/v3/v4. Section 37 covers Phase B Lifecycle Hardening, June 7–9. Section 36 covers May 27–29 — Contabo migration, marketing studio v2, WhatsApp P0 fixes, Nidaan price change ₹999→₹499.)
+> **Last Updated:** June 17, 2026 (Section 40 covers June 11–17 — ₹499 value-first funnel end-to-end, WhatsApp/email parity, ops lead pipeline, DPDP lead-retention + account-erasure, recurring-billing fix, SMTP :465 + Brevo, zero-downtime blue-green deploy + path-unit deploy-automation fix, Sprint F security/DR with encrypted AWS S3 Mumbai offsite, dashboard bug fixes. Section 38 covers June 10. Section 37 covers Phase B, June 7–9.)
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -3236,6 +3236,93 @@ Sprint D is "low-effort, high-information" — surfaces unknowns BEFORE we commi
 - Auth endpoints have rate limits applied
 - DMARC records published, SPF + DKIM aligned with header-from
 - Disaster recovery: can restore DB from `git-backup` + `backup-db` artifacts within 30 minutes
+
+---
+
+## 40. ₹499 FUNNEL + INFRA + DPDP SPRINT — JUNE 11–17, 2026
+
+A large multi-track sprint. All items are **live and verified** on the production
+server (Contabo `84.247.172.252`, app dir `/opt/sarathi`, user `sarathi`).
+
+### 40.1 ₹499 value-first funnel (NidaanPartner.com)
+- **Entry → free submission:** homepage CTAs hide the price ("Check if you have a
+  case — Free"); `/nidaan/start#get-reviewed` is login-gated, then a free
+  claim-intake form (`submitFreeClaim` → `/nidaan/api/claims/submit` →
+  `payment_status='unpaid_lead'`). ₹499 is revealed only on the dashboard.
+- **Dashboard checklist + pay-gate (Step 3b):** `leadChecklistCard` renders
+  per-document upload slots from `biz_nidaan_doc_checklist.py`, progress + DPDP
+  trust line; the hope/hook **pay-gate** (`show_pay_gate`, disputed-amount vs
+  ₹499) appears when all required docs are in → `/pay` → Razorpay → `/pay-verify`
+  flips to `paid` + starts the review + **48-business-hour SLA**.
+- **One-tap pay link:** claim-bound, expiring `nidaan_paylink` token →
+  `GET /nidaan/pay/{claim_id}?t=` mints a session and auto-opens Razorpay.
+- **WhatsApp + email parity (Step 4):** `biz_nidaan_notifications.py` —
+  `on_lead_filed` (doc-chase), `on_funnel_pay_ready` (pay-nudge + one-tap link,
+  idempotent), `on_funnel_paid`. Template-first, en/hi/mr, opt-in respected
+  (`wa_consent` at submit). Dashboard + WhatsApp + email say the same thing.
+- **Ops lead pipeline (Step 6):** `get_claims_ops` payment_status filter + paid-
+  above-leads sort; ops UI LEAD/PAID/SUB badges + pipeline filter bar.
+- **DPDP lead-doc retention (Step 7b):** `biz_nidaan_retention.run_lead_retention`
+  — pre-notice at day 23, secure purge at day 30 (tunable
+  `NIDAAN_LEAD_RETENTION_DAYS` / `_NOTICE_DAYS`); worker-gated daily sweep.
+- **Upload hardening (Step 7a):** magic-byte sniff (`_doc_magic_ok`) + per-claim
+  doc cap; `/claims/submit` rate-limited.
+
+### 40.2 Recurring billing fix (both platforms)
+- **Sarathi-AI** already used Razorpay Subscriptions (recurring). **Nidaan** was
+  recurring only for quarterly+toggle; annual was one-time. Now **all Nidaan
+  subscriptions are recurring** — quarterly = monthly/interval-3, annual =
+  yearly/1 (`NIDAAN_RAZORPAY_PLANS` gained period/interval; the dashboard always
+  uses `/subscribe/recurring`). Only the **₹499 single review stays one-time**.
+  Fixed a plan-lookup crash on `notes=[]` that created duplicate Razorpay plans.
+  Verified against **live Razorpay** (no dup plans).
+
+### 40.3 Email — SMTP + Brevo
+- The host **blocks outbound :587**; switched `SMTP_PORT=465` + port-aware TLS in
+  `biz_email.py` (was silently failing). **Brevo** (`BREVO_API_KEY`, Path 1, DKIM)
+  wired for deliverability. (Verify sender in Brevo dashboard.)
+
+### 40.4 Zero-downtime (blue-green) deploy — LIVE
+- `APP_ROLE` split: `sarathi-worker` (bots+scheduler singletons, :8100) +
+  `sarathi-web@1/@2` (HTTP, :8001/:8002) behind nginx **ip_hash** upstream
+  `sarathi_app`. SQLite **WAL** enabled. Rolling `auto-deploy.sh` (one web at a
+  time, health-gated) → **no 502**. Per-instance ports come from
+  `/etc/sarathi/sarathi-web-%i.env` (on this host `EnvironmentFile` overrides
+  `Environment=`). Runbook: `deploy/ZERO_DOWNTIME_DEPLOY.md`.
+- **Deploy-automation fix (critical):** web units have `NoNewPrivileges=true`,
+  which blocks `sudo` — so the webhook couldn't restart services (stale for ~2
+  days). Fixed with a **systemd path-unit**: `_run_deploy` touches
+  `/opt/sarathi/.deploy-trigger`; `sarathi-deploy.path` → `sarathi-deploy.service`
+  (own cgroup) runs the rolling deploy. Auto-deploy proven end-to-end.
+
+### 40.5 Sprint F (cybersecurity) — executed
+- **OWASP pass** on funnel/billing: parameterized SQL (f-strings only interpolate
+  whitelisted column names), IDOR covered by ownership checks, Razorpay HMAC sig
+  verification + claim-bound tokens, strong nginx CSP/HSTS, `DEPLOY_TOKEN`-authed
+  webhook. Fixed the one gap (missing rate-limit on `/claims/submit`).
+- **DPDP account-erasure (right-to-delete):** `request_account_deletion` (cancels
+  Razorpay sub + bundle, soft-delete `deletion_pending`), 7-day undo, daily
+  `run_account_erasure_sweep` hard-purge (deletes docs + all PII, anonymises the
+  account, **retains** anonymised financial records). Dashboard Settings → Delete
+  my account. Test `_tools/test_account_erasure.py` = 14/14.
+- **DR:** daily WAL-safe backups + restore verified; **encrypted offsite to AWS
+  S3 Mumbai** (`ap-south-1`, India-resident) via rclone+gpg (AES256) — full
+  round-trip restore proven. `BACKUP_GPG_PASSPHRASE` in `biz.env` (user holds it
+  offline too).
+
+### 40.6 Dashboard bug fixes
+- WhatsApp opt-in card had a duplicate `display` (always visible to non-subs) —
+  fixed. Lock-overlay "Pay ₹499" linked to `#review-section` and bounced
+  logged-in users back to the dashboard — repointed to `#get-reviewed`.
+
+### 40.7 Open / pending
+- Verify Brevo sender; `NIDAAN_ADMIN_EMAIL` empty (ops "paid claim" alert).
+- Advisor per-plan caps left flexible (quarterly) — to tighten later.
+- WhatsApp official numbers not yet configured (funnel WA messages need a live
+  Evolution number; email works).
+- **Next build:** "Review delivered" status + report delivery (A: can-be-fought →
+  Nidaan legal team contacts; B: settled/no-scope → share assessment) to
+  dashboard + WhatsApp + email. Then a mobile UI/UX pass on all Nidaan pages.
 
 ---
 
