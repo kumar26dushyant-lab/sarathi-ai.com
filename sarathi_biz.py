@@ -1000,7 +1000,7 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
                        f"{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>")))
     return {"status": "paid", "claim_id": claim_id,
             "sla_due_utc": sla_due.isoformat(),
-            "message": "Payment confirmed. Your expert review starts now and will be delivered within 48 business hours — here and on WhatsApp."}
+            "message": "Payment confirmed. Your case is now under review — we'll share your report within 24–48 business hours, here and on WhatsApp."}
 
 
 @app.get("/nidaan/pay/{claim_id}", response_class=HTMLResponse)

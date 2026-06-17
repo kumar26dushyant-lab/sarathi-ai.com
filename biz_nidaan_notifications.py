@@ -964,7 +964,7 @@ async def on_funnel_pay_ready(claim_id: int, account_id: int):
         body = (f"शाबाश {name}! ✅ आपके सभी दस्तावेज़ मिल गए।\n\n"
                 f"🎯 आपका क्लेम लड़ने लायक मज़बूत दिखता है।\n"
                 f"{contrast}"
-                f"अभी ₹499 दें और अपनी विशेषज्ञ समीक्षा शुरू करें — रिपोर्ट *48 कार्य-घंटों* में, "
+                f"अभी ₹499 दें और अपनी विशेषज्ञ समीक्षा शुरू करें — रिपोर्ट *24-48 कार्य-घंटों* में, "
                 f"यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
                 f"👉 एक टैप में भुगतान करें: {pay_link}\n\n"
                 f"अपना पैसा यूँ ही मत छोड़िए।\n— Nidaan – The Legal Consultants LLP")
@@ -974,7 +974,7 @@ async def on_funnel_pay_ready(claim_id: int, account_id: int):
         body = (f"छान {name}! ✅ तुमची सर्व कागदपत्रे मिळाली.\n\n"
                 f"🎯 तुमचा क्लेम लढण्याइतका मजबूत दिसतो.\n"
                 f"{contrast}"
-                f"आता ₹499 भरा आणि तुमची तज्ज्ञ समीक्षा सुरू करा — अहवाल *48 कामकाजाच्या तासांत*, "
+                f"आता ₹499 भरा आणि तुमची तज्ज्ञ समीक्षा सुरू करा — अहवाल *24-48 कामकाजाच्या तासांत*, "
                 f"इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
                 f"👉 एका टॅपमध्ये पैसे भरा: {pay_link}\n\n"
                 f"तुमचे पैसे असेच सोडू नका.\n— Nidaan – The Legal Consultants LLP")
@@ -985,7 +985,7 @@ async def on_funnel_pay_ready(claim_id: int, account_id: int):
                 f"🎯 Your claim looks strong enough to fight.\n"
                 f"{contrast}"
                 f"Pay ₹499 now to start your expert review — your report arrives within "
-                f"*48 business hours*, here on WhatsApp and on your dashboard.\n\n"
+                f"*24-48 business hours*, here on WhatsApp and on your dashboard.\n\n"
                 f"👉 Pay in one tap: {pay_link}\n\n"
                 f"Don't leave your money on the table.\n— Nidaan – The Legal Consultants LLP")
 
@@ -1000,7 +1000,7 @@ async def on_funnel_pay_ready(claim_id: int, account_id: int):
 
 async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
     """₹499 paid → review started. WhatsApp + email confirmation mirroring the
-    dashboard: review has begun, report within 48 business hours, here + WhatsApp."""
+    dashboard: review has begun, report within 24-48 business hours, here + WhatsApp."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
@@ -1017,17 +1017,17 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
     if lang == "hi":
         body = (f"धन्यवाद {name}! ✅ आपका ₹499 भुगतान मिल गया।\n\n"
                 f"आपके *{claim.get('insured_name','')}* के क्लेम की विशेषज्ञ समीक्षा अभी शुरू हो गई है। "
-                f"आपकी विस्तृत रिपोर्ट *48 कार्य-घंटों* में मिलेगी — यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
+                f"आपकी विस्तृत रिपोर्ट *24-48 कार्य-घंटों* में मिलेगी — यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
     elif lang == "mr":
         body = (f"धन्यवाद {name}! ✅ तुमचे ₹499 पेमेंट मिळाले.\n\n"
                 f"तुमच्या *{claim.get('insured_name','')}* च्या क्लेमची तज्ज्ञ समीक्षा आता सुरू झाली आहे. "
-                f"तुमचा सविस्तर अहवाल *48 कामकाजाच्या तासांत* मिळेल — इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
+                f"तुमचा सविस्तर अहवाल *24-48 कामकाजाच्या तासांत* मिळेल — इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
     else:
         body = (f"Thank you {name}! ✅ Your ₹499 payment is confirmed.\n\n"
                 f"The expert review of your *{claim.get('insured_name','')}* claim has started now. "
-                f"Your detailed report arrives within *48 business hours* — here on WhatsApp and on your dashboard.\n\n"
+                f"Your detailed report arrives within *24-48 business hours* — here on WhatsApp and on your dashboard.\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
 
     wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
