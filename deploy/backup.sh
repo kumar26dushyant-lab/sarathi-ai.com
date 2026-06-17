@@ -60,7 +60,7 @@ if [ -n "${BACKUP_GPG_PASSPHRASE:-}" ] && [ -n "${BACKUP_RCLONE_REMOTE:-}" ] \
     ENC="${ARCHIVE}.gpg"
     if gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
            --cipher-algo AES256 -c -o "$ENC" "$ARCHIVE" 2>>"$LOG_FILE"; then
-        if rclone copy "$ENC" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
+        if rclone copy --s3-no-check-bucket "$ENC" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
             log "      Offsite ✓ $(basename "$ENC") → $BACKUP_RCLONE_REMOTE"
         else
             log "      ⚠️ Offsite rclone FAILED — check $LOG_FILE"
