@@ -30,6 +30,7 @@ FROM_NAME = "Sarathi-AI Business Technologies"
 FROM_EMAIL = ""
 FROM_NOREPLY = ""  # info@sarathi-ai.com — transactional/notifications
 FROM_SUPPORT = ""  # support@sarathi-ai.com — support ticket communications
+NIDAAN_FROM = ""   # noreply@nidaanpartner.com — Nidaan-branded (own-domain, DKIM-aligned)
 _initialized = False
 
 def _base_url() -> str:
@@ -39,7 +40,7 @@ def _base_url() -> str:
 
 def init_email():
     """Initialize email configuration from environment."""
-    global SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NOREPLY, FROM_SUPPORT, _initialized
+    global SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NOREPLY, FROM_SUPPORT, NIDAAN_FROM, _initialized
 
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -48,6 +49,11 @@ def init_email():
     FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
     FROM_NOREPLY = os.getenv("SMTP_FROM_NOREPLY", FROM_EMAIL)  # info@sarathi-ai.com
     FROM_SUPPORT = os.getenv("SMTP_FROM_SUPPORT", FROM_EMAIL)  # support@sarathi-ai.com
+    # Nidaan emails should send from a domain we CONTROL (nidaanpartner.com) so
+    # SPF/DKIM/DMARC align — sending "as" a gmail.com address lands in spam. Only
+    # takes effect once that domain is authenticated in Brevo (else Brevo rejects
+    # the unverified sender). Falls back to the generic noreply until configured.
+    NIDAAN_FROM = os.getenv("NIDAAN_FROM_EMAIL", FROM_NOREPLY)
 
     if SMTP_USER and SMTP_PASSWORD:
         _initialized = True
@@ -77,8 +83,11 @@ async def send_email(to_email: str, subject: str, html_body: str,
         logger.warning("Email not sent (not configured): %s → %s", subject, to_email)
         return False
 
-    sender_email = from_email or FROM_NOREPLY
     sender_name = from_name or FROM_NAME
+    # Nidaan-branded emails (OTP, claims, billing) send from the Nidaan own-domain
+    # address when configured, so SPF/DKIM/DMARC align and they don't hit spam.
+    _default_from = (NIDAAN_FROM if (NIDAAN_FROM and sender_name.startswith("Nidaan")) else FROM_NOREPLY)
+    sender_email = from_email or _default_from
 
     # Allow comma/semicolon-separated recipients (e.g. NIDAAN_ADMIN_EMAIL with
     # multiple ops addresses). First address is the canonical "To".
@@ -391,6 +400,7 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
         f"Nidaan Partner Login Code: {otp}",
         _wrap_nidaan_template("Nidaan Partner OTP", content),
         from_name="Nidaan Partner",
+        from_email=NIDAAN_FROM or None,
     )
 
 
