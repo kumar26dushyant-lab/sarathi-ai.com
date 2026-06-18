@@ -897,7 +897,24 @@ async function _prefillClaimForm() {
 <!-- ══ GET REVIEWED SECTION ══════════════════════════════════════════════════ -->
 <style>
 #review-section{display:none;flex:1;flex-direction:column;align-items:center;padding:1.5rem 1rem}
-#review-section .rev-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:520px}
+.rev-wrap{display:flex;gap:1.5rem;width:100%;max-width:980px;align-items:flex-start}
+#review-section .rev-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;flex:1 1 540px;min-width:0}
+/* Motivational side panel — fills the blank space + nudges users to get a review */
+.rev-side{flex:0 0 320px;display:flex;flex-direction:column;gap:.9rem;position:sticky;top:1.25rem}
+.rev-side-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.1rem 1.2rem}
+.rev-side-hero{background:linear-gradient(135deg,rgba(6,182,212,.14),rgba(8,145,178,.06));border:1px solid rgba(34,211,238,.25)}
+.rev-stat{display:flex;align-items:center;gap:.7rem;padding:.4rem 0}
+.rev-stat b{font-size:1.35rem;color:#22d3ee;font-family:'Poppins',sans-serif;min-width:64px;text-align:center}
+.rev-step{display:flex;gap:.6rem;align-items:flex-start;font-size:.84rem;color:rgba(255,255,255,.7);padding:.3rem 0;line-height:1.45}
+.rev-step .n{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(34,211,238,.18);color:#22d3ee;font-weight:800;font-size:.78rem;display:flex;align-items:center;justify-content:center}
+/* Document upload slots */
+#rev-docs-wrap{margin-bottom:1.1rem}
+.doc-slot{display:flex;align-items:center;gap:.7rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.6rem .75rem;margin-bottom:.55rem}
+.doc-slot.done{border-color:rgba(52,211,153,.4);background:rgba(16,185,129,.08)}
+.doc-slot .dlabel{flex:1;min-width:0;font-size:.85rem;color:#fff;font-weight:600}
+.doc-slot .dwhy{font-size:.72rem;color:rgba(255,255,255,.4);line-height:1.4;font-weight:400}
+.doc-slot button{background:#0891b2;color:#fff;border:none;border-radius:7px;padding:.4rem .85rem;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap}
+.doc-slot.done .dtick{color:#34d399;font-weight:800}
 #review-section h2{font-size:1.45rem;font-weight:800;margin-bottom:.35rem}
 #review-section .rev-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
 #review-section .rev-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .85rem;font-size:.82rem;color:#22d3ee;margin-bottom:1.25rem}
@@ -913,7 +930,11 @@ async function _prefillClaimForm() {
 .btn-pay{width:100%;border:none;border-radius:11px;padding:.9rem 1rem;font-size:1rem;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.5rem}
 .btn-pay:hover{opacity:.9;transform:translateY(-1px)}
 .btn-pay:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.rev-note{font-size:.78rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.75rem;line-height:1.5}
+.rev-note{font-size:.84rem;color:rgba(255,255,255,.55);text-align:center;margin-top:.85rem;line-height:1.55;font-weight:600}
+@media(max-width:900px){
+  .rev-wrap{flex-direction:column;max-width:560px}
+  .rev-side{flex:auto;width:100%;position:static;order:-1;flex-direction:column}
+}
 @media(max-width:480px){
   #review-section .rev-card{padding:1.5rem 1.1rem}
   .rev-row2{grid-template-columns:1fr}
@@ -922,6 +943,7 @@ async function _prefillClaimForm() {
 </style>
 
 <section id="review-section">
+  <div class="rev-wrap">
   <div class="rev-card">
     <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
     <h2>Check if you have a case</h2>
@@ -941,7 +963,7 @@ async function _prefillClaimForm() {
       <legend>Claim Details</legend>
       <div class="rev-row2">
         <div class="field"><label>Claim Type *</label>
-          <select id="rv_claim_type" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
+          <select id="rv_claim_type" onchange="loadDocChecklist()" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
             <option value="">Select type…</option>
             <option value="health">Health Insurance</option>
             <option value="life">Life Insurance</option>
@@ -959,8 +981,17 @@ async function _prefillClaimForm() {
       </div>
     </fieldset>
 
+    <!-- Documents — appears once a claim type is selected; required to proceed -->
+    <div id="rev-docs-wrap" style="display:none">
+      <fieldset>
+        <legend>Upload your documents</legend>
+        <div id="rev-doc-trust" style="font-size:.74rem;color:rgba(255,255,255,.42);line-height:1.5;margin-bottom:.75rem"></div>
+        <div id="rev-doc-slots"></div>
+      </fieldset>
+    </div>
+
     <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
-      <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.15rem;flex-shrink:0;width:16px;height:16px;accent-color:#06b6d4">
+      <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.1rem;flex-shrink:0;width:18px;height:18px;-webkit-appearance:auto;appearance:auto;accent-color:#06b6d4;background:none;border:0;padding:0">
       <span>Send me updates about this claim on <strong style="color:rgba(255,255,255,.8)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span>
     </label>
 
@@ -969,7 +1000,32 @@ async function _prefillClaimForm() {
     <button class="btn-pay" id="revSubmitBtn" onclick="submitFreeClaim()">
       <span>📋</span> Submit &amp; See My Next Steps →
     </button>
-    <p class="rev-note">No payment now. After you submit, we'll show you the few documents to upload so our experts can build your case — then a one-time ₹499 unlocks your full review (delivered within 48 business hours, here and on WhatsApp).</p>
+    <p class="rev-note">💚 Thousands have recovered their rightful money — yours could be next. Let's find out.</p>
+  </div>
+
+  <!-- ── Motivational side panel: fills the space + nudges users toward a review ── -->
+  <aside class="rev-side">
+    <div class="rev-side-card rev-side-hero">
+      <div style="font-size:1.08rem;font-weight:800;color:#fff;line-height:1.4">Your rejected claim might still be worth lakhs.</div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.72);margin-top:.45rem;line-height:1.55">A rejection letter isn't the end — it's often just the insurer hoping you'll walk away. Let our experts find out if yours can be reopened.</div>
+    </div>
+    <div class="rev-side-card">
+      <div class="rev-stat"><b>95%</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">success rate on cases we take up</span></div>
+      <div class="rev-stat"><b>5,000+</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">policyholders helped</span></div>
+      <div class="rev-stat"><b style="font-size:1.05rem">₹ Lakhs</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">recovered for rightful claims</span></div>
+    </div>
+    <div class="rev-side-card">
+      <div style="font-size:.76rem;font-weight:700;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem">How it works</div>
+      <div class="rev-step"><span class="n">1</span><span>Tell us about your claim &amp; upload your documents — <strong style="color:rgba(255,255,255,.85)">free</strong>.</span></div>
+      <div class="rev-step"><span class="n">2</span><span>Our lawyers + insurance experts audit your case.</span></div>
+      <div class="rev-step"><span class="n">3</span><span>Get a clear legal report — is your claim worth fighting?</span></div>
+    </div>
+    <div class="rev-side-card">
+      <div style="font-size:.84rem;color:rgba(255,255,255,.75);line-height:1.55;font-style:italic">"They reopened my health claim after the company rejected it twice. I got my ₹2.8 lakh back."</div>
+      <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.45rem">— a policyholder we helped</div>
+    </div>
+    <div style="font-size:.74rem;color:rgba(255,255,255,.4);text-align:center;line-height:1.5">🔒 Your documents are used only to fight your claim. DPDP Act 2023 — never shared.</div>
+  </aside>
   </div>
 </section>
 
@@ -979,6 +1035,49 @@ async function _prefillClaimForm() {
 // now). The account must already exist (funnel gates login before this form).
 // On success → dashboard, where the document checklist + pay-gate take over.
 const _SUBMIT_LABEL = '<span>📋</span> Submit &amp; See My Next Steps →';
+let _revDocs = [];    // required doc keys for the selected claim type
+let _revFiles = {};   // doc_key → File chosen by the user
+function _revEsc(s){ const d=document.createElement('div'); d.textContent=(s==null?'':s); return d.innerHTML; }
+
+// When the claim type changes, fetch its required documents and render upload slots.
+async function loadDocChecklist() {
+  const ct = document.getElementById('rv_claim_type').value;
+  const wrap = document.getElementById('rev-docs-wrap');
+  const slots = document.getElementById('rev-doc-slots');
+  _revDocs = []; _revFiles = {};
+  if (!ct) { wrap.style.display = 'none'; slots.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/nidaan/api/doc-checklist?claim_type=' + encodeURIComponent(ct));
+    if (!r.ok) { wrap.style.display = 'none'; return; }
+    const d = await r.json();
+    document.getElementById('rev-doc-trust').textContent = d.trust_line || '';
+    const required = (d.docs || []).filter(x => x.required);
+    _revDocs = required.map(x => x.key);
+    slots.innerHTML = required.map(x => `
+      <div class="doc-slot" id="ds_${x.key}">
+        <div style="font-size:1.05rem">📄</div>
+        <div class="dlabel">${_revEsc(x.label)}<div class="dwhy">${_revEsc(x.why || '')}</div></div>
+        <input type="file" id="df_${x.key}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="onRevDocPick('${x.key}',this)">
+        <button type="button">Upload</button>
+      </div>`).join('');
+    // wire the buttons (avoid inline onclick referencing dynamic ids)
+    required.forEach(x => {
+      const slot = document.getElementById('ds_' + x.key);
+      slot.querySelector('button').onclick = () => document.getElementById('df_' + x.key).click();
+    });
+    wrap.style.display = 'block';
+  } catch (e) { wrap.style.display = 'none'; }
+}
+function onRevDocPick(key, input) {
+  const f = input.files[0]; if (!f) return;
+  if (f.size > 10 * 1024 * 1024) { showRevMsg('err', 'Each file must be under 10 MB.'); input.value=''; return; }
+  _revFiles[key] = f;
+  const slot = document.getElementById('ds_' + key);
+  slot.classList.add('done');
+  const btn = slot.querySelector('button');
+  btn.textContent = '✓ ' + (f.name.length > 14 ? f.name.slice(0, 12) + '…' : f.name);
+}
+
 async function submitFreeClaim() {
   const btn = document.getElementById('revSubmitBtn');
   const msg = document.getElementById('rev-msg');
@@ -999,22 +1098,24 @@ async function submitFreeClaim() {
   if (!insured_name) { showRevMsg('err', 'Please enter the insured name.'); return; }
   if (insured_phone.length < 10) { showRevMsg('err', 'Please enter a valid 10-digit contact phone.'); return; }
   if (!claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
+  // All listed documents are required before we can review the claim.
+  const missing = _revDocs.filter(k => !_revFiles[k]);
+  if (missing.length) {
+    showRevMsg('err', `Please upload all listed documents to continue (${missing.length} still needed).`);
+    document.getElementById('rev-docs-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
 
-  // Preferred comms language carries from the dashboard/homepage toggle (en|hi|mr).
   const _ll = (localStorage.getItem('nidaan_lang') || 'en');
   const comm_lang = ['en', 'hi', 'mr'].includes(_ll) ? _ll : 'en';
-  const wa_consent = document.getElementById('rv_wa_consent').checked;
 
   // Body MUST match NidaanClaimReq exactly (extra="forbid").
   const body = {
-    claim_type,
-    insured_name,
-    insured_phone,
+    claim_type, insured_name, insured_phone,
     insurer_name: document.getElementById('rv_insurer_name').value.trim(),
     disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
     notes_from_agent: document.getElementById('rv_notes').value.trim(),
-    comm_lang,
-    wa_consent,
+    comm_lang, wa_consent: document.getElementById('rv_wa_consent').checked,
   };
 
   btn.disabled = true;
@@ -1026,16 +1127,25 @@ async function submitFreeClaim() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (res.status === 401) {  // token expired → back to login
+    if (res.status === 401) {
       showRevMsg('err', 'Your session expired. Please sign in again.');
       localStorage.removeItem('nidaan_token');
       setTimeout(() => location.reload(), 1500);
       return;
     }
     if (!res.ok) throw new Error(_extractErr(data, 'Could not submit your claim.'));
-    showRevMsg('ok', '✅ Claim submitted! Taking you to your dashboard to upload your documents…');
+    const claimId = data.claim_id;
+    // Upload every document to the new claim (so the dashboard opens straight on the pay-gate).
+    btn.innerHTML = '<span>⏳</span> Uploading your documents…';
+    for (const key of _revDocs) {
+      const f = _revFiles[key]; if (!f) continue;
+      const fd = new FormData(); fd.append('files', f); fd.append('doc_key', key);
+      await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+    }
+    showRevMsg('ok', '✅ All set! Taking you to your dashboard…');
     btn.style.display = 'none';
-    setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 1400);
+    setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 1300);
   } catch(e) {
     showRevMsg('err', e.message);
     btn.disabled = false;

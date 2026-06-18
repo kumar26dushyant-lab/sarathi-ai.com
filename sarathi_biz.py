@@ -872,6 +872,27 @@ async def nidaan_api_claim_checklist(claim_id: int, request: Request):
     return st
 
 
+@app.get("/nidaan/api/doc-checklist")
+async def nidaan_api_doc_checklist_for_type(request: Request, claim_type: str = "", lang: str = "en"):
+    """Required-document checklist for a claim TYPE (before a claim exists). Used by
+    the review form to show exactly which documents to upload for the chosen type."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_doc_checklist as _ck
+    lang = lang if lang in ("en", "hi", "mr") else "en"
+    docs = []
+    for d in _ck.doc_template_for(claim_type or "other"):
+        docs.append({
+            "key": d["key"],
+            "label": d.get(lang) or d["en"],
+            "why": d.get("why_en", ""),
+            "required": bool(d["required"]),
+            "conditional": bool(d.get("conditional")),
+        })
+    return {"claim_type": _ck.canonical_type(claim_type or "other"), "docs": docs,
+            "trust_line": _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])}
+
+
 @app.post("/nidaan/api/claims/{claim_id}/pay")
 @limiter.limit("10/minute")
 async def nidaan_claim_pay(claim_id: int, request: Request):
