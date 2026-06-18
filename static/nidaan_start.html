@@ -17,6 +17,14 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060f1e;color:#fff;min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
 select{color-scheme:dark}select option{background:#0f1e3a;color:#e2e8f0}
 
+/* ── i18n: EN / हिं toggle (matches homepage + dashboard) ── */
+body.en .hi{display:none!important}
+body.hi .en{display:none!important}
+.i18n-inline .en,.i18n-inline .hi{display:inline}
+.lang-toggle{display:flex;gap:.25rem}
+.lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:700;border:1.5px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
+.lang-btn.active{background:#06b6d4;border-color:#06b6d4;color:#fff}
+
 /* ── NAV ── */
 nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:rgba(6,15,30,.95);border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
 .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;text-decoration:none}
@@ -112,15 +120,63 @@ input::placeholder{color:rgba(255,255,255,.25)}
 }
 </style>
 </head>
-<body>
+<body class="en">
 
 <nav>
   <a href="/" class="nav-brand">
     <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
     Nidaan Partner
   </a>
-  <a href="/" class="nav-back">← Back to home</a>
+  <div style="display:flex;align-items:center;gap:1rem">
+    <a href="/" class="nav-back"><span class="en">← Back to home</span><span class="hi">← होम पर वापस</span></a>
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" onclick="setLang('hi')">हिं</button>
+    </div>
+  </div>
 </nav>
+
+<script>
+// ── Language (EN / हिं) — shared with homepage & dashboard via localStorage ──
+let _lang = 'en';
+function L(en, hi){ return _lang === 'hi' ? hi : en; }
+// Placeholders & dynamic attribute strings can't use spans — swap them by id.
+const _PH = {
+  emailInput:       ['advisor@example.com', 'advisor@example.com'],
+  otpInput:         ['6-digit code', '6-अंकों का कोड'],
+  pwdInput:         ['Your password', 'आपका पासवर्ड'],
+  resetOtpInput:    ['6-digit code', '6-अंकों का कोड'],
+  resetNewPwd:      ['Min 8 characters', 'कम से कम 8 अक्षर'],
+  regOtpInput:      ['000000', '000000'],
+  regName:          ['Rahul Sharma', 'राहुल शर्मा'],
+  regPhone:         ['9876543210', '9876543210'],
+  regFirm:          ['Optional', 'वैकल्पिक'],
+  regPwd:           ['Min 8 characters', 'कम से कम 8 अक्षर'],
+  rv_insured_name:  ['Name on the policy', 'पॉलिसी पर नाम'],
+  rv_insured_phone: ['10-digit mobile', '10-अंकों का मोबाइल'],
+  rv_insurer_name:  ['e.g. HDFC Ergo', 'जैसे HDFC Ergo'],
+  rv_disputed_amount:['e.g. 250000', 'जैसे 250000'],
+  rv_notes:         ['Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…',
+                     'क्लेम विवाद, रिजेक्शन या कम भुगतान का कारण, या आप समीक्षा में क्या चाहते हैं — संक्षेप में बताएं…'],
+};
+function setLang(l){
+  _lang = (l === 'hi') ? 'hi' : 'en';
+  document.body.className = _lang;
+  try { localStorage.setItem('nidaan_lang', _lang); } catch(e){}
+  document.querySelectorAll('.lang-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.trim() === (_lang === 'hi' ? 'हिं' : 'EN')));
+  for (const id in _PH){ const el = document.getElementById(id); if (el) el.placeholder = _PH[id][_lang === 'hi' ? 1 : 0]; }
+  // Re-render the submit button label + re-fetch doc labels in the chosen language.
+  if (typeof revRefreshLang === 'function') revRefreshLang();
+}
+(function(){
+  let saved = null; try { saved = localStorage.getItem('nidaan_lang'); } catch(e){}
+  const sys = (navigator.language || '').toLowerCase().startsWith('hi') ? 'hi' : 'en';
+  document.addEventListener('DOMContentLoaded', () => setLang(saved || sys));
+  // also apply ASAP for placeholders already in the DOM
+  if (document.readyState !== 'loading') setLang(saved || sys);
+})();
+</script>
 
 <div id="login-section">
 <div class="page">
@@ -129,38 +185,38 @@ input::placeholder{color:rgba(255,255,255,.25)}
     <!-- ══ STEP 1: Email entry ══ -->
     <div class="step active" id="step1">
       <div class="card-icon">🛡️</div>
-      <h1>Welcome to Nidaan Partner</h1>
-      <p class="card-sub">Enter your email to sign in or create a free account in seconds.</p>
+      <h1><span class="en">Welcome to Nidaan Partner</span><span class="hi">निदान पार्टनर में आपका स्वागत है</span></h1>
+      <p class="card-sub"><span class="en">Enter your email to sign in or create a free account in seconds.</span><span class="hi">साइन इन करने या कुछ ही सेकंड में मुफ़्त खाता बनाने के लिए अपना ईमेल दर्ज करें।</span></p>
 
       <!-- Funnel framing: shown only when arriving via "Check if you have a case" -->
       <div id="funnel-auth-note" style="display:none;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.22);border-radius:12px;padding:.85rem 1rem;margin-bottom:1.1rem;text-align:left">
-        <div style="font-weight:700;color:#22d3ee;font-size:.9rem;margin-bottom:.25rem">📋 Let's check if you have a case</div>
-        <div style="font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5">Create your free account to submit your rejected or underpaid claim. <strong style="color:rgba(255,255,255,.85)">No payment to start</strong> — our legal experts review it first.</div>
+        <div style="font-weight:700;color:#22d3ee;font-size:.9rem;margin-bottom:.25rem"><span class="en">📋 Let's check if you have a case</span><span class="hi">📋 आइए देखें कि आपके पास केस है या नहीं</span></div>
+        <div style="font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5"><span class="en">Create your free account to submit your rejected or underpaid claim. <strong style="color:rgba(255,255,255,.85)">No payment to start</strong> — our legal experts review it first.</span><span class="hi">अपना खारिज या कम भुगतान वाला क्लेम जमा करने के लिए मुफ़्त खाता बनाएं। <strong style="color:rgba(255,255,255,.85)">शुरू करने के लिए कोई भुगतान नहीं</strong> — हमारे कानूनी विशेषज्ञ पहले इसकी समीक्षा करते हैं।</span></div>
       </div>
 
       <!-- Google first -->
       <div id="googleAreaStep1">
-        <div class="google-stub" id="googleStub1">Loading Google Sign-In…</div>
+        <div class="google-stub" id="googleStub1"><span class="en">Loading Google Sign-In…</span><span class="hi">Google साइन-इन लोड हो रहा है…</span></div>
         <div class="google-wrap" id="googleBtn1" style="display:none"></div>
       </div>
 
-      <div class="divider"><span>or continue with email</span></div>
+      <div class="divider"><span><span class="en">or continue with email</span><span class="hi">या ईमेल से जारी रखें</span></span></div>
 
       <div class="field">
-        <label>Work email *</label>
+        <label><span class="en">Work email *</span><span class="hi">कार्य ईमेल *</span></label>
         <input type="email" id="emailInput" placeholder="advisor@example.com" autocomplete="email" inputmode="email">
       </div>
       <button class="btn btn-cyan" id="continueBtn" onclick="checkEmail()">
-        Continue &rarr;
+        <span class="en">Continue &rarr;</span><span class="hi">जारी रखें &rarr;</span>
       </button>
       <div class="msg" id="msg1"></div>
     </div>
 
     <!-- ══ STEP 2A: Existing user — sign in ══ -->
     <div class="step" id="step2a">
-      <button class="back-link" onclick="goBack()">&#8592; Change email</button>
+      <button class="back-link" onclick="goBack()"><span class="en">&#8592; Change email</span><span class="hi">&#8592; ईमेल बदलें</span></button>
       <div class="card-icon">👋</div>
-      <h1 id="welcomeBack">Welcome back!</h1>
+      <h1 id="welcomeBack"><span class="en">Welcome back!</span><span class="hi">वापसी पर स्वागत है!</span></h1>
       <div class="email-chip" onclick="goBack()">
         <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
         <span id="emailChip2a"></span>
@@ -171,29 +227,29 @@ input::placeholder{color:rgba(255,255,255,.25)}
         <div class="google-wrap" id="googleBtn2a" style="display:none"></div>
       </div>
 
-      <div class="divider" id="divider2a"><span>or sign in with</span></div>
+      <div class="divider" id="divider2a"><span><span class="en">or sign in with</span><span class="hi">या इससे साइन इन करें</span></span></div>
 
       <!-- Tabs: OTP | Password | Reset -->
       <div class="tabs">
-        <button class="tab active" id="tabOtp" onclick="switchTab('otp')">Email OTP</button>
-        <button class="tab" id="tabPwd" onclick="switchTab('pwd')">Password</button>
-        <button class="tab" id="tabReset" onclick="switchTab('reset')">Reset</button>
+        <button class="tab active" id="tabOtp" onclick="switchTab('otp')"><span class="en">Email OTP</span><span class="hi">ईमेल OTP</span></button>
+        <button class="tab" id="tabPwd" onclick="switchTab('pwd')"><span class="en">Password</span><span class="hi">पासवर्ड</span></button>
+        <button class="tab" id="tabReset" onclick="switchTab('reset')"><span class="en">Reset</span><span class="hi">रीसेट</span></button>
       </div>
 
       <!-- OTP flow -->
       <div id="otpFlow">
         <div id="otpStep1">
-          <button class="btn btn-cyan" id="sendOtpBtn" onclick="sendOTP(false)">Send OTP to my email</button>
+          <button class="btn btn-cyan" id="sendOtpBtn" onclick="sendOTP(false)"><span class="en">Send OTP to my email</span><span class="hi">मेरे ईमेल पर OTP भेजें</span></button>
         </div>
         <div id="otpStep2" style="display:none">
           <div class="field">
-            <label>Enter OTP sent to your email</label>
+            <label><span class="en">Enter OTP sent to your email</span><span class="hi">अपने ईमेल पर भेजा गया OTP दर्ज करें</span></label>
             <input type="text" id="otpInput" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
           </div>
           <div class="otp-actions">
-            <button class="btn btn-cyan btn-sm" onclick="verifyOTP()">Verify &amp; Sign In</button>
+            <button class="btn btn-cyan btn-sm" onclick="verifyOTP()"><span class="en">Verify &amp; Sign In</span><span class="hi">सत्यापित करें और साइन इन करें</span></button>
             <span id="countdown" style="display:none"></span>
-            <button class="btn btn-ghost btn-sm" id="resendBtn" onclick="sendOTP(true)" style="display:none">Resend</button>
+            <button class="btn btn-ghost btn-sm" id="resendBtn" onclick="sendOTP(true)" style="display:none"><span class="en">Resend</span><span class="hi">पुनः भेजें</span></button>
           </div>
         </div>
       </div>
@@ -201,34 +257,34 @@ input::placeholder{color:rgba(255,255,255,.25)}
       <!-- Password flow -->
       <div id="pwdFlow" style="display:none">
         <div class="field">
-          <label>Password</label>
+          <label><span class="en">Password</span><span class="hi">पासवर्ड</span></label>
           <input type="password" id="pwdInput" placeholder="Your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doPasswordLogin()">
         </div>
-        <button class="btn btn-cyan" onclick="doPasswordLogin()">Sign In &rarr;</button>
+        <button class="btn btn-cyan" onclick="doPasswordLogin()"><span class="en">Sign In &rarr;</span><span class="hi">साइन इन करें &rarr;</span></button>
         <p class="card-foot" style="margin-top:.75rem">
-          Forgot password? <a href="#" onclick="switchTab('reset');return false">Reset via OTP</a>
+          <span class="en">Forgot password? <a href="#" onclick="switchTab('reset');return false">Reset via OTP</a></span><span class="hi">पासवर्ड भूल गए? <a href="#" onclick="switchTab('reset');return false">OTP से रीसेट करें</a></span>
         </p>
       </div>
 
       <!-- Reset password flow -->
       <div id="resetFlow" style="display:none">
-        <p class="card-sub" style="margin-bottom:1rem">We'll send an OTP to your email. Enter it below with your new password.</p>
+        <p class="card-sub" style="margin-bottom:1rem"><span class="en">We'll send an OTP to your email. Enter it below with your new password.</span><span class="hi">हम आपके ईमेल पर एक OTP भेजेंगे। इसे अपने नए पासवर्ड के साथ नीचे दर्ज करें।</span></p>
         <div id="resetStep1">
-          <button class="btn btn-ghost" id="sendResetOtpBtn" onclick="sendResetOTP()">Send OTP to reset password</button>
+          <button class="btn btn-ghost" id="sendResetOtpBtn" onclick="sendResetOTP()"><span class="en">Send OTP to reset password</span><span class="hi">पासवर्ड रीसेट करने के लिए OTP भेजें</span></button>
         </div>
         <div id="resetStep2" style="display:none">
           <div class="field">
-            <label>OTP from email</label>
+            <label><span class="en">OTP from email</span><span class="hi">ईमेल से OTP</span></label>
             <input type="text" id="resetOtpInput" placeholder="6-digit code" maxlength="6" inputmode="numeric">
           </div>
           <div class="field">
-            <label>New Password</label>
+            <label><span class="en">New Password</span><span class="hi">नया पासवर्ड</span></label>
             <input type="password" id="resetNewPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doResetPassword()">
           </div>
-          <button class="btn btn-cyan" onclick="doResetPassword()">Set New Password &amp; Sign In</button>
+          <button class="btn btn-cyan" onclick="doResetPassword()"><span class="en">Set New Password &amp; Sign In</span><span class="hi">नया पासवर्ड सेट करें और साइन इन करें</span></button>
           <div class="otp-actions" style="margin-top:.5rem">
             <span id="resetCountdown" style="display:none"></span>
-            <button class="btn btn-ghost btn-sm" id="resendResetBtn" onclick="sendResetOTP()" style="display:none">Resend OTP</button>
+            <button class="btn btn-ghost btn-sm" id="resendResetBtn" onclick="sendResetOTP()" style="display:none"><span class="en">Resend OTP</span><span class="hi">OTP पुनः भेजें</span></button>
           </div>
         </div>
       </div>
@@ -238,10 +294,10 @@ input::placeholder{color:rgba(255,255,255,.25)}
 
     <!-- ══ STEP 2B: New user — register ══ -->
     <div class="step" id="step2b">
-      <button class="back-link" onclick="goBack()">&#8592; Change email</button>
+      <button class="back-link" onclick="goBack()"><span class="en">&#8592; Change email</span><span class="hi">&#8592; ईमेल बदलें</span></button>
       <div class="card-icon">🚀</div>
-      <h1>Create your free account</h1>
-      <p class="card-sub">No credit card needed. Explore the dashboard, then subscribe when you're ready.</p>
+      <h1><span class="en">Create your free account</span><span class="hi">अपना मुफ़्त खाता बनाएं</span></h1>
+      <p class="card-sub"><span class="en">No credit card needed. Explore the dashboard, then subscribe when you're ready.</span><span class="hi">किसी क्रेडिट कार्ड की ज़रूरत नहीं। डैशबोर्ड देखें, फिर जब तैयार हों तब सब्सक्राइब करें।</span></p>
       <div class="email-chip" onclick="goBack()">
         <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
         <span id="emailChip2b"></span>
@@ -251,23 +307,23 @@ input::placeholder{color:rgba(255,255,255,.25)}
       <div id="googleAreaStep2b" style="margin-bottom:.5rem">
         <div class="google-wrap" id="googleBtn2b" style="display:none"></div>
       </div>
-      <div class="divider" id="divider2b"><span>or register with email</span></div>
+      <div class="divider" id="divider2b"><span><span class="en">or register with email</span><span class="hi">या ईमेल से रजिस्टर करें</span></span></div>
 
       <!-- SUB-STEP 1: Verify email via OTP (shown first) -->
       <div id="regOtpSection">
-        <p class="card-sub" style="margin-bottom:1rem">First, let's verify this email belongs to you. We'll send a 6-digit code.</p>
+        <p class="card-sub" style="margin-bottom:1rem"><span class="en">First, let's verify this email belongs to you. We'll send a 6-digit code.</span><span class="hi">पहले, आइए सत्यापित करें कि यह ईमेल आपका है। हम एक 6-अंकों का कोड भेजेंगे।</span></p>
         <div id="regOtpStep1">
-          <button class="btn btn-cyan" id="sendRegOtpBtn" onclick="sendRegOTP(false)">Send Verification Code →</button>
+          <button class="btn btn-cyan" id="sendRegOtpBtn" onclick="sendRegOTP(false)"><span class="en">Send Verification Code →</span><span class="hi">सत्यापन कोड भेजें →</span></button>
         </div>
         <div id="regOtpStep2" style="display:none">
           <div class="field">
-            <label>Enter the 6-digit code sent to your email</label>
+            <label><span class="en">Enter the 6-digit code sent to your email</span><span class="hi">अपने ईमेल पर भेजा गया 6-अंकों का कोड दर्ज करें</span></label>
             <input type="text" id="regOtpInput" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" oninput="this.value=this.value.replace(/\D/g,'')">
           </div>
           <div class="otp-actions">
-            <button class="btn btn-cyan btn-sm" onclick="verifyRegOTP()">Verify Email</button>
+            <button class="btn btn-cyan btn-sm" onclick="verifyRegOTP()"><span class="en">Verify Email</span><span class="hi">ईमेल सत्यापित करें</span></button>
             <span id="regOtpCountdown" style="display:none" class="otp-hint"></span>
-            <button class="btn btn-ghost btn-sm" id="resendRegOtpBtn" onclick="sendRegOTP(true)" style="display:none">Resend</button>
+            <button class="btn btn-ghost btn-sm" id="resendRegOtpBtn" onclick="sendRegOTP(true)" style="display:none"><span class="en">Resend</span><span class="hi">पुनः भेजें</span></button>
           </div>
         </div>
         <div class="msg" id="msgRegOtp"></div>
@@ -275,28 +331,28 @@ input::placeholder{color:rgba(255,255,255,.25)}
 
       <!-- SUB-STEP 2: Registration form (shown after OTP verified) -->
       <div id="regFormSection" style="display:none">
-        <div class="msg info" id="emailVerifiedBadge" style="margin-bottom:.85rem">✅ Email verified — complete your profile below.</div>
+        <div class="msg info" id="emailVerifiedBadge" style="margin-bottom:.85rem"><span class="en">✅ Email verified — complete your profile below.</span><span class="hi">✅ ईमेल सत्यापित — नीचे अपनी प्रोफ़ाइल पूरी करें।</span></div>
         <div class="row2">
           <div class="field">
-            <label>Full name *</label>
+            <label><span class="en">Full name *</span><span class="hi">पूरा नाम *</span></label>
             <input type="text" id="regName" placeholder="Rahul Sharma" autocomplete="name">
           </div>
           <div class="field">
-            <label>Phone *</label>
+            <label><span class="en">Phone *</span><span class="hi">फ़ोन *</span></label>
             <input type="tel" id="regPhone" placeholder="9876543210" inputmode="tel">
           </div>
         </div>
         <div class="field">
-          <label>Firm / agency name</label>
+          <label><span class="en">Firm / agency name</span><span class="hi">फर्म / एजेंसी का नाम</span></label>
           <input type="text" id="regFirm" placeholder="Optional">
         </div>
         <div class="field">
-          <label>Password *</label>
+          <label><span class="en">Password *</span><span class="hi">पासवर्ड *</span></label>
           <input type="password" id="regPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
         </div>
-        <button class="btn btn-cyan" id="registerBtn" onclick="doRegister()">Create free account &rarr;</button>
+        <button class="btn btn-cyan" id="registerBtn" onclick="doRegister()"><span class="en">Create free account &rarr;</span><span class="hi">मुफ़्त खाता बनाएं &rarr;</span></button>
         <div class="msg" id="msg2b"></div>
-        <p class="card-foot">By creating an account you agree to our <a href="/terms" target="_blank">Terms</a> &amp; <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
+        <p class="card-foot"><span class="en">By creating an account you agree to our <a href="/terms" target="_blank">Terms</a> &amp; <a href="/privacy" target="_blank">Privacy Policy</a>.</span><span class="hi">खाता बनाकर आप हमारी <a href="/terms" target="_blank">शर्तों</a> और <a href="/privacy" target="_blank">गोपनीयता नीति</a> से सहमत होते हैं।</span></p>
       </div>
     </div>
 
@@ -379,12 +435,12 @@ function showMsg(id, type, text) {
 // ── Step 1: check email ───────────────────────────────────────────────────────
 async function checkEmail() {
   const raw = document.getElementById('emailInput').value.trim();
-  if (!raw || !raw.includes('@')) { showMsg('msg1','err','Please enter a valid email address.'); return; }
+  if (!raw || !raw.includes('@')) { showMsg('msg1','err',L('Please enter a valid email address.','कृपया एक मान्य ईमेल पता दर्ज करें।')); return; }
   _email = raw.toLowerCase();
 
   const btn = document.getElementById('continueBtn');
   btn.disabled = true;
-  btn.textContent = 'Checking…';
+  btn.textContent = L('Checking…','जांच हो रही है…');
   clearMsg();
 
   try {
@@ -394,13 +450,13 @@ async function checkEmail() {
       body: JSON.stringify({email: _email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Error checking email'));
+    if (!res.ok) throw new Error(_extractErr(data, L('Error checking email','ईमेल जांचने में त्रुटि')));
 
     if (data.exists) {
       // Existing user → sign in
       _googleMode = 'login';
       document.getElementById('emailChip2a').textContent = _email;
-      document.getElementById('welcomeBack').textContent = 'Welcome back!';
+      document.getElementById('welcomeBack').innerHTML = '<span class="en">Welcome back!</span><span class="hi">वापसी पर स्वागत है!</span>';
       showStep('step2a');
       // Reset OTP state
       document.getElementById('otpStep1').style.display = '';
@@ -418,14 +474,14 @@ async function checkEmail() {
       document.getElementById('regOtpStep2').style.display = 'none';
       document.getElementById('msgRegOtp').className = 'msg';
       document.getElementById('sendRegOtpBtn').disabled = false;
-      document.getElementById('sendRegOtpBtn').textContent = 'Send Verification Code →';
+      document.getElementById('sendRegOtpBtn').innerHTML = '<span class="en">Send Verification Code →</span><span class="hi">सत्यापन कोड भेजें →</span>';
       showStep('step2b');
     }
   } catch(e) {
     showMsg('msg1','err', e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Continue &rarr;';
+    btn.innerHTML = '<span class="en">Continue &rarr;</span><span class="hi">जारी रखें &rarr;</span>';
   }
 }
 
@@ -448,7 +504,7 @@ async function sendOTP(isResend) {
   clearMsg();
   const btn = document.getElementById('sendOtpBtn');
   const resendBtn = document.getElementById('resendBtn');
-  if (!isResend) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  if (!isResend) { btn.disabled = true; btn.textContent = L('Sending…','भेजा जा रहा है…'); }
   else { resendBtn.style.display = 'none'; }
 
   try {
@@ -459,8 +515,8 @@ async function sendOTP(isResend) {
     });
     const data = await res.json();
     if (!res.ok) {
-      const hint = data.code === 'email_failed' ? ' Try the Password tab instead.' : '';
-      throw new Error(_extractErr(data, 'Failed to send OTP') + hint);
+      const hint = data.code === 'email_failed' ? L(' Try the Password tab instead.',' इसके बजाय पासवर्ड टैब आज़माएं।') : '';
+      throw new Error(_extractErr(data, L('Failed to send OTP','OTP भेजने में विफल')) + hint);
     }
     // Show OTP input
     document.getElementById('otpStep1').style.display = 'none';
@@ -469,7 +525,7 @@ async function sendOTP(isResend) {
     startCountdown(60);
   } catch(e) {
     showMsg('msg2a','err', e.message);
-    if (!isResend) { btn.disabled = false; btn.textContent = 'Send OTP to my email'; }
+    if (!isResend) { btn.disabled = false; btn.innerHTML = '<span class="en">Send OTP to my email</span><span class="hi">मेरे ईमेल पर OTP भेजें</span>'; }
     else { resendBtn.style.display = ''; }
   }
 }
@@ -477,7 +533,7 @@ async function sendOTP(isResend) {
 async function verifyOTP() {
   clearMsg();
   const otp = document.getElementById('otpInput').value.trim();
-  if (!otp || otp.length < 4) { showMsg('msg2a','err','Enter the OTP from your email.'); return; }
+  if (!otp || otp.length < 4) { showMsg('msg2a','err',L('Enter the OTP from your email.','अपने ईमेल से OTP दर्ज करें।')); return; }
   try {
     const res = await fetch('/nidaan/api/verify-email-otp', {
       method: 'POST',
@@ -485,7 +541,7 @@ async function verifyOTP() {
       body: JSON.stringify({email: _email, otp})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Invalid OTP'));
+    if (!res.ok) throw new Error(_extractErr(data, L('Invalid OTP','अमान्य OTP')));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
@@ -499,7 +555,7 @@ function startCountdown(sec) {
   resendBtn.style.display = 'none';
   if (_countdownTimer) clearInterval(_countdownTimer);
   let remaining = sec;
-  el.textContent = `Resend in ${remaining}s`;
+  el.textContent = L(`Resend in ${remaining}s`,`${remaining}s में पुनः भेजें`);
   _countdownTimer = setInterval(() => {
     remaining--;
     if (remaining <= 0) {
@@ -507,7 +563,7 @@ function startCountdown(sec) {
       el.style.display = 'none';
       resendBtn.style.display = '';
     } else {
-      el.textContent = `Resend in ${remaining}s`;
+      el.textContent = L(`Resend in ${remaining}s`,`${remaining}s में पुनः भेजें`);
     }
   }, 1000);
 }
@@ -516,7 +572,7 @@ function startCountdown(sec) {
 async function doPasswordLogin() {
   clearMsg();
   const pwd = document.getElementById('pwdInput').value;
-  if (!pwd) { showMsg('msg2a','err','Enter your password.'); return; }
+  if (!pwd) { showMsg('msg2a','err',L('Enter your password.','अपना पासवर्ड दर्ज करें।')); return; }
   try {
     const res = await fetch('/nidaan/api/login', {
       method: 'POST',
@@ -524,7 +580,7 @@ async function doPasswordLogin() {
       body: JSON.stringify({email: _email, password: pwd})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Invalid password'));
+    if (!res.ok) throw new Error(_extractErr(data, L('Invalid password','अमान्य पासवर्ड')));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
@@ -538,7 +594,7 @@ async function sendResetOTP() {
   clearMsg();
   const sendBtn = document.getElementById('sendResetOtpBtn');
   const resendBtn = document.getElementById('resendResetBtn');
-  sendBtn && (sendBtn.disabled = true, sendBtn.textContent = 'Sending…');
+  sendBtn && (sendBtn.disabled = true, sendBtn.textContent = L('Sending…','भेजा जा रहा है…'));
   resendBtn && (resendBtn.style.display = 'none');
 
   try {
@@ -548,8 +604,8 @@ async function sendResetOTP() {
     });
     const data = await res.json();
     if (!res.ok) {
-      const hint = data.code === 'email_failed' ? ' Use the Password tab to sign in instead.' : '';
-      throw new Error(_extractErr(data, 'Failed to send OTP') + hint);
+      const hint = data.code === 'email_failed' ? L(' Use the Password tab to sign in instead.',' इसके बजाय पासवर्ड टैब से साइन इन करें।') : '';
+      throw new Error(_extractErr(data, L('Failed to send OTP','OTP भेजने में विफल')) + hint);
     }
     document.getElementById('resetStep1').style.display = 'none';
     document.getElementById('resetStep2').style.display = '';
@@ -559,15 +615,15 @@ async function sendResetOTP() {
     el.style.display = '';
     if (_resetCountdownTimer) clearInterval(_resetCountdownTimer);
     let t = 60;
-    el.textContent = `Resend in ${t}s`;
+    el.textContent = L(`Resend in ${t}s`,`${t}s में पुनः भेजें`);
     _resetCountdownTimer = setInterval(() => {
       t--;
       if (t <= 0) { clearInterval(_resetCountdownTimer); el.style.display = 'none'; resendBtn.style.display = ''; }
-      else el.textContent = `Resend in ${t}s`;
+      else el.textContent = L(`Resend in ${t}s`,`${t}s में पुनः भेजें`);
     }, 1000);
   } catch(e) {
     showMsg('msg2a','err', e.message);
-    sendBtn && (sendBtn.disabled = false, sendBtn.textContent = 'Send OTP to reset password');
+    sendBtn && (sendBtn.disabled = false, sendBtn.innerHTML = '<span class="en">Send OTP to reset password</span><span class="hi">पासवर्ड रीसेट करने के लिए OTP भेजें</span>');
   }
 }
 
@@ -575,15 +631,15 @@ async function doResetPassword() {
   clearMsg();
   const otp = document.getElementById('resetOtpInput').value.trim();
   const pwd = document.getElementById('resetNewPwd').value;
-  if (!otp || otp.length < 4) { showMsg('msg2a','err','Enter the OTP from your email.'); return; }
-  if (pwd.length < 8) { showMsg('msg2a','err','New password must be at least 8 characters.'); return; }
+  if (!otp || otp.length < 4) { showMsg('msg2a','err',L('Enter the OTP from your email.','अपने ईमेल से OTP दर्ज करें।')); return; }
+  if (pwd.length < 8) { showMsg('msg2a','err',L('New password must be at least 8 characters.','नया पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।')); return; }
   try {
     const res = await fetch('/nidaan/api/reset-password', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({email: _email, otp, new_password: pwd})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Reset failed. Try again.'));
+    if (!res.ok) throw new Error(_extractErr(data, L('Reset failed. Try again.','रीसेट विफल। पुनः प्रयास करें।')));
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2a','err', e.message);
@@ -596,7 +652,7 @@ async function sendRegOTP(isResend) {
   msgEl.className = 'msg';
   const sendBtn = document.getElementById('sendRegOtpBtn');
   const resendBtn = document.getElementById('resendRegOtpBtn');
-  if (!isResend) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+  if (!isResend) { sendBtn.disabled = true; sendBtn.textContent = L('Sending…','भेजा जा रहा है…'); }
   else { resendBtn.style.display = 'none'; }
 
   try {
@@ -605,7 +661,7 @@ async function sendRegOTP(isResend) {
       body: JSON.stringify({email: _email})
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Failed to send code'));
+    if (!res.ok) throw new Error(_extractErr(data, L('Failed to send code','कोड भेजने में विफल')));
     // Show OTP input
     document.getElementById('regOtpStep1').style.display = 'none';
     document.getElementById('regOtpStep2').style.display = '';
@@ -616,16 +672,16 @@ async function sendRegOTP(isResend) {
     cEl.style.display = '';
     if (_regOtpCountdownTimer) clearInterval(_regOtpCountdownTimer);
     let t = 60;
-    cEl.textContent = `Resend in ${t}s`;
+    cEl.textContent = L(`Resend in ${t}s`,`${t}s में पुनः भेजें`);
     _regOtpCountdownTimer = setInterval(() => {
       t--;
       if (t <= 0) { clearInterval(_regOtpCountdownTimer); cEl.style.display = 'none'; resendBtn.style.display = ''; }
-      else cEl.textContent = `Resend in ${t}s`;
+      else cEl.textContent = L(`Resend in ${t}s`,`${t}s में पुनः भेजें`);
     }, 1000);
   } catch(e) {
     msgEl.className = 'msg err';
     msgEl.textContent = e.message;
-    if (!isResend) { sendBtn.disabled = false; sendBtn.textContent = 'Send Verification Code →'; }
+    if (!isResend) { sendBtn.disabled = false; sendBtn.innerHTML = '<span class="en">Send Verification Code →</span><span class="hi">सत्यापन कोड भेजें →</span>'; }
     else { resendBtn.style.display = ''; }
   }
 }
@@ -636,7 +692,7 @@ async function verifyRegOTP() {
   msgEl.className = 'msg';
   if (!otp || otp.length < 4) {
     msgEl.className = 'msg err';
-    msgEl.textContent = 'Enter the 6-digit code from your email.';
+    msgEl.textContent = L('Enter the 6-digit code from your email.','अपने ईमेल से 6-अंकों का कोड दर्ज करें।');
     return;
   }
   // Store the OTP — actual server-side verification happens at account creation (doRegister).
@@ -664,23 +720,23 @@ async function doRegister() {
   // Session state guard — if user refreshed or deep-linked to step 2, _email or
   // _regVerifiedOtp will be empty and the backend would 422. Send them back cleanly.
   if (!_email) {
-    showMsg('msg2b','err','Your session expired. Please re-enter your email and verify again.');
+    showMsg('msg2b','err',L('Your session expired. Please re-enter your email and verify again.','आपका सत्र समाप्त हो गया। कृपया अपना ईमेल फिर से दर्ज करें और सत्यापित करें।'));
     setTimeout(() => location.reload(), 1500);
     return;
   }
   if (!_regVerifiedOtp) {
-    showMsg('msg2b','err','Verification code missing. Please request a new OTP.');
+    showMsg('msg2b','err',L('Verification code missing. Please request a new OTP.','सत्यापन कोड गायब है। कृपया नया OTP मांगें।'));
     document.getElementById('regOtpSection').style.display = '';
     document.getElementById('regFormSection').style.display = 'none';
     return;
   }
 
-  if (!name)  { showMsg('msg2b','err','Full name is required.'); return; }
-  if (!phone || phone.replace(/\D/g,'').length < 10) { showMsg('msg2b','err','Enter a valid 10-digit phone number.'); return; }
-  if (pwd.length < 8) { showMsg('msg2b','err','Password must be at least 8 characters.'); return; }
+  if (!name)  { showMsg('msg2b','err',L('Full name is required.','पूरा नाम आवश्यक है।')); return; }
+  if (!phone || phone.replace(/\D/g,'').length < 10) { showMsg('msg2b','err',L('Enter a valid 10-digit phone number.','एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
+  if (pwd.length < 8) { showMsg('msg2b','err',L('Password must be at least 8 characters.','पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।')); return; }
 
   const btn = document.getElementById('registerBtn');
-  btn.disabled = true; btn.textContent = 'Creating account…';
+  btn.disabled = true; btn.textContent = L('Creating account…','खाता बन रहा है…');
 
   try {
     const res = await fetch('/nidaan/api/signup', {
@@ -703,16 +759,16 @@ async function doRegister() {
         document.getElementById('regOtpStep1').style.display = '';
         document.getElementById('regOtpStep2').style.display = 'none';
         document.getElementById('msgRegOtp').className = 'msg err';
-        document.getElementById('msgRegOtp').textContent = 'Your verification code expired. Please request a new one.';
-        btn.disabled = false; btn.innerHTML = 'Create free account &rarr;';
+        document.getElementById('msgRegOtp').textContent = L('Your verification code expired. Please request a new one.','आपका सत्यापन कोड समाप्त हो गया। कृपया नया मांगें।');
+        btn.disabled = false; btn.innerHTML = '<span class="en">Create free account &rarr;</span><span class="hi">मुफ़्त खाता बनाएं &rarr;</span>';
         return;
       }
-      throw new Error(_extractErr(data, 'Registration failed'));
+      throw new Error(_extractErr(data, L('Registration failed','रजिस्ट्रेशन विफल')));
     }
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2b','err', e.message);
-    btn.disabled = false; btn.innerHTML = 'Create free account &rarr;';
+    btn.disabled = false; btn.innerHTML = '<span class="en">Create free account &rarr;</span><span class="hi">मुफ़्त खाता बनाएं &rarr;</span>';
   }
 }
 
@@ -946,37 +1002,37 @@ async function _prefillClaimForm() {
   <div class="rev-wrap">
   <div class="rev-card">
     <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
-    <h2>Check if you have a case</h2>
-    <p class="rev-sub">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:rgba(255,255,255,.75)">free to submit, no payment to start.</strong></p>
-    <div class="rev-badge">🔒 Free to submit · Protected under the DPDP Act 2023</div>
+    <h2><span class="en">Check if you have a case</span><span class="hi">देखें कि आपके पास केस है या नहीं</span></h2>
+    <p class="rev-sub"><span class="en">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:rgba(255,255,255,.75)">free to submit, no payment to start.</strong></span><span class="hi">अपने खारिज या कम भुगतान वाले क्लेम के बारे में बताएं। हमारे कानूनी विशेषज्ञ इसकी समीक्षा करते हैं और बताते हैं कि आप कहां खड़े हैं — <strong style="color:rgba(255,255,255,.75)">जमा करना मुफ़्त, शुरू में कोई भुगतान नहीं।</strong></span></p>
+    <div class="rev-badge"><span class="en">🔒 Free to submit · Protected under the DPDP Act 2023</span><span class="hi">🔒 जमा करना मुफ़्त · DPDP अधिनियम 2023 के तहत सुरक्षित</span></div>
 
     <fieldset>
-      <legend>Who is this claim for?</legend>
+      <legend><span class="en">Who is this claim for?</span><span class="hi">यह क्लेम किसके लिए है?</span></legend>
       <div class="rev-row2">
-        <div class="field"><label>Insured Name *</label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
-        <div class="field"><label>Contact Phone *</label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
+        <div class="field"><label><span class="en">Insured Name *</span><span class="hi">बीमित व्यक्ति का नाम *</span></label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
+        <div class="field"><label><span class="en">Contact Phone *</span><span class="hi">संपर्क फ़ोन *</span></label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
       </div>
-      <p style="font-size:.74rem;color:rgba(255,255,255,.35);margin:.15rem 0 0;line-height:1.5">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</p>
+      <p style="font-size:.74rem;color:rgba(255,255,255,.35);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
     </fieldset>
 
     <fieldset>
-      <legend>Claim Details</legend>
+      <legend><span class="en">Claim Details</span><span class="hi">क्लेम विवरण</span></legend>
       <div class="rev-row2">
-        <div class="field"><label>Claim Type *</label>
+        <div class="field"><label><span class="en">Claim Type *</span><span class="hi">क्लेम का प्रकार *</span></label>
           <select id="rv_claim_type" onchange="loadDocChecklist()" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
-            <option value="">Select type…</option>
-            <option value="health">Health Insurance</option>
-            <option value="life">Life Insurance</option>
-            <option value="motor">Motor Insurance</option>
-            <option value="home">Home / Property</option>
-            <option value="travel">Travel Insurance</option>
-            <option value="other">Other</option>
+            <option value="">Select type… / प्रकार चुनें…</option>
+            <option value="health">Health Insurance / स्वास्थ्य बीमा</option>
+            <option value="life">Life Insurance / जीवन बीमा</option>
+            <option value="motor">Motor Insurance / मोटर बीमा</option>
+            <option value="home">Home / Property / गृह / संपत्ति</option>
+            <option value="travel">Travel Insurance / यात्रा बीमा</option>
+            <option value="other">Other / अन्य</option>
           </select>
         </div>
-        <div class="field"><label>Insurer / Company Name</label><input type="text" id="rv_insurer_name" placeholder="e.g. HDFC Ergo"></div>
+        <div class="field"><label><span class="en">Insurer / Company Name</span><span class="hi">बीमा कंपनी का नाम</span></label><input type="text" id="rv_insurer_name" placeholder="e.g. HDFC Ergo"></div>
       </div>
-      <div class="field"><label>Disputed Amount (₹)</label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
-      <div class="field"><label>Brief Description / Notes</label>
+      <div class="field"><label><span class="en">Disputed Amount (₹)</span><span class="hi">विवादित राशि (₹)</span></label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
+      <div class="field"><label><span class="en">Brief Description / Notes</span><span class="hi">संक्षिप्त विवरण / नोट्स</span></label>
         <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
       </div>
     </fieldset>
@@ -984,7 +1040,7 @@ async function _prefillClaimForm() {
     <!-- Documents — appears once a claim type is selected; required to proceed -->
     <div id="rev-docs-wrap" style="display:none">
       <fieldset>
-        <legend>Upload your documents</legend>
+        <legend><span class="en">Upload your documents</span><span class="hi">अपने दस्तावेज़ अपलोड करें</span></legend>
         <div id="rev-doc-trust" style="font-size:.74rem;color:rgba(255,255,255,.42);line-height:1.5;margin-bottom:.75rem"></div>
         <div id="rev-doc-slots"></div>
       </fieldset>
@@ -992,39 +1048,39 @@ async function _prefillClaimForm() {
 
     <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
       <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.1rem;flex-shrink:0;width:18px;height:18px;-webkit-appearance:auto;appearance:auto;accent-color:#06b6d4;background:none;border:0;padding:0">
-      <span>Send me updates about this claim on <strong style="color:rgba(255,255,255,.8)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span>
+      <span><span class="en">Send me updates about this claim on <strong style="color:rgba(255,255,255,.8)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span><span class="hi">इस क्लेम के अपडेट मुझे <strong style="color:rgba(255,255,255,.8)">WhatsApp और ईमेल</strong> पर भेजें — दस्तावेज़ रिमाइंडर, स्थिति और मेरी रिपोर्ट। आप कभी भी STOP लिखकर रोक सकते हैं।</span></span>
     </label>
 
     <div id="rev-msg"></div>
 
     <button class="btn-pay" id="revSubmitBtn" onclick="submitFreeClaim()">
-      <span>📋</span> Submit &amp; See My Next Steps →
+      <span class="en">📋 Submit &amp; See My Next Steps →</span><span class="hi">📋 जमा करें और अगले कदम देखें →</span>
     </button>
-    <p class="rev-note">💚 Thousands have recovered their rightful money — yours could be next. Let's find out.</p>
+    <p class="rev-note"><span class="en">💚 Thousands have recovered their rightful money — yours could be next. Let's find out.</span><span class="hi">💚 हज़ारों लोग अपना हक़ का पैसा वापस पा चुके हैं — अगली बारी आपकी हो सकती है। आइए पता करें।</span></p>
   </div>
 
   <!-- ── Motivational side panel: fills the space + nudges users toward a review ── -->
   <aside class="rev-side">
     <div class="rev-side-card rev-side-hero">
-      <div style="font-size:1.08rem;font-weight:800;color:#fff;line-height:1.4">Your rejected claim might still be worth lakhs.</div>
-      <div style="font-size:.85rem;color:rgba(255,255,255,.72);margin-top:.45rem;line-height:1.55">A rejection letter isn't the end — it's often just the insurer hoping you'll walk away. Let our experts find out if yours can be reopened.</div>
+      <div style="font-size:1.08rem;font-weight:800;color:#fff;line-height:1.4"><span class="en">Your rejected claim might still be worth lakhs.</span><span class="hi">आपका खारिज क्लेम अब भी लाखों का हो सकता है।</span></div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.72);margin-top:.45rem;line-height:1.55"><span class="en">A rejection letter isn't the end — it's often just the insurer hoping you'll walk away. Let our experts find out if yours can be reopened.</span><span class="hi">रिजेक्शन लेटर अंत नहीं है — अक्सर कंपनी यही चाहती है कि आप हार मान लें। हमारे विशेषज्ञ बताएंगे कि क्या आपका केस फिर से खोला जा सकता है।</span></div>
     </div>
     <div class="rev-side-card">
-      <div class="rev-stat"><b>95%</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">success rate on cases we take up</span></div>
-      <div class="rev-stat"><b>5,000+</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">policyholders helped</span></div>
-      <div class="rev-stat"><b style="font-size:1.05rem">₹ Lakhs</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)">recovered for rightful claims</span></div>
+      <div class="rev-stat"><b>95%</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">success rate on cases we take up</span><span class="hi">हम जो केस लेते हैं उनमें सफलता दर</span></span></div>
+      <div class="rev-stat"><b>5,000+</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">policyholders helped</span><span class="hi">पॉलिसीधारकों की मदद की</span></span></div>
+      <div class="rev-stat"><b style="font-size:1.05rem">₹ Lakhs</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">recovered for rightful claims</span><span class="hi">सही क्लेम के लिए वापस दिलाए</span></span></div>
     </div>
     <div class="rev-side-card">
-      <div style="font-size:.76rem;font-weight:700;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem">How it works</div>
-      <div class="rev-step"><span class="n">1</span><span>Tell us about your claim &amp; upload your documents — <strong style="color:rgba(255,255,255,.85)">free</strong>.</span></div>
-      <div class="rev-step"><span class="n">2</span><span>Our lawyers + insurance experts audit your case.</span></div>
-      <div class="rev-step"><span class="n">3</span><span>Get a clear legal report — is your claim worth fighting?</span></div>
+      <div style="font-size:.76rem;font-weight:700;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem"><span class="en">How it works</span><span class="hi">यह कैसे काम करता है</span></div>
+      <div class="rev-step"><span class="n">1</span><span><span class="en">Tell us about your claim &amp; upload your documents — <strong style="color:rgba(255,255,255,.85)">free</strong>.</span><span class="hi">अपने क्लेम के बारे में बताएं और दस्तावेज़ अपलोड करें — <strong style="color:rgba(255,255,255,.85)">मुफ़्त</strong>।</span></span></div>
+      <div class="rev-step"><span class="n">2</span><span><span class="en">Our lawyers + insurance experts audit your case.</span><span class="hi">हमारे वकील + बीमा विशेषज्ञ आपके केस की जांच करते हैं।</span></span></div>
+      <div class="rev-step"><span class="n">3</span><span><span class="en">Get a clear legal report — is your claim worth fighting?</span><span class="hi">एक स्पष्ट कानूनी रिपोर्ट पाएं — क्या आपका क्लेम लड़ने लायक है?</span></span></div>
     </div>
     <div class="rev-side-card">
-      <div style="font-size:.84rem;color:rgba(255,255,255,.75);line-height:1.55;font-style:italic">"They reopened my health claim after the company rejected it twice. I got my ₹2.8 lakh back."</div>
-      <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.45rem">— a policyholder we helped</div>
+      <div style="font-size:.84rem;color:rgba(255,255,255,.75);line-height:1.55;font-style:italic"><span class="en">"They reopened my health claim after the company rejected it twice. I got my ₹2.8 lakh back."</span><span class="hi">"कंपनी ने मेरा हेल्थ क्लेम दो बार खारिज किया था, इन्होंने फिर से खुलवाया। मुझे मेरे ₹2.8 लाख वापस मिले।"</span></div>
+      <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.45rem"><span class="en">— a policyholder we helped</span><span class="hi">— एक पॉलिसीधारक जिसकी हमने मदद की</span></div>
     </div>
-    <div style="font-size:.74rem;color:rgba(255,255,255,.4);text-align:center;line-height:1.5">🔒 Your documents are used only to fight your claim. DPDP Act 2023 — never shared.</div>
+    <div style="font-size:.74rem;color:rgba(255,255,255,.4);text-align:center;line-height:1.5"><span class="en">🔒 Your documents are used only to fight your claim. DPDP Act 2023 — never shared.</span><span class="hi">🔒 आपके दस्तावेज़ केवल आपका क्लेम लड़ने के लिए उपयोग होते हैं। DPDP अधिनियम 2023 — कभी साझा नहीं।</span></div>
   </aside>
   </div>
 </section>
@@ -1034,7 +1090,8 @@ async function _prefillClaimForm() {
 // ₹499 value-first funnel: submit the claim as a FREE unpaid lead (no payment
 // now). The account must already exist (funnel gates login before this form).
 // On success → dashboard, where the document checklist + pay-gate take over.
-const _SUBMIT_LABEL = '<span>📋</span> Submit &amp; See My Next Steps →';
+const _SUBMIT_LABEL = '<span class="en">📋 Submit &amp; See My Next Steps →</span><span class="hi">📋 जमा करें और अगले कदम देखें →</span>';
+function _Lr(en, hi){ return (typeof _lang !== 'undefined' && _lang === 'hi') ? hi : en; }  // review-local lang helper
 let _revDocs = [];    // required doc keys for the selected claim type
 let _revFiles = {};   // doc_key → File chosen by the user
 function _revEsc(s){ const d=document.createElement('div'); d.textContent=(s==null?'':s); return d.innerHTML; }
@@ -1044,38 +1101,49 @@ async function loadDocChecklist() {
   const ct = document.getElementById('rv_claim_type').value;
   const wrap = document.getElementById('rev-docs-wrap');
   const slots = document.getElementById('rev-doc-slots');
+  const keep = { ..._revFiles };   // preserve already-chosen files across a language switch
   _revDocs = []; _revFiles = {};
   if (!ct) { wrap.style.display = 'none'; slots.innerHTML = ''; return; }
   try {
-    const r = await fetch('/nidaan/api/doc-checklist?claim_type=' + encodeURIComponent(ct));
+    const lg = (typeof _lang !== 'undefined') ? _lang : 'en';
+    const r = await fetch('/nidaan/api/doc-checklist?claim_type=' + encodeURIComponent(ct) + '&lang=' + lg);
     if (!r.ok) { wrap.style.display = 'none'; return; }
     const d = await r.json();
     document.getElementById('rev-doc-trust').textContent = d.trust_line || '';
     const required = (d.docs || []).filter(x => x.required);
     _revDocs = required.map(x => x.key);
+    const upLabel = _Lr('Upload', 'अपलोड');
     slots.innerHTML = required.map(x => `
       <div class="doc-slot" id="ds_${x.key}">
         <div style="font-size:1.05rem">📄</div>
         <div class="dlabel">${_revEsc(x.label)}<div class="dwhy">${_revEsc(x.why || '')}</div></div>
         <input type="file" id="df_${x.key}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="onRevDocPick('${x.key}',this)">
-        <button type="button">Upload</button>
+        <button type="button">${upLabel}</button>
       </div>`).join('');
-    // wire the buttons (avoid inline onclick referencing dynamic ids)
+    // wire the buttons + restore any previously chosen files (e.g. after a lang toggle)
     required.forEach(x => {
       const slot = document.getElementById('ds_' + x.key);
       slot.querySelector('button').onclick = () => document.getElementById('df_' + x.key).click();
+      if (keep[x.key]) { _revFiles[x.key] = keep[x.key]; _markDocDone(x.key, keep[x.key]); }
     });
     wrap.style.display = 'block';
   } catch (e) { wrap.style.display = 'none'; }
 }
+function _markDocDone(key, f) {
+  const slot = document.getElementById('ds_' + key); if (!slot) return;
+  slot.classList.add('done');
+  slot.querySelector('button').textContent = '✓ ' + (f.name.length > 14 ? f.name.slice(0, 12) + '…' : f.name);
+}
 function onRevDocPick(key, input) {
   const f = input.files[0]; if (!f) return;
-  if (f.size > 10 * 1024 * 1024) { showRevMsg('err', 'Each file must be under 10 MB.'); input.value=''; return; }
+  if (f.size > 10 * 1024 * 1024) { showRevMsg('err', _Lr('Each file must be under 10 MB.', 'हर फ़ाइल 10 MB से कम होनी चाहिए।')); input.value=''; return; }
   _revFiles[key] = f;
-  const slot = document.getElementById('ds_' + key);
-  slot.classList.add('done');
-  const btn = slot.querySelector('button');
-  btn.textContent = '✓ ' + (f.name.length > 14 ? f.name.slice(0, 12) + '…' : f.name);
+  _markDocDone(key, f);
+}
+// Called by setLang() when the user toggles EN/हिं — re-fetch doc labels in the new language.
+function revRefreshLang() {
+  const sel = document.getElementById('rv_claim_type');
+  if (sel && sel.value) loadDocChecklist();
 }
 
 async function submitFreeClaim() {
@@ -1085,7 +1153,7 @@ async function submitFreeClaim() {
 
   const token = localStorage.getItem('nidaan_token');
   if (!token) {  // safety net — funnel should have gated this already
-    showRevMsg('err', 'Please create your free account first.');
+    showRevMsg('err', _Lr('Please create your free account first.', 'कृपया पहले अपना मुफ़्त खाता बनाएं।'));
     document.getElementById('login-section').style.display = '';
     document.getElementById('review-section').style.display = 'none';
     return;
@@ -1095,13 +1163,13 @@ async function submitFreeClaim() {
   const insured_phone = document.getElementById('rv_insured_phone').value.replace(/\D/g, '');
   const claim_type = document.getElementById('rv_claim_type').value;
 
-  if (!insured_name) { showRevMsg('err', 'Please enter the insured name.'); return; }
-  if (insured_phone.length < 10) { showRevMsg('err', 'Please enter a valid 10-digit contact phone.'); return; }
-  if (!claim_type) { showRevMsg('err', 'Please select the claim type.'); return; }
+  if (!insured_name) { showRevMsg('err', _Lr('Please enter the insured name.', 'कृपया बीमित व्यक्ति का नाम दर्ज करें।')); return; }
+  if (insured_phone.length < 10) { showRevMsg('err', _Lr('Please enter a valid 10-digit contact phone.', 'कृपया एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
+  if (!claim_type) { showRevMsg('err', _Lr('Please select the claim type.', 'कृपया क्लेम का प्रकार चुनें।')); return; }
   // All listed documents are required before we can review the claim.
   const missing = _revDocs.filter(k => !_revFiles[k]);
   if (missing.length) {
-    showRevMsg('err', `Please upload all listed documents to continue (${missing.length} still needed).`);
+    showRevMsg('err', _Lr(`Please upload all listed documents to continue (${missing.length} still needed).`, `जारी रखने के लिए कृपया सभी सूचीबद्ध दस्तावेज़ अपलोड करें (${missing.length} और बाकी)।`));
     document.getElementById('rev-docs-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
@@ -1119,7 +1187,7 @@ async function submitFreeClaim() {
   };
 
   btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Submitting…';
+  btn.innerHTML = '<span>⏳</span> ' + _Lr('Submitting…', 'जमा हो रहा है…');
   try {
     const res = await fetch('/nidaan/api/claims/submit', {
       method: 'POST',
@@ -1128,22 +1196,22 @@ async function submitFreeClaim() {
     });
     const data = await res.json();
     if (res.status === 401) {
-      showRevMsg('err', 'Your session expired. Please sign in again.');
+      showRevMsg('err', _Lr('Your session expired. Please sign in again.', 'आपका सत्र समाप्त हो गया। कृपया फिर से साइन इन करें।'));
       localStorage.removeItem('nidaan_token');
       setTimeout(() => location.reload(), 1500);
       return;
     }
-    if (!res.ok) throw new Error(_extractErr(data, 'Could not submit your claim.'));
+    if (!res.ok) throw new Error(_extractErr(data, _Lr('Could not submit your claim.', 'आपका क्लेम जमा नहीं हो सका।')));
     const claimId = data.claim_id;
     // Upload every document to the new claim (so the dashboard opens straight on the pay-gate).
-    btn.innerHTML = '<span>⏳</span> Uploading your documents…';
+    btn.innerHTML = '<span>⏳</span> ' + _Lr('Uploading your documents…', 'आपके दस्तावेज़ अपलोड हो रहे हैं…');
     for (const key of _revDocs) {
       const f = _revFiles[key]; if (!f) continue;
       const fd = new FormData(); fd.append('files', f); fd.append('doc_key', key);
       await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
     }
-    showRevMsg('ok', '✅ All set! Taking you to your dashboard…');
+    showRevMsg('ok', _Lr('✅ All set! Taking you to your dashboard…', '✅ सब तैयार! आपको आपके डैशबोर्ड पर ले जा रहे हैं…'));
     btn.style.display = 'none';
     setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 1300);
   } catch(e) {
