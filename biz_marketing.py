@@ -1037,6 +1037,84 @@ async def push_to_telegram(agent_telegram_id: str, content: dict,
 
 
 # ---------------------------------------------------------------------------
+#  Templated video generation (Creatomate)  — Phase 1, paid external API
+#  Renders a short branded video from a Creatomate template. Sits behind env
+#  keys and degrades gracefully (clear error) when not configured. The cost is
+#  contained by the per-plan video caps in DAILY_CAPS.
+#  Setup (one-time, by the operator):
+#    1. Create a video template in the Creatomate dashboard with named elements:
+#       Title, Body, Image, Logo, Brand-Color.
+#    2. Put CREATOMATE_API_KEY and CREATOMATE_TEMPLATE_ID in biz.env.
+# ---------------------------------------------------------------------------
+def video_configured() -> bool:
+    return bool(os.getenv("CREATOMATE_API_KEY", "").strip()
+                and os.getenv("CREATOMATE_TEMPLATE_ID", "").strip())
+
+
+async def generate_video(tenant_id: int, title: str, body_text: str,
+                         image_url: str = "", logo_url: str = "",
+                         brand_accent: str = "", template_id: str = "",
+                         timeout_s: int = 150) -> dict:
+    """Render a branded short video via Creatomate.
+    Returns {'video_path': str} on success or {'error': str, 'code': str}."""
+    key = os.getenv("CREATOMATE_API_KEY", "").strip()
+    tmpl = (template_id or os.getenv("CREATOMATE_TEMPLATE_ID", "")).strip()
+    if not (key and tmpl):
+        return {"error": "Video generation isn't set up yet.", "code": "not_configured"}
+
+    modifications: dict = {"Title": title or "", "Body": body_text or ""}
+    if image_url:   modifications["Image"] = image_url
+    if logo_url:    modifications["Logo"] = logo_url
+    if brand_accent: modifications["Brand-Color"] = brand_accent
+
+    import httpx
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post("https://api.creatomate.com/v1/renders",
+                                  headers=headers,
+                                  json={"template_id": tmpl, "modifications": modifications})
+            if r.status_code not in (200, 201, 202):
+                return {"error": f"Creatomate error {r.status_code}: {r.text[:180]}"}
+            data = r.json()
+            render = data[0] if isinstance(data, list) and data else data
+            render_id = render.get("id")
+            status = render.get("status")
+            url = render.get("url")
+
+            waited = 0
+            while status in ("planned", "waiting", "transcribing", "rendering") and waited < timeout_s:
+                await asyncio.sleep(3); waited += 3
+                pr = await client.get(f"https://api.creatomate.com/v1/renders/{render_id}", headers=headers)
+                if pr.status_code == 200:
+                    j = pr.json(); status = j.get("status"); url = j.get("url") or url
+            if status != "succeeded" or not url:
+                return {"error": f"Video render didn't finish in time (status={status}).", "code": "timeout"}
+
+            video_dir = _BASE_DIR / "static" / "marketing" / "videos"
+            video_dir.mkdir(parents=True, exist_ok=True)
+            fname = f"v_{tenant_id}_{int(datetime.now().timestamp())}.mp4"
+            dl = await client.get(url, timeout=120)
+            (video_dir / fname).write_bytes(dl.content)
+            return {"video_path": f"static/marketing/videos/{fname}", "render_id": render_id}
+    except Exception as e:
+        logger.error("Creatomate video failed: %s", e)
+        return {"error": f"Video generation failed: {e}", "code": "exception"}
+
+
+async def set_video_path(content_id: int, tenant_id: int, video_path: str) -> None:
+    """Attach a rendered video to an existing content row (poster → video)."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE marketing_content SET video_path=? WHERE content_id=? AND tenant_id=?",
+                (video_path, content_id, tenant_id))
+            await conn.commit()
+    except Exception as e:
+        logger.error("set_video_path failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
 #  Plan helpers
 # ---------------------------------------------------------------------------
 def can_generate_video(plan: str) -> bool:

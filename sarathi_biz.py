@@ -10542,7 +10542,56 @@ async def api_marketing_quota(tenant: dict = Depends(auth.require_owner)):
     plan = (t.get("plan") if t else None) or "trial"
     cap = await mkt.check_daily_cap(tenant["tenant_id"], plan, want_video=False)
     return {"ok": True, "plan": plan, "caps": cap["caps"], "used": cap["used"],
-            "remaining": cap["remaining"], "can_video": mkt.can_generate_video(plan)}
+            "remaining": cap["remaining"], "can_video": mkt.can_generate_video(plan),
+            "video_configured": mkt.video_configured()}
+
+
+@app.post("/api/marketing/generate-video/{content_id}")
+@limiter.limit("4/minute")
+async def api_marketing_generate_video(content_id: int, request: Request,
+                                       tenant: dict = Depends(auth.require_owner)):
+    """Turn an already-generated poster into a branded short video (Creatomate).
+    Gated by plan (Team+), the video daily cap, and the concurrency guard."""
+    tid = tenant["tenant_id"]
+    t = await db.get_tenant(tid)
+    plan = (t.get("plan") if t else None) or "trial"
+    if not mkt.can_generate_video(plan):
+        return JSONResponse({"error": "Video is available on Team & Enterprise plans.", "code": "upgrade"}, status_code=403)
+    if not mkt.video_configured():
+        return JSONResponse({"error": "Video generation isn't set up yet — please try again later.", "code": "not_configured"}, status_code=503)
+    cap = await mkt.check_daily_cap(tid, plan, want_video=True)
+    if not cap["allowed"]:
+        return JSONResponse({"error": cap["reason"], "code": "daily_limit", "remaining": cap["remaining"]}, status_code=429)
+
+    item = await mkt.get_content_by_id(content_id, tid)
+    if not item:
+        return JSONResponse({"error": "content not found"}, status_code=404)
+    if (item.get("video_path") or "").strip():
+        return JSONResponse({"error": "This content already has a video."}, status_code=400)
+
+    base_url = os.getenv("SARATHI_BASE_URL", "https://sarathi-ai.com").rstrip("/")
+    img_rel = (item.get("image_path") or "").lstrip("/")
+    image_url = f"{base_url}/{img_rel}" if img_rel else ""
+    logo_rel = (t.get("marketing_logo_path") or "").lstrip("/")
+    logo_url = f"{base_url}/{logo_rel}" if logo_rel else ""
+
+    try:
+        await asyncio.wait_for(_MKT_GEN_SEM.acquire(), timeout=0.05)
+    except asyncio.TimeoutError:
+        return JSONResponse({"error": "The studio is busy right now — please try again in a few seconds.", "code": "busy"}, status_code=429)
+    try:
+        res = await mkt.generate_video(
+            tid, item.get("title", ""), item.get("body_text", ""),
+            image_url=image_url, logo_url=logo_url,
+            brand_accent=t.get("brand_accent", ""))
+    finally:
+        _MKT_GEN_SEM.release()
+
+    if "error" in res:
+        return JSONResponse({"error": res["error"], "code": res.get("code", "")}, status_code=502)
+    await mkt.set_video_path(content_id, tid, res["video_path"])
+    remaining = (await mkt.check_daily_cap(tid, plan, want_video=True))["remaining"]
+    return {"ok": True, "content_id": content_id, "video_path": res["video_path"], "remaining": remaining}
 
 
 # ── Content Calendar: Schedule ─────────────────────────────────────────────
