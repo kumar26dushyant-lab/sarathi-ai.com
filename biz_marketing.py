@@ -341,6 +341,34 @@ _SCENARIO_PROMPTS = {
 }
 
 
+def _clean_caption(text: str) -> str:
+    """Strip LLM artifacts so they never reach the poster: preambles
+    ('Here's a draft:', 'यहाँ एक मसौदा है:'), character/word counts
+    ('(कुल 189 अक्षर)', '(total 189 characters)'), labels, and markdown."""
+    if not text:
+        return ""
+    s = text.strip().replace("```", "").replace("**", "").replace("__", "")
+    # Strip leading preamble lines (English + Hindi), up to a few of them.
+    preamble = re.compile(
+        r"^\s*(here(?:'s| is)\b[^:\n]*:|sure[!,. ]+|okay[!,. ]+|draft\s*:|caption\s*:|"
+        r"post\s*:|option\s*\d*\s*:|यहाँ[^:\n]*:|यह\s+रहा[^:\n]*:|कैप्शन\s*:|प्रस्तुत[^:\n]*:|"
+        r"प्रस्तावित[^:\n]*:)\s*", re.IGNORECASE)
+    for _ in range(3):
+        nxt = preamble.sub("", s).strip()
+        if nxt == s:
+            break
+        s = nxt
+    # Remove character/word counts anywhere (brackets) and at the end (any script).
+    s = re.sub(r"[\(\[\{][^)\]\}]*?\b\d{1,4}\s*(?:characters?|chars?|words?|अक्षर|शब्द|कैरेक्टर)\b[^)\]\}]*?[\)\]\}]",
+               "", s, flags=re.IGNORECASE)
+    s = re.sub(r"[—\-–]?\s*(?:total\s*|कुल\s*)?\b\d{1,4}\s*(?:characters?|chars?|words?|अक्षर|शब्द)\b\.?\s*$",
+               "", s, flags=re.IGNORECASE | re.MULTILINE)
+    s = re.sub(r"(?:character|word|कैरेक्टर|अक्षर|शब्द)\s*count\s*[:\-]?\s*\d{1,4}",
+               "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\n{3,}", "\n\n", s).strip().strip('"').strip("'").strip()
+    return s
+
+
 async def generate_content_text(content_type: str, lang: str = "en",
                                 festival: Optional[dict] = None,
                                 tenant_name: str = "",
@@ -378,7 +406,7 @@ async def generate_content_text(content_type: str, lang: str = "en",
             prompt += f" The advisor's firm name is '{tenant_name}'."
 
         body = await ai._ask_gemini(prompt)
-        body = body.strip().strip('"').strip()
+        body = _clean_caption(body)
         title_map = {
             "scenario_insurance": {
                 "en": "The True Cost of Not Having Insurance",
@@ -599,6 +627,15 @@ async def generate_image(
         title = _strip_emojis(title or "")
         body_text = _strip_emojis(body_text or "")
 
+        # Keep captions tight so they always fit the text band (no overflow onto
+        # the photo / footer). The full caption is still saved as body_text for
+        # WhatsApp/Telegram; only the on-image copy is trimmed.
+        _max_on_image = 240 if image_format == "whatsapp_status" else (190 if image_format == "instagram_square" else 260)
+        body_on_image = body_text
+        if len(body_on_image) > _max_on_image:
+            cut = body_on_image[:_max_on_image].rsplit(" ", 1)[0].rstrip(".,;:—- ")
+            body_on_image = (cut or body_on_image[:_max_on_image]) + "…"
+
         dims = IMAGE_FORMATS.get(image_format, IMAGE_FORMATS["whatsapp_status"])
         W, H = dims
 
@@ -663,13 +700,17 @@ async def generate_image(
             for y in range(0, int(H * 0.20)):
                 a = int(160 * (1 - y / max(1, int(H * 0.20))))
                 od.line([(0, y), (W, y)], fill=(0, 0, 0, a))
-            # Middle text scrim (gradient toward darker center for body text)
-            mid_top = int(H * 0.32)
-            mid_bot = int(H * 0.66)
+            # Middle text scrim — strong, near-uniform band so body copy stays
+            # readable over any background photo (feathered top/bottom edges only).
+            mid_top = int(H * 0.26)
+            mid_bot = int(H * 0.74)
+            feather = max(1, int((mid_bot - mid_top) * 0.18))
             for y in range(mid_top, mid_bot):
-                t = abs((y - (mid_top + mid_bot) / 2) / max(1, (mid_bot - mid_top) / 2))
-                a = int(150 * (1 - t * t))
-                od.line([(0, y), (W, y)], fill=(15, 23, 42, a))
+                d_top = y - mid_top
+                d_bot = mid_bot - y
+                edge = min(d_top, d_bot)
+                a = 185 if edge >= feather else int(185 * (edge / feather))
+                od.line([(0, y), (W, y)], fill=(10, 15, 30, a))
             # Bottom band — covers name + disclaimer + watermark
             for y in range(int(H * 0.75), H):
                 a = int(220 * ((y - H * 0.75) / max(1, H * 0.25)))
@@ -730,29 +771,34 @@ async def generate_image(
         }.get(content_type, {"en": "Marketing", "hi": "मार्केटिंग", "mr": "मार्केटिंग"})
         badge_text = _badge_by_type.get(lang, _badge_by_type["en"])
         font_badge = _font_for(badge_text, 36, bold=False)
-        draw.text((60, 140), badge_text, fill=accent_color, font=font_badge)
+        badge_y = 50 + logo_h + 18   # always sit clear below the logo / placeholder box
+        draw.text((60, badge_y), badge_text, fill=accent_color, font=font_badge)
 
         # ── Decorative accent line ───────────────────────────────────────────
-        draw.rectangle([(60, 240), (160, 246)], fill=accent_color)
+        accent_line_y = badge_y + 56
+        draw.rectangle([(60, accent_line_y), (160, accent_line_y + 6)], fill=accent_color)
 
         # Scale font sizes based on canvas dimensions
         _scale = min(W, H) / 1080
         title_font_size = max(int(72 * _scale), 28)
         body_font_size  = max(int(52 * _scale), 22)
         title_y = int(280 * (H / 1920)) if image_format == "whatsapp_status" else int(H * 0.18)
+        title_y = max(title_y, accent_line_y + 34)   # never collide with the badge/accent line
         body_y  = int(580 * (H / 1920)) if image_format == "whatsapp_status" else int(H * 0.35)
         title_wrap_width = 20 if image_format == "whatsapp_status" else (30 if image_format == "instagram_square" else 40)
         body_wrap_width  = 28 if image_format == "whatsapp_status" else (34 if image_format == "instagram_square" else 55)
 
-        # ── Title ───────────────────────────────────────────────────────────
+        # ── Title (white with a dark outline → readable on any background) ────
         font_title = _font_for(title, title_font_size, bold=True)
         title_wrapped = textwrap.fill(title, width=title_wrap_width)
-        draw.text((60, title_y), title_wrapped, fill="#ffffff", font=font_title)
+        draw.text((60, title_y), title_wrapped, fill="#ffffff", font=font_title,
+                  stroke_width=3, stroke_fill="#0a0f1e")
 
-        # ── Body text ────────────────────────────────────────────────────────
-        font_body = _font_for(body_text, body_font_size, bold=False)
-        body_wrapped = textwrap.fill(body_text, width=body_wrap_width)
-        draw.text((60, body_y), body_wrapped, fill="#e2e8f0cc", font=font_body)
+        # ── Body text (pure white + outline; uses the trimmed on-image copy) ──
+        font_body = _font_for(body_on_image, body_font_size, bold=False)
+        body_wrapped = textwrap.fill(body_on_image, width=body_wrap_width)
+        draw.text((60, body_y), body_wrapped, fill="#ffffff", font=font_body,
+                  stroke_width=2, stroke_fill="#0a0f1e")
 
         # ── Agent photo (circular, bottom-right) ─────────────────────────────
         photo_loaded = False
@@ -766,7 +812,11 @@ async def generate_image(
                 ID2.Draw(mask).ellipse((0, 0, 220, 220), fill=255)
                 photo_circle = Image.new("RGBA", (220, 220), (0, 0, 0, 0))
                 photo_circle.paste(photo, (0, 0), mask)
-                img.paste(photo_circle, (W - 280, H - 360), photo_circle)
+                px, py = W - 280, H - 360
+                img.paste(photo_circle, (px, py), photo_circle)
+                # White ring → makes the advisor's face stand out (trust cue).
+                draw.ellipse([(px - 4, py - 4), (px + 224, py + 224)],
+                             outline="#ffffff", width=6)
                 photo_loaded = True
             except Exception as pe:
                 logger.debug("Marketing photo load failed: %s", pe)
@@ -787,10 +837,12 @@ async def generate_image(
         footer_offset  = int(340 * (H / 1920)) if image_format == "whatsapp_status" else int(H * 0.22)
         primary_name = agent_name or firm_name or ""
         font_name = _font_for(primary_name, name_font_size, bold=True)
-        draw.text((60, H - footer_offset), primary_name, fill="#ffffff", font=font_name)
-        if firm_name and agent_name:
+        draw.text((60, H - footer_offset), primary_name, fill="#ffffff", font=font_name,
+                  stroke_width=2, stroke_fill="#0a0f1e")
+        if firm_name and agent_name and firm_name.strip().lower() != agent_name.strip().lower():
             font_firm = _font_for(firm_name, firm_font_size, bold=False)
-            draw.text((60, H - int(footer_offset * 0.79)), firm_name, fill="#94a3b8", font=font_firm)
+            draw.text((60, H - int(footer_offset * 0.79)), firm_name, fill="#cbd5e1", font=font_firm,
+                      stroke_width=1, stroke_fill="#0a0f1e")
 
         # ── Soft IRDAI disclaimer band (small, neutral, advisor-onus) ─────────
         disclaimer_map = {
