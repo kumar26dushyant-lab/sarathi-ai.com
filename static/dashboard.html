@@ -1989,16 +1989,22 @@ function exitImpersonation() {
                 <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenSchedule()">🗓️ Schedule Post</button>
               </div>
 
+              <!-- Daily allowance meter (cost + load aware) -->
+              <div id="mktQuota" style="margin-top:10px;font-size:.82em;color:#6b7280;display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>
+
               <div id="mktGenerating" style="display:none;margin-top:12px;color:#6b7280;font-size:.88em">⏳ Generating content with AI…</div>
               <div id="mktPreview" style="display:none;margin-top:14px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:12px">
                 <div style="font-weight:600;margin-bottom:8px" id="mktPreviewTitle"></div>
                 <div style="font-size:.9em;color:#374151;white-space:pre-wrap;margin-bottom:12px" id="mktPreviewBody"></div>
-                <img id="mktPreviewImg" src="" style="max-width:280px;border-radius:8px;display:none;margin-bottom:12px">
+                <img id="mktPreviewImg" src="" style="max-width:280px;width:100%;border-radius:8px;display:none;margin-bottom:12px">
+                <video id="mktPreviewVideo" src="" controls playsinline style="max-width:280px;width:100%;border-radius:8px;display:none;margin-bottom:12px"></video>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="btn btn-primary" style="font-size:.85em" onclick="mktSendStatus()">📱 Post to WA Status</button>
-                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendTelegram()">✈️ Push to Telegram</button>
-                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenDMPanel()">📨 Send as DM to Leads</button>
-                  <a id="mktDownloadImg" href="#" download style="display:none" class="btn btn-secondary" style="font-size:.85em;text-decoration:none">⬇️ Download Image</a>
+                  <button class="btn btn-primary" style="font-size:.85em" onclick="mktSendToMe()">📲 Send to my WhatsApp</button>
+                  <button id="mktMakeVideoBtn" class="btn btn-secondary" style="font-size:.85em;display:none" onclick="mktMakeVideo()">🎬 Make Video</button>
+                  <a id="mktDownloadImg" href="#" download style="display:none" class="btn btn-secondary" style="font-size:.85em;text-decoration:none">⬇️ Download</a>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendTelegram()">✈️ Telegram</button>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendStatus()">📱 WA Status</button>
+                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenDMPanel()">📨 DM Leads</button>
                 </div>
               </div>
             </div>
@@ -9114,6 +9120,7 @@ let _mktPage = 1;
 let _mktLeads = [];
 
 async function loadMarketing() {
+  loadMktQuota();   // show today's allowance + whether video is available
   const r = await fetch('/api/marketing/settings', {headers: hdrs()});
   if (!r.ok) return;
   _mktSettings = await r.json();
@@ -9335,7 +9342,8 @@ async function mktGenerate() {
     });
     if (!r.ok) {
       const err = await r.json().catch(()=>({}));
-      showToast && showToast(_extractErr(err, 'Generation failed'), 'error');
+      showToast && showToast(err.error || _extractErr(err, 'Generation failed'), 'error');
+      if (err.remaining) renderMktQuota(err.remaining);
       return;
     }
     const d = await r.json();
@@ -9345,7 +9353,9 @@ async function mktGenerate() {
     document.getElementById('mktPreviewTitle').textContent = c.title || '';
     document.getElementById('mktPreviewBody').textContent = c.body_text || '';
     const img = document.getElementById('mktPreviewImg');
+    const vid = document.getElementById('mktPreviewVideo');
     const dlBtn = document.getElementById('mktDownloadImg');
+    if (vid) { vid.style.display = 'none'; vid.src = ''; }   // fresh poster has no video yet
     if (c.image_path) {
       const url = '/' + c.image_path + '?v=' + Date.now();
       img.src = url;
@@ -9355,7 +9365,11 @@ async function mktGenerate() {
       img.style.display = 'none';
       if (dlBtn) dlBtn.style.display = 'none';
     }
+    // Show "Make Video" only when the plan + provider allow it.
+    const vBtn = document.getElementById('mktMakeVideoBtn');
+    if (vBtn) vBtn.style.display = (_mktCanVideo && _mktVideoConfigured) ? 'inline-flex' : 'none';
     document.getElementById('mktPreview').style.display = 'block';
+    if (d.remaining) renderMktQuota(d.remaining);
     loadMktLibrary();
   } finally {
     document.getElementById('mktGenerating').style.display = 'none';
@@ -9392,10 +9406,11 @@ async function loadMktLibrary(page) {
       <div style="padding:10px">
         <div style="font-size:.8em;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title||'')}</div>
         <div style="font-size:.72em;color:#6b7280;margin-bottom:8px">${item.generated_date||''} · ${item.language||'en'}</div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktSendStatusById(${item.content_id})">${waIcon} Status</button>
-          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktSendTelegramById(${item.content_id})">${tgIcon} Telegram</button>
-          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="mktOpenDMPanelById(${item.content_id})">📨 DM</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-primary" style="font-size:.72em;padding:4px 8px;flex:1 1 100%" onclick="event.stopPropagation();mktSendToMeById(${item.content_id})">📲 Send to my WhatsApp</button>
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktSendTelegramById(${item.content_id})">${tgIcon} Telegram</button>
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktSendStatusById(${item.content_id})">${waIcon} Status</button>
+          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktOpenDMPanelById(${item.content_id})">📨 DM</button>
         </div>
       </div>`;
     grid.appendChild(card);
@@ -9411,6 +9426,57 @@ async function mktSendStatusById(id) {
   const d = await r.json().catch(()=>({}));
   if (r.ok && d.ok) showToast && showToast('Posted to WhatsApp Status! ✅', 'success');
   else showToast && showToast(d.error || 'Failed to post. Is WhatsApp connected?', 'error');
+}
+
+// ── Daily allowance meter + video capability ───────────────────────────────
+let _mktCanVideo = false, _mktVideoConfigured = false;
+function renderMktQuota(remaining) {
+  const el = document.getElementById('mktQuota');
+  if (!el || !remaining) return;
+  const p = remaining.posters ?? '–', v = remaining.videos ?? 0;
+  let html = `<span>🖼️ <b>${p}</b> posters left today</span>`;
+  if (_mktCanVideo) html += `<span>🎬 <b>${v}</b> videos left today</span>`;
+  el.innerHTML = html;
+}
+async function loadMktQuota() {
+  try {
+    const r = await fetch('/api/marketing/quota', {headers: hdrs()});
+    if (!r.ok) return;
+    const d = await r.json();
+    _mktCanVideo = !!d.can_video;
+    _mktVideoConfigured = !!d.video_configured;
+    renderMktQuota(d.remaining);
+  } catch(e) {}
+}
+
+async function mktSendToMe() { if (_mktCurrentContentId) await mktSendToMeById(_mktCurrentContentId); }
+async function mktSendToMeById(id) {
+  if (!id) return;
+  showToast && showToast('Sending to your WhatsApp…', 'info');
+  const r = await fetch(`/api/marketing/send-to-me/${id}`, {method:'POST', headers:hdrs()});
+  const d = await r.json().catch(()=>({}));
+  if (r.ok && d.ok) showToast && showToast(`Sent to your WhatsApp (••••${d.delivered_to||''}) — open WhatsApp and post it! ✅`, 'success');
+  else showToast && showToast(d.error || 'Could not send. Connect WhatsApp in Settings, or use Download.', 'error');
+}
+
+async function mktMakeVideo() {
+  const id = _mktCurrentContentId;
+  if (!id) return;
+  const btn = document.getElementById('mktMakeVideoBtn');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Rendering video…'; }
+  try {
+    const r = await fetch(`/api/marketing/generate-video/${id}`, {method:'POST', headers:hdrs()});
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok || !d.ok) { showToast && showToast(d.error || 'Video generation failed.', 'error'); if (d.remaining) renderMktQuota(d.remaining); return; }
+    const vid = document.getElementById('mktPreviewVideo');
+    if (vid && d.video_path) { vid.src = '/' + d.video_path + '?v=' + Date.now(); vid.style.display = 'block'; }
+    if (btn) btn.style.display = 'none';
+    if (d.remaining) renderMktQuota(d.remaining);
+    showToast && showToast('Video ready! 🎬', 'success');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
 }
 
 async function mktSendTelegramById(id) {
