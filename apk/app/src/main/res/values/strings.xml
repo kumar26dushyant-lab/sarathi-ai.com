@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sarathi Agent</string>
+    <string name="btn_scan_qr">Scan QR from Dashboard</string>
+    <string name="label_wa_package">Target WhatsApp app:</string>
+    <string name="btn_notif_access">1 · Enable Notification Access</string>
+    <string name="btn_battery_opt">2 · Disable Battery Optimization</string>
+    <string name="btn_start_agent">3 · Start Sarathi Agent ✓</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_permissions">Permission Guide</string>
+    <string name="label_agent">Sarathi Agent Active</string>
+    <string name="label_replied_today">Auto-replied today: —</string>
+    <string name="channel_fg">Sarathi Agent</string>
+    <string name="channel_crm">Sarathi CRM</string>
+</resources>

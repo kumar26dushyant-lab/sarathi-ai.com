@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🤖"
+            android:textSize="48sp"
+            android:layout_marginTop="24dp" />
+
+        <!-- Agent name -->
+        <TextView
+            android:id="@+id/tv_agent_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sarathi Agent"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/colorText"
+            android:layout_marginTop="8dp" />
+
+        <!-- Connection status -->
+        <TextView
+            android:id="@+id/tv_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Checking notification listener…"
+            android:textSize="13sp"
+            android:textAlignment="center"
+            android:textColor="@color/colorMuted"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="24dp"
+            android:padding="12dp"
+            android:background="@color/colorSurface" />
+
+        <!-- Stats row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@color/colorSurface"
+                android:padding="12dp"
+                android:layout_marginEnd="8dp">
+                <TextView
+                    android:id="@+id/tv_replied_today"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorSuccess" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Replied Today"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorMuted" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@color/colorSurface"
+                android:padding="12dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="9AM–8PM"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorText" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Business Hours"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorMuted" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Auto-reply toggle -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/colorSurface"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Auto-Reply"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorText" />
+
+            <Switch
+                android:id="@+id/switch_autoreply"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <!-- Permission guide button -->
+        <Button
+            android:id="@+id/btn_permissions"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="@string/btn_permissions"
+            android:textColor="@color/colorText"
+            android:textSize="13sp"
+            android:backgroundTint="@color/colorSurface"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Disconnect button -->
+        <Button
+            android:id="@+id/btn_disconnect"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="@string/btn_disconnect"
+            android:textColor="@color/colorError"
+            android:textSize="13sp"
+            android:backgroundTint="@color/colorSurface" />
+
+    </LinearLayout>
+</ScrollView>

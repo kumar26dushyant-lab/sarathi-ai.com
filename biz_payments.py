@@ -134,7 +134,7 @@ PLANS = {
         "interval": 1,
         "max_agents": 6,
         "period_days": 30,
-        "description": "Admin + 5 Advisors · WhatsApp · Custom Branding",
+        "description": "Admin + 5 Advisors · WhatsApp · Team Dashboard",
     },
     "enterprise": {
         "name": "Enterprise",
@@ -165,7 +165,7 @@ PLANS = {
         "interval": 1,
         "max_agents": 6,
         "period_days": 365,
-        "description": "Admin + 5 Advisors · WhatsApp · Custom Branding · Best Value",
+        "description": "Admin + 5 Advisors · WhatsApp · Team Dashboard · Best Value",
     },
     "enterprise_annual": {
         "name": "Enterprise (Annual)",

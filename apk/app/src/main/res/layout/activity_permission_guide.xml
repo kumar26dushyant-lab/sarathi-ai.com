@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Setup Guide"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/colorText"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Complete these 2 steps to activate auto-reply."
+            android:textColor="@color/colorMuted"
+            android:textSize="13sp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Step 1 -->
+        <Button
+            android:id="@+id/btn_notif_access"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/btn_notif_access"
+            android:textColor="@color/colorOnPrimary"
+            android:textSize="14sp"
+            android:backgroundTint="@color/colorPrimary"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Step 2 -->
+        <Button
+            android:id="@+id/btn_battery_opt"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/btn_battery_opt"
+            android:textColor="@color/colorOnPrimary"
+            android:textSize="14sp"
+            android:backgroundTint="@color/colorWarning"
+            android:layout_marginBottom="12dp" />
+
+        <!-- OEM-specific battery guide text -->
+        <TextView
+            android:id="@+id/tv_battery_guide"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/colorMuted"
+            android:textSize="12sp"
+            android:lineSpacingMultiplier="1.4"
+            android:background="@color/colorSurface"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Step 3 -->
+        <Button
+            android:id="@+id/btn_start_agent"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/btn_start_agent"
+            android:textColor="@color/colorOnPrimary"
+            android:textSize="14sp"
+            android:backgroundTint="@color/colorSuccess"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Info -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="The Start button activates automatically once both steps are done. You can close and reopen the app anytime — it remembers your progress."
+            android:textColor="@color/colorMuted"
+            android:textSize="12sp"
+            android:lineSpacingMultiplier="1.4"
+            android:padding="12dp"
+            android:background="@color/colorSurface" />
+
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <!-- Logo / Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🤖"
+            android:textSize="56sp"
+            android:layout_marginTop="32dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sarathi Agent"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:textColor="@color/colorText"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WhatsApp AI for Advisors"
+            android:textSize="14sp"
+            android:textColor="@color/colorMuted"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- WA Package selector -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_wa_package"
+            android:textColor="@color/colorMuted"
+            android:textSize="13sp"
+            android:layout_marginBottom="6dp" />
+
+        <Spinner
+            android:id="@+id/spinner_wa_package"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@color/colorSurface"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Scan QR button -->
+        <Button
+            android:id="@+id/btn_scan_qr"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/btn_scan_qr"
+            android:textColor="@color/colorOnPrimary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:backgroundTint="@color/colorPrimary" />
+
+        <!-- Status message -->
+        <TextView
+            android:id="@+id/tv_onboard_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textAlignment="center"
+            android:layout_marginTop="16dp"
+            android:visibility="gone" />
+
+        <!-- Instructions -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open your Sarathi dashboard → WhatsApp tab → Click 'Connect APK' to get the QR code."
+            android:textColor="@color/colorMuted"
+            android:textSize="12sp"
+            android:textAlignment="center"
+            android:layout_marginTop="32dp"
+            android:paddingHorizontal="16dp" />
+
+    </LinearLayout>
+</ScrollView>
