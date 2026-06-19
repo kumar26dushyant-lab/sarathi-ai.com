@@ -1050,6 +1050,67 @@ def has_watermark(plan: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+#  Daily generation caps  (cost + server-load control)
+#  Posters render locally (Pillow) ≈ free, so their caps are generous; videos
+#  hit a paid external API, so their caps are tight. Usage is counted from the
+#  existing marketing_content table (no extra table needed).
+# ---------------------------------------------------------------------------
+DAILY_CAPS = {
+    "trial":             {"posters": 2,  "videos": 0},
+    "individual":        {"posters": 4,  "videos": 0},
+    "individual_annual": {"posters": 4,  "videos": 0},
+    "team":              {"posters": 10, "videos": 2},
+    "team_annual":       {"posters": 10, "videos": 2},
+    "enterprise":        {"posters": 25, "videos": 5},
+    "enterprise_annual": {"posters": 25, "videos": 5},
+}
+
+
+def caps_for(plan: str) -> dict:
+    return DAILY_CAPS.get(plan, DAILY_CAPS["trial"])
+
+
+async def daily_usage(tenant_id: int, day: Optional[str] = None) -> dict:
+    """Count posters (image-only) and videos this tenant generated today."""
+    if day is None:
+        day = datetime.now().strftime("%Y-%m-%d")
+    posters = videos = 0
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            async with conn.execute(
+                "SELECT "
+                "COALESCE(SUM(CASE WHEN video_path IS NULL OR video_path='' THEN 1 ELSE 0 END),0), "
+                "COALESCE(SUM(CASE WHEN video_path IS NOT NULL AND video_path<>'' THEN 1 ELSE 0 END),0) "
+                "FROM marketing_content WHERE tenant_id=? AND generated_date=?",
+                (tenant_id, day)) as cur:
+                row = await cur.fetchone()
+                if row:
+                    posters, videos = int(row[0] or 0), int(row[1] or 0)
+    except Exception as e:
+        logger.error("daily_usage failed: %s", e)
+    return {"posters": posters, "videos": videos}
+
+
+async def check_daily_cap(tenant_id: int, plan: str, want_video: bool) -> dict:
+    """Gate a generation request against the plan's daily cap.
+    Returns {allowed, reason, remaining{posters,videos}, caps, used}."""
+    caps = caps_for(plan)
+    used = await daily_usage(tenant_id)
+    kind = "videos" if want_video else "posters"
+    limit = int(caps.get(kind, 0))
+    allowed = used.get(kind, 0) < limit
+    reason = ""
+    if not allowed:
+        if want_video and limit == 0:
+            reason = "Video generation isn't included in your plan — upgrade to Team or Enterprise."
+        else:
+            reason = f"You've used today's {limit} {kind}. Come back tomorrow, or upgrade for a higher daily limit."
+    remaining = {k: max(0, int(caps.get(k, 0)) - used.get(k, 0)) for k in ("posters", "videos")}
+    return {"allowed": allowed, "reason": reason, "remaining": remaining,
+            "caps": caps, "used": used}
+
+
+# ---------------------------------------------------------------------------
 #  Daily Auto-Post Scheduler
 # ---------------------------------------------------------------------------
 async def run_marketing_auto_post(now: Optional[datetime] = None) -> int:

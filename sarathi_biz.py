@@ -10297,6 +10297,12 @@ async def api_microsite_check_slug(request: Request, slug: str = Query(...),
 # =============================================================================
 import biz_marketing as mkt
 
+# Marketing generation is heavy (Pillow render + optional external video API).
+# Bound concurrency so simultaneous requests can't exhaust the ARM box's RAM;
+# when saturated we reject fast with 429 rather than piling up and slowing the
+# whole server. Tunable via MKT_MAX_CONCURRENT_GEN.
+_MKT_GEN_SEM = asyncio.Semaphore(int(os.getenv("MKT_MAX_CONCURRENT_GEN", "3")))
+
 class MarketingSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     enabled: Optional[bool] = None
@@ -10487,26 +10493,56 @@ async def api_marketing_generate(
         except Exception:
             pass
 
+    # ── Daily cap (cost + abuse control). On-demand generate produces posters. ──
+    cap = await mkt.check_daily_cap(tid, plan, want_video=False)
+    if not cap["allowed"]:
+        return JSONResponse(
+            {"error": cap["reason"], "code": "daily_limit", "remaining": cap["remaining"]},
+            status_code=429)
+
     owner_agent = await db.get_owner_agent_by_tenant(tid)
     agent_name = owner_agent.get("name", "") if owner_agent else ""
 
-    content = await mkt.generate_content(
-        tenant_id=tid,
-        content_type=body.content_type,
-        lang=lang,
-        festival=festival,
-        firm_name=firm_name,
-        agent_name=agent_name,
-        marketing_photo_path=marketing_photo_path,
-        marketing_logo_path=marketing_logo_path,
-        watermark=watermark,
-        custom_topic=body.custom_topic or "",
-        image_format=body.image_format,
-        brand_accent=brand_accent,
-        template_id=body.template_id or "",
-    )
+    # ── Load guard: bounded concurrency. Reject fast when the box is saturated. ──
+    try:
+        await asyncio.wait_for(_MKT_GEN_SEM.acquire(), timeout=0.05)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            {"error": "The studio is busy right now — please try again in a few seconds.",
+             "code": "busy"}, status_code=429)
+    try:
+        content = await mkt.generate_content(
+            tenant_id=tid,
+            content_type=body.content_type,
+            lang=lang,
+            festival=festival,
+            firm_name=firm_name,
+            agent_name=agent_name,
+            marketing_photo_path=marketing_photo_path,
+            marketing_logo_path=marketing_logo_path,
+            watermark=watermark,
+            custom_topic=body.custom_topic or "",
+            image_format=body.image_format,
+            brand_accent=brand_accent,
+            template_id=body.template_id or "",
+        )
+    finally:
+        _MKT_GEN_SEM.release()
+
     content_id = await mkt.save_content(tid, content)
-    return {"ok": True, "content_id": content_id, "content": content}
+    # Recompute remaining so the UI can show "N posters left today".
+    remaining = (await mkt.check_daily_cap(tid, plan, want_video=False))["remaining"]
+    return {"ok": True, "content_id": content_id, "content": content, "remaining": remaining}
+
+
+@app.get("/api/marketing/quota")
+async def api_marketing_quota(tenant: dict = Depends(auth.require_owner)):
+    """Today's remaining marketing-generation allowance (drives the mobile studio meter)."""
+    t = await db.get_tenant(tenant["tenant_id"])
+    plan = (t.get("plan") if t else None) or "trial"
+    cap = await mkt.check_daily_cap(tenant["tenant_id"], plan, want_video=False)
+    return {"ok": True, "plan": plan, "caps": cap["caps"], "used": cap["used"],
+            "remaining": cap["remaining"], "can_video": mkt.can_generate_video(plan)}
 
 
 # ── Content Calendar: Schedule ─────────────────────────────────────────────
