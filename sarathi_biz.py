@@ -10825,6 +10825,60 @@ async def api_marketing_send_status(content_id: int,
     return {"ok": "error" not in result, "result": result}
 
 
+@app.post("/api/marketing/send-to-me/{content_id}")
+async def api_marketing_send_to_me(content_id: int,
+                                   tenant: dict = Depends(auth.require_owner)):
+    """Deliver a generated poster/video + caption to the owner's OWN WhatsApp
+    number so they can post it themselves (we don't auto-post to Status)."""
+    tid = tenant["tenant_id"]
+    item = await mkt.get_content_by_id(content_id, tid)
+    if not item:
+        return JSONResponse({"error": "content not found"}, status_code=404)
+
+    # Prefer video when present, else the poster image.
+    video_path = (item.get("video_path") or "").strip()
+    image_path = (item.get("image_path") or "").strip()
+    rel_path = video_path or image_path
+    media_type = "video" if video_path else "image"
+    if not rel_path:
+        return JSONResponse({"error": "no media for this content"}, status_code=400)
+
+    # The owner's own WhatsApp number (where we send the ready-to-post content).
+    owner_agent = await db.get_owner_agent_by_tenant(tid)
+    own_phone = ((owner_agent or {}).get("phone") or "").strip()
+    if not own_phone:
+        t = await db.get_tenant(tid)
+        own_phone = ((t or {}).get("phone") or "").strip()
+    own_phone = "".join(ch for ch in own_phone if ch.isdigit())
+    if len(own_phone) < 10:
+        return JSONResponse({"error": "No valid WhatsApp number on your profile. Add your number in settings, or use Download."}, status_code=400)
+
+    # Need a connected WhatsApp instance to send from.
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT evolution_instance FROM wa_instances WHERE tenant_id=? AND status='connected' LIMIT 1",
+            (tid,))
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse(
+            {"error": "Connect your WhatsApp first (Settings → WhatsApp), or use Download to save and post manually.",
+             "code": "no_wa"}, status_code=400)
+    instance = row["evolution_instance"]
+
+    base_url = os.getenv("SARATHI_BASE_URL", "https://sarathi-ai.com").rstrip("/")
+    media_url = f"{base_url}/{rel_path.lstrip('/')}"
+    caption = (item.get("body_text") or "")[:900]
+    try:
+        import biz_whatsapp_evolution as wa_evo
+        result = await wa_evo.send_media(instance, own_phone, media_url,
+                                         caption=caption, media_type=media_type)
+    except Exception as e:
+        return JSONResponse({"error": f"WhatsApp delivery failed: {e}"}, status_code=502)
+    ok = "error" not in result
+    return {"ok": ok, "delivered_to": own_phone[-4:], "media_type": media_type, "result": result}
+
+
 @app.post("/api/marketing/send-telegram/{content_id}")
 async def api_marketing_send_telegram(content_id: int,
                                        tenant: dict = Depends(auth.require_owner)):
