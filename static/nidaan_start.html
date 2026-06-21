@@ -778,16 +778,39 @@ async function doRegister() {
 }
 
 // ── Auth success ──────────────────────────────────────────────────────────────
-function _loginSuccess(data) {
+async function _loginSuccess(data) {
   const token = data.access_token || data.token;
   const plan  = data.plan || data.account?.plan || '';
   localStorage.setItem('nidaan_token', token);
   localStorage.setItem('nidaan_plan',  plan);
   // Free-claim funnel: don't bounce to dashboard — reveal the claim form right here.
   if (_funnelMode) { enterClaimForm(); return; }
-  // If they came from a plan card, go to dashboard and open subscribe modal
-  const dest = '/nidaan/dashboard' + (_plan ? '?subscribe=' + _plan : '');
-  window.location.href = dest;
+  // Came from a plan card → dashboard + open subscribe modal.
+  if (_plan) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
+  // Otherwise route by account state:
+  //   • active subscription → clean dashboard
+  //   • a claim/review already in flight → dashboard (shows it)
+  //   • brand-new / nothing yet → value-first claim funnel (collect info + docs)
+  try {
+    const auth = { 'Authorization': 'Bearer ' + token };
+    const [meR, clR] = await Promise.all([
+      fetch('/nidaan/api/me', { headers: auth }),
+      fetch('/nidaan/api/claims?limit=1', { headers: auth }),
+    ]);
+    const me = meR.ok ? await meR.json() : null;
+    const claims = clR.ok ? ((await clR.json()).claims || []) : [];
+    const hasSub = !!(me && me.subscription);
+    const pc = me && me.per_claim;
+    const hasReview = !!(pc && ((pc.purchased > 0) ||
+        (Array.isArray(pc.pending) && pc.pending.length) ||
+        (Array.isArray(pc.history) && pc.history.length)));
+    if (!hasSub && claims.length === 0 && !hasReview) {
+      _funnelMode = true;
+      enterClaimForm();   // first-timer → straight into the claim funnel
+      return;
+    }
+  } catch (e) { /* fall through to dashboard */ }
+  window.location.href = '/nidaan/dashboard';
 }
 
 // ── Google Sign-In / Sign-Up ──────────────────────────────────────────────────

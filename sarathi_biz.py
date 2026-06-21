@@ -952,8 +952,9 @@ async def nidaan_api_claim_checklist(claim_id: int, request: Request):
     st["payment_status"] = row["payment_status"]
     st["disputed_amount"] = row["disputed_amount"]
     st["trust_line"] = _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])
-    # Pay-gate shows ONLY when all required docs are in AND it's still an unpaid lead.
-    st["show_pay_gate"] = bool(st["complete"] and row["payment_status"] == "unpaid_lead")
+    # Pay-gate shows once enough KEY docs are in (2–3, flexibility-first) AND it's
+    # still an unpaid lead — we don't force every required doc before asking ₹499.
+    st["show_pay_gate"] = bool(_ck.pay_gate_ready(st) and row["payment_status"] == "unpaid_lead")
     return st
 
 
@@ -1665,7 +1666,7 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
                     "complete": _st["complete"],
                     "received_required": _st["received_required"],
                     "required_total": _st["required_total"],
-                    "show_pay_gate": bool(_st["complete"] and _r["payment_status"] == "unpaid_lead"),
+                    "show_pay_gate": bool(_ck.pay_gate_ready(_st) and _r["payment_status"] == "unpaid_lead"),
                 }
                 # ₹499 funnel: pay-gate just opened → mirror to WhatsApp/email
                 # (hope/hook + one-tap pay link). Handler is idempotent (fires once).

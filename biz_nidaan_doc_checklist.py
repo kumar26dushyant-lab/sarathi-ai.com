@@ -266,6 +266,21 @@ async def pending_required_docs(claim_id: int, claim_type: str) -> list[dict]:
     return pending
 
 
+PAY_GATE_MIN_DOCS = 3   # ₹499 appears after this many key docs (flexibility-first)
+
+
+def pay_gate_ready(st: dict) -> bool:
+    """Whether enough key documents are in to surface the ₹499 pay-gate.
+    Flexibility-first: we don't force every required doc — just the first few
+    important ones (or all required, if the category needs fewer than the
+    threshold)."""
+    req = int(st.get("required_total", 0))
+    rec = int(st.get("received_required", 0))
+    if req <= 0:
+        return False
+    return rec >= min(PAY_GATE_MIN_DOCS, req)
+
+
 async def checklist_status(claim_id: int, claim_type: str) -> dict:
     """Full status for dashboard/ops: counts + pending + complete flag."""
     rows = {r["doc_key"]: r for r in await _rows(claim_id)}
