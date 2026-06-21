@@ -1206,18 +1206,23 @@ async def get_overview_widgets(staff_id: int, staff_role: str,
             except Exception:
                 refunds_needs_action = 0
 
-        # 6. Quick top-line numbers
+        # 6. Quick top-line numbers.
+        # NOTE: only count claims whose account still exists, so these match the
+        # All-Claims table (which inner-joins nidaan_accounts). Orphaned claims
+        # left by a deleted account must not inflate the count.
+        _live = ("EXISTS(SELECT 1 FROM nidaan_accounts a "
+                 "WHERE a.account_id=nidaan_claims.account_id)")
         total_claims = (await (await conn.execute(
-            "SELECT COUNT(*) FROM nidaan_claims")).fetchone())[0]
+            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_live}")).fetchone())[0]
         open_claims = (await (await conn.execute(
-            "SELECT COUNT(*) FROM nidaan_claims WHERE status NOT IN "
+            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_live} AND status NOT IN "
             "('resolved_won','resolved_lost','closed','withdrawn')")).fetchone())[0]
         active_subs = (await (await conn.execute(
             "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active'")).fetchone())[0]
 
         # 7. Claims by status (everyone — small dataset, useful for all roles).
         cur = await conn.execute(
-            "SELECT status, COUNT(*) AS cnt FROM nidaan_claims "
+            f"SELECT status, COUNT(*) AS cnt FROM nidaan_claims WHERE {_live} "
             "GROUP BY status ORDER BY cnt DESC")
         claims_by_status = [dict(r) for r in await cur.fetchall()]
 
