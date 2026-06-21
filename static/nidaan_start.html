@@ -1196,10 +1196,12 @@ async function submitFreeClaim() {
   if (!insured_name) { showRevMsg('err', _Lr('Please enter the insured name.', 'कृपया बीमित व्यक्ति का नाम दर्ज करें।')); return; }
   if (insured_phone.length < 10) { showRevMsg('err', _Lr('Please enter a valid 10-digit contact phone.', 'कृपया एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
   if (!claim_type) { showRevMsg('err', _Lr('Please select the claim type.', 'कृपया क्लेम का प्रकार चुनें।')); return; }
-  // All listed documents are required before we can review the claim.
-  const missing = _revDocs.filter(k => !_revFiles[k]);
-  if (missing.length) {
-    showRevMsg('err', _Lr(`Please upload all listed documents to continue (${missing.length} still needed).`, `जारी रखने के लिए कृपया सभी सूचीबद्ध दस्तावेज़ अपलोड करें (${missing.length} और बाकी)।`));
+  // Flexibility-first: need at least a few KEY docs to start (not every doc).
+  // The rest can be added later from the dashboard.
+  const uploadedCount = _revDocs.filter(k => _revFiles[k]).length;
+  const needed = Math.min(3, _revDocs.length);
+  if (_revDocs.length && uploadedCount < needed) {
+    showRevMsg('err', _Lr(`Please upload at least ${needed} key document(s) to continue — you can add the rest later.`, `जारी रखने के लिए कम से कम ${needed} ज़रूरी दस्तावेज़ अपलोड करें — बाकी आप बाद में जोड़ सकते हैं।`));
     document.getElementById('rev-docs-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
