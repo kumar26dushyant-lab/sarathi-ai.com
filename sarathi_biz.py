@@ -409,6 +409,7 @@ class NidaanSignupReq(BaseModel):
     email_otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
     firm_name: str = ""
     plan: str = "silver"
+    branch_code: str = ""   # optional affiliate branch attribution (validated strictly if given)
 
 
 class NidaanLoginReq(BaseModel):
@@ -485,12 +486,17 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Affiliate branch attribution — optional, but if given must match an active branch.
+    branch_code = (body.branch_code or "").strip().upper()
+    if branch_code and not await nidaan.is_valid_branch(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive branch code. Leave blank if you don't have one.")
     account_id = await nidaan.create_account(
         owner_name=body.owner_name.strip(),
         email=email,
         phone=body.phone.strip(),
         password=body.password,
         firm_name=body.firm_name.strip(),
+        branch_code=branch_code,
     )
     if account_id is None:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -2903,6 +2909,48 @@ async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request
 
 
 # ── Claims ops ────────────────────────────────────────────────────────────────
+
+# ── Affiliate branches (superadmin: create/list/disable city branch codes) ────
+@app.get("/nidaan/ops/api/branches")
+async def ops_list_branches(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"branches": await nidaan.list_branches()}
+
+
+class OpsBranchCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_code: str
+    city: str
+    name: str = ""
+
+
+@app.post("/nidaan/ops/api/branches")
+async def ops_create_branch(body: OpsBranchCreate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    res = await nidaan.create_branch(body.branch_code, body.city, body.name)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    return res
+
+
+class OpsBranchStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str   # active | disabled
+
+
+@app.patch("/nidaan/ops/api/branches/{branch_code}")
+async def ops_set_branch_status(branch_code: str, body: OpsBranchStatus, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    if not await nidaan.set_branch_status(branch_code, body.status):
+        raise HTTPException(status_code=404, detail="Branch not found")
+    return {"ok": True}
+
 
 @app.get("/nidaan/ops/api/claims")
 async def ops_list_claims(

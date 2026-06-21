@@ -1219,10 +1219,41 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN review_outcome TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_findings TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_delivered_at TIMESTAMP",
+            # Affiliate branch attribution (Jun 2026): the offline city branch /
+            # local vendor that sold this subscription. Used by superadmin to
+            # reconcile commissions later. Empty = direct/online signup.
+            "ALTER TABLE nidaan_accounts ADD COLUMN branch_code TEXT DEFAULT ''",
         ]
         for m in nidaan_migrations:
             try:
                 await conn.execute(m)
+            except Exception:
+                pass
+
+        # ── nidaan_branches: affiliate city branches (offline vendors selling
+        # subscriptions). Superadmin creates codes; signup validates against
+        # active ones. branch_code is the unique attribution key.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_branches (
+                branch_code   TEXT PRIMARY KEY,
+                city          TEXT NOT NULL,
+                name          TEXT DEFAULT '',
+                status        TEXT DEFAULT 'active',   -- active | disabled
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Seed the initial branches (idempotent — INSERT OR IGNORE on the PK).
+        for _code, _city, _name in [
+            ("IND-HO", "Indore", "Indore Head Office"),
+            ("PUN-01", "Pune", "Pune Branch"),
+            ("MUM-01", "Mumbai", "Mumbai Branch"),
+            ("CHD-01", "Chandigarh", "Chandigarh Branch"),
+            ("HYD-01", "Hyderabad", "Hyderabad Branch"),
+        ]:
+            try:
+                await conn.execute(
+                    "INSERT OR IGNORE INTO nidaan_branches (branch_code, city, name) VALUES (?,?,?)",
+                    (_code, _city, _name))
             except Exception:
                 pass
 

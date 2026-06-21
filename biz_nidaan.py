@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 from datetime import datetime, date, timedelta
 from typing import Optional
@@ -84,22 +85,88 @@ async def create_account(
     phone: str,
     password: str,
     firm_name: str = "",
+    branch_code: str = "",
 ) -> Optional[int]:
-    """Create a new Nidaan account. Returns account_id or None on duplicate email."""
+    """Create a new Nidaan account. Returns account_id or None on duplicate email.
+    branch_code attributes the sale to an affiliate city branch (already validated
+    by the caller; stored as-is)."""
     pw_hash = _hash_password(password)
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
                 """INSERT INTO nidaan_accounts
-                   (owner_name, email, phone, password_hash, firm_name)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (owner_name, email.lower().strip(), phone, pw_hash, firm_name),
+                   (owner_name, email, phone, password_hash, firm_name, branch_code)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (owner_name, email.lower().strip(), phone, pw_hash, firm_name,
+                 (branch_code or "").strip().upper()),
             )
             await conn.commit()
             return cur.lastrowid
     except aiosqlite.IntegrityError:
         logger.warning("nidaan create_account: duplicate email %s", email)
         return None
+
+
+# ── Affiliate branches (offline city vendors selling subscriptions) ──────────
+async def list_branches(include_disabled: bool = True) -> list[dict]:
+    """All branches with a live count of attributed accounts (for superadmin)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        where = "" if include_disabled else "WHERE b.status='active'"
+        cur = await conn.execute(
+            f"""SELECT b.branch_code, b.city, b.name, b.status, b.created_at,
+                       (SELECT COUNT(*) FROM nidaan_accounts a
+                        WHERE UPPER(a.branch_code)=b.branch_code) AS accounts
+                FROM nidaan_branches b {where}
+                ORDER BY b.city, b.branch_code""")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_branch(code: str) -> Optional[dict]:
+    code = (code or "").strip().upper()
+    if not code:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM nidaan_branches WHERE branch_code=?", (code,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def is_valid_branch(code: str) -> bool:
+    """True only if the code exists AND is active (strict validation)."""
+    b = await get_branch(code)
+    return bool(b and b.get("status") == "active")
+
+
+async def create_branch(code: str, city: str, name: str = "") -> dict:
+    """Create a branch code. Returns {ok} or {error}."""
+    code = (code or "").strip().upper()
+    city = (city or "").strip()
+    if not code or not city:
+        return {"error": "Branch code and city are required."}
+    if not re.match(r"^[A-Z0-9][A-Z0-9\-]{1,19}$", code):
+        return {"error": "Code must be 2–20 chars: letters, digits, hyphens."}
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO nidaan_branches (branch_code, city, name) VALUES (?,?,?)",
+                (code, city, (name or "").strip()))
+            await conn.commit()
+        return {"ok": True, "branch_code": code}
+    except aiosqlite.IntegrityError:
+        return {"error": f"Branch code '{code}' already exists."}
+
+
+async def set_branch_status(code: str, status: str) -> bool:
+    code = (code or "").strip().upper()
+    status = status if status in ("active", "disabled") else "active"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_branches SET status=? WHERE branch_code=?", (status, code))
+        await conn.commit()
+        return cur.rowcount > 0
 
 
 async def get_account_by_email(email: str) -> Optional[dict]:
@@ -2659,7 +2726,10 @@ async def get_claims_ops(
         cur = await conn.execute(
             f"""SELECT c.*,
                     a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
-                    s.name AS assigned_staff_name
+                    a.branch_code,
+                    s.name AS assigned_staff_name,
+                    (SELECT COUNT(*) FROM nidaan_followups f
+                     WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks
                FROM nidaan_claims c
                JOIN nidaan_accounts a ON a.account_id = c.account_id
                LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
