@@ -472,6 +472,78 @@ async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
     return {"exists": account is not None}
 
 
+async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, phone: str):
+    """Email the affiliate branch that a lead signed up under their code (still unpaid)."""
+    def _esc(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    try:
+        branch = await nidaan.get_branch(branch_code)
+        to = (branch or {}).get("contact_email", "").strip()
+        if not to:
+            return  # no branch email on file — superadmin still sees it in the panel
+        label = _esc(branch.get("name") or branch.get("city") or branch_code)
+        await email_svc.send_email(
+            to_email=to,
+            subject=f"New signup under your branch {branch_code} — payment pending",
+            html_body=(
+                f"<p>Hello {label} team,</p>"
+                f"<p>A customer just signed up on Nidaan Partner using your branch code "
+                f"<b>{_esc(branch_code)}</b>:</p>"
+                f"<ul><li><b>Name:</b> {_esc(owner_name)}</li>"
+                f"<li><b>Email:</b> {_esc(email)}</li>"
+                f"<li><b>Phone:</b> {_esc(phone)}</li></ul>"
+                f"<p><b>They have not paid yet.</b> Please don't provide offline services until "
+                f"their ₹499 review (or a subscription) is paid — we'll confirm once payment clears. "
+                f"This keeps commissions clean and prevents unpaid offline servicing.</p>"
+                f"<p>— Nidaan Partner</p>"
+            ),
+            from_name="Nidaan Partner",
+        )
+    except Exception as e:
+        logger.warning("branch signup notify failed for %s: %s", branch_code, e)
+
+
+async def _run_branch_unpaid_sweep() -> int:
+    """Daily sweep: email branches about attributed leads that started a ₹499
+    review but are still unpaid past 24h — once each (flagged so no repeats)."""
+    def _esc(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    try:
+        leads = await nidaan.get_branch_leads_to_remind(24)
+    except Exception as e:
+        logger.error("branch unpaid sweep: fetch failed: %s", e)
+        return 0
+    sent = 0
+    for L in leads:
+        to = (L.get("branch_email") or "").strip()
+        if not to:
+            continue
+        try:
+            await email_svc.send_email(
+                to_email=to,
+                subject=f"Reminder: lead under branch {L['branch_code']} still unpaid",
+                html_body=(
+                    f"<p>Hello {_esc(L.get('branch_name') or L.get('branch_city') or L['branch_code'])} team,</p>"
+                    f"<p>This customer signed up under your branch code <b>{_esc(L['branch_code'])}</b> "
+                    f"and started a ₹499 review, but <b>has still not paid</b>:</p>"
+                    f"<ul><li><b>Name:</b> {_esc(L.get('owner_name'))}</li>"
+                    f"<li><b>Phone:</b> {_esc(L.get('phone'))}</li>"
+                    f"<li><b>Claim:</b> {_esc(L.get('claim_type'))} — ₹{L.get('disputed_amount') or 0}</li></ul>"
+                    f"<p>Please ensure payment is completed before any offline servicing — this keeps "
+                    f"commission attribution clean.</p>"
+                    f"<p>— Nidaan Partner</p>"
+                ),
+                from_name="Nidaan Partner",
+            )
+            await nidaan.mark_branch_reminded(L["account_id"])
+            sent += 1
+        except Exception as e:
+            logger.warning("branch reminder failed for acct %s: %s", L.get("account_id"), e)
+    if sent:
+        logger.info("📨 Branch unpaid sweep: reminded %d lead(s)", sent)
+    return sent
+
+
 @app.post("/nidaan/api/signup")
 @limiter.limit("5/minute")
 async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
@@ -502,6 +574,12 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         raise HTTPException(status_code=409, detail="Email already registered")
     token = nidaan.create_nidaan_token(account_id, email, plan)
     import asyncio as _asyncio
+    # Affiliate branch alert: a lead just signed up under this branch code — tell
+    # the branch immediately (they're unpaid until the ₹499 / subscription clears,
+    # so the branch knows not to service them offline before payment).
+    if branch_code:
+        _asyncio.create_task(_notify_branch_signup(
+            branch_code, body.owner_name.strip(), email, body.phone.strip()))
     _asyncio.create_task(email_svc.send_email(
         to_email=body.email.strip(),
         subject="Welcome to Nidaan Partner! 🛡️",
@@ -2924,6 +3002,7 @@ class OpsBranchCreate(BaseModel):
     branch_code: str
     city: str
     name: str = ""
+    contact_email: str = ""   # where 'attributed lead unpaid' alerts are sent
 
 
 @app.post("/nidaan/ops/api/branches")
@@ -2931,25 +3010,36 @@ async def ops_create_branch(body: OpsBranchCreate, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    res = await nidaan.create_branch(body.branch_code, body.city, body.name)
+    res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
 
 
-class OpsBranchStatus(BaseModel):
+class OpsBranchUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    status: str   # active | disabled
+    status: Optional[str] = None          # active | disabled
+    contact_email: Optional[str] = None
 
 
 @app.patch("/nidaan/ops/api/branches/{branch_code}")
-async def ops_set_branch_status(branch_code: str, body: OpsBranchStatus, request: Request):
+async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    if not await nidaan.set_branch_status(branch_code, body.status):
-        raise HTTPException(status_code=404, detail="Branch not found")
+    if not await nidaan.update_branch(branch_code, status=body.status, contact_email=body.contact_email):
+        raise HTTPException(status_code=404, detail="Branch not found or nothing to update")
     return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")
+async def ops_branch_unpaid_leads(branch_code: str, request: Request):
+    """Attributed accounts for this branch that haven't paid yet — the fallback
+    list so a branch can't quietly service an unpaid lead offline."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"leads": await nidaan.get_branch_unpaid_leads(branch_code)}
 
 
 @app.get("/nidaan/ops/api/claims")
@@ -17633,6 +17723,20 @@ async def main():
                     logger.error("Marketing daily batch error: %s", e)
                     await asyncio.sleep(3600)
         asyncio.create_task(marketing_batch_loop())
+
+        # Step 6g: Branch fallback — twice-daily sweep that emails affiliate
+        # branches about attributed leads still unpaid past 24h (once each).
+        async def branch_unpaid_loop():
+            await asyncio.sleep(600)  # let startup settle
+            while True:
+                try:
+                    await _run_branch_unpaid_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Branch unpaid sweep error: %s", e)
+                await asyncio.sleep(12 * 3600)  # twice daily
+        asyncio.create_task(branch_unpaid_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 

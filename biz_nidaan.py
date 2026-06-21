@@ -108,18 +108,86 @@ async def create_account(
 
 
 # ── Affiliate branches (offline city vendors selling subscriptions) ──────────
+# An account is "paid" for a branch if it has an active subscription OR a
+# per-claim review that progressed past pending_payment (i.e. they actually paid).
+_BRANCH_PAID_EXISTS = (
+    "(EXISTS(SELECT 1 FROM nidaan_subscriptions s "
+    "        WHERE s.account_id=a.account_id AND s.status='active') "
+    " OR EXISTS(SELECT 1 FROM nidaan_per_claim_purchase p "
+    "           WHERE p.account_id=a.account_id "
+    "             AND p.status NOT IN ('pending_payment','cancelled')))"
+)
+
+
 async def list_branches(include_disabled: bool = True) -> list[dict]:
-    """All branches with a live count of attributed accounts (for superadmin)."""
+    """All branches with live signup / paid / unpaid attribution counts."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         where = "" if include_disabled else "WHERE b.status='active'"
         cur = await conn.execute(
-            f"""SELECT b.branch_code, b.city, b.name, b.status, b.created_at,
+            f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.status, b.created_at,
                        (SELECT COUNT(*) FROM nidaan_accounts a
-                        WHERE UPPER(a.branch_code)=b.branch_code) AS accounts
+                        WHERE UPPER(a.branch_code)=b.branch_code) AS signups,
+                       (SELECT COUNT(*) FROM nidaan_accounts a
+                        WHERE UPPER(a.branch_code)=b.branch_code AND {_BRANCH_PAID_EXISTS}) AS paid
                 FROM nidaan_branches b {where}
                 ORDER BY b.city, b.branch_code""")
+        rows = [dict(r) for r in await cur.fetchall()]
+    for r in rows:
+        r["accounts"] = r.get("signups", 0)   # back-compat alias
+        r["unpaid"] = max(0, int(r.get("signups", 0)) - int(r.get("paid", 0)))
+    return rows
+
+
+async def get_branch_unpaid_leads(branch_code: str) -> list[dict]:
+    """Attributed accounts for a branch that haven't paid anything yet
+    (with their pending ₹499 review, if they started one)."""
+    code = (branch_code or "").strip().upper()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            f"""SELECT a.account_id, a.owner_name, a.email, a.phone, a.created_at,
+                       p.purchase_id, p.claim_type, p.disputed_amount,
+                       p.created_at AS review_started_at
+                FROM nidaan_accounts a
+                LEFT JOIN nidaan_per_claim_purchase p
+                       ON p.account_id=a.account_id AND p.status='pending_payment'
+                WHERE UPPER(a.branch_code)=? AND {_BRANCH_PAID_EXISTS} = 0
+                ORDER BY a.created_at DESC""",
+            (code,))
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_branch_leads_to_remind(min_age_hours: int = 24) -> list[dict]:
+    """For the daily sweep: branch-attributed accounts that started a ₹499 review,
+    are still unpaid past min_age_hours, and haven't been reminded yet. Includes
+    the branch's contact email so the caller can notify it once."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            f"""SELECT a.account_id, a.owner_name, a.email, a.phone, a.branch_code,
+                       b.contact_email AS branch_email, b.city AS branch_city, b.name AS branch_name,
+                       p.claim_type, p.disputed_amount, p.created_at AS review_started_at
+                FROM nidaan_accounts a
+                JOIN nidaan_branches b ON b.branch_code = UPPER(a.branch_code)
+                JOIN nidaan_per_claim_purchase p
+                     ON p.account_id=a.account_id AND p.status='pending_payment'
+                WHERE a.branch_code <> ''
+                  AND a.branch_unpaid_reminded_at IS NULL
+                  AND b.contact_email <> ''
+                  AND p.created_at <= datetime('now', ?)
+                  AND {_BRANCH_PAID_EXISTS} = 0
+                GROUP BY a.account_id""",
+            (f"-{int(min_age_hours)} hours",))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def mark_branch_reminded(account_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_accounts SET branch_unpaid_reminded_at=CURRENT_TIMESTAMP WHERE account_id=?",
+            (account_id,))
+        await conn.commit()
 
 
 async def get_branch(code: str) -> Optional[dict]:
@@ -140,33 +208,55 @@ async def is_valid_branch(code: str) -> bool:
     return bool(b and b.get("status") == "active")
 
 
-async def create_branch(code: str, city: str, name: str = "") -> dict:
+async def create_branch(code: str, city: str, name: str = "", contact_email: str = "") -> dict:
     """Create a branch code. Returns {ok} or {error}."""
     code = (code or "").strip().upper()
     city = (city or "").strip()
+    email = (contact_email or "").strip().lower()
     if not code or not city:
         return {"error": "Branch code and city are required."}
     if not re.match(r"^[A-Z0-9][A-Z0-9\-]{1,19}$", code):
         return {"error": "Code must be 2–20 chars: letters, digits, hyphens."}
+    if email and "@" not in email:
+        return {"error": "Contact email looks invalid."}
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             await conn.execute(
-                "INSERT INTO nidaan_branches (branch_code, city, name) VALUES (?,?,?)",
-                (code, city, (name or "").strip()))
+                "INSERT INTO nidaan_branches (branch_code, city, name, contact_email) VALUES (?,?,?,?)",
+                (code, city, (name or "").strip(), email))
             await conn.commit()
         return {"ok": True, "branch_code": code}
     except aiosqlite.IntegrityError:
         return {"error": f"Branch code '{code}' already exists."}
 
 
-async def set_branch_status(code: str, status: str) -> bool:
+async def update_branch(code: str, status: Optional[str] = None,
+                        contact_email: Optional[str] = None) -> bool:
+    """Update a branch's status and/or contact email."""
     code = (code or "").strip().upper()
-    status = status if status in ("active", "disabled") else "active"
+    sets, params = [], []
+    if status is not None:
+        sets.append("status=?")
+        params.append(status if status in ("active", "disabled") else "active")
+    if contact_email is not None:
+        email = (contact_email or "").strip().lower()
+        if email and "@" not in email:
+            return False
+        sets.append("contact_email=?")
+        params.append(email)
+    if not sets:
+        return False
+    params.append(code)
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "UPDATE nidaan_branches SET status=? WHERE branch_code=?", (status, code))
+            f"UPDATE nidaan_branches SET {', '.join(sets)} WHERE branch_code=?", params)
         await conn.commit()
         return cur.rowcount > 0
+
+
+# Back-compat shim for the existing status-only endpoint.
+async def set_branch_status(code: str, status: str) -> bool:
+    return await update_branch(code, status=status)
 
 
 async def get_account_by_email(email: str) -> Optional[dict]:

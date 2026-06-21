@@ -1223,6 +1223,9 @@ async def init_db():
             # local vendor that sold this subscription. Used by superadmin to
             # reconcile commissions later. Empty = direct/online signup.
             "ALTER TABLE nidaan_accounts ADD COLUMN branch_code TEXT DEFAULT ''",
+            # Branch fallback: timestamp the one-time 'attributed lead still unpaid'
+            # reminder was sent to the branch, so the sweep doesn't re-notify.
+            "ALTER TABLE nidaan_accounts ADD COLUMN branch_unpaid_reminded_at TIMESTAMP",
         ]
         for m in nidaan_migrations:
             try:
@@ -1238,10 +1241,16 @@ async def init_db():
                 branch_code   TEXT PRIMARY KEY,
                 city          TEXT NOT NULL,
                 name          TEXT DEFAULT '',
-                status        TEXT DEFAULT 'active',   -- active | disabled
+                contact_email TEXT DEFAULT '',          -- where branch alerts are sent
+                status        TEXT DEFAULT 'active',     -- active | disabled
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # contact_email added later → ALTER for branches tables created before it.
+        try:
+            await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN contact_email TEXT DEFAULT ''")
+        except Exception:
+            pass
         # Seed the initial branches (idempotent — INSERT OR IGNORE on the PK).
         for _code, _city, _name in [
             ("IND-HO", "Indore", "Indore Head Office"),
