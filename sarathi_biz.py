@@ -433,6 +433,7 @@ class NidaanClaimReq(BaseModel):
     intermediary_name: str = ""
     comm_lang: str = ""          # en|hi|mr — preferred WhatsApp/email language
     wa_consent: bool = True      # ₹499 funnel: opt-in to WhatsApp updates for this claim
+    branch_code: str = ""        # optional affiliate branch (captured here too; covers Google-signup)
 
 
 class NidaanSendOTPReq(BaseModel):
@@ -1206,6 +1207,21 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
+    # Optional affiliate branch from the claim form — store on the account if it
+    # has none yet (covers Google sign-up, which skips the signup branch field).
+    # Validate strictly; notify the branch about this newly-attributed lead.
+    _bc = (body.branch_code or "").strip().upper()
+    if _bc:
+        try:
+            _acct = await nidaan.get_account_by_id(payload["sub"])
+            if (_acct and not (_acct.get("branch_code") or "").strip()
+                    and await nidaan.is_valid_branch(_bc)):
+                await nidaan.set_account_branch(payload["sub"], _bc)
+                import asyncio as _aio
+                _aio.create_task(_notify_branch_signup(
+                    _bc, _acct.get("owner_name", ""), _acct.get("email", ""), _acct.get("phone", "")))
+        except Exception as _be:
+            logger.warning("claim-form branch capture failed: %s", _be)
     # Seed the required-document checklist for this claim (all paths) — the spine
     # of the de-dup + pay-gate. Non-fatal if it fails.
     try:

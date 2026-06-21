@@ -208,6 +208,17 @@ async def is_valid_branch(code: str) -> bool:
     return bool(b and b.get("status") == "active")
 
 
+async def set_account_branch(account_id: int, code: str) -> bool:
+    """Attribute an account to a branch (used when the code is supplied on the
+    claim form rather than at signup). Caller should ensure the code is valid."""
+    code = (code or "").strip().upper()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_accounts SET branch_code=? WHERE account_id=?", (code, account_id))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 async def create_branch(code: str, city: str, name: str = "", contact_email: str = "") -> dict:
     """Create a branch code. Returns {ok} or {error}."""
     code = (code or "").strip().upper()

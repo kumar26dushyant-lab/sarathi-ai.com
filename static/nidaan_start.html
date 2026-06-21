@@ -1040,6 +1040,8 @@ async function _prefillClaimForm() {
       <div class="field"><label><span class="en">Brief Description / Notes</span><span class="hi">संक्षिप्त विवरण / नोट्स</span></label>
         <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
       </div>
+      <div class="field"><label><span class="en">Branch code</span><span class="hi">ब्रांच कोड</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">if you have one</span><span class="hi">यदि आपके पास हो</span>)</span></label>
+        <input type="text" id="rv_branch_code" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters"></div>
     </fieldset>
 
     <!-- Documents — appears once a claim type is selected; required to proceed -->
@@ -1189,6 +1191,7 @@ async function submitFreeClaim() {
     disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
     notes_from_agent: document.getElementById('rv_notes').value.trim(),
     comm_lang, wa_consent: document.getElementById('rv_wa_consent').checked,
+    branch_code: (document.getElementById('rv_branch_code')?.value || '').trim().toUpperCase(),
   };
 
   btn.disabled = true;
