@@ -322,6 +322,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-overview" class="panel"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
       <div id="panel-accounts" class="panel" style="display:none"></div>
+      <div id="panel-branches" class="panel" style="display:none"></div>
       <div id="panel-staff" class="panel" style="display:none"></div>
       <div id="panel-settings" class="panel" style="display:none"></div>
       <div id="panel-numbers" class="panel" style="display:none"></div>
@@ -530,7 +531,9 @@ function buildSidebar() {
   const myRank = roleRank[_role] ?? 0;
   const items = [
     {id:'overview',   label:'📊 Overview',     minRank:0},
+    {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
+    {id:'branches',   label:'🏢 Branches',     minRank:1},
     null,
     {id:'staff',      label:'👤 Staff',         minRank:2},
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
@@ -568,6 +571,7 @@ function showPanel(id) {
     overview: loadOverview,
     claims: loadClaims,
     accounts: loadAccounts,
+    branches: loadBranches,
     staff: loadStaff,
     settings: loadWorkflowSettings,
     numbers: loadOfficialNumbers,
@@ -1665,6 +1669,11 @@ async function loadClaims(statusFilter='', search='') {
     return;
   }
 
+  const payPill = (p)=>{
+    const map = {unpaid_lead:['#fbbf24','Lead'], paid:['#34d399','Paid'], subscription:['#22d3ee','Sub']};
+    const [col,lbl] = map[p||'paid'] || ['#94a3b8', (p||'—')];
+    return `<span style="font-size:.68rem;font-weight:700;color:${col}">${lbl}</span>`;
+  };
   const rows = d.claims.map(c=>`
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
       <td><strong>#${fmtClaimNum(c.claim_id)}</strong></td>
@@ -1673,18 +1682,70 @@ async function loadClaims(statusFilter='', search='') {
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
+      <td>${payPill(c.payment_status)}</td>
       <td>${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.firm_name||'')}</span></td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
+      <td style="text-align:center">${(c.pending_tasks||0)>0?`<span style="background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;padding:.1rem .45rem;font-size:.72rem;font-weight:700">${c.pending_tasks}</span>`:'<span style="color:rgba(255,255,255,.25)">0</span>'}</td>
+      <td>${c.branch_code?`<span style="font-size:.7rem;color:#a78bfa;font-weight:700">${esc(c.branch_code)}</span>`:'<span style="color:rgba(255,255,255,.25)">—</span>'}</td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(c.created_at)}</td>
     </tr>`).join('');
 
   document.getElementById('claimTableWrap').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Advisor</th><th>Assigned To</th><th>Date</th></tr></thead>
+        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Advisor / Account</th><th>Assigned To</th><th>Tasks</th><th>Branch</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+// ═══ BRANCHES (affiliate city branch codes) ═══
+async function loadBranches() {
+  const el = document.getElementById('panel-branches');
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches — the code a subscriber enters at signup attributes the sale here (for commission reconciliation).</div></div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
+      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Branch code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:140px"></div>
+      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:160px"></div>
+      <div style="flex:1;min-width:160px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Name (optional)</label><input id="brName" placeholder="Pune Branch" style="width:100%"></div>
+      <button class="btn btn-primary" onclick="createBranch()">+ Create code</button>
+    </div>
+    <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+  const r = await API('/branches');
+  if (!r.ok) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><p>Failed to load branches</p></div>'; return; }
+  const d = await r.json();
+  if (!d.branches || !d.branches.length) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><div class="ei">🏢</div><p>No branches yet — create one above.</p></div>'; return; }
+  const rows = d.branches.map(b=>{
+    const active = b.status==='active';
+    return `<tr>
+      <td><strong style="color:#a78bfa">${esc(b.branch_code)}</strong></td>
+      <td>${esc(b.city)}</td>
+      <td>${esc(b.name||'—')}</td>
+      <td style="text-align:center">${b.accounts||0}</td>
+      <td><span style="font-size:.7rem;font-weight:700;color:${active?'#34d399':'#fca5a5'}">${b.status}</span></td>
+      <td><button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
+    </tr>`;}).join('');
+  document.getElementById('branchTableWrap').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Accounts</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+async function createBranch() {
+  const code = (document.getElementById('brCode').value||'').trim().toUpperCase();
+  const city = (document.getElementById('brCity').value||'').trim();
+  const name = (document.getElementById('brName').value||'').trim();
+  if (!code || !city) { alert('Branch code and city are required.'); return; }
+  const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name})});
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { alert(d.detail || 'Could not create branch.'); return; }
+  loadBranches();
+}
+async function toggleBranch(code, status) {
+  const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({status})});
+  if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update branch.'); return; }
+  loadBranches();
 }
 
 async function openClaimDrawer(claimId) {

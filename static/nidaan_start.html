@@ -347,6 +347,10 @@ function setLang(l){
           <input type="text" id="regFirm" placeholder="Optional">
         </div>
         <div class="field">
+          <label><span class="en">Branch code</span><span class="hi">ब्रांच कोड</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">if a branch referred you</span><span class="hi">यदि किसी ब्रांच ने भेजा हो</span>)</span></label>
+          <input type="text" id="regBranch" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters">
+        </div>
+        <div class="field">
           <label><span class="en">Password *</span><span class="hi">पासवर्ड *</span></label>
           <input type="password" id="regPwd" placeholder="Min 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
         </div>
@@ -746,7 +750,8 @@ async function doRegister() {
         owner_name: name, email: _email, phone: phone.replace(/\D/g,''),
         password: pwd, firm_name: firm,
         email_otp: _regVerifiedOtp,
-        plan: _plan || 'free'
+        plan: _plan || 'free',
+        branch_code: (document.getElementById('regBranch')?.value || '').trim().toUpperCase()
       })
     });
     const data = await res.json();
