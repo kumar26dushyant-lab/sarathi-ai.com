@@ -1378,3 +1378,139 @@ async def run_marketing_auto_post(now: Optional[datetime] = None) -> int:
             logger.error("Auto-post: error for tenant %d: %s", tenant_id, e, exc_info=True)
 
     return sent_count
+
+
+# ---------------------------------------------------------------------------
+#  Phase 2 — Off-peak daily batch pre-generation (server-load smoothing)
+#  Runs once in the early morning: pre-generates each enabled tenant's daily
+#  poster SERIALLY (no concurrency spike) and pushes it to their Telegram for
+#  review. Own-number WhatsApp delivery stays on-demand from the dashboard.
+# ---------------------------------------------------------------------------
+async def run_marketing_daily_batch(now: Optional[datetime] = None) -> int:
+    """Pre-generate the day's poster for every marketing-enabled tenant, one at
+    a time (load-safe). Skips tenants who already have content today and any who
+    are over their daily cap. Returns how many were generated."""
+    if now is None:
+        now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    made = 0
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute("""
+                SELECT t.tenant_id, t.firm_name AS name, t.plan, t.marketing_lang,
+                       t.marketing_festival_prefs, t.marketing_photo_path,
+                       t.marketing_logo_path, t.marketing_watermark,
+                       t.owner_telegram_id, t.brand_accent
+                FROM tenants t
+                WHERE t.marketing_enabled = 1 AND t.marketing_autopost_enabled = 1
+            """) as cur:
+                tenants = [dict(r) for r in await cur.fetchall()]
+    except Exception as e:
+        logger.error("Daily batch: fetch tenants failed: %s", e)
+        return 0
+
+    for tenant in tenants:
+        tid = tenant["tenant_id"]
+        try:
+            # Skip if anything was already generated today (dedupe vs on-demand / auto-post).
+            used = await daily_usage(tid, today_str)
+            if (used.get("posters", 0) + used.get("videos", 0)) > 0:
+                continue
+            plan = tenant.get("plan") or "trial"
+            cap = await check_daily_cap(tid, plan, want_video=False)
+            if not cap["allowed"]:
+                continue
+
+            # Festival-aware content type, else rotate by weekday so it varies.
+            try:
+                prefs = json.loads(tenant.get("marketing_festival_prefs") or '["all","hindu"]')
+            except Exception:
+                prefs = ["all", "hindu"]
+            fests = get_festivals_for_date(now.date(), prefs)
+            if fests:
+                festival, ctype = fests[0], "festival"
+            else:
+                rot = ["scenario_insurance", "tip", "scenario_investment",
+                       "tip", "product_pitch", "tip", "scenario_insurance"]
+                ctype, festival = rot[now.weekday()], None
+
+            content = await generate_content(
+                tenant_id=tid, content_type=ctype,
+                lang=tenant.get("marketing_lang") or "en", festival=festival,
+                firm_name=tenant.get("name") or "Sarathi",
+                marketing_photo_path=tenant.get("marketing_photo_path") or "",
+                marketing_logo_path=tenant.get("marketing_logo_path") or "",
+                watermark=bool(tenant.get("marketing_watermark", 1)),
+                brand_accent=tenant.get("brand_accent") or "")
+            if not content or not content.get("image_path"):
+                continue
+            await save_content(tid, content)
+            made += 1
+
+            tg = str(tenant.get("owner_telegram_id") or "").strip()
+            if tg and content.get("image_path"):
+                try:
+                    await push_to_telegram(tg, content, str(_BASE_DIR / content["image_path"]))
+                except Exception:
+                    pass  # best-effort
+        except Exception as e:
+            logger.error("Daily batch: tenant %d failed: %s", tid, e)
+        await asyncio.sleep(2)  # spread the load across the morning window
+
+    if made:
+        logger.info("Daily batch: pre-generated %d daily posters", made)
+    return made
+
+
+# ---------------------------------------------------------------------------
+#  Phase 2 — Marketing analytics (for the dashboard stats panel)
+# ---------------------------------------------------------------------------
+async def get_marketing_stats(tenant_id: int) -> dict:
+    """Return generation/delivery counts for the analytics panel."""
+    stats = {"generated_total": 0, "generated_30d": 0, "videos_total": 0,
+             "sent_wa_status": 0, "sent_tg": 0, "sent_dm": 0,
+             "by_type": [], "last7": []}
+    try:
+        from datetime import timedelta
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            d30 = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            async with conn.execute(
+                "SELECT "
+                "COUNT(*) AS total, "
+                "COALESCE(SUM(CASE WHEN video_path IS NOT NULL AND video_path<>'' THEN 1 ELSE 0 END),0) AS vids, "
+                "COALESCE(SUM(sent_wa_status),0) AS wa, COALESCE(SUM(sent_tg),0) AS tg, "
+                "COALESCE(SUM(CASE WHEN generated_date >= ? THEN 1 ELSE 0 END),0) AS d30 "
+                "FROM marketing_content WHERE tenant_id=?", (d30, tenant_id)) as cur:
+                r = await cur.fetchone()
+                if r:
+                    stats["generated_total"] = int(r["total"] or 0)
+                    stats["videos_total"] = int(r["vids"] or 0)
+                    stats["sent_wa_status"] = int(r["wa"] or 0)
+                    stats["sent_tg"] = int(r["tg"] or 0)
+                    stats["generated_30d"] = int(r["d30"] or 0)
+            # By content type
+            async with conn.execute(
+                "SELECT content_type, COUNT(*) AS n FROM marketing_content "
+                "WHERE tenant_id=? GROUP BY content_type ORDER BY n DESC LIMIT 8", (tenant_id,)) as cur:
+                stats["by_type"] = [{"type": row["content_type"], "n": int(row["n"])} for row in await cur.fetchall()]
+            # Last 7 days series
+            for i in range(6, -1, -1):
+                day = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                async with conn.execute(
+                    "SELECT COUNT(*) FROM marketing_content WHERE tenant_id=? AND generated_date=?",
+                    (tenant_id, day)) as cur:
+                    row = await cur.fetchone()
+                    stats["last7"].append({"date": day[5:], "n": int(row[0] or 0) if row else 0})
+            # DM sends (best-effort; table may not exist on older installs)
+            try:
+                async with conn.execute(
+                    "SELECT COUNT(*) FROM marketing_sends WHERE tenant_id=?", (tenant_id,)) as cur:
+                    row = await cur.fetchone()
+                    stats["sent_dm"] = int(row[0] or 0) if row else 0
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error("get_marketing_stats failed: %s", e)
+    return stats

@@ -10546,6 +10546,13 @@ async def api_marketing_quota(tenant: dict = Depends(auth.require_owner)):
             "video_configured": mkt.video_configured()}
 
 
+@app.get("/api/marketing/stats")
+async def api_marketing_stats(tenant: dict = Depends(auth.require_owner)):
+    """Marketing analytics for the dashboard panel (generated/sent counts, trends)."""
+    stats = await mkt.get_marketing_stats(tenant["tenant_id"])
+    return {"ok": True, "stats": stats}
+
+
 @app.post("/api/marketing/generate-video/{content_id}")
 @limiter.limit("4/minute")
 async def api_marketing_generate_video(content_id: int, request: Request,
@@ -17557,6 +17564,27 @@ async def main():
                     logger.error("Account erasure sweep error: %s", e)
                 await asyncio.sleep(24 * 3600)  # daily
         asyncio.create_task(account_erasure_loop())
+
+        # Step 6f: Marketing daily batch — pre-generate each enabled tenant's
+        # poster in the off-peak early morning (05:00) so load is smoothed
+        # instead of spiking when everyone opens the app. Worker-only singleton.
+        async def marketing_batch_loop():
+            from datetime import datetime as _dtm, timedelta as _td
+            while True:
+                try:
+                    now = _dtm.now()
+                    nxt = now.replace(hour=5, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - now).total_seconds()))
+                    n = await mkt.run_marketing_daily_batch()
+                    logger.info("📣 Marketing daily batch done — %d posters pre-generated", n)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Marketing daily batch error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(marketing_batch_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 

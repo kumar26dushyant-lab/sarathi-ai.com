@@ -2009,6 +2009,14 @@ function exitImpersonation() {
               </div>
             </div>
 
+            <!-- ═══ ANALYTICS ═══ -->
+            <details style="margin-bottom:16px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:0" ontoggle="if(this.open)loadMktStats()">
+              <summary style="cursor:pointer;font-weight:600;user-select:none;padding:12px">📊 Analytics <span style="font-size:.8em;font-weight:400;color:#6b7280;margin-left:6px">— what you've created &amp; sent</span></summary>
+              <div style="padding:12px;border-top:1px solid var(--border,#e5e7eb)" id="mktStats">
+                <div style="color:#6b7280;font-size:.85em">Loading…</div>
+              </div>
+            </details>
+
             <!-- ═══ CONTENT CALENDAR ═══ -->
             <details style="margin-bottom:16px;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:0">
               <summary style="cursor:pointer;font-weight:600;user-select:none;padding:12px">🗓️ Content Calendar <span style="font-size:.8em;font-weight:400;color:#6b7280;margin-left:6px">— Schedule posts in advance</span></summary>
@@ -9447,6 +9455,32 @@ async function loadMktQuota() {
     _mktVideoConfigured = !!d.video_configured;
     renderMktQuota(d.remaining);
   } catch(e) {}
+}
+
+async function loadMktStats() {
+  const box = document.getElementById('mktStats');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/marketing/stats', {headers: hdrs()});
+    if (!r.ok) { box.innerHTML = '<div style="color:#6b7280;font-size:.85em">Could not load stats.</div>'; return; }
+    const s = (await r.json()).stats || {};
+    const cards = [
+      ['🖼️ Generated', s.generated_total||0],
+      ['📅 Last 30d', s.generated_30d||0],
+      ['🎬 Videos', s.videos_total||0],
+      ['📱 WA Status', s.sent_wa_status||0],
+      ['✈️ Telegram', s.sent_tg||0],
+      ['📨 DM sends', s.sent_dm||0],
+    ].map(([l,v])=>`<div style="flex:1 1 90px;min-width:88px;background:var(--bg-secondary,#f9fafb);border-radius:8px;padding:10px;text-align:center"><div style="font-size:1.4em;font-weight:700">${v}</div><div style="font-size:.7em;color:#6b7280">${l}</div></div>`).join('');
+    const last7 = s.last7 || [];
+    const max7 = Math.max(1, ...last7.map(x=>x.n));
+    const spark = last7.map(x=>`<div title="${x.date}: ${x.n}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px"><div style="width:62%;height:${Math.round(40*x.n/max7)+2}px;background:#3b82f6;border-radius:3px 3px 0 0"></div><div style="font-size:.58em;color:#9ca3af">${x.date}</div></div>`).join('');
+    const types = (s.by_type||[]).map(t=>`<span style="display:inline-block;background:#eef2ff;color:#3730a3;border-radius:12px;padding:2px 10px;font-size:.74em;margin:2px">${esc(t.type)}: ${t.n}</span>`).join('');
+    box.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${cards}</div>
+      <div style="font-size:.78em;color:#6b7280;margin-bottom:4px">Last 7 days</div>
+      <div style="display:flex;gap:4px;align-items:flex-end;height:62px;margin-bottom:12px">${spark}</div>
+      <div style="font-size:.78em;color:#6b7280;margin-bottom:4px">By type</div><div>${types||'<span style="color:#9ca3af;font-size:.8em">No data yet</span>'}</div>`;
+  } catch(e) { box.innerHTML = '<div style="color:#6b7280;font-size:.85em">Could not load stats.</div>'; }
 }
 
 async function mktSendToMe() { if (_mktCurrentContentId) await mktSendToMeById(_mktCurrentContentId); }
