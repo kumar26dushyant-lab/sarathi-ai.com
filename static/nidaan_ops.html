@@ -1704,40 +1704,49 @@ async function loadBranches() {
   const el = document.getElementById('panel-branches');
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches — the code a subscriber enters at signup attributes the sale here (for commission reconciliation).</div></div>
+      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches. The code a subscriber enters at signup attributes the sale here; a branch email gets alerted when an attributed lead signs up and if they stay unpaid.</div></div>
     </div>
     <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
-      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Branch code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:140px"></div>
-      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:160px"></div>
-      <div style="flex:1;min-width:160px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Name (optional)</label><input id="brName" placeholder="Pune Branch" style="width:100%"></div>
+      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Branch code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:130px"></div>
+      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:140px"></div>
+      <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Name</label><input id="brName" placeholder="Pune Branch" style="max-width:160px"></div>
+      <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Alert email</label><input id="brEmail" type="email" placeholder="branch@example.com" style="width:100%"></div>
       <button class="btn btn-primary" onclick="createBranch()">+ Create code</button>
     </div>
-    <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+    <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>
+    <div id="branchLeadsWrap" style="margin-top:1rem"></div>`;
   const r = await API('/branches');
   if (!r.ok) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><p>Failed to load branches</p></div>'; return; }
   const d = await r.json();
   if (!d.branches || !d.branches.length) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><div class="ei">🏢</div><p>No branches yet — create one above.</p></div>'; return; }
   const rows = d.branches.map(b=>{
     const active = b.status==='active';
+    const unpaid = b.unpaid||0;
+    const email = b.contact_email||'';
     return `<tr>
       <td><strong style="color:#a78bfa">${esc(b.branch_code)}</strong></td>
       <td>${esc(b.city)}</td>
       <td>${esc(b.name||'—')}</td>
-      <td style="text-align:center">${b.accounts||0}</td>
+      <td style="font-size:.74rem">${email?esc(email):'<span style="color:rgba(255,255,255,.3)">— none —</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:#22d3ee;font-size:.7rem">edit</a></td>
+      <td style="text-align:center">${b.signups||0}</td>
+      <td style="text-align:center;color:#34d399">${b.paid||0}</td>
+      <td style="text-align:center">${unpaid>0?`<a href="#" onclick="showBranchUnpaid('${esc(b.branch_code)}');return false" style="background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;padding:.1rem .5rem;font-weight:700;text-decoration:none">${unpaid}</a>`:'<span style="color:rgba(255,255,255,.25)">0</span>'}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'#34d399':'#fca5a5'}">${b.status}</span></td>
       <td><button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Accounts</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
+      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">Click an <b style="color:#fca5a5">unpaid</b> count to see those leads. Add an alert email so the branch is notified automatically.</div>`;
 }
 async function createBranch() {
   const code = (document.getElementById('brCode').value||'').trim().toUpperCase();
   const city = (document.getElementById('brCity').value||'').trim();
   const name = (document.getElementById('brName').value||'').trim();
+  const contact_email = (document.getElementById('brEmail').value||'').trim();
   if (!code || !city) { alert('Branch code and city are required.'); return; }
-  const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name})});
+  const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name, contact_email})});
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { alert(d.detail || 'Could not create branch.'); return; }
   loadBranches();
@@ -1746,6 +1755,35 @@ async function toggleBranch(code, status) {
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({status})});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update branch.'); return; }
   loadBranches();
+}
+async function editBranchEmail(code, current) {
+  const email = prompt('Alert email for branch '+code+' (blank to clear):', current||'');
+  if (email===null) return;
+  const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({contact_email: email.trim()})});
+  if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update email.'); return; }
+  loadBranches();
+}
+async function showBranchUnpaid(code) {
+  const wrap = document.getElementById('branchLeadsWrap');
+  wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading unpaid leads…</p></div>';
+  const r = await API('/branches/'+encodeURIComponent(code)+'/unpaid-leads');
+  if (!r.ok) { wrap.innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
+  const d = await r.json();
+  if (!d.leads || !d.leads.length) { wrap.innerHTML=`<div class="empty"><div class="ei">✅</div><p>No unpaid leads for ${esc(code)}</p></div>`; return; }
+  const rows = d.leads.map(L=>`
+    <tr>
+      <td>${esc(L.owner_name||'—')}</td>
+      <td style="font-size:.74rem">${esc(L.email||'')}<br><span style="color:rgba(255,255,255,.3)">${esc(L.phone||'')}</span></td>
+      <td>${L.claim_type?esc(L.claim_type):'<span style="color:rgba(255,255,255,.3)">no review started</span>'}</td>
+      <td>${L.disputed_amount?('₹'+fmt(L.disputed_amount)):'—'}</td>
+      <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(L.created_at)}</td>
+    </tr>`).join('');
+  wrap.innerHTML = `
+    <div class="section-hdr" style="margin-bottom:.5rem"><div><div class="section-title" style="font-size:1rem">Unpaid leads — ${esc(code)}</div><div class="section-sub">Signed up under this branch but not paid yet</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Contact</th><th>Review type</th><th>Disputed</th><th>Signed up</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 async function openClaimDrawer(claimId) {
