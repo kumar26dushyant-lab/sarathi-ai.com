@@ -598,6 +598,10 @@ async def init_db():
             "ALTER TABLE policies ADD COLUMN maturity_date TEXT",
             "ALTER TABLE policies ADD COLUMN maturity_value REAL",
             "ALTER TABLE policies ADD COLUMN riders TEXT",
+            # Customers feature (Jun 2026): link policy to a customer + AI-extracted
+            # type-specific fields (JSON) aligned per policy type.
+            "ALTER TABLE policies ADD COLUMN customer_id INTEGER",
+            "ALTER TABLE policies ADD COLUMN type_specific TEXT",
             # ── Feature 4: Advisor Microsite (April 30, 2026) ──
             "ALTER TABLE tenants ADD COLUMN microsite_slug TEXT",
             "ALTER TABLE tenants ADD COLUMN microsite_bio TEXT DEFAULT ''",
@@ -1286,6 +1290,64 @@ async def init_db():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nidaan_audit_created ON nidaan_audit_log(created_at DESC)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nidaan_audit_action ON nidaan_audit_log(action)")
+
+        # ── customers: a lead becomes a customer on their first policy (or
+        # manually). First-class entity (vs lead) so each customer owns a
+        # portfolio + a shareable read-only self-view link (portfolio_token).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                customer_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id        INTEGER NOT NULL,
+                lead_id         INTEGER,                 -- origin lead (nullable)
+                name            TEXT NOT NULL,
+                phone           TEXT,
+                whatsapp        TEXT,
+                email           TEXT,
+                dob             TEXT,
+                city            TEXT,
+                occupation      TEXT,
+                pan_number      TEXT,
+                address         TEXT,
+                portfolio_token TEXT,                    -- shareable self-view link
+                notes           TEXT,
+                converted_at    TEXT DEFAULT (datetime('now')),
+                created_at      TEXT DEFAULT (datetime('now')),
+                updated_at      TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_agent ON customers(agent_id)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_token ON customers(portfolio_token)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_lead ON customers(lead_id)")
+
+        # One-time backfill: every lead that already has ≥1 policy becomes a
+        # customer (idempotent — skips leads that already have a customer row).
+        try:
+            import secrets as _secrets
+            cur = await conn.execute("""
+                SELECT DISTINCT l.lead_id, l.agent_id, l.name, l.phone, l.whatsapp,
+                       l.email, l.dob, l.city, l.occupation, l.pan_number, l.address
+                FROM leads l
+                JOIN policies p ON p.lead_id = l.lead_id
+                WHERE NOT EXISTS (SELECT 1 FROM customers c WHERE c.lead_id = l.lead_id)
+            """)
+            to_convert = await cur.fetchall()
+            for r in to_convert:
+                lead_id = r[0]
+                token = _secrets.token_urlsafe(24)
+                ccur = await conn.execute(
+                    """INSERT INTO customers
+                       (agent_id, lead_id, name, phone, whatsapp, email, dob, city,
+                        occupation, pan_number, address, portfolio_token)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (r[1], lead_id, r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], token))
+                new_cid = ccur.lastrowid
+                await conn.execute("UPDATE policies SET customer_id=? WHERE lead_id=? AND customer_id IS NULL",
+                                   (new_cid, lead_id))
+                await conn.execute("UPDATE leads SET client_type='customer' WHERE lead_id=?", (lead_id,))
+            if to_convert:
+                logger.info("Customers backfill: converted %d lead(s) with policies", len(to_convert))
+        except Exception as _bf:
+            logger.warning("Customers backfill skipped: %s", _bf)
 
         # ═════════════════════════════════════════════════════════════════════
         # NIDAAN ERP — Phase 3: Workflow Engine (Jun 2026)
@@ -3336,8 +3398,9 @@ async def add_policy(lead_id: int, agent_id: int, insurer: str = None,
                      policy_status: str = "active", folio_number: str = None,
                      fund_name: str = None, sip_amount: float = None,
                      maturity_date: str = None, maturity_value: float = None,
-                     riders: str = None) -> int:
-    """Record a policy (sold or tracked)."""
+                     riders: str = None, type_specific: str = None) -> int:
+    """Record a policy (sold or tracked). Adding a policy auto-converts the lead
+    into a customer and links the policy to that customer."""
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
             """INSERT INTO policies
@@ -3345,16 +3408,126 @@ async def add_policy(lead_id: int, agent_id: int, insurer: str = None,
                 policy_type, sum_insured, premium, premium_mode,
                 start_date, end_date, renewal_date, commission, notes,
                 sold_by_agent, policy_status, folio_number, fund_name,
-                sip_amount, maturity_date, maturity_value, riders)
+                sip_amount, maturity_date, maturity_value, riders, type_specific)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (lead_id, agent_id, policy_number, insurer, plan_name,
              policy_type, sum_insured, premium, premium_mode,
              start_date, end_date, renewal_date, commission, notes,
              sold_by_agent, policy_status, folio_number, fund_name,
-             sip_amount, maturity_date, maturity_value, riders))
+             sip_amount, maturity_date, maturity_value, riders, type_specific))
         await conn.commit()
-        return cursor.lastrowid
+        policy_id = cursor.lastrowid
+    # Auto-convert: ensure a customer exists for this lead + link the policy.
+    try:
+        cid = await ensure_customer_for_lead(lead_id, agent_id)
+        if cid:
+            async with aiosqlite.connect(DB_PATH) as conn2:
+                await conn2.execute("UPDATE policies SET customer_id=? WHERE policy_id=?", (cid, policy_id))
+                await conn2.execute("UPDATE leads SET client_type='customer' WHERE lead_id=?", (lead_id,))
+                await conn2.commit()
+    except Exception as e:
+        logger.warning("auto-convert on policy add failed (lead %s): %s", lead_id, e)
+    return policy_id
+
+
+# ── Customers (a lead with policies; owns a portfolio + shareable self-view) ──
+async def ensure_customer_for_lead(lead_id: int, agent_id: int = None) -> Optional[int]:
+    """Get-or-create the customer record for a lead. Returns customer_id."""
+    import secrets as _secrets
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ex = await (await conn.execute(
+            "SELECT customer_id FROM customers WHERE lead_id=?", (lead_id,))).fetchone()
+        if ex:
+            return ex["customer_id"]
+        lead = await (await conn.execute(
+            "SELECT * FROM leads WHERE lead_id=?", (lead_id,))).fetchone()
+        if not lead:
+            return None
+        cur = await conn.execute(
+            """INSERT INTO customers
+               (agent_id, lead_id, name, phone, whatsapp, email, dob, city,
+                occupation, pan_number, address, portfolio_token)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (agent_id or lead["agent_id"], lead_id, lead["name"], lead["phone"],
+             lead["whatsapp"] if "whatsapp" in lead.keys() else None, lead["email"],
+             lead["dob"] if "dob" in lead.keys() else None,
+             lead["city"] if "city" in lead.keys() else None,
+             lead["occupation"] if "occupation" in lead.keys() else None,
+             lead["pan_number"] if "pan_number" in lead.keys() else None,
+             lead["address"] if "address" in lead.keys() else None,
+             _secrets.token_urlsafe(24)))
+        await conn.execute("UPDATE leads SET client_type='customer' WHERE lead_id=?", (lead_id,))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_customers(agent_id: int, search: str = None) -> list:
+    """List an agent's customers with policy count + portfolio totals."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        conds, params = ["c.agent_id=?"], [agent_id]
+        if search:
+            conds.append("(c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)")
+            like = f"%{search}%"; params += [like, like, like]
+        cur = await conn.execute(
+            f"""SELECT c.*,
+                   (SELECT COUNT(*) FROM policies p WHERE p.customer_id=c.customer_id) AS policy_count,
+                   (SELECT COALESCE(SUM(p.sum_insured),0) FROM policies p WHERE p.customer_id=c.customer_id) AS total_cover,
+                   (SELECT COALESCE(SUM(p.premium),0) FROM policies p WHERE p.customer_id=c.customer_id) AS total_premium,
+                   (SELECT MIN(p.renewal_date) FROM policies p WHERE p.customer_id=c.customer_id AND p.renewal_date IS NOT NULL AND p.renewal_date >= date('now')) AS next_renewal
+                FROM customers c WHERE {' AND '.join(conds)}
+                ORDER BY c.updated_at DESC, c.customer_id DESC""", params)
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_customer_portfolio(customer_id: int, agent_id: int = None) -> Optional[dict]:
+    """Customer + their policies (the portfolio). Optionally scope to an agent."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        q = "SELECT * FROM customers WHERE customer_id=?"
+        p = [customer_id]
+        if agent_id is not None:
+            q += " AND agent_id=?"; p.append(agent_id)
+        c = await (await conn.execute(q, p)).fetchone()
+        if not c:
+            return None
+        pols = await (await conn.execute(
+            "SELECT * FROM policies WHERE customer_id=? ORDER BY policy_type, renewal_date",
+            (customer_id,))).fetchall()
+    out = dict(c)
+    out["policies"] = [dict(r) for r in pols]
+    return out
+
+
+async def get_customer_by_token(token: str) -> Optional[dict]:
+    """Public portfolio self-view by share token (read-only)."""
+    if not token:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT * FROM customers WHERE portfolio_token=?", (token,))).fetchone()
+        if not c:
+            return None
+        pols = await (await conn.execute(
+            "SELECT * FROM policies WHERE customer_id=? ORDER BY policy_type, renewal_date",
+            (c["customer_id"],))).fetchall()
+    out = dict(c)
+    out["policies"] = [dict(r) for r in pols]
+    return out
+
+
+async def regenerate_portfolio_token(customer_id: int, agent_id: int) -> Optional[str]:
+    import secrets as _secrets
+    token = _secrets.token_urlsafe(24)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE customers SET portfolio_token=?, updated_at=datetime('now') WHERE customer_id=? AND agent_id=?",
+            (token, customer_id, agent_id))
+        await conn.commit()
+        return token if cur.rowcount else None
 
 
 async def add_policy_member(policy_id: int, member_name: str,
