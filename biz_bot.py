@@ -4319,10 +4319,18 @@ async def _scan_save_all(query_or_update, context):
     if nominee_text:
         pol_notes = (pol_notes + " | " + nominee_text) if pol_notes else nominee_text
 
+    # Type-specific AI-extracted fields (drop guidance keys + empties) → JSON.
+    import json as _json
+    _ts = data.get('type_specific') or {}
+    _ts = {k: v for k, v in _ts.items()
+           if isinstance(_ts, dict) and not k.startswith('_') and v not in (None, '', [])} if isinstance(_ts, dict) else {}
+    _ts_json = _json.dumps(_ts, ensure_ascii=False) if _ts else None
+
     # Save policy
     policy_id = await db.add_policy(
         lead_id=lead_id,
         agent_id=agent_id,
+        type_specific=_ts_json,
         insurer=policy.get('insurer'),
         plan_name=policy.get('plan_name'),
         policy_type=policy.get('policy_type') or 'health',

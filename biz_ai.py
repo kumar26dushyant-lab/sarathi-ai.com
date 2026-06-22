@@ -859,6 +859,15 @@ Return ONLY valid JSON with this structure:
     "notes": "<nominee details, exclusions, special conditions — max 300 chars>"
   },
 
+  "type_specific": {
+    "_comment": "Extract the MOST IMPORTANT extra fields for THIS document_type. ONLY include keys you actually find in the document; OMIT unknown keys entirely (do not output null). Use these key sets per type:",
+    "_motor": "registration_no, make_model, manufacture_year, idv, rto, fuel_type, engine_no, chassis_no, ncb_pct, cubic_capacity, seating_capacity",
+    "_health": "members_covered, room_rent_limit, copay_pct, pre_existing_waiting_years, restoration_benefit, no_claim_bonus, network_hospitals",
+    "_term_endowment_ulip_child_retirement": "nominee_name, nominee_relation, policy_term_years, premium_paying_term_years, maturity_value, maturity_date, death_benefit, sum_assured, fund_value",
+    "_investment_mutual_fund_sip_nps": "folio_number, scheme_name, nav, units, sip_amount, sip_date, current_value, invested_amount, fund_house",
+    "_general": "asset_insured, location, coverage_details"
+  },
+
   "insured_members": [
     {
       "name": "<insured person name>",
