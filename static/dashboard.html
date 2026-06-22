@@ -13,6 +13,10 @@
     <script src="/static/dark-mode.js?v=3"></script>
     <script src="/static/_err.js?v=1"></script>
     <style>
+        /* Temporarily hide Telegram from customers (backend stays connected). */
+        #bot-info-section { display: none !important; }
+    </style>
+    <style>
         :root {
             --blue: #0d9488; --blue-dark: #0f766e; --blue-light: #ccfbf1;
             --saffron: #f59e0b; --saffron-light: #fffbeb;
@@ -1605,7 +1609,7 @@ function exitImpersonation() {
                 <div class="card-body">
                     <h3 style="margin:0 0 6px"><span data-i18n="drip_title">🌱 Drip Nurture Sequences</span></h3>
                     <p style="font-size:.85em;color:var(--muted);margin:0 0 10px" data-i18n="drip_desc">
-                        Multi-step time-delayed nurture campaigns. When a lead is enrolled, messages are sent automatically via <b>WhatsApp</b> at the right time — to both the client (personalized message) and you (a delivery confirmation). Telegram is used as a backup if WhatsApp is unavailable.
+                        Multi-step time-delayed nurture campaigns. When a lead is enrolled, messages are sent automatically via <b>WhatsApp</b> at the right time — to both the client (personalized message) and you (a delivery confirmation).
                     </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
                         <button class="btn btn-sm btn-outline" onclick="loadDripSequences()" data-i18n="drip_refresh">🔄 Refresh</button>
@@ -2010,7 +2014,7 @@ function exitImpersonation() {
                   <button class="btn btn-primary" style="font-size:.85em" onclick="mktSendToMe()">📲 Send to my WhatsApp</button>
                   <button id="mktMakeVideoBtn" class="btn btn-secondary" style="font-size:.85em;display:none" onclick="mktMakeVideo()">🎬 Make Video</button>
                   <a id="mktDownloadImg" href="#" download style="display:none" class="btn btn-secondary" style="font-size:.85em;text-decoration:none">⬇️ Download</a>
-                  <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendTelegram()">✈️ Telegram</button>
+                  <button class="btn btn-secondary" style="display:none;font-size:.85em" onclick="mktSendTelegram()">✈️ Telegram</button>
                   <button class="btn btn-secondary" style="font-size:.85em" onclick="mktSendStatus()">📱 WA Status</button>
                   <button class="btn btn-secondary" style="font-size:.85em" onclick="mktOpenDMPanel()">📨 DM Leads</button>
                 </div>
@@ -9451,7 +9455,7 @@ async function loadMktLibrary(page) {
         <div style="font-size:.72em;color:#6b7280;margin-bottom:8px">${item.generated_date||''} · ${item.language||'en'}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-primary" style="font-size:.72em;padding:4px 8px;flex:1 1 100%" onclick="event.stopPropagation();mktSendToMeById(${item.content_id})">📲 Send to my WhatsApp</button>
-          <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktSendTelegramById(${item.content_id})">${tgIcon} Telegram</button>
+          <button class="btn btn-secondary" style="display:none;font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktSendTelegramById(${item.content_id})">${tgIcon} Telegram</button>
           <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktSendStatusById(${item.content_id})">${waIcon} Status</button>
           <button class="btn btn-secondary" style="font-size:.72em;padding:4px 8px;flex:1" onclick="event.stopPropagation();mktOpenDMPanelById(${item.content_id})">📨 DM</button>
         </div>
