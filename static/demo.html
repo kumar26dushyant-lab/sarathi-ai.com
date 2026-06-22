@@ -8,7 +8,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180x180.png">
-<meta name="description" content="Experience Sarathi-AI in action — see how the AI bot manages leads, pitches clients, and closes deals via Telegram, Voice AI, and web dashboard.">
+<meta name="description" content="Experience Sarathi-AI in action — see how the AI assistant manages leads, pitches clients, and closes deals via WhatsApp, Voice AI, and the web dashboard.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dark-mode.css?v=4">
@@ -288,8 +288,8 @@ a{text-decoration:none;color:inherit}
 <!-- VIEW TABS                                             -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="view-tabs" id="viewTabs">
-  <div class="view-tab active" onclick="showView('telegram')" data-i18n="tab_telegram"><span class="tab-icon">🤖</span> Telegram Bot</div>
-  <div class="view-tab" onclick="showView('laptop')" data-i18n="tab_laptop"><span class="tab-icon">💻</span> Web on Laptop</div>
+  <div class="view-tab" onclick="showView('telegram')" data-i18n="tab_telegram" style="display:none!important"><span class="tab-icon">🤖</span> Telegram Bot</div>
+  <div class="view-tab active" onclick="showView('laptop')" data-i18n="tab_laptop"><span class="tab-icon">💻</span> Web on Laptop</div>
   <div class="view-tab" onclick="showView('mobile')" data-i18n="tab_mobile"><span class="tab-icon">📱</span> Web on Mobile</div>
   <div class="view-tab" onclick="showView('pwa')" data-i18n="tab_pwa"><span class="tab-icon">📲</span> Install as App</div>
   <!-- WhatsApp tab hidden — using Voice AI + personal messaging instead -->
@@ -300,7 +300,7 @@ a{text-decoration:none;color:inherit}
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- PANEL 4: TELEGRAM BOT                                 -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="view-panel active" id="view-telegram">
+<div class="view-panel" id="view-telegram">
   <div class="container">
     <div class="panel-header">
       <div class="badge badge-telegram" data-i18n="tg_badge">🤖 Telegram Bot Experience</div>
@@ -479,7 +479,7 @@ a{text-decoration:none;color:inherit}
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- PANEL 1: WEB ON LAPTOP                                -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="view-panel" id="view-laptop">
+<div class="view-panel active" id="view-laptop">
   <div class="container">
     <!-- PLACEHOLDER — filled in Part 2 -->
     <div class="panel-header">
@@ -853,7 +853,7 @@ a{text-decoration:none;color:inherit}
                   </div>
                   <div style="text-align:center">
                     <div style="width:36px;height:36px;background:linear-gradient(135deg,#2AABEE,#229ED9);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">✈️</div>
-                    <div style="font-size:.32em;color:#fff">Telegram</div>
+                    <div style="font-size:.32em;color:#fff">WhatsApp</div>
                   </div>
                   <div style="text-align:center">
                     <div style="width:36px;height:36px;background:linear-gradient(135deg,#4285f4,#34a853);border-radius:10px;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:.85em">📧</div>
@@ -1476,7 +1476,7 @@ a{text-decoration:none;color:inherit}
     <p data-i18n="cta_desc">Join thousands of Indian financial advisors who close more deals with less effort. 14-day free trial — no card required.</p>
     <div class="cta-buttons">
       <a href="/#pricing" class="btn-primary" data-i18n="cta_btn1">Start Free Trial — ₹0 for 14 Days →</a>
-      <a href="https://t.me/SarathiBizBot" class="btn-secondary" data-i18n="cta_btn2">Open Telegram Bot</a>
+      <a href="/dashboard" class="btn-secondary" data-i18n="cta_btn2">Open Dashboard</a>
     </div>
   </div>
 </section>
@@ -1544,7 +1544,7 @@ const _T={
   cta_title:{en:'Ready to Let AI Sell For You?',hi:'AI को अपने लिए बेचने देने के लिए तैयार?'},
   cta_desc:{en:'Join thousands of Indian financial advisors who close more deals with less effort. 14-day free trial — no card required.',hi:'हज़ारों भारतीय वित्तीय सलाहकारों से जुड़ें जो कम मेहनत में ज़्यादा डील क्लोज़ करते हैं। 14 दिन फ्री ट्रायल — कार्ड नहीं चाहिए।'},
   cta_btn1:{en:'Start Free Trial — ₹0 for 14 Days →',hi:'फ्री ट्रायल शुरू करें — 14 दिन ₹0 →'},
-  cta_btn2:{en:'Open Telegram Bot',hi:'Telegram बोट खोलें'},
+  cta_btn2:{en:'Open Dashboard',hi:'डैशबोर्ड खोलें'},
   // Laptop screens
   ld_h1:{en:'📈 AI Sales Dashboard',hi:'📈 AI सेल्स डैशबोर्ड'},
   ld_p1:{en:'See your complete business health at a glance. Real-time pipeline tracking, premium metrics, follow-up alerts, and AI-driven insights — all in one view.',hi:'एक नज़र में अपने बिज़नेस की पूरी सेहत देखें। रीयल-टाइम पाइपलाइन, प्रीमियम मेट्रिक्स, फॉलो-अप अलर्ट, और AI इनसाइट्स — सब एक ही व्यू में।'},
@@ -1663,7 +1663,7 @@ const _S={
   'Calculators':'कैलकुलेटर',
   'AI Pitch':'AI पिच',
   'AI Sales Assistant':'AI सेल्स असिस्टेंट',
-  'AI follows up, pitches, sends wishes, closes deals — from WhatsApp.':'AI फॉलो-अप, पिच, शुभकामनाएं, डील क्लोज़ — Telegram और WhatsApp से।',
+  'AI follows up, pitches, sends wishes, closes deals — from WhatsApp.':'AI फॉलो-अप, पिच, शुभकामनाएं, डील क्लोज़ — WhatsApp से।',
   'Voice-to-Action':'वॉयस-टू-एक्शन',
   'Claims Helper':'क्लेम्स हेल्पर',
   '12 Calculators':'12 कैलकुलेटर',
