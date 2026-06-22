@@ -3420,5 +3420,54 @@ Another large multi-track sprint. All items **live and verified** on production
 
 ---
 
+## 42. SARATHI CUSTOMERS/PORTFOLIO + WHATSAPP-FIRST (TELEGRAM HIDDEN) + MOBILE-FIRST — JUNE 22+, 2026
+
+All live + verified on production. See memory `[[project-sarathi-customers]]`,
+`[[project-nidaan-value-first]]`, `[[feedback-mobile-first]]`.
+
+### 42.1 Leads → Customers separation + portfolios (Sarathi-AI)
+- **New `customers` table** (first-class entity, `portfolio_token` for a shareable
+  self-view) + `policies.customer_id` + `policies.type_specific` (JSON). One-time
+  idempotent **backfill** (lead-with-policies → customer).
+- **Conversion:** auto on first policy (`add_policy` → `ensure_customer_for_lead`)
+  **+ manual "Convert"** in the Leads pipeline **+ "Add Customer"** direct
+  (contact-only; flagged `client_type='customer'` so it skips the pipeline).
+- **Strict isolation:** every customer read/write scoped via `agents.tenant_id`
+  (owner=firm, agent=own); `_customer_in_scope()` IDOR guard on
+  portfolio/share/convert. Verified: bogus share token → 404, no leak.
+- **Customer → Portfolio:** policies grouped by type; **AI per-type extraction**
+  (`_DOC_EXTRACT_PROMPT` emits a `type_specific` block: motor reg-no/IDV/NCB;
+  life nominee/term/maturity; health members/room-rent/co-pay; investment
+  folio/NAV/SIP) auto-fills on policy-doc scan.
+- **Shareable portfolio link:** public `GET /portfolio/{token}` (read-only,
+  commission/internal stripped, advisor contact shown), revocable via
+  `regenerate_portfolio_token`.
+- **Policies tab → "Renewals & Book"** (cross-customer: summary cards, sort by
+  soonest renewal, renewal-window filter). Endpoints:
+  `/api/admin/customers` (GET list + POST add), `.../{id}/portfolio`,
+  `.../{id}/share`, `/api/admin/leads/{id}/convert`,
+  `/api/admin/leads?exclude_customers=1`.
+
+### 42.2 WhatsApp-first — Telegram hidden from customers (backend untouched)
+- Product is WhatsApp-first; the Telegram bot (`biz_bot.py`) **still runs** — only
+  hidden from customer UI. **Parity confirmed:** web+mobile voice
+  (`/api/ai/voice-action`) + WhatsApp agent (`biz_wa_agent`) + full dashboard
+  cover everything Telegram did.
+- Swept sitewide: homepage (hero "AI Assistant Bot" tab hidden + rotation skips
+  it; all copy → WhatsApp/app), demo (Telegram view hidden, **WhatsApp demo** now
+  default), getting-started/onboarding flipped **WhatsApp-first**,
+  features/help/about/invite reframed, `/telegram-guide` → 302 redirect. Hidden
+  login-via-Telegram + JS identifiers (`map.telegram`, `saveTelegramBot`) left
+  intact so nothing unplugs. Voice walkthroughs verified Telegram-free.
+
+### 42.3 Mobile-first ground rule + fixes
+- **Ground rule (permanent):** every change/build must be mobile UI/UX compatible
+  — verify on phone viewport before done.
+- Mobile passes: Customers grid → 1 col, cc-stats wrap, Renewals summary 2-up,
+  type-specific chips word-break; homepage footer +96px bottom padding so the
+  copyright clears the fixed Listen/Demo buttons.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
