@@ -4240,6 +4240,7 @@ async function loadLeads() {
                 <button class="btn btn-sm btn-outline" onclick="openLeadAI(${l.lead_id},'${esc(l.name).replace(/'/g,"\\'")}')" title="AI Tools" style="color:var(--primary)">🤖 ${_dt("btn_ai")}</button>
                 <button class="btn btn-sm btn-outline" onclick="openTimeline(${l.lead_id},'${esc(l.name).replace(/'/g,"\\'")}')" title="Timeline" style="color:#059669">📋 ${_dt("btn_timeline")}</button>
                 <button class="btn btn-sm btn-outline" onclick="showStageModal(${l.lead_id},'${esc(l.name)}','${l.stage}')" title="Stage">📊 ${_dt("btn_stage")}</button>
+                <button class="btn btn-sm btn-outline" onclick="convertLead(${l.lead_id},'${esc(l.name).replace(/'/g,"\\'")}')" title="Move to Customers" style="color:#059669">👤 Convert</button>
                 ${isOwnerRole()?`<button class="btn btn-sm btn-outline" onclick="deleteLead(${l.lead_id},'${esc(l.name).replace(/'/g,"\\'")}')" title="Delete" style="color:var(--red)">🗑️ ${_dt("btn_delete")}</button>`:''}
             </td></tr>`}).join('') :
             `<tr><td colspan="${showA?8:7}"><div class="empty"><div class="icon">📋</div><p>${_dt('no_leads')||'No leads yet'}</p></div></td></tr>`;
@@ -4519,6 +4520,15 @@ async function shareCustomer(customerId, ev){
     const d = await res.json();
     try { await navigator.clipboard.writeText(d.url); toast && toast('Portfolio link copied — share it with your customer'); }
     catch(e){ prompt('Customer portfolio link (copy & share):', d.url); }
+}
+
+async function convertLead(leadId, name){
+    if (!confirm(`Move "${name}" to Customers? They'll appear in the Customers tab with their own portfolio.`)) return;
+    const res = await api(`/api/admin/leads/${leadId}/convert`, {method:'POST'});
+    if (!res||!res.ok){ toast && toast('Could not convert'); return; }
+    toast && toast(`${name} moved to Customers ✅`);
+    loadLeads();
+    if (typeof loadOverview==='function') loadOverview();
 }
 
 // ═══════════ POLICIES ═══════════
