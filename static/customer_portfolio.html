@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Insurance Portfolio · Sarathi-AI</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0b1220;color:#e2e8f0;min-height:100vh;padding:1.25rem}
+  .wrap{max-width:680px;margin:0 auto}
+  .hdr{text-align:center;margin-bottom:1.5rem;padding-top:.5rem}
+  .hdr .badge{display:inline-block;background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);color:#22d3ee;border-radius:20px;padding:.25rem .8rem;font-size:.74rem;font-weight:700;letter-spacing:.05em;margin-bottom:.75rem}
+  .hdr h1{font-size:1.5rem;font-weight:800}
+  .hdr .sub{color:#94a3b8;font-size:.9rem;margin-top:.25rem}
+  .summary{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1.25rem}
+  .scard{flex:1 1 120px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.85rem 1rem;text-align:center}
+  .scard .v{font-size:1.3rem;font-weight:800;color:#fff}
+  .scard .l{font-size:.72rem;color:#94a3b8;margin-top:.15rem}
+  .group{margin-bottom:1.1rem}
+  .group h2{font-size:.85rem;text-transform:capitalize;color:#22d3ee;font-weight:700;margin-bottom:.5rem;padding-left:.2rem}
+  .pcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem;margin-bottom:.7rem}
+  .pcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+  .pcard .ins{font-weight:700;font-size:1rem}
+  .pcard .plan{color:#94a3b8;font-size:.84rem}
+  .pcard .num{color:#64748b;font-size:.74rem;margin-top:.15rem}
+  .pcard .prem{text-align:right;white-space:nowrap}
+  .pcard .prem b{font-size:1.05rem;color:#fff}
+  .pcard .renew{font-size:.74rem;color:#fbbf24;margin-top:.2rem}
+  .fields{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.75rem;padding-top:.6rem;border-top:1px dashed rgba(255,255,255,.1)}
+  .chip{background:rgba(255,255,255,.05);border-radius:8px;padding:.2rem .55rem;font-size:.74rem}
+  .chip .k{color:#94a3b8}
+  .advisor{background:rgba(6,182,212,.08);border:1px solid rgba(34,211,238,.25);border-radius:12px;padding:1rem;text-align:center;margin-top:1.25rem}
+  .advisor a{color:#22d3ee;text-decoration:none;font-weight:700}
+  .foot{text-align:center;color:#475569;font-size:.72rem;margin-top:1.5rem;line-height:1.6}
+  .msg{text-align:center;padding:3rem 1rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="content"><div class="msg">Loading your portfolio…</div></div>
+  <div class="foot">🔒 This is your private, read-only portfolio summary.<br>Powered by Sarathi-AI · For policy changes, contact your advisor.</div>
+</div>
+<script>
+const _token = location.pathname.split('/').filter(Boolean).pop();
+function esc(s){const d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
+function fmt(n){ if(n==null||n==='')return ''; const x=Number(n); if(isNaN(x))return esc(n);
+  return '₹'+x.toLocaleString('en-IN'); }
+function fmtDate(d){ if(!d)return ''; try{const dt=new Date(d); if(isNaN(dt))return esc(d);
+  return dt.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});}catch(e){return esc(d);} }
+function tsLabel(k){ return k.replace(/_/g,' ').replace(/\b\w/g,m=>m.toUpperCase()); }
+
+(async function(){
+  const box = document.getElementById('content');
+  let r;
+  try { r = await fetch('/api/portfolio/'+encodeURIComponent(_token)); }
+  catch(e){ box.innerHTML='<div class="msg">Could not load. Please check your link.</div>'; return; }
+  if(!r.ok){ box.innerHTML='<div class="msg">This portfolio link is invalid or has been revoked.</div>'; return; }
+  const d = await r.json();
+  const pols = d.policies||[];
+  let totalCover=0, totalPrem=0; let nextRenewal=null;
+  pols.forEach(p=>{ totalCover+=Number(p.sum_insured)||0; totalPrem+=Number(p.premium)||0;
+    if(p.renewal_date && (!nextRenewal || p.renewal_date<nextRenewal)) nextRenewal=p.renewal_date; });
+
+  // group by type
+  const groups={}; pols.forEach(p=>{const t=(p.policy_type||'other');(groups[t]=groups[t]||[]).push(p);});
+  let body = `
+    <div class="hdr">
+      <div class="badge">MY INSURANCE PORTFOLIO</div>
+      <h1>${esc(d.name||'')}</h1>
+      ${d.city?`<div class="sub">${esc(d.city)}</div>`:''}
+    </div>
+    <div class="summary">
+      <div class="scard"><div class="v">${pols.length}</div><div class="l">Policies</div></div>
+      <div class="scard"><div class="v">${totalCover?fmt(totalCover):'-'}</div><div class="l">Total Cover</div></div>
+      <div class="scard"><div class="v">${totalPrem?fmt(totalPrem):'-'}</div><div class="l">Premium</div></div>
+      <div class="scard"><div class="v" style="font-size:.95rem">${nextRenewal?fmtDate(nextRenewal):'-'}</div><div class="l">Next Renewal</div></div>
+    </div>`;
+
+  if(!pols.length){ body += '<div class="msg">No policies on file yet.</div>'; }
+  for(const [type,list] of Object.entries(groups)){
+    body += `<div class="group"><h2>${esc(type)} insurance</h2>`;
+    for(const p of list){
+      let ts=p.type_specific; try{ ts=(typeof ts==='string')?JSON.parse(ts):ts; }catch(e){ ts=null; }
+      const chips = (ts&&typeof ts==='object') ? Object.entries(ts).filter(([k,v])=>v!==null&&v!==''&&v!==undefined)
+        .map(([k,v])=>`<span class="chip"><span class="k">${esc(tsLabel(k))}:</span> <strong>${esc(String(v))}</strong></span>`).join('') : '';
+      body += `<div class="pcard">
+        <div class="top">
+          <div>
+            <div class="ins">${esc(p.insurer||'')}</div>
+            ${p.plan_name?`<div class="plan">${esc(p.plan_name)}</div>`:''}
+            ${p.policy_number?`<div class="num">Policy #${esc(p.policy_number)}</div>`:''}
+            ${p.sum_insured?`<div class="num">Cover: ${fmt(p.sum_insured)}</div>`:''}
+          </div>
+          <div class="prem">
+            ${p.premium?`<b>${fmt(p.premium)}</b>`:''}${p.premium_mode?`<span style="color:#64748b;font-size:.72rem">/${esc(p.premium_mode)}</span>`:''}
+            ${p.renewal_date?`<div class="renew">Renews ${fmtDate(p.renewal_date)}</div>`:''}
+          </div>
+        </div>
+        ${chips?`<div class="fields">${chips}</div>`:''}
+      </div>`;
+    }
+    body += `</div>`;
+  }
+
+  if(d.advisor && (d.advisor.name||d.advisor.phone)){
+    const ph=(d.advisor.phone||'').replace(/\D/g,'');
+    body += `<div class="advisor">Your advisor: <strong>${esc(d.advisor.name||'')}</strong>${ph?` · <a href="https://wa.me/${ph.length===10?'91'+ph:ph}">Chat on WhatsApp</a>`:''}</div>`;
+  }
+  box.innerHTML = body;
+})();
+</script>
+</body>
+</html>

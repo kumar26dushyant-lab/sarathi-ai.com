@@ -15951,15 +15951,18 @@ async def api_admin_overview(tenant: dict = Depends(auth.get_current_tenant)):
 async def api_admin_leads(stage: str = Query(None),
                            search: str = Query(None),
                            client_type: str = Query(None),
+                           exclude_customers: bool = Query(False),
                            limit: int = Query(50, le=200),
                            offset: int = Query(0),
                            tenant: dict = Depends(auth.get_current_tenant)):
-    """List leads — owners see all, agents see only their own."""
+    """List leads — owners see all, agents see only their own.
+    exclude_customers=1 hides converted contacts (the Leads pipeline view)."""
     role = tenant.get("role", "agent")
     agent_id = tenant.get("agent_id") if role not in ("owner", "admin") else None
     return await db.get_leads_by_tenant(tenant["tenant_id"], stage=stage,
                                          search=search, limit=limit, offset=offset,
-                                         agent_id=agent_id, client_type=client_type)
+                                         agent_id=agent_id, client_type=client_type,
+                                         exclude_customers=exclude_customers)
 
 
 class AdminAddLeadRequest(BaseModel):
@@ -16234,17 +16237,90 @@ async def api_admin_delete_policy(policy_id: int, request: Request,
     return result
 
 
+def _agent_scope(tenant: dict):
+    """None for owner/admin (sees whole tenant); the agent_id otherwise."""
+    role = tenant.get("role", "agent")
+    return tenant.get("agent_id") if role not in ("owner", "admin") else None
+
+
 @app.get("/api/admin/customers")
 async def api_admin_customers(search: str = Query(None),
                                limit: int = Query(50, le=200),
                                offset: int = Query(0),
                                tenant: dict = Depends(auth.get_current_tenant)):
-    """List customers with portfolio summary — policy counts and totals."""
-    role = tenant.get("role", "agent")
-    agent_id = tenant.get("agent_id") if role not in ("owner", "admin") else None
-    return await db.get_customers_with_portfolio(tenant["tenant_id"], search=search,
-                                                  limit=limit, offset=offset,
-                                                  agent_id=agent_id)
+    """List customers (separate customers table) with portfolio summary.
+    Tenant-isolated; agents see only their own."""
+    return await db.get_customers(tenant["tenant_id"], agent_id=_agent_scope(tenant),
+                                  search=search, limit=limit, offset=offset)
+
+
+@app.get("/api/admin/customers/{customer_id}/portfolio")
+async def api_admin_customer_portfolio(customer_id: int,
+                                        tenant: dict = Depends(auth.get_current_tenant)):
+    """A customer's full portfolio (policies grouped client-side by type).
+    Returns 404 if the customer is not in the caller's tenant/agent scope."""
+    pf = await db.get_customer_portfolio(customer_id, tenant["tenant_id"],
+                                         agent_id=_agent_scope(tenant))
+    if not pf:
+        return JSONResponse({"error": "Customer not found"}, status_code=404)
+    return pf
+
+
+@app.post("/api/admin/customers/{customer_id}/share")
+async def api_admin_customer_share(customer_id: int, request: Request,
+                                    tenant: dict = Depends(auth.get_current_tenant)):
+    """Rotate + return the customer's shareable read-only portfolio link.
+    Rotating revokes any previously shared link."""
+    token = await db.regenerate_portfolio_token(customer_id, tenant["tenant_id"],
+                                                 agent_id=_agent_scope(tenant))
+    if not token:
+        return JSONResponse({"error": "Customer not found"}, status_code=404)
+    base = os.getenv("SARATHI_BASE_URL", "https://sarathi-ai.com").rstrip("/")
+    return {"token": token, "url": f"{base}/portfolio/{token}"}
+
+
+@app.post("/api/admin/leads/{lead_id}/convert")
+async def api_admin_convert_lead(lead_id: int, request: Request,
+                                  tenant: dict = Depends(auth.get_current_tenant)):
+    """Manually convert a lead into a customer (also happens automatically on the
+    first policy). Scope-checked to the caller's tenant/agent."""
+    cid = await db.convert_lead_to_customer(lead_id, tenant["tenant_id"],
+                                            agent_id=_agent_scope(tenant))
+    if not cid:
+        return JSONResponse({"error": "Lead not found"}, status_code=404)
+    return {"ok": True, "customer_id": cid}
+
+
+# ── Public customer portfolio self-view (token-gated, read-only) ──────────────
+@app.get("/portfolio/{token}", response_class=HTMLResponse)
+async def customer_portfolio_page(token: str):
+    f = static_dir / "customer_portfolio.html"
+    if not f.exists():
+        return HTMLResponse("<h1>Portfolio page not found</h1>", status_code=404)
+    return FileResponse(f)
+
+
+@app.get("/api/portfolio/{token}")
+@limiter.limit("30/minute")
+async def api_public_portfolio(token: str, request: Request):
+    """PUBLIC read-only portfolio by share token. No auth — the unguessable token
+    is the key; returns exactly ONE customer. Commission + internal fields are
+    stripped (the customer must never see internal/agent data)."""
+    pf = await db.get_customer_by_token(token)
+    if not pf:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    _SAFE = ("policy_type", "insurer", "plan_name", "policy_number", "sum_insured",
+             "premium", "premium_mode", "start_date", "end_date", "renewal_date",
+             "status", "policy_status", "maturity_date", "maturity_value", "riders",
+             "fund_name", "folio_number", "sip_amount", "type_specific")
+    policies = [{k: p.get(k) for k in _SAFE} for p in pf.get("policies", [])]
+    adv = pf.get("advisor") or {}
+    return {
+        "name": pf.get("name"),
+        "city": pf.get("city"),
+        "policies": policies,
+        "advisor": {"name": adv.get("name", ""), "phone": adv.get("phone", "")},
+    }
 
 
 @app.get("/api/admin/leads/{lead_id}/policies")

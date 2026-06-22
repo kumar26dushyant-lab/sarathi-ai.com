@@ -3463,36 +3463,61 @@ async def ensure_customer_for_lead(lead_id: int, agent_id: int = None) -> Option
         return cur.lastrowid
 
 
-async def get_customers(agent_id: int, search: str = None) -> list:
-    """List an agent's customers with policy count + portfolio totals."""
+async def _customer_in_scope(conn, customer_id: int, tenant_id: int,
+                             agent_id: int = None) -> bool:
+    """True only if the customer belongs to this tenant (and agent, if scoped).
+    The IDOR guard for every customer read/write — prevents one firm's (or one
+    agent's) data being reachable by another."""
+    q = ("SELECT 1 FROM customers c JOIN agents a ON c.agent_id = a.agent_id "
+         "WHERE c.customer_id = ? AND a.tenant_id = ?")
+    p = [customer_id, tenant_id]
+    if agent_id is not None:
+        q += " AND c.agent_id = ?"; p.append(agent_id)
+    return (await (await conn.execute(q, p)).fetchone()) is not None
+
+
+async def get_customers(tenant_id: int, agent_id: int = None, search: str = None,
+                        limit: int = 50, offset: int = 0) -> dict:
+    """List a TENANT's customers (owner sees all; agent_id scopes to one agent)
+    with policy count + portfolio totals. Isolated via the agents.tenant_id join."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        conds, params = ["c.agent_id=?"], [agent_id]
+        conds, params = ["a.tenant_id = ?"], [tenant_id]
+        if agent_id is not None:
+            conds.append("c.agent_id = ?"); params.append(agent_id)
         if search:
             conds.append("(c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)")
             like = f"%{search}%"; params += [like, like, like]
+        where = " AND ".join(conds)
+        total = (await (await conn.execute(
+            f"SELECT COUNT(*) FROM customers c JOIN agents a ON c.agent_id=a.agent_id WHERE {where}",
+            params)).fetchone())[0]
         cur = await conn.execute(
-            f"""SELECT c.*,
+            f"""SELECT c.*, a.name AS agent_name,
                    (SELECT COUNT(*) FROM policies p WHERE p.customer_id=c.customer_id) AS policy_count,
                    (SELECT COALESCE(SUM(p.sum_insured),0) FROM policies p WHERE p.customer_id=c.customer_id) AS total_cover,
                    (SELECT COALESCE(SUM(p.premium),0) FROM policies p WHERE p.customer_id=c.customer_id) AS total_premium,
                    (SELECT MIN(p.renewal_date) FROM policies p WHERE p.customer_id=c.customer_id AND p.renewal_date IS NOT NULL AND p.renewal_date >= date('now')) AS next_renewal
-                FROM customers c WHERE {' AND '.join(conds)}
-                ORDER BY c.updated_at DESC, c.customer_id DESC""", params)
-        return [dict(r) for r in await cur.fetchall()]
+                FROM customers c JOIN agents a ON c.agent_id=a.agent_id
+                WHERE {where}
+                ORDER BY c.updated_at DESC, c.customer_id DESC
+                LIMIT ? OFFSET ?""", params + [limit, offset])
+        rows = [dict(r) for r in await cur.fetchall()]
+    return {"customers": rows, "total": total}
 
 
-async def get_customer_portfolio(customer_id: int, agent_id: int = None) -> Optional[dict]:
-    """Customer + their policies (the portfolio). Optionally scope to an agent."""
+async def get_customer_portfolio(customer_id: int, tenant_id: int,
+                                 agent_id: int = None) -> Optional[dict]:
+    """Customer + their policies (portfolio). Returns None if the customer is not
+    in the caller's tenant/agent scope (IDOR-safe)."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        q = "SELECT * FROM customers WHERE customer_id=?"
-        p = [customer_id]
-        if agent_id is not None:
-            q += " AND agent_id=?"; p.append(agent_id)
-        c = await (await conn.execute(q, p)).fetchone()
-        if not c:
+        if not await _customer_in_scope(conn, customer_id, tenant_id, agent_id):
             return None
+        c = await (await conn.execute(
+            "SELECT c.*, a.name AS agent_name FROM customers c "
+            "JOIN agents a ON c.agent_id=a.agent_id WHERE c.customer_id=?",
+            (customer_id,))).fetchone()
         pols = await (await conn.execute(
             "SELECT * FROM policies WHERE customer_id=? ORDER BY policy_type, renewal_date",
             (customer_id,))).fetchall()
@@ -3502,8 +3527,9 @@ async def get_customer_portfolio(customer_id: int, agent_id: int = None) -> Opti
 
 
 async def get_customer_by_token(token: str) -> Optional[dict]:
-    """Public portfolio self-view by share token (read-only)."""
-    if not token:
+    """Public portfolio self-view by share token (read-only). The unguessable
+    token is the access key; returns exactly ONE customer's data."""
+    if not token or len(token) < 16:
         return None
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -3514,20 +3540,43 @@ async def get_customer_by_token(token: str) -> Optional[dict]:
         pols = await (await conn.execute(
             "SELECT * FROM policies WHERE customer_id=? ORDER BY policy_type, renewal_date",
             (c["customer_id"],))).fetchall()
+        agent = await (await conn.execute(
+            "SELECT name, phone FROM agents WHERE agent_id=?", (c["agent_id"],))).fetchone()
     out = dict(c)
     out["policies"] = [dict(r) for r in pols]
+    out["advisor"] = dict(agent) if agent else {}
     return out
 
 
-async def regenerate_portfolio_token(customer_id: int, agent_id: int) -> Optional[str]:
+async def regenerate_portfolio_token(customer_id: int, tenant_id: int,
+                                     agent_id: int = None) -> Optional[str]:
+    """Rotate the share token (revokes the old link). Scope-checked."""
     import secrets as _secrets
     token = _secrets.token_urlsafe(24)
     async with aiosqlite.connect(DB_PATH) as conn:
-        cur = await conn.execute(
-            "UPDATE customers SET portfolio_token=?, updated_at=datetime('now') WHERE customer_id=? AND agent_id=?",
-            (token, customer_id, agent_id))
+        if not await _customer_in_scope(conn, customer_id, tenant_id, agent_id):
+            return None
+        await conn.execute(
+            "UPDATE customers SET portfolio_token=?, updated_at=datetime('now') WHERE customer_id=?",
+            (token, customer_id))
         await conn.commit()
-        return token if cur.rowcount else None
+        return token
+
+
+async def convert_lead_to_customer(lead_id: int, tenant_id: int,
+                                   agent_id: int = None) -> Optional[int]:
+    """Manual conversion. Scope-checks the lead, then creates/links the customer."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        q = ("SELECT l.lead_id, l.agent_id FROM leads l JOIN agents a ON l.agent_id=a.agent_id "
+             "WHERE l.lead_id=? AND a.tenant_id=?")
+        p = [lead_id, tenant_id]
+        if agent_id is not None:
+            q += " AND l.agent_id=?"; p.append(agent_id)
+        row = await (await conn.execute(q, p)).fetchone()
+        if not row:
+            return None
+        lead_agent = row[1]
+    return await ensure_customer_for_lead(lead_id, lead_agent)
 
 
 async def add_policy_member(policy_id: int, member_name: str,
@@ -6254,8 +6303,10 @@ async def force_apply_plan_change(tenant_id: int, new_plan: str) -> dict:
 async def get_leads_by_tenant(tenant_id: int, stage: str = None,
                                search: str = None, limit: int = 200,
                                offset: int = 0, agent_id: int = None,
-                               client_type: str = None) -> dict:
-    """Get leads for a tenant. If agent_id provided, filter to that agent only."""
+                               client_type: str = None,
+                               exclude_customers: bool = False) -> dict:
+    """Get leads for a tenant. If agent_id provided, filter to that agent only.
+    exclude_customers=True hides converted contacts (they live in Customers)."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         conditions = ["a.tenant_id = ?"]
@@ -6268,6 +6319,8 @@ async def get_leads_by_tenant(tenant_id: int, stage: str = None,
         if client_type:
             conditions.append("l.client_type = ?")
             params.append(client_type)
+        elif exclude_customers:
+            conditions.append("(l.client_type IS NULL OR l.client_type != 'customer')")
 
         if stage and stage != 'all':
             conditions.append("l.stage = ?")

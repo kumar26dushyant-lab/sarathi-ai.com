@@ -4170,7 +4170,7 @@ async function loadLeads() {
     const search = document.getElementById('lead-search').value.trim();
     const stage = document.getElementById('lead-stage-filter').value;
     const limit = 50;
-    let url = `/api/admin/leads?limit=${limit}&offset=${_leadsPage*limit}`;
+    let url = `/api/admin/leads?limit=${limit}&offset=${_leadsPage*limit}&exclude_customers=1`;
     if (stage) url += `&stage=${stage}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
 
@@ -4420,31 +4420,30 @@ async function loadCustomers() {
     const showA = isTeamPlan();
 
     if (!custs.length) {
-        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px"><div style="font-size:2.5em;margin-bottom:10px">👥</div><p style="color:var(--muted)">No customers yet. Customers are created when you scan a policy document via the Telegram bot.</p></div>`;
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px"><div style="font-size:2.5em;margin-bottom:10px">👥</div><p style="color:var(--muted)">No customers yet. A lead becomes a customer automatically when you add their first policy (or convert them from the Leads tab).</p></div>`;
     } else {
         grid.innerHTML = custs.map(c => {
-            const ph = (c.phone||'').replace(/\D/g,'');
-            return `<div class="customer-card" id="cc-${c.lead_id}" onclick="togglePortfolio(${c.lead_id})">
+            const id = c.customer_id;
+            return `<div class="customer-card" id="cc-${id}" onclick="togglePortfolio(${id})">
                 <div class="cc-header">
                     <div>
                         <div class="cc-name">${esc(c.name)}</div>
                         <div class="cc-contact">${esc(c.phone||'')}${c.email?' • '+esc(c.email):''}${c.city?' • '+esc(c.city):''}</div>
                     </div>
-                    <span class="cc-expand-icon" id="cc-icon-${c.lead_id}">▼</span>
+                    <span class="cc-expand-icon" id="cc-icon-${id}">▼</span>
                 </div>
                 <div class="cc-stats">
                     <div class="cc-stat"><div class="cc-stat-val">${c.policy_count||0}</div><div class="cc-stat-lbl">Policies</div></div>
-                    <div class="cc-stat"><div class="cc-stat-val">${c.total_premium?fmt(c.total_premium):'-'}</div><div class="cc-stat-lbl">Annual Premium</div></div>
-                    <div class="cc-stat"><div class="cc-stat-val">${c.sold_count||0}</div><div class="cc-stat-lbl">Sold</div></div>
-                    <div class="cc-stat"><div class="cc-stat-val">${c.tracked_count||0}</div><div class="cc-stat-lbl">Tracked</div></div>
+                    <div class="cc-stat"><div class="cc-stat-val">${c.total_premium?fmt(c.total_premium):'-'}</div><div class="cc-stat-lbl">Premium</div></div>
+                    <div class="cc-stat"><div class="cc-stat-val">${c.total_cover?fmt(c.total_cover):'-'}</div><div class="cc-stat-lbl">Cover</div></div>
+                    <div class="cc-stat"><div class="cc-stat-val" style="font-size:.85em">${c.next_renewal?fmtDate(c.next_renewal):'-'}</div><div class="cc-stat-lbl">Next Renewal</div></div>
                 </div>
-                <div class="cc-badges">
-                    ${c.need_type?`<span class="badge badge-blue">${esc(c.need_type)}</span>`:''}
+                <div class="cc-badges" onclick="event.stopPropagation()">
                     ${showA&&c.agent_name?`<span class="badge badge-muted">${esc(c.agent_name)}</span>`:''}
-                    ${ph?_waBtn(ph,c.name,{small:true}):''}
+                    <button class="btn btn-sm btn-outline" style="font-size:.72em;padding:3px 8px" onclick="shareCustomer(${id},event)">🔗 Share portfolio</button>
                 </div>
-                <div class="cc-portfolio" id="cc-portfolio-${c.lead_id}">
-                    <div style="text-align:center;padding:10px;color:var(--muted);font-size:.82em">Loading policies...</div>
+                <div class="cc-portfolio" id="cc-portfolio-${id}">
+                    <div style="text-align:center;padding:10px;color:var(--muted);font-size:.82em">Loading portfolio...</div>
                 </div>
             </div>`;
         }).join('');
@@ -4459,65 +4458,67 @@ async function loadCustomers() {
         </div>` : '';
 }
 
-async function togglePortfolio(leadId) {
-    const el = document.getElementById('cc-portfolio-'+leadId);
-    const icon = document.getElementById('cc-icon-'+leadId);
-    if (el.classList.contains('open')) {
-        el.classList.remove('open');
-        icon.classList.remove('open');
-        return;
-    }
-    el.classList.add('open');
-    icon.classList.add('open');
-    // If already loaded, don't re-fetch
+// Human labels for type-specific keys the AI extracts per policy type.
+function _tsLabel(k){ return k.replace(/_/g,' ').replace(/\b\w/g, m=>m.toUpperCase()); }
+function _renderTypeSpecific(p){
+    let ts = p.type_specific;
+    if (!ts) return '';
+    try { ts = (typeof ts==='string') ? JSON.parse(ts) : ts; } catch(e){ return ''; }
+    if (!ts || typeof ts!=='object') return '';
+    const chips = Object.entries(ts).filter(([k,v])=>v!==null&&v!==''&&v!==undefined)
+        .map(([k,v])=>`<span style="display:inline-block;background:var(--bg,#f1f5f9);border-radius:8px;padding:2px 8px;margin:2px;font-size:.72em"><span style="color:var(--muted)">${esc(_tsLabel(k))}:</span> <strong>${esc(String(v))}</strong></span>`).join('');
+    return chips ? `<div class="cc-typespec" onclick="event.stopPropagation()" style="padding:4px 8px 6px">${chips}</div>` : '';
+}
+
+async function togglePortfolio(customerId) {
+    const el = document.getElementById('cc-portfolio-'+customerId);
+    const icon = document.getElementById('cc-icon-'+customerId);
+    if (el.classList.contains('open')) { el.classList.remove('open'); icon.classList.remove('open'); return; }
+    el.classList.add('open'); icon.classList.add('open');
     if (el.dataset.loaded) return;
 
-    const res = await api(`/api/admin/leads/${leadId}/policies`);
+    const res = await api(`/api/admin/customers/${customerId}/portfolio`);
     if (!res||!res.ok) { el.innerHTML = '<div style="color:var(--red);font-size:.82em;padding:8px">Failed to load</div>'; return; }
-    const d = await res.json();
-    const policies = d.policies||[];
+    const pf = await res.json();
+    const policies = pf.policies||[];
     el.dataset.loaded = '1';
+    if (!policies.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.82em;padding:8px">No policies yet</div>'; return; }
 
-    if (!policies.length) {
-        el.innerHTML = '<div style="color:var(--muted);font-size:.82em;padding:8px">No policies found</div>';
-        return;
-    }
-
+    // Group by policy type
+    const groups = {};
+    for (const p of policies){ const t=(p.policy_type||'other'); (groups[t]=groups[t]||[]).push(p); }
     let html = '';
-    for (const p of policies) {
-        const soldBadge = p.sold_by_agent === 1
-            ? '<span class="badge badge-sold">SOLD</span>'
-            : (p.sold_by_agent === 0 ? '<span class="badge badge-tracked">TRACKED</span>' : '');
-        const statusBadge = p.status === 'active'
-            ? '<span class="badge badge-green" style="font-size:.68em">Active</span>'
-            : `<span class="badge badge-muted" style="font-size:.68em">${esc(p.status||'')}</span>`;
-        html += `<div class="cc-policy-row" onclick="event.stopPropagation()">
-            <div>
-                <span class="cc-policy-type">${esc(p.policy_type||'Policy')}</span>
-                <span style="font-size:.82em;color:var(--muted)"> — ${esc(p.insurer||'')} ${esc(p.plan_name||'')}</span>
-                ${p.policy_number?'<br><span style="font-size:.75em;color:var(--muted)">#'+esc(p.policy_number)+'</span>':''}
-            </div>
-            <div style="text-align:right;white-space:nowrap">
-                ${p.premium?'<span style="font-weight:600">'+fmt(p.premium)+'</span>':''}
-                ${p.premium_mode?'<span style="font-size:.7em;color:var(--muted)">/'+esc(p.premium_mode)+'</span>':''}
-                <br>${soldBadge} ${statusBadge}
-                ${p.renewal_date?'<br><span style="font-size:.7em;color:var(--muted)">Expires: '+fmtDate(p.renewal_date)+'</span>':''}
-            </div>
-        </div>`;
-
-        // Load members for this policy
-        const mRes = await api(`/api/admin/policies/${p.policy_id}/members`);
-        if (mRes&&mRes.ok) {
-            const mData = await mRes.json();
-            const members = mData.members||[];
-            if (members.length) {
-                html += `<div class="cc-members" onclick="event.stopPropagation()">👥 Insured: ${members.map(m=>
-                    `<strong>${esc(m.member_name||'')}</strong> (${esc(m.relation||'')})${m.age?' Age '+m.age:''}${m.sum_insured?' SI '+fmt(m.sum_insured):''}`
-                ).join(' • ')}</div>`;
-            }
+    for (const [type, pols] of Object.entries(groups)){
+        html += `<div class="cc-type-group" onclick="event.stopPropagation()" style="margin-top:8px"><div style="font-weight:700;font-size:.8em;text-transform:capitalize;color:var(--text);padding:2px 8px">${esc(type)} <span style="color:var(--muted);font-weight:400">(${pols.length})</span></div>`;
+        for (const p of pols){
+            const statusBadge = (p.status||'active')==='active'
+                ? '<span class="badge badge-green" style="font-size:.68em">Active</span>'
+                : `<span class="badge badge-muted" style="font-size:.68em">${esc(p.status||'')}</span>`;
+            html += `<div class="cc-policy-row" onclick="event.stopPropagation()">
+                <div>
+                    <span style="font-size:.82em;color:var(--muted)">${esc(p.insurer||'')} ${esc(p.plan_name||'')}</span>
+                    ${p.policy_number?'<br><span style="font-size:.75em;color:var(--muted)">#'+esc(p.policy_number)+'</span>':''}
+                </div>
+                <div style="text-align:right;white-space:nowrap">
+                    ${p.premium?'<span style="font-weight:600">'+fmt(p.premium)+'</span>':''}
+                    ${p.premium_mode?'<span style="font-size:.7em;color:var(--muted)">/'+esc(p.premium_mode)+'</span>':''}
+                    <br>${statusBadge}
+                    ${p.renewal_date?'<br><span style="font-size:.7em;color:var(--muted)">Renews: '+fmtDate(p.renewal_date)+'</span>':''}
+                </div>
+            </div>${_renderTypeSpecific(p)}`;
         }
+        html += '</div>';
     }
     el.innerHTML = html;
+}
+
+async function shareCustomer(customerId, ev){
+    if (ev) ev.stopPropagation();
+    const res = await api(`/api/admin/customers/${customerId}/share`, {method:'POST'});
+    if (!res||!res.ok){ toast && toast('Could not create link'); return; }
+    const d = await res.json();
+    try { await navigator.clipboard.writeText(d.url); toast && toast('Portfolio link copied — share it with your customer'); }
+    catch(e){ prompt('Customer portfolio link (copy & share):', d.url); }
 }
 
 // ═══════════ POLICIES ═══════════
