@@ -16252,6 +16252,35 @@ async def api_admin_customers(search: str = Query(None),
                                   search=search, limit=limit, offset=offset)
 
 
+class AddCustomerReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=2, max_length=100)
+    phone: Optional[str] = Field(None, max_length=15)
+    email: Optional[str] = Field(None, max_length=100)
+    dob: Optional[str] = Field(None, max_length=10)
+    city: Optional[str] = Field(None, max_length=50)
+    occupation: Optional[str] = Field(None, max_length=80)
+    notes: Optional[str] = Field(None, max_length=500)
+    assign_to_agent_id: Optional[int] = None
+
+
+@app.post("/api/admin/customers")
+@limiter.limit("30/minute")
+async def api_admin_add_customer(req: AddCustomerReq, request: Request,
+                                  tenant: dict = Depends(auth.get_current_tenant)):
+    """Add a customer directly (contact-only). Agents add to themselves; owners
+    may assign. Creates the contact flagged as customer (skips Leads pipeline)."""
+    role = tenant.get("role", "agent")
+    assign_to = req.assign_to_agent_id if role in ("owner", "admin") else tenant.get("agent_id")
+    res = await db.add_customer_direct(
+        tenant["tenant_id"], name=req.name, phone=req.phone, email=req.email,
+        dob=req.dob, city=req.city, occupation=req.occupation, notes=req.notes,
+        assign_to_agent_id=assign_to)
+    if not res.get("success"):
+        return JSONResponse({"error": res.get("error", "Could not add customer")}, status_code=400)
+    return res
+
+
 @app.get("/api/admin/customers/{customer_id}/portfolio")
 async def api_admin_customer_portfolio(customer_id: int,
                                         tenant: dict = Depends(auth.get_current_tenant)):

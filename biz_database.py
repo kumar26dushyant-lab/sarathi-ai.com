@@ -3579,6 +3579,30 @@ async def convert_lead_to_customer(lead_id: int, tenant_id: int,
     return await ensure_customer_for_lead(lead_id, lead_agent)
 
 
+async def add_customer_direct(tenant_id: int, name: str, phone: str = None,
+                              email: str = None, dob: str = None, city: str = None,
+                              occupation: str = None, notes: str = None,
+                              assign_to_agent_id: int = None) -> dict:
+    """Add a customer directly (contact-only). Creates the underlying contact,
+    immediately flags it client_type='customer' (so it skips the Leads pipeline),
+    and creates the customer record. Returns {success, customer_id, lead_id}."""
+    res = await add_lead_admin(tenant_id, name, phone=phone, email=email, dob=dob,
+                               city=city, source='web_admin_customer', notes=notes,
+                               assign_to_agent_id=assign_to_agent_id)
+    if not res.get('success'):
+        return res
+    lead_id, agent_id = res['lead_id'], res['agent_id']
+    cid = await ensure_customer_for_lead(lead_id, agent_id)   # also marks lead as customer
+    if cid and (occupation or notes):
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE customers SET occupation=COALESCE(?, occupation), notes=COALESCE(?, notes), "
+                "updated_at=datetime('now') WHERE customer_id=?",
+                (occupation, notes, cid))
+            await conn.commit()
+    return {'success': True, 'customer_id': cid, 'lead_id': lead_id}
+
+
 async def add_policy_member(policy_id: int, member_name: str,
                             relation: str = "self", dob: str = None,
                             age: int = None, sum_insured: float = None,
