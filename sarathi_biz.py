@@ -9194,11 +9194,9 @@ async def getting_started_page():
 
 @app.get("/telegram-guide", response_class=HTMLResponse)
 async def telegram_guide_page():
-    """Serve the comprehensive Telegram CRM usage guide page."""
-    tg_file = static_dir / "telegram-guide.html"
-    if tg_file.exists():
-        return HTMLResponse(tg_file.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>Telegram Guide page not found</h1>", status_code=404)
+    """Telegram is hidden from customers (WhatsApp-first) — redirect the old
+    Telegram guide to the getting-started page. Backend bot still runs."""
+    return RedirectResponse(url="/getting-started", status_code=302)
 
 @app.get("/demo", response_class=HTMLResponse)
 async def demo_page():

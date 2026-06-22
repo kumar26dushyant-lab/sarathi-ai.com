@@ -174,8 +174,8 @@ a{text-decoration:none;color:inherit}
 <!-- ────────────────────────────────────────────────────── -->
 <!-- STEP 1: Create & Connect Your Own Telegram Bot        -->
 <!-- ────────────────────────────────────────────────────── -->
-<div class="step-card active" id="step1">
-  <h2>🤖 Step 1: Create Your Telegram CRM Bot</h2>
+<div class="step-card" id="step1" style="display:none">
+  <h2>🤖 Step 1: Create Your ऐप CRM Bot</h2>
   <p class="subtitle">Your firm gets its own branded Telegram bot — your agents use it daily to manage leads, pipeline, and follow-ups.</p>
 
   <div class="instruction">
@@ -226,8 +226,8 @@ a{text-decoration:none;color:inherit}
 <!-- ────────────────────────────────────────────────────── -->
 <!-- STEP 2: WhatsApp Business API — HIDDEN                -->
 <!-- ────────────────────────────────────────────────────── -->
-<div class="step-card" id="step2" style="display:none!important">
-  <h2>💬 Step 2: Connect WhatsApp (Optional)</h2>
+<div class="step-card active" id="step2">
+  <h2>💬 Step 1: Connect WhatsApp</h2>
   <p class="subtitle">Send auto-greetings, calculator reports, and policy reminders directly to client WhatsApp.</p>
 
   <div class="instruction">
@@ -361,7 +361,7 @@ a{text-decoration:none;color:inherit}
 const params = new URLSearchParams(window.location.search);
 const tenantId = params.get('tenant_id') || '';
 const phone = params.get('phone') || '';
-let currentStep = 1;
+let currentStep = 2;
 let botUsername = ''; // stored after successful token validation
 
 /* Build links with tenant_id */
