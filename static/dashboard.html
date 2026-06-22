@@ -200,6 +200,14 @@
         .cc-policy-row:hover { background: rgba(13,148,136,.05); }
         .cc-policy-type { font-weight: 600; }
         .cc-policy-detail { color: var(--muted); font-size: .9em; }
+        /* Mobile alignment for Customers + Renewals (Jun 2026 features) */
+        @media (max-width: 600px) {
+          .customer-grid { grid-template-columns: 1fr; }
+          .customer-card .cc-stats { gap: 8px; flex-wrap: wrap; }
+          .customer-card .cc-stat { flex: 1 1 calc(50% - 4px); }
+          #policies-summary > div { flex: 1 1 calc(50% - 6px) !important; min-width: 0 !important; }
+          .cc-typespec .chip, .cc-typespec span { word-break: break-word; }
+        }
         .badge-sold { background: #d1fae5; color: #059669; font-size: .68em; }
         .badge-tracked { background: #e0e7ff; color: #4338ca; font-size: .68em; }
         .cc-members { font-size: .78em; color: var(--muted); margin-top: 6px; padding: 6px 10px; background: var(--bg); border-radius: 8px; }
