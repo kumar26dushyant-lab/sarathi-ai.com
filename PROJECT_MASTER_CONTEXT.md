@@ -3326,5 +3326,99 @@ server (Contabo `84.247.172.252`, app dir `/opt/sarathi`, user `sarathi`).
 
 ---
 
+## 41. MARKETING STUDIO + AFFILIATE BRANCHES + VALUE-FIRST ENTRY + OPS CONTROL CENTER — JUNE 18–22, 2026
+
+Another large multi-track sprint. All items **live and verified** on production
+(Contabo `84.247.172.252`). ~29 commits.
+
+### 41.1 Marketing Studio revamp (Sarathi-AI)
+- **Cost & load control:** per-plan **daily caps** (`biz_marketing.DAILY_CAPS`,
+  `check_daily_cap`/`daily_usage`) — posters generous (local Pillow render ≈ free),
+  videos tight (paid API). A bounded **concurrency semaphore** (`_MKT_GEN_SEM`,
+  `MKT_MAX_CONCURRENT_GEN`=3) guards `/api/marketing/generate` (429 "busy" when
+  saturated). `GET /api/marketing/quota` drives the UI allowance meter.
+- **Deliver to own WhatsApp** (`POST /api/marketing/send-to-me/{id}`): hands the
+  finished poster/video + caption to the subscriber's **own** number to post
+  manually (not auto-Status). Graceful when no WA connected.
+- **Templated video (Creatomate):** `biz_marketing.generate_video()` +
+  `POST /api/marketing/generate-video/{id}` (poster→branded video), behind
+  `CREATOMATE_API_KEY` + `CREATOMATE_TEMPLATE_ID` (operator adds + designs a
+  template: Title/Body/Image/Logo/Brand-Color). Gated by plan + video cap +
+  semaphore. Dormant until configured.
+- **Generation quality fixes:** `_clean_caption()` strips LLM artifacts ("(कुल 189
+  अक्षर)", "Here's a draft:", char-counts) EN+HI; body text pure white + outline +
+  stronger scrim; badge no longer overlaps the logo box; on-image caption
+  length-capped; advisor photo gets a white ring; duplicate name/firm suppressed.
+- **Mobile-first UI wiring** (dashboard.html): Send-to-WhatsApp / Make Video /
+  Download + a live "N posters / N videos left today" meter.
+- **Phase 2:** off-peak **daily batch** (05:00 singleton, serial, load-smoothed)
+  pre-generates each tenant's poster + Telegram-pushes it; **analytics**
+  (`get_marketing_stats` + `/api/marketing/stats` + dashboard panel).
+
+### 41.2 Sarathi-AI plan cards validated + fixed
+- Audited every plan-card claim vs code. **Removed "Email-to-CRM"** from the Team
+  card (i18n too) — marketing text with **zero backing implementation**.
+- Corrected `payments.PLANS` Team description ("Custom Branding" → "Team
+  Dashboard"; custom_branding is Enterprise-only). 12-calculators claim verified.
+
+### 41.3 Sarathi-AI email deliverability (advisory — pending user DNS)
+- Sarathi sends from `info@sarathi-ai.com` via Brevo but **sarathi-ai.com is not
+  authenticated in Brevo** (no `spf.brevo.com` in SPF, no brevo DKIM CNAMEs, DMARC
+  `p=none`). DNS at **Cloudflare**. Steps handed to user. **Not yet actioned.**
+
+### 41.4 Nidaan affiliate branch codes
+- `nidaan_branches` (code/city/name/contact_email/status), seeded **IND-HO,
+  PUN-01, MUM-01, CHD-01, HYD-01**; `branch_code` on `nidaan_accounts`.
+- Captured at **signup AND the ₹499 claim form** (covers Google sign-up); strict
+  validation, optional, neutral verbiage.
+- **Superadmin "🏢 Branches" panel:** create/disable + alert email +
+  signups/paid/unpaid counts + unpaid-leads drill-in.
+- **Fallback alerts:** email branch on attributed signup + a twice-daily sweep
+  emails once if the ₹499 stays unpaid >24h (`branch_unpaid_reminded_at`).
+
+### 41.5 Nidaan ops — All-Claims table + Overview fix
+- Added **"📋 All Claims"** to the superadmin sidebar (table existed but was
+  unreachable except via an account); columns now include Payment, Assigned-to,
+  **Tasks** (open follow-ups), **Branch**.
+- **Bug fix:** Overview counted all `nidaan_claims` while the table inner-joins
+  accounts → an **orphaned claim** (manual account delete) showed "1" vs "0".
+  Overview now counts only claims with a live account; orphan cleaned.
+
+### 41.6 Value-first entry + routing (NidaanPartner)
+- See `[[project-nidaan-value-first]]`. Homepage CTA **"Get Started" → "Login"**;
+  `_loginSuccess` **routes by state** (subscriber→dashboard; in-flight→dashboard;
+  new/no-claim→claim funnel); the dashboard redirects no-sub/no-claim users into
+  the funnel.
+- **₹499 pay-gate after 2–3 KEY docs** (`pay_gate_ready`, `min(3,required)`); the
+  claim form softened to need only the key docs to submit.
+
+### 41.7 Superadmin account delete + Ops Control Center
+- **Account delete:** `DELETE .../accounts/{id}` + `.../accounts/bulk-delete`
+  reuse DPDP-safe `execute_account_erasure`. UI: bulk checkboxes + per-row 🗑️ +
+  **2-step type-to-confirm** guard. (Accounts only for now.)
+- **Activity trail:** `nidaan_audit_log` + `log_activity`/`get_activity_log` +
+  `_ops_audit`. Instrumented account/staff/branch/claim CRUD + assign/status.
+- **App Health → "Control Center":** live service checks (DB/Brevo/Razorpay/WA/
+  disk), **Recent Errors** (in-memory ring buffer `_ERROR_RING`, resets on
+  deploy), filterable **Activity Log**. **Deferred:** Layer-3 auto-remediation bot.
+
+### 41.8 Branding
+- Sarathi `/about`: removed Ashwin Kaushal; Dushyant = "Founder, Sarathi-AI ·
+  Co-Founder, NidaanPartner.com". Nidaan `/about`: Ashwin = "Co-Founder,
+  NidaanPartner.com" (Sarathi removed); Dushyant = "Co-Founder, NidaanPartner.com
+  · Founder, Sarathi-AI.com". Sarathi homepage Nidaan section → single CTA
+  "🛡️ Insurance Claims Support — Click Here →".
+
+### 41.9 Open / pending (operator + next)
+- **Operator:** Sarathi Brevo DNS (§41.3); advisor marketing photo;
+  `CREATOMATE_API_KEY`/`_TEMPLATE_ID`; branch alert emails for the 5 branches.
+- WhatsApp official numbers still not configured.
+- **Next (discussion):** Sarathi-AI dashboard — separate **Leads** (journey to
+  conversion) from **Customers** (post-conversion **portfolio** per policy type,
+  AI extraction from policy docs); fold the standalone Policies section into
+  Customers.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
