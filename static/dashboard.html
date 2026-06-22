@@ -657,7 +657,7 @@ function exitImpersonation() {
     <div class="nav-item active" data-tab="overview" onclick="switchTab('overview')" data-i18n="nav_overview">📊 Overview</div>
     <div class="nav-item" data-tab="tasks" onclick="switchTab('tasks')" data-i18n="nav_tasks">📋 Tasks</div>
     <div class="nav-item" data-tab="leads" onclick="switchTab('leads')" data-i18n="nav_leads">👥 Leads</div>
-    <div class="nav-item" data-tab="policies" onclick="switchTab('policies')" data-i18n="nav_policies">📄 Policies</div>
+    <div class="nav-item" data-tab="policies" onclick="switchTab('policies')" data-i18n="nav_policies">🔄 Renewals & Book</div>
     <div class="nav-item" data-tab="ai" onclick="switchTab('ai')" data-i18n="nav_ai">🤖 AI Tools</div>
     <div class="nav-item" data-tab="drip" onclick="switchTab('drip')" data-i18n="nav_drip">🌱 Drip Sequences</div>
     <div class="nav-item" data-tab="quotes" onclick="switchTab('quotes')" data-i18n="nav_quotes">💰 Quote Compare</div>
@@ -952,7 +952,15 @@ function exitImpersonation() {
                 <div class="skeleton-card"><div class="skeleton-line w60"></div><div class="skeleton-line w80"></div><div class="skeleton-line w40"></div></div>
                 <div class="skeleton-card"><div class="skeleton-line w60"></div><div class="skeleton-line w80"></div><div class="skeleton-line w40"></div></div>
             </div>
+            <div id="policies-summary" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.75rem"></div>
             <div class="toolbar">
+                <select id="policy-renewal-filter" onchange="loadPolicies()">
+                    <option value="">All renewals</option>
+                    <option value="overdue">⚠️ Overdue</option>
+                    <option value="30">⏰ Due ≤ 30 days</option>
+                    <option value="60">📅 Due ≤ 60 days</option>
+                    <option value="90">Due ≤ 90 days</option>
+                </select>
                 <select id="policy-status-filter" onchange="loadPolicies()">
                     <option value="" data-i18n="all_status">All Status</option>
                     <option value="active" data-i18n="status_active">Active</option>
@@ -2983,11 +2991,11 @@ const _DT = {
   nav_overview:{en:'📊 Overview',hi:'📊 अवलोकन'},
   nav_tasks:{en:'📋 Tasks',hi:'📋 टास्क'},
   nav_leads:{en:'📋 Leads',hi:'📋 लीड्स'},
-  nav_policies:{en:'📄 Policies',hi:'📄 पॉलिसियां'},
+  nav_policies:{en:'🔄 Renewals & Book',hi:'🔄 रिन्यूअल और बुक'},
   bnav_overview:{en:'Overview',hi:'होम'},
   bnav_tasks:{en:'Tasks',hi:'टास्क'},
   bnav_leads:{en:'Leads',hi:'लीड्स'},
-  bnav_policies:{en:'Policies',hi:'पॉलिसी'},
+  bnav_policies:{en:'Renewals',hi:'रिन्यूअल'},
   bnav_ai:{en:'AI',hi:'AI'},
   bnav_more:{en:'More',hi:'और'},
   nav_team:{en:'👥 Team',hi:'👥 टीम'},
@@ -4544,6 +4552,22 @@ async function loadPolicies() {
     if (!res||!res.ok) return;
     const d = await res.json();
     _cachedPolicies = d.policies||[];
+
+    // ── Renewals & Book: sort by soonest renewal, summarise, window-filter ──
+    const _today = new Date();
+    const _days = p => p.renewal_date ? Math.ceil((new Date(p.renewal_date)-_today)/864e5) : null;
+    _cachedPolicies.sort((a,b)=>{ const da=_days(a), db=_days(b);
+        if(da===null) return 1; if(db===null) return -1; return da-db; });
+    let bookPrem=0, due30=0, due60=0, overdue=0;
+    _cachedPolicies.forEach(p=>{ bookPrem+=Number(p.premium)||0; const dl=_days(p);
+        if(dl!==null){ if(dl<0) overdue++; else if(dl<=30) due30++; else if(dl<=60) due60++; } });
+    const sumEl=document.getElementById('policies-summary');
+    if(sumEl){ const card=(v,l,c)=>`<div style="flex:1 1 110px;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:.7rem .9rem;text-align:center"><div style="font-size:1.3em;font-weight:800;color:${c||'inherit'}">${v}</div><div style="font-size:.7em;color:var(--muted)">${l}</div></div>`;
+        sumEl.innerHTML = card(_cachedPolicies.length,'Policies')+card(fmt(bookPrem),'Book Premium')+card(due30,'Due ≤30d','#d97706')+card(due60,'Due ≤60d')+card(overdue,'Overdue','#dc2626'); }
+    const _rwin=(document.getElementById('policy-renewal-filter')||{}).value||'';
+    if(_rwin){ _cachedPolicies = _cachedPolicies.filter(p=>{ const dl=_days(p); if(dl===null) return false;
+        if(_rwin==='overdue') return dl<0; return dl>=0 && dl<=parseInt(_rwin); }); }
+
     const showA = isTeamPlan();
     const cols = showA ? 10 : 9;
     document.getElementById('policies-body').innerHTML = _cachedPolicies.length ? _cachedPolicies.map(p=>`<tr>
