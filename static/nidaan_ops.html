@@ -2090,12 +2090,18 @@ async function loadFollowups() {
 //  ACCOUNTS
 // ═══════════════════════════════════════════════════════════════
 async function loadAccounts() {
+  _accSel.clear();
   const el = document.getElementById('panel-accounts');
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Advisor Accounts</div><div class="section-sub">All registered advisors</div></div>
       ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
     </div>
+    ${_role==='super_admin'?`<div id="accBulkBar" style="display:none;align-items:center;gap:.75rem;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.35);border-radius:10px;padding:.5rem .85rem;margin-bottom:.75rem">
+      <span style="font-size:.85rem;color:#fca5a5"><b id="accSelCount">0</b> selected</span>
+      <button class="btn" style="background:#dc2626;color:#fff;font-size:.8rem;padding:.35rem .8rem" onclick="deleteSelectedAccounts()">🗑️ Delete selected</button>
+      <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_accSel.clear();renderAccounts(window._allAccounts);">Clear</button>
+    </div>`:''}
     <div class="filter-bar">
       <input id="accSearch" placeholder="🔍 Search name / email / firm…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
     </div>
@@ -2121,8 +2127,12 @@ function renderAccounts(accounts) {
   if (!accounts.length) {
     document.getElementById('accTableWrap').innerHTML='<div class="empty"><p>No accounts found</p></div>'; return;
   }
-  const rows = accounts.map(a=>`
+  const isSA = _role==='super_admin';
+  const rows = accounts.map(a=>{
+    const deleted = (a.status||'')==='deleted';
+    return `
     <tr style="cursor:pointer" onclick="openAccountDrawer(${a.account_id})">
+      ${isSA?`<td onclick="event.stopPropagation()" style="text-align:center">${deleted?'':`<input type="checkbox" ${_accSel.has(a.account_id)?'checked':''} onchange="toggleAccSel(${a.account_id},this.checked)">`}</td>`:''}
       <td><strong>#${a.account_id}</strong></td>
       <td>${esc(a.owner_name)}</td>
       <td>${esc(a.firm_name||'—')}</td>
@@ -2132,20 +2142,75 @@ function renderAccounts(accounts) {
       <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(a.created_at)}</td>
       <td onclick="event.stopPropagation()">
-        ${_role==='super_admin'?`
+        ${isSA?`
         <button class="btn-icon" onclick="openEditAccountModal(${a.account_id})" title="Edit">✏️</button>
         <button class="btn-icon" onclick="doImpersonate(${a.account_id})" title="Login as Advisor">🔑</button>
-        <button class="btn-icon" onclick="showSarathiLink(${a.account_id})" title="Sarathi CRM Link">🔗</button>`:''}
+        <button class="btn-icon" onclick="showSarathiLink(${a.account_id})" title="Sarathi CRM Link">🔗</button>
+        ${deleted?'':`<button class="btn-icon" onclick="confirmDeleteAccounts([${a.account_id}])" title="Delete account" style="color:#fca5a5">🗑️</button>`}`:''}
       </td>
-    </tr>`).join('');
+    </tr>`;}).join('');
   document.getElementById('accTableWrap').innerHTML = `
     <div style="font-size:.75rem;color:rgba(255,255,255,.35);margin-bottom:.4rem">💡 Click any row to view account details, claims and reviews</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Status</th><th>Joined</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  updateAccBulkBar();
+}
+
+// ── Account delete (single + bulk) with a 2-step type-to-confirm guard ─────────
+let _accSel = new Set();
+function toggleAccSel(id, on){ if(on)_accSel.add(id); else _accSel.delete(id); updateAccBulkBar(); }
+function updateAccBulkBar(){
+  const bar=document.getElementById('accBulkBar'); if(!bar)return;
+  if(_accSel.size){ bar.style.display='flex'; const c=document.getElementById('accSelCount'); if(c)c.textContent=_accSel.size; }
+  else bar.style.display='none';
+}
+function deleteSelectedAccounts(){ if(_accSel.size) confirmDeleteAccounts([..._accSel]); }
+function confirmDeleteAccounts(ids){
+  const accts=(window._allAccounts||[]).filter(a=>ids.includes(a.account_id) && (a.status||'')!=='deleted');
+  if(!accts.length)return;
+  const single=accts.length===1;
+  const confirmWord=single?((accts[0].owner_name||'').trim()||'DELETE'):'DELETE';
+  const listHtml=accts.map(a=>`<li style="margin:.2rem 0">#${a.account_id} — <b>${esc(a.owner_name)}</b> &lt;${esc(a.email)}&gt;</li>`).join('');
+  const ov=document.createElement('div');
+  ov.id='delModalOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML=`
+    <div style="background:#0f1e3a;border:1px solid rgba(239,68,68,.45);border-radius:14px;max-width:480px;width:100%;padding:1.5rem">
+      <div style="font-size:1.15rem;font-weight:800;color:#fca5a5;margin-bottom:.5rem">⚠️ Delete ${accts.length} account${accts.length>1?'s':''}?</div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:.7rem">This permanently removes their <b>claims, documents and personal data</b> (an anonymised billing record is kept as required by law). <b style="color:#fca5a5">This cannot be undone.</b></div>
+      <ul style="font-size:.82rem;color:rgba(255,255,255,.85);max-height:150px;overflow:auto;background:rgba(255,255,255,.04);border-radius:8px;padding:.6rem .6rem .6rem 1.6rem;margin:0 0 1rem">${listHtml}</ul>
+      <div id="delStep1" style="display:flex;gap:.6rem;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeDelModal()">Cancel</button>
+        <button class="btn" style="background:#b91c1c;color:#fff" onclick="delStep2()">Continue →</button>
+      </div>
+      <div id="delStep2" style="display:none">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.7);margin:.2rem 0 .4rem">Type <b style="color:#fca5a5">${esc(confirmWord)}</b> to confirm:</div>
+        <input id="delConfirmInput" autocomplete="off" placeholder="${esc(confirmWord)}" style="width:100%;margin-bottom:.85rem" oninput="document.getElementById('delFinalBtn').disabled=(this.value.trim()!==${JSON.stringify(confirmWord)})">
+        <div style="display:flex;gap:.6rem;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="closeDelModal()">Cancel</button>
+          <button id="delFinalBtn" class="btn" style="background:#dc2626;color:#fff" disabled onclick='doDeleteAccounts(${JSON.stringify(accts.map(a=>a.account_id))})'>Delete permanently</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+function delStep2(){ document.getElementById('delStep1').style.display='none'; document.getElementById('delStep2').style.display=''; setTimeout(()=>document.getElementById('delConfirmInput').focus(),50); }
+function closeDelModal(){ const o=document.getElementById('delModalOv'); if(o)o.remove(); }
+async function doDeleteAccounts(ids){
+  const btn=document.getElementById('delFinalBtn'); if(btn){btn.disabled=true;btn.textContent='Deleting…';}
+  try {
+    if(ids.length===1){
+      const r=await API('/accounts/'+ids[0],{method:'DELETE'});
+      if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||'Delete failed');}
+    } else {
+      const r=await API('/accounts/bulk-delete',{method:'POST',body:JSON.stringify({account_ids:ids})});
+      if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||'Bulk delete failed');}
+    }
+  } finally { closeDelModal(); _accSel.clear(); loadAccounts(); }
 }
 
 function openCreateAccountModal() {
@@ -2962,10 +3027,21 @@ async function loadHealth() {
 
   const latencyColor = d.db_latency_ms < 50 ? '#4ade80' : d.db_latency_ms < 200 ? '#fbbf24' : '#f87171';
 
+  const checks = (d.checks||[]).map(c=>
+    `<div class="stat-card ${c.ok?'ok':'danger'}" title="${esc(c.note||'')}">
+      <div class="sv" style="font-size:1.1rem;color:${c.ok?'#4ade80':'#f87171'}">${c.ok?'✓':'✕'}</div>
+      <div class="sl">${esc(c.name)}<div style="font-size:.66rem;color:rgba(255,255,255,.35)">${esc(c.note||'')}</div></div>
+    </div>`).join('');
+
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">App Health</div><div class="section-sub">Snapshot at ${d.timestamp}</div></div>
+      <div><div class="section-title">Control Center</div><div class="section-sub">Live diagnostics, errors &amp; activity · ${d.timestamp}</div></div>
       <button class="btn btn-ghost" onclick="loadHealth()">🔄 Refresh</button>
+    </div>
+
+    <div style="margin-bottom:1.25rem">
+      <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:#fca5a5">⚠️ ${d.errors_recent} recent error log(s)</span>`:'<span style="font-size:.78rem;color:#4ade80">No recent errors</span>'}</div>
+      <div class="stats-row">${checks||'<div class="stat-card"><div class="sl">No checks</div></div>'}</div>
     </div>
 
     <div class="stats-row">
@@ -2992,10 +3068,70 @@ async function loadHealth() {
       <div>${claimStatus}</div>
     </div>
 
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">⚠️ Recent Errors</div><button class="btn btn-ghost" style="font-size:.75rem;padding:.25rem .6rem" onclick="loadCCErrors()">Refresh</button></div>
+      <div id="ccErrors"><div class="empty"><p>Loading…</p></div></div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">📜 Activity Log</div></div>
+      <div class="filter-bar" style="margin-bottom:.6rem">
+        <input id="ccActSearch" placeholder="🔍 actor / action / target…" oninput="loadCCActivity()" style="flex:1;min-width:180px">
+        <select id="ccActType" onchange="loadCCActivity()">
+          <option value="">All targets</option>
+          <option value="account">Account</option>
+          <option value="staff">Staff</option>
+          <option value="branch">Branch</option>
+          <option value="claim">Claim</option>
+        </select>
+      </div>
+      <div id="ccActivity"><div class="empty"><p>Loading…</p></div></div>
+    </div>
+
     <div>
       <div class="section-hdr" style="margin-bottom:.65rem"><div class="section-title" style="font-size:1rem">Database Table Sizes</div></div>
       <div class="drawer-section">${tblRows}</div>
     </div>`;
+  loadCCErrors();
+  loadCCActivity();
+}
+
+async function loadCCErrors(){
+  const box=document.getElementById('ccErrors'); if(!box)return;
+  const r=await API('/errors?limit=60');
+  if(!r.ok){box.innerHTML='<div class="empty"><p>Failed to load</p></div>';return;}
+  const d=await r.json();
+  if(!d.errors||!d.errors.length){box.innerHTML='<div class="empty"><div class="ei">✅</div><p>No recent errors</p></div>';return;}
+  const lvlColor={ERROR:'#f87171',CRITICAL:'#f87171',WARNING:'#fbbf24'};
+  box.innerHTML=`<div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Level</th><th>Where</th><th>Message</th></tr></thead>
+    <tbody>${d.errors.map(e=>`<tr>
+      <td style="font-size:.7rem;color:rgba(255,255,255,.4);white-space:nowrap">${e.ts?new Date(e.ts*1000).toLocaleString():'—'}</td>
+      <td><span style="font-size:.7rem;font-weight:700;color:${lvlColor[e.level]||'#94a3b8'}">${e.level}</span></td>
+      <td style="font-size:.7rem;color:rgba(255,255,255,.45);white-space:nowrap">${esc(e.where||'')}</td>
+      <td style="font-size:.76rem">${esc(e.msg||'')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function loadCCActivity(){
+  const box=document.getElementById('ccActivity'); if(!box)return;
+  const q=(document.getElementById('ccActSearch')||{}).value||'';
+  const tt=(document.getElementById('ccActType')||{}).value||'';
+  const params=new URLSearchParams({limit:'120'});
+  if(q)params.set('search',q); if(tt)params.set('target_type',tt);
+  const r=await API('/activity?'+params);
+  if(!r.ok){box.innerHTML='<div class="empty"><p>Failed to load</p></div>';return;}
+  const d=await r.json();
+  if(!d.activity||!d.activity.length){box.innerHTML='<div class="empty"><div class="ei">📜</div><p>No activity yet</p></div>';return;}
+  box.innerHTML=`<div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+    <tbody>${d.activity.map(a=>`<tr>
+      <td style="font-size:.7rem;color:rgba(255,255,255,.4);white-space:nowrap">${a.created_at||''}</td>
+      <td style="font-size:.76rem">${esc(a.actor_name||'—')}<br><span style="font-size:.66rem;color:rgba(255,255,255,.3)">${esc(a.actor_role||'')}</span></td>
+      <td><span style="font-size:.72rem;font-weight:700;color:${(a.action||'').includes('delete')?'#fca5a5':'#22d3ee'}">${esc(a.action||'')}</span></td>
+      <td style="font-size:.72rem">${esc(a.target_type||'')} ${a.target_id?('#'+esc(a.target_id)):''}</td>
+      <td style="font-size:.74rem;color:rgba(255,255,255,.7)">${esc(a.detail||'')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
