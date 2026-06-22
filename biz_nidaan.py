@@ -219,6 +219,45 @@ async def set_account_branch(account_id: int, code: str) -> bool:
         return cur.rowcount > 0
 
 
+# ── Control-center activity trail ─────────────────────────────────────────────
+async def log_activity(action: str, actor_type: str = "staff", actor_id=None,
+                       actor_name: str = "", actor_role: str = "",
+                       target_type: str = "", target_id="", detail: str = "",
+                       ip: str = "") -> None:
+    """Record a sensitive ops action. Never raises (best-effort)."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO nidaan_audit_log "
+                "(actor_type,actor_id,actor_name,actor_role,action,target_type,target_id,detail,ip) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (actor_type, actor_id, actor_name, actor_role, action,
+                 target_type, str(target_id) if target_id != "" else "", detail, ip))
+            await conn.commit()
+    except Exception as e:
+        logger.warning("activity log failed (%s): %s", action, e)
+
+
+async def get_activity_log(limit: int = 100, offset: int = 0, action: str = None,
+                           target_type: str = None, search: str = None) -> list[dict]:
+    """Filterable activity feed for the Control Center."""
+    conds, params = [], []
+    if action:
+        conds.append("action = ?"); params.append(action)
+    if target_type:
+        conds.append("target_type = ?"); params.append(target_type)
+    if search:
+        conds.append("(actor_name LIKE ? OR detail LIKE ? OR action LIKE ? OR target_id LIKE ?)")
+        like = f"%{search}%"; params.extend([like, like, like, like])
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            f"SELECT * FROM nidaan_audit_log {where} ORDER BY created_at DESC, log_id DESC "
+            "LIMIT ? OFFSET ?", params + [limit, offset])
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def create_branch(code: str, city: str, name: str = "", contact_email: str = "") -> dict:
     """Create a branch code. Returns {ok} or {error}."""
     code = (code or "").strip().upper()

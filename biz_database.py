@@ -1266,6 +1266,27 @@ async def init_db():
             except Exception:
                 pass
 
+        # ── nidaan_audit_log: control-center activity trail. Every sensitive ops
+        # action (create/delete/disable/assign/status/login) records who did what
+        # to whom — surfaced in the superadmin Control Center.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_audit_log (
+                log_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_type  TEXT,            -- staff | account | system
+                actor_id    INTEGER,
+                actor_name  TEXT,
+                actor_role  TEXT,
+                action      TEXT NOT NULL,   -- e.g. account.delete, staff.disable, claim.assign
+                target_type TEXT,            -- account | staff | branch | claim
+                target_id   TEXT,
+                detail      TEXT,
+                ip          TEXT,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nidaan_audit_created ON nidaan_audit_log(created_at DESC)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nidaan_audit_action ON nidaan_audit_log(action)")
+
         # ═════════════════════════════════════════════════════════════════════
         # NIDAAN ERP — Phase 3: Workflow Engine (Jun 2026)
         # 6 new tables + 1 column.  Idempotent — runs on every boot, safe.

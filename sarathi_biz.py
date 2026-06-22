@@ -75,6 +75,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sarathi.biz")
 
+# ── Control-center error ring buffer: keep the most recent WARNING+ log records
+# in memory so the superadmin can see what's failing without shell access. ──────
+import collections as _collections
+_ERROR_RING = _collections.deque(maxlen=300)
+
+
+class _RingHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            if record.levelno < logging.WARNING:
+                return
+            _ERROR_RING.append({
+                "ts": getattr(record, "created", None),
+                "level": record.levelname,
+                "logger": record.name,
+                "msg": record.getMessage()[:600],
+                "where": f"{record.module}:{record.lineno}",
+            })
+        except Exception:
+            pass
+
+
+try:
+    _rh = _RingHandler()
+    _rh.setLevel(logging.WARNING)
+    logging.getLogger().addHandler(_rh)   # root → catches all module loggers
+except Exception:
+    pass
+
 # =============================================================================
 #  LOAD ENVIRONMENT
 # =============================================================================
@@ -2879,6 +2908,21 @@ def _require_staff(request: Request, min_role: str = "team_member") -> dict:
     return staff
 
 
+async def _ops_audit(request: Request, action: str, target_type: str = "",
+                     target_id="", detail: str = ""):
+    """Best-effort: record a superadmin ops action to the activity trail."""
+    try:
+        staff = _get_staff_from_request(request) or {}
+        ip = request.client.host if request.client else ""
+        await nidaan.log_activity(
+            action=action, actor_type="staff", actor_id=staff.get("staff_id"),
+            actor_name=staff.get("name") or staff.get("email", ""),
+            actor_role=staff.get("role", ""), target_type=target_type,
+            target_id=target_id, detail=detail, ip=ip)
+    except Exception:
+        pass
+
+
 @app.get("/nidaan/ops", response_class=HTMLResponse)
 async def nidaan_ops_page(request: Request):
     if not _is_nidaan_host(request):
@@ -2983,6 +3027,7 @@ async def ops_create_staff(body: CreateStaffReq, request: Request):
         raise HTTPException(status_code=400, detail=str(e))
     if not staff_id:
         raise HTTPException(status_code=409, detail="Email already exists")
+    await _ops_audit(request, "staff.create", "staff", staff_id, f"Created {body.name} ({body.role})")
     return {"staff_id": staff_id, "name": body.name, "role": body.role}
 
 
@@ -3000,6 +3045,10 @@ async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=400, detail="Nothing to update")
+    _bits = [f"{k}={v}" for k, v in (("name", body.name), ("role", body.role), ("status", body.status)) if v is not None]
+    if body.password:
+        _bits.append("password reset")
+    await _ops_audit(request, "staff.update", "staff", staff_id, "; ".join(_bits) or "updated")
     return {"staff_id": staff_id, "updated": True}
 
 
@@ -3030,6 +3079,8 @@ async def ops_create_branch(body: OpsBranchCreate, request: Request):
     res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
+    await _ops_audit(request, "branch.create", "branch", body.branch_code.strip().upper(),
+                     f"{body.city} {('('+body.contact_email+')') if body.contact_email else ''}".strip())
     return res
 
 
@@ -3046,6 +3097,9 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
     _require_staff(request, "sub_super_admin")
     if not await nidaan.update_branch(branch_code, status=body.status, contact_email=body.contact_email):
         raise HTTPException(status_code=404, detail="Branch not found or nothing to update")
+    _bb = [x for x in ((f"status={body.status}" if body.status else ""),
+                       ("email updated" if body.contact_email is not None else "")) if x]
+    await _ops_audit(request, "branch.update", "branch", branch_code.strip().upper(), "; ".join(_bb) or "updated")
     return {"ok": True}
 
 
@@ -3163,6 +3217,7 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
         _ae3.ensure_future(_notify_assigned())
     except Exception:
         pass
+    await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to staff #{body.staff_id}")
     return {"claim_id": claim_id, "assigned_to": body.staff_id}
 
 
@@ -3195,6 +3250,8 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=404, detail="Claim not found")
+    await _ops_audit(request, "claim.status", "claim", claim_id,
+                     f"→ {body.new_status}" + (f" ({body.note[:80]})" if body.note else ""))
     # Non-blocking advisor email
     try:
         claim = await nidaan.get_claim_with_account(claim_id)
@@ -3460,7 +3517,59 @@ async def ops_update_account(account_id: int, body: OpsUpdateAccount, request: R
         if len(body.new_password) < 8:
             raise HTTPException(status_code=400, detail="Password min 8 characters")
         await nidaan.admin_set_account_password(account_id, body.new_password)
+    _ab = [f"{k}={v}" for k, v in (("status", body.status), ("name", body.owner_name)) if v is not None]
+    if body.new_password:
+        _ab.append("password reset")
+    await _ops_audit(request, "account.update", "account", account_id, "; ".join(_ab) or "updated")
     return {"account_id": account_id, "updated": True}
+
+
+@app.delete("/nidaan/ops/api/accounts/{account_id}")
+async def ops_delete_account(account_id: int, request: Request):
+    """Superadmin hard-delete of a customer account (DPDP-safe purge: removes
+    claims/docs/PII, keeps an anonymised billing shell). Audit-logged."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    acct = await nidaan.get_account_by_id(account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if acct.get("status") == "deleted":
+        return {"account_id": account_id, "already_deleted": True}
+    label = f"{acct.get('owner_name','')} <{acct.get('email','')}>"
+    res = await nidaan.execute_account_erasure(account_id)
+    await _ops_audit(request, "account.delete", "account", account_id,
+                     f"Deleted {label} — {res.get('claims_deleted',0)} claims, {res.get('files_deleted',0)} files")
+    return {"account_id": account_id, "deleted": True, **res}
+
+
+class OpsBulkDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_ids: list[int]
+
+
+@app.post("/nidaan/ops/api/accounts/bulk-delete")
+async def ops_bulk_delete_accounts(body: OpsBulkDelete, request: Request):
+    """Superadmin bulk hard-delete of accounts. Audit-logged per account."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    ids = list(dict.fromkeys(body.account_ids))[:200]  # de-dup, cap
+    deleted, skipped = [], []
+    for aid in ids:
+        acct = await nidaan.get_account_by_id(aid)
+        if not acct or acct.get("status") == "deleted":
+            skipped.append(aid); continue
+        label = f"{acct.get('owner_name','')} <{acct.get('email','')}>"
+        try:
+            res = await nidaan.execute_account_erasure(aid)
+            await _ops_audit(request, "account.delete", "account", aid,
+                             f"[bulk] Deleted {label} — {res.get('claims_deleted',0)} claims")
+            deleted.append(aid)
+        except Exception as e:
+            logger.warning("bulk delete failed for account %s: %s", aid, e)
+            skipped.append(aid)
+    return {"deleted": deleted, "skipped": skipped, "count": len(deleted)}
 
 
 @app.post("/nidaan/ops/api/accounts/{account_id}/impersonate")
@@ -3667,7 +3776,55 @@ async def ops_health(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "super_admin")
-    return await nidaan.get_app_health()
+    health = await nidaan.get_app_health()
+    # Live service checks for the control center.
+    checks = []
+    def _chk(name, ok, note=""):
+        checks.append({"name": name, "ok": bool(ok), "note": note})
+    _chk("Database", health is not None, "SQLite reachable")
+    _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
+    _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
+    try:
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            wac = (await (await _c.execute(
+                "SELECT COUNT(*) FROM wa_instances WHERE status='connected'")).fetchone())[0]
+        _chk("WhatsApp", wac > 0, f"{wac} instance(s) connected")
+    except Exception:
+        _chk("WhatsApp", False, "no connected instance")
+    try:
+        import shutil as _sh
+        du = _sh.disk_usage(".")
+        pct = round(du.used / du.total * 100, 1)
+        _chk("Disk", pct < 90, f"{pct}% used")
+    except Exception:
+        pass
+    health["checks"] = checks
+    health["errors_recent"] = len(_ERROR_RING)
+    return health
+
+
+@app.get("/nidaan/ops/api/activity")
+async def ops_activity(request: Request, limit: int = 100, offset: int = 0,
+                       action: Optional[str] = None, target_type: Optional[str] = None,
+                       search: Optional[str] = None):
+    """Control-center activity trail (who did what)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_activity_log(limit=min(limit, 500), offset=offset,
+                                         action=action, target_type=target_type, search=search)
+    return {"activity": rows, "count": len(rows)}
+
+
+@app.get("/nidaan/ops/api/errors")
+async def ops_errors(request: Request, limit: int = 100):
+    """Recent WARNING+ application log records (in-memory ring buffer)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    items = list(_ERROR_RING)[-min(limit, 300):]
+    items.reverse()
+    return {"errors": items, "count": len(items)}
 
 
 # ── Stats (super_admin + sub_super_admin) ─────────────────────────────────────
