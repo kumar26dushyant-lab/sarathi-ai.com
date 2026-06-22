@@ -289,11 +289,11 @@ a{text-decoration:none;color:inherit}
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="view-tabs" id="viewTabs">
   <div class="view-tab" onclick="showView('telegram')" data-i18n="tab_telegram" style="display:none!important"><span class="tab-icon">🤖</span> Telegram Bot</div>
-  <div class="view-tab active" onclick="showView('laptop')" data-i18n="tab_laptop"><span class="tab-icon">💻</span> Web on Laptop</div>
+  <div class="view-tab" onclick="showView('laptop')" data-i18n="tab_laptop"><span class="tab-icon">💻</span> Web on Laptop</div>
   <div class="view-tab" onclick="showView('mobile')" data-i18n="tab_mobile"><span class="tab-icon">📱</span> Web on Mobile</div>
   <div class="view-tab" onclick="showView('pwa')" data-i18n="tab_pwa"><span class="tab-icon">📲</span> Install as App</div>
   <!-- WhatsApp tab hidden — using Voice AI + personal messaging instead -->
-  <div class="view-tab" onclick="showView('whatsapp')" data-i18n="tab_whatsapp" style="display:none!important"><span class="tab-icon">💬</span> WhatsApp Bot</div>
+  <div class="view-tab active" onclick="showView('whatsapp')" data-i18n="tab_whatsapp"><span class="tab-icon">💬</span> WhatsApp</div>
   <div class="view-tab" onclick="showView('calculators')" data-i18n="tab_calc"><span class="tab-icon">📊</span> Calculators</div>
 </div>
 
@@ -479,7 +479,7 @@ a{text-decoration:none;color:inherit}
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- PANEL 1: WEB ON LAPTOP                                -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="view-panel active" id="view-laptop">
+<div class="view-panel" id="view-laptop">
   <div class="container">
     <!-- PLACEHOLDER — filled in Part 2 -->
     <div class="panel-header">
@@ -902,7 +902,7 @@ a{text-decoration:none;color:inherit}
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- PANEL 5: WHATSAPP BOT (hidden — Voice AI replaces)    -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="view-panel" id="view-whatsapp" style="display:none!important">
+<div class="view-panel active" id="view-whatsapp">
   <div class="container">
     <div class="panel-header">
       <div class="badge" style="background:#dcfce7;color:#15803d" data-i18n="wa_badge">💬 WhatsApp Automation</div>
@@ -1520,8 +1520,8 @@ const _T={
   tab_laptop:{en:'💻 Web on Laptop',hi:'💻 लैपटॉप पर वेब'},
   tab_mobile:{en:'📱 Web on Mobile',hi:'📱 मोबाइल पर वेब'},
   tab_pwa:{en:'📲 Install as App',hi:'📲 ऐप इंस्टॉल करें'},
-  tab_telegram:{en:'🤖 Telegram Bot',hi:'🤖 Telegram बोट'},
-  tab_whatsapp:{en:'💬 WhatsApp Bot',hi:'💬 WhatsApp बोट'},
+  tab_telegram:{en:'🤖 Assistant',hi:'🤖 सहायक'},
+  tab_whatsapp:{en:'💬 WhatsApp',hi:'💬 WhatsApp'},
   tab_calc:{en:'📊 Calculators',hi:'📊 कैलकुलेटर'},
   laptop_badge:{en:'💻 Desktop Experience',hi:'💻 डेस्कटॉप अनुभव'},
   laptop_title:{en:'Full-Screen Dashboard & CRM',hi:'फुल-स्क्रीन डैशबोर्ड और CRM'},
@@ -1532,8 +1532,8 @@ const _T={
   pwa_badge:{en:'📲 Install as App',hi:'📲 ऐप इंस्टॉल करें'},
   pwa_title:{en:'One Tap — App on Your Phone',hi:'एक टैप — फ़ोन पर ऐप'},
   pwa_desc:{en:'No app store needed. Add Sarathi-AI to your home screen and use it like a native app — instant access, full features.',hi:'ऐप स्टोर की ज़रूरत नहीं। Sarathi-AI को होम स्क्रीन पर जोड़ें और नेटिव ऐप की तरह इस्तेमाल करें।'},
-  tg_badge:{en:'🤖 Telegram Bot Experience',hi:'🤖 Telegram बोट अनुभव'},
-  tg_title:{en:'Your AI Sales Assistant on Telegram',hi:'Telegram पर आपका AI सेल्स असिस्टेंट'},
+  tg_badge:{en:'🤖 Voice Assistant',hi:'🤖 वॉइस सहायक'},
+  tg_title:{en:'Your AI Sales Assistant on Telegram',hi:'WhatsApp पर आपका AI सेल्स असिस्टेंट'},
   tg_desc:{en:'Add leads with voice, get AI pitches, track pipeline, smart follow-ups with reminders & accountability — all through simple chat commands.',hi:'वॉयस से लीड जोड़ें, AI पिच पाएं, पाइपलाइन ट्रैक करें, स्मार्ट फॉलो-अप रिमाइंडर और एकाउंटेबिलिटी — सिंपल चैट कमांड से।'},
   wa_badge:{en:'💬 WhatsApp Automation',hi:'💬 WhatsApp ऑटोमेशन'},
   wa_title:{en:'Impress Clients on WhatsApp',hi:'WhatsApp पर ग्राहकों को प्रभावित करें'},

@@ -1428,7 +1428,7 @@ section{padding:80px 0}
     <!-- Tab Pills -->
     <div class="hero-tabs" id="heroTabs">
       <div class="hero-tab active" data-hero-tab="0" onclick="switchHeroTab(0)"><span class="tab-icon">💬</span><span data-i18n="htab_wa">WhatsApp AI in Action</span><div class="hero-tab-progress"></div></div>
-      <div class="hero-tab" data-hero-tab="1" onclick="switchHeroTab(1)"><span class="tab-icon">🤖</span><span data-i18n="htab_bot">Your AI Assistant Bot</span><div class="hero-tab-progress"></div></div>
+      <div class="hero-tab" data-hero-tab="1" onclick="switchHeroTab(1)" style="display:none"><span class="tab-icon">🤖</span><span data-i18n="htab_bot">Your AI Assistant Bot</span><div class="hero-tab-progress"></div></div>
       <div class="hero-tab" data-hero-tab="2" onclick="switchHeroTab(2)"><span class="tab-icon">💻</span><span data-i18n="htab_web">Voice AI Web Dashboard</span><div class="hero-tab-progress"></div></div>
       <div class="hero-tab" data-hero-tab="3" onclick="switchHeroTab(3)"><span class="tab-icon">📱</span><span data-i18n="htab_mob">Voice AI Mobile App</span><div class="hero-tab-progress"></div></div>
     </div>
@@ -2926,7 +2926,7 @@ section{padding:80px 0}
       <div style="text-align:center;padding:12px 0">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="#0088cc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
         <h3 style="margin:12px 0 8px" data-i18n="login_tg_title">Login via Telegram</h3>
-        <p style="color:var(--g600);font-size:.9em;line-height:1.5" data-i18n="login_tg_steps">Open your Telegram bot and type:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>You'll get a one-click link that opens your dashboard directly — no OTP needed!</p>
+        <p style="color:var(--g600);font-size:.9em;line-height:1.5" data-i18n="login_tg_steps">Open the app and type:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>You'll get a one-click link that opens your dashboard directly — no OTP needed!</p>
       </div>
       <p style="text-align:center;margin-top:10px">
         <a href="javascript:void(0)" onclick="document.getElementById('loginStep1').style.display='';document.getElementById('loginStepTelegram').style.display='none'" style="color:var(--g500);font-size:.85em" data-i18n="login_back_email">← Back to email login</a>
@@ -3287,9 +3287,9 @@ const _T = {
   login_verify: {en:'Verify & Login', hi:'वेरिफाई और लॉगिन'},
   login_change_num: {en:'← Change number', hi:'← नंबर बदलें'},
   login_or: {en:'OR', hi:'या'},
-  login_telegram: {en:'Login via Telegram Bot', hi:'टेलीग्राम बॉट से लॉगिन'},
-  login_tg_title: {en:'Login via Telegram', hi:'टेलीग्राम से लॉगिन'},
-  login_tg_steps: {en:'Open your Telegram bot and type:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>You\'ll get a one-click link that opens your dashboard directly — no phone number or OTP needed!', hi:'अपना टेलीग्राम बॉट खोलें और टाइप करें:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>आपको एक क्लिक लिंक मिलेगा जो सीधे डैशबोर्ड खोलेगा — फ़ोन नंबर या OTP की ज़रूरत नहीं!'},
+  login_telegram: {en:'Quick login', hi:'त्वरित लॉगिन'},
+  login_tg_title: {en:'Quick login', hi:'त्वरित लॉगिन'},
+  login_tg_steps: {en:'Open the app and type:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>You\'ll get a one-click link that opens your dashboard directly — no phone number or OTP needed!', hi:'अपना ऐप खोलें और टाइप करें:<br><code style="background:var(--g100);padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:600">/weblogin</code><br><br>आपको एक क्लिक लिंक मिलेगा जो सीधे डैशबोर्ड खोलेगा — फ़ोन नंबर या OTP की ज़रूरत नहीं!'},
   login_back_phone: {en:'← Back to phone login', hi:'← फ़ोन लॉगिन पर वापस'},
   // ── Trust bar ──
   // ── Feature cards (Voice / Partner) ──
@@ -4436,9 +4436,9 @@ function _playWAShowcase(idx){
       _waScBusy=false;
       const _nextWaIdx=(_waScIdx+1)%_waScenarios.length;
       if(_nextWaIdx===0&&_heroTabIdx===0){
-        /* All 12 WA automations shown — advance to Bot tab */
+        /* All 12 WA automations shown — advance to Web tab (bot tab hidden) */
         clearTimeout(_heroTabTimer);
-        _heroTabTimer=setTimeout(()=>switchHeroTab(1),2000);
+        _heroTabTimer=setTimeout(()=>switchHeroTab(2),2000);
       } else {
         _waScTimer=setTimeout(()=>{
           _waScIdx=_nextWaIdx;
@@ -4473,7 +4473,7 @@ function switchHeroTab(idx){
   if(idx===0){
     _waScBusy=false;clearTimeout(_waScTimer);
     _waScIdx=0;_playWAShowcase(0); /* start from scenario 0, cycle all 12 */
-    _heroTabTimer=setTimeout(()=>switchHeroTab(1),80000); /* safety fallback ~80s */
+    _heroTabTimer=setTimeout(()=>switchHeroTab(2),80000); /* skip hidden bot tab → web */
   } else if(idx===1){
     switchShowcase(11);
     /* Bot showcase handles its own cycling; auto-advance tab after 12s */
