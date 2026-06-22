@@ -2174,6 +2174,10 @@ function confirmDeleteAccounts(ids){
   if(!accts.length)return;
   const single=accts.length===1;
   const confirmWord=single?((accts[0].owner_name||'').trim()||'DELETE'):'DELETE';
+  // Stash on globals so the inline handlers don't have to embed (and break on)
+  // names containing quotes/spaces.
+  window._delConfirmWord = confirmWord;
+  window._delIds = accts.map(a=>a.account_id);
   const listHtml=accts.map(a=>`<li style="margin:.2rem 0">#${a.account_id} — <b>${esc(a.owner_name)}</b> &lt;${esc(a.email)}&gt;</li>`).join('');
   const ov=document.createElement('div');
   ov.id='delModalOv';
@@ -2189,18 +2193,21 @@ function confirmDeleteAccounts(ids){
       </div>
       <div id="delStep2" style="display:none">
         <div style="font-size:.82rem;color:rgba(255,255,255,.7);margin:.2rem 0 .4rem">Type <b style="color:#fca5a5">${esc(confirmWord)}</b> to confirm:</div>
-        <input id="delConfirmInput" autocomplete="off" placeholder="${esc(confirmWord)}" style="width:100%;margin-bottom:.85rem" oninput="document.getElementById('delFinalBtn').disabled=(this.value.trim()!==${JSON.stringify(confirmWord)})">
+        <input id="delConfirmInput" autocomplete="off" placeholder="${esc(confirmWord)}" style="width:100%;margin-bottom:.85rem" oninput="delCheckConfirm(this)">
         <div style="display:flex;gap:.6rem;justify-content:flex-end">
           <button class="btn btn-ghost" onclick="closeDelModal()">Cancel</button>
-          <button id="delFinalBtn" class="btn" style="background:#dc2626;color:#fff" disabled onclick='doDeleteAccounts(${JSON.stringify(accts.map(a=>a.account_id))})'>Delete permanently</button>
+          <button id="delFinalBtn" class="btn" style="background:#dc2626;color:#fff" disabled onclick="doDeleteAccounts()">Delete permanently</button>
         </div>
       </div>
     </div>`;
   document.body.appendChild(ov);
 }
 function delStep2(){ document.getElementById('delStep1').style.display='none'; document.getElementById('delStep2').style.display=''; setTimeout(()=>document.getElementById('delConfirmInput').focus(),50); }
+function delCheckConfirm(input){ const b=document.getElementById('delFinalBtn'); if(b) b.disabled = (input.value.trim() !== window._delConfirmWord); }
 function closeDelModal(){ const o=document.getElementById('delModalOv'); if(o)o.remove(); }
-async function doDeleteAccounts(ids){
+async function doDeleteAccounts(){
+  const ids = window._delIds || [];
+  if(!ids.length) return;
   const btn=document.getElementById('delFinalBtn'); if(btn){btn.disabled=true;btn.textContent='Deleting…';}
   try {
     if(ids.length===1){
