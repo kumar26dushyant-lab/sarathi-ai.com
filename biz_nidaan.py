@@ -1716,9 +1716,20 @@ async def get_quick_task(quick_task_id: int) -> Optional[dict]:
 async def list_quick_tasks(*, status: Optional[str] = None,
                             assigned_to_staff_id: Optional[int] = None,
                             claim_id: Optional[int] = None,
+                            task_type: Optional[str] = None,
+                            search: Optional[str] = None,
                             include_done: bool = False,
+                            include_deleted: bool = False,
                             limit: int = 100) -> list[dict]:
-    where, params = ["q.deleted_at IS NULL"], []
+    """Flexible task query.
+    - include_done=False (default): hides done/cancelled (the "open work" view).
+    - include_done=True: every status (the registry view).
+    - status=<one>: pins to exactly that status (overrides include_done).
+    - include_deleted=True: also returns soft-deleted rows (admin audit only).
+    """
+    where, params = [], []
+    if not include_deleted:
+        where.append("q.deleted_at IS NULL")
     if status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:
@@ -1727,6 +1738,12 @@ async def list_quick_tasks(*, status: Optional[str] = None,
         where.append("q.assigned_to_staff_id = ?"); params.append(assigned_to_staff_id)
     if claim_id is not None:
         where.append("q.claim_id = ?"); params.append(claim_id)
+    if task_type in ("assignment", "request"):
+        where.append("q.task_type = ?"); params.append(task_type)
+    if search:
+        like = f"%{search.strip()}%"
+        where.append("(q.title LIKE ? OR q.description LIKE ?)")
+        params += [like, like]
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -1741,10 +1758,30 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "LEFT JOIN nidaan_claims c ON c.claim_id = q.claim_id "
             + clause +
             " ORDER BY "
+            # active work first, finished/cancelled sink to the bottom
+            "   CASE q.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 0 ELSE 1 END, "
             "   CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
             "                   WHEN 'normal' THEN 2 ELSE 3 END, "
             "   q.created_at DESC LIMIT ?", params + [limit])
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
+                                    ) -> dict:
+    """Counts per status for the registry tabs (excludes soft-deleted)."""
+    where, params = ["deleted_at IS NULL"], []
+    if assigned_to_staff_id is not None:
+        where.append("assigned_to_staff_id = ?"); params.append(assigned_to_staff_id)
+    clause = " WHERE " + " AND ".join(where)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT status, COUNT(*) AS n FROM nidaan_quick_tasks"
+            + clause + " GROUP BY status", params)
+        rows = {r["status"]: r["n"] for r in await cur.fetchall()}
+    rows["all"] = sum(rows.values())
+    rows["active"] = rows.get("open", 0) + rows.get("in_progress", 0)
+    return rows
 
 
 async def _log_quick_task(conn, quick_task_id: int, action: str,

@@ -3935,15 +3935,22 @@ async def ops_quick_tasks_list(request: Request,
                                 status: Optional[str] = None,
                                 assignee: Optional[str] = None,
                                 claim_id: Optional[int] = None,
+                                task_type: Optional[str] = None,
+                                q: Optional[str] = None,
                                 include_done: bool = False,
-                                limit: int = 100):
-    """List quick tasks. Scope:
+                                include_deleted: bool = False,
+                                with_counts: bool = False,
+                                limit: int = 200):
+    """List quick tasks (also powers the full registry). Scope:
        - team_member: only their own assigned (regardless of `assignee` param)
-       - admin/SA: everyone's; `assignee=me` filters to self
+       - admin/SA: everyone's; `assignee=me` filters to self, `assignee=<id>` to one.
+       include_done=true returns done/cancelled too; include_deleted=true (admin
+       only) surfaces soft-deleted rows for audit.
     """
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     role = staff.get("role", "")
+    is_admin = role in ("super_admin", "sub_super_admin")
     assignee_id: Optional[int] = None
     if role == "team_member":
         assignee_id = staff["staff_id"]
@@ -3951,10 +3958,17 @@ async def ops_quick_tasks_list(request: Request,
         assignee_id = staff["staff_id"]
     elif assignee and assignee.isdigit():
         assignee_id = int(assignee)
+    # Only admins may view soft-deleted rows.
+    incl_deleted = bool(include_deleted) and is_admin
     items = await nidaan.list_quick_tasks(
         status=status, assigned_to_staff_id=assignee_id,
-        claim_id=claim_id, include_done=include_done, limit=limit)
-    return {"quick_tasks": items, "count": len(items)}
+        claim_id=claim_id, task_type=task_type, search=q,
+        include_done=include_done, include_deleted=incl_deleted, limit=limit)
+    out = {"quick_tasks": items, "count": len(items)}
+    if with_counts:
+        out["counts"] = await nidaan.quick_task_status_counts(
+            assigned_to_staff_id=assignee_id)
+    return out
 
 
 @app.get("/nidaan/ops/api/quick-tasks/{qid}")

@@ -704,16 +704,16 @@ async function loadTasks() {
         <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
-    <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
+    <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div id="overviewMyQuickTasks"></div>
-      ${isAdmin ? '<div id="overviewTeamQuickTasks"></div>' : ''}
     </div>
-    <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
+    <div id="tasksRegistry" style="margin-top:1.25rem"></div>
+    <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
     </div>
-    <div id="tasksLeave" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>`;
+    <div id="tasksLeave" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem"></div>`;
   loadMyQuickTasksWidget();
-  if (isAdmin) loadTeamQuickTasksWidget();
+  loadTaskRegistry();
   loadLeaveSection();
 
   const r = await fetch('/nidaan/ops/api/overview-widgets', { headers: hdrs() });
@@ -1357,24 +1357,126 @@ async function loadMyQuickTasksWidget(){
     </div>`;
 }
 
-// ── Widget: Team Quick Tasks (SA/admin) ──────────────────────────────────────
-async function loadTeamQuickTasksWidget(){
-  const el = document.getElementById('overviewTeamQuickTasks');
-  if (!el) return;
-  el.innerHTML = '<div class="nd-card" style="padding:1rem"><div style="font-weight:700;font-size:.98rem;margin-bottom:.85rem">📌 Team Quick Tasks</div><div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div></div>';
-  const r = await fetch('/nidaan/ops/api/quick-tasks', { headers: hdrs() });
-  if (!r.ok) { el.innerHTML = '<div class="nd-card" style="padding:1rem;color:#fca5a5">Failed to load</div>'; return; }
+// Legacy alias — the team widget is superseded by the full Task Registry.
+async function loadTeamQuickTasksWidget(){ /* replaced by loadTaskRegistry */ }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  TASK REGISTRY — the complete, filterable record of EVERY task, regardless
+//  of status (open / in progress / done / cancelled), with admin delete and an
+//  audit view of soft-deleted rows. This is the durable history surface.
+// ════════════════════════════════════════════════════════════════════════════
+let _registryState = {status:'all', type:'', assignee:'', q:'', includeDeleted:false};
+let _registrySearchTimer = null;
+
+async function loadTaskRegistry(){
+  const box = document.getElementById('tasksRegistry');
+  if (!box) return;
+  const isAdmin = (_role==='super_admin' || _role==='sub_super_admin');
+
+  // preserve search focus/caret across re-render
+  const hadFocus = document.activeElement && document.activeElement.id==='regSearch';
+  const caret = hadFocus ? document.activeElement.selectionStart : null;
+
+  const p = new URLSearchParams();
+  p.set('with_counts','true'); p.set('limit','200');
+  if (_registryState.status==='active') { p.set('include_done','false'); }
+  else { p.set('include_done','true');
+         if (_registryState.status && _registryState.status!=='all') p.set('status', _registryState.status); }
+  if (_registryState.type) p.set('task_type', _registryState.type);
+  if (_registryState.assignee) p.set('assignee', _registryState.assignee);
+  if (_registryState.q) p.set('q', _registryState.q);
+  if (_registryState.includeDeleted && isAdmin) p.set('include_deleted','true');
+
+  let assignees = [];
+  if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
+
+  const r = await fetch('/nidaan/ops/api/quick-tasks?'+p.toString(), { headers: hdrs() });
+  if (!r.ok) { box.innerHTML = `<div class="nd-card" style="padding:1rem;color:#f87171">Failed to load registry (${r.status})</div>`; return; }
   const d = await r.json();
-  const items = (d.quick_tasks || []).slice(0, 12);
-  el.innerHTML = `
+  const items = d.quick_tasks || [];
+  const counts = d.counts || {};
+
+  const chip = (key,label) => {
+    const active = _registryState.status===key;
+    const n = key==='all'?counts.all : key==='active'?counts.active : counts[key];
+    return `<button onclick="setRegistryStatus('${key}')" style="background:${active?'#22d3ee':'rgba(255,255,255,.05)'};color:${active?'#0a1628':'rgba(255,255,255,.75)'};border:1px solid ${active?'#22d3ee':'rgba(255,255,255,.12)'};font-weight:${active?'700':'500'};padding:.3rem .6rem;border-radius:999px;font-size:.78rem;cursor:pointer">${label}${(n!=null)?` ${n}`:''}</button>`;
+  };
+  const selStyle = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.32rem .5rem;border-radius:6px;font-size:.8rem';
+
+  box.innerHTML = `
     <div class="nd-card" style="padding:1rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.85rem">
-        <div style="font-weight:700;font-size:.98rem">📌 Team Quick Tasks</div>
-        <div style="font-size:.78rem;color:rgba(255,255,255,.45)">${d.count||0} open</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+        <div style="font-weight:700;font-size:1rem">📋 All Tasks <span style="color:rgba(255,255,255,.4);font-weight:500;font-size:.82rem">— complete record</span></div>
+        <input id="regSearch" value="${esc(_registryState.q)}" placeholder="🔍 search title…"
+               oninput="onRegistrySearch(this.value)"
+               style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.35rem .6rem;border-radius:6px;font-size:.82rem;min-width:150px">
       </div>
-      ${items.length ? items.map(qt => _qtRow(qt, true)).join('') :
-        '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No team quick tasks open ✓</div>'}
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+        ${chip('all','All')}${chip('active','Active')}${chip('open','Open')}${chip('in_progress','In progress')}${chip('done','Done')}${chip('cancelled','Cancelled')}
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center">
+        <select onchange="setRegistryType(this.value)" style="${selStyle}">
+          <option value="" ${!_registryState.type?'selected':''}>All types</option>
+          <option value="assignment" ${_registryState.type==='assignment'?'selected':''}>Assignments</option>
+          <option value="request" ${_registryState.type==='request'?'selected':''}>Requests</option>
+        </select>
+        ${isAdmin ? `<select onchange="setRegistryAssignee(this.value)" style="${selStyle}">
+          <option value="">All assignees</option>
+          <option value="me" ${_registryState.assignee==='me'?'selected':''}>Me</option>
+          ${assignees.map(a=>`<option value="${a.staff_id}" ${_registryState.assignee===String(a.staff_id)?'selected':''}>${esc(a.name)}</option>`).join('')}
+        </select>` : ''}
+        ${isAdmin ? `<label style="font-size:.78rem;color:rgba(255,255,255,.6);display:flex;align-items:center;gap:.3rem;cursor:pointer">
+          <input type="checkbox" ${_registryState.includeDeleted?'checked':''} onchange="setRegistryDeleted(this.checked)" style="accent-color:#f87171"> show deleted</label>` : ''}
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,.07)">
+        ${items.length ? items.map(qt=>_qtRegistryRow(qt,isAdmin)).join('') :
+          '<div style="padding:1.5rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No tasks match these filters.</div>'}
+      </div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.6rem">Showing ${items.length}${items.length>=200?'+ — refine filters to narrow':''}</div>
     </div>`;
+
+  if (hadFocus) { const s=document.getElementById('regSearch'); if(s){ s.focus(); try{ const c=(caret==null?s.value.length:caret); s.setSelectionRange(c,c); }catch(e){} } }
+}
+
+function _qtRegistryRow(qt, isAdmin){
+  const prio = QT_PRIORITY_PILLS[qt.priority] || QT_PRIORITY_PILLS.normal;
+  const st = QT_STATUS_PILLS[qt.status] || QT_STATUS_PILLS.open;
+  const deleted = !!qt.deleted_at;
+  const finished = (qt.status==='done' || qt.status==='cancelled');
+  const typePill = qt.task_type==='request' ? `<span style="font-size:.68rem;background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44;padding:.03rem .3rem;border-radius:4px">🙋 Request</span>` : '';
+  let apprPill = '';
+  if (qt.requires_approval){ const m={pending:['#fbbf24','⏳'],approved:['#22c55e','✅'],rejected:['#f87171','🚫']}[qt.approval_status||'pending']; if(m) apprPill=`<span style="font-size:.68rem;background:${m[0]}22;color:${m[0]};border:1px solid ${m[0]}44;padding:.03rem .3rem;border-radius:4px">${m[1]}</span>`; }
+  return `
+    <div onclick="openQuickTaskDrawer(${qt.quick_task_id})"
+         style="padding:.6rem .25rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start;${deleted?'opacity:.45':''}">
+      <div style="width:3px;align-self:stretch;background:${prio.color};border-radius:2px;flex-shrink:0;min-height:34px"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.88rem;font-weight:600;${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</div>
+        <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
+          <span style="color:${st.color}">● ${st.label}</span>
+          ${typePill}${apprPill}
+          ${qt.assignee_name?`<span>@ ${esc(qt.assignee_name)}</span>`:'<span style="color:rgba(255,255,255,.35)">unassigned</span>'}
+          ${qt.due_date?`<span>📅 ${esc(qt.due_date)}</span>`:''}
+          ${qt.claim_id?`<span>🔗 #${fmtClaimNum(qt.claim_id)}</span>`:''}
+          <span style="color:rgba(255,255,255,.3)">${qt.created_at?ndUI.timeAgo(qt.created_at):''}</span>
+          ${deleted?'<span style="color:#f87171">· deleted</span>':''}
+        </div>
+      </div>
+      ${(isAdmin && !deleted) ? `<button onclick="event.stopPropagation();qtDeleteRow(${qt.quick_task_id})" title="Delete task"
+          style="background:transparent;border:none;color:rgba(248,113,113,.7);cursor:pointer;font-size:.95rem;flex-shrink:0;padding:.1rem .3rem">🗑</button>` : ''}
+    </div>`;
+}
+
+function setRegistryStatus(s){ _registryState.status=s; loadTaskRegistry(); }
+function setRegistryType(t){ _registryState.type=t; loadTaskRegistry(); }
+function setRegistryAssignee(a){ _registryState.assignee=a; loadTaskRegistry(); }
+function setRegistryDeleted(v){ _registryState.includeDeleted=v; loadTaskRegistry(); }
+function onRegistrySearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 350); }
+async function qtDeleteRow(qid){
+  if(!confirm('Delete this task? It is removed from active lists; its history is preserved.')) return;
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {method:'DELETE', headers:hdrs()});
+  if(r.ok){ ndUI.toast('Task deleted','success'); loadTaskRegistry(); _refreshQuickTaskWidgets(); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Delete failed'),'error'); }
 }
 
 function _qtRow(qt, showAssignee){
@@ -1548,9 +1650,11 @@ function qtToggleReply(nid){
 // Refresh the quick-task widgets when they're on-screen (Tasks panel, or
 // Overview on older sessions). Called after any task mutation.
 function _refreshQuickTaskWidgets(){
-  if (_currentPanel === 'tasks' || _currentPanel === 'overview') {
+  if (_currentPanel === 'tasks') {
     loadMyQuickTasksWidget();
-    if (_role==='super_admin' || _role==='sub_super_admin') loadTeamQuickTasksWidget();
+    if (typeof loadTaskRegistry === 'function') loadTaskRegistry();
+  } else if (_currentPanel === 'overview') {
+    loadMyQuickTasksWidget();
   }
 }
 
@@ -3202,7 +3306,8 @@ async function loadStaff() {
     <tr>
       <td><strong>#${s.staff_id}</strong></td>
       <td>${esc(s.name)}</td>
-      <td>${esc(s.email)}</td>
+      <td style="font-size:.8rem;color:rgba(255,255,255,.6)">${esc(s.email)}</td>
+      <td style="font-size:.8rem">${s.notify_email?esc(s.notify_email):'<span style="color:#fca5a5">— not set —</span>'}</td>
       <td style="font-size:.78rem">${s.phone?esc(s.phone):'<span style="color:#fca5a5">— none —</span>'}</td>
       <td><span class="pill-status s-${s.role==='super_admin'?'assigned':s.role==='sub_super_admin'?'in_review':'intimated'}" style="font-size:.68rem">${s.role.replace(/_/g,' ')}</span></td>
       <td><span class="pill-status s-${s.status}">${s.status}</span></td>
@@ -3218,7 +3323,7 @@ async function loadStaff() {
   document.getElementById('staffTableWrap').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th><th>Login ID</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -3228,14 +3333,14 @@ function openCreateStaffModal() {
   openModal('Add Staff Member', `
     <div class="form-field"><label>Full Name</label><input id="ns-name" class="form-input" placeholder="e.g. Rahul Sharma"></div>
     <div class="form-field">
-      <label>Email <span style="color:#06b6d4;font-size:.78rem">(@nidaanpartner.com only)</span></label>
+      <label>Login ID <span style="color:#06b6d4;font-size:.78rem">(username to sign in — not a real inbox)</span></label>
       <div style="display:flex;align-items:center;gap:0;border:1px solid rgba(255,255,255,.15);border-radius:6px;overflow:hidden;background:rgba(255,255,255,.05)">
         <input id="ns-emailuser" class="form-input" placeholder="firstname.lastname" style="border:none;border-radius:0;flex:1;background:transparent" oninput="document.getElementById('ns-emailpreview').textContent=this.value?this.value+'@nidaanpartner.com':''"></div>
       </div>
-      <div style="font-size:.78rem;color:#22d3ee;margin-top:.3rem">Login email: <strong id="ns-emailpreview" style="color:#93c5fd">—</strong></div>
+      <div style="font-size:.78rem;color:#22d3ee;margin-top:.3rem">They sign in with: <strong id="ns-emailpreview" style="color:#93c5fd">—</strong></div>
     </div>
     <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(for WhatsApp/SMS notifications)</span></label><input id="ns-phone" class="form-input" type="tel" inputmode="tel" placeholder="10-digit mobile"></div>
-    <div class="form-field"><label>Notification Email <span style="color:#06b6d4;font-size:.78rem">(personal/Gmail — where email alerts go)</span></label><input id="ns-notifyemail" class="form-input" type="email" inputmode="email" placeholder="e.g. rahul@gmail.com"></div>
+    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox — where email alerts are sent)</span></label><input id="ns-notifyemail" class="form-input" type="email" inputmode="email" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Password</label><input id="ns-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
     <div class="form-field"><label>Role</label>
       <select id="ns-role" class="form-input">
@@ -3272,8 +3377,9 @@ function openEditStaffModal(staffId) {
   if(!s)return;
   openModal('Edit Staff #'+staffId,`
     <div class="form-field"><label>Name</label><input id="es-name" class="form-input" value="${esc(s.name)}"></div>
+    <div class="form-field"><label>Login ID <span style="color:rgba(255,255,255,.4);font-size:.78rem">(username — cannot be changed)</span></label><input class="form-input" value="${esc(s.email||'')}" disabled style="opacity:.6;cursor:not-allowed"></div>
     <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(notifications)</span></label><input id="es-phone" class="form-input" type="tel" inputmode="tel" value="${esc(s.phone||'')}" placeholder="10-digit mobile"></div>
-    <div class="form-field"><label>Notification Email <span style="color:#06b6d4;font-size:.78rem">(personal/Gmail)</span></label><input id="es-notifyemail" class="form-input" type="email" inputmode="email" value="${esc(s.notify_email||'')}" placeholder="e.g. rahul@gmail.com"></div>
+    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox)</span></label><input id="es-notifyemail" class="form-input" type="email" inputmode="email" value="${esc(s.notify_email||'')}" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Role</label><select id="es-role" class="form-input">
       <option value="team_member" ${s.role==='team_member'?'selected':''}>Team Member</option>
       <option value="sub_super_admin" ${s.role==='sub_super_admin'?'selected':''}>Sub Super Admin</option>
