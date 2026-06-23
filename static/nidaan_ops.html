@@ -320,6 +320,7 @@ select.form-input option{background:#1e293b}
     <!-- Main content -->
     <main class="main">
       <div id="panel-overview" class="panel"></div>
+      <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
       <div id="panel-accounts" class="panel" style="display:none"></div>
       <div id="panel-branches" class="panel" style="display:none"></div>
@@ -531,6 +532,7 @@ function buildSidebar() {
   const myRank = roleRank[_role] ?? 0;
   const items = [
     {id:'overview',   label:'📊 Overview',     minRank:0},
+    {id:'tasks',      label:'✅ Tasks',         minRank:0},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
     {id:'branches',   label:'🏢 Branches',     minRank:1},
@@ -569,6 +571,7 @@ function showPanel(id) {
   });
   const loaders = {
     overview: loadOverview,
+    tasks: loadTasks,
     claims: loadClaims,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -595,8 +598,6 @@ async function loadOverview() {
     <div class="stats-row" id="overviewStats">
       <div class="stat-card"><div class="sv">…</div><div class="sl">Loading</div></div>
     </div>
-    <!-- Quick Tasks pinned at top — most actionable surface -->
-    <div id="overviewQuickTasksTop" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>
     <div id="overviewWidgets" style="margin-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>
     <div id="overviewClaimsWidget" style="margin-top:1.25rem"></div>
     <div id="overviewAdminWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>`;
@@ -623,9 +624,8 @@ async function loadOverview() {
         <div class="sl">Refunds Need Action →</div>
       </div>` : ''}`;
 
-  // First widget grid — works for every role.
+  // First widget grid — works for every role. (Task widgets live in the Tasks panel.)
   document.getElementById('overviewWidgets').innerHTML = `
-    ${_widgetTaskPipeline(d.task_pipeline || [])}
     ${isAdmin ? _widgetTopAccounts(d.top_accounts || []) : _widgetClaimsByStatus(d.claims_by_status || [])}
     ${_widgetPendingReviews(d.pending_reviews || [])}
     ${_widgetFollowupsDue(d.followups_due || [])}
@@ -658,19 +658,10 @@ async function loadOverview() {
     </div>`;
   renderActiveClaimsWidget('', '');
 
-  // Quick Tasks at top — same widgets, but now pinned for prominence.
-  // Layout: My + (admin) Team side-by-side on wide screens; stacks on narrow.
-  document.getElementById('overviewQuickTasksTop').innerHTML = `
-    <div id="overviewMyQuickTasks"></div>
-    ${isAdmin ? '<div id="overviewTeamQuickTasks"></div>' : ''}
-  `;
-  loadMyQuickTasksWidget();
-  if (isAdmin) loadTeamQuickTasksWidget();
-
-  // Admin-only bottom widget grid: workload + recent comments + escalations + analytics
+  // Admin-only bottom widget grid: recent comments + escalations + analytics.
+  // (Quick Tasks + Workload moved to the dedicated Tasks panel.)
   if (isAdmin) {
     document.getElementById('overviewAdminWidgets').innerHTML = `
-      ${_widgetWorkload(d.workload || [])}
       ${_widgetRecentComments(d.recent_comments || [])}
       <div id="overviewEscalations">${_widgetEscalationsLoading()}</div>
       <div id="overviewAnalytics">${_widgetAnalyticsLoading()}</div>
@@ -678,6 +669,43 @@ async function loadOverview() {
     loadEscalationsWidget();
     loadAnalyticsWidget();
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TASKS — dedicated office-task panel (My + Team quick tasks,
+//  task pipeline, and workload-by-assignee). Replaces the task
+//  widgets that used to crowd the Overview.
+// ═══════════════════════════════════════════════════════════════
+async function loadTasks() {
+  const el = document.getElementById('panel-tasks');
+  const isAdmin = (_role === 'super_admin' || _role === 'sub_super_admin');
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">Tasks</div>
+      <div class="section-sub">Office tasks, assignments & team workload</div></div>
+      ${isAdmin ? `<button class="btn-primary" onclick="openQuickTaskModal()">+ New Task</button>` : ''}
+    </div>
+    <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
+      <div id="overviewMyQuickTasks"></div>
+      ${isAdmin ? '<div id="overviewTeamQuickTasks"></div>' : ''}
+    </div>
+    <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
+      <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
+    </div>`;
+  loadMyQuickTasksWidget();
+  if (isAdmin) loadTeamQuickTasksWidget();
+
+  const r = await fetch('/nidaan/ops/api/overview-widgets', { headers: hdrs() });
+  if (!r.ok) {
+    document.getElementById('tasksWidgets').innerHTML =
+      `<div class="nd-card" style="padding:1rem;color:#f87171">Failed to load (${r.status})</div>`;
+    return;
+  }
+  const d = await r.json();
+  document.getElementById('tasksWidgets').innerHTML = `
+    ${_widgetTaskPipeline(d.task_pipeline || [])}
+    ${isAdmin ? _widgetWorkload(d.workload || []) : ''}
+  `;
 }
 
 function _widgetEscalationsLoading(){
