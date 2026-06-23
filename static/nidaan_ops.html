@@ -248,6 +248,18 @@ select.form-input option{background:#1e293b}
   }
   /* Quick Task button hides label on phones to save space */
   #quickTaskBtn{font-size:.78rem;padding:.45rem .7rem}
+  /* Leave modal: dates stack + fills viewport */
+  #leaveModalBg > div{padding:1rem !important;max-width:100% !important}
+  #leaveModalBg > div > div[style*="grid-template-columns:1fr 1fr"]{
+    grid-template-columns:1fr !important
+  }
+  /* Tasks panel header (title + action buttons) stacks so buttons don't overflow */
+  #panel-tasks .section-hdr{flex-direction:column;align-items:flex-start;gap:.6rem}
+  #panel-tasks .section-hdr > div:last-child{width:100%;display:flex;flex-wrap:wrap}
+  /* Task Registry: comfortable tap targets, no horizontal overflow */
+  #tasksRegistry select{flex:1;min-width:140px}
+  #tasksRegistry #regSearch{flex:1;min-width:140px}
+  #tasksRegistry .nd-card{padding:.85rem}
 }
 </style>
 </head>
