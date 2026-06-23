@@ -2710,18 +2710,21 @@ async def create_staff(
     email: str,
     password: str,
     role: str,
+    phone: str = "",
     created_by: Optional[int] = None,
 ) -> Optional[int]:
-    """Create a staff account. Returns staff_id or None on duplicate email."""
+    """Create a staff account. Returns staff_id or None on duplicate email.
+    phone is the internal notification number (WhatsApp + SMS routing)."""
     if role not in STAFF_ROLES:
         raise ValueError(f"Invalid role: {role}")
     pw_hash = _hash_password(password)
+    phone = "".join(ch for ch in (phone or "") if ch.isdigit())
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
-                """INSERT INTO nidaan_staff (name, email, password_hash, role, created_by)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (name, email.lower().strip(), pw_hash, role, created_by),
+                """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (name, email.lower().strip(), pw_hash, role, phone, created_by),
             )
             await conn.commit()
             return cur.lastrowid
@@ -2783,19 +2786,20 @@ async def list_staff(include_inactive: bool = False) -> list[dict]:
         conn.row_factory = aiosqlite.Row
         if include_inactive:
             cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,created_at,last_login_at "
+                "SELECT staff_id,name,email,role,status,phone,created_at,last_login_at "
                 "FROM nidaan_staff ORDER BY created_at DESC"
             )
         else:
             cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,created_at,last_login_at "
+                "SELECT staff_id,name,email,role,status,phone,created_at,last_login_at "
                 "FROM nidaan_staff WHERE status='active' ORDER BY created_at DESC"
             )
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def update_staff(staff_id: int, name: str = None, role: str = None,
-                       status: str = None, password: str = None) -> bool:
+                       status: str = None, password: str = None,
+                       phone: str = None) -> bool:
     fields, vals = [], []
     if name is not None:
         fields.append("name=?"); vals.append(name)
@@ -2805,6 +2809,8 @@ async def update_staff(staff_id: int, name: str = None, role: str = None,
         fields.append("role=?"); vals.append(role)
     if status is not None:
         fields.append("status=?"); vals.append(status)
+    if phone is not None:
+        fields.append("phone=?"); vals.append("".join(ch for ch in phone if ch.isdigit()))
     if password is not None:
         fields.append("password_hash=?"); vals.append(_hash_password(password))
     if not fields:

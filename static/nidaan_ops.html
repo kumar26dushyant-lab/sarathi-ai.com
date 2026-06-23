@@ -2835,6 +2835,7 @@ async function loadStaff() {
       <td><strong>#${s.staff_id}</strong></td>
       <td>${esc(s.name)}</td>
       <td>${esc(s.email)}</td>
+      <td style="font-size:.78rem">${s.phone?esc(s.phone):'<span style="color:#fca5a5">— none —</span>'}</td>
       <td><span class="pill-status s-${s.role==='super_admin'?'assigned':s.role==='sub_super_admin'?'in_review':'intimated'}" style="font-size:.68rem">${s.role.replace(/_/g,' ')}</span></td>
       <td><span class="pill-status s-${s.status}">${s.status}</span></td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${s.last_login_at?fmtDate(s.last_login_at):'Never'}</td>
@@ -2849,7 +2850,7 @@ async function loadStaff() {
   document.getElementById('staffTableWrap').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -2865,6 +2866,7 @@ function openCreateStaffModal() {
       </div>
       <div style="font-size:.78rem;color:#22d3ee;margin-top:.3rem">Login email: <strong id="ns-emailpreview" style="color:#93c5fd">—</strong></div>
     </div>
+    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(for WhatsApp/SMS notifications)</span></label><input id="ns-phone" class="form-input" type="tel" inputmode="tel" placeholder="10-digit mobile"></div>
     <div class="form-field"><label>Password</label><input id="ns-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
     <div class="form-field"><label>Role</label>
       <select id="ns-role" class="form-input">
@@ -2882,9 +2884,11 @@ function openCreateStaffModal() {
 async function createStaff() {
   const userpart = document.getElementById('ns-emailuser').value.trim().toLowerCase();
   const email = userpart ? userpart + '@nidaanpartner.com' : '';
-  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value};
+  const phone = (document.getElementById('ns-phone').value||'').replace(/\D/g,'');
+  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value,phone};
   const msg=document.getElementById('ns-msg');
   if(!body.name||!userpart||!body.password){msg.className='msg err';msg.textContent='All fields required';return;}
+  if(phone.length<10){msg.className='msg err';msg.textContent='Enter a valid 10-digit mobile number (for notifications)';return;}
   if(!/^[a-z0-9._-]+$/.test(userpart)){msg.className='msg err';msg.textContent='Email username: only letters, numbers, dots, hyphens';return;}
   const r=await API('/staff',{method:'POST',body:JSON.stringify(body)});
   const d=await r.json().catch(()=>({}));
@@ -2897,6 +2901,7 @@ function openEditStaffModal(staffId) {
   if(!s)return;
   openModal('Edit Staff #'+staffId,`
     <div class="form-field"><label>Name</label><input id="es-name" class="form-input" value="${esc(s.name)}"></div>
+    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(notifications)</span></label><input id="es-phone" class="form-input" type="tel" inputmode="tel" value="${esc(s.phone||'')}" placeholder="10-digit mobile"></div>
     <div class="form-field"><label>Role</label><select id="es-role" class="form-input">
       <option value="team_member" ${s.role==='team_member'?'selected':''}>Team Member</option>
       <option value="sub_super_admin" ${s.role==='sub_super_admin'?'selected':''}>Sub Super Admin</option>
@@ -2910,6 +2915,8 @@ function openEditStaffModal(staffId) {
 
 async function saveStaff(staffId) {
   const body={name:document.getElementById('es-name').value.trim(),role:document.getElementById('es-role').value};
+  const _ph=(document.getElementById('es-phone').value||'').replace(/\D/g,'');
+  if(_ph) body.phone=_ph;
   const pwd=document.getElementById('es-pwd').value;
   if(pwd){if(pwd.length<8){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Password min 8 chars';return;}body.password=pwd;}
   const r=await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify(body)});
