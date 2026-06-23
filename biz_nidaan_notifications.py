@@ -705,6 +705,39 @@ async def on_quick_task_assigned(quick_task: dict):
             claim_id=quick_task.get("claim_id"))
 
 
+async def on_quick_task_approval(quick_task: dict, decision: str):
+    """A task requiring approval was approved/rejected. Notify the creator and
+    assignee with the outcome + a deep link."""
+    if not quick_task:
+        return
+    title = quick_task.get("title", "") or ""
+    qid = quick_task.get("quick_task_id")
+    deep_link = f"{NIDAAN_BASE_URL}/nidaan/ops?qt={qid}" if qid else f"{NIDAAN_BASE_URL}/nidaan/ops"
+    approved = (decision == "approved")
+    icon = "✅" if approved else "🚫"
+    word = "approved" if approved else "rejected"
+    # Deduplicate recipients (creator may equal assignee).
+    seen = set()
+    targets = [
+        (quick_task.get("created_by_staff_id"), quick_task.get("creator_phone"), quick_task.get("creator_email")),
+        (quick_task.get("assigned_to_staff_id"), quick_task.get("assignee_phone"), quick_task.get("assignee_email")),
+    ]
+    for sid, phone, email in targets:
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        await dispatch(
+            event_key="quick_task.approval",
+            priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_STAFF, recipient_id=sid,
+            recipient_phone=phone or "",
+            recipient_email=email or "",
+            subject=f"[Nidaan] Task {word}: {title}",
+            body=(f"{icon} Task {word}: {title}\n"
+                  f"Open: {deep_link}"),
+            claim_id=quick_task.get("claim_id"))
+
+
 async def on_task_status_changed(task_id: int, from_status: str, to_status: str, note: str = ""):
     """A task moved status. Notify assignee + subscriber (if status maps to stage change)."""
     task = await ntasks.get_task(task_id)

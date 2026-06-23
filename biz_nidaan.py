@@ -1649,23 +1649,45 @@ QUICK_TASK_STATUSES = ("open", "in_progress", "done", "cancelled")
 async def create_quick_task(*, title: str, created_by_staff_id: int,
                              assigned_to_staff_id: Optional[int] = None,
                              priority: str = "normal", claim_id: Optional[int] = None,
-                             due_date: Optional[str] = None, description: str = "") -> int:
+                             due_date: Optional[str] = None, description: str = "",
+                             requires_approval: bool = False) -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
+    approval_status = "pending" if requires_approval else "none"
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_tasks "
             "(title, description, assigned_to_staff_id, created_by_staff_id, "
-            " priority, claim_id, due_date) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " priority, claim_id, due_date, requires_approval, approval_status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
-             created_by_staff_id, priority, claim_id, due_date))
+             created_by_staff_id, priority, claim_id, due_date,
+             1 if requires_approval else 0, approval_status))
         qid = cur.lastrowid
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
-                              changed_by=created_by_staff_id)
+                              changed_by=created_by_staff_id,
+                              note="requires approval" if requires_approval else "")
         await conn.commit()
         return qid
+
+
+async def set_quick_task_approval(quick_task_id: int, decision: str,
+                                   changed_by: int, note: str = "") -> bool:
+    """Approve or reject a quick task. decision: 'approved' | 'rejected'."""
+    decision = (decision or "").lower()
+    if decision not in ("approved", "rejected"):
+        raise ValueError("decision must be 'approved' or 'rejected'")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_quick_tasks SET approval_status=?, "
+            "approved_by_staff_id=?, approved_at=CURRENT_TIMESTAMP "
+            "WHERE quick_task_id=?", (decision, changed_by, quick_task_id))
+        await _log_quick_task(conn, quick_task_id,
+                              "approve" if decision == "approved" else "reject",
+                              to_value=decision, changed_by=changed_by, note=note)
+        await conn.commit()
+    return True
 
 
 async def get_quick_task(quick_task_id: int) -> Optional[dict]:

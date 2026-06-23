@@ -981,7 +981,15 @@ async function openQuickTaskModal(presetClaimId){
 
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin:.85rem 0 .2rem">First comment (optional)</label>
       <textarea id="qtComment" rows="2" placeholder="Any context, instructions, etc."
-                style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:1rem"></textarea>
+                style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:.85rem"></textarea>
+
+      <label style="display:flex;align-items:flex-start;gap:.55rem;padding:.55rem .65rem;border:1px solid rgba(167,139,250,.25);border-radius:8px;background:rgba(167,139,250,.06);cursor:pointer;margin-bottom:1rem">
+        <input type="checkbox" id="qtRequiresApproval" style="margin-top:.15rem;accent-color:#a78bfa">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:600;font-size:.84rem;color:#c4b5fd">Requires approval before it's considered done</div>
+          <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.1rem">An admin/super-admin must approve. Creator &amp; assignee are notified of the decision.</div>
+        </div>
+      </label>
 
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <button class="btn-sm btn-ghost" onclick="document.getElementById('quickTaskModalBg').remove()">Cancel</button>
@@ -1096,7 +1104,8 @@ async function submitQuickTask(){
   const claimVal = document.getElementById('qtClaimId').value;
   const dueDate = document.getElementById('qtDueDate').value || null;
   const comment = (document.getElementById('qtComment')?.value || '').trim();
-  const body = { title, priority };
+  const requiresApproval = !!(document.getElementById('qtRequiresApproval') || {}).checked;
+  const body = { title, priority, requires_approval: requiresApproval };
   if (assigneeVal) body.assigned_to_staff_id = parseInt(assigneeVal);
   if (claimVal) body.claim_id = parseInt(claimVal);
   if (dueDate) body.due_date = dueDate;
@@ -1108,7 +1117,8 @@ async function submitQuickTask(){
   if (r.ok) {
     ndUI.toast('Quick task created ✓','success');
     document.getElementById('quickTaskModalBg').remove();
-    if (_currentPanel === 'overview') loadOverview();
+    if (_currentPanel === 'tasks') loadTasks();
+    else if (_currentPanel === 'overview') loadOverview();
   } else {
     const e = await r.json().catch(()=>({detail:'Error'}));
     ndUI.toast(_extractErr(e, 'Create failed'),'error');
@@ -1196,6 +1206,16 @@ async function openQuickTaskDrawer(qid){
   let assignees = [];
   if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
 
+  // Approval state
+  const reqAppr = !!qt.requires_approval;
+  const apprStatus = qt.approval_status || 'none';
+  const APPR_PILL = {
+    pending:  {c:'#fbbf24', t:'⏳ Approval pending'},
+    approved: {c:'#22c55e', t:'✅ Approved'},
+    rejected: {c:'#f87171', t:'🚫 Rejected'},
+  };
+  const ap = APPR_PILL[apprStatus];
+
   document.getElementById('drawerTitle').textContent = '📌 Quick Task #' + qt.quick_task_id;
   const body = document.getElementById('drawerBody');
   const statusActions = canTransition ? `
@@ -1204,6 +1224,14 @@ async function openQuickTaskDrawer(qid){
       ${qt.status!=='done' && qt.status!=='cancelled' ? `<button class="btn-sm" style="background:#22c55e;color:#0a1628;font-weight:700" onclick="qtSetStatus(${qt.quick_task_id},'done')">✓ Mark done</button>` : ''}
       ${qt.status==='done' || qt.status==='cancelled' ? `<button class="btn-sm btn-ghost" onclick="qtSetStatus(${qt.quick_task_id},'open')">↺ Reopen</button>` : ''}
       ${qt.status!=='cancelled' && qt.status!=='done' && isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5" onclick="qtSetStatus(${qt.quick_task_id},'cancelled')">✕ Cancel</button>` : ''}
+    </div>` : '';
+
+  // Approval actions — admin/SA decide on tasks that are pending approval.
+  const approvalActions = (reqAppr && apprStatus === 'pending' && isAdmin) ? `
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:1rem;padding:.65rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px">
+      <span style="font-size:.82rem;color:#fbbf24;font-weight:600;flex:1">⏳ This task needs your approval</span>
+      <button class="btn-sm" style="background:#22c55e;color:#0a1628;font-weight:700" onclick="qtApprove(${qt.quick_task_id},'approved')">✓ Approve</button>
+      <button class="btn-sm" style="background:#f87171;color:#0a1628;font-weight:700" onclick="qtApprove(${qt.quick_task_id},'rejected')">✕ Reject</button>
     </div>` : '';
 
   // Manage block: reassign + delete (admin) and history (anyone who can view).
@@ -1225,6 +1253,7 @@ async function openQuickTaskDrawer(qid){
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
         <span class="task-pill" style="background:${prio.color}22;color:${prio.color};border:1px solid ${prio.color}44">${prio.icon} ${prio.label}</span>
         <span class="task-pill" style="background:${status.color}22;color:${status.color};border:1px solid ${status.color}44">${status.label}</span>
+        ${reqAppr && ap ? `<span class="task-pill" style="background:${ap.c}22;color:${ap.c};border:1px solid ${ap.c}44">${ap.t}</span>` : ''}
       </div>
       <div style="font-size:1.1rem;font-weight:700;margin-bottom:.6rem">${esc(qt.title||'')}</div>
       ${qt.description ? `<div style="font-size:.86rem;color:rgba(255,255,255,.7);white-space:pre-wrap;margin-bottom:1rem">${esc(qt.description)}</div>` : ''}
@@ -1238,6 +1267,7 @@ async function openQuickTaskDrawer(qid){
         ${qt.completed_at ? `<div><span style="color:rgba(255,255,255,.45)">Completed</span><br>${ndUI.timeAgo(qt.completed_at)}</div>` : ''}
       </div>
 
+      ${approvalActions}
       ${statusActions}
       ${manageActions}
 
@@ -1337,6 +1367,21 @@ async function qtReassign(qid){
     openQuickTaskDrawer(qid);
     _refreshQuickTaskWidgets();
   } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Reassign failed'),'error'); }
+}
+
+async function qtApprove(qid, decision){
+  const note = decision==='rejected'
+    ? (prompt('Reason for rejection (optional):') || '')
+    : '';
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid+'/approval', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({decision, note})
+  });
+  if (r.ok) {
+    ndUI.toast(decision==='approved'?'Approved ✓':'Rejected','success');
+    openQuickTaskDrawer(qid);
+    _refreshQuickTaskWidgets();
+  } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Action failed'),'error'); }
 }
 
 async function qtDelete(qid){

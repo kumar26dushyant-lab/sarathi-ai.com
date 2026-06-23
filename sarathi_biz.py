@@ -3899,12 +3899,19 @@ class _QuickTaskCreateReq(BaseModel):
     claim_id: Optional[int] = None
     due_date: Optional[str] = None
     initial_comment: str = ""
+    requires_approval: bool = False
 
 
 class _QuickTaskUpdateReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     status: Optional[str] = Field(None, pattern=r"^(open|in_progress|done|cancelled)$")
     assigned_to_staff_id: Optional[int] = None
+
+
+class _QuickTaskApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    note: str = Field("", max_length=2000)
 
 
 class _QuickTaskNoteReq(BaseModel):
@@ -3974,7 +3981,7 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
         created_by_staff_id=staff["staff_id"],
         assigned_to_staff_id=body.assigned_to_staff_id,
         priority=body.priority, claim_id=body.claim_id,
-        due_date=body.due_date)
+        due_date=body.due_date, requires_approval=body.requires_approval)
     if body.initial_comment.strip():
         try:
             await nidaan.add_quick_task_note(
@@ -4043,6 +4050,29 @@ async def ops_quick_task_history(qid: int, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request)
     return {"history": await nidaan.get_quick_task_history(qid)}
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/approval")
+async def ops_quick_task_approval(qid: int, body: _QuickTaskApprovalReq, request: Request):
+    """Approve or reject a task that was created with requires_approval (admin/SA only)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    if not qt.get("requires_approval"):
+        raise HTTPException(400, "This task does not require approval")
+    await nidaan.set_quick_task_approval(qid, body.decision,
+                                         changed_by=staff["staff_id"], note=body.note)
+    # Notify creator + assignee of the decision (deep-linked).
+    try:
+        fresh = await nidaan.get_quick_task(qid)
+        if fresh:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_quick_task_approval(fresh, body.decision))
+    except Exception as ne:
+        logger.warning("Quick task approval notification failed: %s", ne)
+    return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
 
 
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")
