@@ -1304,17 +1304,31 @@ async def get_overview_widgets(staff_id: int, staff_role: str,
                 "LIMIT 10")
             top_accounts = [dict(r) for r in await cur.fetchall()]
 
-            # 9. Workload by active staff member.
+            # 9. Workload by active staff member — counts BOTH claim-tasks
+            #    (nidaan_tasks) and office quick-tasks (nidaan_quick_tasks) so
+            #    quick-tasks assigned to a staffer surface here too.
             cur = await conn.execute(
                 "SELECT s.staff_id, s.name, s.role, "
-                "       COUNT(CASE WHEN t.status_slug NOT IN "
-                "         ('completed','cancelled') THEN 1 END) AS open_tasks, "
-                "       COUNT(CASE WHEN t.sla_due_at IS NOT NULL "
-                "         AND t.sla_due_at < datetime('now') "
-                "         AND t.status_slug NOT IN ('completed','cancelled') "
-                "         THEN 1 END) AS overdue_tasks "
+                # claim-tasks open + overdue
+                "  (SELECT COUNT(*) FROM nidaan_tasks t "
+                "     WHERE t.assigned_to_staff_id = s.staff_id "
+                "       AND t.status_slug NOT IN ('completed','cancelled')) "
+                "  + (SELECT COUNT(*) FROM nidaan_quick_tasks q "
+                "     WHERE q.assigned_to_staff_id = s.staff_id "
+                "       AND q.deleted_at IS NULL "
+                "       AND q.status NOT IN ('done','cancelled')) AS open_tasks, "
+                "  (SELECT COUNT(*) FROM nidaan_tasks t "
+                "     WHERE t.assigned_to_staff_id = s.staff_id "
+                "       AND t.sla_due_at IS NOT NULL "
+                "       AND t.sla_due_at < datetime('now') "
+                "       AND t.status_slug NOT IN ('completed','cancelled')) "
+                "  + (SELECT COUNT(*) FROM nidaan_quick_tasks q "
+                "     WHERE q.assigned_to_staff_id = s.staff_id "
+                "       AND q.deleted_at IS NULL "
+                "       AND q.due_date IS NOT NULL "
+                "       AND q.due_date < datetime('now') "
+                "       AND q.status NOT IN ('done','cancelled')) AS overdue_tasks "
                 "FROM nidaan_staff s "
-                "LEFT JOIN nidaan_tasks t ON t.assigned_to_staff_id = s.staff_id "
                 "WHERE s.status = 'active' "
                 "GROUP BY s.staff_id "
                 "ORDER BY open_tasks DESC")
@@ -1660,8 +1674,11 @@ async def get_quick_task(quick_task_id: int) -> Optional[dict]:
         row = await (await conn.execute(
             "SELECT q.*, "
             "       a.name AS assignee_name, a.role AS assignee_role, "
-            "       a.phone AS assignee_phone, a.email AS assignee_email, "
+            "       a.phone AS assignee_phone, "
+            "       COALESCE(NULLIF(a.notify_email,''), a.email) AS assignee_email, "
             "       cr.name AS creator_name, cr.role AS creator_role, "
+            "       cr.phone AS creator_phone, "
+            "       COALESCE(NULLIF(cr.notify_email,''), cr.email) AS creator_email, "
             "       c.insured_name "
             "FROM nidaan_quick_tasks q "
             "LEFT JOIN nidaan_staff a  ON a.staff_id = q.assigned_to_staff_id "
@@ -2771,19 +2788,23 @@ async def create_staff(
     role: str,
     phone: str = "",
     created_by: Optional[int] = None,
+    notify_email: str = "",
 ) -> Optional[int]:
     """Create a staff account. Returns staff_id or None on duplicate email.
-    phone is the internal notification number (WhatsApp + SMS routing)."""
+    phone is the internal notification number (WhatsApp + SMS routing).
+    notify_email is the staffer's real/personal inbox for email notifications
+    (login email may be @nidaanpartner.com without a real mailbox)."""
     if role not in STAFF_ROLES:
         raise ValueError(f"Invalid role: {role}")
     pw_hash = _hash_password(password)
     phone = "".join(ch for ch in (phone or "") if ch.isdigit())
+    notify_email = (notify_email or "").lower().strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
-                """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (name, email.lower().strip(), pw_hash, role, phone, created_by),
+                """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, notify_email, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (name, email.lower().strip(), pw_hash, role, phone, notify_email, created_by),
             )
             await conn.commit()
             return cur.lastrowid
@@ -2819,7 +2840,7 @@ async def get_staff_by_id(staff_id: int) -> Optional[dict]:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT staff_id,name,email,role,status,created_at,last_login_at,"
-            "       phone,saved_official_numbers_at "
+            "       phone,notify_email,saved_official_numbers_at "
             "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
         )
         row = await cur.fetchone()
@@ -2845,12 +2866,12 @@ async def list_staff(include_inactive: bool = False) -> list[dict]:
         conn.row_factory = aiosqlite.Row
         if include_inactive:
             cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,phone,created_at,last_login_at "
+                "SELECT staff_id,name,email,role,status,phone,notify_email,created_at,last_login_at "
                 "FROM nidaan_staff ORDER BY created_at DESC"
             )
         else:
             cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,phone,created_at,last_login_at "
+                "SELECT staff_id,name,email,role,status,phone,notify_email,created_at,last_login_at "
                 "FROM nidaan_staff WHERE status='active' ORDER BY created_at DESC"
             )
         return [dict(r) for r in await cur.fetchall()]
@@ -2858,7 +2879,7 @@ async def list_staff(include_inactive: bool = False) -> list[dict]:
 
 async def update_staff(staff_id: int, name: str = None, role: str = None,
                        status: str = None, password: str = None,
-                       phone: str = None) -> bool:
+                       phone: str = None, notify_email: str = None) -> bool:
     fields, vals = [], []
     if name is not None:
         fields.append("name=?"); vals.append(name)
@@ -2870,6 +2891,8 @@ async def update_staff(staff_id: int, name: str = None, role: str = None,
         fields.append("status=?"); vals.append(status)
     if phone is not None:
         fields.append("phone=?"); vals.append("".join(ch for ch in phone if ch.isdigit()))
+    if notify_email is not None:
+        fields.append("notify_email=?"); vals.append((notify_email or "").lower().strip())
     if password is not None:
         fields.append("password_hash=?"); vals.append(_hash_password(password))
     if not fields:

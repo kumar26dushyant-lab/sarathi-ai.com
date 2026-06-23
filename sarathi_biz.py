@@ -2994,6 +2994,7 @@ class CreateStaffReq(BaseModel):
     password: str = Field(min_length=8)
     role: str
     phone: str = Field(..., min_length=10, max_length=15)  # internal notification routing
+    notify_email: str = ""  # personal/Gmail inbox for email notifications (optional)
 
 class UpdateStaffReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
@@ -3002,6 +3003,7 @@ class UpdateStaffReq(BaseModel):
     status: Optional[str] = None
     password: Optional[str] = None
     phone: Optional[str] = None
+    notify_email: Optional[str] = None
 
 @app.get("/nidaan/ops/api/staff")
 async def ops_list_staff(request: Request, include_inactive: bool = False):
@@ -3023,6 +3025,7 @@ async def ops_create_staff(body: CreateStaffReq, request: Request):
         staff_id = await nidaan.create_staff(
             name=body.name, email=body.email,
             password=body.password, role=body.role, phone=body.phone,
+            notify_email=body.notify_email,
             created_by=caller["staff_id"],
         )
     except ValueError as e:
@@ -3042,6 +3045,7 @@ async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request
         ok = await nidaan.update_staff(
             staff_id=staff_id, name=body.name, role=body.role,
             status=body.status, password=body.password, phone=body.phone,
+            notify_email=body.notify_email,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

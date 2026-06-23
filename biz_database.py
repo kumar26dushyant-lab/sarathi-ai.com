@@ -1642,6 +1642,11 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN phone TEXT DEFAULT ''")
         except Exception:
             pass
+        # personal/Gmail notification email (login email is @nidaanpartner.com, may not be a real inbox)
+        try:
+            await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN notify_email TEXT DEFAULT ''")
+        except Exception:
+            pass
         # round-robin pointer: which staff_id index was last assigned
         try:
             await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN last_assigned_at TIMESTAMP")

@@ -624,17 +624,18 @@ async def on_task_assigned(task_id: int):
         event_key="task.assigned", priority=PRIORITY_P1,
         recipient_type=RECIPIENT_STAFF, recipient_id=staff["staff_id"],
         recipient_phone=staff.get("phone") or "",
-        recipient_email=staff.get("email") or "",
+        recipient_email=staff.get("notify_email") or staff.get("email") or "",
         subject=f"Task #{task_id} assigned to you",
         body=(f"🗂️ {task.get('title','')}\n"
               f"Case #{task.get('claim_id')} — {task.get('claim_insured_name','')}\n"
               f"Status: {task.get('status_slug')}\n"
-              f"Open: /nidaan/ops (Tasks)"),
+              f"Open: {NIDAAN_BASE_URL}/nidaan/ops?task={task_id}"),
         claim_id=task.get("claim_id"), task_id=task_id)
 
 
 async def on_quick_task_assigned(quick_task: dict):
-    """A Quick Task was assigned to a staff member.
+    """A Quick Task was created/assigned. Notify BOTH the assignee (action needed)
+    and the creator (confirmation), each with a direct deep link to the task.
     Map task priority → notification priority:
       low    → no notification (skip)
       normal → P2 (email + WA if budget healthy)
@@ -645,11 +646,7 @@ async def on_quick_task_assigned(quick_task: dict):
     if not quick_task:
         return
     assignee_id = quick_task.get("assigned_to_staff_id")
-    if not assignee_id:
-        return  # unassigned — nothing to notify
-    # Self-assigned: no notification noise
-    if assignee_id == quick_task.get("created_by_staff_id"):
-        return
+    creator_id = quick_task.get("created_by_staff_id")
     task_priority = (quick_task.get("priority") or "normal").lower()
     if task_priority == "low":
         return  # explicit silence
@@ -660,24 +657,52 @@ async def on_quick_task_assigned(quick_task: dict):
     }
     notif_priority = priority_map.get(task_priority, PRIORITY_P2)
     title = quick_task.get("title", "") or ""
-    body_lines = [f"📌 {title}"]
-    if quick_task.get("claim_id"):
-        body_lines.append(f"Linked: claim #{quick_task['claim_id']} "
-                          f"({quick_task.get('insured_name','')})")
-    if quick_task.get("creator_name"):
-        body_lines.append(f"From: {quick_task['creator_name']}")
-    if quick_task.get("due_date"):
-        body_lines.append(f"Due: {quick_task['due_date']}")
-    body_lines.append("Open: /nidaan/ops")
-    await dispatch(
-        event_key="quick_task.assigned",
-        priority=notif_priority,
-        recipient_type=RECIPIENT_STAFF, recipient_id=assignee_id,
-        recipient_phone=quick_task.get("assignee_phone") or "",
-        recipient_email=quick_task.get("assignee_email") or "",
-        subject=f"[Nidaan] Quick task: {title}",
-        body="\n".join(body_lines),
-        claim_id=quick_task.get("claim_id"))
+    qid = quick_task.get("quick_task_id")
+    deep_link = f"{NIDAAN_BASE_URL}/nidaan/ops?qt={qid}" if qid else f"{NIDAAN_BASE_URL}/nidaan/ops"
+
+    def _common_lines():
+        lines = []
+        if quick_task.get("claim_id"):
+            lines.append(f"Linked: claim #{quick_task['claim_id']} "
+                         f"({quick_task.get('insured_name','')})")
+        if quick_task.get("due_date"):
+            lines.append(f"Due: {quick_task['due_date']}")
+        return lines
+
+    # --- Notify the ASSIGNEE (someone has work to do) ---
+    # Skip when self-assigned: the creator already knows, no notification noise.
+    if assignee_id and assignee_id != creator_id:
+        body_lines = [f"📌 {title}"]
+        if quick_task.get("creator_name"):
+            body_lines.append(f"From: {quick_task['creator_name']}")
+        body_lines += _common_lines()
+        body_lines.append(f"Open: {deep_link}")
+        await dispatch(
+            event_key="quick_task.assigned",
+            priority=notif_priority,
+            recipient_type=RECIPIENT_STAFF, recipient_id=assignee_id,
+            recipient_phone=quick_task.get("assignee_phone") or "",
+            recipient_email=quick_task.get("assignee_email") or "",
+            subject=f"[Nidaan] Quick task: {title}",
+            body="\n".join(body_lines),
+            claim_id=quick_task.get("claim_id"))
+
+    # --- Notify the CREATOR (confirmation), unless they assigned it to themselves ---
+    if creator_id and creator_id != assignee_id:
+        body_lines = [f"✅ Task created: {title}"]
+        if quick_task.get("assignee_name"):
+            body_lines.append(f"Assigned to: {quick_task['assignee_name']}")
+        body_lines += _common_lines()
+        body_lines.append(f"Track: {deep_link}")
+        await dispatch(
+            event_key="quick_task.created",
+            priority=notif_priority,
+            recipient_type=RECIPIENT_STAFF, recipient_id=creator_id,
+            recipient_phone=quick_task.get("creator_phone") or "",
+            recipient_email=quick_task.get("creator_email") or "",
+            subject=f"[Nidaan] Task created: {title}",
+            body="\n".join(body_lines),
+            claim_id=quick_task.get("claim_id"))
 
 
 async def on_task_status_changed(task_id: int, from_status: str, to_status: str, note: str = ""):
@@ -693,12 +718,12 @@ async def on_task_status_changed(task_id: int, from_status: str, to_status: str,
                 event_key="task.status_changed", priority=PRIORITY_P2,
                 recipient_type=RECIPIENT_STAFF, recipient_id=staff["staff_id"],
                 recipient_phone=staff.get("phone") or "",
-                recipient_email=staff.get("email") or "",
+                recipient_email=staff.get("notify_email") or staff.get("email") or "",
                 subject=f"Task #{task_id}: {from_status} → {to_status}",
                 body=(f"Task #{task_id}: *{task.get('title','')}*\n"
                       f"Status: {from_status} → {to_status}\n"
                       + (f"Note: {note}\n" if note else "")
-                      + f"Open: /nidaan/ops"),
+                      + f"Open: {NIDAAN_BASE_URL}/nidaan/ops?task={task_id}"),
                 claim_id=task.get("claim_id"), task_id=task_id)
     # Notify subscriber if stage changed (look up claim)
     new_status = await ntasks.get_status(to_status)

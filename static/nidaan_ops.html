@@ -2867,6 +2867,7 @@ function openCreateStaffModal() {
       <div style="font-size:.78rem;color:#22d3ee;margin-top:.3rem">Login email: <strong id="ns-emailpreview" style="color:#93c5fd">—</strong></div>
     </div>
     <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(for WhatsApp/SMS notifications)</span></label><input id="ns-phone" class="form-input" type="tel" inputmode="tel" placeholder="10-digit mobile"></div>
+    <div class="form-field"><label>Notification Email <span style="color:#06b6d4;font-size:.78rem">(personal/Gmail — where email alerts go)</span></label><input id="ns-notifyemail" class="form-input" type="email" inputmode="email" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Password</label><input id="ns-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
     <div class="form-field"><label>Role</label>
       <select id="ns-role" class="form-input">
@@ -2885,10 +2886,12 @@ async function createStaff() {
   const userpart = document.getElementById('ns-emailuser').value.trim().toLowerCase();
   const email = userpart ? userpart + '@nidaanpartner.com' : '';
   const phone = (document.getElementById('ns-phone').value||'').replace(/\D/g,'');
-  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value,phone};
+  const notify_email = (document.getElementById('ns-notifyemail').value||'').trim().toLowerCase();
+  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value,phone,notify_email};
   const msg=document.getElementById('ns-msg');
   if(!body.name||!userpart||!body.password){msg.className='msg err';msg.textContent='All fields required';return;}
   if(phone.length<10){msg.className='msg err';msg.textContent='Enter a valid 10-digit mobile number (for notifications)';return;}
+  if(notify_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(notify_email)){msg.className='msg err';msg.textContent='Enter a valid notification email (or leave blank)';return;}
   if(!/^[a-z0-9._-]+$/.test(userpart)){msg.className='msg err';msg.textContent='Email username: only letters, numbers, dots, hyphens';return;}
   const r=await API('/staff',{method:'POST',body:JSON.stringify(body)});
   const d=await r.json().catch(()=>({}));
@@ -2902,6 +2905,7 @@ function openEditStaffModal(staffId) {
   openModal('Edit Staff #'+staffId,`
     <div class="form-field"><label>Name</label><input id="es-name" class="form-input" value="${esc(s.name)}"></div>
     <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(notifications)</span></label><input id="es-phone" class="form-input" type="tel" inputmode="tel" value="${esc(s.phone||'')}" placeholder="10-digit mobile"></div>
+    <div class="form-field"><label>Notification Email <span style="color:#06b6d4;font-size:.78rem">(personal/Gmail)</span></label><input id="es-notifyemail" class="form-input" type="email" inputmode="email" value="${esc(s.notify_email||'')}" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Role</label><select id="es-role" class="form-input">
       <option value="team_member" ${s.role==='team_member'?'selected':''}>Team Member</option>
       <option value="sub_super_admin" ${s.role==='sub_super_admin'?'selected':''}>Sub Super Admin</option>
@@ -2917,6 +2921,9 @@ async function saveStaff(staffId) {
   const body={name:document.getElementById('es-name').value.trim(),role:document.getElementById('es-role').value};
   const _ph=(document.getElementById('es-phone').value||'').replace(/\D/g,'');
   if(_ph) body.phone=_ph;
+  const _ne=(document.getElementById('es-notifyemail').value||'').trim().toLowerCase();
+  if(_ne && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(_ne)){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Enter a valid notification email (or leave blank)';return;}
+  body.notify_email=_ne;
   const pwd=document.getElementById('es-pwd').value;
   if(pwd){if(pwd.length<8){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Password min 8 chars';return;}body.password=pwd;}
   const r=await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify(body)});
@@ -3213,8 +3220,24 @@ function togglePasswordVisibility() {
   _staffId = staff.staff_id;
   _staffName = staff.name;
   _staffEmail = staff.email || '';
-  bootApp();
+  await bootApp();
+  _handleDeepLink();
 })();
+
+// Deep links from notifications (WhatsApp/email): /nidaan/ops?qt=<id> opens the
+// quick-task drawer; ?task=<id> jumps to the Tasks panel.
+function _handleDeepLink(){
+  try {
+    const p = new URLSearchParams(location.search);
+    const qt = p.get('qt');
+    const task = p.get('task');
+    if (qt && /^\d+$/.test(qt)) {
+      setTimeout(()=>{ try{ openQuickTaskDrawer(parseInt(qt,10)); }catch(e){} }, 350);
+    } else if (task && /^\d+$/.test(task)) {
+      setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
+    }
+  } catch(e){}
+}
 
 // Enter key on login
 document.getElementById('loginPwd').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
