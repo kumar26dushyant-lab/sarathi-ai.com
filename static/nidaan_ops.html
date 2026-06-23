@@ -1192,6 +1192,10 @@ async function openQuickTaskDrawer(qid){
   const canTransition = isAssignee || isAdmin;
   const canComment = isAssignee || isCreator || isAdmin;
 
+  // Admins can reassign — load the assignee roster up front.
+  let assignees = [];
+  if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
+
   document.getElementById('drawerTitle').textContent = '📌 Quick Task #' + qt.quick_task_id;
   const body = document.getElementById('drawerBody');
   const statusActions = canTransition ? `
@@ -1201,6 +1205,20 @@ async function openQuickTaskDrawer(qid){
       ${qt.status==='done' || qt.status==='cancelled' ? `<button class="btn-sm btn-ghost" onclick="qtSetStatus(${qt.quick_task_id},'open')">↺ Reopen</button>` : ''}
       ${qt.status!=='cancelled' && qt.status!=='done' && isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5" onclick="qtSetStatus(${qt.quick_task_id},'cancelled')">✕ Cancel</button>` : ''}
     </div>` : '';
+
+  // Manage block: reassign + delete (admin) and history (anyone who can view).
+  const manageActions = `
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:1rem;padding:.6rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px">
+      ${isAdmin ? `
+        <span style="font-size:.78rem;color:rgba(255,255,255,.5)">Reassign:</span>
+        <select id="qtReassignSel" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.35rem .5rem;border-radius:6px;font-size:.82rem">
+          ${assignees.map(a=>`<option value="${a.staff_id}" ${a.staff_id===qt.assigned_to_staff_id?'selected':''}>${esc(a.name)} · ${esc((a.role||'').replace(/_/g,' '))}</option>`).join('')}
+        </select>
+        <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="qtReassign(${qt.quick_task_id})">⇄ Reassign</button>` : ''}
+      <button class="btn-sm btn-ghost" onclick="qtShowHistory(${qt.quick_task_id})">📜 History</button>
+      ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5;margin-left:auto" onclick="qtDelete(${qt.quick_task_id})">🗑 Delete</button>` : ''}
+    </div>
+    <div id="qtHistoryBox" style="display:none;margin-bottom:1rem"></div>`;
 
   body.innerHTML = `
     <div style="padding:1rem 1.25rem 2rem">
@@ -1221,6 +1239,7 @@ async function openQuickTaskDrawer(qid){
       </div>
 
       ${statusActions}
+      ${manageActions}
 
       <div style="margin-bottom:.5rem">
         <div style="font-size:.78rem;color:rgba(255,255,255,.55);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.05em">🧵 Discussion (${notes.length})</div>
@@ -1283,6 +1302,15 @@ function qtToggleReply(nid){
   if (show) setTimeout(() => document.getElementById('qtReplyInput_'+nid)?.focus(), 30);
 }
 
+// Refresh the quick-task widgets when they're on-screen (Tasks panel, or
+// Overview on older sessions). Called after any task mutation.
+function _refreshQuickTaskWidgets(){
+  if (_currentPanel === 'tasks' || _currentPanel === 'overview') {
+    loadMyQuickTasksWidget();
+    if (_role==='super_admin' || _role==='sub_super_admin') loadTeamQuickTasksWidget();
+  }
+}
+
 async function qtSetStatus(qid, status){
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {
     method:'PATCH', headers:{...hdrs(),'Content-Type':'application/json'},
@@ -1291,11 +1319,65 @@ async function qtSetStatus(qid, status){
   if (r.ok) {
     ndUI.toast('Status updated','success');
     openQuickTaskDrawer(qid);  // refresh
-    if (_currentPanel === 'overview') {
-      loadMyQuickTasksWidget();
-      if (_role==='super_admin' || _role==='sub_super_admin') loadTeamQuickTasksWidget();
-    }
+    _refreshQuickTaskWidgets();
   } else ndUI.toast('Failed to update','error');
+}
+
+async function qtReassign(qid){
+  const sel = document.getElementById('qtReassignSel');
+  if (!sel) return;
+  const newId = parseInt(sel.value, 10);
+  if (!newId) { ndUI.toast('Pick an assignee','error'); return; }
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {
+    method:'PATCH', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({assigned_to_staff_id:newId})
+  });
+  if (r.ok) {
+    ndUI.toast('Reassigned ✓ — assignee notified','success');
+    openQuickTaskDrawer(qid);
+    _refreshQuickTaskWidgets();
+  } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Reassign failed'),'error'); }
+}
+
+async function qtDelete(qid){
+  if (!confirm('Delete this task? It will be removed from active lists (history is kept).')) return;
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, { method:'DELETE', headers: hdrs() });
+  if (r.ok) {
+    ndUI.toast('Task deleted','success');
+    closeDrawer();
+    _refreshQuickTaskWidgets();
+  } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Delete failed'),'error'); }
+}
+
+const _QT_ACTION_LABEL = {
+  created:'Created', status:'Status changed', reassign:'Reassigned',
+  reopen:'Reopened', delete:'Deleted', approve:'Approved', reject:'Rejected'
+};
+async function qtShowHistory(qid){
+  const box = document.getElementById('qtHistoryBox');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML = '<div style="padding:.6rem;color:rgba(255,255,255,.4);font-size:.82rem">Loading history…</div>';
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid+'/history', { headers: hdrs() });
+  if (!r.ok) { box.innerHTML='<div style="padding:.6rem;color:#fca5a5;font-size:.82rem">Failed to load history</div>'; return; }
+  const d = await r.json();
+  const rows = d.history || [];
+  if (!rows.length) { box.innerHTML='<div style="padding:.6rem;color:rgba(255,255,255,.4);font-size:.82rem">No history yet.</div>'; return; }
+  box.innerHTML = `
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:.6rem .75rem">
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">📜 Activity log</div>
+      ${rows.map(h=>{
+        const lbl = _QT_ACTION_LABEL[h.action] || h.action;
+        const chg = (h.from_value||h.to_value) ? ` <span style="color:rgba(255,255,255,.55)">${esc(h.from_value||'—')} → ${esc(h.to_value||'—')}</span>` : '';
+        return `<div style="font-size:.8rem;margin-bottom:.4rem;display:flex;gap:.5rem">
+          <span style="color:#a78bfa;font-weight:600;min-width:96px">${esc(lbl)}</span>
+          <span style="flex:1">${chg}${h.note?` · <span style="color:rgba(255,255,255,.6)">${esc(h.note)}</span>`:''}
+            <div style="color:rgba(255,255,255,.4);font-size:.72rem">${esc(h.by_name||'—')} · ${ndUI.timeAgo(h.changed_at)}</div>
+          </span>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 async function qtAddNote(qid, parentNoteId){
