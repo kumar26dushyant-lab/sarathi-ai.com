@@ -4004,9 +4004,9 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
     if body.assigned_to_staff_id is not None and role == "team_member":
         raise HTTPException(403, "Only admin or SA can reassign")
     if body.status is not None:
-        await nidaan.update_quick_task_status(qid, body.status)
+        await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"])
     if body.assigned_to_staff_id is not None:
-        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id)
+        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id, changed_by=staff["staff_id"])
         # Notify new assignee if priority demands it
         try:
             new_qt = await nidaan.get_quick_task(qid)
@@ -4016,6 +4016,29 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
         except Exception:
             pass
     return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+@app.delete("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_delete(qid: int, request: Request):
+    """Soft-delete a quick task (admin/SA, or the creator). History is kept."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    if role == "team_member" and qt.get("created_by_staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "Only admin/SA or the creator can delete")
+    ok = await nidaan.soft_delete_quick_task(qid, changed_by=staff["staff_id"])
+    return {"ok": ok}
+
+
+@app.get("/nidaan/ops/api/quick-tasks/{qid}/history")
+async def ops_quick_task_history(qid: int, request: Request):
+    """Immutable lifecycle history for a quick task (status/reassign/reopen/delete/approval)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"history": await nidaan.get_quick_task_history(qid)}
 
 
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")

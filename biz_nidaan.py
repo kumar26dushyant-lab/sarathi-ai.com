@@ -1646,8 +1646,12 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
              created_by_staff_id, priority, claim_id, due_date))
+        qid = cur.lastrowid
+        await _log_quick_task(conn, qid, "created",
+                              to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
+                              changed_by=created_by_staff_id)
         await conn.commit()
-        return cur.lastrowid
+        return qid
 
 
 async def get_quick_task(quick_task_id: int) -> Optional[dict]:
@@ -1672,7 +1676,7 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                             claim_id: Optional[int] = None,
                             include_done: bool = False,
                             limit: int = 100) -> list[dict]:
-    where, params = [], []
+    where, params = ["q.deleted_at IS NULL"], []
     if status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:
@@ -1701,27 +1705,82 @@ async def list_quick_tasks(*, status: Optional[str] = None,
         return [dict(r) for r in await cur.fetchall()]
 
 
-async def update_quick_task_status(quick_task_id: int, status: str) -> bool:
+async def _log_quick_task(conn, quick_task_id: int, action: str,
+                          from_value: str = None, to_value: str = None,
+                          changed_by: int = None, note: str = "") -> None:
+    """Append an immutable history row (uses an existing open connection)."""
+    await conn.execute(
+        "INSERT INTO nidaan_quick_task_log "
+        "(quick_task_id, action, from_value, to_value, changed_by_staff_id, note) "
+        "VALUES (?,?,?,?,?,?)",
+        (quick_task_id, action, from_value, to_value, changed_by, note or ""))
+
+
+async def update_quick_task_status(quick_task_id: int, status: str,
+                                   changed_by: int = None, note: str = "") -> bool:
     if status not in QUICK_TASK_STATUSES:
         return False
-    done_clause = ", completed_at = CURRENT_TIMESTAMP" if status == "done" else ""
     async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await (await conn.execute(
+            "SELECT status, completed_at FROM nidaan_quick_tasks WHERE quick_task_id=?",
+            (quick_task_id,))).fetchone()
+        if not cur:
+            return False
+        prev = cur["status"]
+        # Reopening a done/cancelled task → clear completed_at + flag the action.
+        reopening = prev in ("done", "cancelled") and status in ("open", "in_progress")
+        done_clause = ", completed_at = CURRENT_TIMESTAMP" if status == "done" else \
+                      (", completed_at = NULL" if reopening else "")
         await conn.execute(
-            f"UPDATE nidaan_quick_tasks SET status = ?, "
-            f"updated_at = CURRENT_TIMESTAMP{done_clause} "
+            f"UPDATE nidaan_quick_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP{done_clause} "
             "WHERE quick_task_id = ?", (status, quick_task_id))
+        await _log_quick_task(conn, quick_task_id,
+                              "reopen" if reopening else "status",
+                              from_value=prev, to_value=status,
+                              changed_by=changed_by, note=note)
         await conn.commit()
     return True
 
 
-async def reassign_quick_task(quick_task_id: int, assignee_staff_id: Optional[int]) -> bool:
+async def reassign_quick_task(quick_task_id: int, assignee_staff_id: Optional[int],
+                              changed_by: int = None, note: str = "") -> bool:
     async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        prev = await (await conn.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_quick_tasks WHERE quick_task_id=?",
+            (quick_task_id,))).fetchone()
         await conn.execute(
             "UPDATE nidaan_quick_tasks SET assigned_to_staff_id = ?, "
             "updated_at = CURRENT_TIMESTAMP WHERE quick_task_id = ?",
             (assignee_staff_id, quick_task_id))
+        await _log_quick_task(conn, quick_task_id, "reassign",
+                              from_value=str(prev["assigned_to_staff_id"]) if prev and prev["assigned_to_staff_id"] else None,
+                              to_value=str(assignee_staff_id) if assignee_staff_id else None,
+                              changed_by=changed_by, note=note)
         await conn.commit()
     return True
+
+
+async def soft_delete_quick_task(quick_task_id: int, changed_by: int = None) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_quick_tasks SET deleted_at = CURRENT_TIMESTAMP "
+            "WHERE quick_task_id = ? AND deleted_at IS NULL", (quick_task_id,))
+        if cur.rowcount:
+            await _log_quick_task(conn, quick_task_id, "delete", changed_by=changed_by)
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def get_quick_task_history(quick_task_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT l.*, s.name AS by_name FROM nidaan_quick_task_log l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.changed_by_staff_id "
+            "WHERE l.quick_task_id = ? ORDER BY l.changed_at ASC", (quick_task_id,))
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,

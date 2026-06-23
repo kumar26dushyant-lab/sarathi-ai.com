@@ -1549,6 +1549,35 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_nqtn_task "
             "ON nidaan_quick_task_notes(quick_task_id, created_at DESC)")
 
+        # ── Quick-task lifecycle: soft-delete + approval + immutable history ──
+        for _alt in [
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN deleted_at TIMESTAMP",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN task_type TEXT DEFAULT 'assignment'",   # assignment | request | leave
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN requires_approval INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN approval_status TEXT DEFAULT 'none'",    # none | pending | approved | rejected
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_at TIMESTAMP",
+        ]:
+            try:
+                await conn.execute(_alt)
+            except Exception:
+                pass
+        # nidaan_quick_task_log: immutable trail (status, reassign, reopen, delete,
+        # approval). INSERT-only — the audit history per quick task.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_log (
+                log_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                quick_task_id       INTEGER NOT NULL REFERENCES nidaan_quick_tasks(quick_task_id),
+                action              TEXT NOT NULL,        -- created|status|reassign|reopen|delete|approve|reject
+                from_value          TEXT,
+                to_value            TEXT,
+                changed_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                note                TEXT,
+                changed_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nqtlog_task ON nidaan_quick_task_log(quick_task_id, changed_at DESC)")
+
         # Webhook signature failure log — drives the monitoring alert that
         # warns the owner before Razorpay (or any other webhook source) hits
         # its retry cap and disables the webhook.
