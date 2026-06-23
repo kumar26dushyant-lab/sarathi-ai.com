@@ -1650,19 +1650,22 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                              assigned_to_staff_id: Optional[int] = None,
                              priority: str = "normal", claim_id: Optional[int] = None,
                              due_date: Optional[str] = None, description: str = "",
-                             requires_approval: bool = False) -> int:
+                             requires_approval: bool = False,
+                             task_type: str = "assignment") -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
+    if task_type not in ("assignment", "request"):
+        task_type = "assignment"
     approval_status = "pending" if requires_approval else "none"
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_tasks "
             "(title, description, assigned_to_staff_id, created_by_staff_id, "
-            " priority, claim_id, due_date, requires_approval, approval_status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " priority, claim_id, due_date, requires_approval, approval_status, task_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
              created_by_staff_id, priority, claim_id, due_date,
-             1 if requires_approval else 0, approval_status))
+             1 if requires_approval else 0, approval_status, task_type))
         qid = cur.lastrowid
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
@@ -2866,7 +2869,49 @@ async def update_account_profile(account_id: int, owner_name: str = None,
 # =============================================================================
 
 STAFF_ROLES = ("super_admin", "sub_super_admin", "team_member")
+STAFF_ROLE_RANK = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
 _STAFF_JWT_SUFFIX = ":nidaan_staff"
+
+
+def role_rank(role: str) -> int:
+    return STAFF_ROLE_RANK.get(role or "", 0)
+
+
+# ── Ops settings (key-value office policy) ───────────────────────────────────
+OPS_SETTING_DEFAULTS = {
+    # Minimum role permitted to create a DIRECT assignment. Lower roles can
+    # still raise an upward "request". Default 'team_member' = everyone creates.
+    "task_create_min_role": "team_member",
+}
+
+
+async def get_ops_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT value FROM nidaan_ops_settings WHERE key=?", (key,))).fetchone()
+        if row is not None:
+            return row[0]
+    return default if default is not None else OPS_SETTING_DEFAULTS.get(key)
+
+
+async def get_all_ops_settings() -> dict:
+    out = dict(OPS_SETTING_DEFAULTS)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute("SELECT key, value FROM nidaan_ops_settings")
+        for k, v in await cur.fetchall():
+            out[k] = v
+    return out
+
+
+async def set_ops_setting(key: str, value: str, updated_by: Optional[int] = None) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_ops_settings (key, value, updated_by, updated_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+            "updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP",
+            (key, value, updated_by))
+        await conn.commit()
 
 
 def _staff_jwt_secret() -> str:

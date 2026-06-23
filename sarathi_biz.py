@@ -3900,6 +3900,7 @@ class _QuickTaskCreateReq(BaseModel):
     due_date: Optional[str] = None
     initial_comment: str = ""
     requires_approval: bool = False
+    task_type: str = Field("assignment", pattern=r"^(assignment|request)$")
 
 
 class _QuickTaskUpdateReq(BaseModel):
@@ -3975,13 +3976,21 @@ async def ops_quick_task_get(qid: int, request: Request):
 @app.post("/nidaan/ops/api/quick-tasks")
 async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
-    staff = _require_staff(request, "sub_super_admin")
+    # Everyone can create. A permission setting can require a minimum role for
+    # DIRECT assignments; lower roles are nudged to an upward "request" instead.
+    staff = _require_staff(request)
+    task_type = body.task_type
+    min_role = await nidaan.get_ops_setting("task_create_min_role", "team_member")
+    if task_type == "assignment" and \
+       nidaan.role_rank(staff.get("role", "")) < nidaan.role_rank(min_role):
+        task_type = "request"  # nudge, don't block
     qid = await nidaan.create_quick_task(
         title=body.title, description=body.description,
         created_by_staff_id=staff["staff_id"],
         assigned_to_staff_id=body.assigned_to_staff_id,
         priority=body.priority, claim_id=body.claim_id,
-        due_date=body.due_date, requires_approval=body.requires_approval)
+        due_date=body.due_date, requires_approval=body.requires_approval,
+        task_type=task_type)
     if body.initial_comment.strip():
         try:
             await nidaan.add_quick_task_note(
@@ -3989,15 +3998,19 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
                 note=body.initial_comment)
         except Exception as ce:
             logger.warning("Initial comment failed on quick task %d: %s", qid, ce)
-    # Notification dispatch — driven by priority taxonomy
+    # Notification dispatch — requests alert admins; assignments notify the pair.
     try:
         qt = await nidaan.get_quick_task(qid)
         if qt:
             import asyncio as _asyncio
-            _asyncio.create_task(nnot.on_quick_task_assigned(qt))
+            if task_type == "request":
+                _asyncio.create_task(nnot.on_quick_task_request(qt))
+            else:
+                _asyncio.create_task(nnot.on_quick_task_assigned(qt))
     except Exception as ne:
         logger.warning("Quick task notification dispatch failed: %s", ne)
-    return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid)}
+    return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid),
+            "task_type": task_type}
 
 
 @app.patch("/nidaan/ops/api/quick-tasks/{qid}")
@@ -4180,6 +4193,35 @@ async def ops_leave_cancel(leave_id: int, request: Request):
         raise HTTPException(403, "You can only cancel your own request")
     await nidaan.cancel_leave_request(leave_id, staff["staff_id"])
     return {"ok": True}
+
+
+# ── Ops permission settings (P5) ──────────────────────────────────────────────
+class _OpsSettingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_create_min_role: str = Field(pattern=r"^(team_member|sub_super_admin|super_admin)$")
+
+
+@app.get("/nidaan/ops/api/ops-settings")
+async def ops_settings_get(request: Request):
+    """Office policy settings. Readable by any staff (the create UI adapts to it)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    settings = await nidaan.get_all_ops_settings()
+    return {"settings": settings,
+            "my_role": staff.get("role"),
+            "can_edit": staff.get("role") == "super_admin"}
+
+
+@app.put("/nidaan/ops/api/ops-settings")
+async def ops_settings_update(body: _OpsSettingReq, request: Request):
+    """Update office policy (super_admin only)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("task_create_min_role", body.task_create_min_role,
+                                 updated_by=staff["staff_id"])
+    await _ops_audit(request, "ops_settings.update", "settings", 0,
+                     f"task_create_min_role={body.task_create_min_role}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
 
 
 @app.get("/nidaan/ops/api/claim-search")

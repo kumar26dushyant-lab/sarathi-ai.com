@@ -1598,6 +1598,18 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_staff ON nidaan_leave_requests(staff_id, status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_status ON nidaan_leave_requests(status, start_date)")
 
+        # nidaan_ops_settings: small key-value store for office policy toggles
+        # (e.g. task_create_min_role — the minimum role allowed to create a
+        # direct assignment; lower roles raise an upward "request" instead).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_ops_settings (
+                key             TEXT PRIMARY KEY,
+                value           TEXT NOT NULL DEFAULT '',
+                updated_by      INTEGER REFERENCES nidaan_staff(staff_id),
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Webhook signature failure log — drives the monitoring alert that
         # warns the owner before Razorpay (or any other webhook source) hits
         # its retry cap and disables the webhook.

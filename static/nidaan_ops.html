@@ -676,16 +676,32 @@ async function loadOverview() {
 //  task pipeline, and workload-by-assignee). Replaces the task
 //  widgets that used to crowd the Overview.
 // ═══════════════════════════════════════════════════════════════
+const _ROLE_RANK = {team_member:0, sub_super_admin:1, super_admin:2};
+let _opsSettingsCache = null;
+async function _loadOpsSettings(force){
+  if (_opsSettingsCache && !force) return _opsSettingsCache;
+  const r = await fetch('/nidaan/ops/api/ops-settings', { headers: hdrs() });
+  if (r.ok) _opsSettingsCache = await r.json();
+  return _opsSettingsCache || {settings:{task_create_min_role:'team_member'}, can_edit:false};
+}
+// Can the current user create a DIRECT assignment (vs. only raise a request)?
+function _canAssignTasks(){
+  const minRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
+  return (_ROLE_RANK[_role]||0) >= (_ROLE_RANK[minRole]||0);
+}
+
 async function loadTasks() {
   const el = document.getElementById('panel-tasks');
   const isAdmin = (_role === 'super_admin' || _role === 'sub_super_admin');
+  await _loadOpsSettings(true);
+  const canAssign = _canAssignTasks();
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Tasks</div>
       <div class="section-sub">Office tasks, assignments, workload & leave</div></div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <button class="btn-sm btn-ghost" onclick="openLeaveModal()">🌴 Apply for Leave</button>
-        ${isAdmin ? `<button class="btn-primary" onclick="openQuickTaskModal()">+ New Task</button>` : ''}
+        <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
     <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
@@ -786,7 +802,35 @@ async function loadLeaveSection(){
     </div>`;
   }
 
+  // Super-admin: task-creation permission
+  if (_role === 'super_admin') {
+    const minRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
+    const opt = (v,t)=>`<option value="${v}" ${minRole===v?'selected':''}>${t}</option>`;
+    cards += `<div class="nd-card" style="padding:1rem">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.5rem">🔐 Task Permissions</div>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:.6rem">Minimum role to create a <b>direct assignment</b>. Anyone below this can still raise an upward <b>request</b>.</div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <select id="permMinRole" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.4rem .55rem;border-radius:6px;font-size:.85rem">
+          ${opt('team_member','Everyone (associates +)')}
+          ${opt('sub_super_admin','Admins & Super Admins')}
+          ${opt('super_admin','Super Admins only')}
+        </select>
+        <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="savePermissions()">Save</button>
+      </div>
+    </div>`;
+  }
+
   wrap.innerHTML = cards;
+}
+
+async function savePermissions(){
+  const val = document.getElementById('permMinRole').value;
+  const r = await fetch('/nidaan/ops/api/ops-settings', {
+    method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({task_create_min_role: val})
+  });
+  if (r.ok) { _opsSettingsCache = null; ndUI.toast('Permissions saved ✓','success'); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Save failed'),'error'); }
 }
 
 function openLeaveModal(){
@@ -1057,7 +1101,11 @@ async function openQuickTaskModal(presetClaimId){
   const [assignees, priorities] = await Promise.all([
     _loadAssigneesOnce(),
     _loadQTPriorities(),
+    _loadOpsSettings(),
   ]);
+  // Restricted roles raise an upward "request" rather than a direct assignment.
+  const requestMode = !_canAssignTasks();
+  window._qtRequestMode = requestMode;
   let presetClaim = null;
   if (presetClaimId) {
     const r = await API('/claims/' + presetClaimId);
@@ -1111,10 +1159,11 @@ async function openQuickTaskModal(presetClaimId){
   bg.innerHTML = `
     <div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:560px;width:100%;max-height:92vh;overflow-y:auto;padding:1.5rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-        <h2 style="font-size:1.15rem;font-weight:800">✚ Quick Task</h2>
+        <h2 style="font-size:1.15rem;font-weight:800">${requestMode ? '🙋 Raise a Request' : '✚ Quick Task'}</h2>
         <button onclick="document.getElementById('quickTaskModalBg').remove()"
                 style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.25rem;cursor:pointer">✕</button>
       </div>
+      ${requestMode ? `<div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);color:#c4b5fd;padding:.5rem .65rem;border-radius:6px;font-size:.8rem;margin-bottom:.85rem">This goes up to your admins as a request. You can suggest who should handle it.</div>` : ''}
 
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Title *</label>
       <input id="qtTitle" placeholder="e.g. Call Bajaj Allianz on Monday re. claim escalation"
@@ -1122,7 +1171,7 @@ async function openQuickTaskModal(presetClaimId){
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.85rem">
         <div>
-          <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Assign to</label>
+          <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">${requestMode ? 'Suggest who handles it' : 'Assign to'}</label>
           <select id="qtAssignee" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem">
             <option value="">Unassigned</option>
             ${assignees.map(a => `<option value="${a.staff_id}" ${a.staff_id===_staffId?'selected':''}>${esc(a.name)}${a.staff_id===_staffId?' (me)':''}</option>`).join('')}
@@ -1266,7 +1315,8 @@ async function submitQuickTask(){
   const dueDate = document.getElementById('qtDueDate').value || null;
   const comment = (document.getElementById('qtComment')?.value || '').trim();
   const requiresApproval = !!(document.getElementById('qtRequiresApproval') || {}).checked;
-  const body = { title, priority, requires_approval: requiresApproval };
+  const taskType = window._qtRequestMode ? 'request' : 'assignment';
+  const body = { title, priority, requires_approval: requiresApproval, task_type: taskType };
   if (assigneeVal) body.assigned_to_staff_id = parseInt(assigneeVal);
   if (claimVal) body.claim_id = parseInt(claimVal);
   if (dueDate) body.due_date = dueDate;
@@ -1276,7 +1326,8 @@ async function submitQuickTask(){
     body: JSON.stringify(body),
   });
   if (r.ok) {
-    ndUI.toast('Quick task created ✓','success');
+    const dd = await r.json().catch(()=>({}));
+    ndUI.toast(dd.task_type==='request' ? 'Request sent to admins ✓' : 'Quick task created ✓','success');
     document.getElementById('quickTaskModalBg').remove();
     if (_currentPanel === 'tasks') loadTasks();
     else if (_currentPanel === 'overview') loadOverview();
@@ -1414,6 +1465,7 @@ async function openQuickTaskDrawer(qid){
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
         <span class="task-pill" style="background:${prio.color}22;color:${prio.color};border:1px solid ${prio.color}44">${prio.icon} ${prio.label}</span>
         <span class="task-pill" style="background:${status.color}22;color:${status.color};border:1px solid ${status.color}44">${status.label}</span>
+        ${qt.task_type==='request' ? `<span class="task-pill" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">🙋 Request</span>` : ''}
         ${reqAppr && ap ? `<span class="task-pill" style="background:${ap.c}22;color:${ap.c};border:1px solid ${ap.c}44">${ap.t}</span>` : ''}
       </div>
       <div style="font-size:1.1rem;font-weight:700;margin-bottom:.6rem">${esc(qt.title||'')}</div>

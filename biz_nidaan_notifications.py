@@ -750,6 +750,28 @@ async def _active_admins() -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def on_quick_task_request(quick_task: dict):
+    """An associate raised an upward request — alert every admin/SA so someone
+    picks it up. Deep-linked to the task."""
+    if not quick_task:
+        return
+    title = quick_task.get("title", "") or ""
+    qid = quick_task.get("quick_task_id")
+    link = f"{NIDAAN_BASE_URL}/nidaan/ops?qt={qid}" if qid else f"{NIDAAN_BASE_URL}/nidaan/ops"
+    frm = quick_task.get("creator_name") or "an associate"
+    for a in await _active_admins():
+        await dispatch(
+            event_key="quick_task.request", priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
+            recipient_phone=a.get("phone") or "",
+            recipient_email=a.get("email") or "",
+            subject=f"[Nidaan] Request from {frm}: {title}",
+            body=(f"🙋 New request from {frm}\n"
+                  f"📌 {title}\n"
+                  + (f"Linked: claim #{quick_task['claim_id']}\n" if quick_task.get('claim_id') else "")
+                  + f"Pick up: {link}"))
+
+
 async def on_leave_requested(leave: dict):
     """A staffer applied for leave — alert every admin/SA (deep-linked to Tasks)."""
     if not leave:
