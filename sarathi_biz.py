@@ -4092,6 +4092,96 @@ async def ops_quick_task_note_add(qid: int, body: _QuickTaskNoteReq, request: Re
     return {"note_id": nid}
 
 
+# ── Leave management (P4) ─────────────────────────────────────────────────────
+class _LeaveCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    start_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    reason: str = Field("", max_length=2000)
+
+
+class _LeaveDecisionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    note: str = Field("", max_length=2000)
+
+
+@app.post("/nidaan/ops/api/leave")
+async def ops_leave_create(body: _LeaveCreateReq, request: Request):
+    """Any staffer applies for leave; all admins/SA are notified."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    if body.end_date < body.start_date:
+        raise HTTPException(400, "End date cannot be before start date")
+    leave_id = await nidaan.create_leave_request(
+        staff_id=staff["staff_id"], start_date=body.start_date,
+        end_date=body.end_date, reason=body.reason)
+    try:
+        leave = await nidaan.get_leave_request(leave_id)
+        if leave:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_leave_requested(leave))
+    except Exception as ne:
+        logger.warning("Leave-requested notification failed: %s", ne)
+    await _ops_audit(request, "leave.request", "leave", leave_id,
+                     f"{body.start_date}→{body.end_date}")
+    return {"leave_id": leave_id}
+
+
+@app.get("/nidaan/ops/api/leave")
+async def ops_leave_list(request: Request, scope: str = "auto", status: str = ""):
+    """List leave requests. team_member sees own; admin/SA see all (scope=mine
+    to force own). Also returns the current on-leave roster for admins."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    own_only = (not is_admin) or (scope == "mine")
+    rows = await nidaan.list_leave_requests(
+        staff_id=staff["staff_id"] if own_only else None,
+        status=status or None)
+    out = {"leave": rows, "is_admin": is_admin}
+    if is_admin and not own_only:
+        out["on_leave_now"] = await nidaan.list_staff_on_leave_now()
+    return out
+
+
+@app.post("/nidaan/ops/api/leave/{leave_id}/decision")
+async def ops_leave_decide(leave_id: int, body: _LeaveDecisionReq, request: Request):
+    """Approve/reject a pending leave request (admin/SA)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    leave = await nidaan.get_leave_request(leave_id)
+    if not leave:
+        raise HTTPException(404)
+    if leave.get("status") != "pending":
+        raise HTTPException(400, "This request was already decided")
+    await nidaan.decide_leave_request(leave_id, body.decision,
+                                      decided_by=staff["staff_id"], note=body.note)
+    try:
+        fresh = await nidaan.get_leave_request(leave_id)
+        if fresh:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_leave_decided(fresh, body.decision))
+    except Exception as ne:
+        logger.warning("Leave-decided notification failed: %s", ne)
+    await _ops_audit(request, "leave.decide", "leave", leave_id, body.decision)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/leave/{leave_id}/cancel")
+async def ops_leave_cancel(leave_id: int, request: Request):
+    """A staffer withdraws their own still-pending leave request."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    leave = await nidaan.get_leave_request(leave_id)
+    if not leave:
+        raise HTTPException(404)
+    if leave.get("staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "You can only cancel your own request")
+    await nidaan.cancel_leave_request(leave_id, staff["staff_id"])
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/claim-search")
 async def ops_claims_search(request: Request, q: str = ""):
     """Claim picker for the Quick Task panel.

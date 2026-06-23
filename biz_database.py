@@ -1578,6 +1578,26 @@ async def init_db():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nqtlog_task ON nidaan_quick_task_log(quick_task_id, changed_at DESC)")
 
+        # nidaan_leave_requests: staff apply → admin/SA approve/reject. While a
+        # request is approved and within its window the staffer is "on leave",
+        # which surfaces their open tasks for reassignment.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_leave_requests (
+                leave_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                staff_id            INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                start_date          TEXT NOT NULL,         -- YYYY-MM-DD
+                end_date            TEXT NOT NULL,         -- YYYY-MM-DD (inclusive)
+                reason              TEXT DEFAULT '',
+                status              TEXT NOT NULL DEFAULT 'pending', -- pending|approved|rejected|cancelled
+                decided_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                decided_at          TIMESTAMP,
+                decision_note       TEXT DEFAULT '',
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_staff ON nidaan_leave_requests(staff_id, status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_status ON nidaan_leave_requests(status, start_date)")
+
         # Webhook signature failure log — drives the monitoring alert that
         # warns the owner before Razorpay (or any other webhook source) hits
         # its retry cap and disables the webhook.

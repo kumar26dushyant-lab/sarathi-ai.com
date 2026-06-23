@@ -682,8 +682,11 @@ async function loadTasks() {
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Tasks</div>
-      <div class="section-sub">Office tasks, assignments & team workload</div></div>
-      ${isAdmin ? `<button class="btn-primary" onclick="openQuickTaskModal()">+ New Task</button>` : ''}
+      <div class="section-sub">Office tasks, assignments, workload & leave</div></div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn-sm btn-ghost" onclick="openLeaveModal()">🌴 Apply for Leave</button>
+        ${isAdmin ? `<button class="btn-primary" onclick="openQuickTaskModal()">+ New Task</button>` : ''}
+      </div>
     </div>
     <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
       <div id="overviewMyQuickTasks"></div>
@@ -691,9 +694,11 @@ async function loadTasks() {
     </div>
     <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem">
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
-    </div>`;
+    </div>
+    <div id="tasksLeave" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>`;
   loadMyQuickTasksWidget();
   if (isAdmin) loadTeamQuickTasksWidget();
+  loadLeaveSection();
 
   const r = await fetch('/nidaan/ops/api/overview-widgets', { headers: hdrs() });
   if (!r.ok) {
@@ -706,6 +711,162 @@ async function loadTasks() {
     ${_widgetTaskPipeline(d.task_pipeline || [])}
     ${isAdmin ? _widgetWorkload(d.workload || []) : ''}
   `;
+}
+
+// ── Leave (P4) ───────────────────────────────────────────────────────────────
+const LEAVE_PILL = {
+  pending:  {c:'#fbbf24', t:'Pending'},
+  approved: {c:'#22c55e', t:'Approved'},
+  rejected: {c:'#f87171', t:'Rejected'},
+  cancelled:{c:'#94a3b8', t:'Cancelled'},
+};
+
+async function loadLeaveSection(){
+  const wrap = document.getElementById('tasksLeave');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading leave…</div>';
+  const r = await fetch('/nidaan/ops/api/leave', { headers: hdrs() });
+  if (!r.ok) { wrap.innerHTML = `<div class="nd-card" style="padding:1rem;color:#f87171">Failed to load leave (${r.status})</div>`; return; }
+  const d = await r.json();
+  const isAdmin = !!d.is_admin;
+  const all = d.leave || [];
+  const mine = all.filter(l => l.staff_id === _staffId);
+  const pending = isAdmin ? all.filter(l => l.status === 'pending') : [];
+  const onLeave = d.on_leave_now || [];
+
+  const row = (l, opts={}) => {
+    const p = LEAVE_PILL[l.status] || LEAVE_PILL.pending;
+    return `<div style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.86rem;font-weight:600">${esc(l.start_date)} → ${esc(l.end_date)}
+          <span class="task-pill" style="background:${p.c}22;color:${p.c};border:1px solid ${p.c}44;margin-left:.35rem">${p.t}</span></div>
+        ${opts.showWho ? `<div style="font-size:.78rem;color:rgba(255,255,255,.6)">👤 ${esc(l.staff_name||'')}${l.staff_role?` · ${esc((l.staff_role||'').replace(/_/g,' '))}`:''}</div>` : ''}
+        ${l.reason ? `<div style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.1rem">${esc(l.reason)}</div>` : ''}
+        ${l.decision_note ? `<div style="font-size:.74rem;color:rgba(255,255,255,.45);margin-top:.1rem">Note: ${esc(l.decision_note)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:.35rem;flex-shrink:0">
+        ${opts.admin && l.status==='pending' ? `
+          <button class="btn-sm" style="background:#22c55e;color:#0a1628;font-weight:700" onclick="leaveDecide(${l.leave_id},'approved')">✓</button>
+          <button class="btn-sm" style="background:#f87171;color:#0a1628;font-weight:700" onclick="leaveDecide(${l.leave_id},'rejected')">✕</button>` : ''}
+        ${(!opts.admin && l.staff_id===_staffId && l.status==='pending') ? `
+          <button class="btn-sm btn-ghost" onclick="leaveCancel(${l.leave_id})">Withdraw</button>` : ''}
+      </div>
+    </div>`;
+  };
+
+  let cards = '';
+  // My leave (everyone)
+  cards += `<div class="nd-card" style="padding:1rem">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem">
+      <div style="font-weight:700;font-size:.98rem">🌴 My Leave</div>
+      <button class="btn-sm btn-ghost" onclick="openLeaveModal()">+ Apply</button>
+    </div>
+    ${mine.length ? mine.map(l=>row(l,{})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No leave requests yet.</div>'}
+  </div>`;
+
+  // Admin: pending approvals
+  if (isAdmin) {
+    cards += `<div class="nd-card" style="padding:1rem">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">⏳ Pending Leave Approvals ${pending.length?`<span style="color:#fbbf24">(${pending.length})</span>`:''}</div>
+      ${pending.length ? pending.map(l=>row(l,{admin:true,showWho:true})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">Nothing awaiting approval.</div>'}
+    </div>`;
+
+    // Admin: currently on leave + their open tasks (for reassignment)
+    cards += `<div class="nd-card" style="padding:1rem">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">📅 Currently On Leave</div>
+      ${onLeave.length ? onLeave.map(s=>`
+        <div style="display:flex;gap:.6rem;align-items:center;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.86rem;font-weight:600">${esc(s.staff_name||'')}</div>
+            <div style="font-size:.76rem;color:rgba(255,255,255,.55)">until ${esc(s.end_date)} · ${s.open_tasks} open task${s.open_tasks==1?'':'s'}</div>
+          </div>
+          ${s.open_tasks>0 ? `<button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="leaveShowTasks(${s.staff_id},'${esc(s.staff_name||'').replace(/'/g,'')}')">⇄ Reassign tasks</button>` : ''}
+        </div>`).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No one is on leave today.</div>'}
+      <div id="leaveTasksBox" style="margin-top:.5rem"></div>
+    </div>`;
+  }
+
+  wrap.innerHTML = cards;
+}
+
+function openLeaveModal(){
+  const existing = document.getElementById('leaveModalBg');
+  if (existing) existing.remove();
+  const today = new Date().toISOString().slice(0,10);
+  const bg = document.createElement('div');
+  bg.id = 'leaveModalBg';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem';
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  bg.innerHTML = `
+    <div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+        <h2 style="font-size:1.1rem;font-weight:800">🌴 Apply for Leave</h2>
+        <button onclick="document.getElementById('leaveModalBg').remove()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.25rem;cursor:pointer">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.85rem">
+        <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">From *</label>
+          <input id="lvStart" type="date" min="${today}" value="${today}" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
+        <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">To *</label>
+          <input id="lvEnd" type="date" min="${today}" value="${today}" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
+      </div>
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Reason (optional)</label>
+      <textarea id="lvReason" rows="2" placeholder="e.g. family function" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:1rem"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:.5rem">
+        <button class="btn-sm btn-ghost" onclick="document.getElementById('leaveModalBg').remove()">Cancel</button>
+        <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="submitLeave()">Submit request</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+}
+
+async function submitLeave(){
+  const start_date = document.getElementById('lvStart').value;
+  const end_date = document.getElementById('lvEnd').value;
+  const reason = (document.getElementById('lvReason').value||'').trim();
+  if (!start_date || !end_date) { ndUI.toast('Pick both dates','error'); return; }
+  if (end_date < start_date) { ndUI.toast('End date is before start date','error'); return; }
+  const r = await fetch('/nidaan/ops/api/leave', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({start_date, end_date, reason})
+  });
+  if (r.ok) {
+    ndUI.toast('Leave request sent — admins notified','success');
+    document.getElementById('leaveModalBg')?.remove();
+    if (_currentPanel === 'tasks') loadLeaveSection();
+  } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Request failed'),'error'); }
+}
+
+async function leaveDecide(leaveId, decision){
+  const note = decision==='rejected' ? (prompt('Reason for rejection (optional):')||'') : '';
+  const r = await fetch('/nidaan/ops/api/leave/'+leaveId+'/decision', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({decision, note})
+  });
+  if (r.ok) { ndUI.toast(decision==='approved'?'Approved ✓':'Rejected','success'); loadLeaveSection(); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Action failed'),'error'); }
+}
+
+async function leaveCancel(leaveId){
+  if (!confirm('Withdraw this leave request?')) return;
+  const r = await fetch('/nidaan/ops/api/leave/'+leaveId+'/cancel', { method:'POST', headers: hdrs() });
+  if (r.ok) { ndUI.toast('Withdrawn','success'); loadLeaveSection(); }
+  else ndUI.toast('Failed','error');
+}
+
+async function leaveShowTasks(staffId, staffName){
+  const box = document.getElementById('leaveTasksBox');
+  if (!box) return;
+  box.innerHTML = '<div style="padding:.5rem;color:rgba(255,255,255,.4);font-size:.82rem">Loading tasks…</div>';
+  const r = await fetch('/nidaan/ops/api/quick-tasks?assignee='+staffId, { headers: hdrs() });
+  if (!r.ok) { box.innerHTML='<div style="padding:.5rem;color:#fca5a5;font-size:.82rem">Failed to load</div>'; return; }
+  const d = await r.json();
+  const tasks = d.quick_tasks || [];
+  if (!tasks.length) { box.innerHTML=`<div style="padding:.5rem;color:rgba(255,255,255,.4);font-size:.82rem">${esc(staffName)} has no open tasks.</div>`; return; }
+  box.innerHTML = `
+    <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:.6rem .75rem">
+      <div style="font-size:.76rem;color:#c4b5fd;margin-bottom:.4rem">Open tasks for ${esc(staffName)} — click to reassign:</div>
+      ${tasks.map(t=>`<div style="font-size:.83rem;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer" onclick="openQuickTaskDrawer(${t.quick_task_id})">📌 ${esc(t.title||'')} <span style="color:rgba(255,255,255,.4);font-size:.74rem">#${t.quick_task_id}</span></div>`).join('')}
+    </div>`;
 }
 
 function _widgetEscalationsLoading(){
@@ -3386,10 +3547,13 @@ function _handleDeepLink(){
     const p = new URLSearchParams(location.search);
     const qt = p.get('qt');
     const task = p.get('task');
+    const leave = p.get('leave');
     if (qt && /^\d+$/.test(qt)) {
       setTimeout(()=>{ try{ openQuickTaskDrawer(parseInt(qt,10)); }catch(e){} }, 350);
     } else if (task && /^\d+$/.test(task)) {
       setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
+    } else if (leave && /^\d+$/.test(leave)) {
+      setTimeout(()=>{ try{ showPanel('tasks'); }catch(e){} }, 350);
     }
   } catch(e){}
 }

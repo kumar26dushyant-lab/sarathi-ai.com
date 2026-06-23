@@ -738,6 +738,58 @@ async def on_quick_task_approval(quick_task: dict, decision: str):
             claim_id=quick_task.get("claim_id"))
 
 
+async def _active_admins() -> list[dict]:
+    """All active super_admin + sub_super_admin, with notify-email fallback."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT staff_id, name, phone, role, "
+            "       COALESCE(NULLIF(notify_email,''), email) AS email "
+            "FROM nidaan_staff "
+            "WHERE role IN ('super_admin','sub_super_admin') AND status='active'")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def on_leave_requested(leave: dict):
+    """A staffer applied for leave — alert every admin/SA (deep-linked to Tasks)."""
+    if not leave:
+        return
+    who = leave.get("staff_name") or f"Staff #{leave.get('staff_id')}"
+    window = f"{leave.get('start_date')} → {leave.get('end_date')}"
+    link = f"{NIDAAN_BASE_URL}/nidaan/ops?leave={leave.get('leave_id')}"
+    for a in await _active_admins():
+        await dispatch(
+            event_key="leave.requested", priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
+            recipient_phone=a.get("phone") or "",
+            recipient_email=a.get("email") or "",
+            subject=f"[Nidaan] Leave request — {who}",
+            body=(f"🌴 Leave request from {who}\n"
+                  f"Dates: {window}\n"
+                  + (f"Reason: {leave.get('reason')}\n" if leave.get('reason') else "")
+                  + f"Review: {link}"))
+
+
+async def on_leave_decided(leave: dict, decision: str):
+    """A leave request was approved/rejected — notify the requester."""
+    if not leave or not leave.get("staff_id"):
+        return
+    approved = (decision == "approved")
+    icon = "✅" if approved else "🚫"
+    word = "approved" if approved else "rejected"
+    window = f"{leave.get('start_date')} → {leave.get('end_date')}"
+    link = f"{NIDAAN_BASE_URL}/nidaan/ops?leave={leave.get('leave_id')}"
+    await dispatch(
+        event_key="leave.decided", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_STAFF, recipient_id=leave["staff_id"],
+        recipient_phone=leave.get("staff_phone") or "",
+        recipient_email=leave.get("staff_email") or "",
+        subject=f"[Nidaan] Leave {word}",
+        body=(f"{icon} Your leave ({window}) was {word}.\n"
+              + (f"Note: {leave.get('decision_note')}\n" if leave.get('decision_note') else "")
+              + f"Open: {link}"))
+
+
 async def on_task_status_changed(task_id: int, from_status: str, to_status: str, note: str = ""):
     """A task moved status. Notify assignee + subscriber (if status maps to stage change)."""
     task = await ntasks.get_task(task_id)

@@ -1822,6 +1822,107 @@ async def get_quick_task_history(quick_task_id: int) -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+# =============================================================================
+#  LEAVE REQUESTS — staff apply → admin/SA approve; on-leave surfaces tasks
+# =============================================================================
+
+LEAVE_STATUSES = ("pending", "approved", "rejected", "cancelled")
+
+
+async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
+                                reason: str = "") -> int:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_leave_requests (staff_id, start_date, end_date, reason) "
+            "VALUES (?, ?, ?, ?)",
+            (staff_id, start_date, end_date, (reason or "").strip()))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_leave_request(leave_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT l.*, s.name AS staff_name, s.phone AS staff_phone, "
+            "       COALESCE(NULLIF(s.notify_email,''), s.email) AS staff_email, "
+            "       d.name AS decided_by_name "
+            "FROM nidaan_leave_requests l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "LEFT JOIN nidaan_staff d ON d.staff_id = l.decided_by_staff_id "
+            "WHERE l.leave_id = ?", (leave_id,))).fetchone()
+        return dict(row) if row else None
+
+
+async def list_leave_requests(*, staff_id: Optional[int] = None,
+                               status: Optional[str] = None,
+                               limit: int = 100) -> list[dict]:
+    where, params = [], []
+    if staff_id is not None:
+        where.append("l.staff_id = ?"); params.append(staff_id)
+    if status:
+        where.append("l.status = ?"); params.append(status)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT l.*, s.name AS staff_name, s.role AS staff_role, "
+            "       d.name AS decided_by_name "
+            "FROM nidaan_leave_requests l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "LEFT JOIN nidaan_staff d ON d.staff_id = l.decided_by_staff_id "
+            + clause +
+            " ORDER BY (l.status='pending') DESC, l.start_date DESC LIMIT ?",
+            params + [limit])
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def decide_leave_request(leave_id: int, decision: str, decided_by: int,
+                                note: str = "") -> bool:
+    """decision: 'approved' | 'rejected'."""
+    decision = (decision or "").lower()
+    if decision not in ("approved", "rejected"):
+        raise ValueError("decision must be 'approved' or 'rejected'")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_leave_requests SET status=?, decided_by_staff_id=?, "
+            "decided_at=CURRENT_TIMESTAMP, decision_note=? "
+            "WHERE leave_id=? AND status='pending'",
+            (decision, decided_by, (note or "").strip(), leave_id))
+        await conn.commit()
+    return True
+
+
+async def cancel_leave_request(leave_id: int, staff_id: int) -> bool:
+    """A staffer withdraws their own still-pending request."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_leave_requests SET status='cancelled' "
+            "WHERE leave_id=? AND staff_id=? AND status='pending'",
+            (leave_id, staff_id))
+        await conn.commit()
+    return True
+
+
+async def list_staff_on_leave_now() -> list[dict]:
+    """Staff whose approved leave window includes today, with their open task count."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT l.leave_id, l.staff_id, l.start_date, l.end_date, l.reason, "
+            "       s.name AS staff_name, s.role AS staff_role, "
+            "       (SELECT COUNT(*) FROM nidaan_quick_tasks q "
+            "          WHERE q.assigned_to_staff_id = l.staff_id "
+            "            AND q.deleted_at IS NULL "
+            "            AND q.status NOT IN ('done','cancelled')) AS open_tasks "
+            "FROM nidaan_leave_requests l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "WHERE l.status='approved' "
+            "  AND date('now') BETWEEN date(l.start_date) AND date(l.end_date) "
+            "ORDER BY l.end_date ASC")
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
                                 parent_note_id: Optional[int] = None) -> int:
     # Flatten: a reply-to-a-reply becomes a reply to the original parent.
