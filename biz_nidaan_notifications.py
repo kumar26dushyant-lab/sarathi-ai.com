@@ -433,11 +433,15 @@ async def _send_email(*, to_email: str, subject: str, html_body: str,
                       text_body: str = "") -> tuple[bool, str]:
     try:
         import biz_email as email_svc
+        # This module only ever sends NidaanPartner ops notifications — brand the
+        # sender as "Nidaan Partner" (a name starting with "Nidaan" also routes
+        # send_email to the Nidaan from-address, not the Sarathi default).
         ok = await email_svc.send_email(
             to_email=to_email,
             subject=subject,
             html_body=html_body,
-            text_body=text_body)
+            text_body=text_body,
+            from_name="Nidaan Partner")
         return (bool(ok), "" if ok else "email send returned False")
     except Exception as e:
         return (False, str(e))
