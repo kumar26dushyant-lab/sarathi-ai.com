@@ -2914,6 +2914,20 @@ def role_rank(role: str) -> int:
     return STAFF_ROLE_RANK.get(role or "", 0)
 
 
+def normalize_indian_mobile(p: str) -> Optional[str]:
+    """Return a clean 10-digit Indian mobile, or None if invalid. Strips a
+    recognised +91 / 0 prefix but never truncates an arbitrary long number
+    (a malformed entry must be rejected, not silently mangled)."""
+    digits = "".join(ch for ch in str(p or "") if ch.isdigit())
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) == 10 and digits[0] in "6789":
+        return digits
+    return None
+
+
 # ── Ops settings (key-value office policy) ───────────────────────────────────
 OPS_SETTING_DEFAULTS = {
     # Minimum role permitted to create a DIRECT assignment. Lower roles can
@@ -3002,7 +3016,13 @@ async def create_staff(
     if role not in STAFF_ROLES:
         raise ValueError(f"Invalid role: {role}")
     pw_hash = _hash_password(password)
-    phone = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if (phone or "").strip():
+        norm = normalize_indian_mobile(phone)
+        if not norm:
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        phone = norm
+    else:
+        phone = ""
     notify_email = (notify_email or "").lower().strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
@@ -3067,19 +3087,67 @@ async def mark_staff_saved_numbers(staff_id: int, phone: str = "") -> None:
 
 
 async def list_staff(include_inactive: bool = False) -> list[dict]:
+    """Active roster (or active+inactive). Soft-deleted staff are never here —
+    see list_deleted_staff() for the archive."""
+    cols = ("staff_id,name,email,role,status,phone,notify_email,"
+            "created_at,last_login_at")
+    where = "deleted_at IS NULL" + ("" if include_inactive else " AND status='active'")
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        if include_inactive:
-            cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,phone,notify_email,created_at,last_login_at "
-                "FROM nidaan_staff ORDER BY created_at DESC"
-            )
-        else:
-            cur = await conn.execute(
-                "SELECT staff_id,name,email,role,status,phone,notify_email,created_at,last_login_at "
-                "FROM nidaan_staff WHERE status='active' ORDER BY created_at DESC"
-            )
+        cur = await conn.execute(
+            f"SELECT {cols} FROM nidaan_staff WHERE {where} ORDER BY created_at DESC")
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_deleted_staff() -> list[dict]:
+    """The archive — soft-deleted staff, restorable."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT staff_id,name,email,role,status,phone,notify_email,"
+            "created_at,last_login_at,deleted_at "
+            "FROM nidaan_staff WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def soft_delete_staff(staff_id: int) -> bool:
+    """Archive a staffer (reversible). Super admins are protected. Also flips
+    status to inactive so every existing status='active' query excludes them."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT role, deleted_at FROM nidaan_staff WHERE staff_id=?",
+            (staff_id,))).fetchone()
+        if not row:
+            return False
+        if row["role"] == "super_admin":
+            raise ValueError("Super admins cannot be deleted")
+        await conn.execute(
+            "UPDATE nidaan_staff SET deleted_at=CURRENT_TIMESTAMP, status='inactive' "
+            "WHERE staff_id=? AND deleted_at IS NULL", (staff_id,))
+        await conn.commit()
+    return True
+
+
+async def restore_staff(staff_id: int) -> bool:
+    """Bring an archived staffer back (as inactive — admin re-activates explicitly)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_staff SET deleted_at=NULL, status='inactive' "
+            "WHERE staff_id=? AND deleted_at IS NOT NULL", (staff_id,))
+        await conn.commit()
+    return True
+
+
+async def delete_inactive_staff() -> int:
+    """Bulk-archive every currently-inactive staffer except super admins.
+    Returns the number archived."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_staff SET deleted_at=CURRENT_TIMESTAMP "
+            "WHERE status='inactive' AND deleted_at IS NULL AND role != 'super_admin'")
+        await conn.commit()
+        return cur.rowcount
 
 
 async def update_staff(staff_id: int, name: str = None, role: str = None,
@@ -3095,7 +3163,13 @@ async def update_staff(staff_id: int, name: str = None, role: str = None,
     if status is not None:
         fields.append("status=?"); vals.append(status)
     if phone is not None:
-        fields.append("phone=?"); vals.append("".join(ch for ch in phone if ch.isdigit()))
+        if (phone or "").strip():
+            norm = normalize_indian_mobile(phone)
+            if not norm:
+                raise ValueError("Enter a valid 10-digit Indian mobile number")
+            fields.append("phone=?"); vals.append(norm)
+        else:
+            fields.append("phone=?"); vals.append("")
     if notify_email is not None:
         fields.append("notify_email=?"); vals.append((notify_email or "").lower().strip())
     if password is not None:

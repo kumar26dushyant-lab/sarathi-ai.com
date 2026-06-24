@@ -72,9 +72,20 @@ IST = timezone(timedelta(hours=5, minutes=30))
 #  Phone normalization
 # ═════════════════════════════════════════════════════════════════════════════
 def _norm_phone(p: str) -> str:
-    """Last 10 digits, no plus/spaces. Returns '' if invalid."""
+    """Strict Indian-mobile normaliser. Returns a clean 10-digit number, or ''
+    if the input is not a valid mobile. CRITICAL: we must NEVER silently
+    truncate a malformed number (e.g. an 11-digit typo) into a different but
+    deliverable number — that risks messaging a stranger. So we only strip a
+    recognised country/trunk prefix and otherwise reject."""
     digits = re.sub(r"[^0-9]", "", str(p or ""))
-    return digits[-10:] if len(digits) >= 10 else ""
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]            # +91XXXXXXXXXX
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]            # 0XXXXXXXXXX (STD trunk prefix)
+    # A valid Indian mobile is exactly 10 digits starting 6-9.
+    if len(digits) == 10 and digits[0] in "6789":
+        return digits
+    return ""
 
 
 def _to_wa_jid(p: str) -> str:
@@ -455,7 +466,7 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
                    recipient_phone: str = "", recipient_email: str = "",
                    subject: str = "", body: str = "",
                    claim_id: Optional[int] = None, task_id: Optional[int] = None,
-                   force_urgent: bool = False) -> dict:
+                   force_urgent: bool = False, force_email: bool = False) -> dict:
     """
     Fire-and-forget notification dispatch. Routes through enabled channels.
     Always writes a dashboard notification record. Returns summary dict.
@@ -544,8 +555,10 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
     email_err = ""
     # Always send email unless WA already succeeded for a non-P0 message and email_enabled is off
     if recipient_email and email_fallback_enabled:
-        # For P0, ALWAYS send email regardless. For P1/P2, send if WA didn't succeed.
-        should_email = (priority == PRIORITY_P0) or (not wa_sent_ok)
+        # For P0, ALWAYS send email regardless. For P1/P2, send if WA didn't
+        # succeed — OR if the caller forced email (e.g. task assignee should get
+        # both the WhatsApp nudge AND an email record).
+        should_email = (priority == PRIORITY_P0) or force_email or (not wa_sent_ok)
         if should_email:
             subj = subject if subject.startswith("[Nidaan]") else f"[Nidaan] {subject}"
             ok, err = await _send_email(
@@ -673,7 +686,7 @@ async def on_quick_task_assigned(quick_task: dict):
             lines.append(f"Due: {quick_task['due_date']}")
         return lines
 
-    # --- Notify the ASSIGNEE (someone has work to do) ---
+    # --- Notify the ASSIGNEE (someone has work to do): WhatsApp nudge + email ---
     # Skip when self-assigned: the creator already knows, no notification noise.
     if assignee_id and assignee_id != creator_id:
         body_lines = [f"📌 {title}"]
@@ -689,9 +702,12 @@ async def on_quick_task_assigned(quick_task: dict):
             recipient_email=quick_task.get("assignee_email") or "",
             subject=f"[Nidaan] Quick task: {title}",
             body="\n".join(body_lines),
-            claim_id=quick_task.get("claim_id"))
+            claim_id=quick_task.get("claim_id"),
+            force_email=True)
 
-    # --- Notify the CREATOR (confirmation), unless they assigned it to themselves ---
+    # --- Notify the CREATOR (confirmation): EMAIL ONLY ---
+    # The creator already initiated the task, so no WhatsApp nudge for them —
+    # WhatsApp is reserved for the assignee who must act. Email is the record.
     if creator_id and creator_id != assignee_id:
         body_lines = [f"✅ Task created: {title}"]
         if quick_task.get("assignee_name"):
@@ -702,11 +718,12 @@ async def on_quick_task_assigned(quick_task: dict):
             event_key="quick_task.created",
             priority=notif_priority,
             recipient_type=RECIPIENT_STAFF, recipient_id=creator_id,
-            recipient_phone=quick_task.get("creator_phone") or "",
+            recipient_phone="",   # email only — no WhatsApp to the creator
             recipient_email=quick_task.get("creator_email") or "",
             subject=f"[Nidaan] Task created: {title}",
             body="\n".join(body_lines),
-            claim_id=quick_task.get("claim_id"))
+            claim_id=quick_task.get("claim_id"),
+            force_email=True)
 
 
 async def on_quick_task_approval(quick_task: dict, decision: str):

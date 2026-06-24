@@ -3294,27 +3294,51 @@ async function submitReviewUpdate(purchaseId) {
 }
 
 
+let _staffArchiveView = false;
 async function loadStaff() {
   const el = document.getElementById('panel-staff');
+  const inactiveCount = (window._allStaff||[]).filter(s=>s.status==='inactive').length;
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Staff Management</div><div class="section-sub">Internal team access control · only Super Admin can create accounts</div></div>
-      <button class="btn btn-primary" onclick="openCreateStaffModal()">+ Add Staff</button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn-sm btn-ghost" onclick="toggleStaffArchive()">${_staffArchiveView?'← Active staff':'🗄️ Archive'}</button>
+        ${!_staffArchiveView?`<button class="btn-sm btn-ghost" style="color:#fca5a5" onclick="deleteInactiveStaff()">🗑 Delete all inactive</button>`:''}
+        ${!_staffArchiveView?`<button class="btn btn-primary" onclick="openCreateStaffModal()">+ Add Staff</button>`:''}
+      </div>
     </div>
     <div style="background:rgba(6,182,212,.07);border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:.65rem 1rem;font-size:.8rem;color:#22d3ee;margin-bottom:1rem">
-      💡 Associates (Team Members) only see claims assigned to them. They receive an email when a claim is assigned.
-      Staff login emails must use the <strong>@nidaanpartner.com</strong> domain.
+      ${_staffArchiveView
+        ? '🗄️ <strong>Archive</strong> — deleted staff are kept here as a record. Restore brings them back as <em>inactive</em>. Super admins can never be deleted.'
+        : '💡 Associates only see claims assigned to them. Login IDs use the <strong>@nidaanpartner.com</strong> domain. Super admins cannot be deactivated or deleted (lockout protection).'}
     </div>
     <div id="staffTableWrap"><div class="empty"><p>Loading…</p></div></div>`;
 
-  const r = await API('/staff?include_inactive=true');
+  const r = await API(_staffArchiveView ? '/staff?archived=true' : '/staff?include_inactive=true');
   if (!r.ok) return;
   const d = await r.json();
   window._allStaff = d.staff;
 
-  if (!d.staff.length) { document.getElementById('staffTableWrap').innerHTML='<div class="empty"><p>No staff yet</p></div>'; return; }
+  if (!d.staff.length) {
+    document.getElementById('staffTableWrap').innerHTML =
+      `<div class="empty"><p>${_staffArchiveView?'Archive is empty':'No staff yet'}</p></div>`;
+    return;
+  }
 
-  const rows = d.staff.map(s=>`
+  const rows = d.staff.map(s=>{
+    const isSuper = s.role==='super_admin';
+    const actions = _staffArchiveView
+      ? `<button class="btn-icon" style="color:#4ade80" onclick="restoreStaff(${s.staff_id})" title="Restore as inactive">♻️ Restore</button>`
+      : `
+        <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
+        ${isSuper
+          ? '<span class="btn-icon" style="opacity:.3;cursor:not-allowed" title="Super admins are protected">🔒</span>'
+          : (s.status==='active'
+              ? `<button class="btn-icon" style="color:#f87171" onclick="deactivateStaff(${s.staff_id})" title="Deactivate">🚫</button>`
+              : `<button class="btn-icon" style="color:#4ade80" onclick="reactivateStaff(${s.staff_id})" title="Reactivate">✅</button>`)}
+        ${s.staff_id!==_staffId&&s.status==='active'?`<button class="btn-icon" onclick="doImpersonateStaff(${s.staff_id})" title="Login as this staff member">🔑</button>`:''}
+        ${!isSuper?`<button class="btn-icon" style="color:#f87171" onclick="deleteStaff(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')" title="Delete (archive)">🗑</button>`:''}`;
+    return `
     <tr>
       <td><strong>#${s.staff_id}</strong></td>
       <td>${esc(s.name)}</td>
@@ -3322,23 +3346,43 @@ async function loadStaff() {
       <td style="font-size:.8rem">${s.notify_email?esc(s.notify_email):'<span style="color:#fca5a5">— not set —</span>'}</td>
       <td style="font-size:.78rem">${s.phone?esc(s.phone):'<span style="color:#fca5a5">— none —</span>'}</td>
       <td><span class="pill-status s-${s.role==='super_admin'?'assigned':s.role==='sub_super_admin'?'in_review':'intimated'}" style="font-size:.68rem">${s.role.replace(/_/g,' ')}</span></td>
-      <td><span class="pill-status s-${s.status}">${s.status}</span></td>
+      <td>${_staffArchiveView?`<span style="font-size:.72rem;color:#fca5a5">deleted ${fmtDate(s.deleted_at)}</span>`:`<span class="pill-status s-${s.status}">${s.status}</span>`}</td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${s.last_login_at?fmtDate(s.last_login_at):'Never'}</td>
       <td>${fmtDate(s.created_at)}</td>
-      <td>
-        <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
-        ${s.status==='active'?`<button class="btn-icon" style="color:#f87171" onclick="deactivateStaff(${s.staff_id})" title="Deactivate">🚫</button>`:'<button class="btn-icon" style="color:#4ade80" onclick="reactivateStaff('+s.staff_id+')" title="Reactivate">✅</button>'}
-        ${s.staff_id!==_staffId&&s.status==='active'?`<button class="btn-icon" onclick="doImpersonateStaff(${s.staff_id})" title="Login as this staff member">🔑</button>`:''}
-      </td>
-    </tr>`).join('');
+      <td><div style="display:flex;gap:.15rem;flex-wrap:wrap">${actions}</div></td>
+    </tr>`;}).join('');
 
   document.getElementById('staffTableWrap').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Name</th><th>Login ID</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th><th>Login ID</th><th>Email</th><th>Phone</th><th>Role</th><th>${_staffArchiveView?'Deleted':'Status'}</th><th>Last Login</th><th>Created</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+function toggleStaffArchive(){ _staffArchiveView = !_staffArchiveView; loadStaff(); }
+
+async function deleteStaff(staffId, name){
+  if(!confirm(`Delete ${name||'this staff member'}? They move to the Archive (restorable) and lose portal access.`)) return;
+  const r = await API('/staff/'+staffId, {method:'DELETE'});
+  if(r.ok){ ndUI.toast('Moved to archive','success'); loadStaff(); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Delete failed'),'error'); }
+}
+
+async function restoreStaff(staffId){
+  const r = await API('/staff/'+staffId+'/restore', {method:'POST'});
+  if(r.ok){ ndUI.toast('Restored as inactive','success'); loadStaff(); }
+  else ndUI.toast('Restore failed','error');
+}
+
+async function deleteInactiveStaff(){
+  const n = (window._allStaff||[]).filter(s=>s.status==='inactive'&&s.role!=='super_admin').length;
+  if(!n){ ndUI.toast('No inactive staff to delete','info'); return; }
+  if(!confirm(`Delete all ${n} inactive staff? They move to the Archive (restorable). Super admins are skipped.`)) return;
+  const r = await API('/staff/delete-inactive', {method:'POST'});
+  if(r.ok){ const d=await r.json().catch(()=>({})); ndUI.toast(`Archived ${d.archived||0} staff`,'success'); loadStaff(); }
+  else ndUI.toast('Bulk delete failed','error');
 }
 
 function openCreateStaffModal() {
@@ -3367,15 +3411,24 @@ function openCreateStaffModal() {
   );
 }
 
+// Normalise to a clean 10-digit Indian mobile (strips +91/0), else null —
+// mirrors the server so a malformed number is rejected, never truncated.
+function _normMobile(raw){
+  let d=(raw||'').replace(/\D/g,'');
+  if(d.length===12&&d.startsWith('91')) d=d.slice(2);
+  else if(d.length===11&&d.startsWith('0')) d=d.slice(1);
+  return (d.length===10 && '6789'.includes(d[0])) ? d : null;
+}
+
 async function createStaff() {
   const userpart = document.getElementById('ns-emailuser').value.trim().toLowerCase();
   const email = userpart ? userpart + '@nidaanpartner.com' : '';
-  const phone = (document.getElementById('ns-phone').value||'').replace(/\D/g,'');
+  const phone = _normMobile(document.getElementById('ns-phone').value);
   const notify_email = (document.getElementById('ns-notifyemail').value||'').trim().toLowerCase();
-  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value,phone,notify_email};
   const msg=document.getElementById('ns-msg');
-  if(!body.name||!userpart||!body.password){msg.className='msg err';msg.textContent='All fields required';return;}
-  if(phone.length<10){msg.className='msg err';msg.textContent='Enter a valid 10-digit mobile number (for notifications)';return;}
+  if(!document.getElementById('ns-name').value.trim()||!userpart||!document.getElementById('ns-pwd').value){msg.className='msg err';msg.textContent='All fields required';return;}
+  if(!phone){msg.className='msg err';msg.textContent='Enter a valid 10-digit Indian mobile number (for notifications)';return;}
+  const body={name:document.getElementById('ns-name').value.trim(),email,password:document.getElementById('ns-pwd').value,role:document.getElementById('ns-role').value,phone,notify_email};
   if(notify_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(notify_email)){msg.className='msg err';msg.textContent='Enter a valid notification email (or leave blank)';return;}
   if(!/^[a-z0-9._-]+$/.test(userpart)){msg.className='msg err';msg.textContent='Email username: only letters, numbers, dots, hyphens';return;}
   const r=await API('/staff',{method:'POST',body:JSON.stringify(body)});
@@ -3405,8 +3458,12 @@ function openEditStaffModal(staffId) {
 
 async function saveStaff(staffId) {
   const body={name:document.getElementById('es-name').value.trim(),role:document.getElementById('es-role').value};
-  const _ph=(document.getElementById('es-phone').value||'').replace(/\D/g,'');
-  if(_ph) body.phone=_ph;
+  const _phRaw=(document.getElementById('es-phone').value||'').trim();
+  if(_phRaw){
+    const _ph=_normMobile(_phRaw);
+    if(!_ph){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Enter a valid 10-digit Indian mobile number';return;}
+    body.phone=_ph;
+  }
   const _ne=(document.getElementById('es-notifyemail').value||'').trim().toLowerCase();
   if(_ne && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(_ne)){document.getElementById('es-msg').className='msg err';document.getElementById('es-msg').textContent='Enter a valid notification email (or leave blank)';return;}
   body.notify_email=_ne;

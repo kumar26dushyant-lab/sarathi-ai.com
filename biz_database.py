@@ -1679,6 +1679,12 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN notify_email TEXT DEFAULT ''")
         except Exception:
             pass
+        # soft-delete / archive: deleted staff are hidden from the roster but kept
+        # as a restorable record (preserves task/audit references).
+        try:
+            await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN deleted_at TIMESTAMP")
+        except Exception:
+            pass
         # round-robin pointer: which staff_id index was last assigned
         try:
             await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN last_assigned_at TIMESTAMP")

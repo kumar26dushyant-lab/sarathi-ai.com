@@ -3006,10 +3006,14 @@ class UpdateStaffReq(BaseModel):
     notify_email: Optional[str] = None
 
 @app.get("/nidaan/ops/api/staff")
-async def ops_list_staff(request: Request, include_inactive: bool = False):
+async def ops_list_staff(request: Request, include_inactive: bool = False,
+                          archived: bool = False):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "super_admin")
+    if archived:
+        rows = await nidaan.list_deleted_staff()
+        return {"staff": rows, "count": len(rows), "archived": True}
     staff_list = await nidaan.list_staff(include_inactive=include_inactive)
     return {"staff": staff_list, "count": len(staff_list)}
 
@@ -3040,7 +3044,15 @@ async def ops_create_staff(body: CreateStaffReq, request: Request):
 async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "super_admin")
+    caller = _require_staff(request, "super_admin")
+    # Lockout guards: a super admin can't be deactivated, and nobody can
+    # deactivate themselves (prevents the accidental "inactivate everyone").
+    if body.status == "inactive":
+        target = await nidaan.get_staff_by_id(staff_id)
+        if target and target.get("role") == "super_admin":
+            raise HTTPException(status_code=403, detail="Super admins cannot be deactivated")
+        if staff_id == caller["staff_id"]:
+            raise HTTPException(status_code=403, detail="You cannot deactivate your own account")
     try:
         ok = await nidaan.update_staff(
             staff_id=staff_id, name=body.name, role=body.role,
@@ -3056,6 +3068,46 @@ async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request
         _bits.append("password reset")
     await _ops_audit(request, "staff.update", "staff", staff_id, "; ".join(_bits) or "updated")
     return {"staff_id": staff_id, "updated": True}
+
+
+@app.delete("/nidaan/ops/api/staff/{staff_id}")
+async def ops_delete_staff(staff_id: int, request: Request):
+    """Archive a staffer (soft delete, restorable). Super admins are protected."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    if staff_id == caller["staff_id"]:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account")
+    try:
+        ok = await nidaan.soft_delete_staff(staff_id)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    await _ops_audit(request, "staff.delete", "staff", staff_id, "archived")
+    return {"staff_id": staff_id, "deleted": True}
+
+
+@app.post("/nidaan/ops/api/staff/{staff_id}/restore")
+async def ops_restore_staff(staff_id: int, request: Request):
+    """Bring an archived staffer back (as inactive)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.restore_staff(staff_id)
+    await _ops_audit(request, "staff.restore", "staff", staff_id, "restored (inactive)")
+    return {"staff_id": staff_id, "restored": True}
+
+
+@app.post("/nidaan/ops/api/staff/delete-inactive")
+async def ops_delete_inactive_staff(request: Request):
+    """Bulk-archive every inactive staffer except super admins."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    n = await nidaan.delete_inactive_staff()
+    await _ops_audit(request, "staff.delete_inactive", "staff", 0, f"archived {n} inactive")
+    return {"archived": n}
 
 
 # ── Claims ops ────────────────────────────────────────────────────────────────
