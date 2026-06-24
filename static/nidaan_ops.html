@@ -3391,12 +3391,12 @@ function openCreateStaffModal() {
     <div class="form-field">
       <label>Login ID <span style="color:#06b6d4;font-size:.78rem">(username to sign in — not a real inbox)</span></label>
       <div style="display:flex;align-items:center;gap:0;border:1px solid rgba(255,255,255,.15);border-radius:6px;overflow:hidden;background:rgba(255,255,255,.05)">
-        <input id="ns-emailuser" class="form-input" placeholder="firstname.lastname" style="border:none;border-radius:0;flex:1;background:transparent" oninput="document.getElementById('ns-emailpreview').textContent=this.value?this.value+'@nidaanpartner.com':''"></div>
+        <input id="ns-emailuser" class="form-input" maxlength="40" autocapitalize="off" autocomplete="off" placeholder="firstname.lastname" style="border:none;border-radius:0;flex:1;background:transparent" oninput="onLoginIdInput(this)"></div>
       </div>
       <div style="font-size:.78rem;color:#22d3ee;margin-top:.3rem">They sign in with: <strong id="ns-emailpreview" style="color:#93c5fd">—</strong></div>
     </div>
-    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(for WhatsApp/SMS notifications)</span></label><input id="ns-phone" class="form-input" type="tel" inputmode="tel" placeholder="10-digit mobile"></div>
-    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox — where email alerts are sent)</span></label><input id="ns-notifyemail" class="form-input" type="email" inputmode="email" placeholder="e.g. rahul@gmail.com"></div>
+    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(10-digit, for WhatsApp/SMS notifications)</span></label><input id="ns-phone" class="form-input" type="tel" inputmode="numeric" maxlength="15" oninput="_liveMobile(this)" placeholder="10-digit mobile"></div>
+    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox — where email alerts are sent)</span></label><input id="ns-notifyemail" class="form-input" type="email" inputmode="email" maxlength="120" autocapitalize="off" autocomplete="off" oninput="_liveEmail(this)" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Password</label><input id="ns-pwd" class="form-input" type="password" placeholder="Min 8 characters"></div>
     <div class="form-field"><label>Role</label>
       <select id="ns-role" class="form-input">
@@ -3418,6 +3418,29 @@ function _normMobile(raw){
   if(d.length===12&&d.startsWith('91')) d=d.slice(2);
   else if(d.length===11&&d.startsWith('0')) d=d.slice(1);
   return (d.length===10 && '6789'.includes(d[0])) ? d : null;
+}
+
+// ── Live input restrictions (prevent bad data at the keystroke) ──────────────
+// Mobile: keep digits only, transparently drop a pasted +91/0 prefix, cap at 10.
+function _liveMobile(el){
+  let d=el.value.replace(/\D/g,'');
+  if(d.length>10){ if(d.startsWith('91')) d=d.slice(2); else if(d.startsWith('0')) d=d.slice(1); }
+  el.value=d.slice(0,10);
+  // green tick once it's a valid 10-digit mobile
+  const ok=(el.value.length===10 && '6789'.includes(el.value[0]));
+  el.style.borderColor = el.value.length ? (ok?'rgba(34,197,94,.6)':'rgba(248,113,113,.6)') : '';
+}
+// Login ID: lowercase, only [a-z0-9._-], and refresh the @nidaanpartner.com preview.
+function onLoginIdInput(el){
+  el.value=el.value.toLowerCase().replace(/[^a-z0-9._-]/g,'');
+  const p=document.getElementById('ns-emailpreview');
+  if(p) p.textContent = el.value ? el.value+'@nidaanpartner.com' : '—';
+}
+// Email: strip whitespace; tint border by validity.
+function _liveEmail(el){
+  el.value=el.value.replace(/\s/g,'');
+  const ok=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(el.value);
+  el.style.borderColor = el.value.length ? (ok?'rgba(34,197,94,.6)':'rgba(248,113,113,.6)') : '';
 }
 
 async function createStaff() {
@@ -3443,8 +3466,8 @@ function openEditStaffModal(staffId) {
   openModal('Edit Staff #'+staffId,`
     <div class="form-field"><label>Name</label><input id="es-name" class="form-input" value="${esc(s.name)}"></div>
     <div class="form-field"><label>Login ID <span style="color:rgba(255,255,255,.4);font-size:.78rem">(username — cannot be changed)</span></label><input class="form-input" value="${esc(s.email||'')}" disabled style="opacity:.6;cursor:not-allowed"></div>
-    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(notifications)</span></label><input id="es-phone" class="form-input" type="tel" inputmode="tel" value="${esc(s.phone||'')}" placeholder="10-digit mobile"></div>
-    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox)</span></label><input id="es-notifyemail" class="form-input" type="email" inputmode="email" value="${esc(s.notify_email||'')}" placeholder="e.g. rahul@gmail.com"></div>
+    <div class="form-field"><label>Mobile Number <span style="color:#06b6d4;font-size:.78rem">(10-digit, notifications)</span></label><input id="es-phone" class="form-input" type="tel" inputmode="numeric" maxlength="15" oninput="_liveMobile(this)" value="${esc(s.phone||'')}" placeholder="10-digit mobile"></div>
+    <div class="form-field"><label>Email Address <span style="color:#06b6d4;font-size:.78rem">(real Gmail/personal inbox)</span></label><input id="es-notifyemail" class="form-input" type="email" inputmode="email" maxlength="120" autocapitalize="off" autocomplete="off" oninput="_liveEmail(this)" value="${esc(s.notify_email||'')}" placeholder="e.g. rahul@gmail.com"></div>
     <div class="form-field"><label>Role</label><select id="es-role" class="form-input">
       <option value="team_member" ${s.role==='team_member'?'selected':''}>Team Member</option>
       <option value="sub_super_admin" ${s.role==='sub_super_admin'?'selected':''}>Sub Super Admin</option>
