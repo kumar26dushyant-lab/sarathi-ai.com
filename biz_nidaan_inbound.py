@@ -205,7 +205,18 @@ async def _save_document(*, claim_id: int, account_id: int,
 
 async def _send_official_reply(*, instance: str, to_phone10: str, message: str):
     """Outbound to subscriber FROM the same official number we received on
-    (so the conversation stays in one thread). Best-effort, swallows errors."""
+    (so the conversation stays in one thread). Best-effort, swallows errors.
+
+    HELD OFF: all subscriber/account-facing WhatsApp is paused until a dedicated
+    business line is in place — WhatsApp currently goes to staff numbers only.
+    Re-enable via flag nidaan_subscriber_wa_enabled (default off)."""
+    try:
+        import biz_nidaan_tasks as _nt
+        if (await _nt.get_flag("nidaan_subscriber_wa_enabled", "0")) != "1":
+            logger.info("Subscriber WhatsApp held off (flag off) — not replying to %s", to_phone10)
+            return
+    except Exception:
+        return  # if the flag can't be read, stay safe and DON'T send
     try:
         import biz_whatsapp_evolution as wa_evo
         jid = f"91{to_phone10}@s.whatsapp.net"

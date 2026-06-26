@@ -423,9 +423,27 @@ def _digits_only(s: str) -> str:
     return "".join(c for c in (s or "") if c.isdigit())
 
 
+async def _is_registered_staff_phone(dest_digits: str) -> bool:
+    """True only if the destination is an ACTIVE, non-deleted staff member's
+    registered mobile (matched on the last 10 digits)."""
+    d10 = dest_digits[-10:]
+    if len(d10) < 10:
+        return False
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT 1 FROM nidaan_staff "
+            "WHERE status='active' AND deleted_at IS NULL "
+            "AND substr(replace(replace(phone,' ',''),'+',''), -10) = ? LIMIT 1",
+            (d10,))
+        return (await cur.fetchone()) is not None
+
+
 async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool, str, str]:
     """Returns (success, wa_message_id, error_str).
     FOOLPROOF GUARDS (a wrong-recipient send is a critical risk):
+      0. Staff-only allow-list — WhatsApp goes ONLY to registered staff numbers
+         (all account/subscriber WhatsApp is held off for now). Flag
+         nidaan_wa_staff_only (default on).
       1. Self-send guard — never message the instance's OWN number.
       2. Verify-before-send — confirm the number is registered on WhatsApp and
          send only to the canonical JID that check returns. Fail CLOSED: if the
@@ -437,6 +455,13 @@ async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool,
             return (False, "", f"No instance for slot {instance_slot}")
 
         dest_digits = _digits_only(jid.split("@")[0] if "@" in jid else jid)
+
+        # (0) Staff-only allow-list. Until a dedicated business line exists, the
+        # ONLY numbers WhatsApp may reach are active staff mobiles from the Staff
+        # section. Anything else (subscribers, leads, unknowns) is held off.
+        staff_only = (await ntasks.get_flag("nidaan_wa_staff_only", "1")) == "1"
+        if staff_only and not await _is_registered_staff_phone(dest_digits):
+            return (False, "", "blocked_non_staff_recipient")
 
         # (1) Self-send guard: don't message our own sending line.
         own = _digits_only(inst.get("phone_number") or inst.get("own_jid") or "")
