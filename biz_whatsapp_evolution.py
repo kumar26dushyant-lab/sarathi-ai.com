@@ -278,6 +278,33 @@ async def send_presence(instance_name: str, to_phone: str,
     return await _request("POST", f"/chat/sendPresence/{instance_name}", json=payload)
 
 
+async def check_number_exists(instance_name: str, phone: str) -> Optional[str]:
+    """Verify a number is registered on WhatsApp and return its CANONICAL JID.
+    Returns the jid string if the number exists, None if it does not, and
+    raises on a transport/API error (so callers can fail-closed deliberately).
+
+    Uses Evolution's /chat/whatsappNumbers — the authoritative check that also
+    resolves the true JID, preventing sends to non-existent or mis-mapped
+    accounts."""
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    if "@" in (phone or ""):
+        digits = "".join(c for c in phone.split("@")[0] if c.isdigit())
+    if len(digits) == 10:
+        digits = "91" + digits
+    if not digits:
+        return None
+    res = await _request("POST", f"/chat/whatsappNumbers/{instance_name}",
+                         json={"numbers": [digits]}, timeout=15.0)
+    # Evolution returns a list like [{"exists":true,"jid":"91..@s.whatsapp.net","number":"91.."}]
+    items = res if isinstance(res, list) else (res.get("numbers") if isinstance(res, dict) else None)
+    if not isinstance(items, list):
+        raise RuntimeError(f"Unexpected whatsappNumbers response: {res!r}")
+    for it in items:
+        if isinstance(it, dict) and (it.get("exists") or it.get("isWhatsapp") or it.get("isWhatsApp")):
+            return it.get("jid") or f"{digits}@s.whatsapp.net"
+    return None
+
+
 async def mark_read(instance_name: str, remote_jid: str, message_id: str) -> dict:
     """Mark an inbound message as read (blue ticks)."""
     payload = {

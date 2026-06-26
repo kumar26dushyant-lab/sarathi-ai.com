@@ -298,12 +298,26 @@ async def handle_official_inbound(*, instance_slot: int, evolution_instance: str
         return
     account = await _find_account_by_phone(phone10)
     if not account:
-        # Unknown sender — politely direct them to register
-        await _send_official_reply(
-            instance=evolution_instance, to_phone10=phone10,
-            message=("Hello! We don't see an active NidaanPartner.com account "
-                     "with this number. Please register at https://nidaanpartner.com "
-                     "or call us back to get started."))
+        # CRITICAL SAFETY: never auto-message a number that is NOT a known
+        # NidaanPartner account. Replying "please register" to every unknown
+        # inbound spams strangers / personal contacts (the official line shares
+        # a staffer's personal number). Default: stay silent. Re-enable only on
+        # a dedicated business number via the flag.
+        reply_unknown = "0"
+        try:
+            import biz_nidaan_tasks as _nt
+            reply_unknown = await _nt.get_flag("nidaan_reply_to_unknown_senders", "0")
+        except Exception:
+            reply_unknown = "0"
+        if reply_unknown == "1":
+            await _send_official_reply(
+                instance=evolution_instance, to_phone10=phone10,
+                message=("Hello! We don't see an active NidaanPartner.com account "
+                         "with this number. Please register at https://nidaanpartner.com "
+                         "or call us back to get started."))
+        else:
+            logger.info("Inbound from unknown number %s — no account match, "
+                        "staying silent (no auto-reply).", phone10)
         return
 
     account_id = account["account_id"]

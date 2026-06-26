@@ -419,14 +419,44 @@ async def _bump_sent_count(slot: int) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 #  Channel senders
 # ═════════════════════════════════════════════════════════════════════════════
+def _digits_only(s: str) -> str:
+    return "".join(c for c in (s or "") if c.isdigit())
+
+
 async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool, str, str]:
-    """Returns (success, wa_message_id, error_str)."""
+    """Returns (success, wa_message_id, error_str).
+    FOOLPROOF GUARDS (a wrong-recipient send is a critical risk):
+      1. Self-send guard — never message the instance's OWN number.
+      2. Verify-before-send — confirm the number is registered on WhatsApp and
+         send only to the canonical JID that check returns. Fail CLOSED: if the
+         number isn't on WhatsApp, or the check can't be completed, do NOT send."""
     try:
         import biz_whatsapp_evolution as wa_evo
         inst = await get_official_instance(instance_slot)
         if not inst:
             return (False, "", f"No instance for slot {instance_slot}")
-        result = await wa_evo.send_text(inst["evolution_instance"], jid, message, delay_ms=1500)
+
+        dest_digits = _digits_only(jid.split("@")[0] if "@" in jid else jid)
+
+        # (1) Self-send guard: don't message our own sending line.
+        own = _digits_only(inst.get("phone_number") or inst.get("own_jid") or "")
+        if own and dest_digits and (own == dest_digits or own.endswith(dest_digits) or dest_digits.endswith(own)):
+            return (False, "", "blocked_self_send")
+
+        # (2) Verify the destination is on WhatsApp; send only to its canonical JID.
+        verify_on = (await ntasks.get_flag("nidaan_wa_verify_before_send", "1")) == "1"
+        send_jid = jid
+        if verify_on:
+            try:
+                canonical = await wa_evo.check_number_exists(inst["evolution_instance"], dest_digits)
+            except Exception as ve:
+                # Could not verify → fail closed (never risk a wrong recipient).
+                return (False, "", f"verify_failed:{ve}")
+            if not canonical:
+                return (False, "", "number_not_on_whatsapp")
+            send_jid = canonical
+
+        result = await wa_evo.send_text(inst["evolution_instance"], send_jid, message, delay_ms=1500)
         if result and not result.get("error"):
             await _bump_sent_count(instance_slot)
             wa_id = ""
