@@ -448,11 +448,25 @@ async function bootApp() {
     const btn = document.getElementById('quickTaskBtn');
     if (btn) btn.style.display = 'inline-block';
   }
+  renderImpersonationBanner();
   buildSidebar();
-  showPanel('overview');
+  // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
+  // bookmarks) so navigation is restorable.
+  const KNOWN_PANELS = ['tasks','overview','claims','accounts','branches','staff','settings','numbers','revenue','health'];
+  const hashPanel = (location.hash || '').replace('#','');
+  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
+  showPanel(initial, true);
+  try { history.replaceState({panel: initial}, '', '#' + initial); } catch(e){}
   // Phase 4: mandatory staff onboarding — save 3 official numbers
   await checkStaffOnboarding();
 }
+
+// Browser Back/Forward switches panels in-place instead of leaving the portal.
+window.addEventListener('popstate', (e) => {
+  if (document.getElementById('appShell').style.display === 'none') return; // not in app
+  const id = (e.state && e.state.panel) || (location.hash || '').replace('#','') || 'tasks';
+  if (document.getElementById('panel-' + id)) showPanel(id, true);
+});
 
 // ── Phase 4: Mandatory staff onboarding modal ───────────────────────────────
 async function checkStaffOnboarding() {
@@ -543,8 +557,8 @@ function buildSidebar() {
   const roleRank = {team_member:0, sub_super_admin:1, super_admin:2};
   const myRank = roleRank[_role] ?? 0;
   const items = [
-    {id:'overview',   label:'📊 Overview',     minRank:0},
     {id:'tasks',      label:'✅ Tasks',         minRank:0},
+    {id:'overview',   label:'📊 Overview',     minRank:0},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
     {id:'branches',   label:'🏢 Branches',     minRank:1},
@@ -572,8 +586,14 @@ function buildSidebar() {
   });
 }
 
-function showPanel(id) {
+function showPanel(id, fromHistory) {
   _currentPanel = id;
+  // Record a history entry so browser Back/Forward moves between panels
+  // (instead of dropping out of the portal). Skip when we're responding to a
+  // popstate or the initial boot render.
+  if (!fromHistory) {
+    try { history.pushState({panel: id}, '', '#' + id); } catch(e){}
+  }
   closeMobileNav();  // close sidebar on mobile when navigating
   document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
   const el = document.getElementById('panel-'+id);
@@ -716,6 +736,7 @@ async function loadTasks() {
         <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
+    <div id="tasksDash" style="margin-bottom:1.1rem"></div>
     <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div id="overviewMyQuickTasks"></div>
     </div>
@@ -724,6 +745,7 @@ async function loadTasks() {
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
     </div>
     <div id="tasksLeave" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem"></div>`;
+  loadTasksDashboard();
   loadMyQuickTasksWidget();
   loadTaskRegistry();
   loadLeaveSection();
@@ -739,6 +761,44 @@ async function loadTasks() {
     ${_widgetTaskPipeline(d.task_pipeline || [])}
     ${isAdmin ? _widgetWorkload(d.workload || []) : ''}
   `;
+}
+
+// ── Tasks dashboard strip — at-a-glance numbers for everyone ──────────────────
+async function loadTasksDashboard(){
+  const el = document.getElementById('tasksDash');
+  if (!el) return;
+  const isAdmin = (_role==='super_admin' || _role==='sub_super_admin');
+  let c = {};
+  try {
+    const r = await fetch('/nidaan/ops/api/quick-tasks?with_counts=true&limit=1', { headers: hdrs() });
+    if (r.ok) c = (await r.json()).counts || {};
+  } catch(e){}
+  let onLeave = 0;
+  if (isAdmin) {
+    try { const lr = await fetch('/nidaan/ops/api/leave', { headers: hdrs() });
+          if (lr.ok) onLeave = ((await lr.json()).on_leave_now || []).length; } catch(e){}
+  }
+  const card = (label, val, color, onclick) => `
+    <div ${onclick?`onclick="${onclick}"`:''} style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .5rem;text-align:center;${onclick?'cursor:pointer;':''}">
+      <div style="font-size:1.4rem;font-weight:800;color:${color};line-height:1.1">${val||0}</div>
+      <div style="font-size:.68rem;color:rgba(255,255,255,.55);margin-top:.15rem">${label}</div>
+    </div>`;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:.55rem">
+      ${card('Active', c.active, '#22d3ee', "tasksJump('active')")}
+      ${card('Open', c.open, '#94a3b8', "tasksJump('open')")}
+      ${card('In progress', c.in_progress, '#38bdf8', "tasksJump('in_progress')")}
+      ${card('Done', c.done, '#86efac', "tasksJump('done')")}
+      ${card('Overdue', c.overdue, '#f87171', null)}
+      ${card('Pending approval', c.pending_approval, '#fbbf24', null)}
+      ${isAdmin ? card('On leave', onLeave, '#c4b5fd', null) : ''}
+    </div>`;
+}
+function tasksJump(status){
+  _registryState.status = status;
+  loadTaskRegistry();
+  const reg = document.getElementById('tasksRegistry');
+  if (reg) reg.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // ── Leave (P4) ───────────────────────────────────────────────────────────────
@@ -1552,13 +1612,23 @@ async function openQuickTaskDrawer(qid){
       ${qt.status!=='cancelled' && qt.status!=='done' && isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5" onclick="qtSetStatus(${qt.quick_task_id},'cancelled')">✕ Cancel</button>` : ''}
     </div>` : '';
 
-  // Approval actions — admin/SA decide on tasks that are pending approval.
-  const approvalActions = (reqAppr && apprStatus === 'pending' && isAdmin) ? `
+  // Approval actions — only the CREATOR (or a super admin as fallback) decides.
+  const canApprove = reqAppr && apprStatus === 'pending' && (isCreator || _role === 'super_admin');
+  let approvalActions = '';
+  if (canApprove) {
+    approvalActions = `
     <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:1rem;padding:.65rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px">
-      <span style="font-size:.82rem;color:#fbbf24;font-weight:600;flex:1">⏳ This task needs your approval</span>
+      <span style="font-size:.82rem;color:#fbbf24;font-weight:600;flex:1">⏳ This task needs your approval${isCreator?'':' (as super admin)'}</span>
       <button class="btn-sm" style="background:#22c55e;color:#0a1628;font-weight:700" onclick="qtApprove(${qt.quick_task_id},'approved')">✓ Approve</button>
       <button class="btn-sm" style="background:#f87171;color:#0a1628;font-weight:700" onclick="qtApprove(${qt.quick_task_id},'rejected')">✕ Reject</button>
-    </div>` : '';
+    </div>`;
+  } else if (reqAppr && apprStatus === 'pending') {
+    // Everyone else (incl. the assignee) sees a read-only waiting notice.
+    approvalActions = `
+    <div style="margin-bottom:1rem;padding:.6rem .65rem;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.22);border-radius:8px;font-size:.82rem;color:#fbbf24">
+      ⏳ Awaiting approval from <strong>${esc(qt.creator_name||'the creator')}</strong>
+    </div>`;
+  }
 
   // Manage block: reassign + delete (admin) and history (anyone who can view).
   const manageActions = `
@@ -2773,19 +2843,48 @@ async function doImpersonate(accountId) {
 
 async function doImpersonateStaff(staffId) {
   const s = (window._allStaff||[]).find(x=>x.staff_id===staffId);
-  if (!confirm('Login as staff member '+(s?s.name:'#'+staffId)+'?\n\nThis will be logged. Use only for troubleshooting.')) return;
+  if (localStorage.getItem('nidaan_admin_token')) {
+    alert('You are already viewing as another staff member. Return to your account first.');
+    return;
+  }
+  if (!confirm('View the portal as '+(s?s.name:'#'+staffId)+'?\n\nThis is logged. You can return to your own account anytime from the banner at the top.')) return;
   const r = await API('/staff/'+staffId+'/impersonate', {method:'POST'});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert('Failed: '+_extractErr(d,'Unknown error')); return; }
   const d = await r.json();
-  openModal('Staff Login Token', `
-    <div style="font-size:.85rem;color:rgba(255,255,255,.5);margin-bottom:.75rem">
-      Generated staff token for <strong>${esc(d.name)}</strong> (${esc(d.role.replace(/_/g,' '))}). 
-      Opening ops portal as this staff member in a new tab.
-    </div>`,
-    [{label:'Close', cls:'btn-ghost', fn:closeModal}]
-  );
+  // Back up MY admin token so I can return, then switch this tab to the staff view.
+  const myToken = localStorage.getItem('nidaan_ops_token');
+  localStorage.setItem('nidaan_admin_token', myToken);
+  localStorage.setItem('nidaan_admin_name', _staffName || 'my account');
   localStorage.setItem('nidaan_ops_token', d.staff_token);
-  setTimeout(()=>{ window.open('/admins', '_blank'); closeModal(); }, 800);
+  location.href = '/admins';   // reload this tab as the staff member
+}
+
+// Persistent banner shown whenever you're viewing as another staff member.
+function renderImpersonationBanner() {
+  const adminTok = localStorage.getItem('nidaan_admin_token');
+  let bar = document.getElementById('imperBanner');
+  if (!adminTok) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'imperBanner';
+    bar.style.cssText = 'position:sticky;top:0;z-index:200;background:#7c3aed;color:#fff;'
+      + 'display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;'
+      + 'padding:.5rem .9rem;font-size:.84rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    document.body.prepend(bar);
+  }
+  bar.innerHTML = `👤 Viewing as <strong>${esc(_staffName||'staff')}</strong> (${esc((_role||'').replace(/_/g,' '))})`
+    + `<button onclick="stopImpersonating()" style="background:#fff;color:#7c3aed;border:none;`
+    + `font-weight:700;padding:.3rem .8rem;border-radius:6px;cursor:pointer;font-size:.82rem">← Return to my account</button>`;
+}
+
+function stopImpersonating() {
+  const admin = localStorage.getItem('nidaan_admin_token');
+  if (admin) {
+    localStorage.setItem('nidaan_ops_token', admin);
+    localStorage.removeItem('nidaan_admin_token');
+    localStorage.removeItem('nidaan_admin_name');
+  }
+  location.href = '/admins';
 }
 
 // ═══════════════════════════════════════════════════════════════

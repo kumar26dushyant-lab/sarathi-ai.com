@@ -1768,7 +1768,8 @@ async def list_quick_tasks(*, status: Optional[str] = None,
 
 async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
                                     ) -> dict:
-    """Counts per status for the registry tabs (excludes soft-deleted)."""
+    """Counts for the Tasks dashboard/registry (excludes soft-deleted).
+    Includes per-status counts plus derived overdue + pending_approval."""
     where, params = ["deleted_at IS NULL"], []
     if assigned_to_staff_id is not None:
         where.append("assigned_to_staff_id = ?"); params.append(assigned_to_staff_id)
@@ -1779,8 +1780,20 @@ async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
             "SELECT status, COUNT(*) AS n FROM nidaan_quick_tasks"
             + clause + " GROUP BY status", params)
         rows = {r["status"]: r["n"] for r in await cur.fetchall()}
+        # overdue: past due date and still open/in_progress
+        overdue = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_quick_tasks" + clause +
+            " AND due_date IS NOT NULL AND due_date < datetime('now') "
+            "AND status NOT IN ('done','cancelled')", params)).fetchone())[0]
+        # pending approval
+        pending_appr = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_quick_tasks" + clause +
+            " AND requires_approval = 1 AND approval_status = 'pending'",
+            params)).fetchone())[0]
     rows["all"] = sum(rows.values())
     rows["active"] = rows.get("open", 0) + rows.get("in_progress", 0)
+    rows["overdue"] = overdue
+    rows["pending_approval"] = pending_appr
     return rows
 
 
