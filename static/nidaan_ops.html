@@ -1479,7 +1479,7 @@ async function loadTaskRegistry(){
     <div class="nd-card" style="padding:1rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
         <div style="font-weight:700;font-size:1rem">📋 All Tasks <span style="color:rgba(255,255,255,.4);font-weight:500;font-size:.82rem">— complete record</span></div>
-        <input id="regSearch" value="${esc(_registryState.q)}" placeholder="🔍 search title…"
+        <input id="regSearch" value="${esc(_registryState.q)}" placeholder="🔍 search title or #id…"
                oninput="onRegistrySearch(this.value)"
                style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.35rem .6rem;border-radius:6px;font-size:.82rem;min-width:150px">
       </div>
@@ -1523,7 +1523,7 @@ function _qtRegistryRow(qt, isAdmin){
          style="padding:.6rem .25rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start;${deleted?'opacity:.45':''}">
       <div style="width:3px;align-self:stretch;background:${prio.color};border-radius:2px;flex-shrink:0;min-height:34px"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.88rem;font-weight:600;${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</div>
+        <div style="font-size:.88rem;font-weight:600;${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}"><span style="color:rgba(255,255,255,.35);font-family:monospace;font-size:.82rem;margin-right:.35rem">#${qt.quick_task_id}</span>${esc(qt.title||'')}</div>
         <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
           <span style="color:${st.color}">● ${st.label}</span>
           ${typePill}${apprPill}
@@ -1561,7 +1561,7 @@ function _qtRow(qt, showAssignee){
          style="padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;border-left:3px solid ${prio.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:.86rem;font-weight:600">${prio.icon} ${esc(qt.title||'')}</div>
+          <div style="font-size:.86rem;font-weight:600">${prio.icon} <span style="color:rgba(255,255,255,.4);font-family:monospace;font-size:.8rem">#${qt.quick_task_id}</span> ${esc(qt.title||'')}</div>
           <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.15rem">
             <span style="color:${status.color}">${status.label}</span>${showAssignee&&qt.assignee_name?' · @ '+esc(qt.assignee_name):''}${due}${claim}
           </div>
@@ -3728,6 +3728,17 @@ async function loadHealth() {
     <div style="margin-bottom:1.25rem">
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:#fca5a5">⚠️ ${d.errors_recent} recent error log(s)</span>`:'<span style="font-size:.78rem;color:#4ade80">No recent errors</span>'}</div>
       <div class="stats-row">${checks||'<div class="stat-card"><div class="sl">No checks</div></div>'}</div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">📱 WhatsApp Numbers</div><button class="btn-sm btn-ghost" onclick="showPanel('numbers')">Manage →</button></div>
+      ${(d.wa_instances && d.wa_instances.length) ? `<div class="stats-row">${d.wa_instances.map(w=>{
+          const up = w.state==='open';
+          return `<div class="stat-card ${up?'ok':'danger'}">
+            <div class="sv" style="font-size:1rem;color:${up?'#4ade80':'#f87171'}">${up?'🟢 Connected':'🔴 Offline'}</div>
+            <div class="sl">${esc(w.name||('Slot '+w.slot))}<div style="font-size:.66rem;color:rgba(255,255,255,.4)">${esc(w.phone||'—')} · ${w.sent_today||0} sent today</div></div>
+          </div>`;}).join('')}</div>`
+        : '<div class="stat-card warn"><div class="sv" style="font-size:1rem;color:#fbbf24">No numbers configured</div><div class="sl">Add one under Official Numbers</div></div>'}
     </div>
 
     <div class="stats-row">

@@ -705,6 +705,32 @@ async def on_task_assigned(task_id: int):
         claim_id=task.get("claim_id"), task_id=task_id)
 
 
+async def on_staff_welcome(staff: dict):
+    """A new staff member was added — send them a welcome (email + WhatsApp)
+    with their Login ID and the portal link. Password is set by the admin and
+    shared separately (never messaged, for security)."""
+    if not staff:
+        return
+    name = staff.get("name") or "there"
+    role = (staff.get("role") or "").replace("_", " ")
+    login_id = staff.get("email") or ""
+    phone = staff.get("phone") or ""
+    email = staff.get("notify_email") or staff.get("email") or ""
+    portal = f"{NIDAAN_BASE_URL}/admins"
+    body = (f"👋 Welcome to NidaanPartner Ops, {name}!\n"
+            f"Role: {role}\n"
+            f"Sign in at: {portal}\n"
+            f"Your Login ID: {login_id}\n"
+            f"Your password was set by your admin — please ask them for it, then "
+            f"change it after your first login.")
+    await dispatch(
+        event_key="staff.welcome", priority=PRIORITY_P1,
+        recipient_type=RECIPIENT_STAFF, recipient_id=staff.get("staff_id"),
+        recipient_phone=phone, recipient_email=email,
+        subject="[Nidaan] Welcome to NidaanPartner Ops",
+        body=body, force_email=True)
+
+
 async def on_quick_task_assigned(quick_task: dict):
     """A Quick Task was created/assigned. Notify BOTH the assignee (action needed)
     and the creator (confirmation), each with a direct deep link to the task.

@@ -3037,6 +3037,14 @@ async def ops_create_staff(body: CreateStaffReq, request: Request):
     if not staff_id:
         raise HTTPException(status_code=409, detail="Email already exists")
     await _ops_audit(request, "staff.create", "staff", staff_id, f"Created {body.name} ({body.role})")
+    # Welcome the new staffer (email + WhatsApp) with their Login ID + portal link.
+    try:
+        new_staff = await nidaan.get_staff_by_id(staff_id)
+        if new_staff:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_staff_welcome(new_staff))
+    except Exception as we:
+        logger.warning("Staff welcome notification failed: %s", we)
     return {"staff_id": staff_id, "name": body.name, "role": body.role}
 
 
@@ -3842,13 +3850,24 @@ async def ops_health(request: Request):
     _chk("Database", health is not None, "SQLite reachable")
     _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
     _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
+    # WhatsApp status comes from the NIDAAN official instances (not the Sarathi
+    # wa_instances table). health_state 'open' == connected.
     try:
-        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
-            wac = (await (await _c.execute(
-                "SELECT COUNT(*) FROM wa_instances WHERE status='connected'")).fetchone())[0]
-        _chk("WhatsApp", wac > 0, f"{wac} instance(s) connected")
-    except Exception:
-        _chk("WhatsApp", False, "no connected instance")
+        wa_insts = await nnot.list_official_instances()
+        connected = [i for i in wa_insts if (i.get("health_state") == "open")]
+        health["wa_instances"] = [
+            {"slot": i.get("instance_slot"), "name": i.get("display_name"),
+             "phone": i.get("phone_number"), "state": i.get("health_state"),
+             "sent_today": i.get("daily_sent_count") or 0}
+            for i in wa_insts]
+        if wa_insts:
+            _chk("WhatsApp", len(connected) > 0,
+                 f"{len(connected)}/{len(wa_insts)} official number(s) connected")
+        else:
+            _chk("WhatsApp", False, "no official numbers configured yet")
+    except Exception as _we:
+        health["wa_instances"] = []
+        _chk("WhatsApp", False, f"status check failed: {_we}")
     try:
         import shutil as _sh
         du = _sh.disk_usage(".")

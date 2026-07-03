@@ -1741,9 +1741,15 @@ async def list_quick_tasks(*, status: Optional[str] = None,
     if task_type in ("assignment", "request"):
         where.append("q.task_type = ?"); params.append(task_type)
     if search:
-        like = f"%{search.strip()}%"
-        where.append("(q.title LIKE ? OR q.description LIKE ?)")
-        params += [like, like]
+        s = search.strip()
+        like = f"%{s}%"
+        # A bare number also matches the task's #id (e.g. searching "20" finds #20).
+        if s.isdigit():
+            where.append("(q.title LIKE ? OR q.description LIKE ? OR q.quick_task_id = ?)")
+            params += [like, like, int(s)]
+        else:
+            where.append("(q.title LIKE ? OR q.description LIKE ?)")
+            params += [like, like]
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
