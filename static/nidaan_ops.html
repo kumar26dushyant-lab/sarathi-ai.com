@@ -809,6 +809,14 @@ const LEAVE_PILL = {
   cancelled:{c:'#94a3b8', t:'Cancelled'},
 };
 
+function _leaveWhen(l){
+  if ((l.leave_type||'full_day')==='half_day'){
+    const per = l.half_period==='second_half' ? 'afternoon' : 'morning';
+    return `${esc(l.start_date)} · <span style="color:#fbbf24">½ day (${per})</span>`;
+  }
+  return (l.start_date===l.end_date) ? esc(l.start_date) : `${esc(l.start_date)} → ${esc(l.end_date)}`;
+}
+
 async function loadLeaveSection(){
   const wrap = document.getElementById('tasksLeave');
   if (!wrap) return;
@@ -826,10 +834,12 @@ async function loadLeaveSection(){
     const p = LEAVE_PILL[l.status] || LEAVE_PILL.pending;
     return `<div style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
       <div style="flex:1;min-width:0">
-        <div style="font-size:.86rem;font-weight:600">${esc(l.start_date)} → ${esc(l.end_date)}
+        <div style="font-size:.86rem;font-weight:600">${_leaveWhen(l)}
           <span class="task-pill" style="background:${p.c}22;color:${p.c};border:1px solid ${p.c}44;margin-left:.35rem">${p.t}</span></div>
-        ${opts.showWho ? `<div style="font-size:.78rem;color:rgba(255,255,255,.6)">👤 ${esc(l.staff_name||'')}${l.staff_role?` · ${esc((l.staff_role||'').replace(/_/g,' '))}`:''}</div>` : ''}
+        ${opts.showWho ? `<div style="font-size:.78rem;color:rgba(255,255,255,.6)">👤 ${esc(l.staff_name||'')}${l.staff_role?` · ${esc((l.staff_role||'').replace(/_/g,' '))}`:''}${(l.open_tasks)?` · <span style="color:#fbbf24">${l.open_tasks} task(s) in hand</span>`:''}</div>` : ''}
         ${l.reason ? `<div style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.1rem">${esc(l.reason)}</div>` : ''}
+        ${(opts.showWho && l.cover_name) ? `<div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-top:.1rem">🤝 Cover: ${esc(l.cover_name)}</div>` : ''}
+        ${(opts.showWho && l.handover_notes) ? `<div style="font-size:.76rem;color:#c4b5fd;margin-top:.15rem;background:rgba(167,139,250,.08);padding:.3rem .45rem;border-radius:5px">📋 ${esc(l.handover_notes)}</div>` : ''}
         ${l.decision_note ? `<div style="font-size:.74rem;color:rgba(255,255,255,.45);margin-top:.1rem">Note: ${esc(l.decision_note)}</div>` : ''}
       </div>
       <div style="display:flex;gap:.35rem;flex-shrink:0">
@@ -843,6 +853,22 @@ async function loadLeaveSection(){
   };
 
   let cards = '';
+
+  // Currently On Leave — visible to EVERYONE (team awareness). Reassign is admin-only.
+  cards += `<div class="nd-card" style="padding:1rem${onLeave.length?';border-color:rgba(251,191,36,.3)':''}">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">📅 Currently On Leave ${onLeave.length?`<span style="color:#fbbf24">(${onLeave.length})</span>`:''}</div>
+      ${onLeave.length ? onLeave.map(s=>`
+        <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.86rem;font-weight:600">${esc(s.staff_name||'')} ${(s.leave_type==='half_day')?`<span style="font-size:.68rem;color:#fbbf24">½ day (${s.half_period==='second_half'?'afternoon':'morning'})</span>`:''}</div>
+            <div style="font-size:.76rem;color:rgba(255,255,255,.55)">until ${esc(s.end_date)} · ${s.open_tasks} open task${s.open_tasks==1?'':'s'}${s.cover_name?` · 🤝 ${esc(s.cover_name)}`:''}</div>
+            ${s.handover_notes?`<div style="font-size:.74rem;color:#c4b5fd;margin-top:.2rem;background:rgba(167,139,250,.08);padding:.3rem .45rem;border-radius:5px">📋 ${esc(s.handover_notes)}</div>`:''}
+          </div>
+          ${(isAdmin && s.open_tasks>0) ? `<button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700;flex-shrink:0" onclick="leaveShowTasks(${s.staff_id},'${esc(s.staff_name||'').replace(/'/g,'')}')">⇄ Reassign</button>` : ''}
+        </div>`).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No one is on leave today ✓</div>'}
+      <div id="leaveTasksBox" style="margin-top:.5rem"></div>
+    </div>`;
+
   // My leave (everyone)
   cards += `<div class="nd-card" style="padding:1rem">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem">
@@ -857,20 +883,6 @@ async function loadLeaveSection(){
     cards += `<div class="nd-card" style="padding:1rem">
       <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">⏳ Pending Leave Approvals ${pending.length?`<span style="color:#fbbf24">(${pending.length})</span>`:''}</div>
       ${pending.length ? pending.map(l=>row(l,{admin:true,showWho:true})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">Nothing awaiting approval.</div>'}
-    </div>`;
-
-    // Admin: currently on leave + their open tasks (for reassignment)
-    cards += `<div class="nd-card" style="padding:1rem">
-      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">📅 Currently On Leave</div>
-      ${onLeave.length ? onLeave.map(s=>`
-        <div style="display:flex;gap:.6rem;align-items:center;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.86rem;font-weight:600">${esc(s.staff_name||'')}</div>
-            <div style="font-size:.76rem;color:rgba(255,255,255,.55)">until ${esc(s.end_date)} · ${s.open_tasks} open task${s.open_tasks==1?'':'s'}</div>
-          </div>
-          ${s.open_tasks>0 ? `<button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="leaveShowTasks(${s.staff_id},'${esc(s.staff_name||'').replace(/'/g,'')}')">⇄ Reassign tasks</button>` : ''}
-        </div>`).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No one is on leave today.</div>'}
-      <div id="leaveTasksBox" style="margin-top:.5rem"></div>
     </div>`;
   }
 
@@ -905,28 +917,74 @@ async function savePermissions(){
   else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Save failed'),'error'); }
 }
 
-function openLeaveModal(){
+function lvToggleType(){
+  const half = document.querySelector('input[name=lvType]:checked')?.value === 'half_day';
+  document.getElementById('lvHalfRow').style.display = half ? '' : 'none';
+  document.getElementById('lvEndWrap').style.display = half ? 'none' : '';
+  if (half) { document.getElementById('lvEnd').value = document.getElementById('lvStart').value; }
+}
+async function openLeaveModal(){
   const existing = document.getElementById('leaveModalBg');
   if (existing) existing.remove();
   const today = new Date().toISOString().slice(0,10);
+  // Pull MY open tasks so I can note handover for them.
+  let myTasks = [];
+  try { const r = await fetch('/nidaan/ops/api/quick-tasks?assignee=me', { headers: hdrs() });
+        if (r.ok) myTasks = (await r.json()).quick_tasks || []; } catch(e){}
+  let assignees = [];
+  try { assignees = await _loadAssigneesOnce(); } catch(e){}
+  const coverOpts = assignees.filter(a=>a.staff_id!==_staffId)
+    .map(a=>`<option value="${a.staff_id}">${esc(a.name)}</option>`).join('');
+  const tasksBlock = myTasks.length ? `
+    <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:.6rem .7rem;margin-bottom:.6rem">
+      <div style="font-size:.78rem;color:#fbbf24;font-weight:600;margin-bottom:.3rem">⚠️ You have ${myTasks.length} task(s) in hand — note the handover below</div>
+      ${myTasks.map(t=>`<div style="font-size:.78rem;color:rgba(255,255,255,.7)">• <span style="color:#22d3ee;font-family:monospace">#${t.quick_task_id}</span> ${esc(t.title||'')} <span style="color:rgba(255,255,255,.4)">(${esc(t.status)})</span></div>`).join('')}
+    </div>` : '<div style="font-size:.78rem;color:#86efac;margin-bottom:.6rem">✓ No open tasks in hand.</div>';
+
   const bg = document.createElement('div');
   bg.id = 'leaveModalBg';
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  const inp = 'width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem';
   bg.innerHTML = `
-    <div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
+    <div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:460px;width:100%;max-height:92vh;overflow-y:auto;padding:1.5rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
         <h2 style="font-size:1.1rem;font-weight:800">🌴 Apply for Leave</h2>
         <button onclick="document.getElementById('leaveModalBg').remove()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.25rem;cursor:pointer">✕</button>
       </div>
+
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.3rem">Leave type *</label>
+      <div style="display:flex;gap:.5rem;margin-bottom:.85rem">
+        <label style="flex:1;display:flex;align-items:center;gap:.4rem;padding:.5rem .6rem;border:1px solid rgba(255,255,255,.12);border-radius:8px;cursor:pointer;font-size:.84rem"><input type="radio" name="lvType" value="full_day" checked onchange="lvToggleType()"> Full day</label>
+        <label style="flex:1;display:flex;align-items:center;gap:.4rem;padding:.5rem .6rem;border:1px solid rgba(255,255,255,.12);border-radius:8px;cursor:pointer;font-size:.84rem"><input type="radio" name="lvType" value="half_day" onchange="lvToggleType()"> Half day</label>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.85rem">
         <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">From *</label>
-          <input id="lvStart" type="date" min="${today}" value="${today}" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
-        <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">To *</label>
-          <input id="lvEnd" type="date" min="${today}" value="${today}" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
+          <input id="lvStart" type="date" min="${today}" value="${today}" onchange="if(document.querySelector('input[name=lvType]:checked').value==='half_day')document.getElementById('lvEnd').value=this.value" style="${inp}"></div>
+        <div id="lvEndWrap"><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">To *</label>
+          <input id="lvEnd" type="date" min="${today}" value="${today}" style="${inp}"></div>
       </div>
+
+      <div id="lvHalfRow" style="display:none;margin-bottom:.85rem">
+        <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Which half?</label>
+        <select id="lvHalf" style="${inp}">
+          <option value="first_half">First half (morning)</option>
+          <option value="second_half">Second half (afternoon)</option>
+        </select>
+      </div>
+
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Reason (optional)</label>
-      <textarea id="lvReason" rows="2" placeholder="e.g. family function" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:1rem"></textarea>
+      <textarea id="lvReason" rows="2" placeholder="e.g. family function" style="${inp};resize:vertical;margin-bottom:.85rem"></textarea>
+
+      <div style="font-size:.8rem;font-weight:700;color:#fff;margin-bottom:.4rem">📋 Handover — tasks in hand</div>
+      ${tasksBlock}
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Handover notes — status & who covers if urgent</label>
+      <textarea id="lvHandover" rows="2" placeholder="e.g. #12 draft ready, share with client; if urgent Tamanna will handle." style="${inp};resize:vertical;margin-bottom:.85rem"></textarea>
+
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Suggested cover person (optional)</label>
+      <select id="lvCover" style="${inp};margin-bottom:1rem"><option value="">— none —</option>${coverOpts}</select>
+
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <button class="btn-sm btn-ghost" onclick="document.getElementById('leaveModalBg').remove()">Cancel</button>
         <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="submitLeave()">Submit request</button>
@@ -936,14 +994,21 @@ function openLeaveModal(){
 }
 
 async function submitLeave(){
+  const leave_type = document.querySelector('input[name=lvType]:checked')?.value || 'full_day';
   const start_date = document.getElementById('lvStart').value;
-  const end_date = document.getElementById('lvEnd').value;
+  let end_date = document.getElementById('lvEnd').value;
+  const half_period = leave_type==='half_day' ? document.getElementById('lvHalf').value : '';
+  if (leave_type==='half_day') end_date = start_date;
   const reason = (document.getElementById('lvReason').value||'').trim();
-  if (!start_date || !end_date) { ndUI.toast('Pick both dates','error'); return; }
+  const handover_notes = (document.getElementById('lvHandover').value||'').trim();
+  const cover_staff_id = document.getElementById('lvCover').value ? parseInt(document.getElementById('lvCover').value) : null;
+  if (!start_date || !end_date) { ndUI.toast('Pick a date','error'); return; }
   if (end_date < start_date) { ndUI.toast('End date is before start date','error'); return; }
+  const body = {start_date, end_date, reason, leave_type, half_period, handover_notes};
+  if (cover_staff_id) body.cover_staff_id = cover_staff_id;
   const r = await fetch('/nidaan/ops/api/leave', {
     method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
-    body: JSON.stringify({start_date, end_date, reason})
+    body: JSON.stringify(body)
   });
   if (r.ok) {
     ndUI.toast('Leave request sent — admins notified','success');

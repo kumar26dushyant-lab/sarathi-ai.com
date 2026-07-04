@@ -1930,12 +1930,24 @@ LEAVE_STATUSES = ("pending", "approved", "rejected", "cancelled")
 
 
 async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
-                                reason: str = "") -> int:
+                                reason: str = "", leave_type: str = "full_day",
+                                half_period: str = "", handover_notes: str = "",
+                                cover_staff_id: Optional[int] = None) -> int:
+    if leave_type not in ("full_day", "half_day"):
+        leave_type = "full_day"
+    if leave_type == "half_day":
+        end_date = start_date               # a half-day is a single date
+        if half_period not in ("first_half", "second_half"):
+            half_period = "first_half"
+    else:
+        half_period = ""
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "INSERT INTO nidaan_leave_requests (staff_id, start_date, end_date, reason) "
-            "VALUES (?, ?, ?, ?)",
-            (staff_id, start_date, end_date, (reason or "").strip()))
+            "INSERT INTO nidaan_leave_requests "
+            "(staff_id, start_date, end_date, reason, leave_type, half_period, "
+            " handover_notes, cover_staff_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (staff_id, start_date, end_date, (reason or "").strip(), leave_type,
+             half_period, (handover_notes or "").strip(), cover_staff_id))
         await conn.commit()
         return cur.lastrowid
 
@@ -1946,10 +1958,14 @@ async def get_leave_request(leave_id: int) -> Optional[dict]:
         row = await (await conn.execute(
             "SELECT l.*, s.name AS staff_name, s.phone AS staff_phone, "
             "       COALESCE(NULLIF(s.notify_email,''), s.email) AS staff_email, "
-            "       d.name AS decided_by_name "
+            "       d.name AS decided_by_name, cov.name AS cover_name, "
+            "       (SELECT COUNT(*) FROM nidaan_quick_tasks q "
+            "          WHERE q.assigned_to_staff_id = l.staff_id AND q.deleted_at IS NULL "
+            "            AND q.status NOT IN ('done','cancelled')) AS open_tasks "
             "FROM nidaan_leave_requests l "
             "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
             "LEFT JOIN nidaan_staff d ON d.staff_id = l.decided_by_staff_id "
+            "LEFT JOIN nidaan_staff cov ON cov.staff_id = l.cover_staff_id "
             "WHERE l.leave_id = ?", (leave_id,))).fetchone()
         return dict(row) if row else None
 
@@ -2010,13 +2026,16 @@ async def list_staff_on_leave_now() -> list[dict]:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT l.leave_id, l.staff_id, l.start_date, l.end_date, l.reason, "
+            "       l.leave_type, l.half_period, l.handover_notes, "
             "       s.name AS staff_name, s.role AS staff_role, "
+            "       cov.name AS cover_name, "
             "       (SELECT COUNT(*) FROM nidaan_quick_tasks q "
             "          WHERE q.assigned_to_staff_id = l.staff_id "
             "            AND q.deleted_at IS NULL "
             "            AND q.status NOT IN ('done','cancelled')) AS open_tasks "
             "FROM nidaan_leave_requests l "
             "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "LEFT JOIN nidaan_staff cov ON cov.staff_id = l.cover_staff_id "
             "WHERE l.status='approved' "
             "  AND date('now') BETWEEN date(l.start_date) AND date(l.end_date) "
             "ORDER BY l.end_date ASC")

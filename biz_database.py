@@ -1598,6 +1598,17 @@ async def init_db():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_staff ON nidaan_leave_requests(staff_id, status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_status ON nidaan_leave_requests(status, start_date)")
+        # Leave overhaul: half-day support + handover (tasks-in-hand) + cover person.
+        for _lalt in [
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN leave_type TEXT DEFAULT 'full_day'",  # full_day | half_day
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN half_period TEXT DEFAULT ''",          # first_half | second_half
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN handover_notes TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN cover_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
+        ]:
+            try:
+                await conn.execute(_lalt)
+            except Exception:
+                pass
 
         # nidaan_ops_settings: small key-value store for office policy toggles
         # (e.g. task_create_min_role — the minimum role allowed to create a

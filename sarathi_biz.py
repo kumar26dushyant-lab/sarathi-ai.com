@@ -4243,6 +4243,10 @@ class _LeaveCreateReq(BaseModel):
     start_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     reason: str = Field("", max_length=2000)
+    leave_type: str = Field("full_day", pattern=r"^(full_day|half_day)$")
+    half_period: str = Field("", pattern=r"^(first_half|second_half|)$")
+    handover_notes: str = Field("", max_length=4000)
+    cover_staff_id: Optional[int] = None
 
 
 class _LeaveDecisionReq(BaseModel):
@@ -4260,7 +4264,9 @@ async def ops_leave_create(body: _LeaveCreateReq, request: Request):
         raise HTTPException(400, "End date cannot be before start date")
     leave_id = await nidaan.create_leave_request(
         staff_id=staff["staff_id"], start_date=body.start_date,
-        end_date=body.end_date, reason=body.reason)
+        end_date=body.end_date, reason=body.reason,
+        leave_type=body.leave_type, half_period=body.half_period,
+        handover_notes=body.handover_notes, cover_staff_id=body.cover_staff_id)
     try:
         leave = await nidaan.get_leave_request(leave_id)
         if leave:
@@ -4284,9 +4290,9 @@ async def ops_leave_list(request: Request, scope: str = "auto", status: str = ""
     rows = await nidaan.list_leave_requests(
         staff_id=staff["staff_id"] if own_only else None,
         status=status or None)
-    out = {"leave": rows, "is_admin": is_admin}
-    if is_admin and not own_only:
-        out["on_leave_now"] = await nidaan.list_staff_on_leave_now()
+    # Who's on leave today is visible to EVERYONE (team awareness / handover).
+    out = {"leave": rows, "is_admin": is_admin,
+           "on_leave_now": await nidaan.list_staff_on_leave_now()}
     return out
 
 

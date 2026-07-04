@@ -463,10 +463,17 @@ async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool,
         if staff_only and not await _is_registered_staff_phone(dest_digits):
             return (False, "", "blocked_non_staff_recipient")
 
-        # (1) Self-send guard: don't message our own sending line.
-        own = _digits_only(inst.get("phone_number") or inst.get("own_jid") or "")
-        if own and dest_digits and (own == dest_digits or own.endswith(dest_digits) or dest_digits.endswith(own)):
-            return (False, "", "blocked_self_send")
+        # (1) Self-send: by default we ALLOW sending to the official number
+        # itself. When a super admin shares the official line, their own
+        # notifications (leave approvals, task alerts) should still reach them on
+        # WhatsApp — it lands in the number's "Message yourself" chat, with full
+        # details. Set flag nidaan_wa_block_self_send=1 to re-enable blocking
+        # (e.g. once the official line is a dedicated, un-manned business number).
+        block_self = (await ntasks.get_flag("nidaan_wa_block_self_send", "0")) == "1"
+        if block_self:
+            own = _digits_only(inst.get("phone_number") or inst.get("own_jid") or "")
+            if own and dest_digits and (own == dest_digits or own.endswith(dest_digits) or dest_digits.endswith(own)):
+                return (False, "", "blocked_self_send")
 
         # (2) Verify the destination is on WhatsApp; send only to its canonical JID.
         verify_on = (await ntasks.get_flag("nidaan_wa_verify_before_send", "1")) == "1"
@@ -874,24 +881,44 @@ async def on_quick_task_request(quick_task: dict):
                   + f"Pick up: {link}"))
 
 
+def _leave_when(leave: dict) -> str:
+    """Human window: half-day shows the period, full-day shows the range."""
+    if (leave.get("leave_type") or "full_day") == "half_day":
+        period = "first half (morning)" if leave.get("half_period") == "first_half" else "second half (afternoon)"
+        return f"{leave.get('start_date')} — half day, {period}"
+    if leave.get("start_date") == leave.get("end_date"):
+        return f"{leave.get('start_date')} (full day)"
+    return f"{leave.get('start_date')} → {leave.get('end_date')} (full days)"
+
+
 async def on_leave_requested(leave: dict):
-    """A staffer applied for leave — alert every admin/SA (deep-linked to Tasks)."""
+    """A staffer applied for leave — alert every admin/SA for approval on
+    WhatsApp + email, with the handover (tasks in hand) details."""
     if not leave:
         return
     who = leave.get("staff_name") or f"Staff #{leave.get('staff_id')}"
-    window = f"{leave.get('start_date')} → {leave.get('end_date')}"
+    when = _leave_when(leave)
     link = f"{NIDAAN_BASE_URL}/nidaan/ops?leave={leave.get('leave_id')}"
+    open_tasks = leave.get("open_tasks")
+    lines = [f"🌴 Leave request from {who}", f"When: {when}"]
+    if leave.get("reason"):
+        lines.append(f"Reason: {leave['reason']}")
+    if open_tasks:
+        lines.append(f"⚠️ {who} has {open_tasks} open task(s) in hand")
+    if leave.get("cover_name"):
+        lines.append(f"Suggested cover: {leave['cover_name']}")
+    if leave.get("handover_notes"):
+        lines.append(f"Handover: {leave['handover_notes']}")
+    lines.append(f"Approve/Reject: {link}")
+    body = "\n".join(lines)
     for a in await _active_admins():
         await dispatch(
             event_key="leave.requested", priority=PRIORITY_P1,
             recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
             recipient_phone=a.get("phone") or "",
             recipient_email=a.get("email") or "",
-            subject=f"[Nidaan] Leave request — {who}",
-            body=(f"🌴 Leave request from {who}\n"
-                  f"Dates: {window}\n"
-                  + (f"Reason: {leave.get('reason')}\n" if leave.get('reason') else "")
-                  + f"Review: {link}"))
+            subject=f"[Nidaan] Leave request — {who} ({when})",
+            body=body, force_email=True)
 
 
 async def on_leave_decided(leave: dict, decision: str):
@@ -901,7 +928,7 @@ async def on_leave_decided(leave: dict, decision: str):
     approved = (decision == "approved")
     icon = "✅" if approved else "🚫"
     word = "approved" if approved else "rejected"
-    window = f"{leave.get('start_date')} → {leave.get('end_date')}"
+    when = _leave_when(leave)
     link = f"{NIDAAN_BASE_URL}/nidaan/ops?leave={leave.get('leave_id')}"
     await dispatch(
         event_key="leave.decided", priority=PRIORITY_P1,
@@ -909,9 +936,10 @@ async def on_leave_decided(leave: dict, decision: str):
         recipient_phone=leave.get("staff_phone") or "",
         recipient_email=leave.get("staff_email") or "",
         subject=f"[Nidaan] Leave {word}",
-        body=(f"{icon} Your leave ({window}) was {word}.\n"
+        body=(f"{icon} Your leave ({when}) was {word}.\n"
               + (f"Note: {leave.get('decision_note')}\n" if leave.get('decision_note') else "")
-              + f"Open: {link}"))
+              + f"Open: {link}"),
+        force_email=True)
 
 
 async def on_task_status_changed(task_id: int, from_status: str, to_status: str, note: str = ""):
