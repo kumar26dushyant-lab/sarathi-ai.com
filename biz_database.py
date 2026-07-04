@@ -1557,6 +1557,7 @@ async def init_db():
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approval_status TEXT DEFAULT 'none'",    # none | pending | approved | rejected
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_at TIMESTAMP",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN merged_into INTEGER REFERENCES nidaan_quick_tasks(quick_task_id)",
         ]:
             try:
                 await conn.execute(_alt)

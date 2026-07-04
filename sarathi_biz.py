@@ -3118,6 +3118,27 @@ async def ops_delete_inactive_staff(request: Request):
     return {"archived": n}
 
 
+@app.post("/nidaan/ops/api/staff/{staff_id}/reset-password")
+async def ops_reset_staff_password(staff_id: int, request: Request):
+    """One-click password reset (super admin). Generates a temporary password,
+    sets it, and returns it once so the admin can share it securely."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    import secrets as _secrets
+    temp_pw = "Nidaan@" + "".join(_secrets.choice("23456789") for _ in range(5))
+    ok = await nidaan.update_staff(staff_id=staff_id, password=temp_pw)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not reset password")
+    await _ops_audit(request, "staff.password_reset", "staff", staff_id,
+                     f"reset password for {target.get('name','')}")
+    return {"staff_id": staff_id, "name": target.get("name", ""),
+            "login_id": target.get("email", ""), "temp_password": temp_pw}
+
+
 # ── Claims ops ────────────────────────────────────────────────────────────────
 
 # ── Affiliate branches (superadmin: create/list/disable city branch codes) ────
@@ -4175,6 +4196,28 @@ async def ops_quick_task_approval(qid: int, body: _QuickTaskApprovalReq, request
     except Exception as ne:
         logger.warning("Quick task approval notification failed: %s", ne)
     return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+class _QuickTaskMergeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duplicate_id: int
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/merge")
+async def ops_quick_task_merge(qid: int, body: _QuickTaskMergeReq, request: Request):
+    """Merge the duplicate task INTO this one (qid is retained). Admin/SA only.
+    Comments move to the retained task; both timelines record the merge; the
+    duplicate is archived pointing back here."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    try:
+        res = await nidaan.merge_quick_tasks(qid, body.duplicate_id,
+                                             changed_by=staff["staff_id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "quick_task.merge", "quick_task", qid,
+                     f"merged #{body.duplicate_id} into #{qid}")
+    return {"ok": True, **res, "quick_task": await nidaan.get_quick_task(qid)}
 
 
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")

@@ -1881,6 +1881,47 @@ async def get_quick_task_history(quick_task_id: int) -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def merge_quick_tasks(retain_id: int, duplicate_id: int,
+                            changed_by: int = None) -> dict:
+    """Merge `duplicate_id` INTO `retain_id` (retain_id is kept). Moves the
+    duplicate's comments onto the retained task, records the merge in BOTH
+    timelines, and archives the duplicate with a pointer back. Returns a status
+    dict. Raises ValueError on invalid input."""
+    if retain_id == duplicate_id:
+        raise ValueError("Cannot merge a task into itself")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = {r["quick_task_id"]: r for r in await (await conn.execute(
+            "SELECT quick_task_id, title, deleted_at, merged_into FROM nidaan_quick_tasks "
+            "WHERE quick_task_id IN (?, ?)", (retain_id, duplicate_id))).fetchall()}
+        keep = rows.get(retain_id)
+        dup = rows.get(duplicate_id)
+        if not keep or not dup:
+            raise ValueError("One or both tasks not found")
+        if dup["deleted_at"] is not None:
+            raise ValueError("The duplicate task is already deleted/merged")
+        if keep["deleted_at"] is not None:
+            raise ValueError("The task to retain is deleted")
+        # Move the duplicate's comments onto the retained task.
+        await conn.execute(
+            "UPDATE nidaan_quick_task_notes SET quick_task_id = ? WHERE quick_task_id = ?",
+            (retain_id, duplicate_id))
+        # Record the merge in both timelines.
+        await _log_quick_task(conn, retain_id, "merge", to_value=str(duplicate_id),
+                              changed_by=changed_by,
+                              note=f"Merged #{duplicate_id} \"{dup['title']}\" into this task")
+        await _log_quick_task(conn, duplicate_id, "merge", to_value=str(retain_id),
+                              changed_by=changed_by,
+                              note=f"Merged into #{retain_id} \"{keep['title']}\"")
+        # Archive the duplicate, pointing at the retained task.
+        await conn.execute(
+            "UPDATE nidaan_quick_tasks SET deleted_at = CURRENT_TIMESTAMP, "
+            "merged_into = ?, status = 'cancelled' WHERE quick_task_id = ?",
+            (retain_id, duplicate_id))
+        await conn.commit()
+    return {"retained": retain_id, "merged": duplicate_id}
+
+
 # =============================================================================
 #  LEAVE REQUESTS — staff apply → admin/SA approve; on-leave surfaces tasks
 # =============================================================================
@@ -3043,12 +3084,34 @@ async def create_staff(
     else:
         phone = ""
     notify_email = (notify_email or "").lower().strip()
+    email = email.lower().strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            # If this Login ID belongs to a SOFT-DELETED (archived) staffer,
+            # reclaim that row as a fresh account — so recreating a deleted
+            # staffer with the same Login ID works cleanly (the email UNIQUE
+            # constraint would otherwise block it). An ACTIVE match is a real
+            # duplicate → return None (409).
+            existing = await (await conn.execute(
+                "SELECT staff_id, deleted_at FROM nidaan_staff WHERE email=?",
+                (email,))).fetchone()
+            if existing is not None:
+                if existing["deleted_at"] is None:
+                    return None  # active account already uses this Login ID
+                sid = existing["staff_id"]
+                await conn.execute(
+                    "UPDATE nidaan_staff SET name=?, password_hash=?, role=?, "
+                    "phone=?, notify_email=?, created_by=?, status='active', "
+                    "deleted_at=NULL, last_login_at=NULL, saved_official_numbers_at=NULL, "
+                    "created_at=CURRENT_TIMESTAMP WHERE staff_id=?",
+                    (name, pw_hash, role, phone, notify_email, created_by, sid))
+                await conn.commit()
+                return sid
             cur = await conn.execute(
                 """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, notify_email, created_by)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (name, email.lower().strip(), pw_hash, role, phone, notify_email, created_by),
+                (name, email, pw_hash, role, phone, notify_email, created_by),
             )
             await conn.commit()
             return cur.lastrowid

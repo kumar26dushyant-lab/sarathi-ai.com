@@ -1523,7 +1523,7 @@ function _qtRegistryRow(qt, isAdmin){
          style="padding:.6rem .25rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start;${deleted?'opacity:.45':''}">
       <div style="width:3px;align-self:stretch;background:${prio.color};border-radius:2px;flex-shrink:0;min-height:34px"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.88rem;font-weight:600;${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}"><span style="color:rgba(255,255,255,.35);font-family:monospace;font-size:.82rem;margin-right:.35rem">#${qt.quick_task_id}</span>${esc(qt.title||'')}</div>
+        <div style="font-size:.88rem;font-weight:600;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap"><span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.9rem;padding:.1rem .45rem;border-radius:6px;flex-shrink:0">#${qt.quick_task_id}</span><span style="${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</span></div>
         <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
           <span style="color:${st.color}">● ${st.label}</span>
           ${typePill}${apprPill}
@@ -1561,7 +1561,7 @@ function _qtRow(qt, showAssignee){
          style="padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;border-left:3px solid ${prio.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:.86rem;font-weight:600">${prio.icon} <span style="color:rgba(255,255,255,.4);font-family:monospace;font-size:.8rem">#${qt.quick_task_id}</span> ${esc(qt.title||'')}</div>
+          <div style="font-size:.86rem;font-weight:600">${prio.icon} <span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.88rem;padding:.08rem .4rem;border-radius:6px">#${qt.quick_task_id}</span> ${esc(qt.title||'')}</div>
           <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.15rem">
             <span style="color:${status.color}">${status.label}</span>${showAssignee&&qt.assignee_name?' · @ '+esc(qt.assignee_name):''}${due}${claim}
           </div>
@@ -1640,12 +1640,14 @@ async function openQuickTaskDrawer(qid){
         </select>
         <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="qtReassign(${qt.quick_task_id})">⇄ Reassign</button>` : ''}
       <button class="btn-sm btn-ghost" onclick="qtShowHistory(${qt.quick_task_id})">📜 History</button>
+      ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#c4b5fd" onclick="openMergeModal(${qt.quick_task_id})">⧉ Merge</button>` : ''}
       ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5;margin-left:auto" onclick="qtDelete(${qt.quick_task_id})">🗑 Delete</button>` : ''}
     </div>
     <div id="qtHistoryBox" style="display:none;margin-bottom:1rem"></div>`;
 
   body.innerHTML = `
     <div style="padding:1rem 1.25rem 2rem">
+      ${qt.merged_into ? `<div style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);border-radius:8px;padding:.6rem .7rem;margin-bottom:.8rem;font-size:.82rem;color:#c4b5fd">⧉ This task was merged into <a style="color:#a78bfa;cursor:pointer;font-weight:700" onclick="openQuickTaskDrawer(${qt.merged_into})">#${qt.merged_into}</a></div>` : ''}
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
         <span class="task-pill" style="background:${prio.color}22;color:${prio.color};border:1px solid ${prio.color}44">${prio.icon} ${prio.label}</span>
         <span class="task-pill" style="background:${status.color}22;color:${status.color};border:1px solid ${status.color}44">${status.label}</span>
@@ -1793,9 +1795,59 @@ async function qtDelete(qid){
   } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Delete failed'),'error'); }
 }
 
+// ── Task merge (dedupe) ──────────────────────────────────────────────────────
+let _mergeState = {baseId:null, baseTitle:'', otherId:null, otherTitle:'', retain:'base'};
+async function openMergeModal(baseId){
+  let base = {};
+  try { base = (await (await fetch('/nidaan/ops/api/quick-tasks/'+baseId,{headers:hdrs()})).json()).quick_task || {}; } catch(e){}
+  _mergeState = {baseId, baseTitle:base.title||'', otherId:null, otherTitle:'', retain:'base'};
+  openModal('⧉ Merge Tasks', `
+    <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-bottom:.75rem">Merge a duplicate into <strong>#${baseId}</strong>. Comments move to the retained task; the other is archived with a link back, and both timelines record the merge.</div>
+    <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Find the duplicate task</label>
+    <input id="mergeSearch" placeholder="Search title or #id…" oninput="mergeSearchTasks(this.value)" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .7rem;border-radius:6px;font-size:.86rem;margin-bottom:.5rem">
+    <div id="mergeResults" style="max-height:190px;overflow-y:auto;margin-bottom:.5rem"></div>
+    <div id="mergeConfirm"></div>`,
+    [{label:'Cancel', cls:'btn-ghost', fn:closeModal}]);
+  mergeSearchTasks('');
+}
+async function mergeSearchTasks(q){
+  const box = document.getElementById('mergeResults'); if(!box) return;
+  const r = await fetch('/nidaan/ops/api/quick-tasks?include_done=true&limit=30'+(q?('&q='+encodeURIComponent(q)):''), { headers: hdrs() });
+  const items = (r.ok ? (await r.json()).quick_tasks : []).filter(t=>t.quick_task_id!==_mergeState.baseId);
+  box.innerHTML = items.length ? items.map(t=>`
+    <div onclick="mergePick(${t.quick_task_id},'${esc((t.title||'').replace(/'/g,''))}')" style="padding:.45rem .5rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:.84rem">
+      <span style="color:#22d3ee;font-family:monospace;font-weight:700">#${t.quick_task_id}</span> ${esc(t.title||'')} <span style="color:rgba(255,255,255,.4);font-size:.74rem">· ${esc(t.status)}</span>
+    </div>`).join('') : '<div style="padding:.5rem;color:rgba(255,255,255,.4);font-size:.82rem">No matches</div>';
+}
+function mergePick(id, title){
+  _mergeState.otherId = id; _mergeState.otherTitle = title; _mergeState.retain = 'base';
+  const c = document.getElementById('mergeConfirm'); if(!c) return;
+  c.innerHTML = `
+    <div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:.7rem">
+      <div style="font-size:.82rem;margin-bottom:.5rem">Which task should be <strong>kept</strong>? The other is merged into it.</div>
+      <label style="display:block;font-size:.84rem;margin-bottom:.35rem;cursor:pointer"><input type="radio" name="mergeRetain" value="base" checked onchange="_mergeState.retain='base'"> Keep <strong>#${_mergeState.baseId}</strong> "${esc(_mergeState.baseTitle)}"</label>
+      <label style="display:block;font-size:.84rem;margin-bottom:.6rem;cursor:pointer"><input type="radio" name="mergeRetain" value="other" onchange="_mergeState.retain='other'"> Keep <strong>#${id}</strong> "${esc(title)}"</label>
+      <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700;width:100%" onclick="doMerge()">⧉ Merge</button>
+    </div>`;
+}
+async function doMerge(){
+  const {baseId, otherId, retain} = _mergeState;
+  if(!otherId){ ndUI.toast('Pick a task to merge','error'); return; }
+  const keep = retain==='base' ? baseId : otherId;
+  const drop = retain==='base' ? otherId : baseId;
+  if(!confirm(`Keep #${keep} and merge #${drop} into it?\n#${drop} will be archived (its comments move to #${keep}).`)) return;
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+keep+'/merge', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({duplicate_id: drop})
+  });
+  if(r.ok){ ndUI.toast('Tasks merged ✓','success'); closeModal(); _refreshQuickTaskWidgets(); openQuickTaskDrawer(keep); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Merge failed'),'error'); }
+}
+
 const _QT_ACTION_LABEL = {
   created:'Created', status:'Status changed', reassign:'Reassigned',
-  reopen:'Reopened', delete:'Deleted', approve:'Approved', reject:'Rejected'
+  reopen:'Reopened', delete:'Deleted', approve:'Approved', reject:'Rejected',
+  merge:'Merged'
 };
 async function qtShowHistory(qid){
   const box = document.getElementById('qtHistoryBox');
@@ -3430,12 +3482,13 @@ async function loadStaff() {
       ? `<button class="btn-icon" style="color:#4ade80" onclick="restoreStaff(${s.staff_id})" title="Restore as inactive">♻️ Restore</button>`
       : `
         <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
+        ${_role==='super_admin'?`<button class="btn-icon" style="color:#fbbf24" onclick="resetStaffPassword(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')" title="Reset password (one click)">🔑↻</button>`:''}
         ${isSuper
           ? '<span class="btn-icon" style="opacity:.3;cursor:not-allowed" title="Super admins are protected">🔒</span>'
           : (s.status==='active'
               ? `<button class="btn-icon" style="color:#f87171" onclick="deactivateStaff(${s.staff_id})" title="Deactivate">🚫</button>`
               : `<button class="btn-icon" style="color:#4ade80" onclick="reactivateStaff(${s.staff_id})" title="Reactivate">✅</button>`)}
-        ${s.staff_id!==_staffId&&s.status==='active'?`<button class="btn-icon" onclick="doImpersonateStaff(${s.staff_id})" title="Login as this staff member">🔑</button>`:''}
+        ${s.staff_id!==_staffId&&s.status==='active'?`<button class="btn-icon" onclick="doImpersonateStaff(${s.staff_id})" title="Login as this staff member">🪪</button>`:''}
         ${!isSuper?`<button class="btn-icon" style="color:#f87171" onclick="deleteStaff(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')" title="Delete (archive)">🗑</button>`:''}`;
     return `
     <tr>
@@ -3473,6 +3526,26 @@ async function restoreStaff(staffId){
   const r = await API('/staff/'+staffId+'/restore', {method:'POST'});
   if(r.ok){ ndUI.toast('Restored as inactive','success'); loadStaff(); }
   else ndUI.toast('Restore failed','error');
+}
+
+async function resetStaffPassword(staffId, name){
+  if(!confirm(`Reset password for ${name||'this staff member'}?\n\nA new temporary password will be generated for you to share.`)) return;
+  const r = await API('/staff/'+staffId+'/reset-password', {method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Reset failed'),'error'); return; }
+  const d = await r.json();
+  openModal('🔑 Password Reset', `
+    <div style="font-size:.86rem;color:rgba(255,255,255,.7);margin-bottom:.75rem">New temporary password for <strong>${esc(d.name)}</strong>. Share it securely — they should change it after logging in.</div>
+    <div style="background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3);border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem">
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5)">Login ID</div>
+      <div style="font-family:monospace;font-size:.9rem;margin-bottom:.5rem">${esc(d.login_id)}</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5)">Temporary password</div>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span id="tmpPw" style="font-family:monospace;font-size:1.1rem;font-weight:800;color:#22d3ee">${esc(d.temp_password)}</span>
+        <button class="btn-sm btn-ghost" onclick="navigator.clipboard.writeText('${esc(d.temp_password)}').then(()=>ndUI.toast('Copied','success'))">📋 Copy</button>
+      </div>
+    </div>`,
+    [{label:'Done', cls:'btn-primary', fn:closeModal}]
+  );
 }
 
 async function deleteInactiveStaff(){
