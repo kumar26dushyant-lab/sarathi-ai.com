@@ -438,6 +438,20 @@ async def _is_registered_staff_phone(dest_digits: str) -> bool:
         return (await cur.fetchone()) is not None
 
 
+async def _is_official_number(dest_digits: str) -> bool:
+    """True if the destination is one of our official WhatsApp lines (any slot).
+    These are always allowed through the staff-only gate."""
+    d10 = dest_digits[-10:]
+    if len(d10) < 10:
+        return False
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT 1 FROM nidaan_official_instances "
+            "WHERE substr(replace(replace(phone_number,' ',''),'+',''), -10) = ? LIMIT 1",
+            (d10,))
+        return (await cur.fetchone()) is not None
+
+
 async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool, str, str]:
     """Returns (success, wa_message_id, error_str).
     FOOLPROOF GUARDS (a wrong-recipient send is a critical risk):
@@ -460,7 +474,8 @@ async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool,
         # ONLY numbers WhatsApp may reach are active staff mobiles from the Staff
         # section. Anything else (subscribers, leads, unknowns) is held off.
         staff_only = (await ntasks.get_flag("nidaan_wa_staff_only", "1")) == "1"
-        if staff_only and not await _is_registered_staff_phone(dest_digits):
+        if staff_only and not (await _is_registered_staff_phone(dest_digits)
+                               or await _is_official_number(dest_digits)):
             return (False, "", "blocked_non_staff_recipient")
 
         # (1) Self-send: by default we ALLOW sending to the official number
@@ -868,17 +883,45 @@ async def on_quick_task_request(quick_task: dict):
     qid = quick_task.get("quick_task_id")
     link = f"{NIDAAN_BASE_URL}/nidaan/ops?qt={qid}" if qid else f"{NIDAAN_BASE_URL}/nidaan/ops"
     frm = quick_task.get("creator_name") or "an associate"
+    subject = f"[Nidaan] Request from {frm}: {title}"
+    body = ("🙋 New request from " + frm + "\n"
+            f"📌 {title}\n"
+            + (f"Linked: claim #{quick_task['claim_id']}\n" if quick_task.get('claim_id') else "")
+            + f"Pick up: {link}")
+    # EMAIL each admin; WHATSAPP only to the connected official line(s).
     for a in await _active_admins():
         await dispatch(
             event_key="quick_task.request", priority=PRIORITY_P1,
             recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
-            recipient_phone=a.get("phone") or "",
+            recipient_phone="",
             recipient_email=a.get("email") or "",
-            subject=f"[Nidaan] Request from {frm}: {title}",
-            body=(f"🙋 New request from {frm}\n"
-                  f"📌 {title}\n"
-                  + (f"Linked: claim #{quick_task['claim_id']}\n" if quick_task.get('claim_id') else "")
-                  + f"Pick up: {link}"))
+            subject=subject, body=body, force_email=True)
+    await _whatsapp_official_lines(event_key="quick_task.request",
+                                   subject=subject, body=body)
+
+
+async def _whatsapp_official_lines(*, event_key: str, subject: str, body: str,
+                                   priority: str = PRIORITY_P1) -> int:
+    """Deliver an internal alert to every CONNECTED official WhatsApp line
+    (health_state='open'). Each connected line receives it (a self-message on
+    its own number) — so with 1 connected it lands on that one, and with all 3
+    connected it lands on all 3. Returns how many lines were messaged.
+    Email is handled separately by the caller (per-admin)."""
+    insts = await list_official_instances()
+    sent = 0
+    for inst in insts:
+        if inst.get("health_state") != "open":
+            continue
+        num = inst.get("phone_number")
+        if not num:
+            continue
+        await dispatch(
+            event_key=event_key, priority=priority,
+            recipient_type=RECIPIENT_STAFF, recipient_id=None,
+            recipient_phone=num, recipient_email="",
+            subject=subject, body=body)
+        sent += 1
+    return sent
 
 
 def _leave_when(leave: dict) -> str:
@@ -911,14 +954,18 @@ async def on_leave_requested(leave: dict):
         lines.append(f"Handover: {leave['handover_notes']}")
     lines.append(f"Approve/Reject: {link}")
     body = "\n".join(lines)
+    subject = f"[Nidaan] Leave request — {who} ({when})"
+    # EMAIL each admin (their own inbox); WHATSAPP only to the connected official
+    # line(s) — not to admins' personal numbers.
     for a in await _active_admins():
         await dispatch(
             event_key="leave.requested", priority=PRIORITY_P1,
             recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
-            recipient_phone=a.get("phone") or "",
+            recipient_phone="",
             recipient_email=a.get("email") or "",
-            subject=f"[Nidaan] Leave request — {who} ({when})",
-            body=body, force_email=True)
+            subject=subject, body=body, force_email=True)
+    await _whatsapp_official_lines(event_key="leave.requested",
+                                   subject=subject, body=body)
 
 
 async def on_leave_decided(leave: dict, decision: str):
