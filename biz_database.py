@@ -1548,6 +1548,24 @@ async def init_db():
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nqtn_task "
             "ON nidaan_quick_task_notes(quick_task_id, created_at DESC)")
+        # Comment approval (admins can sign off a specific comment).
+        for _nalt in [
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN approved_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN approved_at TIMESTAMP",
+        ]:
+            try:
+                await conn.execute(_nalt)
+            except Exception:
+                pass
+        # Comment read-receipts (WhatsApp-style ✓ sent / ✓✓ read).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_note_reads (
+                note_id   INTEGER NOT NULL REFERENCES nidaan_quick_task_notes(note_id),
+                staff_id  INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                read_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (note_id, staff_id)
+            )
+        """)
 
         # ── Quick-task lifecycle: soft-delete + approval + immutable history ──
         for _alt in [

@@ -4075,8 +4075,28 @@ async def ops_quick_task_get(qid: int, request: Request):
         if qt.get("assigned_to_staff_id") != staff["staff_id"] and \
            qt.get("created_by_staff_id") != staff["staff_id"]:
             raise HTTPException(403)
+    # Opening the task = reading its comments (read-receipts).
+    await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
-    return {"quick_task": qt, "notes": notes}
+    return {"quick_task": qt, "notes": notes, "me": staff["staff_id"]}
+
+
+class _NoteApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool = True
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/notes/{note_id}/approval")
+async def ops_quick_task_note_approval(qid: int, note_id: int,
+                                       body: _NoteApprovalReq, request: Request):
+    """Approve (or un-approve) a specific comment. Admins only."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    await nidaan.set_quick_task_note_approval(
+        note_id, staff["staff_id"] if body.approve else None)
+    await _ops_audit(request, "quick_task.note_approval", "quick_task", qid,
+                     f"note #{note_id} {'approved' if body.approve else 'unapproved'}")
+    return {"ok": True}
 
 
 @app.post("/nidaan/ops/api/quick-tasks")
@@ -4809,14 +4829,14 @@ async def ops_official_list(request: Request):
     _require_staff(request)
     insts = await nnot.list_official_instances()
     caps = await nnot.compute_effective_caps()
+    # No hardcoded numbers — the roster is user-driven. Report the free slots so
+    # the UI can offer "add a number".
+    used = {i.get("instance_slot") for i in insts}
     return {
         "instances": insts,
         "caps": caps,
-        "official_phones": [
-            {"slot": 1, "phone": "+91 98272 84804", "display_name": "Nidaan Cases"},
-            {"slot": 2, "phone": "+91 98260 11116", "display_name": "Nidaan Updates"},
-            {"slot": 3, "phone": "+91 95844 68804", "display_name": "Nidaan Support"},
-        ],
+        "max_slots": 3,
+        "free_slots": [s for s in (1, 2, 3) if s not in used],
     }
 
 
@@ -4829,6 +4849,18 @@ async def ops_official_upsert(body: _OfficialInstanceUpsertReq, request: Request
         evolution_instance=body.evolution_instance,
         display_name=body.display_name, phone_number=body.phone_number)
     return {"instance": inst}
+
+
+@app.delete("/nidaan/ops/api/official-numbers/{slot}")
+async def ops_official_delete(slot: int, request: Request):
+    """Remove an official number (unlinks the WhatsApp session too). SA only."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    ok = await nnot.delete_official_instance(slot)
+    if not ok:
+        raise HTTPException(404, "No number registered in that slot")
+    await _ops_audit(request, "official_number.delete", "official", slot, f"removed slot {slot}")
+    return {"ok": True}
 
 
 @app.get("/nidaan/ops/api/official-numbers/{slot}/qr")

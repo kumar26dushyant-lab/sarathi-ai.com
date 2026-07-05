@@ -133,6 +133,24 @@ async def upsert_official_instance(*, instance_slot: int,
     return await get_official_instance(instance_slot) or {}
 
 
+async def delete_official_instance(slot: int) -> bool:
+    """Remove an official number registration (and best-effort logout in
+    Evolution so the SIM's WhatsApp is unlinked)."""
+    inst = await get_official_instance(slot)
+    if not inst:
+        return False
+    try:
+        import biz_whatsapp_evolution as wa_evo
+        await wa_evo.logout_instance(inst["evolution_instance"])
+    except Exception:
+        pass  # logout is best-effort; still remove the registration
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM nidaan_official_instances WHERE instance_slot = ?", (slot,))
+        await conn.commit()
+    return True
+
+
 async def update_instance_health(slot: int, *, state: str, own_jid: str = "",
                                  phone_number: str = "") -> None:
     async with aiosqlite.connect(db.DB_PATH) as conn:

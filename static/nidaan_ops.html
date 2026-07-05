@@ -1757,6 +1757,7 @@ function _renderQTThread(notes, qid, canComment){
   if (!notes.length) return '<div style="color:rgba(255,255,255,.35);font-size:.85rem">No comments yet.</div>';
   const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
   const roleLabel = {super_admin:'SA', sub_super_admin:'ADMIN', team_member:'ASSOC'};
+  const isAdmin = (_role==='super_admin' || _role==='sub_super_admin');
   const byParent = {};
   const roots = [];
   notes.forEach(n => {
@@ -1766,13 +1767,26 @@ function _renderQTThread(notes, qid, canComment){
   const renderNote = (n, isReply) => {
     const c = roleColors[n.staff_role] || '#94a3b8';
     const l = roleLabel[n.staff_role] || 'STAFF';
+    // Read-receipt tick — ✓ sent, ✓✓ blue read (by whom, on hover)
+    const readers = n.reads || [];
+    const tick = readers.length
+      ? `<span title="Read by ${esc(readers.map(r=>r.name+' ('+ndUI.timeAgo(r.at)+')').join(', '))}" style="color:#22d3ee;font-weight:800;letter-spacing:-1px">✓✓</span>`
+      : `<span title="Sent" style="color:rgba(255,255,255,.35);font-weight:700">✓</span>`;
+    const approved = !!n.approved_by_name;
+    const apprBadge = approved
+      ? `<span style="font-size:.66rem;background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.35);padding:.05rem .35rem;border-radius:4px;margin-left:.35rem">✔ Approved${n.approved_by_name?' · '+esc(n.approved_by_name):''}</span>`
+      : '';
+    const apprBtn = isAdmin
+      ? `<button onclick="qtApproveNote(${qid},${n.note_id},${approved?'false':'true'})" style="font-size:.7rem;background:transparent;border:none;color:${approved?'rgba(255,255,255,.4)':'#4ade80'};cursor:pointer;padding:.15rem .3rem">${approved?'✖ Unapprove':'✔ Approve'}</button>`
+      : '';
     return `
       <div style="${isReply?'margin-left:1.25rem;border-left:2px solid '+c+'33;padding-left:.6rem':''};margin-bottom:.6rem">
         <div style="font-size:.74rem;color:rgba(255,255,255,.55)">
           <span style="color:${c};font-weight:700">[${l}]</span>
-          <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)}
+          <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} ${tick}${apprBadge}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
+        ${apprBtn}
         ${(!isReply && canComment) ? `
           <button onclick="qtToggleReply(${n.note_id})"
                   style="font-size:.72rem;background:transparent;border:none;color:rgba(34,211,238,.85);cursor:pointer;padding:.15rem 0">↩ Reply</button>
@@ -1795,6 +1809,15 @@ function qtToggleReply(nid){
   const show = box.style.display === 'none';
   box.style.display = show ? 'block' : 'none';
   if (show) setTimeout(() => document.getElementById('qtReplyInput_'+nid)?.focus(), 30);
+}
+
+async function qtApproveNote(qid, noteId, approve){
+  const r = await fetch(`/nidaan/ops/api/quick-tasks/${qid}/notes/${noteId}/approval`, {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({approve})
+  });
+  if (r.ok) { ndUI.toast(approve?'Comment approved ✓':'Approval removed','success'); openQuickTaskDrawer(qid); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Failed'),'error'); }
 }
 
 // Refresh the quick-task widgets when they're on-screen (Tasks panel, or
@@ -4652,61 +4675,95 @@ async function loadOfficialNumbers(){
   const d = await r.json();
   const insts = d.instances || [];
   const caps = d.caps || {by_slot:{}};
-  const phones = d.official_phones || [];
+  const freeSlots = d.free_slots || [];
 
-  // Build a row per phone (1,2,3); show health, cap, controls
+  // A card per REGISTERED number (user-added). No hardcoded numbers.
   let rows = '';
-  phones.forEach(p => {
-    const reg = insts.find(i => i.instance_slot === p.slot);
-    const cap = caps.by_slot[p.slot] || {};
-    const healthy = reg && (reg.health_state === 'open' || reg.health_state === 'connected');
-    const stateColor = healthy ? '#22c55e' : reg ? '#fbbf24' : '#6b7280';
-    const stateLabel = healthy ? 'CONNECTED' : reg ? 'DISCONNECTED' : 'NOT PAIRED';
+  insts.forEach(reg => {
+    const slot = reg.instance_slot;
+    const cap = caps.by_slot[slot] || {};
+    const healthy = (reg.health_state === 'open' || reg.health_state === 'connected');
+    const stateColor = healthy ? '#22c55e' : '#fbbf24';
+    const stateLabel = healthy ? 'CONNECTED' : 'DISCONNECTED';
     const usagePct = cap.usage_pct || 0;
     const effective = cap.effective_cap || 0;
     rows += `
       <div class="nd-card" style="padding:1rem;margin-bottom:.85rem">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
           <div>
-            <div style="font-weight:700;font-size:1rem">${esc(p.display_name)}</div>
-            <div style="font-family:monospace;font-size:.85rem;color:rgba(255,255,255,.65)">${esc(p.phone)}</div>
+            <div style="font-weight:700;font-size:1rem">${esc(reg.display_name||('Number '+slot))}</div>
+            <div style="font-family:monospace;font-size:.85rem;color:rgba(255,255,255,.65)">${esc(reg.phone_number||'—')}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:.75rem">
-            <span class="task-pill" style="background:${stateColor}22;color:${stateColor};border:1px solid ${stateColor}33;padding:.25rem .65rem">${stateLabel}</span>
+          <span class="task-pill" style="background:${stateColor}22;color:${stateColor};border:1px solid ${stateColor}33;padding:.25rem .65rem">${stateLabel}</span>
+        </div>
+        <div style="margin-top:.65rem;font-size:.82rem;color:rgba(255,255,255,.55)">
+          Instance: <code style="background:rgba(0,0,0,.25);padding:.1rem .4rem;border-radius:4px">${esc(reg.evolution_instance)}</code>
+        </div>
+        <div style="margin-top:.5rem;font-size:.83rem">
+          <div style="display:flex;justify-content:space-between;margin-bottom:.2rem">
+            <span style="color:rgba(255,255,255,.55)">Today: ${cap.sent_today || 0} / ${effective}</span>
+            <span style="color:rgba(255,255,255,.55)">${usagePct}%</span>
+          </div>
+          <div style="background:rgba(255,255,255,.06);height:6px;border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(100, usagePct)}%;background:${usagePct>=90?'#f87171':usagePct>=70?'#fbbf24':'#22d3ee'}"></div>
           </div>
         </div>
-        <div style="margin-top:.65rem;font-size:.85rem;color:rgba(255,255,255,.65)">
-          <strong>Evolution instance:</strong> <code style="background:rgba(0,0,0,.25);padding:.1rem .4rem;border-radius:4px">${esc((reg && reg.evolution_instance) || 'nidaan_official_'+p.slot+' (suggested)')}</code>
-        </div>
-        ${reg ? `
-        <div style="margin-top:.5rem;display:flex;align-items:center;gap:.75rem;font-size:.83rem">
-          <div style="flex:1">
-            <div style="display:flex;justify-content:space-between;margin-bottom:.2rem">
-              <span style="color:rgba(255,255,255,.55)">Today's cap: ${cap.sent_today || 0} / ${effective}</span>
-              <span style="color:rgba(255,255,255,.55)">${usagePct}%</span>
-            </div>
-            <div style="background:rgba(255,255,255,.06);height:6px;border-radius:3px;overflow:hidden">
-              <div style="height:100%;width:${Math.min(100, usagePct)}%;background:${usagePct>=90?'#f87171':usagePct>=70?'#fbbf24':'#22d3ee'};transition:width .3s"></div>
-            </div>
-          </div>
-        </div>` : ''}
         <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
-          ${reg ? `<button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="showQR(${p.slot})">📷 Show QR / Pair</button>` :
-                  `<button class="nd-btn nd-btn-sm nd-btn-primary" onclick="setupInstance(${p.slot}, '${esc(p.display_name)}', '${esc(p.phone)}')">⚙️ Setup This Number</button>`}
+          <button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="showQR(${slot})">📷 ${healthy?'Re-pair':'Connect'} (QR)</button>
+          <button class="nd-btn nd-btn-sm" style="color:#fca5a5;border:1px solid rgba(248,113,113,.3);background:transparent" onclick="removeOfficialNumber(${slot},'${esc((reg.display_name||'').replace(/'/g,''))}')">🗑 Remove</button>
         </div>
       </div>`;
   });
+  if (!insts.length) rows = '<div class="nd-card" style="padding:1.25rem;color:rgba(255,255,255,.5);font-size:.9rem">No numbers added yet. Add your first official WhatsApp number below.</div>';
+
+  const addForm = freeSlots.length ? `
+    <div class="nd-card" style="padding:1rem;border:1px dashed rgba(34,211,238,.35)">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">➕ Add an Official Number</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
+        <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Display name</label>
+          <input id="onName" placeholder="e.g. Nidaan Cases" style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
+        <div><label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Phone (10-digit)</label>
+          <input id="onPhone" type="tel" inputmode="numeric" maxlength="15" oninput="_liveMobile(this)" placeholder="98xxxxxxxx" style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem"></div>
+      </div>
+      <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="addOfficialNumber()">Add &amp; get QR</button>
+      <div style="font-size:.76rem;color:rgba(255,255,255,.4);margin-top:.5rem">After adding, scan the QR from that SIM's WhatsApp to connect. Up to 3 numbers.</div>
+    </div>` : '<div style="font-size:.82rem;color:rgba(255,255,255,.45);padding:.5rem 0">All 3 slots are in use. Remove one to add another.</div>';
 
   panel.innerHTML = `
     <div style="padding:1.25rem 1.5rem 2rem">
       <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:.3rem">📞 Official Nidaan WhatsApp Numbers</h1>
       <div style="color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.25rem">
-        Three numbers route all subscriber + staff WhatsApp communications. Active-count auto-balances per-number caps:
-        3 active → 30 each (warm-up) · 2 active → 45 each · 1 active → 60.
-        Healthy instances: <b>${caps.active_count || 0} / 3</b> · Total remaining today: <b>${caps.total_remaining || 0}</b>
+        Add your own numbers and connect them by QR. Active-count auto-balances per-number daily caps.
+        Connected: <b>${caps.active_count || 0}</b> · Remaining today: <b>${caps.total_remaining || 0}</b>
       </div>
       ${rows}
+      <div style="margin-top:1rem">${addForm}</div>
     </div>`;
+}
+
+async function addOfficialNumber(){
+  const name = (document.getElementById('onName').value||'').trim();
+  const phone = _normMobile(document.getElementById('onPhone').value);
+  if (!name) { ndUI.toast('Enter a display name','error'); return; }
+  if (!phone) { ndUI.toast('Enter a valid 10-digit number','error'); return; }
+  // Claim the next free slot.
+  const r0 = await fetch('/nidaan/ops/api/official-numbers', { headers: hdrs() });
+  const d0 = await r0.json();
+  const slot = (d0.free_slots || [])[0];
+  if (!slot) { ndUI.toast('All slots in use','error'); return; }
+  const r = await fetch('/nidaan/ops/api/official-numbers', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({instance_slot: slot, evolution_instance:'nidaan_official_'+slot, display_name:name, phone_number:'+91 '+phone})
+  });
+  if (r.ok) { ndUI.toast('Number added — opening QR to connect','success'); await loadOfficialNumbers(); showQR(slot); }
+  else { const e=await r.json().catch(()=>({})); ndUI.toast(_extractErr(e,'Failed to add'),'error'); }
+}
+
+async function removeOfficialNumber(slot, name){
+  if (!confirm(`Remove ${name||'this number'}? It will be unlinked from WhatsApp.`)) return;
+  const r = await fetch('/nidaan/ops/api/official-numbers/'+slot, { method:'DELETE', headers: hdrs() });
+  if (r.ok) { ndUI.toast('Number removed','success'); loadOfficialNumbers(); }
+  else { const e=await r.json().catch(()=>({})); ndUI.toast(_extractErr(e,'Failed'),'error'); }
 }
 
 async function setupInstance(slot, displayName, phone){

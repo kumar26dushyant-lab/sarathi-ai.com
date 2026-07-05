@@ -2068,12 +2068,57 @@ async def list_quick_task_notes(quick_task_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
-            "SELECT n.*, s.name AS staff_name, s.role AS staff_role "
+            "SELECT n.*, s.name AS staff_name, s.role AS staff_role, "
+            "       ap.name AS approved_by_name "
             "FROM nidaan_quick_task_notes n "
-            "LEFT JOIN nidaan_staff s ON s.staff_id = n.staff_id "
+            "LEFT JOIN nidaan_staff s  ON s.staff_id = n.staff_id "
+            "LEFT JOIN nidaan_staff ap ON ap.staff_id = n.approved_by_staff_id "
             "WHERE n.quick_task_id = ? ORDER BY n.created_at ASC",
             (quick_task_id,))
-        return [dict(r) for r in await cur.fetchall()]
+        notes = [dict(r) for r in await cur.fetchall()]
+        if not notes:
+            return notes
+        # Attach read-receipts (who read each comment, when) — excluding the author.
+        rcur = await conn.execute(
+            "SELECT r.note_id, r.read_at, s.name AS reader_name "
+            "FROM nidaan_quick_task_note_reads r "
+            "JOIN nidaan_quick_task_notes n ON n.note_id = r.note_id "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id "
+            "WHERE n.quick_task_id = ? AND r.staff_id != n.staff_id "
+            "ORDER BY r.read_at ASC", (quick_task_id,))
+        reads: dict[int, list] = {}
+        for rr in await rcur.fetchall():
+            reads.setdefault(rr["note_id"], []).append(
+                {"name": rr["reader_name"], "at": rr["read_at"]})
+        for n in notes:
+            n["reads"] = reads.get(n["note_id"], [])
+        return notes
+
+
+async def mark_quick_task_notes_read(quick_task_id: int, staff_id: int) -> None:
+    """Mark every comment on this task as read by `staff_id` (except their own)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO nidaan_quick_task_note_reads (note_id, staff_id) "
+            "SELECT note_id, ? FROM nidaan_quick_task_notes "
+            "WHERE quick_task_id = ? AND staff_id != ?",
+            (staff_id, quick_task_id, staff_id))
+        await conn.commit()
+
+
+async def set_quick_task_note_approval(note_id: int, approved_by: Optional[int]) -> bool:
+    """Approve a comment (approved_by set) or clear approval (approved_by=None)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        if approved_by:
+            await conn.execute(
+                "UPDATE nidaan_quick_task_notes SET approved_by_staff_id=?, "
+                "approved_at=CURRENT_TIMESTAMP WHERE note_id=?", (approved_by, note_id))
+        else:
+            await conn.execute(
+                "UPDATE nidaan_quick_task_notes SET approved_by_staff_id=NULL, "
+                "approved_at=NULL WHERE note_id=?", (note_id,))
+        await conn.commit()
+    return True
 
 
 async def get_admin_stats() -> dict:
