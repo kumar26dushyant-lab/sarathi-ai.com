@@ -621,9 +621,9 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
 
 
 async def _increment_quota(account_id: int, conn: aiosqlite.Connection):
-    """Upsert the rolling 90-day quota counter (call inside the same connection as claim insert)."""
+    """Upsert the rolling 30-day quota counter (call inside the same connection as claim insert)."""
     today = date.today().isoformat()
-    window_start = (date.today() - timedelta(days=90)).isoformat()  # quarter = 90 days
+    window_start = (date.today() - timedelta(days=30)).isoformat()  # monthly claim window
     cur = await conn.execute(
         "SELECT current_window_start, claims_this_window FROM nidaan_plan_quota WHERE account_id=?",
         (account_id,),
