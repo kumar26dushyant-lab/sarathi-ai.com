@@ -934,12 +934,12 @@ async def send_support_ticket_notification(ticket_id: int, subject: str,
 # =============================================================================
 
 _NIDAAN_PLAN_PRICES = {
-    "silver":          "₹1,500/quarter",
-    "gold":            "₹3,000/quarter",
-    "platinum":        "₹6,000/quarter",
-    "silver_annual":   "₹5,400/year",
-    "gold_annual":     "₹10,800/year",
-    "platinum_annual": "₹21,600/year",
+    "silver":          "₹500/month",
+    "gold":            "₹1,000/month",
+    "platinum":        "₹2,000/month",
+    "silver_annual":   "₹5,000/year",
+    "gold_annual":     "₹10,000/year",
+    "platinum_annual": "₹20,000/year",
 }
 
 async def send_nidaan_renewal_reminder(

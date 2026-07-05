@@ -32,13 +32,15 @@ DB_PATH = os.environ.get("DB_PATH", "sarathi_biz.db")
 
 # ── Plan limits ───────────────────────────────────────────────────────────────
 PLAN_LIMITS: dict[str, dict] = {
-    "silver":          {"max_users": 1,    "claims_per_quarter": 10,  "sarathi_bundle": True},
-    "gold":            {"max_users": 5,    "claims_per_quarter": 25,  "sarathi_bundle": True},
-    "platinum":        {"max_users": None, "claims_per_quarter": None, "sarathi_bundle": True},
-    # Annual variants — same limits, different billing period
-    "silver_annual":   {"max_users": 1,    "claims_per_quarter": 10,  "sarathi_bundle": True},
-    "gold_annual":     {"max_users": 5,    "claims_per_quarter": 25,  "sarathi_bundle": True},
-    "platinum_annual": {"max_users": None, "claims_per_quarter": None, "sarathi_bundle": True},
+    # Monthly plans: Silver 3 claims/mo (≤₹5L each), Gold 10 claims/mo (≤₹10L),
+    # Platinum unlimited (≤₹50L). Claim quota window is 30 days (see can_submit_claim).
+    "silver":          {"max_users": 1,    "claims_per_month": 3,    "sarathi_bundle": True},
+    "gold":            {"max_users": 5,    "claims_per_month": 10,   "sarathi_bundle": True},
+    "platinum":        {"max_users": None, "claims_per_month": None, "sarathi_bundle": True},
+    # Annual variants — same monthly claim allowance, billed yearly
+    "silver_annual":   {"max_users": 1,    "claims_per_month": 3,    "sarathi_bundle": True},
+    "gold_annual":     {"max_users": 5,    "claims_per_month": 10,   "sarathi_bundle": True},
+    "platinum_annual": {"max_users": None, "claims_per_month": None, "sarathi_bundle": True},
 }
 
 CLAIM_STATUSES = (
@@ -571,7 +573,7 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     sub = await get_active_subscription(account_id)
     if sub:
         plan = sub["plan"]
-        limit = PLAN_LIMITS.get(plan, {}).get("claims_per_quarter")
+        limit = PLAN_LIMITS.get(plan, {}).get("claims_per_month")
         if limit is None:
             return True, "ok"  # platinum / unlimited
 
@@ -582,7 +584,7 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
             )
             quota = await cur.fetchone()
 
-        window_start = date.today() - timedelta(days=90)  # quarter = 90 days
+        window_start = date.today() - timedelta(days=30)  # monthly claim window
         if quota is None:
             return True, "ok"
         stored_start = date.fromisoformat(str(quota["current_window_start"]))
@@ -2164,17 +2166,19 @@ async def get_admin_stats() -> dict:
 # =============================================================================
 
 NIDAAN_RAZORPAY_PLANS = {
-    # period/interval are the Razorpay recurring-plan cadence: quarterly billing
-    # is period="monthly" interval=3 (Razorpay has no "quarterly"); annual is
-    # period="yearly" interval=1. These MATCH the live plans already created
-    # (silver/gold/platinum = monthly/3), so existing plans are reused, not dup'd.
-    "silver":          {"amount_paise": 150000,  "display": "₹1,500/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
-    "gold":            {"amount_paise": 300000,  "display": "₹3,000/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
-    "platinum":        {"amount_paise": 600000,  "display": "₹6,000/quarter",  "period_days": 92,  "period": "monthly", "interval": 3},
-    # Annual plans — recurring yearly (~10% savings vs 4 quarters)
-    "silver_annual":   {"amount_paise": 540000,  "display": "₹5,400/year",     "period_days": 365, "period": "yearly",  "interval": 1},
-    "gold_annual":     {"amount_paise": 1080000, "display": "₹10,800/year",    "period_days": 365, "period": "yearly",  "interval": 1},
-    "platinum_annual": {"amount_paise": 2160000, "display": "₹21,600/year",    "period_days": 365, "period": "yearly",  "interval": 1},
+    # MONTHLY billing (period="monthly" interval=1). Annual is period="yearly"
+    # interval=1 at ~10× monthly (2 months free). The "tag" is what we write to
+    # each Razorpay Plan's notes.nidaan_plan — bumped to "_m1" so ensure_nidaan_plans
+    # creates BRAND-NEW monthly plans instead of reusing the old ₹/quarter ones
+    # (Razorpay plans are immutable). The dict KEY (silver/gold/...) stays the
+    # internal plan id used everywhere else (checkout, DB, webhook), unchanged.
+    "silver":          {"amount_paise": 50000,   "display": "₹500/month",    "period_days": 30,  "period": "monthly", "interval": 1, "tag": "silver_m1"},
+    "gold":            {"amount_paise": 100000,  "display": "₹1,000/month",  "period_days": 30,  "period": "monthly", "interval": 1, "tag": "gold_m1"},
+    "platinum":        {"amount_paise": 200000,  "display": "₹2,000/month",  "period_days": 30,  "period": "monthly", "interval": 1, "tag": "platinum_m1"},
+    # Annual plans — recurring yearly, 10× monthly (2 months free)
+    "silver_annual":   {"amount_paise": 500000,  "display": "₹5,000/year",   "period_days": 365, "period": "yearly",  "interval": 1, "tag": "silver_annual_m1"},
+    "gold_annual":     {"amount_paise": 1000000, "display": "₹10,000/year",  "period_days": 365, "period": "yearly",  "interval": 1, "tag": "gold_annual_m1"},
+    "platinum_annual": {"amount_paise": 2000000, "display": "₹20,000/year",  "period_days": 365, "period": "yearly",  "interval": 1, "tag": "platinum_annual_m1"},
 }
 
 # Cache: plan_key → razorpay_plan_id
@@ -2187,6 +2191,10 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
     for plan_key, info in NIDAAN_RAZORPAY_PLANS.items():
         if plan_key in _nidaan_plan_ids:
             continue
+        # The Razorpay-side identity is the versioned `tag` (falls back to the
+        # plan key). Bumping the tag forces a fresh plan at the new price rather
+        # than reusing an old immutable one.
+        tag = info.get("tag", plan_key)
         # Try to find existing
         try:
             async with httpx.AsyncClient() as client:
@@ -2196,7 +2204,7 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
                 )
                 for p in r.json().get("items", []):
                     notes = p.get("notes")
-                    if isinstance(notes, dict) and notes.get("nidaan_plan") == plan_key:
+                    if isinstance(notes, dict) and notes.get("nidaan_plan") == tag:
                         _nidaan_plan_ids[plan_key] = p["id"]
                         break
         except Exception as e:
@@ -2213,13 +2221,13 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
                         "period": info["period"],
                         "interval": info["interval"],
                         "item": {
-                            "name": f"Nidaan {plan_key.title()} Plan",
+                            "name": f"Nidaan {plan_key.title()} Plan (Monthly)",
                             "amount": info["amount_paise"],
                             "currency": "INR",
                             "description": info["display"],
                         },
                         "notes": {
-                            "nidaan_plan": plan_key,
+                            "nidaan_plan": tag,
                             "product": "nidaan",
                         },
                     },
@@ -2228,7 +2236,7 @@ async def ensure_nidaan_plans(rzp_key_id: str, rzp_key_secret: str):
                 result = r.json()
                 if "id" in result:
                     _nidaan_plan_ids[plan_key] = result["id"]
-                    logger.info("Created Nidaan Razorpay plan %s → %s", plan_key, result["id"])
+                    logger.info("Created Nidaan Razorpay plan %s (tag %s) → %s", plan_key, tag, result["id"])
         except Exception as e:
             logger.error("Failed to create Nidaan plan %s: %s", plan_key, e)
 
@@ -2442,7 +2450,8 @@ async def create_nidaan_recurring_subscription(
     if not info:
         return {"error": f"Unknown plan: {plan}"}
 
-    # Ensure Razorpay plan exists for this plan key
+    # Ensure Razorpay plan exists for this plan key (matched by the versioned tag).
+    tag = info.get("tag", plan)
     razorpay_plan_id = _nidaan_plan_ids.get(plan)
     if not razorpay_plan_id:
         try:
@@ -2453,7 +2462,7 @@ async def create_nidaan_recurring_subscription(
                 )
                 for p in r.json().get("items", []):
                     _n = p.get("notes")
-                    if isinstance(_n, dict) and _n.get("nidaan_plan") == plan:
+                    if isinstance(_n, dict) and _n.get("nidaan_plan") == tag:
                         razorpay_plan_id = p["id"]
                         _nidaan_plan_ids[plan] = razorpay_plan_id
                         break
@@ -2461,7 +2470,7 @@ async def create_nidaan_recurring_subscription(
             logger.warning("Nidaan plan lookup failed for %s: %s", plan, e)
 
     if not razorpay_plan_id:
-        # Create the Razorpay plan now (quarterly = monthly/3, annual = yearly/1)
+        # Create the Razorpay plan now at the current (monthly/annual) price.
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(
@@ -2476,7 +2485,7 @@ async def create_nidaan_recurring_subscription(
                             "currency": "INR",
                             "description": info["display"],
                         },
-                        "notes": {"nidaan_plan": plan, "product": "nidaan"},
+                        "notes": {"nidaan_plan": tag, "product": "nidaan"},
                     },
                     timeout=20.0,
                 )
@@ -2497,8 +2506,8 @@ async def create_nidaan_recurring_subscription(
                 auth=(rzp_key_id, rzp_key_secret),
                 json={
                     "plan_id": razorpay_plan_id,
-                    # max billing cycles: ~10 years either cadence (annual=10, quarterly=40)
-                    "total_count": 10 if info["period"] == "yearly" else 40,
+                    # max billing cycles ≈ 10 years (annual=10, monthly=120)
+                    "total_count": 10 if info["period"] == "yearly" else 120,
                     "quantity": 1,
                     "notify_info": {"notify_phone": phone, "notify_email": email},
                     "notes": {

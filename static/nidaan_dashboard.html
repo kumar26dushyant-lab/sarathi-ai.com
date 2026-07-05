@@ -611,24 +611,24 @@
       <div class="plan-upgrade-grid">
         <div class="plan-opt" id="po-silver" onclick="switchPlan('silver')">
           <div class="po-name">Silver</div>
-          <div class="po-price">₹1,500</div>
-          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
-          <div class="po-quota en">10 claims/quarter<br>Basic support</div>
-          <div class="po-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+          <div class="po-price">₹500</div>
+          <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
+          <div class="po-quota en">3 claims/month · up to ₹5L each</div>
+          <div class="po-quota hi">3 क्लेम/माह · प्रति ₹5 लाख तक</div>
         </div>
         <div class="plan-opt" id="po-gold" onclick="switchPlan('gold')">
           <div class="po-name">Gold</div>
-          <div class="po-price">₹3,000</div>
-          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
-          <div class="po-quota en">25 claims/quarter<br>Priority support</div>
-          <div class="po-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+          <div class="po-price">₹1,000</div>
+          <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
+          <div class="po-quota en">10 claims/month · up to ₹10L each</div>
+          <div class="po-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
         </div>
         <div class="plan-opt" id="po-platinum" onclick="switchPlan('platinum')">
           <div class="po-name">Platinum</div>
-          <div class="po-price">₹6,000</div>
-          <div class="po-period en">per quarter</div><div class="po-period hi">प्रति तिमाही</div>
-          <div class="po-quota en">Unlimited claims<br>Dedicated manager</div>
-          <div class="po-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+          <div class="po-price">₹2,000</div>
+          <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
+          <div class="po-quota en">Unlimited claims · up to ₹50L each</div>
+          <div class="po-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
         </div>
       </div>
       <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="en">
@@ -736,8 +736,8 @@
 
     <!-- Billing period toggle -->
     <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px">
-      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Quarterly</span>
-      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">तिमाही</span>
+      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Monthly</span>
+      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">मासिक</span>
       <label style="position:relative;display:inline-block;width:46px;height:24px;cursor:pointer">
         <input type="checkbox" id="nidaanBillingToggle" onchange="toggleNidaanBilling()" style="opacity:0;width:0;height:0">
         <span id="nidaanToggleTrack" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></span>
@@ -747,31 +747,31 @@
       <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">वार्षिक <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">10% बचत</span></span>
     </div>
 
-    <!-- Plan cards — quarterly -->
+    <!-- Plan cards — monthly -->
     <div id="nidaan-plan-cards-quarterly" class="plan-cards">
       <div class="plan-card" id="pc-silver" onclick="selectPlan('silver')">
         <div class="pc-name">Silver</div>
-        <div class="pc-price">₹1,500</div>
-        <div class="pc-period en">per quarter</div>
-        <div class="pc-period hi">प्रति तिमाही</div>
-        <div class="pc-quota en">10 claims/quarter<br>Basic support</div>
-        <div class="pc-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+        <div class="pc-price">₹500</div>
+        <div class="pc-period en">per month</div>
+        <div class="pc-period hi">प्रति माह</div>
+        <div class="pc-quota en">3 claims/month · up to ₹5L each</div>
+        <div class="pc-quota hi">3 क्लेम/माह · प्रति ₹5 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-gold" onclick="selectPlan('gold')">
         <div class="pc-name">Gold</div>
-        <div class="pc-price">₹3,000</div>
-        <div class="pc-period en">per quarter</div>
-        <div class="pc-period hi">प्रति तिमाही</div>
-        <div class="pc-quota en">25 claims/quarter<br>Priority support</div>
-        <div class="pc-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+        <div class="pc-price">₹1,000</div>
+        <div class="pc-period en">per month</div>
+        <div class="pc-period hi">प्रति माह</div>
+        <div class="pc-quota en">10 claims/month · up to ₹10L each</div>
+        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-platinum" onclick="selectPlan('platinum')">
         <div class="pc-name">Platinum</div>
-        <div class="pc-price">₹6,000</div>
-        <div class="pc-period en">per quarter</div>
-        <div class="pc-period hi">प्रति तिमाही</div>
-        <div class="pc-quota en">Unlimited claims<br>Dedicated manager</div>
-        <div class="pc-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+        <div class="pc-price">₹2,000</div>
+        <div class="pc-period en">per month</div>
+        <div class="pc-period hi">प्रति माह</div>
+        <div class="pc-quota en">Unlimited claims · up to ₹50L each</div>
+        <div class="pc-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
       </div>
     </div>
 
@@ -779,32 +779,32 @@
     <div id="nidaan-plan-cards-yearly" class="plan-cards" style="display:none">
       <div class="plan-card" id="pc-silver-annual" onclick="selectPlan('silver_annual')">
         <div class="pc-name">Silver</div>
-        <div class="pc-price">₹5,400</div>
-        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹600</span></div>
-        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹600 बचत</span></div>
-        <div class="pc-quota en">10 claims/quarter<br>Basic support</div>
-        <div class="pc-quota hi">10 क्लेम/तिमाही<br>बेसिक सपोर्ट</div>
+        <div class="pc-price">₹5,000</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">2 months free</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span></div>
+        <div class="pc-quota en">3 claims/month · up to ₹5L each</div>
+        <div class="pc-quota hi">3 क्लेम/माह · प्रति ₹5 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-gold-annual" onclick="selectPlan('gold_annual')">
         <div class="pc-name">Gold</div>
-        <div class="pc-price">₹10,800</div>
-        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹1,200</span></div>
-        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹1,200 बचत</span></div>
-        <div class="pc-quota en">25 claims/quarter<br>Priority support</div>
-        <div class="pc-quota hi">25 क्लेम/तिमाही<br>प्राथमिकता सपोर्ट</div>
+        <div class="pc-price">₹10,000</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">2 months free</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span></div>
+        <div class="pc-quota en">10 claims/month · up to ₹10L each</div>
+        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-platinum-annual" onclick="selectPlan('platinum_annual')">
         <div class="pc-name">Platinum</div>
-        <div class="pc-price">₹21,600</div>
-        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">Save ₹2,400</span></div>
-        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">₹2,400 बचत</span></div>
-        <div class="pc-quota en">Unlimited claims<br>Dedicated manager</div>
-        <div class="pc-quota hi">असीमित क्लेम<br>समर्पित मैनेजर</div>
+        <div class="pc-price">₹20,000</div>
+        <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">2 months free</span></div>
+        <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span></div>
+        <div class="pc-quota en">Unlimited claims · up to ₹50L each</div>
+        <div class="pc-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
       </div>
     </div>
 
-    <p class="sub-info en" id="nidaan-sub-info-q">One-time payment for 3 months access. Renew anytime. UPI, cards, net banking accepted.</p>
-    <p class="sub-info hi" id="nidaan-sub-info-q-hi">3 महीने की एक्सेस के लिए एकमुश्त भुगतान। UPI, कार्ड, नेट बैंकिंग स्वीकार्य।</p>
+    <p class="sub-info en" id="nidaan-sub-info-q">Auto-renews monthly — cancel anytime. UPI, cards, net banking accepted.</p>
+    <p class="sub-info hi" id="nidaan-sub-info-q-hi">मासिक स्वतः नवीनीकरण — कभी भी रद्द करें। UPI, कार्ड, नेट बैंकिंग स्वीकार्य।</p>
     <p class="sub-info en" id="nidaan-sub-info-y" style="display:none">Auto-renews yearly — cancel anytime. All payment methods accepted.</p>
     <p class="sub-info hi" id="nidaan-sub-info-y-hi" style="display:none">वार्षिक स्वतः नवीनीकरण — कभी भी रद्द करें। सभी भुगतान विधियाँ स्वीकार्य।</p>
 
@@ -1704,7 +1704,7 @@ function toggleNidaanBilling() {
   document.getElementById('autoRenewRow').style.display = '';
   const _enL = document.getElementById('autoRenewLabelEn');
   const _hiL = document.getElementById('autoRenewLabelHi');
-  if (_enL) _enL.textContent = (isYearly ? 'Auto-renews yearly' : 'Auto-renews quarterly') + ' — cancel anytime from your dashboard';
+  if (_enL) _enL.textContent = (isYearly ? 'Auto-renews yearly' : 'Auto-renews monthly') + ' — cancel anytime from your dashboard';
   if (_hiL) _hiL.textContent = (isYearly ? 'वार्षिक स्वतः नवीनीकरण' : 'तिमाही स्वतः नवीनीकरण') + ' — डैशबोर्ड से कभी भी रद्द करें';
   // Deselect plan when toggling
   _selectedPlan = null;
@@ -1751,7 +1751,7 @@ async function doSubscribe() {
         key: data.razorpay_key_id,
         subscription_id: data.subscription_id,
         name: 'Nidaan Partner',
-        description: planLabel + (_isAnnual ? ' Plan — Auto-renews yearly' : ' Plan — Auto-renews quarterly'),
+        description: planLabel + (_isAnnual ? ' Plan — Auto-renews yearly' : ' Plan — Auto-renews monthly'),
         image: '/static/nidaan_logo.png',
         theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
         prefill: {
@@ -1806,7 +1806,7 @@ async function doSubscribe() {
 
       const isAnnual = data.plan.endsWith('_annual');
       const planLabel = data.plan.replace('_annual','').charAt(0).toUpperCase() + data.plan.replace('_annual','').slice(1);
-      const periodLabel = isAnnual ? '12 months access' : '3 months access';
+      const periodLabel = isAnnual ? '12 months access' : '1 month access';
 
       // Store pending payment — recovery fallback for UPI app-switch / browser context loss
       sessionStorage.setItem('nidaan_pending_order', JSON.stringify({
