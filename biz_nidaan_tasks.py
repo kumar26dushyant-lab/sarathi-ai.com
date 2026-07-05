@@ -312,12 +312,13 @@ async def get_staff(staff_id: int) -> Optional[dict]:
 
 
 async def list_active_associates() -> list[dict]:
-    """All staff who can take task assignments — admins included for flexibility."""
+    """Every active, non-deleted staffer — anyone can be assigned a task
+    (associates, admins, and super admins all included)."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT * FROM nidaan_staff WHERE status='active' "
-            "AND role IN ('team_member','sub_super_admin') ORDER BY staff_id")
+            "AND deleted_at IS NULL ORDER BY name")
         return [dict(r) for r in await cur.fetchall()]
 
 

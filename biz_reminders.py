@@ -249,7 +249,7 @@ async def _check_webhook_failure_alert():
         import biz_email as email_svc
         to_email = _os.getenv("MONITOR_EMAIL", "").strip() or \
                    _os.getenv("SUPPORT_ADMIN_EMAIL", "").strip() or \
-                   "kumar26.dushyant@gmail.com"
+                   "info@nidaanlegalindia.com"
         await email_svc.send_email(
             to_email=to_email, subject="[Sarathi] " + subject,
             html_body="<pre>" + body.replace("<","&lt;").replace(">","&gt;") + "</pre>",

@@ -4174,17 +4174,14 @@ async def ops_quick_task_history(qid: int, request: Request):
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/approval")
 async def ops_quick_task_approval(qid: int, body: _QuickTaskApprovalReq, request: Request):
     """Approve or reject a task created with requires_approval.
-    Only the task CREATOR (or a super admin as fallback) may decide."""
+    Only admins (super_admin / sub_super_admin) may decide."""
     if not _is_nidaan_host(request): raise HTTPException(404)
-    staff = _require_staff(request)
+    staff = _require_staff(request, "sub_super_admin")
     qt = await nidaan.get_quick_task(qid)
     if not qt:
         raise HTTPException(404)
     if not qt.get("requires_approval"):
         raise HTTPException(400, "This task does not require approval")
-    is_creator = qt.get("created_by_staff_id") == staff["staff_id"]
-    if not (is_creator or staff.get("role") == "super_admin"):
-        raise HTTPException(403, "Only the task creator or a super admin can approve this task")
     await nidaan.set_quick_task_approval(qid, body.decision,
                                          changed_by=staff["staff_id"], note=body.note)
     # Notify creator + assignee of the decision (deep-linked).

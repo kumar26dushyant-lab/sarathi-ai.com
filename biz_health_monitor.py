@@ -20,7 +20,7 @@ import biz_resilience as resilience
 
 logger = logging.getLogger("health_monitor")
 
-SA_EMAIL = os.getenv("SA_ALERT_EMAIL", "kumar26.dushyant@gmail.com")
+SA_EMAIL = os.getenv("SA_ALERT_EMAIL", "info@nidaanlegalindia.com")
 
 # ─── Utility ──────────────────────────────────────────────────────────────────
 
