@@ -913,10 +913,13 @@ async function _handleGoogleSignup(response) {
 }
 
 // ── Auto-detect if already logged in ─────────────────────────────────────────
-// Don't auto-redirect if arriving on #get-reviewed
+// Don't auto-redirect if arriving on #get-reviewed. CRITICAL: preserve the
+// ?plan intent so a logged-in user clicking a plan lands on the subscribe modal
+// (?subscribe=<plan>) — NOT bounced into the ₹499 claim/documents funnel.
 if (localStorage.getItem('nidaan_token') &&
     !((location.hash || '').startsWith('#get-reviewed') || (location.hash || '').startsWith('#review-section'))) {
-  window.location.replace('/nidaan/dashboard');
+  const _p0 = new URLSearchParams(location.search).get('plan');
+  window.location.replace('/nidaan/dashboard' + (_p0 ? ('?subscribe=' + encodeURIComponent(_p0)) : ''));
 }
 
 // ── Load Google GSI SDK ───────────────────────────────────────────────────────
@@ -1057,7 +1060,27 @@ async function _prefillClaimForm() {
             <option value="other">Other / अन्य</option>
           </select>
         </div>
-        <div class="field"><label><span class="en">Insurer / Company Name</span><span class="hi">बीमा कंपनी का नाम</span></label><input type="text" id="rv_insurer_name" placeholder="e.g. HDFC Ergo"></div>
+        <div class="field"><label><span class="en">Insurer / Company Name</span><span class="hi">बीमा कंपनी का नाम</span></label>
+          <input type="text" id="rv_insurer_name" list="insurerList" placeholder="Select or type…" autocomplete="off">
+          <datalist id="insurerList">
+            <option value="LIC of India"></option><option value="HDFC Life"></option><option value="ICICI Prudential Life"></option>
+            <option value="SBI Life"></option><option value="Max Life"></option><option value="Bajaj Allianz Life"></option>
+            <option value="Kotak Life"></option><option value="Tata AIA Life"></option><option value="PNB MetLife"></option>
+            <option value="Aditya Birla Sun Life"></option><option value="Star Health"></option><option value="HDFC ERGO"></option>
+            <option value="ICICI Lombard"></option><option value="Bajaj Allianz General"></option><option value="Care Health"></option>
+            <option value="Niva Bupa (Max Bupa)"></option><option value="New India Assurance"></option><option value="Tata AIG"></option>
+            <option value="Reliance General"></option><option value="Cholamandalam MS"></option><option value="SBI General"></option>
+            <option value="National Insurance"></option><option value="Oriental Insurance"></option><option value="United India Insurance"></option>
+            <option value="ManipalCigna"></option><option value="Digit Insurance"></option><option value="Acko"></option>
+            <option value="Future Generali"></option><option value="Liberty General"></option><option value="Other"></option>
+          </datalist>
+        </div>
+      </div>
+      <div class="rev-row2">
+        <div class="field"><label><span class="en">Policy Inception Date</span><span class="hi">पॉलिसी आरंभ तिथि</span></label>
+          <input type="date" id="rv_policy_inception" max="2100-12-31"></div>
+        <div class="field"><label><span class="en">TPA</span><span class="hi">TPA</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">optional</span><span class="hi">वैकल्पिक</span>)</span></label>
+          <input type="text" id="rv_tpa_name" placeholder="e.g. Medi Assist, Paramount"></div>
       </div>
       <div class="field"><label><span class="en">Disputed Amount (₹)</span><span class="hi">विवादित राशि (₹)</span></label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
       <div class="field"><label><span class="en">Brief Description / Notes</span><span class="hi">संक्षिप्त विवरण / नोट्स</span></label>
@@ -1067,11 +1090,12 @@ async function _prefillClaimForm() {
         <input type="text" id="rv_branch_code" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters"></div>
     </fieldset>
 
-    <!-- Documents — appears once a claim type is selected; required to proceed -->
-    <div id="rev-docs-wrap" style="display:none">
+    <!-- Documents — OPTIONAL. We only need the rejection / underpaid settlement
+         letter to start; everything else can be added later from the dashboard. -->
+    <div id="rev-docs-wrap">
       <fieldset>
-        <legend><span class="en">Upload your documents</span><span class="hi">अपने दस्तावेज़ अपलोड करें</span></legend>
-        <div id="rev-doc-trust" style="font-size:.74rem;color:rgba(255,255,255,.42);line-height:1.5;margin-bottom:.75rem"></div>
+        <legend><span class="en">Upload your rejection / settlement letter</span><span class="hi">रिजेक्शन / सेटलमेंट लेटर अपलोड करें</span> <span style="color:rgba(255,255,255,.35);font-weight:400;font-size:.8rem">(<span class="en">optional — you can add later</span><span class="hi">वैकल्पिक — बाद में जोड़ सकते हैं</span>)</span></legend>
+        <div id="rev-doc-trust" style="font-size:.74rem;color:rgba(255,255,255,.42);line-height:1.5;margin-bottom:.75rem"><span class="en">🔒 Used only to fight your claim. DPDP Act 2023 — never shared.</span><span class="hi">🔒 केवल आपका क्लेम लड़ने के लिए। DPDP अधिनियम 2023 — कभी साझा नहीं।</span></div>
         <div id="rev-doc-slots"></div>
       </fieldset>
     </div>
@@ -1126,39 +1150,28 @@ let _revDocs = [];    // required doc keys for the selected claim type
 let _revFiles = {};   // doc_key → File chosen by the user
 function _revEsc(s){ const d=document.createElement('div'); d.textContent=(s==null?'':s); return d.innerHTML; }
 
-// When the claim type changes, fetch its required documents and render upload slots.
-async function loadDocChecklist() {
-  const ct = document.getElementById('rv_claim_type').value;
-  const wrap = document.getElementById('rev-docs-wrap');
-  const slots = document.getElementById('rev-doc-slots');
-  const keep = { ..._revFiles };   // preserve already-chosen files across a language switch
-  _revDocs = []; _revFiles = {};
-  if (!ct) { wrap.style.display = 'none'; slots.innerHTML = ''; return; }
-  try {
-    const lg = (typeof _lang !== 'undefined') ? _lang : 'en';
-    const r = await fetch('/nidaan/api/doc-checklist?claim_type=' + encodeURIComponent(ct) + '&lang=' + lg);
-    if (!r.ok) { wrap.style.display = 'none'; return; }
-    const d = await r.json();
-    document.getElementById('rev-doc-trust').textContent = d.trust_line || '';
-    const required = (d.docs || []).filter(x => x.required);
-    _revDocs = required.map(x => x.key);
-    const upLabel = _Lr('Upload', 'अपलोड');
-    slots.innerHTML = required.map(x => `
-      <div class="doc-slot" id="ds_${x.key}">
-        <div style="font-size:1.05rem">📄</div>
-        <div class="dlabel">${_revEsc(x.label)}<div class="dwhy">${_revEsc(x.why || '')}</div></div>
-        <input type="file" id="df_${x.key}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="onRevDocPick('${x.key}',this)">
-        <button type="button">${upLabel}</button>
-      </div>`).join('');
-    // wire the buttons + restore any previously chosen files (e.g. after a lang toggle)
-    required.forEach(x => {
-      const slot = document.getElementById('ds_' + x.key);
-      slot.querySelector('button').onclick = () => document.getElementById('df_' + x.key).click();
-      if (keep[x.key]) { _revFiles[x.key] = keep[x.key]; _markDocDone(x.key, keep[x.key]); }
-    });
-    wrap.style.display = 'block';
-  } catch (e) { wrap.style.display = 'none'; }
+// Documents are OPTIONAL now — we render a single upload slot for the rejection /
+// underpaid settlement letter. Everything else is added later from the dashboard.
+function loadDocChecklist() {
+  const wrap = document.getElementById('rev-doc-slots');
+  if (!wrap) return;
+  const keep = _revFiles.rejection_letter;
+  const upLabel = _Lr('Upload', 'अपलोड');
+  const label = _Lr('Rejection / Underpaid Settlement Letter', 'रिजेक्शन / कम भुगतान सेटलमेंट लेटर');
+  const why = _Lr("The insurer's decision — the basis of the dispute.", 'बीमा कंपनी का निर्णय — विवाद का आधार।');
+  wrap.innerHTML = `
+    <div class="doc-slot" id="ds_rejection_letter">
+      <div style="font-size:1.05rem">📄</div>
+      <div class="dlabel">${_revEsc(label)}<div class="dwhy">${_revEsc(why)}</div></div>
+      <input type="file" id="df_rejection_letter" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="onRevDocPick('rejection_letter',this)">
+      <button type="button">${upLabel}</button>
+    </div>`;
+  wrap.querySelector('#ds_rejection_letter button').onclick = () => document.getElementById('df_rejection_letter').click();
+  _revDocs = ['rejection_letter'];
+  if (keep) { _revFiles.rejection_letter = keep; _markDocDone('rejection_letter', keep); }
 }
+// Render the optional slot on load.
+document.addEventListener('DOMContentLoaded', loadDocChecklist);
 function _markDocDone(key, f) {
   const slot = document.getElementById('ds_' + key); if (!slot) return;
   slot.classList.add('done');
@@ -1196,15 +1209,8 @@ async function submitFreeClaim() {
   if (!insured_name) { showRevMsg('err', _Lr('Please enter the insured name.', 'कृपया बीमित व्यक्ति का नाम दर्ज करें।')); return; }
   if (insured_phone.length < 10) { showRevMsg('err', _Lr('Please enter a valid 10-digit contact phone.', 'कृपया एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
   if (!claim_type) { showRevMsg('err', _Lr('Please select the claim type.', 'कृपया क्लेम का प्रकार चुनें।')); return; }
-  // Flexibility-first: need at least a few KEY docs to start (not every doc).
-  // The rest can be added later from the dashboard.
-  const uploadedCount = _revDocs.filter(k => _revFiles[k]).length;
-  const needed = Math.min(3, _revDocs.length);
-  if (_revDocs.length && uploadedCount < needed) {
-    showRevMsg('err', _Lr(`Please upload at least ${needed} key document(s) to continue — you can add the rest later.`, `जारी रखने के लिए कम से कम ${needed} ज़रूरी दस्तावेज़ अपलोड करें — बाकी आप बाद में जोड़ सकते हैं।`));
-    document.getElementById('rev-docs-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
+  // Documents are OPTIONAL — no upload is required to submit. Users can add the
+  // rejection letter now or later from the dashboard.
 
   const _ll = (localStorage.getItem('nidaan_lang') || 'en');
   const comm_lang = ['en', 'hi', 'mr'].includes(_ll) ? _ll : 'en';
@@ -1217,6 +1223,8 @@ async function submitFreeClaim() {
     notes_from_agent: document.getElementById('rv_notes').value.trim(),
     comm_lang, wa_consent: document.getElementById('rv_wa_consent').checked,
     branch_code: (document.getElementById('rv_branch_code')?.value || '').trim().toUpperCase(),
+    policy_inception_date: (document.getElementById('rv_policy_inception')?.value || '') || null,
+    tpa_name: (document.getElementById('rv_tpa_name')?.value || '').trim(),
   };
 
   btn.disabled = true;

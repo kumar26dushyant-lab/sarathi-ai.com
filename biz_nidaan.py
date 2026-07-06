@@ -662,6 +662,8 @@ async def submit_claim(
     policy_no: str = "",
     disputed_amount: Optional[int] = None,
     claim_event_date: Optional[str] = None,
+    policy_inception_date: Optional[str] = None,
+    tpa_name: str = "",
     type_specific: Optional[dict] = None,
     notes_from_agent: str = "",
     intermediary_code: str = "",
@@ -695,12 +697,13 @@ async def submit_claim(
             """INSERT INTO nidaan_claims
                (account_id, user_id, claim_type, insured_name, insured_phone,
                 insured_email, insurer_name, policy_no, disputed_amount,
-                claim_event_date, type_specific, notes_from_agent,
-                intermediary_code, intermediary_name, payment_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                claim_event_date, policy_inception_date, tpa_name, type_specific,
+                notes_from_agent, intermediary_code, intermediary_name, payment_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
-             claim_event_date, type_specific_json, notes_from_agent,
+             claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
+             type_specific_json, notes_from_agent,
              (intermediary_code or "").strip(), (intermediary_name or "").strip(),
              payment_status),
         )

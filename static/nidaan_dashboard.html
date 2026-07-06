@@ -850,7 +850,19 @@
         <div class="field">
           <label class="en">Insurer Name</label>
           <label class="hi">बीमाकर्ता का नाम</label>
-          <input type="text" id="insurerName" placeholder="e.g. Star Health">
+          <input type="text" id="insurerName" list="dashInsurerList" placeholder="Select or type…" autocomplete="off">
+          <datalist id="dashInsurerList">
+            <option value="LIC of India"></option><option value="HDFC Life"></option><option value="ICICI Prudential Life"></option>
+            <option value="SBI Life"></option><option value="Max Life"></option><option value="Bajaj Allianz Life"></option>
+            <option value="Kotak Life"></option><option value="Tata AIA Life"></option><option value="PNB MetLife"></option>
+            <option value="Aditya Birla Sun Life"></option><option value="Star Health"></option><option value="HDFC ERGO"></option>
+            <option value="ICICI Lombard"></option><option value="Bajaj Allianz General"></option><option value="Care Health"></option>
+            <option value="Niva Bupa (Max Bupa)"></option><option value="New India Assurance"></option><option value="Tata AIG"></option>
+            <option value="Reliance General"></option><option value="Cholamandalam MS"></option><option value="SBI General"></option>
+            <option value="National Insurance"></option><option value="Oriental Insurance"></option><option value="United India Insurance"></option>
+            <option value="ManipalCigna"></option><option value="Digit Insurance"></option><option value="Acko"></option>
+            <option value="Future Generali"></option><option value="Liberty General"></option><option value="Other"></option>
+          </datalist>
         </div>
       </div>
       <div class="row2">
@@ -875,6 +887,18 @@
           <label class="en">Disputed Amount (₹)</label>
           <label class="hi">विवादित राशि (₹)</label>
           <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="en">Policy Inception Date</label>
+          <label class="hi">पॉलिसी आरंभ तिथि</label>
+          <input type="date" id="policyInception">
+        </div>
+        <div class="field">
+          <label class="en">TPA <span style="opacity:.5;font-weight:400">(optional)</span></label>
+          <label class="hi">TPA</label>
+          <input type="text" id="tpaName" placeholder="e.g. Medi Assist">
         </div>
       </div>
       <div class="row2">
@@ -1037,6 +1061,17 @@ async function loadDashboard() {
       }
     } else { const _lc = document.getElementById('leadChecklistCard'); if (_lc) _lc.style.display = 'none'; }
   } catch (e) { console.warn('lead checklist render failed', e); }
+
+  // Plan intent carried from a plan card (?subscribe=<plan>): open the subscribe
+  // modal preselected on that plan, then clean the URL. This is the smooth
+  // "click a plan → checkout" path (no bounce to the claim form).
+  {
+    const _sp = new URLSearchParams(location.search).get('subscribe');
+    if (_sp && ['silver','gold','platinum'].includes(_sp)) {
+      history.replaceState({}, '', '/nidaan/dashboard');
+      setTimeout(() => { try { switchPlan(_sp); } catch(e){ try{ openSubscribeModal(); }catch(_){} } }, 250);
+    }
+  }
 
   // New signup welcome toast (from ?new=1 redirect after review form)
   if (new URLSearchParams(location.search).get('new') === '1') {
@@ -1354,7 +1389,9 @@ async function submitClaim(e) {
         disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,
         notes_from_agent: document.getElementById('notes').value.trim(),
         intermediary_code: (document.getElementById('intermediaryCode')?.value || '').trim(),
-        intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim()
+        intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim(),
+        policy_inception_date: (document.getElementById('policyInception')?.value || '') || null,
+        tpa_name: (document.getElementById('tpaName')?.value || '').trim()
       })
     });
     const data = await res.json();

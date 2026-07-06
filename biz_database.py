@@ -1203,6 +1203,9 @@ async def init_db():
             # payment/subscription before this column existed) are correctly
             # treated as paid; new claims set the value explicitly in submit_claim.
             "ALTER TABLE nidaan_claims ADD COLUMN payment_status TEXT DEFAULT 'paid'",
+            # ₹499 form: policy inception date + TPA (both optional).
+            "ALTER TABLE nidaan_claims ADD COLUMN policy_inception_date DATE",
+            "ALTER TABLE nidaan_claims ADD COLUMN tpa_name TEXT DEFAULT ''",
             # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
             "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
             # DPDP retention for unpaid leads: we keep their documents only while the

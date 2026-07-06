@@ -457,6 +457,8 @@ class NidaanClaimReq(BaseModel):
     policy_no: str = ""
     disputed_amount: Optional[int] = None
     claim_event_date: Optional[str] = None
+    policy_inception_date: Optional[str] = None
+    tpa_name: str = ""
     notes_from_agent: str = ""
     intermediary_code: str = ""
     intermediary_name: str = ""
@@ -1229,6 +1231,8 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         policy_no=body.policy_no,
         disputed_amount=body.disputed_amount,
         claim_event_date=body.claim_event_date,
+        policy_inception_date=body.policy_inception_date,
+        tpa_name=body.tpa_name,
         notes_from_agent=body.notes_from_agent,
         intermediary_code=body.intermediary_code,
         intermediary_name=body.intermediary_name,
