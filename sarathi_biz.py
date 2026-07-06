@@ -4816,6 +4816,41 @@ async def ops_assignees(request: Request):
     return {"staff": await ntasks.list_active_associates()}
 
 
+# ── Broadcast + notification bell (P4) ────────────────────────────────────────
+class _BroadcastReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(min_length=1, max_length=1000)
+
+
+@app.post("/nidaan/ops/api/broadcast")
+async def ops_broadcast(body: _BroadcastReq, request: Request):
+    """Anyone on staff can broadcast a short message to everyone's bell."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    n = await nnot.record_broadcast(staff["staff_id"], staff.get("name", "Staff"),
+                                    body.message.strip())
+    await _ops_audit(request, "broadcast", "broadcast", 0, body.message.strip()[:80])
+    return {"ok": True, "recipients": n}
+
+
+@app.get("/nidaan/ops/api/notifications")
+async def ops_notifications(request: Request):
+    """Current staffer's notification bell — recent items + unread count."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    rows, unread = await nnot.list_staff_notifications(staff["staff_id"])
+    return {"notifications": rows, "unread": unread}
+
+
+@app.post("/nidaan/ops/api/notifications/read")
+async def ops_notifications_read(request: Request):
+    """Mark all the current staffer's bell notifications as read."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.mark_staff_notifications_read(staff["staff_id"])
+    return {"ok": True}
+
+
 # =============================================================================
 #  NIDAAN ERP — Phase 4: Notifications + Comms Hub
 # =============================================================================

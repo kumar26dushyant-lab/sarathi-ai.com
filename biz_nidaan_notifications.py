@@ -418,6 +418,56 @@ async def _record_notification(**kw) -> int:
         return cur.lastrowid
 
 
+# ── Ops notification bell + broadcast ────────────────────────────────────────
+async def record_broadcast(sender_id: int, sender_name: str, message: str,
+                           tone: str = "") -> int:
+    """Post a broadcast to EVERY active staffer's notification bell (dashboard
+    channel only — no WhatsApp/email). Returns how many recipients."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
+        staff_ids = [r["staff_id"] for r in rows]
+        subj = f"📢 {sender_name}"
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        for sid in staff_ids:
+            await conn.execute("""
+                INSERT INTO nidaan_notifications
+                  (event_key, priority, recipient_type, recipient_id, channel,
+                   subject, body, status, sent_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?)
+            """, ("broadcast", PRIORITY_P2, RECIPIENT_STAFF, sid,
+                  CHANNEL_DASHBOARD, subj, message, now))
+        await conn.commit()
+    return len(staff_ids)
+
+
+async def list_staff_notifications(staff_id: int, limit: int = 40):
+    """Recent dashboard notifications for the bell + the unread count."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT notif_id, event_key, subject, body, task_id, claim_id, read_at, created_at "
+            "FROM nidaan_notifications "
+            "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
+            "ORDER BY notif_id DESC LIMIT ?", (staff_id, limit))
+        rows = [dict(r) for r in await cur.fetchall()]
+        uc = await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_notifications "
+            "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
+            "AND read_at IS NULL", (staff_id,))).fetchone()
+    return rows, (uc[0] if uc else 0)
+
+
+async def mark_staff_notifications_read(staff_id: int) -> None:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_notifications SET read_at=CURRENT_TIMESTAMP "
+            "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
+            "AND read_at IS NULL", (staff_id,))
+        await conn.commit()
+
+
 async def _bump_sent_count(slot: int) -> None:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         today = date.today().isoformat()

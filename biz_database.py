@@ -1815,6 +1815,11 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_status ON nidaan_notifications(status, deferred_until)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_recipient ON nidaan_notifications(recipient_type, recipient_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nnotif_event ON nidaan_notifications(event_key)")
+        # Per-recipient read flag for the ops notification bell.
+        try:
+            await conn.execute("ALTER TABLE nidaan_notifications ADD COLUMN read_at TIMESTAMP")
+        except Exception:
+            pass
 
         # ── nidaan_messages: subscriber ↔ associate thread per claim
         # (in-dashboard chat + WhatsApp mirror).

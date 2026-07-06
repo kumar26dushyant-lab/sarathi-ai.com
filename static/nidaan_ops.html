@@ -319,6 +319,13 @@ select.form-input option{background:#1e293b}
               style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.4);color:#22d3ee;font-weight:700;display:none">
         ✚ Quick Task
       </button>
+      <button id="broadcastBtn" class="btn-sm btn-ghost" onclick="openBroadcastModal()" title="Broadcast to everyone" style="border:1px solid rgba(255,255,255,.12)">📢</button>
+      <div style="position:relative;display:inline-block">
+        <button id="bellBtn" class="btn-sm btn-ghost" onclick="toggleBell()" title="Notifications" style="border:1px solid rgba(255,255,255,.12);position:relative">
+          🔔<span id="bellBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:#f43f5e;color:#fff;font-size:.62rem;font-weight:800;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:9px;padding:0 3px"></span>
+        </button>
+        <div id="bellDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 8px);width:340px;max-width:88vw;max-height:70vh;overflow-y:auto;background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:200"></div>
+      </div>
       <span id="staffName" style="color:rgba(255,255,255,.6)"></span>
       <span class="role-badge" id="staffRoleBadge"></span>
       <button class="btn-sm btn-ghost" onclick="doLogout()">Logout</button>
@@ -457,6 +464,9 @@ async function bootApp() {
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
   try { history.replaceState({panel: initial}, '', '#' + initial); } catch(e){}
+  // Notification bell — load + poll every 45s.
+  loadBell();
+  if (!_bellPoll) _bellPoll = setInterval(loadBell, 45000);
   // Phase 4: mandatory staff onboarding — save 3 official numbers
   await checkStaffOnboarding();
 }
@@ -4108,6 +4118,74 @@ function _handleDeepLink(){
     }
   } catch(e){}
 }
+
+// ── Notification bell + broadcast (P4) ───────────────────────────────────────
+let _bellPoll = null;
+async function loadBell(){
+  try {
+    const r = await fetch('/nidaan/ops/api/notifications', {headers: hdrs()});
+    if (!r.ok) return;
+    const d = await r.json();
+    window._bellData = d.notifications || [];
+    const badge = document.getElementById('bellBadge');
+    if (badge) {
+      if (d.unread > 0) { badge.textContent = d.unread > 99 ? '99+' : d.unread; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+    // If the dropdown is open, refresh its contents live.
+    const dd = document.getElementById('bellDropdown');
+    if (dd && dd.style.display !== 'none') _renderBell();
+  } catch(e){}
+}
+function _bellIcon(ev){ ev=ev||''; return ev==='broadcast'?'📢':ev.indexOf('quick_task')===0?'✅':ev.indexOf('leave')===0?'🌴':ev.indexOf('task')===0?'🗂️':'🔔'; }
+function _renderBell(){
+  const dd = document.getElementById('bellDropdown'); if(!dd) return;
+  const items = window._bellData || [];
+  dd.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1628">
+      <div style="font-weight:700;font-size:.9rem">Notifications</div>
+      <button class="btn-sm btn-ghost" onclick="markBellRead()" style="font-size:.72rem">Mark all read</button>
+    </div>
+    ${items.length ? items.map(n=>{
+      const unread = !n.read_at;
+      const qtM = String(n.body||'').match(/[?&]qt=(\d+)/);
+      const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()` : '';
+      return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
+        <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
+        <div style="font-size:.76rem;color:rgba(255,255,255,.6);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.15rem">${n.created_at?ndUI.timeAgo(n.created_at):''}</div>
+      </div>`; }).join('')
+    : '<div style="padding:1.2rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No notifications yet</div>'}`;
+}
+function toggleBell(){
+  const dd = document.getElementById('bellDropdown'); if(!dd) return;
+  if (dd.style.display !== 'none') { dd.style.display='none'; return; }
+  _renderBell();
+  dd.style.display = 'block';
+  markBellRead();   // opening the bell = read
+}
+async function markBellRead(){
+  try { await fetch('/nidaan/ops/api/notifications/read', {method:'POST', headers: hdrs()}); } catch(e){}
+  const b = document.getElementById('bellBadge'); if(b) b.style.display='none';
+  (window._bellData||[]).forEach(n=>{ if(!n.read_at) n.read_at='seen'; });
+}
+function openBroadcastModal(){
+  openModal('📢 Broadcast to everyone', `
+    <div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.6rem">Goes to every staff member's notification bell. Great for quick heads-ups — "running 30 min late", wins &amp; appreciations 🎉.</div>
+    <textarea id="bcMsg" rows="3" maxlength="1000" placeholder="Type your message…" style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.6rem .75rem;border-radius:8px;font-size:.9rem;resize:vertical"></textarea>`,
+    [{label:'Cancel', cls:'btn-ghost', fn:closeModal}, {label:'📢 Send to all', cls:'btn-primary', fn:sendBroadcast}]);
+}
+async function sendBroadcast(){
+  const msg = (document.getElementById('bcMsg').value||'').trim();
+  if (!msg) { ndUI.toast('Type a message','error'); return; }
+  const r = await fetch('/nidaan/ops/api/broadcast', {method:'POST', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify({message: msg})});
+  if (r.ok) { const d=await r.json(); ndUI.toast(`Broadcast sent to ${d.recipients||0} people ✓`,'success'); closeModal(); loadBell(); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Failed'),'error'); }
+}
+document.addEventListener('click', (e)=>{
+  const dd=document.getElementById('bellDropdown'), bb=document.getElementById('bellBtn');
+  if (dd && dd.style.display!=='none' && bb && !dd.contains(e.target) && !bb.contains(e.target)) dd.style.display='none';
+});
 
 // Enter key on login
 document.getElementById('loginPwd').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
