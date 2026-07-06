@@ -1787,7 +1787,11 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "SELECT q.*, "
             "       a.name AS assignee_name, a.role AS assignee_role, "
             "       cr.name AS creator_name, "
-            "       c.insured_name "
+            "       c.insured_name, "
+            "       (SELECT COUNT(*) FROM nidaan_leave_requests lv "
+            "          WHERE lv.staff_id = q.assigned_to_staff_id AND lv.status='approved' "
+            "            AND date('now') BETWEEN date(lv.start_date) AND date(lv.end_date)) "
+            "         AS assignee_on_leave "
             + unseen_sql +
             "FROM nidaan_quick_tasks q "
             "LEFT JOIN nidaan_staff a  ON a.staff_id = q.assigned_to_staff_id "
@@ -1966,7 +1970,8 @@ LEAVE_STATUSES = ("pending", "approved", "rejected", "cancelled")
 async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
                                 reason: str = "", leave_type: str = "full_day",
                                 half_period: str = "", handover_notes: str = "",
-                                cover_staff_id: Optional[int] = None) -> int:
+                                cover_staff_id: Optional[int] = None,
+                                start_time: str = "", end_time: str = "") -> int:
     if leave_type not in ("full_day", "half_day"):
         leave_type = "full_day"
     if leave_type == "half_day":
@@ -1979,11 +1984,33 @@ async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
         cur = await conn.execute(
             "INSERT INTO nidaan_leave_requests "
             "(staff_id, start_date, end_date, reason, leave_type, half_period, "
-            " handover_notes, cover_staff_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            " handover_notes, cover_staff_id, start_time, end_time) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (staff_id, start_date, end_date, (reason or "").strip(), leave_type,
-             half_period, (handover_notes or "").strip(), cover_staff_id))
+             half_period, (handover_notes or "").strip(), cover_staff_id,
+             (start_time or "").strip(), (end_time or "").strip()))
         await conn.commit()
         return cur.lastrowid
+
+
+async def list_upcoming_leaves(days: int = 30) -> list[dict]:
+    """Approved leaves starting within the next `days` days (admin visibility)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT l.*, s.name AS staff_name, s.role AS staff_role, "
+            "       cov.name AS cover_name, "
+            "       (SELECT COUNT(*) FROM nidaan_quick_tasks q "
+            "          WHERE q.assigned_to_staff_id = l.staff_id AND q.deleted_at IS NULL "
+            "            AND q.status NOT IN ('done','cancelled')) AS open_tasks "
+            "FROM nidaan_leave_requests l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "LEFT JOIN nidaan_staff cov ON cov.staff_id = l.cover_staff_id "
+            "WHERE l.status='approved' "
+            "  AND date(l.end_date) >= date('now') "
+            "  AND date(l.start_date) <= date('now', ?) "
+            "ORDER BY l.start_date ASC", (f"+{int(days)} days",))
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_leave_request(leave_id: int) -> Optional[dict]:

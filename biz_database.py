@@ -1623,6 +1623,8 @@ async def init_db():
         for _lalt in [
             "ALTER TABLE nidaan_leave_requests ADD COLUMN leave_type TEXT DEFAULT 'full_day'",  # full_day | half_day
             "ALTER TABLE nidaan_leave_requests ADD COLUMN half_period TEXT DEFAULT ''",          # first_half | second_half
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN start_time TEXT DEFAULT ''",           # HH:MM (optional)
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN end_time TEXT DEFAULT ''",             # HH:MM (optional)
             "ALTER TABLE nidaan_leave_requests ADD COLUMN handover_notes TEXT DEFAULT ''",
             "ALTER TABLE nidaan_leave_requests ADD COLUMN cover_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
         ]:

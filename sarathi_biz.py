@@ -4273,6 +4273,8 @@ class _LeaveCreateReq(BaseModel):
     half_period: str = Field("", pattern=r"^(first_half|second_half|)$")
     handover_notes: str = Field("", max_length=4000)
     cover_staff_id: Optional[int] = None
+    start_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
+    end_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
 
 
 class _LeaveDecisionReq(BaseModel):
@@ -4292,7 +4294,8 @@ async def ops_leave_create(body: _LeaveCreateReq, request: Request):
         staff_id=staff["staff_id"], start_date=body.start_date,
         end_date=body.end_date, reason=body.reason,
         leave_type=body.leave_type, half_period=body.half_period,
-        handover_notes=body.handover_notes, cover_staff_id=body.cover_staff_id)
+        handover_notes=body.handover_notes, cover_staff_id=body.cover_staff_id,
+        start_time=body.start_time, end_time=body.end_time)
     try:
         leave = await nidaan.get_leave_request(leave_id)
         if leave:
@@ -4319,6 +4322,9 @@ async def ops_leave_list(request: Request, scope: str = "auto", status: str = ""
     # Who's on leave today is visible to EVERYONE (team awareness / handover).
     out = {"leave": rows, "is_admin": is_admin,
            "on_leave_now": await nidaan.list_staff_on_leave_now()}
+    # Admins additionally see approved leaves in the next 30 days (planning).
+    if is_admin:
+        out["upcoming_leaves"] = await nidaan.list_upcoming_leaves(30)
     return out
 
 
