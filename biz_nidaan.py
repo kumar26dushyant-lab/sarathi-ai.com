@@ -1720,9 +1720,13 @@ async def get_quick_task(quick_task_id: int) -> Optional[dict]:
 
 async def list_quick_tasks(*, status: Optional[str] = None,
                             assigned_to_staff_id: Optional[int] = None,
+                            viewer_staff_id: Optional[int] = None,
                             claim_id: Optional[int] = None,
                             task_type: Optional[str] = None,
                             search: Optional[str] = None,
+                            for_staff_id: Optional[int] = None,
+                            overdue: bool = False,
+                            pending_approval: bool = False,
                             include_done: bool = False,
                             include_deleted: bool = False,
                             limit: int = 100) -> list[dict]:
@@ -1731,10 +1735,14 @@ async def list_quick_tasks(*, status: Optional[str] = None,
     - include_done=True: every status (the registry view).
     - status=<one>: pins to exactly that status (overrides include_done).
     - include_deleted=True: also returns soft-deleted rows (admin audit only).
+    - viewer_staff_id: associate scope — tasks assigned TO or created BY them.
     """
     where, params = [], []
     if not include_deleted:
         where.append("q.deleted_at IS NULL")
+    if viewer_staff_id is not None:
+        where.append("(q.assigned_to_staff_id = ? OR q.created_by_staff_id = ?)")
+        params += [viewer_staff_id, viewer_staff_id]
     if status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:
@@ -1745,6 +1753,11 @@ async def list_quick_tasks(*, status: Optional[str] = None,
         where.append("q.claim_id = ?"); params.append(claim_id)
     if task_type in ("assignment", "request"):
         where.append("q.task_type = ?"); params.append(task_type)
+    if overdue:
+        where.append("q.due_date IS NOT NULL AND q.due_date < datetime('now') "
+                     "AND q.status NOT IN ('done','cancelled')")
+    if pending_approval:
+        where.append("q.requires_approval = 1 AND q.approval_status = 'pending'")
     if search:
         s = search.strip()
         like = f"%{s}%"
@@ -1756,6 +1769,18 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             where.append("(q.title LIKE ? OR q.description LIKE ?)")
             params += [like, like]
     clause = (" WHERE " + " AND ".join(where)) if where else ""
+    # Per-task "unseen comments" for the viewer: comments not authored by them
+    # and not yet in their read-receipts.
+    if for_staff_id is not None:
+        unseen_sql = (
+            ", (SELECT COUNT(*) FROM nidaan_quick_task_notes n "
+            "     WHERE n.quick_task_id = q.quick_task_id AND n.staff_id != ? "
+            "       AND n.note_id NOT IN (SELECT note_id FROM nidaan_quick_task_note_reads "
+            "                             WHERE staff_id = ?)) AS unseen ")
+        unseen_params = [for_staff_id, for_staff_id]
+    else:
+        unseen_sql = ", 0 AS unseen "
+        unseen_params = []
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
@@ -1763,6 +1788,7 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "       a.name AS assignee_name, a.role AS assignee_role, "
             "       cr.name AS creator_name, "
             "       c.insured_name "
+            + unseen_sql +
             "FROM nidaan_quick_tasks q "
             "LEFT JOIN nidaan_staff a  ON a.staff_id = q.assigned_to_staff_id "
             "LEFT JOIN nidaan_staff cr ON cr.staff_id = q.created_by_staff_id "
@@ -1773,17 +1799,20 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "   CASE q.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 0 ELSE 1 END, "
             "   CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
             "                   WHEN 'normal' THEN 2 ELSE 3 END, "
-            "   q.created_at DESC LIMIT ?", params + [limit])
+            "   q.created_at DESC LIMIT ?", unseen_params + params + [limit])
         return [dict(r) for r in await cur.fetchall()]
 
 
-async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
-                                    ) -> dict:
+async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None,
+                                    viewer_staff_id: Optional[int] = None) -> dict:
     """Counts for the Tasks dashboard/registry (excludes soft-deleted).
     Includes per-status counts plus derived overdue + pending_approval."""
     where, params = ["deleted_at IS NULL"], []
     if assigned_to_staff_id is not None:
         where.append("assigned_to_staff_id = ?"); params.append(assigned_to_staff_id)
+    if viewer_staff_id is not None:
+        where.append("(assigned_to_staff_id = ? OR created_by_staff_id = ?)")
+        params += [viewer_staff_id, viewer_staff_id]
     clause = " WHERE " + " AND ".join(where)
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

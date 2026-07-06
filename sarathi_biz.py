@@ -4033,6 +4033,8 @@ async def ops_quick_tasks_list(request: Request,
                                 claim_id: Optional[int] = None,
                                 task_type: Optional[str] = None,
                                 q: Optional[str] = None,
+                                overdue: bool = False,
+                                pending_approval: bool = False,
                                 include_done: bool = False,
                                 include_deleted: bool = False,
                                 with_counts: bool = False,
@@ -4048,8 +4050,10 @@ async def ops_quick_tasks_list(request: Request,
     role = staff.get("role", "")
     is_admin = role in ("super_admin", "sub_super_admin")
     assignee_id: Optional[int] = None
+    viewer_id: Optional[int] = None
     if role == "team_member":
-        assignee_id = staff["staff_id"]
+        # Associates see tasks assigned to them OR created by them.
+        viewer_id = staff["staff_id"]
     elif assignee == "me":
         assignee_id = staff["staff_id"]
     elif assignee and assignee.isdigit():
@@ -4057,13 +4061,14 @@ async def ops_quick_tasks_list(request: Request,
     # Only admins may view soft-deleted rows.
     incl_deleted = bool(include_deleted) and is_admin
     items = await nidaan.list_quick_tasks(
-        status=status, assigned_to_staff_id=assignee_id,
+        status=status, assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id,
         claim_id=claim_id, task_type=task_type, search=q,
+        for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
         include_done=include_done, include_deleted=incl_deleted, limit=limit)
     out = {"quick_tasks": items, "count": len(items)}
     if with_counts:
         out["counts"] = await nidaan.quick_task_status_counts(
-            assigned_to_staff_id=assignee_id)
+            assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id)
     return out
 
 
