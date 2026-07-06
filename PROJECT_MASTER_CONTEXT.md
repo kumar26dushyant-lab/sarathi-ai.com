@@ -3521,12 +3521,44 @@ Large multi-session build turning the ops portal (`static/nidaan_ops.html`) into
 ### 43.9 Deployment / backup posture (verified, no change made)
 - **Code**: GitHub `github.com/kumar26dushyant-lab/sarathi-ai.com` (remote, safe) + server + laptop. Deploy = `git push origin master`; server pulls via PAT; `git-backup.timer` also pushes code daily.
 - **Data**: SQLite `/opt/sarathi/sarathi_biz.db` (~4MB) on the Contabo VM; `backup-db.timer` (2am daily) → `deploy/backup.sh` tars DB+uploads+pdfs+videos, keeps 7 **local** copies in `/opt/sarathi/backups`. Secrets in `/opt/sarathi/biz.env` (0600, not in git).
-- **RISK (open)**: DB backups are **on the same server** — a VM/disk loss takes live DB + backups together. **Recommended (not yet done): off-server nightly copy** (B2/S3/rclone/private-repo) + an off-site copy of `biz.env`.
+- **Off-server encrypted backup — DONE (Jul 7, 2026)**: `deploy/git-db-backup.sh` +
+  `git-db-backup.timer` (2:30 AM daily). Hot `.backup` of the DB → gzip → **AES-256
+  (openssl, pbkdf2 iter=200000)** BEFORE leaving the server → pushed to a **private
+  GitHub repo `kumar26dushyant-lab/sarathi-db-backups`** via a **dedicated ed25519
+  deploy key** (`/root/.ssh/id_backup_repo`, not the main PAT). Passphrase in
+  `biz.env` (`BACKUP_ENC_PASSPHRASE`) + held off-site by owner (without it backups
+  can't be decrypted). Single overwritten blob → git history = point-in-time versions.
+  Restore: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in sarathi_biz.db.gz.enc
+  -pass pass:PP | gunzip`. Local 7-day backups still run too (belt + braces).
 
-### 43.10 Pending / next
-- **Phase 5 (PWA/mobile)**: installable web app + push notifications (tasks/comments/broadcast).
+### 43.10 Phase 5 — PWA (installable app + Web Push) — SHIPPED Jul 7, 2026
+- **Installable ops staff app**: `static/nidaan-ops.webmanifest` (standalone,
+  start_url `/nidaan/ops`, 192/512 icons); ops page gets manifest link, theme-color,
+  apple-touch metas, SW registration, an Android **install prompt** + iOS **"Add to
+  Home Screen"** hint. Subscriber dashboard PWA already existed.
+- **Service worker v3** (`nidaan-sw.js`): never-cache all `*api*` paths; added
+  **Web Push** (`push` + `notificationclick`) handlers (tap → focus/open the deep link).
+- **Web Push backend**: VAPID keys in `biz.env` (`VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`),
+  `pywebpush` in venv. `nidaan_push_subscriptions` table (per-device, deduped by
+  endpoint). `push_to_staff()` sends via pywebpush, prunes dead (404/410) subs, runs
+  blocking sends in an executor, never raises. **Hooked centrally** into
+  `_record_notification` (every staff task/comment/approval/leave dashboard event)
+  + `record_broadcast` (broadcasts) — non-blocking `asyncio.create_task`.
+- **Endpoints**: GET `push/vapid-key`, POST `push/subscribe|unsubscribe|test`.
+- **UI**: "Enable push" toggle in the bell dropdown (permission → subscribe →
+  confirmation push; reflects on / blocked / unsupported). Verify on real device.
+
+### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
-- Off-server DB backup; ops architecture cleanup (deferred by user).
+- **API integration (two-way sync) — in design**: claim data originates in the
+  nidaanpartner.com subscriber dashboard → review; if it **has potential to fight**,
+  the claim moves to a **separate legal application** (Level 2) and **status updates
+  flow back** to the subscriber dashboard. If **no potential / correctly settled**, it
+  **ends at Level 1** (subscriber notified, never reaches legal). Plan: Nidaan exposes
+  an authenticated versioned API (API-key per partner, `/api/v1/…`) + webhooks for
+  status callbacks; consume the legal app's API via httpx. Not built yet.
+- CSV/Excel export buttons for ops lists (offered, awaiting go-ahead).
+- Ops architecture cleanup (deferred by user).
 
 ---
 
