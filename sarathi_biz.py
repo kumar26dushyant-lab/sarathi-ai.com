@@ -4836,6 +4836,21 @@ class _SubscriberPrefsReq(BaseModel):
 async def ops_official_list(request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request)
+    # Live-sync each instance's connection state from Evolution so the dashboard
+    # is accurate even if a connection.update webhook was missed. Best-effort.
+    try:
+        import biz_whatsapp_evolution as _wae
+        for _i in await nnot.list_official_instances():
+            try:
+                _st = await _wae.get_connection_state(_i["evolution_instance"])
+                _cur = ((_st.get("instance", {}) or {}).get("state")
+                        or _st.get("state") or "")
+                if _cur and _cur != _i.get("health_state"):
+                    await nnot.update_instance_health(_i["instance_slot"], state=_cur)
+            except Exception:
+                pass
+    except Exception:
+        pass
     insts = await nnot.list_official_instances()
     caps = await nnot.compute_effective_caps()
     # No hardcoded numbers — the roster is user-driven. Report the free slots so
@@ -13172,6 +13187,7 @@ async def api_wa_v2_webhook(request: Request):
             inst_field = data.get("instance")
             inst_wuid = inst_field.get("wuid", "") if isinstance(inst_field, dict) else ""
             phone = data.get("wuid") or inst_wuid or ""
+            _num = str(phone or "").split("@")[0]
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await conn.execute(
                     "UPDATE wa_instances SET status = ?, "
@@ -13179,7 +13195,17 @@ async def api_wa_v2_webhook(request: Request):
                     "last_connected_at = CASE WHEN ? = 'open' THEN datetime('now') ELSE last_connected_at END, "
                     "qr_code = CASE WHEN ? = 'open' THEN NULL ELSE qr_code END, "
                     "updated_at = datetime('now') WHERE evolution_instance = ?",
-                    (state, str(phone or "").split("@")[0], state, state, instance))
+                    (state, _num, state, state, instance))
+                # NIDAAN official numbers live in their OWN table — reflect the
+                # connection state there too, otherwise the ops dashboard shows
+                # a freshly-scanned official number as "disconnected".
+                await conn.execute(
+                    "UPDATE nidaan_official_instances SET health_state = ?, "
+                    "own_jid = COALESCE(NULLIF(?, ''), own_jid), "
+                    "last_connected_at = CASE WHEN ? = 'open' THEN datetime('now') ELSE last_connected_at END, "
+                    "last_disconnected_at = CASE WHEN ? != 'open' THEN datetime('now') ELSE last_disconnected_at END, "
+                    "updated_at = datetime('now') WHERE evolution_instance = ?",
+                    (state, _num, state, state, instance))
                 await conn.commit()
             logger.info("WA conn state: %s → %s", instance, state)
 
