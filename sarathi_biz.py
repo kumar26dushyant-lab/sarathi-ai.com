@@ -4833,6 +4833,28 @@ async def ops_broadcast(body: _BroadcastReq, request: Request):
     return {"ok": True, "recipients": n}
 
 
+@app.get("/nidaan/ops/api/broadcasts")
+async def ops_broadcasts(request: Request):
+    """Recent broadcasts with emoji reactions (for the feed in the bell)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    return {"broadcasts": await nnot.list_broadcasts(staff["staff_id"])}
+
+
+class _ReactReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    emoji: str = Field(min_length=1, max_length=12)
+
+
+@app.post("/nidaan/ops/api/broadcasts/{bid}/react")
+async def ops_broadcast_react(bid: int, body: _ReactReq, request: Request):
+    """Toggle the current staffer's emoji reaction on a broadcast."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.react_broadcast(bid, staff["staff_id"], body.emoji)
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/notifications")
 async def ops_notifications(request: Request):
     """Current staffer's notification bell — recent items + unread count."""

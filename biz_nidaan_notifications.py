@@ -425,6 +425,10 @@ async def record_broadcast(sender_id: int, sender_name: str, message: str,
     channel only — no WhatsApp/email). Returns how many recipients."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
+        # Canonical broadcast row (for the feed + reactions).
+        await conn.execute(
+            "INSERT INTO nidaan_broadcasts (sender_staff_id, sender_name, message) VALUES (?, ?, ?)",
+            (sender_id, sender_name, message))
         rows = await (await conn.execute(
             "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
         staff_ids = [r["staff_id"] for r in rows]
@@ -440,6 +444,52 @@ async def record_broadcast(sender_id: int, sender_name: str, message: str,
                   CHANNEL_DASHBOARD, subj, message, now))
         await conn.commit()
     return len(staff_ids)
+
+
+async def list_broadcasts(viewer_staff_id: int, limit: int = 20):
+    """Recent broadcasts with emoji-reaction summary + the viewer's reaction."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        bl = [dict(r) for r in await (await conn.execute(
+            "SELECT broadcast_id, sender_name, message, created_at "
+            "FROM nidaan_broadcasts ORDER BY broadcast_id DESC LIMIT ?", (limit,))).fetchall()]
+        if not bl:
+            return bl
+        ids = [b["broadcast_id"] for b in bl]
+        ph = ",".join("?" * len(ids))
+        rrows = await (await conn.execute(
+            f"SELECT broadcast_id, emoji, staff_id FROM nidaan_broadcast_reactions "
+            f"WHERE broadcast_id IN ({ph})", ids)).fetchall()
+        react, mine = {}, {}
+        for r in rrows:
+            react.setdefault(r["broadcast_id"], {})
+            react[r["broadcast_id"]][r["emoji"]] = react[r["broadcast_id"]].get(r["emoji"], 0) + 1
+            if r["staff_id"] == viewer_staff_id:
+                mine[r["broadcast_id"]] = r["emoji"]
+        for b in bl:
+            b["reactions"] = react.get(b["broadcast_id"], {})
+            b["my_reaction"] = mine.get(b["broadcast_id"], "")
+        return bl
+
+
+async def react_broadcast(broadcast_id: int, staff_id: int, emoji: str) -> None:
+    """Set/toggle the viewer's single emoji reaction on a broadcast."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "SELECT emoji FROM nidaan_broadcast_reactions WHERE broadcast_id=? AND staff_id=?",
+            (broadcast_id, staff_id))
+        row = await cur.fetchone()
+        if row and row[0] == emoji:   # toggle off
+            await conn.execute(
+                "DELETE FROM nidaan_broadcast_reactions WHERE broadcast_id=? AND staff_id=?",
+                (broadcast_id, staff_id))
+        else:
+            await conn.execute(
+                "INSERT INTO nidaan_broadcast_reactions (broadcast_id, staff_id, emoji) "
+                "VALUES (?, ?, ?) ON CONFLICT(broadcast_id, staff_id) "
+                "DO UPDATE SET emoji=excluded.emoji, created_at=CURRENT_TIMESTAMP",
+                (broadcast_id, staff_id, emoji))
+        await conn.commit()
 
 
 async def list_staff_notifications(staff_id: int, limit: int = 40):

@@ -1769,17 +1769,20 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             where.append("(q.title LIKE ? OR q.description LIKE ?)")
             params += [like, like]
     clause = (" WHERE " + " AND ".join(where)) if where else ""
-    # Per-task "unseen comments" for the viewer: comments not authored by them
-    # and not yet in their read-receipts.
+    # Green-blink signal (A+B): for tasks that are the viewer's OWN (assigned to
+    # or created by them), compute the latest activity time (created / newest
+    # comment / newest status-log change) and the viewer's last "seen" time.
+    # has_new (green blink) is computed in Python from these.
     if for_staff_id is not None:
         unseen_sql = (
-            ", (SELECT COUNT(*) FROM nidaan_quick_task_notes n "
-            "     WHERE n.quick_task_id = q.quick_task_id AND n.staff_id != ? "
-            "       AND n.note_id NOT IN (SELECT note_id FROM nidaan_quick_task_note_reads "
-            "                             WHERE staff_id = ?)) AS unseen ")
-        unseen_params = [for_staff_id, for_staff_id]
+            ", CASE WHEN (q.assigned_to_staff_id=? OR q.created_by_staff_id=?) THEN 1 ELSE 0 END AS mine "
+            ", MAX(q.created_at, "
+            "     COALESCE((SELECT MAX(created_at) FROM nidaan_quick_task_notes n WHERE n.quick_task_id=q.quick_task_id), q.created_at), "
+            "     COALESCE((SELECT MAX(changed_at) FROM nidaan_quick_task_log lg WHERE lg.quick_task_id=q.quick_task_id), q.created_at)) AS last_activity "
+            ", (SELECT seen_at FROM nidaan_quick_task_seen sv WHERE sv.quick_task_id=q.quick_task_id AND sv.staff_id=?) AS seen_at ")
+        unseen_params = [for_staff_id, for_staff_id, for_staff_id]
     else:
-        unseen_sql = ", 0 AS unseen "
+        unseen_sql = ", 0 AS mine, q.created_at AS last_activity, NULL AS seen_at "
         unseen_params = []
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -1804,7 +1807,18 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "   CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
             "                   WHEN 'normal' THEN 2 ELSE 3 END, "
             "   q.created_at DESC LIMIT ?", unseen_params + params + [limit])
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+        # Green blink = my task with activity newer than I last saw it (or never
+        # seen). Gray dot = my task, caught up. None = not my task.
+        for r in rows:
+            if r.get("mine"):
+                seen = r.get("seen_at")
+                act = r.get("last_activity")
+                r["has_new"] = 1 if (not seen or (act and str(act) > str(seen))) else 0
+            else:
+                r["has_new"] = 0
+            r["unseen"] = r["has_new"]   # kept for existing frontend field
+        return rows
 
 
 async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None,
@@ -2157,13 +2171,19 @@ async def list_quick_task_notes(quick_task_id: int) -> list[dict]:
 
 
 async def mark_quick_task_notes_read(quick_task_id: int, staff_id: int) -> None:
-    """Mark every comment on this task as read by `staff_id` (except their own)."""
+    """Mark every comment read + the TASK itself seen by `staff_id` (drives the
+    green→gray blink). Called whenever the staffer opens the task."""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "INSERT OR IGNORE INTO nidaan_quick_task_note_reads (note_id, staff_id) "
             "SELECT note_id, ? FROM nidaan_quick_task_notes "
             "WHERE quick_task_id = ? AND staff_id != ?",
             (staff_id, quick_task_id, staff_id))
+        await conn.execute(
+            "INSERT INTO nidaan_quick_task_seen (quick_task_id, staff_id, seen_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(quick_task_id, staff_id) DO UPDATE SET seen_at=CURRENT_TIMESTAMP",
+            (quick_task_id, staff_id))
         await conn.commit()
 
 

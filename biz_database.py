@@ -1569,6 +1569,16 @@ async def init_db():
                 PRIMARY KEY (note_id, staff_id)
             )
         """)
+        # Task-level "seen" — when a staffer last opened a task. Drives the
+        # green-blink-until-seen indicator (new activity since they last looked).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_seen (
+                quick_task_id INTEGER NOT NULL REFERENCES nidaan_quick_tasks(quick_task_id),
+                staff_id      INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                seen_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (quick_task_id, staff_id)
+            )
+        """)
 
         # ── Quick-task lifecycle: soft-delete + approval + immutable history ──
         for _alt in [
@@ -1820,6 +1830,25 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_notifications ADD COLUMN read_at TIMESTAMP")
         except Exception:
             pass
+        # Broadcasts (canonical feed) + emoji reactions.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_broadcasts (
+                broadcast_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_staff_id  INTEGER REFERENCES nidaan_staff(staff_id),
+                sender_name      TEXT DEFAULT '',
+                message          TEXT NOT NULL,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_broadcast_reactions (
+                broadcast_id  INTEGER NOT NULL REFERENCES nidaan_broadcasts(broadcast_id),
+                staff_id      INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                emoji         TEXT NOT NULL,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (broadcast_id, staff_id)
+            )
+        """)
 
         # ── nidaan_messages: subscriber ↔ associate thread per claim
         # (in-dashboard chat + WhatsApp mirror).

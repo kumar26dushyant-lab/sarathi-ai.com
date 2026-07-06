@@ -319,12 +319,16 @@ select.form-input option{background:#1e293b}
               style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.4);color:#22d3ee;font-weight:700;display:none">
         ✚ Quick Task
       </button>
-      <button id="broadcastBtn" class="btn-sm btn-ghost" onclick="openBroadcastModal()" title="Broadcast to everyone" style="border:1px solid rgba(255,255,255,.12)">📢</button>
+      <button id="broadcastBtn" onclick="openBroadcastModal()" title="Broadcast to everyone"
+              style="display:inline-flex;align-items:center;gap:.35rem;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;font-weight:700;font-size:.82rem;padding:.4rem .75rem;border-radius:9px;cursor:pointer;box-shadow:0 2px 10px rgba(124,58,237,.4)">
+        <span style="font-size:1.05rem">📢</span><span class="bc-label">Broadcast</span>
+      </button>
       <div style="position:relative;display:inline-block">
-        <button id="bellBtn" class="btn-sm btn-ghost" onclick="toggleBell()" title="Notifications" style="border:1px solid rgba(255,255,255,.12);position:relative">
-          🔔<span id="bellBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:#f43f5e;color:#fff;font-size:.62rem;font-weight:800;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:9px;padding:0 3px"></span>
+        <button id="bellBtn" onclick="toggleBell()" title="Notifications"
+                style="position:relative;background:rgba(34,211,238,.14);border:1px solid rgba(34,211,238,.4);color:#22d3ee;font-size:1.15rem;line-height:1;padding:.38rem .5rem;border-radius:9px;cursor:pointer">
+          🔔<span id="bellBadge" style="display:none;position:absolute;top:-7px;right:-7px;background:#f43f5e;color:#fff;font-size:.62rem;font-weight:800;min-width:17px;height:17px;line-height:17px;text-align:center;border-radius:9px;padding:0 3px;box-shadow:0 0 0 2px #0a1628">​</span>
         </button>
-        <div id="bellDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 8px);width:340px;max-width:88vw;max-height:70vh;overflow-y:auto;background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:200"></div>
+        <div id="bellDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 8px);width:360px;max-width:90vw;max-height:72vh;overflow-y:auto;background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:200"></div>
       </div>
       <span id="staffName" style="color:rgba(255,255,255,.6)"></span>
       <span class="role-badge" id="staffRoleBadge"></span>
@@ -1628,7 +1632,7 @@ function _qtRegistryRow(qt, isAdmin){
          style="padding:.6rem .25rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start;${deleted?'opacity:.45':''}${qt.assignee_on_leave>0?'background:rgba(251,146,60,.06);':''}">
       <div style="width:3px;align-self:stretch;background:${qt.assignee_on_leave>0?'#fb923c':prio.color};border-radius:2px;flex-shrink:0;min-height:34px"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.88rem;font-weight:600;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${qt.unseen>0?`<span class="unseen-dot" title="${qt.unseen} unseen comment(s)"></span>`:''}<span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.9rem;padding:.1rem .45rem;border-radius:6px;flex-shrink:0">#${qt.quick_task_id}</span><span style="${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</span></div>
+        <div style="font-size:.88rem;font-weight:600;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${_taskDot(qt)}<span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.9rem;padding:.1rem .45rem;border-radius:6px;flex-shrink:0">#${qt.quick_task_id}</span><span style="${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</span></div>
         <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
           <span style="color:${st.color}">● ${st.label}</span>
           ${typePill}${apprPill}
@@ -1658,6 +1662,13 @@ async function qtDeleteRow(qid){
   else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Delete failed'),'error'); }
 }
 
+// Green blink = your task with new activity since you last opened it;
+// gray = your task, caught up; nothing = not your task.
+function _taskDot(qt){
+  if (qt.has_new) return `<span class="unseen-dot" title="New activity — not seen yet"></span>`;
+  if (qt.mine)    return `<span class="seen-dot" title="Seen — no new activity"></span>`;
+  return '';
+}
 function _qtRow(qt, showAssignee){
   const prio = QT_PRIORITY_PILLS[qt.priority] || QT_PRIORITY_PILLS.normal;
   const status = QT_STATUS_PILLS[qt.status] || QT_STATUS_PILLS.open;
@@ -1668,7 +1679,7 @@ function _qtRow(qt, showAssignee){
          style="padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;border-left:3px solid ${prio.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:.86rem;font-weight:600;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">${qt.unseen>0?`<span class="unseen-dot" title="${qt.unseen} unseen comment(s)"></span>`:''}<span>${prio.icon}</span><span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.88rem;padding:.08rem .4rem;border-radius:6px">#${qt.quick_task_id}</span><span>${esc(qt.title||'')}</span></div>
+          <div style="font-size:.86rem;font-weight:600;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">${_taskDot(qt)}<span>${prio.icon}</span><span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.88rem;padding:.08rem .4rem;border-radius:6px">#${qt.quick_task_id}</span><span>${esc(qt.title||'')}</span></div>
           <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.15rem">
             <span style="color:${status.color}">${status.label}</span>${showAssignee&&qt.assignee_name?' · 👤 '+esc(qt.assignee_name):''}${qt.creator_name?' · ✍️ '+esc(qt.creator_name):''}${due}${claim}
           </div>
@@ -4121,18 +4132,18 @@ function _handleDeepLink(){
 
 // ── Notification bell + broadcast (P4) ───────────────────────────────────────
 let _bellPoll = null;
+const _REACT_EMOJIS = ['👍','❤️','🎉','😂','🙏','🔥'];
 async function loadBell(){
   try {
-    const r = await fetch('/nidaan/ops/api/notifications', {headers: hdrs()});
-    if (!r.ok) return;
-    const d = await r.json();
-    window._bellData = d.notifications || [];
-    const badge = document.getElementById('bellBadge');
-    if (badge) {
-      if (d.unread > 0) { badge.textContent = d.unread > 99 ? '99+' : d.unread; badge.style.display = ''; }
-      else badge.style.display = 'none';
+    const [nr, br] = await Promise.all([
+      fetch('/nidaan/ops/api/notifications', {headers: hdrs()}),
+      fetch('/nidaan/ops/api/broadcasts', {headers: hdrs()}),
+    ]);
+    if (nr.ok) { const d = await nr.json(); window._bellData = d.notifications || [];
+      const badge = document.getElementById('bellBadge');
+      if (badge) { if (d.unread>0){ badge.textContent=d.unread>99?'99+':d.unread; badge.style.display=''; } else badge.style.display='none'; }
     }
-    // If the dropdown is open, refresh its contents live.
+    if (br.ok) window._bcData = (await br.json()).broadcasts || [];
     const dd = document.getElementById('bellDropdown');
     if (dd && dd.style.display !== 'none') _renderBell();
   } catch(e){}
@@ -4141,12 +4152,23 @@ function _bellIcon(ev){ ev=ev||''; return ev==='broadcast'?'📢':ev.indexOf('qu
 function _renderBell(){
   const dd = document.getElementById('bellDropdown'); if(!dd) return;
   const items = window._bellData || [];
-  dd.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1628">
-      <div style="font-weight:700;font-size:.9rem">Notifications</div>
-      <button class="btn-sm btn-ghost" onclick="markBellRead()" style="font-size:.72rem">Mark all read</button>
-    </div>
-    ${items.length ? items.map(n=>{
+  const bcs = window._bcData || [];
+  const bcHtml = bcs.length ? `
+    <div style="padding:.4rem .8rem;font-size:.7rem;font-weight:800;color:#c4b5fd;text-transform:uppercase;letter-spacing:.05em;background:rgba(167,139,250,.06)">📢 Broadcasts</div>
+    ${bcs.slice(0,6).map(b=>{
+      const bar = _REACT_EMOJIS.map(em=>{
+        const c = (b.reactions||{})[em]||0;
+        const mineOn = b.my_reaction===em;
+        return `<button onclick="event.stopPropagation();reactBroadcast(${b.broadcast_id},'${em}')" style="background:${mineOn?'rgba(34,211,238,.25)':'rgba(255,255,255,.05)'};border:1px solid ${mineOn?'#22d3ee':'rgba(255,255,255,.1)'};border-radius:12px;padding:.05rem .35rem;font-size:.78rem;cursor:pointer;line-height:1.3">${em}${c?`<span style="font-size:.68rem;color:rgba(255,255,255,.7);margin-left:.15rem">${c}</span>`:''}</button>`;
+      }).join('');
+      return `<div style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05)">
+        <div style="font-size:.82rem"><b style="color:#c4b5fd">${esc(b.sender_name||'Staff')}</b> <span style="color:rgba(255,255,255,.35);font-size:.68rem">· ${b.created_at?ndUI.timeAgo(b.created_at):''}</span></div>
+        <div style="font-size:.85rem;color:rgba(255,255,255,.85);margin:.15rem 0 .35rem;white-space:pre-wrap">${esc(b.message||'')}</div>
+        <div style="display:flex;gap:.3rem;flex-wrap:wrap">${bar}</div>
+      </div>`;
+    }).join('')}` : '';
+  const notifHtml = items.length ? items.map(n=>{
+      if (n.event_key==='broadcast') return '';  // shown in the broadcast section
       const unread = !n.read_at;
       const qtM = String(n.body||'').match(/[?&]qt=(\d+)/);
       const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()` : '';
@@ -4154,8 +4176,20 @@ function _renderBell(){
         <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
         <div style="font-size:.76rem;color:rgba(255,255,255,.6);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
         <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.15rem">${n.created_at?ndUI.timeAgo(n.created_at):''}</div>
-      </div>`; }).join('')
-    : '<div style="padding:1.2rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No notifications yet</div>'}`;
+      </div>`; }).join('') : '';
+  dd.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1628;z-index:1">
+      <div style="font-weight:700;font-size:.9rem">🔔 Notifications</div>
+      <div style="display:flex;gap:.4rem"><button class="btn-sm btn-ghost" onclick="event.stopPropagation();openBroadcastModal()" style="font-size:.72rem">📢 Broadcast</button><button class="btn-sm btn-ghost" onclick="markBellRead()" style="font-size:.72rem">Mark read</button></div>
+    </div>
+    ${bcHtml}
+    ${notifHtml || (bcHtml ? '' : '<div style="padding:1.2rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Nothing yet</div>')}`;
+}
+async function reactBroadcast(bid, emoji){
+  try {
+    await fetch('/nidaan/ops/api/broadcasts/'+bid+'/react', {method:'POST', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify({emoji})});
+    await loadBell(); _renderBell();
+  } catch(e){}
 }
 function toggleBell(){
   const dd = document.getElementById('bellDropdown'); if(!dd) return;
@@ -5062,6 +5096,10 @@ async function processRefund(subId, amount){
 .task-pill { display:inline-block; padding:.18rem .55rem; border-radius:14px; font-size:.7rem; font-weight:600; }
 @keyframes seenBlink { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.6)} 50%{opacity:.35;box-shadow:0 0 0 4px rgba(34,197,94,0)} }
 .unseen-dot { display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e;animation:seenBlink 1.1s ease-in-out infinite;flex-shrink:0 }
+.seen-dot { display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.28);flex-shrink:0 }
+@keyframes bellPulse { 0%,100%{box-shadow:0 0 0 2px #0a1628,0 0 0 2px rgba(244,63,94,.5)} 50%{box-shadow:0 0 0 2px #0a1628,0 0 0 7px rgba(244,63,94,0)} }
+#bellBadge { animation:bellPulse 1.5s ease-in-out infinite; }
+@media(max-width:640px){ .bc-label{display:none} #broadcastBtn{padding:.4rem .55rem} }
 .task-prio { font-size:.65rem; font-weight:800; padding:.12rem .42rem; border-radius:4px; letter-spacing:.05em; }
 .prio-high { background:rgba(251,146,60,.18); color:#fdba74; }
 .prio-urgent { background:rgba(239,68,68,.22); color:#fca5a5; }
