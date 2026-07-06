@@ -1850,6 +1850,22 @@ async def init_db():
             )
         """)
 
+        # ── nidaan_push_subscriptions: Web Push (PWA) endpoints per staff device.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_push_subscriptions (
+                sub_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                staff_id    INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                endpoint    TEXT NOT NULL UNIQUE,
+                p256dh      TEXT NOT NULL,
+                auth        TEXT NOT NULL,
+                ua          TEXT DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_ok_at  TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_push_sub_staff ON nidaan_push_subscriptions(staff_id)")
+
         # ── nidaan_messages: subscriber ↔ associate thread per claim
         # (in-dashboard chat + WhatsApp mirror).
         await conn.execute("""

@@ -4873,6 +4873,51 @@ async def ops_notifications_read(request: Request):
     return {"ok": True}
 
 
+# ── Web Push (PWA push notifications) ────────────────────────────────────────
+@app.get("/nidaan/ops/api/push/vapid-key")
+async def ops_push_vapid_key(request: Request):
+    """Public VAPID key the browser needs to create a push subscription."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    import os as _os
+    return {"key": _os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+
+@app.post("/nidaan/ops/api/push/subscribe")
+async def ops_push_subscribe(request: Request):
+    """Register this device's push subscription for the logged-in staffer."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    sub = await request.json()
+    if not isinstance(sub, dict) or not sub.get("endpoint"):
+        raise HTTPException(400, "invalid subscription")
+    await nnot.save_push_subscription(
+        staff["staff_id"], sub, request.headers.get("user-agent", ""))
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/push/unsubscribe")
+async def ops_push_unsubscribe(request: Request):
+    """Remove this device's push subscription."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    body = await request.json()
+    ep = (body or {}).get("endpoint", "")
+    if ep:
+        await nnot.delete_push_subscription(ep)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/push/test")
+async def ops_push_test(request: Request):
+    """Send a test push to the current staffer's own devices."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    n = await nnot.push_to_staff([staff["staff_id"]], "🔔 Nidaan Ops",
+                                 "Push notifications are working!", "/nidaan/ops", "test")
+    return {"ok": True, "sent": n}
+
+
 # =============================================================================
 #  NIDAAN ERP — Phase 4: Notifications + Comms Hub
 # =============================================================================

@@ -415,7 +415,120 @@ async def _record_notification(**kw) -> int:
               kw.get("instance_slot"), kw.get("wa_message_id"),
               kw.get("error"), kw.get("sent_at"), kw.get("deferred_until")))
         await conn.commit()
-        return cur.lastrowid
+        notif_id = cur.lastrowid
+    # Web Push mirror: only for a real staff dashboard notification.
+    if (kw.get("channel") == CHANNEL_DASHBOARD
+            and kw.get("recipient_type") == RECIPIENT_STAFF
+            and kw.get("recipient_id")):
+        tid, cid = kw.get("task_id"), kw.get("claim_id")
+        url = (f"/nidaan/ops?qt={tid}" if tid
+               else f"/nidaan/ops?claim={cid}" if cid else "/nidaan/ops")
+        _fire_push([kw.get("recipient_id")],
+                   kw.get("subject") or "Nidaan Ops",
+                   kw.get("body") or "",
+                   url, kw.get("event_key") or "nidaan")
+    return notif_id
+
+
+# ── Web Push (PWA push notifications) ────────────────────────────────────────
+def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
+def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")
+def _vapid_subject() -> str: return os.environ.get("VAPID_SUBJECT", "mailto:info@nidaanlegalindia.com")
+
+
+async def save_push_subscription(staff_id: int, sub: dict, ua: str = "") -> None:
+    """Store (or refresh) a browser push subscription for a staff device."""
+    keys = sub.get("keys") or {}
+    endpoint = sub.get("endpoint") or ""
+    p256dh, auth = keys.get("p256dh") or "", keys.get("auth") or ""
+    if not (endpoint and p256dh and auth):
+        return
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("""
+            INSERT INTO nidaan_push_subscriptions (staff_id, endpoint, p256dh, auth, ua)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(endpoint) DO UPDATE SET
+              staff_id=excluded.staff_id, p256dh=excluded.p256dh,
+              auth=excluded.auth, ua=excluded.ua
+        """, (staff_id, endpoint, p256dh, auth, ua[:300]))
+        await conn.commit()
+
+
+async def delete_push_subscription(endpoint: str) -> None:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("DELETE FROM nidaan_push_subscriptions WHERE endpoint=?", (endpoint,))
+        await conn.commit()
+
+
+def _send_one_push(row: dict, payload: str) -> tuple[bool, bool]:
+    """Blocking send of one web-push. Returns (ok, gone) — gone=True if the
+    subscription is dead (404/410) and should be pruned."""
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception:
+        return (False, False)
+    sub = {"endpoint": row["endpoint"],
+           "keys": {"p256dh": row["p256dh"], "auth": row["auth"]}}
+    try:
+        webpush(subscription_info=sub, data=payload,
+                vapid_private_key=_vapid_private(),
+                vapid_claims={"sub": _vapid_subject()})
+        return (True, False)
+    except WebPushException as e:
+        code = getattr(getattr(e, "response", None), "status_code", None)
+        return (False, code in (404, 410))
+    except Exception:
+        return (False, False)
+
+
+async def push_to_staff(staff_ids: list[int], title: str, body: str,
+                        url: str = "/nidaan/ops", tag: str = "nidaan") -> int:
+    """Fire a Web Push to every device of the given staff. Best-effort, never
+    raises. Prunes dead subscriptions. Returns number of successful sends."""
+    if not (_vapid_private() and _vapid_public() and staff_ids):
+        return 0
+    ids = [int(s) for s in staff_ids if s]
+    if not ids:
+        return 0
+    ph = ",".join("?" * len(ids))
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            f"SELECT sub_id, endpoint, p256dh, auth FROM nidaan_push_subscriptions "
+            f"WHERE staff_id IN ({ph})", ids)).fetchall()]
+    if not rows:
+        return 0
+    payload = json.dumps({"title": title, "body": (body or "")[:300],
+                          "url": url, "tag": tag})
+    loop = asyncio.get_event_loop()
+    ok_count, dead = 0, []
+    for r in rows:
+        ok, gone = await loop.run_in_executor(None, _send_one_push, r, payload)
+        if ok:
+            ok_count += 1
+        elif gone:
+            dead.append(r["sub_id"])
+    if dead:
+        dph = ",".join("?" * len(dead))
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                f"DELETE FROM nidaan_push_subscriptions WHERE sub_id IN ({dph})", dead)
+            await conn.commit()
+    if ok_count:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                f"UPDATE nidaan_push_subscriptions SET last_ok_at=CURRENT_TIMESTAMP "
+                f"WHERE staff_id IN ({ph})", ids)
+            await conn.commit()
+    return ok_count
+
+
+def _fire_push(staff_ids, title, body, url="/nidaan/ops", tag="nidaan") -> None:
+    """Schedule a non-blocking push (never blocks the caller's DB write)."""
+    try:
+        asyncio.create_task(push_to_staff(list(staff_ids), title, body, url, tag))
+    except RuntimeError:
+        pass  # no running loop (sync context) — skip push, dashboard row still saved
 
 
 # ── Ops notification bell + broadcast ────────────────────────────────────────
@@ -443,6 +556,7 @@ async def record_broadcast(sender_id: int, sender_name: str, message: str,
             """, ("broadcast", PRIORITY_P2, RECIPIENT_STAFF, sid,
                   CHANNEL_DASHBOARD, subj, message, now))
         await conn.commit()
+    _fire_push(staff_ids, subj, message, "/nidaan/ops", "broadcast")
     return len(staff_ids)
 
 
