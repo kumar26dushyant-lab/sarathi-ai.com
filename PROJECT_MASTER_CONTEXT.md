@@ -3469,5 +3469,66 @@ All live + verified on production. See memory `[[project-sarathi-customers]]`,
 
 ---
 
+## 43. NIDAANPARTNER OPS — OFFICE-TASK ENGINE + MONTHLY BILLING + WHATSAPP HARDENING — JUNE 23 – JULY 6, 2026
+Large multi-session build turning the ops portal (`static/nidaan_ops.html`) into a real office task engine, plus a billing switch and WhatsApp/notification hardening. All shipped + verified live via `git push origin master` (blue-green). Files: `sarathi_biz.py`, `biz_nidaan.py`, `biz_nidaan_notifications.py`, `biz_nidaan_tasks.py`, `biz_nidaan_inbound.py`, `biz_whatsapp_evolution.py`, `biz_email.py`, `biz_database.py`, `static/nidaan_ops.html`, `static/nidaan_dashboard.html`, `static/nidaan_start.html`, `static/nidaan_index.html`.
+
+### 43.1 Office-task system (quick-tasks → full engine)
+- **Staff**: added `phone` + `notify_email` (personal/Gmail; email falls back login→notify); **welcome notification** (email+WhatsApp w/ Login ID + portal link) on staff create; staff table shows Login ID vs Email; live input validation (10-digit mobile, login-id chars, email).
+- **Task Registry** (the durable record): "📋 All Tasks" with status tabs+counts (All/Active/Open/In-progress/Done/Cancelled/Overdue/Pending-approval), type + assignee filters, **search by title or #id**, per-row delete, admin **show-deleted** audit view. Fixed the original bug where done/cancelled tasks vanished (list was open-only).
+- **Lifecycle**: reopen, reassign, **soft-delete** (history kept), immutable **activity log** (`nidaan_quick_task_log`), **merge** duplicates with **precedence** (`merged_into`, comments move, both timelines record).
+- **Approval**: optional per-task `requires_approval`; approve/reject **only for super/sub-admin** (checkbox hidden from associates); creator+assignee notified.
+- **Comment "Seen"** (replaced comment-approval): `nidaan_quick_task_notes` + `nidaan_quick_task_note_reads` + `nidaan_quick_task_seen`. Green-blink dot = **your** task (assigned/created) with new activity since you last opened it (new comment / assignment / status change); turns **gray** once seen; **nothing** on tasks that aren't yours. Per-comment ✓ Sent / ✓✓ Seen-by.
+- **Everyone assigns to anyone**: `list_active_associates` now returns ALL active non-deleted staff (super admins included). Default `task_create_min_role`=team_member; lower roles are **nudged (not blocked)** into an upward `task_type='request'` that alerts admins.
+- **Creator visibility**: associates now see tasks assigned-to OR created-by them (registry + counts via `viewer_staff_id`).
+- **Tasks dashboard strip**: Active/Open/In-progress/Done/Overdue/Pending-approval/On-leave tiles, **all clickable → auto-filter** the registry (On-leave scrolls to leave card). Tasks panel moved **above Overview** and is the **default landing**.
+- **Deep-link cleanup**: `?qt=/?task=/?leave=` stripped from URL after opening (fixed "task keeps popping up" re-open loop).
+
+### 43.2 Leave (`nidaan_leave_requests`)
+- Apply → admin approve/reject; **full-day or half-day (first/second half)** + optional **From/To time**; **handover** (auto-shows applicant's tasks-in-hand + notes) + **suggested cover person**.
+- **Visibility**: "Currently On Leave" to everyone; admins get **"Upcoming Leaves — next 30 days"**; task rows whose assignee is **on leave today are highlighted** (🌴 + orange) for reassignment.
+- Leave request → **WhatsApp (to official line) + email** to admins (handover + open-task count + half-day + cover); decision → requester.
+
+### 43.3 Broadcast + notification bell (`nidaan_broadcasts`, `nidaan_broadcast_reactions`, `read_at` on `nidaan_notifications`)
+- Top-bar **🔔 bell** (unread badge, pulsing) + dropdown: personal notifications (tasks/comments/approvals/leave, deep-linked) + a **📢 Broadcasts feed** with **emoji reactions** (👍❤️🎉😂🙏🔥, live counts, toggle). Polls 45s; opening marks read.
+- **📢 Broadcast** (everyone) → one message to every active staffer's bell (bell only, no WA/email). Endpoints: POST /broadcast, GET/POST /broadcasts[/{id}/react], GET/POST /notifications[/read].
+
+### 43.4 Monthly billing (was quarterly)
+- **Plans → monthly**: Silver ₹500, Gold ₹1,000, Platinum ₹2,000 /month (annual = 10× = ₹5,000/10,000/20,000). `NIDAAN_RAZORPAY_PLANS` monthly (period=monthly, interval=1, period_days=30) + **versioned `tag` (silver_m1…)** so `ensure_nidaan_plans` creates NEW Razorpay plans (immutable) instead of reusing old ₹/quarter; internal plan keys unchanged so checkout/DB/webhook mapping intact. One-time order path uses amount_paise directly; recurring total_count 40→120.
+- **Claim quota → monthly**: `PLAN_LIMITS.claims_per_month` (Silver 3, Gold 10, Platinum ∞); both quota windows 90→30 days.
+- Display synced: dashboard subscribe cards (monthly+yearly), billing toggle, renewal-email prices, homepage plans (removed Sarathi-free strip, free-consultation, Platinum unlimited-logins; coverage caps ≤₹5L/₹10L/₹50L). **Existing subscribers stay on old plans** until cancel+resubscribe.
+
+### 43.5 ₹499 form rework + login-flow fix
+- **₹499 form** (nidaan_start funnel + dashboard claim form): **insurer dropdown** (30+ Indian insurers + Other), new **Policy Inception Date**, optional **TPA**, **documents optional** (single optional rejection-letter upload; removed "upload N to continue"). Backend: `policy_inception_date`+`tpa_name` on `NidaanClaimReq`/`create_nidaan_claim`/`nidaan_claims`.
+- **Login routing bug** fixed: logged-in users clicking a plan lost the `?plan` intent → bounced into the claim/documents funnel (flicker). Now preserves intent → `/nidaan/dashboard?subscribe=<plan>` which **auto-opens the subscribe modal** and never bounces plan-intent users into the funnel.
+
+### 43.6 WhatsApp hardening + user-driven official numbers
+- **Phone hygiene**: `normalize_indian_mobile` / hardened `_norm_phone` — strip +91/0, require exactly 10 digits, **reject (never truncate)** malformed (root-caused a misdeliver to a stranger).
+- **Staff-only allow-list**: WhatsApp goes ONLY to registered active-staff numbers (+ official numbers); all subscriber/account WhatsApp held off (flags `nidaan_wa_staff_only`, `nidaan_subscriber_wa_enabled`). Inbound bot no longer auto-replies "register" to unknown senders.
+- **Verify-before-send**: Evolution `check_number_exists` (`/chat/whatsappNumbers`) → send only to canonical JID; **fail-closed** (email fallback). Self-send **allowed** so a super admin sharing the official line still gets alerts (flag `nidaan_wa_block_self_send`).
+- **Admin/leave alerts → connected official line(s) only** (`_whatsapp_official_lines`), not personal admin phones; email still per-admin.
+- **Official Numbers user-driven**: removed hardcoded 3-seed; add any number (name+phone) → auto free slot → connect by QR; Remove (logout). **connection.update webhook now updates `nidaan_official_instances`** (was wa_instances only → QR-scanned number showed disconnected) + official-numbers page **live-syncs** Evolution state.
+- **App Health** WhatsApp status reads `nidaan_official_instances` (was wrong table) + per-number panel.
+
+### 43.7 Staff lifecycle + permissions
+- **Super-admin lockout protection**: super admins can't be deactivated/deleted; no self-deactivate (Ashwin had inactivated everyone).
+- **Soft-delete/archive** (`nidaan_staff.deleted_at`): delete→archive, restore, bulk delete-inactive, Archive view. **Recreation reclaims** a soft-deleted login-ID row (fixed "email exists" on delete→recreate).
+- **One-click password reset** (super admin) → temp password shown once.
+- **Ops settings** KV (`nidaan_ops_settings`) — `task_create_min_role` permission (super-admin editable).
+
+### 43.8 Email branding
+- Nidaan ops notifications now send **from "Nidaan Partner"** (routes to NIDAAN_FROM). Personal-Gmail recipient fallbacks (health monitor, reminders) → `info@nidaanlegalindia.com`. **FROM-address change to info@ pending user action**: verify domain in **Brevo** (SPF/DKIM) — Brevo = sender, Cloudflare = DNS + inbound routing; a real inbox needs Zoho/Workspace. Then flip `NIDAAN_FROM_EMAIL`/`SMTP_FROM_*` env.
+
+### 43.9 Deployment / backup posture (verified, no change made)
+- **Code**: GitHub `github.com/kumar26dushyant-lab/sarathi-ai.com` (remote, safe) + server + laptop. Deploy = `git push origin master`; server pulls via PAT; `git-backup.timer` also pushes code daily.
+- **Data**: SQLite `/opt/sarathi/sarathi_biz.db` (~4MB) on the Contabo VM; `backup-db.timer` (2am daily) → `deploy/backup.sh` tars DB+uploads+pdfs+videos, keeps 7 **local** copies in `/opt/sarathi/backups`. Secrets in `/opt/sarathi/biz.env` (0600, not in git).
+- **RISK (open)**: DB backups are **on the same server** — a VM/disk loss takes live DB + backups together. **Recommended (not yet done): off-server nightly copy** (B2/S3/rclone/private-repo) + an off-site copy of `biz.env`.
+
+### 43.10 Pending / next
+- **Phase 5 (PWA/mobile)**: installable web app + push notifications (tasks/comments/broadcast).
+- Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
+- Off-server DB backup; ops architecture cleanup (deferred by user).
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
