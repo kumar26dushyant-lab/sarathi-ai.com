@@ -1,9 +1,10 @@
 // Nidaan Partner Service Worker
-// v2 — network-first for HTML (so price/copy changes propagate immediately),
-//      cache-first for /static/* assets (images, fonts, manifest).
+// v3 — network-first for HTML (so price/copy changes propagate immediately),
+//      cache-first for /static/* assets (images, fonts, manifest),
+//      never-cache all *api* paths, + Web Push (push / notificationclick).
 // Cache version is bumped on every product-content change.
 
-const CACHE_NAME = 'nidaan-v2';
+const CACHE_NAME = 'nidaan-v3';
 
 // Only pre-cache truly-immutable assets — NOT HTML.
 const STATIC_ASSETS = [
@@ -35,7 +36,7 @@ self.addEventListener('fetch', function(event) {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   // API / internal / auth → network only, never cache
-  if (url.pathname.startsWith('/nidaan/api/') ||
+  if (url.pathname.includes('/api/') ||
       url.pathname.startsWith('/internal/') ||
       ['/nidaan/login', '/nidaan/logout', '/nidaan/signup', '/nidaan/start'].includes(url.pathname)) {
     return;
@@ -77,4 +78,36 @@ self.addEventListener('fetch', function(event) {
       })
     );
   }
+});
+
+// ── Web Push ──────────────────────────────────────────────────────────────
+// Payload (JSON): { title, body, url, tag, icon }
+self.addEventListener('push', function(event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
+  var title = data.title || 'Nidaan Ops';
+  var opts = {
+    body: data.body || '',
+    icon: data.icon || '/static/icon-192x192.png',
+    badge: '/static/icon-192x192.png',
+    tag: data.tag || 'nidaan',
+    data: { url: data.url || '/nidaan/ops' },
+    renotify: true,
+    vibrate: [80, 40, 80]
+  };
+  event.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  var target = (event.notification.data && event.notification.data.url) || '/nidaan/ops';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (c.url.indexOf('/nidaan/') !== -1 && 'focus' in c) { c.navigate(target); return c.focus(); }
+      }
+      if (clients.openWindow) return clients.openWindow(target);
+    })
+  );
 });

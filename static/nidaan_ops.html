@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Nidaan Ops — Internal Portal</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
+<!-- PWA: installable staff app -->
+<link rel="manifest" href="/static/nidaan-ops.webmanifest">
+<meta name="theme-color" content="#060d1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nidaan Ops">
+<link rel="apple-touch-icon" href="/static/icon-192x192.png">
 <script src="/static/_err.js?v=1"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -5110,5 +5118,46 @@ async function processRefund(subId, amount){
 .task-overdue { color:#fca5a5; font-weight:600; }
 </style>
 <script src="/static/nidaan_ui.js?v=2"></script>
+<!-- ── PWA: installable app + service worker ── -->
+<style>
+#pwaInstall{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;align-items:center;gap:.6rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none;border-radius:999px;padding:.7rem 1.15rem;font-weight:700;font-size:.85rem;box-shadow:0 10px 30px rgba(124,58,237,.45);cursor:pointer}
+#pwaInstall .x{margin-left:.2rem;opacity:.85;font-weight:800;padding:0 .2rem}
+#pwaIosTip{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;background:#0d1b30;border:1px solid rgba(34,211,238,.35);color:#e2e8f0;border-radius:14px;padding:.85rem 1rem;font-size:.82rem;line-height:1.5;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+#pwaIosTip b{color:#22d3ee}#pwaIosTip .x{float:right;color:#94a3b8;font-weight:800;cursor:pointer}
+</style>
+<button id="pwaInstall">📲 <span>Install Nidaan Ops app</span><span class="x" title="Dismiss">✕</span></button>
+<div id="pwaIosTip"><span class="x" onclick="document.getElementById('pwaIosTip').style.display='none';localStorage.setItem('pwaIosDismissed','1')">✕</span>
+📲 <b>Install this app:</b> tap the <b>Share</b> icon below, then <b>“Add to Home Screen”.</b></div>
+<script>
+(function(){
+  // 1) register service worker (root scope so it controls /nidaan/*)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
+    });
+  }
+  // 2) install prompt (Android/Chrome/Edge)
+  var deferred = null;
+  var btn = document.getElementById('pwaInstall');
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault(); deferred = e;
+    if (!isStandalone && localStorage.getItem('pwaDismissed') !== '1') btn.style.display = 'inline-flex';
+  });
+  btn.addEventListener('click', function(ev){
+    if (ev.target.classList.contains('x')) { btn.style.display='none'; localStorage.setItem('pwaDismissed','1'); return; }
+    if (!deferred) { btn.style.display='none'; return; }
+    deferred.prompt();
+    deferred.userChoice.finally(function(){ deferred=null; btn.style.display='none'; });
+  });
+  window.addEventListener('appinstalled', function(){ btn.style.display='none'; });
+  // 3) iOS Safari has no beforeinstallprompt — show a one-time hint
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var inSafari = isIOS && !/crios|fxios|edgios/i.test(navigator.userAgent);
+  if (inSafari && !isStandalone && localStorage.getItem('pwaIosDismissed') !== '1') {
+    setTimeout(function(){ var t=document.getElementById('pwaIosTip'); if(t) t.style.display='block'; }, 3500);
+  }
+})();
+</script>
 </body>
 </html>
