@@ -3548,6 +3548,32 @@ Large multi-session build turning the ops portal (`static/nidaan_ops.html`) into
 - **UI**: "Enable push" toggle in the bell dropdown (permission → subscribe →
   confirmation push; reflects on / blocked / unsupported). Verify on real device.
 
+### 43.12 Hardening — PWA identity, product boundary, doc access (Jul 7, 2026)
+- **Three cleanly-installable PWAs** (fixed collisions): each manifest now has a
+  distinct `id` + non-overlapping `scope` + correct brand icon.
+  Sarathi `id:"/" scope:"/"` (sarathi icon); Nidaan Partner `id:"/nidaan/dashboard"
+  scope narrowed `"/"→"/nidaan/"` (nidaan logo); Nidaan Ops `scope "/nidaan/"→
+  "/nidaan/ops"` + icons switched from Sarathi's `icon-192/512` to `nidaan_logo.png`
+  (that icon reuse was why the admin app showed the Sarathi logo). Explicit ids equal
+  each app's prior implicit id → existing installs not orphaned.
+- **Internal boundary hardened**: new `biz_platform_bridge.py` is the ONLY module
+  allowed to touch Sarathi's `tenants`/`agents` tables on Nidaan's behalf
+  (`upsert_bundle_tenant`, `shorten_bundle_tenant`, `find_bundle_tenants_ending_on`).
+  biz_nidaan.py's 3 bundle functions delegate to it (SQL moved verbatim, behavior
+  unchanged); no Sarathi-table SQL remains in Nidaan code. Products still co-hosted
+  (one app, one DB) but the seam is now explicit + API-ready.
+- **Claim documents behind signed URLs**: files under `/uploads/nidaan-docs/` were
+  reachable by anyone with the (unguessable UUID) URL, forever. Now the
+  ownership-checked doc APIs emit HMAC-signed URLs (`?exp&sig`, HS256 over
+  `stored_name:exp` with `JWT_SECRET`, 48h TTL); FastAPI middleware
+  `nidaan_doc_access_guard` refuses unsigned/expired/forged requests + sets
+  `no-store`. **Required an nginx change** — nginx served `/uploads/` from disk,
+  bypassing the app, so added `location /uploads/nidaan-docs/ { proxy_pass
+  sarathi_app; }` (more-specific prefix) to route docs through the app. Other
+  `/uploads/*` (photos, marketing) still served from disk. Verified live:
+  signed→200, unsigned/badsig/expired→403. Data isolation on the JSON APIs was
+  already correct (every subscriber read filters by `account_id`).
+
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
 - **API integration (two-way sync) — in design**: claim data originates in the
