@@ -2,6 +2,7 @@
   "name": "Sarathi-AI Business Technologies",
   "short_name": "Sarathi-AI",
   "description": "AI-Powered CRM for Financial Advisors & Insurance Agents",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
