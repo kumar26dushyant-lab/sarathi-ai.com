@@ -265,6 +265,24 @@ async def impersonation_audit_middleware(request: Request, call_next):
             pass  # Don't block requests on audit failures
     return response
 
+
+@app.middleware("http")
+async def nidaan_doc_access_guard(request: Request, call_next):
+    """Gate direct access to uploaded Nidaan claim documents. The files sit under
+    the public /uploads mount, but are served only via short-lived signed URLs
+    handed out by the ownership-checked document APIs. A raw, expired, or forged
+    link is refused — defence in depth over the unguessable UUID filename."""
+    path = request.url.path
+    if path.startswith("/uploads/nidaan-docs/"):
+        stored_name = path.rsplit("/", 1)[-1]
+        if not _verify_doc_sig(stored_name,
+                               request.query_params.get("exp", ""),
+                               request.query_params.get("sig", "")):
+            return JSONResponse(
+                {"detail": "This document link is invalid or has expired. Please reopen it from your dashboard."},
+                status_code=403)
+    return await call_next(request)
+
 # Mount static directory for calculator & dashboard HTML
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
@@ -1559,6 +1577,36 @@ _ALLOWED_MIME = {
 }
 _NIDAAN_DOCS_DIR = Path(__file__).parent / "uploads" / "nidaan-docs"
 _NIDAAN_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ── Signed, expiring URLs for Nidaan claim documents ────────────────────────
+# The files live under the public /uploads mount, so we protect them with a
+# short-lived HMAC signature (defence in depth over the random UUID filename).
+# Ownership-checked document APIs hand out signed URLs via _nidaan_doc_url();
+# nidaan_doc_access_guard (middleware) refuses any unsigned/expired/forged link.
+_DOC_URL_TTL = 48 * 3600  # 48h — doc lists are re-fetched whenever a claim is opened
+
+def _doc_sig(stored_name: str, exp: int) -> str:
+    import hmac, hashlib
+    secret = auth.JWT_SECRET
+    if isinstance(secret, str):
+        secret = secret.encode()
+    return hmac.new(secret, f"{stored_name}:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+
+def _nidaan_doc_url(stored_name: str) -> str:
+    """Relative URL to a claim document, signed and valid for _DOC_URL_TTL."""
+    exp = int(_time.time()) + _DOC_URL_TTL
+    return f"/uploads/nidaan-docs/{stored_name}?exp={exp}&sig={_doc_sig(stored_name, exp)}"
+
+def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
+    import hmac
+    try:
+        e = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if e < int(_time.time()):
+        return False
+    return hmac.compare_digest(_doc_sig(stored_name, e), sig or "")
 _MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
 _MAX_DOCS_PER_CLAIM = 40          # storage-DoS guard for free leads
 
@@ -1723,7 +1771,7 @@ async def ops_get_review_docs(purchase_id: int, request: Request):
     docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
     # Add download URL for each doc
     for d in docs:
-        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+        d["url"] = _nidaan_doc_url(d["stored_name"])
     return {"docs": docs}
 
 
@@ -1735,7 +1783,7 @@ async def ops_get_claim_docs(claim_id: int, request: Request):
     _require_staff(request, "team_member")
     docs = await nidaan.get_claim_documents(claim_id=claim_id)
     for d in docs:
-        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+        d["url"] = _nidaan_doc_url(d["stored_name"])
     return {"docs": docs}
 
 
@@ -1758,7 +1806,7 @@ async def nidaan_get_claim_docs(claim_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Claim not found")
     docs = await nidaan.get_claim_documents(claim_id=claim_id)
     for d in docs:
-        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+        d["url"] = _nidaan_doc_url(d["stored_name"])
     return {"docs": docs}
 
 
@@ -1781,7 +1829,7 @@ async def nidaan_get_review_docs(purchase_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Review not found")
     docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
     for d in docs:
-        d["url"] = f"/uploads/nidaan-docs/{d['stored_name']}"
+        d["url"] = _nidaan_doc_url(d["stored_name"])
     return {"docs": docs}
 
 
