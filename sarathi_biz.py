@@ -281,6 +281,10 @@ async def nidaan_doc_access_guard(request: Request, call_next):
             return JSONResponse(
                 {"detail": "This document link is invalid or has expired. Please reopen it from your dashboard."},
                 status_code=403)
+        # Valid signed request → serve, but keep it out of any shared cache.
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
     return await call_next(request)
 
 # Mount static directory for calculator & dashboard HTML
