@@ -26,6 +26,8 @@ from typing import Optional
 
 import aiosqlite
 
+import biz_platform_bridge as bridge  # Sarathi ⇄ Nidaan boundary (tenants/agents access)
+
 logger = logging.getLogger("sarathi.nidaan")
 
 DB_PATH = os.environ.get("DB_PATH", "sarathi_biz.db")
@@ -2406,44 +2408,16 @@ async def _provision_sarathi_bundle(nidaan_account_id: int, plan: str, period_da
     sarathi_plan = sarathi_plan_map.get(plan, "individual")
     bundled_until = (date.today() + timedelta(days=period_days)).isoformat()
 
-    # Find or create Sarathi tenant by email
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT tenant_id FROM tenants WHERE email=? LIMIT 1", (email,)
-        )
-        row = await cur.fetchone()
-        if row:
-            tenant_id = row["tenant_id"]
-            # Update plan + source + expiry + reactivate (covers expired/trial tenants)
-            await conn.execute(
-                """UPDATE tenants
-                   SET plan=?, plan_source='nidaan_bundle', bundled_until=?,
-                       subscription_status='active', updated_at=CURRENT_TIMESTAMP
-                   WHERE tenant_id=?""",
-                (sarathi_plan, bundled_until, tenant_id),
-            )
-        else:
-            # Create a new Sarathi tenant (they'll login via magic link from Nidaan dashboard)
-            cur2 = await conn.execute(
-                """INSERT INTO tenants
-                       (owner_name, firm_name, email, phone,
-                        plan, plan_source, bundled_until, subscription_status)
-                   VALUES (?, ?, ?, ?, ?, 'nidaan_bundle', ?, 'active')""",
-                (account["owner_name"], account["firm_name"] or "", email,
-                 account["phone"] or "", sarathi_plan, bundled_until),
-            )
-            tenant_id = cur2.lastrowid
-            # Create owner agent so the tenant is usable immediately on first login
-            tg_placeholder = f"web_{tenant_id}"
-            await conn.execute(
-                """INSERT INTO agents
-                       (tenant_id, telegram_id, name, phone, email, role, lang)
-                   VALUES (?, ?, ?, ?, ?, 'owner', 'en')""",
-                (tenant_id, tg_placeholder, account["owner_name"],
-                 account["phone"] or "", email),
-            )
-        await conn.commit()
+    # Find or create the Sarathi tenant (via the platform boundary — the only
+    # module allowed to touch Sarathi's tenants/agents tables).
+    tenant_id = await bridge.upsert_bundle_tenant(
+        email=email,
+        owner_name=account["owner_name"],
+        firm_name=account["firm_name"],
+        phone=account["phone"],
+        sarathi_plan=sarathi_plan,
+        bundled_until=bundled_until,
+    )
 
     # Record the product link
     await link_to_sarathi(nidaan_account_id, tenant_id, source="nidaan_bundle")
@@ -2852,27 +2826,14 @@ async def apply_bundle_teardown(account_id: int,
     if not sarathi_tid:
         return None
     grace_until = (date.today() + timedelta(days=int(grace_days))).isoformat()
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        row = await (await conn.execute(
-            "SELECT bundled_until, plan_source FROM tenants WHERE tenant_id=?",
-            (sarathi_tid,))).fetchone()
-        if not row:
-            return None
-        cur_bu = (row["bundled_until"] or "")
-        # Only shorten — never extend. If the existing grace is already
-        # shorter than the new one, leave it alone.
-        if cur_bu and cur_bu <= grace_until:
-            return sarathi_tid
-        await conn.execute(
-            """UPDATE tenants
-               SET bundled_until=?, lifetime_trial_used=1,
-                   updated_at=CURRENT_TIMESTAMP
-               WHERE tenant_id=? AND plan_source='nidaan_bundle'""",
-            (grace_until, sarathi_tid))
-        await conn.commit()
-    logger.info("Bundle teardown: tenant=%d → bundled_until=%s reason=%s",
-                sarathi_tid, grace_until, reason)
+    # Shorten the linked Sarathi tenant via the platform boundary.
+    #   None  → tenant row missing;  False → skipped (already ≤ grace);  True → updated.
+    res = await bridge.shorten_bundle_tenant(tenant_id=sarathi_tid, grace_until=grace_until)
+    if res is None:
+        return None
+    if res:
+        logger.info("Bundle teardown: tenant=%d → bundled_until=%s reason=%s",
+                    sarathi_tid, grace_until, reason)
     return sarathi_tid
 
 
@@ -2882,14 +2843,8 @@ async def find_bundles_ending_in(days_from_now: int) -> list[dict]:
     fresh cohort, no duplicates without external bookkeeping).
     """
     target = (date.today() + timedelta(days=int(days_from_now))).isoformat()
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT tenant_id, firm_name, owner_name, email, phone, plan, "
-            "       bundled_until "
-            "FROM tenants WHERE plan_source='nidaan_bundle' "
-            "AND date(bundled_until) = ?", (target,))
-        return [dict(r) for r in await cur.fetchall()]
+    # Query Sarathi's bundle tenants via the platform boundary.
+    return await bridge.find_bundle_tenants_ending_on(target)
 
 
 # =============================================================================
