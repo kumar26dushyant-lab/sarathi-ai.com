@@ -3676,6 +3676,21 @@ dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT to
   completed, brand-new choice screen); Stage 4 (retire legacy per_claim path);
   "Get Started Free" → "Choose <Plan>" relabel.
 
+### 43.16 Post-payment lock fix + subscriber↔ops messaging (Jul 8, 2026)
+- **Post-payment lock (fixed):** paying ₹499 flips the claim off `unpaid_lead`, so the
+  dashboard's `_leadClaim`-based unlock gate matched nothing → user fell into the
+  "no subscription → lock everything / Subscribe to manage claims" branch and their
+  own PAID claim was hidden. Now a ₹499 user is "active" if they have ANY claim (lead
+  OR paid/in-progress): dashboard stays unlocked, claim visible, banner "review in
+  progress", Settings open. **This class of bug keeps recurring because entitlement is
+  computed from the tangled dual model — Stage 4 (one model) is the durable fix.**
+- **Subscriber ⇄ ops messaging (built on the long-dormant `nidaan_messages` table):**
+  data fns in biz_nidaan (list/add/mark-read/unread-count) + `on_new_claim_message`
+  (subscriber→ops = SA/Admin bell deep-linked to account; staff→subscriber = dashboard
+  + WhatsApp/email if opted in). Endpoints: subscriber + ops GET/POST
+  `…/claims/{id}/messages`. UI: a message thread in BOTH the subscriber claim drawer
+  and the ops claim drawer. Live (401-gated).
+
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
 - **API integration (two-way sync) — in design**: claim data originates in the
