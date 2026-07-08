@@ -958,6 +958,7 @@ async function _handleGoogleSignup(response) {
 // returns null, login stays hidden, and the page renders blank (bug fixed 2026-06-12).
 // Reveal the claim form (logged-in only). Used by the funnel + post-auth.
 function enterClaimForm() {
+  try { hideNBusy(); } catch (e) {}  // we stay on THIS page → take the sign-in overlay down
   const login = document.getElementById('login-section');
   const review = document.getElementById('review-section');
   if (login) login.style.display = 'none';
