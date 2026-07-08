@@ -420,8 +420,11 @@ async def _record_notification(**kw) -> int:
     if (kw.get("channel") == CHANNEL_DASHBOARD
             and kw.get("recipient_type") == RECIPIENT_STAFF
             and kw.get("recipient_id")):
-        tid, cid = kw.get("task_id"), kw.get("claim_id")
+        tid, cid, aid = kw.get("task_id"), kw.get("claim_id"), kw.get("account_id")
+        # Prefer the account deep-link (lands the admin on the subscriber's account
+        # with full details); tasks open the task drawer; claim-only is a fallback.
         url = (f"/nidaan/ops?qt={tid}" if tid
+               else f"/nidaan/ops?account={aid}" if aid
                else f"/nidaan/ops?claim={cid}" if cid else "/nidaan/ops")
         _fire_push([kw.get("recipient_id")],
                    kw.get("subject") or "Nidaan Ops",
@@ -934,8 +937,38 @@ async def on_claim_filed(claim_id: int, account_id: int):
             body=(f"🆕 New claim filed.\n\n"
                   f"Case: #{claim_id} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
-                  f"Open: /nidaan/ops (Tasks)"),
-            claim_id=claim_id)
+                  f"Open: /nidaan/ops?account={account_id}"),
+            claim_id=claim_id, account_id=account_id)
+
+
+async def on_subscriber_signup(account_id: int):
+    """A new subscriber account was created — alert SA/Sub-admin on their bell
+    (dashboard + push), deep-linked straight to the account. Dashboard-only so we
+    don't WhatsApp/email admins on every single signup."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        acct = await (await conn.execute(
+            "SELECT account_id, owner_name, email, phone, plan FROM nidaan_accounts WHERE account_id=?",
+            (account_id,))).fetchone()
+        if not acct:
+            return
+        acct = dict(acct)
+        admins = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    subj = f"🆕 New signup — {acct.get('owner_name') or acct.get('email','')}"
+    body = (f"A new user just signed up.\n"
+            f"Name: {acct.get('owner_name','') or '—'}\n"
+            f"Email: {acct.get('email','')}\n"
+            f"Phone: {acct.get('phone','') or '—'}\n\n"
+            f"Open: /nidaan/ops?account={account_id}")
+    for sid in admins:
+        await _record_notification(
+            event_key="account.signup", priority=PRIORITY_P2,
+            recipient_type=RECIPIENT_STAFF, recipient_id=sid,
+            channel=CHANNEL_DASHBOARD, subject=subj, body=body,
+            status="sent", sent_at=now, account_id=account_id)
 
 
 async def on_task_assigned(task_id: int):
@@ -1467,6 +1500,27 @@ async def on_lead_filed(claim_id: int, account_id: int):
         recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
         subject="Your claim is in — a few documents to upload",
         body=body, claim_id=claim_id)
+
+    # Alert SA/Sub-admin on their bell (deep-linked to the account): a new ₹499
+    # lead with payment/docs pending, so they can chase + convert. Dashboard-only.
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        _admins = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    _now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    _asubj = f"📝 New ₹499 lead — {claim.get('insured_name','')}"
+    _abody = (f"New ₹499 review lead (payment pending).\n"
+              f"Case: #{claim_id} {claim.get('insured_name','')} ({ctype})\n"
+              f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n"
+              f"Documents pending: {len(pending)}\n\n"
+              f"Open: /nidaan/ops?account={account_id}")
+    for _sid in _admins:
+        await _record_notification(
+            event_key="funnel.lead_filed.admin", priority=PRIORITY_P2,
+            recipient_type=RECIPIENT_STAFF, recipient_id=_sid,
+            channel=CHANNEL_DASHBOARD, subject=_asubj, body=_abody,
+            status="sent", sent_at=_now, claim_id=claim_id, account_id=account_id)
 
 
 async def on_funnel_pay_ready(claim_id: int, account_id: int):

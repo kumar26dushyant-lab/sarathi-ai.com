@@ -641,6 +641,11 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         raise HTTPException(status_code=409, detail="Email already registered")
     token = nidaan.create_nidaan_token(account_id, email, plan)
     import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
     # Affiliate branch alert: a lead just signed up under this branch code — tell
     # the branch immediately (they're unpaid until the ₹499 / subscription clears,
     # so the branch knows not to service them offline before payment).
@@ -939,6 +944,11 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
         return JSONResponse({"detail": "Email already registered"}, status_code=409)
     token = nidaan.create_nidaan_token(account_id, email, req.plan)
     import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
     _asyncio.create_task(email_svc.send_email(
         to_email=email,
         subject="Welcome to Nidaan Partner! 🛡️",
@@ -1962,6 +1972,11 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
             firm_name="",
         )
         account = await nidaan.get_account_by_id(account_id)
+        try:
+            import asyncio as _asyncio2, biz_nidaan_notifications as _nnot
+            _asyncio2.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin (new signup)
+        except Exception:
+            pass
 
     # Create review request record, linked to this account
     purchase_id = await nidaan.create_review_request(

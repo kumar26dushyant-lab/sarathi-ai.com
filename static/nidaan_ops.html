@@ -4122,15 +4122,22 @@ function _handleDeepLink(){
     const qt = p.get('qt');
     const task = p.get('task');
     const leave = p.get('leave');
+    const account = p.get('account');
+    const claim = p.get('claim');
     // CRITICAL: strip the deep-link params from the URL immediately so a reload
     // or panel navigation doesn't re-open the same task over and over
     // (the "task keeps popping up" bug). We act on the value we already captured.
-    if (qt || task || leave) {
+    if (qt || task || leave || account || claim) {
       try { history.replaceState({panel:_currentPanel}, '', location.pathname + (location.hash||'')); } catch(e){}
     }
     if (qt && /^\d+$/.test(qt)) {
       setTimeout(()=>{ try{ openQuickTaskDrawer(parseInt(qt,10)); }catch(e){} }, 350);
+    } else if (account && /^\d+$/.test(account)) {
+      // From a signup / new-claim / lead alert → open the subscriber's account.
+      setTimeout(()=>{ try{ openAccountDrawer(parseInt(account,10)); }catch(e){} }, 350);
     } else if (task && /^\d+$/.test(task)) {
+      setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
+    } else if (claim && /^\d+$/.test(claim)) {
       setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
     } else if (leave && /^\d+$/.test(leave)) {
       setTimeout(()=>{ try{ showPanel('tasks'); }catch(e){} }, 350);
@@ -4178,8 +4185,11 @@ function _renderBell(){
   const notifHtml = items.length ? items.map(n=>{
       if (n.event_key==='broadcast') return '';  // shown in the broadcast section
       const unread = !n.read_at;
-      const qtM = String(n.body||'').match(/[?&]qt=(\d+)/);
-      const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()` : '';
+      const _b = String(n.body||'');
+      const qtM = _b.match(/[?&]qt=(\d+)/);
+      const acM = _b.match(/[?&]account=(\d+)/);
+      const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()`
+               : acM ? `openAccountDrawer(${acM[1]});toggleBell()` : '';
       return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
         <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
         <div style="font-size:.76rem;color:rgba(255,255,255,.6);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
