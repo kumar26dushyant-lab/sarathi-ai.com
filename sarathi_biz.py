@@ -857,11 +857,17 @@ async def nidaan_api_reset_password(req: NidaanResetPasswordReq, request: Reques
 
 # ── Google Sign-In / Sign-Up (Nidaan) ────────────────────────────────────────
 
+def _nidaan_google_client_id() -> str:
+    """Nidaan's own Google OAuth client (so the consent screen says 'Nidaan
+    Partner', not 'Sarathi-AI'). Falls back to the shared client if unset."""
+    return os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID", "")
+
+
 @app.get("/nidaan/api/google-client-id")
 async def nidaan_google_client_id(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_id = _nidaan_google_client_id()
     return {"client_id": client_id if client_id else None}
 
 
@@ -871,7 +877,8 @@ async def nidaan_api_google_signin(req: NidaanGoogleReq, request: Request):
     """Sign in existing Nidaan account with Google ID token."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    google_user = await auth.verify_google_id_token(req.credential)
+    google_user = await auth.verify_google_id_token(
+        req.credential, expected_client_id=(os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or None))
     if not google_user:
         return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
     email = google_user["email"]
@@ -910,7 +917,8 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
         raise HTTPException(status_code=404)
     if req.plan not in ("silver", "gold", "platinum"):
         req = req.model_copy(update={"plan": "silver"})  # default to silver for any unknown/free plan
-    google_user = await auth.verify_google_id_token(req.credential)
+    google_user = await auth.verify_google_id_token(
+        req.credential, expected_client_id=(os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or None))
     if not google_user:
         return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
     email = google_user["email"].lower().strip()

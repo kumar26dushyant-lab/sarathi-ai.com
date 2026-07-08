@@ -831,13 +831,16 @@ async def require_superadmin(request: Request) -> dict:
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 
-async def verify_google_id_token(id_token_str: str) -> Optional[dict]:
+async def verify_google_id_token(id_token_str: str, expected_client_id: Optional[str] = None) -> Optional[dict]:
     """Verify Google ID token. Tries fast local JWK verification first
     (sub-millisecond after first cache load); falls back to Google's
     tokeninfo HTTP endpoint only if local verification is unavailable.
+    Pass expected_client_id to verify against a specific OAuth client (e.g.
+    Nidaan's own); defaults to Sarathi's GOOGLE_CLIENT_ID.
     Returns {"email", "name", "picture", "google_sub"} or None on failure."""
-    if not GOOGLE_CLIENT_ID:
-        logger.error("GOOGLE_CLIENT_ID not configured")
+    client_id = expected_client_id or GOOGLE_CLIENT_ID
+    if not client_id:
+        logger.error("Google client id not configured")
         return None
 
     # Fast path: local verification using cached Google JWKs
@@ -849,13 +852,13 @@ async def verify_google_id_token(id_token_str: str) -> Optional[dict]:
         def _verify_local():
             req = g_requests.Request()
             return g_id_token.verify_oauth2_token(
-                id_token_str, req, GOOGLE_CLIENT_ID, clock_skew_in_seconds=10)
+                id_token_str, req, client_id, clock_skew_in_seconds=10)
         idinfo = await asyncio.wait_for(
             asyncio.get_event_loop().run_in_executor(None, _verify_local),
             timeout=4.0,
         )
         # Validate audience
-        if idinfo.get("aud") != GOOGLE_CLIENT_ID:
+        if idinfo.get("aud") != client_id:
             logger.warning("Google token audience mismatch (local): %s", idinfo.get("aud"))
             return None
         if not idinfo.get("email_verified"):
@@ -881,7 +884,7 @@ async def verify_google_id_token(id_token_str: str) -> Optional[dict]:
             logger.warning("Google token verification failed: %d", resp.status_code)
             return None
         data = resp.json()
-        if data.get("aud") != GOOGLE_CLIENT_ID:
+        if data.get("aud") != client_id:
             logger.warning("Google token audience mismatch: %s", data.get("aud"))
             return None
         if data.get("email_verified") != "true":
