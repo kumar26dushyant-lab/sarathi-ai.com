@@ -3690,6 +3690,13 @@ dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT to
   + WhatsApp/email if opted in). Endpoints: subscriber + ops GET/POST
   `…/claims/{id}/messages`. UI: a message thread in BOTH the subscriber claim drawer
   and the ops claim drawer. Live (401-gated).
+- **Stage 4 — server-authoritative entitlement (done, the durable fix):**
+  `/nidaan/api/me` now returns `account_state {type: subscriber|retail|new, active,
+  plan, has_unpaid_lead}`, computed ONCE server-side from ALL sources (subscription,
+  any claim lead/paid, per-claim purchase). Dashboard lock/unlock now uses
+  `me.account_state.active` instead of re-deriving from scattered signals — the root
+  cause of the recurring "paid user locked out" bugs. (Full dual-table DB collapse
+  can still follow, but the entitlement decision is now single-sourced.)
 
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
