@@ -3495,6 +3495,60 @@ async def get_claim_notes(claim_id: int) -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+# ── Subscriber ⇄ ops messaging (per claim) ───────────────────────────────────
+async def list_claim_messages(claim_id: int, limit: int = 200) -> list[dict]:
+    """Full message thread for a claim (both directions), oldest first, with the
+    staff member's name resolved for display."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            """SELECT m.message_id, m.sender_type, m.sender_staff_id, m.content,
+                      m.created_at, m.read_by_subscriber_at, m.read_by_staff_at,
+                      s.name AS staff_name
+               FROM nidaan_messages m
+               LEFT JOIN nidaan_staff s ON s.staff_id = m.sender_staff_id
+               WHERE m.claim_id=? ORDER BY m.message_id ASC LIMIT ?""",
+            (claim_id, limit))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def add_claim_message(claim_id: int, sender_type: str, content: str,
+                            subscriber_id: Optional[int] = None,
+                            staff_id: Optional[int] = None,
+                            source_channel: str = "dashboard") -> int:
+    """Append a message to a claim thread. sender_type is 'subscriber' or 'staff'."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """INSERT INTO nidaan_messages
+                 (claim_id, sender_type, sender_subscriber_id, sender_staff_id,
+                  content, source_channel)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (claim_id, sender_type, subscriber_id, staff_id, content.strip(), source_channel))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def mark_messages_read(claim_id: int, by: str) -> None:
+    """Mark the claim's messages read by 'subscriber' or 'staff'."""
+    col = "read_by_subscriber_at" if by == "subscriber" else "read_by_staff_at"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_messages SET {col}=CURRENT_TIMESTAMP "
+            f"WHERE claim_id=? AND {col} IS NULL", (claim_id,))
+        await conn.commit()
+
+
+async def count_unread_messages_for_subscriber(account_id: int) -> int:
+    """How many staff→subscriber messages are unread across the subscriber's claims."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            """SELECT COUNT(*) FROM nidaan_messages m
+               JOIN nidaan_claims c ON c.claim_id = m.claim_id
+               WHERE c.account_id=? AND m.sender_type='staff'
+                 AND m.read_by_subscriber_at IS NULL""", (account_id,))).fetchone()
+        return row[0] if row else 0
+
+
 # =============================================================================
 #  OPS: FOLLOW-UPS
 # =============================================================================

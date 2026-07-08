@@ -2678,6 +2678,15 @@ async function openClaimDrawer(claimId) {
     <div class="drawer-section">
       <h4>Status History</h4>
       <div class="tl">${tlHtml}</div>
+    </div>
+    <!-- Messages with subscriber -->
+    <div class="drawer-section">
+      <h4>💬 Messages with subscriber</h4>
+      <div id="opsMsgThread_${c.claim_id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">Loading…</div>
+      <div style="display:flex;gap:.5rem">
+        <input id="opsMsgInput_${c.claim_id}" type="text" autocomplete="off" placeholder="Reply to the subscriber…" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff" onkeydown="if(event.key==='Enter')opsSendMessage(${c.claim_id})">
+        <button class="btn btn-primary" onclick="opsSendMessage(${c.claim_id})">Send</button>
+      </div>
     </div>`;
 
   // Load staff for assign dropdown
@@ -2695,6 +2704,8 @@ async function openClaimDrawer(claimId) {
   loadClaimTasks(c.claim_id);
   // Load Quick Task reminders linked to this claim
   loadClaimReminders(c.claim_id);
+  // Load subscriber ⇄ ops message thread
+  opsLoadMessages(c.claim_id);
 
   // Load documents
   try {
@@ -2761,6 +2772,31 @@ async function assignClaim(claimId) {
   } else {
     msgEl.className='msg err'; msgEl.textContent=_extractErr(d,'Failed');
   }
+}
+
+async function opsLoadMessages(claimId){
+  const el = document.getElementById('opsMsgThread_'+claimId); if(!el) return;
+  try {
+    const r = await API('/claims/'+claimId+'/messages');
+    if(!r.ok){ el.innerHTML=''; return; }
+    const msgs = (await r.json()).messages || [];
+    el.innerHTML = msgs.length ? msgs.map(m=>{
+      const staff = m.sender_type==='staff';
+      const who = staff ? (m.staff_name||'You') : 'Subscriber';
+      const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
+      return `<div style="align-self:${staff?'flex-end':'flex-start'};max-width:82%;background:${staff?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${staff?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">${esc(who)} · ${t}</div>
+        <div style="white-space:pre-wrap">${esc(m.content)}</div></div>`;
+    }).join('') : '<div style="color:rgba(255,255,255,.35);text-align:center;padding:.5rem">No messages yet</div>';
+    el.scrollTop = el.scrollHeight;
+  } catch(e){ el.innerHTML=''; }
+}
+async function opsSendMessage(claimId){
+  const inp = document.getElementById('opsMsgInput_'+claimId); if(!inp) return;
+  const content = (inp.value||'').trim(); if(!content) return;
+  inp.value=''; inp.disabled=true;
+  try { await API('/claims/'+claimId+'/messages', {method:'POST', body:JSON.stringify({content})}); await opsLoadMessages(claimId); } catch(e){}
+  inp.disabled=false; inp.focus();
 }
 
 async function addNote(claimId) {

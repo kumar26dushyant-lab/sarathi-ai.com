@@ -971,6 +971,49 @@ async def on_subscriber_signup(account_id: int):
             status="sent", sent_at=now, account_id=account_id)
 
 
+async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, preview: str):
+    """A new message in a claim thread → notify the OTHER party. subscriber→ops
+    pings SA/Admin bells (deep-linked to the account); staff→subscriber reaches the
+    subscriber (dashboard + WhatsApp/email if opted in)."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        claim = await (await conn.execute(
+            "SELECT c.insured_name, c.claim_type, a.owner_name, a.email AS account_email, "
+            "a.phone AS account_phone FROM nidaan_claims c "
+            "LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id WHERE c.claim_id=?",
+            (claim_id,))).fetchone()
+        if not claim:
+            return
+        claim = dict(claim)
+        admins = []
+        if from_type == "subscriber":
+            admins = [r["staff_id"] for r in await (await conn.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+                "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    if from_type == "subscriber":
+        subj = f"💬 Message — {claim.get('owner_name') or claim.get('account_email','')}"
+        body = (f"Re: #{claim_id} {claim.get('insured_name','')}\n"
+                f"\"{(preview or '')[:140]}\"\n\nOpen: /nidaan/ops?account={account_id}")
+        for sid in admins:
+            await _record_notification(
+                event_key="claim.message", priority=PRIORITY_P1,
+                recipient_type=RECIPIENT_STAFF, recipient_id=sid,
+                channel=CHANNEL_DASHBOARD, subject=subj, body=body,
+                status="sent", sent_at=now, claim_id=claim_id, account_id=account_id)
+    else:  # staff → subscriber
+        prefs = await get_subscriber_prefs(account_id)
+        wa_phone = (claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+        await dispatch(
+            event_key="claim.message.sub", priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
+            recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
+            subject="New message from Nidaan on your claim",
+            body=(f"Our team replied on your claim ({claim.get('insured_name','')}):\n\n"
+                  f"\"{(preview or '')[:200]}\"\n\nOpen your dashboard to view & reply."),
+            claim_id=claim_id)
+
+
 async def on_task_assigned(task_id: int):
     """A task was assigned to an associate."""
     task = await ntasks.get_task(task_id)

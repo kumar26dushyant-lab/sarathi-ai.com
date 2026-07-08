@@ -1845,6 +1845,86 @@ async def nidaan_get_claim_docs(claim_id: int, request: Request):
     return {"docs": docs}
 
 
+# ── Subscriber ⇄ ops messaging (per claim) ───────────────────────────────────
+class _NidaanMsgReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=4000)
+
+
+async def _nidaan_claim_owned_by(claim_id: int, account_id: int) -> bool:
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT 1 FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id))).fetchone()
+        return bool(r)
+
+
+@app.get("/nidaan/api/claims/{claim_id}/messages")
+async def nidaan_claim_messages(claim_id: int, request: Request):
+    """Subscriber: message thread with the ops team for one of their claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    if not await _nidaan_claim_owned_by(claim_id, payload["sub"]):
+        raise HTTPException(404, "Claim not found")
+    msgs = await nidaan.list_claim_messages(claim_id)
+    await nidaan.mark_messages_read(claim_id, by="subscriber")
+    return {"messages": msgs}
+
+
+@app.post("/nidaan/api/claims/{claim_id}/messages")
+async def nidaan_claim_message_send(claim_id: int, body: _NidaanMsgReq, request: Request):
+    """Subscriber: send a message to the ops team about their claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    account_id = payload["sub"]
+    if not await _nidaan_claim_owned_by(claim_id, account_id):
+        raise HTTPException(404, "Claim not found")
+    await nidaan.add_claim_message(claim_id, "subscriber", body.content, subscriber_id=account_id)
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "subscriber", body.content))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/messages")
+async def ops_claim_messages(claim_id: int, request: Request):
+    """Ops: message thread with the subscriber for a claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    msgs = await nidaan.list_claim_messages(claim_id)
+    await nidaan.mark_messages_read(claim_id, by="staff")
+    return {"messages": msgs}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/messages")
+async def ops_claim_message_send(claim_id: int, body: _NidaanMsgReq, request: Request):
+    """Ops: reply to a subscriber about their claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    await nidaan.add_claim_message(claim_id, "staff", body.content, staff_id=staff["staff_id"])
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "staff", body.content))
+    except Exception:
+        pass
+    try:
+        await _ops_audit(request, "claim_message", "claim", claim_id, body.content[:80])
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @app.get("/nidaan/api/review/{purchase_id}/documents")
 async def nidaan_get_review_docs(purchase_id: int, request: Request):
     """Customer: fetch documents they uploaded for one of their own ₹499 reviews."""

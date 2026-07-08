@@ -1618,6 +1618,14 @@ async function openClaimDrawer(claim_id) {
     <div class="drawer-section">
       <h4>${isHi ? 'स्थिति इतिहास' : 'Status History'}</h4>
       <div class="timeline">${timeline}</div>
+    </div>
+    <div class="drawer-section">
+      <h4>${isHi ? '💬 हमारी टीम से बात करें' : '💬 Message our team'}</h4>
+      <div id="msgThread" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">${isHi ? 'लोड हो रहा है…' : 'Loading…'}</div>
+      <div style="display:flex;gap:.5rem">
+        <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff;font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
+        <button onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
+      </div>
     </div>`;
 
   // Load existing documents
@@ -1635,6 +1643,39 @@ async function openClaimDrawer(claim_id) {
       }
     }
   } catch(_) {}
+  loadClaimMessages(claim_id);
+}
+
+function _renderClaimMsg(m){
+  const mine = m.sender_type === 'subscriber';
+  const isHi = document.body.classList.contains('hi');
+  const who = mine ? (isHi ? 'आप' : 'You') : (m.staff_name || 'Nidaan');
+  const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
+  return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:82%;background:${mine?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${mine?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
+    <div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">${esc(who)} · ${t}</div>
+    <div style="white-space:pre-wrap">${esc(m.content)}</div></div>`;
+}
+async function loadClaimMessages(claim_id){
+  const el = document.getElementById('msgThread'); if(!el) return;
+  const isHi = document.body.classList.contains('hi');
+  try {
+    const r = await api(`/nidaan/api/claims/${claim_id}/messages`);
+    if(!r || !r.ok){ el.innerHTML=''; return; }
+    const msgs = (await r.json()).messages || [];
+    el.innerHTML = msgs.length ? msgs.map(_renderClaimMsg).join('')
+      : `<div style="color:rgba(255,255,255,.4);text-align:center;padding:.5rem">${isHi ? 'अभी कोई संदेश नहीं। अपने क्लेम के बारे में कुछ भी पूछें।' : 'No messages yet — ask us anything about your claim.'}</div>`;
+    el.scrollTop = el.scrollHeight;
+  } catch(e){ el.innerHTML=''; }
+}
+async function sendClaimMessage(claim_id){
+  const inp = document.getElementById('msgInput'); if(!inp) return;
+  const content = (inp.value||'').trim(); if(!content) return;
+  inp.value=''; inp.disabled=true;
+  try {
+    await api(`/nidaan/api/claims/${claim_id}/messages`, {method:'POST', body: JSON.stringify({content})});
+    await loadClaimMessages(claim_id);
+  } catch(e){}
+  inp.disabled=false; inp.focus();
 }
 
 function previewDrawerDocs() {
