@@ -1280,6 +1280,12 @@ async function loadDashboard() {
           <span class="en">Pay ₹499 above to start your expert review — documents are optional.</span>
           <span class="hi">अपनी विशेषज्ञ समीक्षा शुरू करने के लिए ऊपर ₹499 दें — दस्तावेज़ वैकल्पिक हैं।</span>
         </div>`;
+      // ₹499 (retail) user = minimal dashboard: they CAN start another ₹499 review
+      // and manage their account (Profile/Settings). No "Subscribe to unlock", no CRM.
+      const _nb = document.getElementById('newClaimBtn');
+      if (_nb) _nb.disabled = false;
+      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
+      window._leadUserAccess = true;
     }
     if (!_leadClaim) {
       // Truly unsubscribed with no active review — lock the claims section + pitch plans.
@@ -1706,8 +1712,9 @@ async function openSarathiCRM(btn) {
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 function showTab(id) {
-  // Gate: non-subscribers cannot access tabs marked data-requires-sub
-  if (!_isSubscribed && id !== 'dashboard') {
+  // Gate: non-subscribers cannot access tabs marked data-requires-sub.
+  // EXCEPT active ₹499 (retail) users, who get their account Profile/Settings.
+  if (!_isSubscribed && !window._leadUserAccess && id !== 'dashboard') {
     // Show paywall overlay inside the requested tab panel instead of real content
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
