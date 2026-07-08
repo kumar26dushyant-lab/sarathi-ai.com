@@ -3652,6 +3652,30 @@ dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT to
   active reviews (not just the first), hide completed reviews (ephemeral), brand-new
   choice screen, retire legacy per_claim path (Stage 4).
 
+### 43.15 Identity-first router + superadmin alerts (Jul 8, 2026)
+- **Identity-first login (done):** `_loginSuccess` was applying the endpoint's
+  ₹499/plan intent BEFORE checking account state → same email showed a different
+  dashboard per button + auto-created duplicate claims. Now it checks state first:
+  ANY existing user (subscription / review / claim) lands on THEIR dashboard
+  regardless of which button they clicked; only a brand-new account follows intent.
+  Switching ₹499⇄plan is an explicit action, never a login side-effect.
+- **Switching rules (CONFIRMED, to build as a "Switch plan" flow in Settings):**
+  ₹499→plan: refund ₹499 only if the review is NOT delivered (free-review hole
+  closed) + ≤7 days. plan→₹499: refund current billing cycle only if NO claim
+  registered that cycle. Existing plan cancelled immediately; if pending data →
+  user chooses **Delete** or **Merge into new plan** (retention upsell).
+- **Superadmin alerts + deep-links (done, Item 1):** `on_subscriber_signup` alerts
+  SA/Sub-admin on every new signup (bell + push, deep-linked to the account);
+  `on_lead_filed` now also alerts admins (₹499 lead, docs pending); `on_claim_filed`
+  admin alert deep-links to the account. Notifications carry `?account=`; ops
+  `_handleDeepLink` + bell items open `openAccountDrawer`.
+- **Nidaan Google OAuth:** own client `NIDAAN_GOOGLE_CLIENT_ID` (consent = "Nidaan
+  Partner"); backend verifies via `expected_client_id`. LIVE + confirmed by user.
+- **Remaining backlog:** subscriber↔ops messaging (subscriber dashboard); Switch-plan
+  flow (+ refunds + delete/merge); Stage 3 finish (render ALL active reviews, hide
+  completed, brand-new choice screen); Stage 4 (retire legacy per_claim path);
+  "Get Started Free" → "Choose <Plan>" relabel.
+
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
 - **API integration (two-way sync) — in design**: claim data originates in the
