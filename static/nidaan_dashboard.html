@@ -3,6 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+/* App-shell auth gate — runs in <head> BEFORE the body paints, so a logged-out
+   open never flashes the dashboard. No session → go straight to the login page.
+   Valid session → fall through and render normally. localStorage is synchronous,
+   so this redirect happens before first paint (no flicker). */
+(function () {
+  try {
+    if (!localStorage.getItem('nidaan_token')) {
+      document.documentElement.style.display = 'none';  // guarantee no paint
+      location.replace('/nidaan/start');
+    }
+  } catch (e) { /* private mode etc. — body-level guard still covers it */ }
+})();
+</script>
 <title>Dashboard — Nidaan Partner</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
