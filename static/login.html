@@ -4,16 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>
-/* If a real session COOKIE is present, go straight to the dashboard. We gate on
-   the cookie (not localStorage) because the server authorizes /dashboard by the
-   cookie — checking localStorage here could bounce a stale token into a loop. */
+/* Auto-forward already-signed-in users to the dashboard — but only after the
+   SERVER confirms the session, so a stale/expired token can never cause a
+   /login <-> /dashboard redirect loop. Logged-out users (no token at all) skip
+   the network call and see the form instantly. */
 (function () {
   try {
-    if (/(?:^|;\s*)sarathi_token=[^;]+/.test(document.cookie)) {
-      document.documentElement.style.display = 'none';
-      location.replace('/dashboard');
-    }
-  } catch (e) {}
+    var ls = localStorage.getItem('sarathi_token');
+    var ck = (document.cookie.match(/(?:^|;\s*)sarathi_token=([^;]+)/) || [])[1];
+    var tok = ls || (ck && decodeURIComponent(ck));
+    if (!tok) return;  // clearly logged out → show login now
+    document.documentElement.style.display = 'none';
+    fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + tok }, credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.ok) { location.replace('/dashboard'); return; }
+        // stale token → clear it and show the login form
+        try { localStorage.removeItem('sarathi_token'); document.cookie = 'sarathi_token=;path=/;max-age=0'; } catch (e) {}
+        document.documentElement.style.display = '';
+      })
+      .catch(function () { document.documentElement.style.display = ''; });
+  } catch (e) { document.documentElement.style.display = ''; }
 })();
 </script>
 <title>Sign in — Sarathi-AI</title>
