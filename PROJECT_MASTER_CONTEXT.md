@@ -3603,6 +3603,35 @@ Nidaan up + upgrade both to httpOnly.
   Step 5 (httpOnly cookies for both — the security upgrade). Then WhatsApp audit +
   brains separation (bounce-to-self, template registry).
 
+### 43.14 ₹499 subscriber-flow rebuild — in progress (Jul 8, 2026)
+User very frustrated: ₹499 flow looped, asked for documents, flickered through
+sign-in→dashboard→form, couldn't reach sign-in. Agreed model: **₹499 = ephemeral
+transactional** (multiple concurrent reviews allowed; completed ones hidden from
+user, kept at backend; returning user = fresh start; needs email+mobile; minimal
+dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT touch).
+- **Pay anytime (done):** removed BOTH document gates — `show_pay_gate` now true for
+  any `unpaid_lead`, AND the hard 409 "upload all required documents first" on
+  `POST /nidaan/api/claims/{id}/pay` (the real blocker — customers literally could
+  not pay). Docs optional everywhere; copy reframed.
+- **Lead-user loop (done):** dashboard no longer shows the lock overlay (whose ₹499
+  button linked back to the form) for lead users; banner points to the visible Pay
+  card.
+- **Redirect chain killed (done):** `nidaan_start` only auto-forwards on explicit
+  `?plan` intent (plain "Login" reaches sign-in + can switch account); dashboard no
+  longer bounces no-claim users to the form. No page auto-redirects on state.
+- **Login overlay (done):** `showNBusy` moved into `_loginSuccess` + `_googleDispatch`
+  so the spinner covers Google + all post-login routing latency.
+- **Diagnosis:** the ₹499 form creates ONE clean `nidaan_claims` lead (no purchase);
+  `nidaan_per_claim_purchase` is a legacy parallel path. Root of the mess = scattered
+  client-side redirects (no single router) + `localStorage`/Bearer auth (server can't
+  route page loads without a cookie).
+- **Next (the "solve forever" = Steps 3+5 combined):** Nidaan session **cookie** →
+  **server-side router** (one 302 before paint: subscriber→full dash, active ₹499→
+  minimal dash, else→login/choice) + dedicated `/nidaan/login` + **silent refresh**
+  + **httpOnly** hardening. Then retire the legacy per_claim path (Stage 4).
+- **"Get Started Free" mislabel:** those are the PAID plan buttons (→ `?plan=`); rename
+  to "Choose <Plan>" to stop the confusion (screenshot-3).
+
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
 - **API integration (two-way sync) — in design**: claim data originates in the
