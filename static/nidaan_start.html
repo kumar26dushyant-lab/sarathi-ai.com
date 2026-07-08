@@ -121,6 +121,11 @@ input::placeholder{color:rgba(255,255,255,.25)}
 </style>
 </head>
 <body class="en">
+<div id="nbusy" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(6,13,26,.75);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:1rem">
+  <div style="width:44px;height:44px;border:4px solid rgba(34,211,238,.25);border-top-color:#22d3ee;border-radius:50%;animation:nspin .8s linear infinite"></div>
+  <div id="nbusyText" style="font-weight:600;color:#22d3ee;font-size:.95rem">Signing you in…</div>
+</div>
+<style>@keyframes nspin{to{transform:rotate(360deg)}}</style>
 
 <nav>
   <a href="/" class="nav-brand">
@@ -534,10 +539,14 @@ async function sendOTP(isResend) {
   }
 }
 
+function showNBusy(t){ document.getElementById('nbusyText').textContent = t || (L('Please wait…','कृपया प्रतीक्षा करें…')); document.getElementById('nbusy').style.display='flex'; }
+function hideNBusy(){ document.getElementById('nbusy').style.display='none'; }
+
 async function verifyOTP() {
   clearMsg();
   const otp = document.getElementById('otpInput').value.trim();
   if (!otp || otp.length < 4) { showMsg('msg2a','err',L('Enter the OTP from your email.','अपने ईमेल से OTP दर्ज करें।')); return; }
+  showNBusy(L('Signing you in…','साइन इन किया जा रहा है…'));
   try {
     const res = await fetch('/nidaan/api/verify-email-otp', {
       method: 'POST',
@@ -546,8 +555,9 @@ async function verifyOTP() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, L('Invalid OTP','अमान्य OTP')));
-    _loginSuccess(data);
+    _loginSuccess(data);   // keep the overlay up through the redirect
   } catch(e) {
+    hideNBusy();
     showMsg('msg2a','err', e.message);
   }
 }
@@ -577,6 +587,7 @@ async function doPasswordLogin() {
   clearMsg();
   const pwd = document.getElementById('pwdInput').value;
   if (!pwd) { showMsg('msg2a','err',L('Enter your password.','अपना पासवर्ड दर्ज करें।')); return; }
+  showNBusy(L('Signing you in…','साइन इन किया जा रहा है…'));
   try {
     const res = await fetch('/nidaan/api/login', {
       method: 'POST',
@@ -585,8 +596,9 @@ async function doPasswordLogin() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, L('Invalid password','अमान्य पासवर्ड')));
-    _loginSuccess(data);
+    _loginSuccess(data);   // keep the overlay up through the redirect
   } catch(e) {
+    hideNBusy();
     showMsg('msg2a','err', e.message);
   }
 }
@@ -1061,19 +1073,23 @@ async function _prefillClaimForm() {
           </select>
         </div>
         <div class="field"><label><span class="en">Insurer / Company Name</span><span class="hi">बीमा कंपनी का नाम</span></label>
-          <input type="text" id="rv_insurer_name" list="insurerList" placeholder="Select or type…" autocomplete="off">
-          <datalist id="insurerList">
-            <option value="LIC of India"></option><option value="HDFC Life"></option><option value="ICICI Prudential Life"></option>
-            <option value="SBI Life"></option><option value="Max Life"></option><option value="Bajaj Allianz Life"></option>
-            <option value="Kotak Life"></option><option value="Tata AIA Life"></option><option value="PNB MetLife"></option>
-            <option value="Aditya Birla Sun Life"></option><option value="Star Health"></option><option value="HDFC ERGO"></option>
-            <option value="ICICI Lombard"></option><option value="Bajaj Allianz General"></option><option value="Care Health"></option>
-            <option value="Niva Bupa (Max Bupa)"></option><option value="New India Assurance"></option><option value="Tata AIG"></option>
-            <option value="Reliance General"></option><option value="Cholamandalam MS"></option><option value="SBI General"></option>
-            <option value="National Insurance"></option><option value="Oriental Insurance"></option><option value="United India Insurance"></option>
-            <option value="ManipalCigna"></option><option value="Digit Insurance"></option><option value="Acko"></option>
-            <option value="Future Generali"></option><option value="Liberty General"></option><option value="Other"></option>
-          </datalist>
+          <select id="rv_insurer_pick" onchange="_onRvInsurerPick()">
+            <option value="">-- Select insurer --</option>
+            <option>LIC of India</option><option>HDFC Life</option><option>ICICI Prudential Life</option>
+            <option>SBI Life</option><option>Max Life</option><option>Bajaj Allianz Life</option>
+            <option>Kotak Life</option><option>Tata AIA Life</option><option>PNB MetLife</option>
+            <option>Aditya Birla Sun Life</option><option>Star Health</option><option>HDFC ERGO</option>
+            <option>ICICI Lombard</option><option>Bajaj Allianz General</option><option>Care Health</option>
+            <option>Niva Bupa (Max Bupa)</option><option>New India Assurance</option><option>Tata AIG</option>
+            <option>Reliance General</option><option>Cholamandalam MS</option><option>SBI General</option>
+            <option>National Insurance</option><option>Oriental Insurance</option><option>United India Insurance</option>
+            <option>ManipalCigna</option><option>Digit Insurance</option><option>Acko</option>
+            <option>Future Generali</option><option>Liberty General</option>
+            <option value="__other">Other (type name)</option>
+          </select>
+          <input type="text" id="rv_insurer_other" placeholder="Type insurer name" autocomplete="off"
+                 style="display:none;margin-top:.45rem" oninput="document.getElementById('rv_insurer_name').value=this.value">
+          <input type="hidden" id="rv_insurer_name">
         </div>
       </div>
       <div class="rev-row2">
@@ -1187,6 +1203,17 @@ function onRevDocPick(key, input) {
 function revRefreshLang() {
   const sel = document.getElementById('rv_claim_type');
   if (sel && sel.value) loadDocChecklist();
+}
+
+// Insurer picker: native <select> (reliable on mobile) + "Other" free-text,
+// syncing the hidden #rv_insurer_name that submitFreeClaim() reads.
+function _onRvInsurerPick() {
+  const s = document.getElementById('rv_insurer_pick');
+  const t = document.getElementById('rv_insurer_other');
+  const h = document.getElementById('rv_insurer_name');
+  if (!s || !t || !h) return;
+  if (s.value === '__other') { t.style.display = ''; t.focus(); h.value = t.value.trim(); }
+  else { t.style.display = 'none'; h.value = s.value; }
 }
 
 async function submitFreeClaim() {

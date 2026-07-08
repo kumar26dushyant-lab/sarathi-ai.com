@@ -864,19 +864,23 @@
         <div class="field">
           <label class="en">Insurer Name</label>
           <label class="hi">बीमाकर्ता का नाम</label>
-          <input type="text" id="insurerName" list="dashInsurerList" placeholder="Select or type…" autocomplete="off">
-          <datalist id="dashInsurerList">
-            <option value="LIC of India"></option><option value="HDFC Life"></option><option value="ICICI Prudential Life"></option>
-            <option value="SBI Life"></option><option value="Max Life"></option><option value="Bajaj Allianz Life"></option>
-            <option value="Kotak Life"></option><option value="Tata AIA Life"></option><option value="PNB MetLife"></option>
-            <option value="Aditya Birla Sun Life"></option><option value="Star Health"></option><option value="HDFC ERGO"></option>
-            <option value="ICICI Lombard"></option><option value="Bajaj Allianz General"></option><option value="Care Health"></option>
-            <option value="Niva Bupa (Max Bupa)"></option><option value="New India Assurance"></option><option value="Tata AIG"></option>
-            <option value="Reliance General"></option><option value="Cholamandalam MS"></option><option value="SBI General"></option>
-            <option value="National Insurance"></option><option value="Oriental Insurance"></option><option value="United India Insurance"></option>
-            <option value="ManipalCigna"></option><option value="Digit Insurance"></option><option value="Acko"></option>
-            <option value="Future Generali"></option><option value="Liberty General"></option><option value="Other"></option>
-          </datalist>
+          <select id="insurerPick" onchange="_onInsurerPick()">
+            <option value="">-- Select insurer --</option>
+            <option>LIC of India</option><option>HDFC Life</option><option>ICICI Prudential Life</option>
+            <option>SBI Life</option><option>Max Life</option><option>Bajaj Allianz Life</option>
+            <option>Kotak Life</option><option>Tata AIA Life</option><option>PNB MetLife</option>
+            <option>Aditya Birla Sun Life</option><option>Star Health</option><option>HDFC ERGO</option>
+            <option>ICICI Lombard</option><option>Bajaj Allianz General</option><option>Care Health</option>
+            <option>Niva Bupa (Max Bupa)</option><option>New India Assurance</option><option>Tata AIG</option>
+            <option>Reliance General</option><option>Cholamandalam MS</option><option>SBI General</option>
+            <option>National Insurance</option><option>Oriental Insurance</option><option>United India Insurance</option>
+            <option>ManipalCigna</option><option>Digit Insurance</option><option>Acko</option>
+            <option>Future Generali</option><option>Liberty General</option>
+            <option value="__other">Other (type name)</option>
+          </select>
+          <input type="text" id="insurerOther" placeholder="Type insurer name" autocomplete="off"
+                 style="display:none;margin-top:.45rem" oninput="document.getElementById('insurerName').value=this.value">
+          <input type="hidden" id="insurerName">
         </div>
       </div>
       <div class="row2">
@@ -1385,6 +1389,17 @@ function showClaimDocList() {
   ).join('');
 }
 
+// Insurer picker: native <select> (reliable on mobile) + "Other" free-text.
+// Keeps the hidden #insurerName in sync — that's what submitClaim() reads.
+function _onInsurerPick() {
+  const s = document.getElementById('insurerPick');
+  const t = document.getElementById('insurerOther');
+  const h = document.getElementById('insurerName');
+  if (!s || !t || !h) return;
+  if (s.value === '__other') { t.style.display = ''; t.focus(); h.value = t.value.trim(); }
+  else { t.style.display = 'none'; h.value = s.value; }
+}
+
 async function submitClaim(e) {
   e.preventDefault();
   const btn = document.getElementById('claimSubmitBtn');
@@ -1427,6 +1442,8 @@ async function submitClaim(e) {
     const isHi = document.body.classList.contains('hi');
     msg.textContent = isHi ? `क्लेम #${data.claim_id} सफलतापूर्वक दर्ज हुआ!` : `Claim #${data.claim_id} submitted successfully!`;
     document.getElementById('claimForm').reset();
+    const _io = document.getElementById('insurerOther'); if (_io) _io.style.display = 'none';
+    const _in = document.getElementById('insurerName'); if (_in) _in.value = '';
     setTimeout(() => { closeModal(); loadDashboard(); }, 1500);
   } catch(err) {
     msg.className = 'msg err';
