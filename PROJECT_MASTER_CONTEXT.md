@@ -3631,6 +3631,26 @@ dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT to
   + **httpOnly** hardening. Then retire the legacy per_claim path (Stage 4).
 - **"Get Started Free" mislabel:** those are the PAID plan buttons (→ `?plan=`); rename
   to "Choose <Plan>" to stop the confusion (screenshot-3).
+- **Stuck overlay (fixed):** the "Signing you in…" overlay stayed on the new-user
+  claim form (funnel reveals it on the same page, no navigation) — `hideNBusy()` now
+  runs in `enterClaimForm()`.
+- **Step 5 foundation (done):** Nidaan session now also in a SameSite=Lax cookie —
+  set on login (`_loginSuccess`), auto-migrated from localStorage on dashboard load
+  (no re-login), cleared on logout. Prereq for server-side routing. NOTE: Nidaan
+  tokens last **30 days**, so Step 3 (silent refresh) is low-value for Nidaan; the
+  server-side gate + httpOnly flip waits until active users have migrated the cookie.
+- **Nidaan Google OAuth (done, Jul 8):** Nidaan now uses its OWN client
+  `NIDAAN_GOOGLE_CLIENT_ID` (env, in biz.env) so the consent screen says "Nidaan
+  Partner" not "Sarathi-AI". `verify_google_id_token(…, expected_client_id=)` added;
+  Nidaan endpoints pass the Nidaan id (fallback to shared `GOOGLE_CLIENT_ID` if unset).
+  Sarathi unchanged. (User must finish the OAuth consent-screen branding + add
+  nidaanpartner.com origin in that Google Cloud project.)
+- **Minimal ₹499 dashboard (Stage 3, started):** a ₹499 lead user's raise-claim button
+  is enabled ("start another ₹499 review", multiple concurrent) and Profile/Settings
+  are unlocked (via `window._leadUserAccess`) — no more "Subscribe to unlock" on the
+  ₹499 dashboard. Subscribers + brand-new users unchanged. Still to do: render ALL
+  active reviews (not just the first), hide completed reviews (ephemeral), brand-new
+  choice screen, retire legacy per_claim path (Stage 4).
 
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
