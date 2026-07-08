@@ -1045,21 +1045,10 @@ async function loadDashboard() {
   if (me.status === 'deletion_pending') { try { _showDeletionPending(''); } catch (e) {} }
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
 
-  // Value-first: a user with no subscription AND no claim/review shouldn't see
-  // the subscribe/₹499 gate — send them into the claim funnel to start a free
-  // review. (Exempt the plan-card path, which explicitly wants the subscribe modal.)
-  {
-    const _pc = me.per_claim;
-    const _hasReview = !!(_pc && ((_pc.purchased > 0) ||
-        (Array.isArray(_pc.pending) && _pc.pending.length) ||
-        (Array.isArray(_pc.history) && _pc.history.length)));
-    const _wantsSubscribe = new URLSearchParams(location.search).get('subscribe');
-    if (!me.subscription && (!claimsData.claims || claimsData.claims.length === 0)
-        && !_hasReview && !_wantsSubscribe) {
-      window.location.replace('/nidaan/start#get-reviewed');
-      return;
-    }
-  }
+  // A brand-new user (no subscription, no claim) is NOT bounced to the form
+  // anymore — that was the start→dashboard→form redirect chain that flickered.
+  // They render right here on the dashboard and choose explicitly: "Get a single
+  // review ₹499" or "Subscribe". No page ever auto-redirects to another on state.
 
   // ₹499 funnel: if any claim is still a free unpaid lead, show its document
   // checklist + pay-gate card at the top of the dashboard. Independent of the

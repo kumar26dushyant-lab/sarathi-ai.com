@@ -927,14 +927,17 @@ async function _handleGoogleSignup(response) {
   } catch(e) { hideNBusy(); showMsg('msg2b','err', e.message); }
 }
 
-// ── Auto-detect if already logged in ─────────────────────────────────────────
-// Don't auto-redirect if arriving on #get-reviewed. CRITICAL: preserve the
-// ?plan intent so a logged-in user clicking a plan lands on the subscribe modal
-// (?subscribe=<plan>) — NOT bounced into the ₹499 claim/documents funnel.
-if (localStorage.getItem('nidaan_token') &&
-    !((location.hash || '').startsWith('#get-reviewed') || (location.hash || '').startsWith('#review-section'))) {
+// ── Auto-forward ONLY on an explicit plan intent ─────────────────────────────
+// A logged-in user who clicked a PLAN (→ ?plan=) is forwarded to subscribe
+// checkout. Everyone else — plain "Login", or #get-reviewed — STAYS here so they
+// actually reach the sign-in form / claim funnel. This removes the old
+// start→dashboard→form redirect chain that caused the flicker and never let the
+// user land on sign-in. (Server-side routing + silent refresh come next.)
+{
   const _p0 = new URLSearchParams(location.search).get('plan');
-  window.location.replace('/nidaan/dashboard' + (_p0 ? ('?subscribe=' + encodeURIComponent(_p0)) : ''));
+  if (localStorage.getItem('nidaan_token') && _p0) {
+    window.location.replace('/nidaan/dashboard?subscribe=' + encodeURIComponent(_p0));
+  }
 }
 
 // ── Load Google GSI SDK ───────────────────────────────────────────────────────
