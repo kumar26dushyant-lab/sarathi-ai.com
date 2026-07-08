@@ -802,14 +802,15 @@ async function _loginSuccess(data) {
     document.cookie = 'nidaan_token=' + token + ';path=/;max-age=2592000;SameSite=Lax' +
       (location.protocol === 'https:' ? ';Secure' : '');
   } catch (e) {}
-  // Free-claim funnel: don't bounce to dashboard — reveal the claim form right here.
-  if (_funnelMode) { enterClaimForm(); return; }
-  // Came from a plan card → dashboard + open subscribe modal.
-  if (_plan) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
-  // Otherwise route by account state:
-  //   • active subscription → clean dashboard
-  //   • a claim/review already in flight → dashboard (shows it)
-  //   • brand-new / nothing yet → value-first claim funnel (collect info + docs)
+  // ── IDENTITY-FIRST router ──────────────────────────────────────────────────
+  // Route by the ACCOUNT's real state, NOT by which button the user clicked. An
+  // existing user (any subscription / any review / any claim) ALWAYS lands on
+  // THEIR own dashboard — the endpoint's ₹499/plan intent is ignored, so a user
+  // can never get a "different dashboard per endpoint" or accidentally create a
+  // duplicate claim. Only a brand-new account follows the button's intent.
+  // (Switching ₹499 ⇄ plan is a deliberate action with its own cancel/refund
+  //  rules — never an implicit side-effect of clicking a login button.)
+  let isExisting = true;  // safe default: on any error, go to the dashboard (never auto-create)
   try {
     const auth = { 'Authorization': 'Bearer ' + token };
     const [meR, clR] = await Promise.all([
@@ -823,13 +824,17 @@ async function _loginSuccess(data) {
     const hasReview = !!(pc && ((pc.purchased > 0) ||
         (Array.isArray(pc.pending) && pc.pending.length) ||
         (Array.isArray(pc.history) && pc.history.length)));
-    if (!hasSub && claims.length === 0 && !hasReview) {
-      _funnelMode = true;
-      enterClaimForm();   // first-timer → straight into the claim funnel
-      return;
-    }
-  } catch (e) { /* fall through to dashboard */ }
-  window.location.href = '/nidaan/dashboard';
+    isExisting = hasSub || hasReview || claims.length > 0;
+  } catch (e) { isExisting = true; }
+
+  if (isExisting) {
+    window.location.href = '/nidaan/dashboard';   // their real dashboard, regardless of endpoint
+    return;
+  }
+  // Brand-new account → honour the intent they arrived with.
+  if (_plan) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
+  _funnelMode = true;
+  enterClaimForm();   // first-timer with no plan intent → start their first ₹499 review
 }
 
 // ── Google Sign-In / Sign-Up ──────────────────────────────────────────────────
