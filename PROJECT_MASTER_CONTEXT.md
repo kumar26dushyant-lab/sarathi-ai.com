@@ -3589,8 +3589,19 @@ Nidaan up + upgrade both to httpOnly.
   `/login` verifies the session via `/api/auth/me` before auto-forwarding, and
   the dashboard gate/login gate agree on the cookie. Nidaan `/nidaan/start`
   already has a Home link. Verified live (302/200/401 chain).
-- **Next:** Step 4 (SW auto-update toast) → Step 3 (Nidaan silent refresh, mirror
-  Sarathi) → Step 5 (httpOnly cookies for both). Then the WhatsApp audit + brains.
+- **Step 4 (done):** auto-update toast — when a freshly-deployed SW takes control
+  (guarded vs first-install via `controllerchange` + `_hadCtrl`), a one-tap
+  "🔄 New version — Update" toast reloads to latest. Non-disruptive. Added to
+  Nidaan ops, Nidaan dashboard, Sarathi dashboard (all SWs already skipWaiting).
+- **Two fixes shipped alongside (Jul 8):** (a) insurer field on the Nidaan
+  dashboard claim form + ₹499 review form was an `<input list>` datalist that
+  shows no tappable dropdown on mobile → replaced with a native `<select>` (30
+  insurers) + "Other" free-text, syncing the same hidden input the forms submit;
+  (b) login screens (Sarathi `/login` + Nidaan `/nidaan/start`) now show a
+  blocking "Signing you in…" spinner overlay during OTP/password/Google latency.
+- **Next:** Step 3 (Nidaan silent refresh, mirror Sarathi's refresh-token flow) →
+  Step 5 (httpOnly cookies for both — the security upgrade). Then WhatsApp audit +
+  brains separation (bounce-to-self, template registry).
 
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
