@@ -1268,36 +1268,42 @@ async function loadDashboard() {
     else if (upgSec) upgSec.style.display = 'none';
   } else {
     _isSubscribed = false;
-    // Mark gated tabs visually with lock icon
     document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
-    if (_leadClaim) {
-      // Free-lead user mid-funnel: keep it on-message — the pay card above is the
-      // CTA. Payment is available now; documents are optional.
+    // A ₹499 (retail) user is "active" if they have ANY review — whether it's a
+    // lead awaiting payment OR a PAID review in progress. (Bug fixed: paying used
+    // to flip the claim off 'unpaid_lead', which dropped the user into the locked
+    // "subscribe" state and hid their own paid claim.)
+    const _hasAnyClaim = (claimsData.claims || []).length > 0;
+    if (_hasAnyClaim) {
       banner.className = 'sub-banner sub-active';
-      banner.innerHTML = `
+      banner.innerHTML = _leadClaim ? `
         <div class="sub-banner-text">
           <strong class="en">Your claim is in 📋</strong><strong class="hi">आपका क्लेम दर्ज है 📋</strong>
           <span class="en">Pay ₹499 above to start your expert review — documents are optional.</span>
           <span class="hi">अपनी विशेषज्ञ समीक्षा शुरू करने के लिए ऊपर ₹499 दें — दस्तावेज़ वैकल्पिक हैं।</span>
+        </div>` : `
+        <div class="sub-banner-text">
+          <strong class="en">Your review is in progress ⚖️</strong><strong class="hi">आपकी समीक्षा जारी है ⚖️</strong>
+          <span class="en">Our experts are on your case — report within 24–48 business hours, here and on WhatsApp.</span>
+          <span class="hi">हमारे विशेषज्ञ आपके केस पर काम कर रहे हैं — रिपोर्ट 24–48 कार्य-घंटों में, यहाँ और WhatsApp पर।</span>
         </div>`;
-      // ₹499 (retail) user = minimal dashboard: they CAN start another ₹499 review
-      // and manage their account (Profile/Settings). No "Subscribe to unlock", no CRM.
+      // Minimal ₹499 dashboard: claims visible, raise-another-review, Profile/Settings.
       const _nb = document.getElementById('newClaimBtn');
       if (_nb) _nb.disabled = false;
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
       window._leadUserAccess = true;
-    }
-    if (!_leadClaim) {
-      // Truly unsubscribed with no active review — lock the claims section + pitch plans.
+      lockOverlay.style.display = 'none';
+      claimCard.classList.remove('locked-section');
+      claimCard.style.pointerEvents = '';
+      const _st = document.querySelector('.stats');
+      if (_st) { _st.style.opacity = ''; _st.style.pointerEvents = ''; }
+    } else {
+      // Brand-new: no subscription AND no claim → subscribe / ₹499 pitch.
       lockOverlay.style.display = 'flex';
       claimCard.style.minHeight = '220px';
       claimCard.classList.add('locked-section');
       document.querySelector('.stats').style.opacity = '.45';
       document.querySelector('.stats').style.pointerEvents = 'none';
-    } else {
-      // Lead user mid-review: the pay card above is the only CTA — no lock overlay,
-      // no "get reviewed → form" button that would loop them back to the form.
-      lockOverlay.style.display = 'none';
     }
   }
 
