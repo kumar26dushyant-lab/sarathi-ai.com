@@ -1327,7 +1327,9 @@ async function loadDashboard() {
       <td style="text-transform:capitalize">${esc(c.claim_type)}</td>
       <td>${esc(c.insurer_name||'—')}</td>
       <td>${c.created_at ? c.created_at.split('T')[0] : '—'}</td>
-      <td>${pillHtml(c.status)}</td>
+      <td>${c.payment_status === 'unpaid_lead'
+        ? `<button onclick="event.stopPropagation();payClaim(${c.claim_id})" style="background:#fcd34d;color:#1c1917;border:none;border-radius:6px;padding:.3rem .7rem;font-weight:800;font-size:.74rem;cursor:pointer;white-space:nowrap">Pay ₹499</button>`
+        : pillHtml(c.status)}</td>
     </tr>`).join('');
   // Phase 4: show WhatsApp opt-in card for subscribed/per-claim users
   if (_isSubscribed) loadWaPrefs();

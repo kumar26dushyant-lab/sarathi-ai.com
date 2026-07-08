@@ -3712,5 +3712,89 @@ dashboard + Settings). **Silver/Gold/Platinum = permanent** (works — do NOT to
 
 ---
 
+## 44. WHERE WE ARE — NIDAANPARTNER SUBSCRIBER + ₹499 FLOW (CONSOLIDATED STATE, Jul 8–9, 2026)
+
+**One-paragraph summary.** A multi-session rebuild fixed the NidaanPartner subscriber
+experience end-to-end: login is now **identity-first** (same email → same dashboard
+from any button, no duplicate claims), **₹499 is payable anytime** (all document gates
+removed), paying no longer locks the dashboard, entitlement is **server-authoritative**
+(one source of truth), **subscriber↔ops messaging** works per claim, **superadmin gets
+deep-linked alerts** on signup/claim/lead, and **Nidaan has its own Google branding**.
+The PWA robustness track (installable apps, no-flicker gates, login-first landing,
+auto-update) is done for all three apps except the httpOnly cookie flip (staged).
+
+### 44.1 The two products (the core mental model — DO NOT conflate)
+- **₹499 one-time review = ephemeral / transactional.** Multiple concurrent reviews
+  allowed; completed reviews drop out of the user's view (retained at backend); a
+  returning user (months later) starts fresh. Minimal dashboard = active review(s) +
+  Settings. Needs email + mobile.
+- **Silver / Gold / Platinum = permanent relationship.** Full persistent dashboard +
+  history. **This flow works — do NOT touch it.**
+- **Identity, not endpoint, decides everything.** `/nidaan/api/me.account_state`
+  (`type: subscriber|retail|new`, `active`, `plan`, `has_unpaid_lead`) is the single
+  source of truth, computed server-side from subscription + any claim + per-claim
+  purchase. Frontend NEVER re-derives entitlement.
+
+### 44.2 Switching rules (CONFIRMED with the user)
+- **₹499 → plan:** refund the ₹499 **only if the review is NOT delivered** (free-review
+  hole closed) **and ≤ 7 days**; then subscribe. >7d or delivered → no refund, subscribe
+  as new.
+- **plan → ₹499:** refund the **current billing cycle only if NO claim was registered
+  that cycle**; if a claim was registered → cancel, no refund for that cycle.
+- **On any switch:** cancel the old plan immediately; if pending data exists the user
+  chooses **Delete** or **Merge into the new plan** (retention upsell).
+
+### 44.3 DONE this session (all live)
+Identity-first login · pay-₹499-anytime (both doc gates removed) · post-payment lock
+fixed · **server-authoritative entitlement (`account_state`)** · subscriber↔ops
+messaging (both drawers + notifications) · superadmin alerts (signup/claim/lead) +
+`?account=` deep-links → account drawer · Nidaan Google OAuth (`NIDAAN_GOOGLE_CLIENT_ID`)
+· minimal ₹499 dashboard (raise-another-review + Settings, no "Subscribe to unlock") ·
+redirect-chain + stuck-overlay killed · "Get Started Free" → "Choose <Plan>" · Nidaan
+session cookie (Step 5 foundation) · PWA Steps 1/2/4 (no-flicker gate, dedicated
+`/login` + login-first landing, auto-update toast).
+
+### 44.4 Key mechanisms / where things live
+- **Router:** `_loginSuccess` (static/nidaan_start.html) — identity-first; only
+  brand-new accounts follow the button's `?plan`/`#get-reviewed` intent.
+- **Entitlement:** `/nidaan/api/me` → `account_state`; dashboard gate uses
+  `me.account_state.active`.
+- **Messaging:** `nidaan_messages` table; biz_nidaan `list/add_claim_message`,
+  `on_new_claim_message`; endpoints `…/claims/{id}/messages` (subscriber + ops); threads
+  in both claim drawers.
+- **Alerts:** biz_nidaan_notifications `on_subscriber_signup`, `on_lead_filed` (admin
+  block), `on_claim_filed`; deep-link `?account=` handled by ops `_handleDeepLink` + bell.
+- **Refund infra (EXISTS + works):** `check_refund_eligibility`, `create_refund_row`,
+  `issue_razorpay_refund`, `update_refund_status`; used by `/nidaan/api/subscribe/cancel`
+  (Policy A: refund within 7 days AND zero claims — this IS the plan→₹499 path). Settings
+  already has **Cancel Subscription** + `switchPlan()` between plans.
+- **Auth:** Nidaan JWT (30-day) in localStorage (Bearer) + a `nidaan_token` cookie
+  (client-set, migrates existing users on load). Server-side routing + httpOnly = staged.
+
+### 44.5 Remaining backlog (well-specified; mostly money/data-sensitive)
+1. **₹499-refund-on-upgrade (₹499→plan):** cancel the paid ₹499 claim + refund via the
+   EXISTING `issue_razorpay_refund` **iff** review not delivered (`review_outcome` null)
+   AND `paid_at` ≤ 7 days; record in `nidaan_refunds`. **Build as a focused, test-with-a-
+   real-transaction effort — do NOT ship blind.**
+2. **Delete/Merge data choice** on cancel/switch (retention upsell) — surface in the
+   Cancel Subscription flow.
+3. **Render ALL active ₹499 reviews** at once (today the pay card shows only the first
+   `unpaid_lead`; the claims table shows the rest). Add a "Pay ₹499" action to unpaid
+   rows.
+4. **Brand-new choice screen** polish (lock overlay already offers View Plans / Get a
+   single review ₹499).
+5. **Step 5 finish:** server-side routing + httpOnly cookie flip (after cookie migration).
+6. **Stage-4 DB collapse (optional):** fully retire `nidaan_per_claim_purchase`; the
+   entitlement decision is already single-sourced, so this is cleanup not urgency.
+
+### 44.6 How to build #1 safely when ready
+Endpoint `POST /nidaan/api/switch/499-to-plan {plan, data_choice}`: find the account's
+paid ₹499 claim(s); for each eligible (not delivered, ≤7d) → `create_refund_row` +
+`issue_razorpay_refund(payment_id, amount_paise=49900, …)` + `update_refund_status`;
+mark claim cancelled (or merge per `data_choice`); then the client opens the subscribe
+modal for `plan`. Verify on one real ₹499 payment before enabling for all.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
