@@ -3574,6 +3574,24 @@ Large multi-session build turning the ops portal (`static/nidaan_ops.html`) into
   signed→200, unsigned/badsig/expired→403. Data isolation on the JSON APIs was
   already correct (every subscriber read filters by `account_id`).
 
+### 43.13 PWA robustness (Play-Store-grade) — Steps 1–2 done (Jul 8, 2026)
+Goal (agreed): all three apps behave like store apps — no flicker, land on login
+when logged out (with a Home button) / dashboard when logged in, soft session
+timeout, auto-update, managed cookies. 5-step plan; **Sarathi is already ahead**
+(has refresh-token silent-refresh, client cookie, CSRF), so 3 & 5 mostly = bring
+Nidaan up + upgrade both to httpOnly.
+- **Step 1 (done):** no-flicker pre-paint `<head>` auth gate on Nidaan dashboard —
+  logged-out opens redirect to `/nidaan/start` before any paint.
+- **Step 2 (done):** login-first landing. New **`/login`** = dedicated Sarathi
+  sign-in (email-OTP + Google, reuses exact endpoints/storage/redirect, Home
+  button). Sarathi manifest `start_url "/"→"/dashboard"` (web visitors keep `/`).
+  `/dashboard` now **302→/login** for logged-out (was a 401 page). Loop-safe:
+  `/login` verifies the session via `/api/auth/me` before auto-forwarding, and
+  the dashboard gate/login gate agree on the cookie. Nidaan `/nidaan/start`
+  already has a Home link. Verified live (302/200/401 chain).
+- **Next:** Step 4 (SW auto-update toast) → Step 3 (Nidaan silent refresh, mirror
+  Sarathi) → Step 5 (httpOnly cookies for both). Then the WhatsApp audit + brains.
+
 ### 43.11 Still pending / next
 - Email FROM → `info@nidaanpartner.com` or `info@nidaanlegalindia.com` (Brevo domain verify + inbox).
 - **API integration (two-way sync) — in design**: claim data originates in the
