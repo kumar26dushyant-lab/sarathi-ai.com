@@ -1269,12 +1269,13 @@ async function loadDashboard() {
   } else {
     _isSubscribed = false;
     document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
-    // A ₹499 (retail) user is "active" if they have ANY review — whether it's a
-    // lead awaiting payment OR a PAID review in progress. (Bug fixed: paying used
-    // to flip the claim off 'unpaid_lead', which dropped the user into the locked
-    // "subscribe" state and hid their own paid claim.)
-    const _hasAnyClaim = (claimsData.claims || []).length > 0;
-    if (_hasAnyClaim) {
+    // Entitlement is SERVER-AUTHORITATIVE (me.account_state.active) — the dashboard
+    // must never re-derive lock/unlock from scattered signals (that's what kept
+    // locking paid ₹499 users out). Fallback to "has any claim" only if the field
+    // is missing (older cached response).
+    const _active = (me.account_state && me.account_state.active)
+                    || (claimsData.claims || []).length > 0;
+    if (_active) {
       banner.className = 'sub-banner sub-active';
       banner.innerHTML = _leadClaim ? `
         <div class="sub-banner-text">

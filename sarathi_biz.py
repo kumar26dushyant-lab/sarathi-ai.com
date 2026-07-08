@@ -978,6 +978,26 @@ async def nidaan_api_me(request: Request):
         raise HTTPException(status_code=404, detail="Account not found")
     sub = await nidaan.get_active_subscription(account["account_id"])
     per_claim = await nidaan.get_per_claim_status(account["account_id"])
+    # ── Authoritative entitlement (single source of truth) ──────────────────────
+    # The dashboard must NOT re-derive "is this user allowed in?" from scattered
+    # signals (that's what kept locking paid users out). The server computes it once
+    # from ALL sources: subscription, any claim (lead/paid), or a per-claim purchase.
+    claims_all = await nidaan.get_claims(account["account_id"], limit=200)
+    _pstat = [(c.get("payment_status") or "") for c in claims_all]
+    has_unpaid_lead = any(p == "unpaid_lead" for p in _pstat)
+    has_any_claim = len(claims_all) > 0
+    pc_active = bool(per_claim and (
+        (per_claim.get("balance") or 0) > 0 or (per_claim.get("purchased") or 0) > 0
+        or (per_claim.get("pending") or [])))
+    if sub:
+        account_state = {"type": "subscriber", "plan": sub.get("plan"),
+                         "active": True, "has_unpaid_lead": False}
+    elif has_any_claim or pc_active:
+        account_state = {"type": "retail", "plan": None,
+                         "active": True, "has_unpaid_lead": has_unpaid_lead}
+    else:
+        account_state = {"type": "new", "plan": None,
+                         "active": False, "has_unpaid_lead": False}
     return {
         "account_id": account["account_id"],
         "owner_name": account["owner_name"],
@@ -987,6 +1007,7 @@ async def nidaan_api_me(request: Request):
         "status": account["status"],
         "subscription": dict(sub) if sub else None,
         "per_claim": per_claim,
+        "account_state": account_state,
     }
 
 
