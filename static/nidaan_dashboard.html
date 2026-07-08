@@ -1274,23 +1274,28 @@ async function loadDashboard() {
     // Mark gated tabs visually with lock icon
     document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
     if (_leadClaim) {
-      // Free-lead user mid-funnel: keep it on-message — the checklist card above
-      // is the CTA, not a subscription pitch.
+      // Free-lead user mid-funnel: keep it on-message — the pay card above is the
+      // CTA. Payment is available now; documents are optional.
       banner.className = 'sub-banner sub-active';
       banner.innerHTML = `
         <div class="sub-banner-text">
           <strong class="en">Your claim is in 📋</strong><strong class="hi">आपका क्लेम दर्ज है 📋</strong>
-          <span class="en">Finish uploading your documents above to unlock your expert review.</span>
-          <span class="hi">अपनी विशेषज्ञ समीक्षा अनलॉक करने के लिए ऊपर दस्तावेज़ अपलोड पूरा करें।</span>
+          <span class="en">Pay ₹499 above to start your expert review — documents are optional.</span>
+          <span class="hi">अपनी विशेषज्ञ समीक्षा शुरू करने के लिए ऊपर ₹499 दें — दस्तावेज़ वैकल्पिक हैं।</span>
         </div>`;
     }
-    // Unsubscribed — lock the claims section visually
-    lockOverlay.style.display = 'flex';
-    claimCard.style.minHeight = '220px';
-    claimCard.classList.add('locked-section');
-    // Keep stats visible but grayed
-    document.querySelector('.stats').style.opacity = '.45';
-    document.querySelector('.stats').style.pointerEvents = 'none';
+    if (!_leadClaim) {
+      // Truly unsubscribed with no active review — lock the claims section + pitch plans.
+      lockOverlay.style.display = 'flex';
+      claimCard.style.minHeight = '220px';
+      claimCard.classList.add('locked-section');
+      document.querySelector('.stats').style.opacity = '.45';
+      document.querySelector('.stats').style.pointerEvents = 'none';
+    } else {
+      // Lead user mid-review: the pay card above is the only CTA — no lock overlay,
+      // no "get reviewed → form" button that would loop them back to the form.
+      lockOverlay.style.display = 'none';
+    }
   }
 
   // Stats
