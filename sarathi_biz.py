@@ -1018,9 +1018,12 @@ async def nidaan_api_claim_checklist(claim_id: int, request: Request):
     st["payment_status"] = row["payment_status"]
     st["disputed_amount"] = row["disputed_amount"]
     st["trust_line"] = _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])
-    # Pay-gate shows once enough KEY docs are in (2–3, flexibility-first) AND it's
-    # still an unpaid lead — we don't force every required doc before asking ₹499.
-    st["show_pay_gate"] = bool(_ck.pay_gate_ready(st) and row["payment_status"] == "unpaid_lead")
+    # Payment is available ANY time for an unpaid lead — documents are optional and
+    # can be added before OR after paying. We never gate ₹499 behind uploads
+    # (that only blocked customers from paying). `docs_optional` tells the UI to
+    # frame uploads as encouraged-not-required.
+    st["show_pay_gate"] = (row["payment_status"] == "unpaid_lead")
+    st["docs_optional"] = True
     return st
 
 
