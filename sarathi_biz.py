@@ -1767,10 +1767,10 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
                     "complete": _st["complete"],
                     "received_required": _st["received_required"],
                     "required_total": _st["required_total"],
-                    "show_pay_gate": bool(_ck.pay_gate_ready(_st) and _r["payment_status"] == "unpaid_lead"),
+                    "show_pay_gate": (_r["payment_status"] == "unpaid_lead"),
                 }
-                # ₹499 funnel: pay-gate just opened → mirror to WhatsApp/email
-                # (hope/hook + one-tap pay link). Handler is idempotent (fires once).
+                # ₹499 funnel: pay-gate is open (payment is available anytime) →
+                # mirror a one-tap pay link to WhatsApp/email. Idempotent (fires once).
                 if checklist["show_pay_gate"]:
                     try:
                         import biz_nidaan_notifications as _nnot
