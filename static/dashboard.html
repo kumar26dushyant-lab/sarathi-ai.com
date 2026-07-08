@@ -3,6 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+    /* App-shell auth gate — decide route BEFORE first paint (no flicker).
+       Mirrors the SPA's token hydration: ?token= (magic-link SSO) and cookie →
+       localStorage; if still no session, go to the dedicated login page. */
+    (function () {
+      try {
+        if (!localStorage.getItem('sarathi_token')) {
+          var u = new URLSearchParams(location.search).get('token');
+          if (u && u.length > 20) {
+            localStorage.setItem('sarathi_token', u);
+            history.replaceState({}, '', '/dashboard');
+          } else {
+            var m = document.cookie.match(/(?:^|;\s*)sarathi_token=([^;]+)/);
+            if (m && m[1]) localStorage.setItem('sarathi_token', decodeURIComponent(m[1]));
+          }
+        }
+        if (!localStorage.getItem('sarathi_token')) {
+          document.documentElement.style.display = 'none';  // never paint the dashboard
+          location.replace('/login');
+        }
+      } catch (e) { /* body-level guard still covers it */ }
+    })();
+    </script>
     <title>Dashboard — Financial Advisor CRM</title>
     <meta name="theme-color" content="#0d9488">
     <link rel="manifest" href="/manifest.json">
@@ -3733,7 +3756,7 @@ function showToast(msg, type='info', ms=3500) {
   if (m && m[1]) localStorage.setItem('sarathi_token', decodeURIComponent(m[1]));
 })();
 const _tok = localStorage.getItem('sarathi_token');
-if (!_tok) window.location.href = '/?login=1';
+if (!_tok) window.location.href = '/login';
 
 function hdrs() { const t = localStorage.getItem('sarathi_token'); const h = t ? { 'Authorization':'Bearer '+t, 'Content-Type':'application/json', 'X-Lang': _dlang } : {'X-Lang': _dlang}; if(window._csrfToken) h['X-CSRF-Token']=window._csrfToken; return h; }
 

@@ -3,7 +3,7 @@
   "short_name": "Sarathi-AI",
   "description": "AI-Powered CRM for Financial Advisors & Insurance Agents",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

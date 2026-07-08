@@ -341,6 +341,19 @@ async def home(request: Request):
     return HTMLResponse("<h1>Homepage not found</h1>", status_code=404)
 
 
+@app.get("/login", response_class=HTMLResponse)
+async def sarathi_login_page(request: Request):
+    """Dedicated Sarathi sign-in page (the installed app's logged-out landing).
+    Web visitors still get the marketing homepage at '/'."""
+    if _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    f = static_dir / "login.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache"})
+    return HTMLResponse("<h1>Login page not found</h1>", status_code=404)
+
+
 @app.get("/onboarding", response_class=HTMLResponse)
 async def onboarding_page():
     """Post-signup onboarding wizard — connect Telegram, WhatsApp, branding."""

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>
+/* If already signed in, go straight to the dashboard (no login flash). */
+(function () {
+  try {
+    if (!localStorage.getItem('sarathi_token')) {
+      var m = document.cookie.match(/(?:^|;\s*)sarathi_token=([^;]+)/);
+      if (m && m[1]) localStorage.setItem('sarathi_token', decodeURIComponent(m[1]));
+    }
+    if (localStorage.getItem('sarathi_token')) {
+      document.documentElement.style.display = 'none';
+      location.replace('/dashboard');
+    }
+  } catch (e) {}
+})();
+</script>
+<title>Sign in — Sarathi-AI</title>
+<link rel="icon" href="/static/icon-192x192.png" type="image/png">
+<meta name="theme-color" content="#0d9488">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--teal:#0d9488;--teal2:#0f766e;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--bg:#f8fafc}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(160deg,#ecfeff,#f8fafc 45%,#f0fdfa);color:var(--ink);min-height:100dvh;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem}
+.brand{display:flex;align-items:center;gap:.55rem;font-weight:800;color:var(--teal2);font-size:1rem}
+.brand img{width:30px;height:30px;border-radius:7px}
+.home-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;font-weight:600;color:var(--muted);text-decoration:none;padding:.45rem .8rem;border:1px solid var(--line);border-radius:999px;background:#fff}
+.home-link:active{transform:scale(.97)}
+.wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:1rem 1.1rem 2.5rem}
+.card{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(13,148,136,.10);padding:1.6rem 1.4rem}
+.logo-lg{width:52px;height:52px;border-radius:12px;display:block;margin:0 auto .7rem}
+h1{font-size:1.28rem;text-align:center;margin-bottom:.25rem}
+.sub{text-align:center;color:var(--muted);font-size:.88rem;margin-bottom:1.3rem}
+label{display:block;font-size:.8rem;font-weight:600;color:#334155;margin:0 0 .35rem}
+input{width:100%;padding:.8rem .9rem;border:1.5px solid var(--line);border-radius:10px;font-size:1rem;outline:none;transition:border-color .15s}
+input:focus{border-color:var(--teal)}
+.btn{width:100%;padding:.85rem;border:none;border-radius:10px;font-size:.98rem;font-weight:700;cursor:pointer;margin-top:.9rem;transition:filter .15s,transform .1s}
+.btn:active{transform:scale(.99)}
+.btn-primary{background:linear-gradient(135deg,var(--teal),var(--teal2));color:#fff}
+.btn-primary:disabled{opacity:.6;cursor:default}
+.btn-ghost{background:#fff;border:1.5px solid var(--line);color:#334155;margin-top:.6rem}
+.msg{margin-top:.9rem;font-size:.86rem;text-align:center;min-height:1.1em}
+.msg.err{color:#dc2626}.msg.ok{color:var(--teal2)}
+.divider{display:flex;align-items:center;gap:.7rem;color:var(--muted);font-size:.78rem;margin:1.15rem 0 .3rem}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.gwrap{display:flex;justify-content:center;margin-top:.9rem;min-height:44px}
+.foot{text-align:center;margin-top:1.2rem;font-size:.82rem;color:var(--muted)}
+.foot a{color:var(--teal2);text-decoration:none;font-weight:600}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><img src="/static/icon-192x192.png" alt="">Sarathi-AI</div>
+  <a class="home-link" href="/">🏠 Home</a>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <img class="logo-lg" src="/static/icon-192x192.png" alt="Sarathi-AI">
+    <h1>Welcome back</h1>
+    <div class="sub">Sign in to your Sarathi-AI dashboard</div>
+
+    <!-- Step 1: email -->
+    <div id="step1">
+      <label for="email">Email address</label>
+      <input type="email" id="email" placeholder="advisor@example.com" autocomplete="email" inputmode="email">
+      <button class="btn btn-primary" id="sendBtn" onclick="sendOtp()">Send OTP to my email</button>
+    </div>
+
+    <!-- Step 2: otp -->
+    <div id="step2" class="hide">
+      <label for="otp">Enter the 6-digit OTP sent to <span id="emailEcho" style="color:var(--teal2)"></span></label>
+      <input type="text" id="otp" placeholder="______" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+      <button class="btn btn-primary" id="verifyBtn" onclick="verifyOtp()">Verify &amp; Sign In</button>
+      <button class="btn btn-ghost" onclick="backToEmail()">← Use a different email</button>
+      <button class="btn btn-ghost hide" id="resendBtn" onclick="sendOtp(true)">Resend OTP</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="divider">or</div>
+    <div class="gwrap">
+      <div id="g_id_onload"
+           data-client_id="903535788143-lta4hr3rhj4oq5ldd2nb1uldjbrjb9d6.apps.googleusercontent.com"
+           data-callback="onGoogleCredential" data-auto_prompt="false"></div>
+      <div class="g_id_signin" data-type="standard" data-shape="pill" data-theme="outline"
+           data-text="signin_with" data-size="large"></div>
+    </div>
+
+    <div class="foot">
+      Can't access your email? <a href="/?login=1">Recover account</a><br>
+      New here? <a href="/#pricing">Start free trial →</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+var _email = '';
+function _msg(t, err){ var m=document.getElementById('msg'); m.textContent=t||''; m.className='msg '+(err?'err':'ok'); }
+function _store(data, email){
+  localStorage.setItem('sarathi_token', data.access_token);
+  document.cookie = 'sarathi_token=' + data.access_token + ';path=/;max-age=86400;SameSite=Lax';
+  if (data.refresh_token) localStorage.setItem('sarathi_refresh', data.refresh_token);
+  localStorage.setItem('sarathi_tenant_id', data.tenant_id || '');
+  localStorage.setItem('sarathi_firm', data.firm_name || '');
+  if (email) localStorage.setItem('sarathi_email', email);
+  localStorage.setItem('sarathi_role', data.role || 'owner');
+}
+function _err(data, fallback){
+  if (data && (data.detail || data.message)) {
+    var d = data.detail || data.message;
+    if (typeof d === 'string') return d;
+  }
+  return fallback;
+}
+
+async function sendOtp(isResend){
+  var email = (document.getElementById('email').value || '').trim().toLowerCase();
+  if (!email || email.indexOf('@') < 1) { _msg('Please enter a valid email address.', true); return; }
+  _email = email;
+  var btn = document.getElementById(isResend ? 'resendBtn' : 'sendBtn');
+  btn.disabled = true; var old = btn.textContent; btn.textContent = 'Sending…';
+  _msg('⏳ Sending OTP — this can take a few seconds…', false);
+  try {
+    var res = await fetch('/api/auth/send-email-otp', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: email})
+    });
+    var data = await res.json();
+    if (res.ok) {
+      document.getElementById('step1').classList.add('hide');
+      document.getElementById('step2').classList.remove('hide');
+      document.getElementById('resendBtn').classList.remove('hide');
+      document.getElementById('emailEcho').textContent = email;
+      document.getElementById('otp').focus();
+      _msg('✅ OTP sent to ' + email, false);
+    } else {
+      _msg(_err(data, res.status === 429 ? 'Too many attempts — please wait a minute.' : 'Could not send OTP. Check the email and try again.'), true);
+    }
+  } catch (e) { _msg('Network error. Please try again.', true); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+async function verifyOtp(){
+  var otp = (document.getElementById('otp').value || '').trim();
+  if (otp.length < 4) { _msg('Enter the OTP from your email.', true); return; }
+  var btn = document.getElementById('verifyBtn');
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  try {
+    var res = await fetch('/api/auth/verify-email-otp', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: _email, otp: otp})
+    });
+    var data = await res.json();
+    if (res.ok && data.access_token) {
+      _store(data, _email);
+      _msg('✅ Signed in! Redirecting…', false);
+      setTimeout(function(){ location.replace('/dashboard'); }, 500);
+    } else {
+      _msg(_err(data, 'Invalid or expired OTP.'), true);
+      btn.disabled = false; btn.textContent = 'Verify & Sign In';
+    }
+  } catch (e) {
+    _msg('Network error. Please try again.', true);
+    btn.disabled = false; btn.textContent = 'Verify & Sign In';
+  }
+}
+
+function backToEmail(){
+  document.getElementById('step2').classList.add('hide');
+  document.getElementById('step1').classList.remove('hide');
+  _msg('');
+}
+
+async function onGoogleCredential(response){
+  _msg('⏳ Signing in with Google…', false);
+  try {
+    var res = await fetch('/api/auth/google', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({credential: response.credential})
+    });
+    var data = await res.json();
+    if (res.ok && data.access_token) {
+      _store(data, '');
+      _msg('✅ Signed in! Redirecting…', false);
+      setTimeout(function(){ location.replace('/dashboard'); }, 400);
+    } else {
+      _msg(_err(data, 'No account found for this Google email.'), true);
+    }
+  } catch (e) { _msg('Network error. Please try again.', true); }
+}
+document.getElementById('otp') && document.getElementById('otp').addEventListener('keydown', function(e){ if(e.key==='Enter') verifyOtp(); });
+document.getElementById('email') && document.getElementById('email').addEventListener('keydown', function(e){ if(e.key==='Enter') sendOtp(); });
+</script>
+</body>
+</html>
