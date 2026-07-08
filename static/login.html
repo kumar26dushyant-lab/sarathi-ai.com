@@ -4,14 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>
-/* If already signed in, go straight to the dashboard (no login flash). */
+/* If a real session COOKIE is present, go straight to the dashboard. We gate on
+   the cookie (not localStorage) because the server authorizes /dashboard by the
+   cookie — checking localStorage here could bounce a stale token into a loop. */
 (function () {
   try {
-    if (!localStorage.getItem('sarathi_token')) {
-      var m = document.cookie.match(/(?:^|;\s*)sarathi_token=([^;]+)/);
-      if (m && m[1]) localStorage.setItem('sarathi_token', decodeURIComponent(m[1]));
-    }
-    if (localStorage.getItem('sarathi_token')) {
+    if (/(?:^|;\s*)sarathi_token=[^;]+/.test(document.cookie)) {
       document.documentElement.style.display = 'none';
       location.replace('/dashboard');
     }

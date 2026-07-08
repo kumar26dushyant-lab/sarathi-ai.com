@@ -9612,7 +9612,8 @@ async def dashboard_page(request: Request):
                 pass
 
     if not tenant:
-        return HTMLResponse(LOGIN_REQUIRED_HTML, status_code=401)
+        # Installed app / logged-out browser → dedicated login page.
+        return RedirectResponse("/login", status_code=302)
 
     is_active = await db.check_subscription_active(tenant["tenant_id"])
     if is_active:
