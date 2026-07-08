@@ -10,9 +10,17 @@
    so this redirect happens before first paint (no flicker). */
 (function () {
   try {
-    if (!localStorage.getItem('nidaan_token')) {
+    var t = localStorage.getItem('nidaan_token');
+    if (!t) {
       document.documentElement.style.display = 'none';  // guarantee no paint
       location.replace('/nidaan/start');
+      return;
+    }
+    // Step 5 foundation: migrate existing localStorage-only sessions to a cookie,
+    // transparently (no re-login), so page loads can be routed server-side later.
+    if (!/(?:^|;\s*)nidaan_token=/.test(document.cookie)) {
+      document.cookie = 'nidaan_token=' + t + ';path=/;max-age=2592000;SameSite=Lax' +
+        (location.protocol === 'https:' ? ';Secure' : '');
     }
   } catch (e) { /* private mode etc. — body-level guard still covers it */ }
 })();
@@ -2086,6 +2094,7 @@ async function doChangePassword() {
 function doLogout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('nidaan_plan');
+  try { document.cookie = 'nidaan_token=;path=/;max-age=0;SameSite=Lax'; } catch (e) {}
   location.href = '/nidaan/start';
 }
 

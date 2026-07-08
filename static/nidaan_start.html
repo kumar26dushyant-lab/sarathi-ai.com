@@ -796,6 +796,12 @@ async function _loginSuccess(data) {
   const plan  = data.plan || data.account?.plan || '';
   localStorage.setItem('nidaan_token', token);
   localStorage.setItem('nidaan_plan',  plan);
+  // Step 5 foundation: also keep the session in a cookie so page loads can be
+  // routed server-side later (localStorage isn't sent on navigations). Cleared on logout.
+  try {
+    document.cookie = 'nidaan_token=' + token + ';path=/;max-age=2592000;SameSite=Lax' +
+      (location.protocol === 'https:' ? ';Secure' : '');
+  } catch (e) {}
   // Free-claim funnel: don't bounce to dashboard — reveal the claim form right here.
   if (_funnelMode) { enterClaimForm(); return; }
   // Came from a plan card → dashboard + open subscribe modal.
@@ -1273,6 +1279,7 @@ async function submitFreeClaim() {
     if (res.status === 401) {
       showRevMsg('err', _Lr('Your session expired. Please sign in again.', 'आपका सत्र समाप्त हो गया। कृपया फिर से साइन इन करें।'));
       localStorage.removeItem('nidaan_token');
+      try { document.cookie = 'nidaan_token=;path=/;max-age=0;SameSite=Lax'; } catch (e) {}
       setTimeout(() => location.reload(), 1500);
       return;
     }
