@@ -9169,7 +9169,22 @@ try {
 }
 </script>
 <!-- Razorpay checkout is lazy-loaded by _ensureRazorpay() when user opens billing/upgrade -->
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'});</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', {scope: '/'});
+  // Auto-update: one-tap "Update" toast when a new deploy takes control.
+  var _hadCtrl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if (!_hadCtrl || document.getElementById('swUpd')) return;
+    var d = document.createElement('div');
+    d.id = 'swUpd';
+    d.innerHTML = '🔄 New version available <b style="text-decoration:underline;margin-left:.35rem">Update</b>';
+    d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:2147483647;background:#0d9488;color:#fff;padding:.6rem 1rem;border-radius:999px;font:600 13px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);cursor:pointer';
+    d.onclick = function(){ location.reload(); };
+    document.body.appendChild(d);
+  });
+}
+</script>
 <script>
 // ── Native mobile enhancements ──
 (function(){

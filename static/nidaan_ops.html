@@ -5193,6 +5193,18 @@ async function processRefund(subId, amount){
     window.addEventListener('load', function(){
       navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
     });
+    // Auto-update: when a freshly-deployed SW takes control (not the first
+    // install), show a one-tap "Update" toast — no data loss, no forced reload.
+    var _hadCtrl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      if (!_hadCtrl || document.getElementById('swUpd')) return;
+      var d = document.createElement('div');
+      d.id = 'swUpd';
+      d.innerHTML = '🔄 New version available <b style="text-decoration:underline;margin-left:.35rem">Update</b>';
+      d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:2147483647;background:#0d9488;color:#fff;padding:.6rem 1rem;border-radius:999px;font:600 13px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);cursor:pointer';
+      d.onclick = function(){ location.reload(); };
+      document.body.appendChild(d);
+    });
   }
   // 2) install prompt (Android/Chrome/Edge)
   var deferred = null;

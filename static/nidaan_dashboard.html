@@ -2411,6 +2411,17 @@ function triggerDashboardInstall() {
 // ── Service Worker ────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
+  // Auto-update: one-tap "Update" toast when a new deploy takes control.
+  var _hadCtrl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if (!_hadCtrl || document.getElementById('swUpd')) return;
+    var d = document.createElement('div');
+    d.id = 'swUpd';
+    d.innerHTML = '🔄 New version available <b style="text-decoration:underline;margin-left:.35rem">Update</b>';
+    d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:2147483647;background:#06b6d4;color:#04121f;padding:.6rem 1rem;border-radius:999px;font:700 13px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4);cursor:pointer';
+    d.onclick = function(){ location.reload(); };
+    document.body.appendChild(d);
+  });
 }
 </script>
 <script src="/static/nidaan_ui.js?v=2"></script>
