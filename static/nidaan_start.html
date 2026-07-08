@@ -791,6 +791,7 @@ async function doRegister() {
 
 // ── Auth success ──────────────────────────────────────────────────────────────
 async function _loginSuccess(data) {
+  try { showNBusy(L('Signing you in…','साइन इन किया जा रहा है…')); } catch (e) {}
   const token = data.access_token || data.token;
   const plan  = data.plan || data.account?.plan || '';
   localStorage.setItem('nidaan_token', token);
@@ -870,6 +871,7 @@ async function _initGoogle() {
 
 // Single dispatch — routes to the right handler based on current visible step
 async function _googleDispatch(response) {
+  try { showNBusy(L('Signing in with Google…','Google से साइन इन…')); } catch (e) {}
   if (_googleMode === 'login')  return _handleGoogleLogin(response);
   if (_googleMode === 'signup') return _handleGoogleSignup(response);
   // default: step1 smart flow
@@ -896,6 +898,7 @@ async function _handleGoogleStep1(response) {
     const d = await res.json();
     throw new Error(_extractErr(d, 'Google sign-in failed'));
   } catch(e) {
+    hideNBusy();
     showMsg('msg1','err', e.message);
   }
 }
@@ -909,7 +912,7 @@ async function _handleGoogleLogin(response) {
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, 'Google sign-in failed'));
     _loginSuccess(data);
-  } catch(e) { showMsg('msg2a','err', e.message); }
+  } catch(e) { hideNBusy(); showMsg('msg2a','err', e.message); }
 }
 
 async function _handleGoogleSignup(response) {
@@ -921,7 +924,7 @@ async function _handleGoogleSignup(response) {
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, 'Google sign-up failed'));
     _loginSuccess(data);
-  } catch(e) { showMsg('msg2b','err', e.message); }
+  } catch(e) { hideNBusy(); showMsg('msg2b','err', e.message); }
 }
 
 // ── Auto-detect if already logged in ─────────────────────────────────────────
