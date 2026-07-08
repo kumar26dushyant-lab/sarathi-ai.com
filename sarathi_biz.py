@@ -1052,8 +1052,8 @@ async def nidaan_api_doc_checklist_for_type(request: Request, claim_type: str = 
 @limiter.limit("10/minute")
 async def nidaan_claim_pay(claim_id: int, request: Request):
     """₹499 funnel: create a Razorpay order to unlock the review of a free-lead
-    claim. Server-side guards: claim is owned, still 'unpaid_lead', and the
-    required-document checklist is COMPLETE (can't pay before docs are in)."""
+    claim. Server-side guards: claim is owned and still 'unpaid_lead'. Documents
+    are OPTIONAL — payment is available anytime; we never block paying on uploads."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     payload = _nidaan_bearer(request)
@@ -1069,10 +1069,7 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim["payment_status"] != "unpaid_lead":
         raise HTTPException(status_code=400, detail=f"Claim is already '{claim['payment_status']}'")
-    import biz_nidaan_doc_checklist as _ck
-    _st = await _ck.checklist_status(claim_id, claim["claim_type"])
-    if not _st["complete"]:
-        raise HTTPException(status_code=409, detail="Please upload all required documents first")
+    # NOTE: no document gate — customers can pay ₹499 anytime; docs are optional.
     import httpx as _httpx2, time as _time2
     rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
     rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
