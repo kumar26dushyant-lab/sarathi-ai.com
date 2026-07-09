@@ -4282,6 +4282,9 @@ async def ops_quick_task_get(qid: int, request: Request):
     # Opening the task = reading its comments (read-receipts).
     await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
+    for _n in notes:
+        if _n.get("attachment_stored_name"):
+            _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
     return {"quick_task": qt, "notes": notes, "me": staff["staff_id"]}
 
 
@@ -4451,7 +4454,11 @@ async def ops_quick_task_merge(qid: int, body: _QuickTaskMergeReq, request: Requ
 
 
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")
-async def ops_quick_task_note_add(qid: int, body: _QuickTaskNoteReq, request: Request):
+async def ops_quick_task_note_add(qid: int, request: Request,
+                                  note: str = Form(""),
+                                  parent_note_id: Optional[int] = Form(None),
+                                  file: Optional[UploadFile] = File(None)):
+    """Add a task comment, optionally with a file attachment (multipart)."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     qt = await nidaan.get_quick_task(qid)
@@ -4461,9 +4468,26 @@ async def ops_quick_task_note_add(qid: int, body: _QuickTaskNoteReq, request: Re
     if role == "team_member" and qt.get("assigned_to_staff_id") != staff["staff_id"] \
        and qt.get("created_by_staff_id") != staff["staff_id"]:
         raise HTTPException(403)
+    note = (note or "").strip()
+    stored_name = None
+    original_name = None
+    if file is not None and (file.filename or ""):
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(413, "Attachment exceeds 10 MB")
+        import uuid as _uuid
+        ext = os.path.splitext(file.filename)[1][:10]
+        stored_name = f"{_uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+        original_name = file.filename
+    if not note and not stored_name:
+        raise HTTPException(400, "Empty comment")
+    if not note and original_name:
+        note = f"📎 {original_name}"
     nid = await nidaan.add_quick_task_note(
         quick_task_id=qid, staff_id=staff["staff_id"],
-        note=body.note, parent_note_id=body.parent_note_id)
+        note=note, parent_note_id=parent_note_id,
+        attachment_stored_name=stored_name, attachment_original_name=original_name)
     return {"note_id": nid}
 
 

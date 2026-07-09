@@ -1555,6 +1555,8 @@ async def init_db():
         for _nalt in [
             "ALTER TABLE nidaan_quick_task_notes ADD COLUMN approved_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
             "ALTER TABLE nidaan_quick_task_notes ADD COLUMN approved_at TIMESTAMP",
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN attachment_stored_name TEXT",
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN attachment_original_name TEXT",
         ]:
             try:
                 await conn.execute(_nalt)

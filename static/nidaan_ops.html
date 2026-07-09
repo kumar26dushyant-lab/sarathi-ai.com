@@ -1802,12 +1802,15 @@ async function openQuickTaskDrawer(qid){
           ${_renderQTThread(notes, qt.quick_task_id, canComment)}
         </div>
         ${canComment ? `
-          <div style="margin-top:.5rem;display:flex;gap:.5rem">
+          <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
             <input id="qtNoteInput" placeholder="Add a comment…"
                    onkeydown="if(event.key==='Enter')qtAddNote(${qt.quick_task_id})"
                    style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;padding:.55rem .75rem;border-radius:8px;font-size:.88rem">
+            <input type="file" id="qtNoteFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtFilePicked()">
+            <button class="btn-sm" title="Attach a file" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
-          </div>` : ''}
+          </div>
+          <div id="qtNoteFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-top:.3rem"></div>` : ''}
       </div>
     </div>`;
   document.getElementById('drawerBg').classList.add('open');
@@ -1839,6 +1842,7 @@ function _renderQTThread(notes, qid, canComment){
           <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
+        ${n.attachment_url ? `<div style="margin-top:.25rem"><a href="${esc(n.attachment_url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(n.attachment_original_name||'attachment')}</a></div>` : ''}
         ${(!isReply && canComment) ? `
           <button onclick="qtToggleReply(${n.note_id})"
                   style="font-size:.72rem;background:transparent;border:none;color:rgba(34,211,238,.85);cursor:pointer;padding:.15rem 0">↩ Reply</button>
@@ -2017,18 +2021,30 @@ async function qtShowHistory(qid){
     </div>`;
 }
 
+function _qtFilePicked(){
+  const f = document.getElementById('qtNoteFile');
+  const lbl = document.getElementById('qtNoteFileName');
+  if (!f || !lbl) return;
+  if (f.files && f.files[0]) { lbl.textContent = '📎 ' + f.files[0].name + ' — press Send to attach'; lbl.style.display='block'; }
+  else { lbl.style.display='none'; }
+}
 async function qtAddNote(qid, parentNoteId){
   const inputId = parentNoteId ? ('qtReplyInput_'+parentNoteId) : 'qtNoteInput';
   const input = document.getElementById(inputId);
   const note = (input?.value || '').trim();
-  if (!note) return;
-  const body = { note };
-  if (parentNoteId) body.parent_note_id = parentNoteId;
+  // Attachments only on the top-level comment box (not replies).
+  const fileInput = parentNoteId ? null : document.getElementById('qtNoteFile');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!note && !file) return;
+  const fd = new FormData();
+  fd.append('note', note);
+  if (parentNoteId) fd.append('parent_note_id', parentNoteId);
+  if (file) fd.append('file', file);
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid+'/notes', {
-    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
-    body: JSON.stringify(body),
+    method:'POST', headers: hdrs(),   // multipart — let the browser set Content-Type
+    body: fd,
   });
-  if (r.ok) { input.value=''; openQuickTaskDrawer(qid); }
+  if (r.ok) { input.value=''; if (fileInput) fileInput.value=''; openQuickTaskDrawer(qid); }
   else ndUI.toast('Failed to add comment','error');
 }
 

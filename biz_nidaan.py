@@ -2123,7 +2123,9 @@ async def list_staff_on_leave_now() -> list[dict]:
 
 
 async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
-                                parent_note_id: Optional[int] = None) -> int:
+                                parent_note_id: Optional[int] = None,
+                                attachment_stored_name: Optional[str] = None,
+                                attachment_original_name: Optional[str] = None) -> int:
     # Flatten: a reply-to-a-reply becomes a reply to the original parent.
     if parent_note_id:
         async with aiosqlite.connect(DB_PATH) as conn:
@@ -2138,8 +2140,10 @@ async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_task_notes "
-            "(quick_task_id, staff_id, note, parent_note_id) VALUES (?, ?, ?, ?)",
-            (quick_task_id, staff_id, note.strip(), parent_note_id))
+            "(quick_task_id, staff_id, note, parent_note_id, attachment_stored_name, "
+            " attachment_original_name) VALUES (?, ?, ?, ?, ?, ?)",
+            (quick_task_id, staff_id, note.strip(), parent_note_id,
+             attachment_stored_name, attachment_original_name))
         await conn.commit()
         return cur.lastrowid
 
