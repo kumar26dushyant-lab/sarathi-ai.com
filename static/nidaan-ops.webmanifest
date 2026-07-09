@@ -2,9 +2,9 @@
   "name": "Nidaan Ops",
   "short_name": "Nidaan Ops",
   "description": "Nidaan Partner internal staff portal — tasks, claims, leave, broadcasts.",
-  "id": "/nidaan/ops",
-  "start_url": "/nidaan/ops",
-  "scope": "/nidaan/ops",
+  "id": "/admin",
+  "start_url": "/admin",
+  "scope": "/admin",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#060d1a",
@@ -15,7 +15,7 @@
     { "src": "/static/nidaan_logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    { "name": "My Tasks", "short_name": "Tasks", "url": "/nidaan/ops?tab=tasks", "icons": [{"src": "/static/nidaan_logo.png", "sizes": "192x192"}] }
+    { "name": "My Tasks", "short_name": "Tasks", "url": "/admin?tab=tasks", "icons": [{"src": "/static/nidaan_logo.png", "sizes": "192x192"}] }
   ],
   "categories": ["business", "productivity"]
 }

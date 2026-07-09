@@ -4,7 +4,7 @@
 //      never-cache all *api* paths, + Web Push (push / notificationclick).
 // Cache version is bumped on every product-content change.
 
-const CACHE_NAME = 'nidaan-v3';
+const CACHE_NAME = 'nidaan-v4';
 
 // Only pre-cache truly-immutable assets — NOT HTML.
 const STATIC_ASSETS = [
@@ -88,10 +88,10 @@ self.addEventListener('push', function(event) {
   var title = data.title || 'Nidaan Ops';
   var opts = {
     body: data.body || '',
-    icon: data.icon || '/static/icon-192x192.png',
-    badge: '/static/icon-192x192.png',
+    icon: data.icon || '/static/nidaan_logo.png',
+    badge: '/static/nidaan_logo.png',
     tag: data.tag || 'nidaan',
-    data: { url: data.url || '/nidaan/ops' },
+    data: { url: data.url || '/admin' },
     renotify: true,
     vibrate: [80, 40, 80]
   };
@@ -100,12 +100,14 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  var target = (event.notification.data && event.notification.data.url) || '/nidaan/ops';
+  var target = (event.notification.data && event.notification.data.url) || '/admin';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
       for (var i = 0; i < list.length; i++) {
         var c = list[i];
-        if (c.url.indexOf('/nidaan/') !== -1 && 'focus' in c) { c.navigate(target); return c.focus(); }
+        if ((c.url.indexOf('/admin') !== -1 || c.url.indexOf('/nidaan/ops') !== -1) && 'focus' in c) {
+          c.navigate(target); return c.focus();
+        }
       }
       if (clients.openWindow) return clients.openWindow(target);
     })

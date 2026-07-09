@@ -421,11 +421,11 @@ async def _record_notification(**kw) -> int:
             and kw.get("recipient_type") == RECIPIENT_STAFF
             and kw.get("recipient_id")):
         tid, cid, aid = kw.get("task_id"), kw.get("claim_id"), kw.get("account_id")
-        # Prefer the account deep-link (lands the admin on the subscriber's account
-        # with full details); tasks open the task drawer; claim-only is a fallback.
-        url = (f"/nidaan/ops?qt={tid}" if tid
-               else f"/nidaan/ops?account={aid}" if aid
-               else f"/nidaan/ops?claim={cid}" if cid else "/nidaan/ops")
+        # Deep-link into the OPS PWA at /admin (its own installable scope) so a push
+        # tap opens the installed app. Account link lands on the subscriber account.
+        url = (f"/admin?qt={tid}" if tid
+               else f"/admin?account={aid}" if aid
+               else f"/admin?claim={cid}" if cid else "/admin")
         _fire_push([kw.get("recipient_id")],
                    kw.get("subject") or "Nidaan Ops",
                    kw.get("body") or "",
@@ -937,7 +937,7 @@ async def on_claim_filed(claim_id: int, account_id: int):
             body=(f"🆕 New claim filed.\n\n"
                   f"Case: #{claim_id} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
-                  f"Open: /nidaan/ops?account={account_id}"),
+                  f"Open: /admin?account={account_id}"),
             claim_id=claim_id, account_id=account_id)
 
 
@@ -962,7 +962,7 @@ async def on_subscriber_signup(account_id: int):
             f"Name: {acct.get('owner_name','') or '—'}\n"
             f"Email: {acct.get('email','')}\n"
             f"Phone: {acct.get('phone','') or '—'}\n\n"
-            f"Open: /nidaan/ops?account={account_id}")
+            f"Open: /admin?account={account_id}")
     for sid in admins:
         await _record_notification(
             event_key="account.signup", priority=PRIORITY_P2,
@@ -994,7 +994,7 @@ async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, p
     if from_type == "subscriber":
         subj = f"💬 Message — {claim.get('owner_name') or claim.get('account_email','')}"
         body = (f"Re: #{claim_id} {claim.get('insured_name','')}\n"
-                f"\"{(preview or '')[:140]}\"\n\nOpen: /nidaan/ops?account={account_id}")
+                f"\"{(preview or '')[:140]}\"\n\nOpen: /admin?account={account_id}")
         for sid in admins:
             await _record_notification(
                 event_key="claim.message", priority=PRIORITY_P1,
@@ -1557,7 +1557,7 @@ async def on_lead_filed(claim_id: int, account_id: int):
               f"Case: #{claim_id} {claim.get('insured_name','')} ({ctype})\n"
               f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n"
               f"Documents pending: {len(pending)}\n\n"
-              f"Open: /nidaan/ops?account={account_id}")
+              f"Open: /admin?account={account_id}")
     for _sid in _admins:
         await _record_notification(
             event_key="funnel.lead_filed.admin", priority=PRIORITY_P2,

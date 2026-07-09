@@ -1209,7 +1209,8 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
             html_body=(f"<p><b>PAID claim #{claim_id}</b> — {claim['insured_name']} · "
                        f"{claim['claim_type']} · disputed ₹{claim['disputed_amount'] or 'N/A'}</p>"
                        f"<p>Payment: {body.razorpay_payment_id}. SLA (48 business hrs) due ~"
-                       f"{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>")))
+                       f"{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>"),
+            from_name="Nidaan Partner"))
     return {"status": "paid", "claim_id": claim_id,
             "sla_due_utc": sla_due.isoformat(),
             "message": "Payment confirmed. Your case is now under review — we'll share your report within 24–48 business hours, here and on WhatsApp."}
@@ -1488,6 +1489,7 @@ async def nidaan_review_signup(body: NidaanReviewSignupReq, request: Request):
                 f"<p><b>Status:</b> PENDING PAYMENT — follow up in 2–3 days if not paid.</p>"
                 f"<p>Purchase ID: #{result['purchase_id']} | New account: {'Yes' if result['is_new'] else 'No'}</p>"
             ),
+            from_name="Nidaan Partner",
         ))
     # Send welcome/login instructions email to the new user
     login_url = "https://nidaanpartner.com/nidaan/login"
@@ -1605,6 +1607,7 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
                 f"<p><b>Payment ID:</b> {body.razorpay_payment_id} | <b>Status: PAID ✅</b></p>"
                 f"<p>Proceed with legal review. Purchase ID: #{purchase_id}</p>"
             ),
+            from_name="Nidaan Partner",
         ))
     # Confirmation to customer
     _asyncio_pv.create_task(email_svc.send_email(
@@ -2110,6 +2113,7 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
                 f"<p><b>Payment ID:</b> {body.razorpay_payment_id}</p>"
                 f"<p><b>Status: PAID ✅</b> — proceed with legal review. Purchase ID: #{purchase_id}</p>"
             ),
+            from_name="Nidaan Partner",
         ))
     # Confirmation to advisor
     _asyncio.create_task(email_svc.send_email(
@@ -2169,6 +2173,7 @@ async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
                 f"<p><b>Notes:</b> {body.notes or '—'}</p>"
                 f"<p>Send payment link and proceed once ₹499 confirmed. Purchase ID: {purchase_id}</p>"
             ),
+            from_name="Nidaan Partner",
         ))
     # Confirmation to advisor
     _asyncio.create_task(email_svc.send_email(
@@ -2944,11 +2949,12 @@ async def nidaan_admin_page(request: Request):
 
 @app.get("/admin", response_class=HTMLResponse)
 async def nidaan_admin_short(request: Request):
-    """Shorthand: nidaanpartner.com/admin → ops portal login."""
+    """nidaanpartner.com/admin → the ops portal, served here directly so /admin is
+    the ops PWA's OWN scope — a separate installable app from the subscriber app
+    (which is scoped to /nidaan/). Ops still also lives at /nidaan/ops."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/nidaan/ops", status_code=302)
+    return _nidaan_page("nidaan_ops.html")
 
 
 @app.get("/nidaan/api/admin/stats")
