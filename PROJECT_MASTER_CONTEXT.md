@@ -3811,6 +3811,22 @@ modal for `plan`. Verify on one real ₹499 payment before enabling for all.
   NOTE: a subscriber app installed long ago with an even broader old scope may need
   one uninstall+reinstall before the ops app installs cleanly.
 
+### 44.8 Ops portal quality improvements (Jul 9, 2026)
+1. **Broadcast reactions:** `list_broadcasts` returns `reactors {emoji:[names]}`;
+   reaction bar has a **➕ full emoji panel** (40), each chip shows count + **who
+   reacted** on hover (desktop `title`) and **long-press** (mobile → toast).
+2. **Task status notify:** `on_quick_task_status_changed` notifies the assignee on
+   reopen/reject/status-change (dashboard + push + WA/email, deep-linked). Reassign
+   already notified.
+3. **Green-blink broadened:** the unseen-activity dot now also lights on tasks you've
+   previously opened when there's newer activity (not just your own), without
+   flooding never-opened tasks; gray once opened. `last_activity` already includes
+   the log (status/reassign/reopen).
+4. **Task comment attachments:** `nidaan_quick_task_notes` +
+   `attachment_stored_name/original_name`; the note endpoint is now multipart
+   (optional file → gated docs dir → signed URL); ops task drawer has a 📎 attach
+   button + per-comment download chip.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
