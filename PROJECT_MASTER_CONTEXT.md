@@ -3794,6 +3794,23 @@ paid ₹499 claim(s); for each eligible (not delivered, ≤7d) → `create_refun
 mark claim cancelled (or merge per `data_choice`); then the client opens the subscribe
 modal for `plan`. Verify on one real ₹499 payment before enabling for all.
 
+### 44.7 Email branding + `/admin` as a separate installable ops app (Jul 9, 2026)
+- **Email branding (fixed):** five Nidaan ₹499/lead admin emails in sarathi_biz.py
+  omitted `from_name` → they sent as "Sarathi-AI Business Technologies". Added
+  `from_name="Nidaan Partner"` to all (the "[Nidaan] ₹499 PAID — assign + begin
+  review" admin email + the 4 review-lead/PAID/request admin emails).
+- **`/admin` = its own installable PWA (fixed):** the ops portal lived at
+  `/nidaan/ops`, INSIDE the subscriber app's scope `/nidaan/`, so "Add to Home
+  Screen" said "already installed". Now: `/admin` **serves the ops portal directly**
+  (was a 302 → /nidaan/ops); `nidaan-ops.webmanifest` `id/start_url/scope = /admin`
+  (cleanly outside `/nidaan/`) → installs as a separate app. **Push/notification
+  deep-links + SW `notificationclick` now target `/admin`** so a push tap opens the
+  installed ops app (tasks / broadcasts / comments / new signup-claim-lead). Push
+  **icon fixed** to the Nidaan logo (was Sarathi's); SW cache `nidaan-v4`. Ops still
+  also reachable at `/nidaan/ops`. Subscriber app (scope `/nidaan/`) untouched.
+  NOTE: a subscriber app installed long ago with an even broader old scope may need
+  one uninstall+reinstall before the ops app installs cleanly.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
