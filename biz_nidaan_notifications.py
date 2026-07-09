@@ -575,16 +575,21 @@ async def list_broadcasts(viewer_staff_id: int, limit: int = 20):
         ids = [b["broadcast_id"] for b in bl]
         ph = ",".join("?" * len(ids))
         rrows = await (await conn.execute(
-            f"SELECT broadcast_id, emoji, staff_id FROM nidaan_broadcast_reactions "
-            f"WHERE broadcast_id IN ({ph})", ids)).fetchall()
-        react, mine = {}, {}
+            f"SELECT br.broadcast_id, br.emoji, br.staff_id, s.name AS staff_name "
+            f"FROM nidaan_broadcast_reactions br "
+            f"LEFT JOIN nidaan_staff s ON s.staff_id=br.staff_id "
+            f"WHERE br.broadcast_id IN ({ph})", ids)).fetchall()
+        react, mine, reactors = {}, {}, {}
         for r in rrows:
-            react.setdefault(r["broadcast_id"], {})
-            react[r["broadcast_id"]][r["emoji"]] = react[r["broadcast_id"]].get(r["emoji"], 0) + 1
+            bid, em = r["broadcast_id"], r["emoji"]
+            react.setdefault(bid, {})
+            react[bid][em] = react[bid].get(em, 0) + 1
+            reactors.setdefault(bid, {}).setdefault(em, []).append(r["staff_name"] or "Someone")
             if r["staff_id"] == viewer_staff_id:
-                mine[r["broadcast_id"]] = r["emoji"]
+                mine[bid] = em
         for b in bl:
             b["reactions"] = react.get(b["broadcast_id"], {})
+            b["reactors"] = reactors.get(b["broadcast_id"], {})   # {emoji: [names]}
             b["my_reaction"] = mine.get(b["broadcast_id"], "")
         return bl
 

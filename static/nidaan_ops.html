@@ -4207,15 +4207,10 @@ function _renderBell(){
   const bcHtml = bcs.length ? `
     <div style="padding:.4rem .8rem;font-size:.7rem;font-weight:800;color:#c4b5fd;text-transform:uppercase;letter-spacing:.05em;background:rgba(167,139,250,.06)">📢 Broadcasts</div>
     ${bcs.slice(0,6).map(b=>{
-      const bar = _REACT_EMOJIS.map(em=>{
-        const c = (b.reactions||{})[em]||0;
-        const mineOn = b.my_reaction===em;
-        return `<button onclick="event.stopPropagation();reactBroadcast(${b.broadcast_id},'${em}')" style="background:${mineOn?'rgba(34,211,238,.25)':'rgba(255,255,255,.05)'};border:1px solid ${mineOn?'#22d3ee':'rgba(255,255,255,.1)'};border-radius:12px;padding:.05rem .35rem;font-size:.78rem;cursor:pointer;line-height:1.3">${em}${c?`<span style="font-size:.68rem;color:rgba(255,255,255,.7);margin-left:.15rem">${c}</span>`:''}</button>`;
-      }).join('');
       return `<div style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05)">
         <div style="font-size:.82rem"><b style="color:#c4b5fd">${esc(b.sender_name||'Staff')}</b> <span style="color:rgba(255,255,255,.35);font-size:.68rem">· ${b.created_at?ndUI.timeAgo(b.created_at):''}</span></div>
         <div style="font-size:.85rem;color:rgba(255,255,255,.85);margin:.15rem 0 .35rem;white-space:pre-wrap">${esc(b.message||'')}</div>
-        <div style="display:flex;gap:.3rem;flex-wrap:wrap">${bar}</div>
+        ${_reactionBar(b)}
       </div>`;
     }).join('')}` : '';
   const notifHtml = items.length ? items.map(n=>{
@@ -4250,6 +4245,30 @@ async function reactBroadcast(bid, emoji){
     await loadBell(); _renderBell();
   } catch(e){}
 }
+// Full emoji panel for broadcast reactions
+const _ALL_EMOJIS = ['👍','❤️','🎉','😂','🙏','🔥','👏','✅','💯','🚀','😍','😮','😢','😡','🤔','👀','💪','🙌','🥳','😎','🤝','💡','⭐','✨','😅','😉','🫡','🤩','🥰','🤯','👌','🫶','💥','⚡','🏆','📌','⏰','✔️','❗','🙏🏼'];
+function _reactionBar(b){
+  const reactions = b.reactions || {};
+  const reactors = b.reactors || {};
+  const shown = Array.from(new Set([..._REACT_EMOJIS, ...Object.keys(reactions)]));
+  const chip = (em)=>{
+    const c = reactions[em]||0;
+    const who = (reactors[em]||[]).join(', ');
+    const mineOn = b.my_reaction===em;
+    return `<button data-who="${esc(who)}" data-em="${em}" title="${esc(who?who+' reacted '+em:'')}"
+      onclick="event.stopPropagation();reactBroadcast(${b.broadcast_id},'${em}')"
+      ontouchstart="_rpStart(this)" ontouchend="_rpEnd()" ontouchmove="_rpEnd()"
+      style="background:${mineOn?'rgba(34,211,238,.25)':'rgba(255,255,255,.05)'};border:1px solid ${mineOn?'#22d3ee':'rgba(255,255,255,.1)'};border-radius:12px;padding:.05rem .35rem;font-size:.82rem;cursor:pointer;line-height:1.3">${em}${c?`<span style="font-size:.68rem;color:rgba(255,255,255,.7);margin-left:.15rem">${c}</span>`:''}</button>`;
+  };
+  const chips = shown.map(chip).join('');
+  const plus = `<button onclick="event.stopPropagation();_toggleEmojiPanel(${b.broadcast_id})" title="More emojis" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.05rem .4rem;font-size:.8rem;cursor:pointer;color:rgba(255,255,255,.7)">➕</button>`;
+  const panel = `<div id="emojiPanel_${b.broadcast_id}" style="display:none;flex-wrap:wrap;gap:.15rem;margin-top:.35rem;max-width:300px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.4rem">${_ALL_EMOJIS.map(em=>`<button onclick="event.stopPropagation();reactBroadcast(${b.broadcast_id},'${em}')" style="background:none;border:none;font-size:1.15rem;cursor:pointer;padding:.1rem .2rem;line-height:1">${em}</button>`).join('')}</div>`;
+  return `<div style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center">${chips}${plus}</div>${panel}`;
+}
+function _toggleEmojiPanel(bid){ const p=document.getElementById('emojiPanel_'+bid); if(p) p.style.display = (p.style.display==='none'||!p.style.display) ? 'flex':'none'; }
+let _rpTimer=null;
+function _rpStart(el){ const who=el.getAttribute('data-who'); if(!who) return; _rpTimer=setTimeout(function(){ try{ ndUI.toast(who+' reacted '+el.getAttribute('data-em'),'info'); }catch(e){} }, 450); }
+function _rpEnd(){ if(_rpTimer){ clearTimeout(_rpTimer); _rpTimer=null; } }
 
 /* ── Web Push (PWA push notifications) ── */
 function _pushSupported(){ return ('serviceWorker' in navigator) && ('PushManager' in window); }
