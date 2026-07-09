@@ -4359,6 +4359,15 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
         raise HTTPException(403, "Only admin or SA can reassign")
     if body.status is not None:
         await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"])
+        # Notify the assignee that their task changed status (reopened/rejected/etc.)
+        try:
+            _sqt = await nidaan.get_quick_task(qid)
+            if _sqt and _sqt.get("assigned_to_staff_id"):
+                import asyncio as _asyncio
+                _asyncio.create_task(nnot.on_quick_task_status_changed(
+                    _sqt, body.status, staff.get("name", "")))
+        except Exception:
+            pass
     if body.assigned_to_staff_id is not None:
         await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id, changed_by=staff["staff_id"])
         # Notify new assignee if priority demands it

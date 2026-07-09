@@ -1137,6 +1137,41 @@ async def on_quick_task_assigned(quick_task: dict):
             force_email=True)
 
 
+async def on_quick_task_status_changed(quick_task: dict, new_status: str, by_name: str = ""):
+    """A quick task's status changed (reopened / rejected / cancelled / done, etc.)
+    → notify the ASSIGNEE so they know their task needs attention. Deep-links to
+    the task in the ops app. Skips if there's no assignee."""
+    if not quick_task:
+        return
+    assignee_id = quick_task.get("assigned_to_staff_id")
+    if not assignee_id:
+        return
+    qid = quick_task.get("quick_task_id")
+    title = quick_task.get("title", "") or ""
+    task_priority = (quick_task.get("priority") or "normal").lower()
+    notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
+                      "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        staff = await (await conn.execute(
+            "SELECT phone, notify_email, email FROM nidaan_staff WHERE staff_id=?",
+            (assignee_id,))).fetchone()
+    staff = dict(staff) if staff else {}
+    label = {"open": "reopened", "in_progress": "reopened", "reopened": "reopened",
+             "rejected": "rejected", "cancelled": "cancelled",
+             "done": "marked done", "completed": "marked done"}.get(new_status, new_status)
+    body = (f"🔄 Task #{qid} \"{title}\" was {label}"
+            + (f" by {by_name}" if by_name else "") + ".\n\n"
+            f"Open: /admin?qt={qid}")
+    await dispatch(
+        event_key="quick_task.status", priority=notif_priority,
+        recipient_type=RECIPIENT_STAFF, recipient_id=assignee_id,
+        recipient_phone=staff.get("phone") or "",
+        recipient_email=staff.get("notify_email") or staff.get("email") or "",
+        subject=f"[Nidaan] Task #{qid} {label} — {title[:50]}",
+        body=body, task_id=qid, force_email=True)
+
+
 async def on_quick_task_approval(quick_task: dict, decision: str):
     """A task requiring approval was approved/rejected. Notify the creator and
     assignee with the outcome + a deep link."""

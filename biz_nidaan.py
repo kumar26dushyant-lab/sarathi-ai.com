@@ -1810,15 +1810,18 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "                   WHEN 'normal' THEN 2 ELSE 3 END, "
             "   q.created_at DESC LIMIT ?", unseen_params + params + [limit])
         rows = [dict(r) for r in await cur.fetchall()]
-        # Green blink = my task with activity newer than I last saw it (or never
-        # seen). Gray dot = my task, caught up. None = not my task.
+        # Green blink = a task with activity I haven't seen yet; gray once I open it.
+        #   • MY tasks (assigned/created): blink on any unseen activity (incl. brand new).
+        #   • OTHER tasks: blink only when there's activity NEWER than I last opened it
+        #     (so we don't flood every never-opened task on first load).
         for r in rows:
+            seen = r.get("seen_at")
+            act = r.get("last_activity")
+            new_since_seen = bool(seen and act and str(act) > str(seen))
             if r.get("mine"):
-                seen = r.get("seen_at")
-                act = r.get("last_activity")
-                r["has_new"] = 1 if (not seen or (act and str(act) > str(seen))) else 0
+                r["has_new"] = 1 if (not seen or new_since_seen) else 0
             else:
-                r["has_new"] = 0
+                r["has_new"] = 1 if new_since_seen else 0
             r["unseen"] = r["has_new"]   # kept for existing frontend field
         return rows
 
