@@ -509,13 +509,20 @@ async function checkStaffOnboarding() {
     const on = onR.ok ? await onR.json() : {instances:[]};
     const insts = on.instances || [];
     const connected = insts.filter(i => i.health_state==='open' || i.health_state==='connected');
-    // Latest change to the official-number set (add / connect / remove).
-    const maxUpd = insts.reduce((m,i)=> (i.updated_at && i.updated_at > m ? i.updated_at : m), '');
-    const ack = me.saved_official_numbers_at || '';
-    const changed = maxUpd && ack && (maxUpd > ack);
-    // Prompt when: never acknowledged, OR the numbers changed since they did.
-    if (ack && !changed) return;
-    showStaffOnboardModal(connected, me.phone || '', changed);
+    // Signature = the SET of official numbers only (add / remove). Deliberately ignores
+    // health_state, daily counters and updated_at — those tick on every send / re-pair
+    // and used to re-fire this popup on every hard refresh. It must fire ONLY when the
+    // actual set of numbers a staffer should save has changed.
+    const sig = insts.map(i => String(i.phone_number||'').replace(/\D/g,''))
+                     .filter(Boolean).sort().join('|');
+    window._numAckSig = sig;
+    const serverAck = me.saved_official_numbers_at || '';
+    let localAck = '';
+    try { localAck = localStorage.getItem('nidaan_ops_numack') || ''; } catch(e){}
+    // Show when: never onboarded on the server (first-time mandatory), OR the number
+    // set changed since this device last acknowledged it.
+    if (serverAck && localAck === sig) return;
+    showStaffOnboardModal(connected, me.phone || '', !!serverAck);
   } catch(e){}
 }
 function showStaffOnboardModal(numbers, currentPhone, isChange) {
@@ -573,6 +580,9 @@ async function confirmStaffOnboard() {
       body: JSON.stringify({ phone })
     });
     if (!r.ok) { alert('Could not save. Try again.'); return; }
+    // Remember the acknowledged number-set on THIS device so we don't re-prompt on
+    // every refresh — only when the set actually changes again.
+    try { localStorage.setItem('nidaan_ops_numack', window._numAckSig || ''); } catch(e){}
     const bg = document.getElementById('staffOnboardBg');
     if (bg) bg.style.display = 'none';
   } catch(e){ alert('Network error. Try again.'); }
