@@ -535,10 +535,36 @@ def _fire_push(staff_ids, title, body, url="/nidaan/ops", tag="nidaan") -> None:
 
 
 # ── Ops notification bell + broadcast ────────────────────────────────────────
+async def _broadcast_wa_mirror(staff: list[dict], sender_name: str, message: str):
+    """Mirror a broadcast to staff WhatsApp — ONLY if an official line is connected.
+    If none is connected it simply doesn't send (no backlog). Each send goes through
+    _send_wa (staff-only allow-list + verify-before-send), so no misrouting."""
+    try:
+        inst = await pick_staff_slot()
+        if not inst:
+            return  # no connected line → die silently
+        text = f"📢 *{sender_name}*\n{message}"
+        for r in staff:
+            ph = r.get("phone")
+            if not ph:
+                continue
+            jid = _to_wa_jid(ph)
+            if not jid:
+                continue
+            try:
+                await _send_wa(instance_slot=inst["instance_slot"], jid=jid, message=text)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 async def record_broadcast(sender_id: int, sender_name: str, message: str,
                            tone: str = "") -> int:
-    """Post a broadcast to EVERY active staffer's notification bell (dashboard
-    channel only — no WhatsApp/email). Returns how many recipients."""
+    """Post a broadcast to EVERY active staffer's bell (dashboard + push), and — if an
+    official WhatsApp line is connected — mirror it to their WhatsApp too. When no
+    line is connected the WhatsApp part is skipped (no queue/backlog). Returns
+    recipient count."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         # Canonical broadcast row (for the feed + reactions).
@@ -546,8 +572,9 @@ async def record_broadcast(sender_id: int, sender_name: str, message: str,
             "INSERT INTO nidaan_broadcasts (sender_staff_id, sender_name, message) VALUES (?, ?, ?)",
             (sender_id, sender_name, message))
         rows = await (await conn.execute(
-            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
-        staff_ids = [r["staff_id"] for r in rows]
+            "SELECT staff_id, phone FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
+        staff = [dict(r) for r in rows]
+        staff_ids = [r["staff_id"] for r in staff]
         subj = f"📢 {sender_name}"
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         for sid in staff_ids:
@@ -559,7 +586,13 @@ async def record_broadcast(sender_id: int, sender_name: str, message: str,
             """, ("broadcast", PRIORITY_P2, RECIPIENT_STAFF, sid,
                   CHANNEL_DASHBOARD, subj, message, now))
         await conn.commit()
-    _fire_push(staff_ids, subj, message, "/nidaan/ops", "broadcast")
+    _fire_push(staff_ids, subj, message, "/admin", "broadcast")
+    # WhatsApp mirror (background; connection-aware, flag-gated, no backlog).
+    try:
+        if (await ntasks.get_flag("nidaan_broadcast_wa", "1")) == "1":
+            asyncio.create_task(_broadcast_wa_mirror(staff, sender_name, message))
+    except Exception:
+        pass
     return len(staff_ids)
 
 
@@ -1175,6 +1208,47 @@ async def on_quick_task_status_changed(quick_task: dict, new_status: str, by_nam
         recipient_email=staff.get("notify_email") or staff.get("email") or "",
         subject=f"[Nidaan] Task #{qid} {label} — {title[:50]}",
         body=body, task_id=qid, force_email=True)
+
+
+async def on_quick_task_comment(quick_task: dict, commenter_id: int, preview: str):
+    """A new comment on a task → notify the OTHER involved staff (assignee + creator,
+    minus the commenter): dashboard + push + WhatsApp. WhatsApp only fires if an
+    official line is connected; otherwise it dies silently (no backlog) — dashboard
+    and email still reach them (plug-and-play)."""
+    if not quick_task:
+        return
+    qid = quick_task.get("quick_task_id")
+    title = quick_task.get("title", "") or ""
+    recips = set()
+    if quick_task.get("assigned_to_staff_id"):
+        recips.add(quick_task["assigned_to_staff_id"])
+    if quick_task.get("created_by_staff_id"):
+        recips.add(quick_task["created_by_staff_id"])
+    recips.discard(commenter_id)
+    if not recips:
+        return
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cmt = await (await conn.execute(
+            "SELECT name FROM nidaan_staff WHERE staff_id=?", (commenter_id,))).fetchone()
+        by_name = (cmt["name"] if cmt else "") or "Someone"
+        ph = ",".join("?" * len(recips))
+        rows = {r["staff_id"]: dict(r) for r in await (await conn.execute(
+            f"SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
+            f"WHERE staff_id IN ({ph})", list(recips))).fetchall()}
+    task_priority = (quick_task.get("priority") or "normal").lower()
+    notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
+                      "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)
+    body = (f"💬 {by_name} commented on task #{qid} \"{title}\":\n"
+            f"\"{(preview or '')[:160]}\"\n\nOpen: /admin?qt={qid}")
+    for sid, st in rows.items():
+        await dispatch(
+            event_key="quick_task.comment", priority=notif_priority,
+            recipient_type=RECIPIENT_STAFF, recipient_id=sid,
+            recipient_phone=st.get("phone") or "",
+            recipient_email=st.get("notify_email") or st.get("email") or "",
+            subject=f"[Nidaan] Comment on task #{qid} — {title[:40]}",
+            body=body, task_id=qid)
 
 
 async def on_quick_task_approval(quick_task: dict, decision: str):

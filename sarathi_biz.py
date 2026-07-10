@@ -4494,6 +4494,12 @@ async def ops_quick_task_note_add(qid: int, request: Request,
         quick_task_id=qid, staff_id=staff["staff_id"],
         note=note, parent_note_id=parent_note_id,
         attachment_stored_name=stored_name, attachment_original_name=original_name)
+    # Notify the other involved staff (assignee + creator) of the new comment.
+    try:
+        import asyncio as _asyncio
+        _asyncio.create_task(nnot.on_quick_task_comment(qt, staff["staff_id"], note))
+    except Exception:
+        pass
     return {"note_id": nid}
 
 
