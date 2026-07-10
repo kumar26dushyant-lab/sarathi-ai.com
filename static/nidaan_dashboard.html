@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>
 /* App-shell auth gate — runs in <head> BEFORE the body paints, so a logged-out
    open never flashes the dashboard. No session → go straight to the login page.
@@ -45,6 +45,12 @@
 
   /* NAV */
   nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.5rem;background:rgba(10,22,40,.97);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50;gap:.5rem;overflow:hidden}
+  /* App feel: when installed to the home screen, respect the notch / status bar
+     and the home-indicator so the header/content don't sit under system UI. */
+  @media (display-mode:standalone){
+    nav{padding-top:calc(.8rem + env(safe-area-inset-top))}
+    body{padding-bottom:env(safe-area-inset-bottom)}
+  }
   .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;min-width:0}
   .nav-brand img{height:32px;border-radius:5px;flex-shrink:0}
   .nav-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -334,20 +340,7 @@
 
 <div class="container">
 
-  <!-- PWA Install Banner -->
-  <div id="pwaInstallBanner" style="display:none;background:linear-gradient(90deg,#0c4a6e,#0891b2);border-radius:12px;padding:.75rem 1rem;margin-bottom:1.25rem;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid rgba(6,182,212,.3)">
-    <div style="display:flex;align-items:center;gap:.55rem;min-width:0;overflow:hidden">
-      <img src="/static/nidaan_logo.png" alt="" style="width:30px;height:30px;border-radius:6px;flex-shrink:0">
-      <div style="min-width:0;overflow:hidden">
-        <div style="font-weight:700;font-size:.83rem;color:#fff">📲 Install Nidaan Partner App</div>
-        <div style="font-size:.72rem;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Faster access · Works offline · Home screen icon</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:.4rem;flex-shrink:0">
-      <button onclick="triggerDashboardInstall()" style="background:#fff;color:#0891b2;border:none;padding:.4rem .85rem;border-radius:7px;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap">Install</button>
-      <button onclick="document.getElementById('pwaInstallBanner').style.display='none'" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:.4rem .55rem;border-radius:7px;font-size:.8rem;cursor:pointer">✕</button>
-    </div>
-  </div>
+  <!-- PWA install is handled by the shared nidaan_install.js module (Android + iOS). -->
 
   <!-- Page title -->
   <div class="page-title en" id="greet">Dashboard</div>
@@ -2443,30 +2436,8 @@ loadDashboard().then(() => {
   history.replaceState(null, '', '/nidaan/dashboard');
 });
 
-// ── PWA Install Prompt (mobile-only) ─────────────────────────────────────────
-var _isMobileDevice = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
-let _deferredInstall = null;
-window.addEventListener('beforeinstallprompt', function(e) {
-  e.preventDefault();
-  _deferredInstall = e;
-  if (!_isMobileDevice) return; // never show on desktop/laptop
-  const banner = document.getElementById('pwaInstallBanner');
-  if (banner) banner.style.display = 'flex';
-});
-window.addEventListener('appinstalled', function() {
-  const banner = document.getElementById('pwaInstallBanner');
-  if (banner) banner.style.display = 'none';
-  _deferredInstall = null;
-});
-function triggerDashboardInstall() {
-  if (!_deferredInstall) return;
-  _deferredInstall.prompt();
-  _deferredInstall.userChoice.then(function() {
-    _deferredInstall = null;
-    const banner = document.getElementById('pwaInstallBanner');
-    if (banner) banner.style.display = 'none';
-  });
-}
+// PWA install (Android beforeinstallprompt + iOS Add-to-Home-Screen guide) is
+// handled by the shared /static/nidaan_install.js module loaded below.
 
 // ── Service Worker ────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -2485,5 +2456,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="/static/nidaan_ui.js?v=2"></script>
+<script>window.NIDAAN_APP_ID='sub';window.NIDAAN_APP_NAME='Nidaan Partner';</script>
+<script src="/static/nidaan_install.js?v=1"></script>
 </body>
 </html>

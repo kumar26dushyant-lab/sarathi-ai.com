@@ -32,6 +32,12 @@ input,select,textarea{font-family:inherit}
 
 /* ── TOPBAR ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1.5rem;background:rgba(6,13,26,.97);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:80;gap:.75rem}
+/* App feel: when installed, keep the top bar clear of the notch/status bar and the
+   content clear of the home indicator. */
+@media (display-mode:standalone){
+  .topbar{padding-top:calc(.7rem + env(safe-area-inset-top))}
+  #appShell{padding-bottom:env(safe-area-inset-bottom)}
+}
 .topbar-brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:.95rem;color:#fff}
 .topbar-brand img{height:28px;border-radius:5px}
 .topbar-brand .pill{background:rgba(220,38,38,.18);color:#fca5a5;border:1px solid rgba(220,38,38,.3);border-radius:6px;font-size:.65rem;font-weight:800;padding:.15rem .45rem;letter-spacing:.04em;text-transform:uppercase}
