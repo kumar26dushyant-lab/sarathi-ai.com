@@ -4075,10 +4075,16 @@ async def ops_health(request: Request):
     try:
         wa_insts = await nnot.list_official_instances()
         connected = [i for i in wa_insts if (i.get("health_state") == "open")]
+        # Reset-aware "sent today" — mirror compute_effective_caps so App Health and
+        # the Official Numbers page always agree (a stale yesterday counter reads 0).
+        from datetime import date as _date
+        _today = _date.today().isoformat()
+        def _sent_today(i):
+            return (i.get("daily_sent_count") or 0) if str(i.get("daily_count_reset_at")) == _today else 0
         health["wa_instances"] = [
             {"slot": i.get("instance_slot"), "name": i.get("display_name"),
              "phone": i.get("phone_number"), "state": i.get("health_state"),
-             "sent_today": i.get("daily_sent_count") or 0}
+             "sent_today": _sent_today(i)}
             for i in wa_insts]
         if wa_insts:
             _chk("WhatsApp", len(connected) > 0,

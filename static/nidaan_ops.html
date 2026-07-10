@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html.ops-has-token #loginScreen{display:none!important}</style>
+<script>
+/* No-flicker gate: if a saved ops session exists, hide the login screen BEFORE
+   paint so it never flashes while the token is validated. init() reveals login
+   again only if that validation fails. */
+try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.classList.add('ops-has-token'); } catch (e) {}
+</script>
 <title>Nidaan Ops — Internal Portal</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
@@ -4149,12 +4156,16 @@ function togglePasswordVisibility() {
 (async function init() {
   // Check for saved token
   const saved = localStorage.getItem('nidaan_ops_token');
-  if (!saved) return;  // show login screen
+  if (!saved) { document.documentElement.classList.remove('ops-has-token'); return; }  // show login
   // Validate token
   const r = await fetch('/nidaan/ops/api/me', {
     headers: {'Authorization':'Bearer '+saved}
   });
-  if (!r.ok) { localStorage.removeItem('nidaan_ops_token'); return; }
+  if (!r.ok) {
+    localStorage.removeItem('nidaan_ops_token');
+    document.documentElement.classList.remove('ops-has-token');  // reveal login
+    return;
+  }
   const staff = await r.json();
 
   _token = saved;
