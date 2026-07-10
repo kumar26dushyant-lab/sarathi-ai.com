@@ -1293,6 +1293,39 @@ async def on_quick_task_comment(quick_task: dict, commenter_id: int, preview: st
             body=body, task_id=qid)
 
 
+async def on_quick_task_approval_request(quick_task: dict):
+    """A task that requires approval was created → notify the approvers (super/sub
+    admins, minus the creator) so they know to review it: dashboard + push + WhatsApp
+    (when a line is connected). Fills the gap where a requires_approval task that is
+    self-assigned notified nobody."""
+    if not quick_task or not quick_task.get("requires_approval"):
+        return
+    qid = quick_task.get("quick_task_id")
+    title = quick_task.get("title", "") or ""
+    creator_id = quick_task.get("created_by_staff_id")
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        admins = [dict(r) for r in await (await conn.execute(
+            "SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
+            "WHERE role IN ('super_admin','sub_super_admin') AND status='active' "
+            "AND deleted_at IS NULL")).fetchall()]
+    task_priority = (quick_task.get("priority") or "normal").lower()
+    notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
+                      "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)
+    body = (f"🧾 Task #{qid} \"{title}\" needs your approval "
+            f"(by {quick_task.get('creator_name','')}).\n\nOpen: /admin?qt={qid}")
+    for a in admins:
+        if a["staff_id"] == creator_id:
+            continue  # don't ask the creator to approve their own task
+        await dispatch(
+            event_key="quick_task.approval_request", priority=notif_priority,
+            recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
+            recipient_phone=a.get("phone") or "",
+            recipient_email=a.get("notify_email") or a.get("email") or "",
+            subject=f"[Nidaan] Approval needed — task #{qid} {title[:40]}",
+            body=body, task_id=qid)
+
+
 async def on_quick_task_approval(quick_task: dict, decision: str):
     """A task requiring approval was approved/rejected. Notify the creator and
     assignee with the outcome + a deep link."""

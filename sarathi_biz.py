@@ -4356,6 +4356,10 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
                 _asyncio.create_task(nnot.on_quick_task_request(qt))
             else:
                 _asyncio.create_task(nnot.on_quick_task_assigned(qt))
+            # A task that needs approval alerts the approvers (was silent when the
+            # task was self-assigned).
+            if qt.get("requires_approval"):
+                _asyncio.create_task(nnot.on_quick_task_approval_request(qt))
     except Exception as ne:
         logger.warning("Quick task notification dispatch failed: %s", ne)
     return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid),
