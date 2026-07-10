@@ -3827,6 +3827,23 @@ modal for `plan`. Verify on one real ₹499 payment before enabling for all.
    (optional file → gated docs dir → signed URL); ops task drawer has a 📎 attach
    button + per-comment download chip.
 
+### 44.9 Ops refresh flicker, WA count alignment, WA coverage (Jul 10, 2026)
+1. **Ops login-flash on refresh (fixed):** `#loginScreen` was visible while the saved
+   token was validated async. Pre-paint gate `html.ops-has-token #loginScreen{display:none}`
+   (set in `<head>` from localStorage); init() reveals login only if validation fails.
+2. **WhatsApp "sent today" mismatch (fixed):** App Health used raw `daily_sent_count`
+   while the Official Numbers page used the reset-aware count (`compute_effective_caps`
+   zeroes a counter whose `daily_count_reset_at` ≠ today). App Health is now reset-aware
+   too — both agree.
+3. **WhatsApp plug-and-play — confirmed + extended:** disconnect already DROPS WhatsApp
+   silently (no queue/backlog: `no_active_instance` doesn't record/defer), and routing
+   is already hardened (staff-only allow-list + verify-before-send). Added coverage:
+   `on_quick_task_comment` (new comment → assignee+creator via dashboard+push+WhatsApp)
+   wired into the note endpoint; `record_broadcast` now mirrors to staff WhatsApp when a
+   line is connected (background, flag `nidaan_broadcast_wa`, per-send verify) and skips
+   silently when disconnected. Broadcast push URL → `/admin`. (Budget-defer for
+   near-cap numbers stays — that's intentional ban protection, not a disconnect backlog.)
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
