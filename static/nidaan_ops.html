@@ -5087,28 +5087,38 @@ async function setupInstance(slot, displayName, phone){
   else ndUI.toast('Failed to register','error');
 }
 
-async function showQR(slot, force){
-  // force=1 → Re-pair: log the (possibly ghost) session out and issue a fresh QR.
-  const r = await fetch(`/nidaan/ops/api/official-numbers/${slot}/qr${force?'?force=1':''}`, { headers: hdrs() });
-  if (!r.ok) {
-    const e = await r.json().catch(()=>({detail:'Error'}));
-    ndUI.toast('QR fetch failed: ' + _extractErr(e, String(r.status)),'error'); return;
-  }
-  const d = await r.json();
-  if (d.locked) {
-    ndUI.toast(d.message || ('Please wait ' + (d.wait_seconds||'a few') + 's before regenerating the QR'), 'info');
-    return;
-  }
-  const qrSrc = d.qr ? (d.qr.startsWith('data:') ? d.qr : 'data:image/png;base64,'+d.qr) : '';
+// Live-refreshing QR pairing. WhatsApp rotates its QR every ~20s and invalidates
+// the old code — scanning a stale one gives "Couldn't link device / try again later".
+// So we poll for a fresh QR every ~18s and swap the image, exactly like web.whatsapp.com,
+// and auto-detect the moment the session connects.
+let _qrPollTimer = null;
+function _stopQRPoll(){ if(_qrPollTimer){ clearInterval(_qrPollTimer); _qrPollTimer=null; } }
+
+function _qrSrc(d){ return d.qr ? (d.qr.startsWith('data:') ? d.qr : 'data:image/png;base64,'+d.qr) : ''; }
+
+function _renderQRConnected(slot){
+  _stopQRPoll();
+  document.getElementById('drawerBody').innerHTML = `
+    <div style="text-align:center;padding:1.5rem">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">✅</div>
+      <h3 style="margin-bottom:.5rem;color:#22c55e">Slot ${slot} connected!</h3>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.6)">WhatsApp is now linked and ready to send.</div>
+    </div>`;
+  ndUI.toast('Slot '+slot+' connected!','success');
+  loadOfficialNumbers();
+}
+
+function _renderQRDrawer(slot, d){
+  const qrSrc = _qrSrc(d);
   let html;
-  if (d.already_connected) {
+  if (d.already_connected || d.state === 'open') {
     html = `
       <div style="text-align:center;padding:1.5rem">
         <div style="font-size:2.5rem;margin-bottom:.5rem">✅</div>
         <h3 style="margin-bottom:.5rem;color:#22c55e">Slot ${slot} is already connected</h3>
         <div style="font-size:.85rem;color:rgba(255,255,255,.6)">
           No QR needed — this WhatsApp instance is paired and active. If you want to re-pair
-          (e.g. moved SIM to a new phone), log it out first.
+          (e.g. moved SIM to a new phone), use Re-pair to log it out first.
         </div>
       </div>`;
   } else {
@@ -5116,17 +5126,65 @@ async function showQR(slot, force){
       <div style="text-align:center;padding:1rem">
         <h3 style="margin-bottom:.5rem">Pair Slot ${slot}</h3>
         <div style="font-size:.85rem;color:rgba(255,255,255,.6);margin-bottom:.75rem">
-          Open WhatsApp on the SIM phone for slot ${slot} → Settings → Linked devices → Link a device → Scan this code.
+          Open <b>the official WhatsApp app</b> on the SIM phone → Settings → Linked devices → Link a device → Scan this code.
         </div>
-        ${qrSrc ? `<img src="${qrSrc}" style="width:280px;height:280px;max-width:100%;background:#fff;padding:1rem;border-radius:8px">` :
-                  `<div style="color:#fbbf24;padding:1rem">No QR returned yet — Baileys is still booting. Close this and click "Show QR / Pair" again in 5-10 seconds.</div>`}
+        <div id="qrHolder">
+        ${qrSrc ? `<img id="qrImg" src="${qrSrc}" style="width:280px;height:280px;max-width:100%;background:#fff;padding:1rem;border-radius:8px">` :
+                  `<div id="qrImg" style="color:#fbbf24;padding:2rem">⏳ Generating QR — Baileys is booting…</div>`}
+        </div>
+        <div style="font-size:.75rem;color:rgba(255,255,255,.45);margin-top:.6rem;line-height:1.4">
+          🔄 This QR refreshes automatically every ~20s. Scan it as soon as it appears — if you scan an
+          old code WhatsApp says <i>"try again later"</i>. It links within a few seconds of a good scan.
+        </div>
         ${d.pairing_code ? `<div style="margin-top:.75rem;font-family:monospace;font-size:1.2rem;color:#22d3ee">Pair code: ${esc(d.pairing_code)}</div>` : ''}
       </div>`;
   }
-  // Reuse drawer for QR display
   document.getElementById('drawerTitle').textContent = `📷 Pair WhatsApp — Slot ${slot}`;
   document.getElementById('drawerBody').innerHTML = html;
   document.getElementById('drawerBg').classList.add('open');
+}
+
+function _startQRPoll(slot){
+  _stopQRPoll();
+  let polls = 0;
+  _qrPollTimer = setInterval(async ()=>{
+    // Stop if the drawer was closed, replaced by another view, or we've polled ~4 min.
+    if (!document.getElementById('drawerBg').classList.contains('open')) { _stopQRPoll(); return; }
+    if (!(document.getElementById('drawerTitle').textContent||'').includes('Pair WhatsApp')) { _stopQRPoll(); return; }
+    if (++polls > 13) { _stopQRPoll(); return; }
+    try {
+      const r = await fetch(`/nidaan/ops/api/official-numbers/${slot}/qr`, { headers: hdrs() });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.locked) return;
+      if (d.already_connected || d.state === 'open') { _renderQRConnected(slot); return; }
+      const qrSrc = _qrSrc(d);
+      if (!qrSrc) return;
+      let img = document.getElementById('qrImg');
+      const holder = document.getElementById('qrHolder');
+      if (img && img.tagName === 'IMG') { img.src = qrSrc; }
+      else if (holder) { holder.innerHTML = `<img id="qrImg" src="${qrSrc}" style="width:280px;height:280px;max-width:100%;background:#fff;padding:1rem;border-radius:8px">`; }
+    } catch(e){}
+  }, 18000);
+}
+
+async function showQR(slot, force){
+  // force=1 → Re-pair: log the (possibly ghost) session out and issue a fresh QR.
+  _stopQRPoll();
+  const r = await fetch(`/nidaan/ops/api/official-numbers/${slot}/qr${force?'?force=1':''}`, { headers: hdrs() });
+  if (!r.ok) {
+    const e = await r.json().catch(()=>({detail:'Error'}));
+    ndUI.toast('QR fetch failed: ' + _extractErr(e, String(r.status)),'error'); return;
+  }
+  const d = await r.json();
+  if (d.locked) {
+    ndUI.toast(d.message || ('Please wait ' + (d.wait_seconds||'a few') + 's before re-pairing'), 'info');
+    // Keep the live QR refreshing if the drawer is already open.
+    if (document.getElementById('drawerBg').classList.contains('open')) _startQRPoll(slot);
+    return;
+  }
+  _renderQRDrawer(slot, d);
+  if (!(d.already_connected || d.state === 'open')) _startQRPoll(slot);
 }
 
 async function toggleFlag(key, value){

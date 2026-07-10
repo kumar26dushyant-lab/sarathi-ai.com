@@ -5265,88 +5265,91 @@ async def ops_official_qr(slot: int, request: Request, force: int = 0):
     if not inst:
         raise HTTPException(404, "Instance slot not registered yet — POST evolution_instance first")
     instance_name = inst["evolution_instance"]
-    # QR spam-guard: after a QR is issued, hold further QR requests for this slot for
-    # a short window so rapid re-generation doesn't invalidate the QR being scanned.
-    QR_LOCK_SECS = 40
+    import biz_whatsapp_evolution as wa_evo
     import time as _t
     _now_ts = int(_t.time())
-    try:
-        _last_qr = int(await nidaan.get_ops_setting(f"qr_lock_slot{slot}", "0") or "0")
-    except Exception:
-        _last_qr = 0
-    _wait_left = QR_LOCK_SECS - (_now_ts - _last_qr)
-    if _wait_left > 0:
-        return {"instance_slot": slot, "qr": "", "pairing_code": "", "locked": True,
-                "wait_seconds": _wait_left,
-                "message": f"A QR was just generated — scan it now, or wait {_wait_left}s before regenerating."}
-    try:
-        await nidaan.set_ops_setting(f"qr_lock_slot{slot}", str(_now_ts))
-    except Exception:
-        pass
-    try:
-        import biz_whatsapp_evolution as wa_evo
 
+    # WhatsApp rotates its QR every ~20s and expires the old ref. If the SA scans a
+    # stale code WhatsApp shows "Couldn't link device — try again later" (exactly the
+    # symptom seen). So the UI POLLS this endpoint (force=0) every ~18s to always show
+    # the current live QR — same as web.whatsapp.com does. Only a full Re-pair
+    # (force=1, which logs out + recreates) is throttled, so rapid clicks can't cycle
+    # the session and themselves trigger WhatsApp's "try again later".
+    async def _fetch_live_qr():
+        _qr = ""; _pair = ""
+        for _attempt in range(4):
+            _res = await wa_evo.connect_instance(instance_name)
+            _raw = _res if isinstance(_res, dict) else {}
+            _qr = (_raw.get("base64") or (_raw.get("qrcode") or {}).get("base64", "") or "")
+            _pair = (_raw.get("pairingCode") or (_raw.get("qrcode") or {}).get("pairingCode", "") or "")
+            if _qr or _pair:
+                break
+            await _asyncio.sleep(1.5)
+        return _qr, _pair
+
+    try:
         if force:
-            # Re-pair: force a fresh WhatsApp session. Logout so Evolution drops the
-            # (possibly ghost) 'open' state and issues a new QR to scan.
+            # Re-pair (heavy): throttle so rapid clicks don't cycle logout/connect.
+            QR_LOCK_SECS = 15
+            try:
+                _last_qr = int(await nidaan.get_ops_setting(f"qr_lock_slot{slot}", "0") or "0")
+            except Exception:
+                _last_qr = 0
+            _wait_left = QR_LOCK_SECS - (_now_ts - _last_qr)
+            if _wait_left > 0:
+                return {"instance_slot": slot, "qr": "", "pairing_code": "", "locked": True,
+                        "wait_seconds": _wait_left, "state": "connecting",
+                        "message": f"Re-pair just triggered — scan the current QR, or wait {_wait_left}s."}
+            try:
+                await nidaan.set_ops_setting(f"qr_lock_slot{slot}", str(_now_ts))
+            except Exception:
+                pass
+            # Log out so Evolution drops the (possibly ghost) 'open' state, then recreate.
             try:
                 await wa_evo.logout_instance(instance_name)
                 await nnot.update_instance_health(slot, state="close")
                 await _asyncio.sleep(2)
             except Exception:
                 pass
-        else:
-            # 1) If already connected, no QR needed — surface that to the UI cleanly.
             try:
-                state = await wa_evo.get_connection_state(instance_name)
-                cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
-                if cur_state == "open":
-                    return {
-                        "instance_slot": slot,
-                        "evolution_instance": instance_name,
-                        "qr": "",
-                        "pairing_code": "",
-                        "already_connected": True,
-                    }
+                await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
+                await _asyncio.sleep(3)  # let Baileys boot
             except Exception:
                 pass
+            try:
+                await wa_evo.set_instance_proxy(instance_name)
+            except Exception as pe:
+                logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
+            qr_b64, pairing = await _fetch_live_qr()
+            return {"instance_slot": slot, "evolution_instance": instance_name,
+                    "qr": qr_b64, "pairing_code": pairing, "already_connected": False,
+                    "state": "connecting"}
 
-        # 2) Ensure instance exists on Evolution (idempotent create).
-        # tenant_id=0 marks this as a system-level Nidaan official instance.
+        # Poll path (force=0): fast, no logout. Returns connected OR the live QR.
+        cur_state = ""
         try:
-            await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
-            await _asyncio.sleep(3)  # let Baileys boot
+            state = await wa_evo.get_connection_state(instance_name)
+            cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
         except Exception:
-            pass
-
-        # 3) Apply residential proxy if configured (Hetzner→Webshare path).
-        try:
-            await wa_evo.set_instance_proxy(instance_name)
-        except Exception as pe:
-            logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
-
-        # 4) Trigger connect — retry up to 4 times since QR generation is async.
-        qr_b64 = ""
-        pairing = ""
-        last_raw = {}
-        for attempt in range(4):
-            result = await wa_evo.connect_instance(instance_name)
-            last_raw = result if isinstance(result, dict) else {}
-            qr_b64 = (last_raw.get("base64")
-                      or (last_raw.get("qrcode") or {}).get("base64", "")
-                      or "")
-            pairing = last_raw.get("pairingCode") or ""
-            if qr_b64 or pairing:
-                break
-            await _asyncio.sleep(2)
-
-        return {
-            "instance_slot": slot,
-            "evolution_instance": instance_name,
-            "qr": qr_b64,
-            "pairing_code": pairing,
-            "already_connected": False,
-        }
+            cur_state = ""
+        if cur_state == "open":
+            return {"instance_slot": slot, "evolution_instance": instance_name,
+                    "qr": "", "pairing_code": "", "already_connected": True, "state": "open"}
+        # Ensure the instance exists only when Evolution has no record of it (first pair).
+        if not cur_state:
+            try:
+                await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
+                await _asyncio.sleep(3)  # let Baileys boot
+            except Exception:
+                pass
+            try:
+                await wa_evo.set_instance_proxy(instance_name)
+            except Exception as pe:
+                logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
+        qr_b64, pairing = await _fetch_live_qr()
+        return {"instance_slot": slot, "evolution_instance": instance_name,
+                "qr": qr_b64, "pairing_code": pairing, "already_connected": False,
+                "state": cur_state or "connecting"}
     except Exception as e:
         logger.exception("QR fetch failed for slot %s: %s", slot, e)
         raise HTTPException(500, f"QR fetch failed: {e}")
