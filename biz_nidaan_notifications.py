@@ -307,6 +307,182 @@ async def wa_send_health() -> dict:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  WhatsApp line WATCHDOG — self-monitoring / auto-recovery / escalation / resume
+#  A deterministic orchestrator (NOT an LLM — you never want an AI guessing whether
+#  to restart a line). Each cycle it: detects a line that can't send (from real send
+#  outcomes), tries an automatic restart, escalates to super-admins via email + app
+#  + dashboard (never the dead WhatsApp) when it can't self-heal, and announces
+#  recovery so WhatsApp resumes on its own.
+# ═════════════════════════════════════════════════════════════════════════════
+async def _all_registered_instances() -> list[dict]:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT instance_slot, evolution_instance, phone_number, display_name, health_state "
+            "FROM nidaan_official_instances ORDER BY instance_slot")).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def _super_admin_staff() -> list[dict]:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT staff_id, name, phone, "
+            "       COALESCE(NULLIF(notify_email,''), email) AS email "
+            "FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def _wd_load(slot: int) -> dict:
+    import biz_nidaan as _nid
+    raw = (await _nid.get_ops_setting(f"wa_wd_slot{slot}", "") or "")
+    try:
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+async def _wd_save(slot: int, st: dict) -> None:
+    import biz_nidaan as _nid
+    try:
+        await _nid.set_ops_setting(f"wa_wd_slot{slot}", json.dumps(st))
+    except Exception as e:
+        logger.warning("watchdog state save failed slot %s: %s", slot, e)
+
+
+async def _wd_probe(slot: int) -> Optional[bool]:
+    """Real send to the configured probe number. While a line is DOWN this fails
+    silently (nothing is delivered); on recovery it delivers exactly one message and
+    returns True — so it doubles as the 'it's back' ping. None if no probe target."""
+    import biz_nidaan as _nid
+    probe_num = (await _nid.get_ops_setting("wa_probe_number", "") or "").strip()
+    if not probe_num:
+        for s in await _super_admin_staff():
+            if s.get("phone"):
+                probe_num = s["phone"]; break
+    if not probe_num:
+        return None
+    jid = _to_wa_jid(probe_num)
+    if not jid:
+        return None
+    ok, _wid, _err = await _send_wa(
+        instance_slot=slot, jid=jid,
+        message="🔧 Nidaan WhatsApp health check — this line is back online.")
+    return bool(ok)
+
+
+async def _wd_alert_admins(*, subject: str, body: str, event_key: str) -> None:
+    """Alert every super-admin via dashboard bell + web push + email. NEVER WhatsApp
+    (the whole point is that WhatsApp is down)."""
+    admins = await _super_admin_staff()
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    for a in admins:
+        try:
+            await _record_notification(
+                event_key=event_key, priority=PRIORITY_P1,
+                recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
+                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
+                status="sent", sent_at=ts)   # dashboard record also fires web push
+        except Exception as e:
+            logger.warning("watchdog bell alert failed for staff %s: %s", a.get("staff_id"), e)
+        if a.get("email"):
+            try:
+                await _send_email(to_email=a["email"], subject=f"[Nidaan] {subject}",
+                                  html_body=body.replace("\n", "<br>"), text_body=body)
+            except Exception:
+                pass
+
+
+async def run_wa_watchdog_cycle() -> dict:
+    """One monitoring pass over all official WhatsApp lines. Enabled by flag
+    nidaan_wa_watchdog_enabled (default on)."""
+    if (await ntasks.get_flag("nidaan_wa_watchdog_enabled", "1")) != "1":
+        return {"skipped": "disabled"}
+    import biz_whatsapp_evolution as wa_evo
+    health = await wa_send_health()
+    result: dict = {}
+    for inst in await _all_registered_instances():
+        slot = inst["instance_slot"]
+        name = inst.get("display_name") or f"Line {slot}"
+        phone = inst.get("phone_number") or ""
+        st = await _wd_load(slot)
+        prev_status = st.get("status", "ok")
+
+        # (1) Evolution socket state
+        evo_open = False
+        try:
+            state = await wa_evo.get_connection_state(inst["evolution_instance"])
+            cur = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
+            evo_open = (cur == "open")
+        except Exception:
+            evo_open = False
+
+        # (2) Can it actually SEND? (from real send outcomes)
+        h = health.get(slot, {})
+        if not evo_open:
+            working: Optional[bool] = False
+        elif "broken" in h:
+            working = not h.get("broken")
+        else:
+            working = None   # no recent traffic → unknown
+
+        # (3) Broken → try automatic restart, then probe to confirm
+        if working is False:
+            tries = int(st.get("restart_tries", 0))
+            if tries < 3:
+                try:
+                    await wa_evo.restart_instance(inst["evolution_instance"])
+                    await asyncio.sleep(6)
+                except Exception:
+                    pass
+                st["restart_tries"] = tries + 1
+            if await _wd_probe(slot) is True:
+                working = True
+        elif working is None and prev_status == "down":
+            # Was down, no fresh traffic — probe to catch recovery.
+            p = await _wd_probe(slot)
+            if p is True:
+                working = True
+            elif p is False:
+                working = False
+
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        # (4) Transitions + alerting (alert once per outage; announce recovery)
+        if working is True:
+            if prev_status == "down":
+                await _wd_alert_admins(
+                    subject=f"✅ WhatsApp back online — {name}",
+                    body=(f"The WhatsApp line {name} ({phone}) is working again. "
+                          f"WhatsApp notifications on it resume automatically now."),
+                    event_key="wa.line.recovered")
+                logger.info("🟢 WA watchdog: %s recovered", name)
+            await _wd_save(slot, {"status": "ok", "last_ok_at": now,
+                                  "alerted": 0, "restart_tries": 0})
+            result[slot] = "ok"
+        elif working is False:
+            down_since = st.get("down_since") or now
+            if not int(st.get("alerted", 0)):
+                await _wd_alert_admins(
+                    subject=f"⛔ WhatsApp DOWN — {name} (re-pair needed)",
+                    body=(f"WhatsApp line {name} ({phone}) is NOT sending and an "
+                          f"automatic restart did not recover it.\n\n"
+                          f"WhatsApp on this line is paused — email + app notifications "
+                          f"continue normally, so nothing is missed.\n\n"
+                          f"To restore WhatsApp: Ops → Official Numbers → {name} → "
+                          f"Re-pair (QR), and scan from the genuine WhatsApp app on a "
+                          f"phone that stays online.\n\n{NIDAAN_BASE_URL}/admin"),
+                    event_key="wa.line.down")
+                logger.warning("🔴 WA watchdog: %s DOWN — super-admins alerted", name)
+            await _wd_save(slot, {"status": "down", "down_since": down_since,
+                                  "alerted": 1, "restart_tries": st.get("restart_tries", 0)})
+            result[slot] = "down"
+        else:
+            result[slot] = "unknown"
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  Quiet hours
 # ═════════════════════════════════════════════════════════════════════════════
 async def _in_quiet_hours_now() -> bool:
@@ -374,12 +550,23 @@ _staff_rr_idx = 0
 _staff_rr_lock = asyncio.Lock()
 
 async def pick_staff_slot() -> Optional[dict]:
-    """Round-robin among healthy instances for staff-direction messages."""
+    """Round-robin among healthy instances for staff-direction messages. Prefers
+    lines that are actually SENDING — a line 'open' but failing every send (ghost)
+    is skipped when at least one working line remains, so we route through a line
+    that works instead of wasting the first attempt on a dead one (failover in
+    _send_wa_failover still covers the rest)."""
     global _staff_rr_idx
     async with _staff_rr_lock:
         healthy = await _list_healthy_instances()
         if not healthy:
             return None
+        try:
+            sh = await wa_send_health()
+            working = [h for h in healthy if not sh.get(h.get("instance_slot"), {}).get("broken")]
+            if working:
+                healthy = working
+        except Exception:
+            pass
         chosen = healthy[_staff_rr_idx % len(healthy)]
         _staff_rr_idx = (_staff_rr_idx + 1) % max(1, len(healthy))
         return chosen

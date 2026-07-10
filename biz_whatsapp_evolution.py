@@ -202,6 +202,12 @@ async def delete_instance(instance_name: str) -> dict:
     return await _request("DELETE", f"/instance/delete/{instance_name}")
 
 
+async def restart_instance(instance_name: str) -> dict:
+    """Restart the Baileys socket for an instance (keeps creds). Best-effort
+    automatic recovery step used by the WhatsApp watchdog."""
+    return await _request("POST", f"/instance/restart/{instance_name}")
+
+
 async def list_instances() -> list:
     """List all instances on this Evolution server."""
     res = await _request("GET", "/instance/fetchInstances")

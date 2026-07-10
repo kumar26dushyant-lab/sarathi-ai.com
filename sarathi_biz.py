@@ -18867,6 +18867,22 @@ async def main():
                     logger.error("Branch unpaid sweep error: %s", e)
                 await asyncio.sleep(12 * 3600)  # twice daily
         asyncio.create_task(branch_unpaid_loop())
+
+        # Step 6h: WhatsApp line watchdog — self-monitoring / auto-restart /
+        # escalate-to-super-admin / recovery. Worker-only singleton, every 4 min.
+        async def wa_watchdog_loop():
+            await asyncio.sleep(150)  # let startup + first traffic settle
+            while True:
+                try:
+                    res = await nnot.run_wa_watchdog_cycle()
+                    if res and any(v == "down" for v in res.values()):
+                        logger.warning("📡 WA watchdog cycle: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("WA watchdog error: %s", e)
+                await asyncio.sleep(240)  # every 4 minutes
+        asyncio.create_task(wa_watchdog_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 
