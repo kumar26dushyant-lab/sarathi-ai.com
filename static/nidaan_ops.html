@@ -5138,7 +5138,7 @@ async function loadOfficialNumbers(){
     const sh = sendHealth[slot] || {};
     const ghost = healthy && sh.broken;   // "open" but sends are failing
     const stateColor = ghost ? '#f97316' : (healthy ? '#22c55e' : '#fbbf24');
-    const stateLabel = ghost ? '⚠ CONNECTED (SEND FAILING)' : (healthy ? 'CONNECTED' : 'DISCONNECTED');
+    const stateLabel = ghost ? '⛔ NOT WORKING — RE-PAIR' : (healthy ? 'CONNECTED' : 'DISCONNECTED');
     const usagePct = cap.usage_pct || 0;
     const effective = cap.effective_cap || 0;
     rows += `

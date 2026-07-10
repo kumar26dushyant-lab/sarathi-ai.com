@@ -277,8 +277,22 @@ async def wa_send_health() -> dict:
         newest = attempts[0]
         sent_recent = sum(1 for a in attempts if a["status"] == "sent")
         failed_recent = sum(1 for a in attempts if a["status"] == "failed")
-        # Broken = the most recent attempt failed AND nothing has sent successfully.
-        broken = bool(newest["status"] == "failed" and sent_recent == 0)
+        # Honest CURRENT health: judge by the latest streak, not "any success in the
+        # last 24h" (a line that sent this morning but fails every send now must read
+        # as DOWN). Count consecutive failures from newest back to the last success.
+        newest_failed = newest["status"] == "failed"
+        newest_err = (newest.get("error") or "").lower()
+        newest_session = ("session" in newest_err) or ("no sessions" in newest_err)
+        consec_fail = 0
+        for a in attempts:
+            if a["status"] == "failed":
+                consec_fail += 1
+            elif a["status"] == "sent":
+                break
+            # other statuses (deferred/suppressed) don't count either way
+        # Down now if the newest send failed AND either it's a session error (line is
+        # dead) or there's a run of failures with no success since.
+        broken = bool(newest_failed and (newest_session or consec_fail >= 2))
         last_fail = next((a for a in attempts if a["status"] == "failed"), None)
         last_err = ((last_fail or {}).get("error") or "")
         session_err = ("session" in last_err.lower()) or ("no sessions" in last_err.lower())
