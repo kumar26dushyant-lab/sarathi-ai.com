@@ -1591,9 +1591,38 @@ async def init_db():
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_at TIMESTAMP",
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN merged_into INTEGER REFERENCES nidaan_quick_tasks(quick_task_id)",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN category_code TEXT",   # e.g. RT | GT (admin-editable set)
         ]:
             try:
                 await conn.execute(_alt)
+            except Exception:
+                pass
+
+        # ── Admin-editable task categories (tags) ────────────────────────────
+        # A small, super-admin-managed list of task tags (code + label + colour).
+        # Tasks store the short code; the label/colour are resolved from here so a
+        # renamed/recoloured category updates everywhere. Soft-deactivate (active=0)
+        # rather than delete so historic tasks keep their tag.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_task_categories (
+                category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code        TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL,
+                color       TEXT NOT NULL DEFAULT '#64748b',
+                sort_order  INTEGER NOT NULL DEFAULT 100,
+                active      INTEGER NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Seed the two categories the user named (Review Task, General Task) once.
+        for _code, _label, _color, _sort in [
+            ("RT", "Review Task",  "#3b82f6", 10),
+            ("GT", "General Task", "#64748b", 20),
+        ]:
+            try:
+                await conn.execute(
+                    "INSERT OR IGNORE INTO nidaan_task_categories (code,label,color,sort_order) "
+                    "VALUES (?,?,?,?)", (_code, _label, _color, _sort))
             except Exception:
                 pass
         # nidaan_quick_task_log: immutable trail (status, reassign, reopen, delete,

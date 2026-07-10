@@ -1300,10 +1300,11 @@ async function openQuickTaskModal(presetClaimId){
   // Prevent stacking — close any existing instance first
   const existing = document.getElementById('quickTaskModalBg');
   if (existing) existing.remove();
-  const [assignees, priorities] = await Promise.all([
+  const [assignees, priorities, , categories] = await Promise.all([
     _loadAssigneesOnce(),
     _loadQTPriorities(),
     _loadOpsSettings(),
+    _loadTaskCategoriesOnce(),
   ]);
   // Restricted roles raise an upward "request" rather than a direct assignment.
   const requestMode = !_canAssignTasks();
@@ -1371,6 +1372,12 @@ async function openQuickTaskModal(presetClaimId){
       <input id="qtTitle" placeholder="e.g. Call Bajaj Allianz on Monday re. claim escalation"
              style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.55rem .75rem;border-radius:6px;font-size:.88rem;margin-bottom:.85rem">
 
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Category</label>
+      <select id="qtCategory" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem;margin-bottom:.85rem">
+        <option value="">— no category —</option>
+        ${(categories||[]).map(c=>`<option value="${esc(c.code)}">${esc(c.label)} (${esc(c.code)})</option>`).join('')}
+      </select>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.85rem">
         <div>
           <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">${requestMode ? 'Suggest who handles it' : 'Assign to'}</label>
@@ -1393,7 +1400,11 @@ async function openQuickTaskModal(presetClaimId){
 
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin:.85rem 0 .2rem">First comment (optional)</label>
       <textarea id="qtComment" rows="2" placeholder="Any context, instructions, etc."
-                style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:.85rem"></textarea>
+                style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:.5rem"></textarea>
+      <input type="file" id="qtCreateFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtCreateFilePicked()">
+      <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
+              style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0;margin-bottom:.4rem">📎 Attach a file</button>
+      <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-bottom:.6rem"></div>
 
       ${(_role==='super_admin'||_role==='sub_super_admin') ? `
       <label style="display:flex;align-items:flex-start;gap:.55rem;padding:.55rem .65rem;border:1px solid rgba(167,139,250,.25);border-radius:8px;background:rgba(167,139,250,.06);cursor:pointer;margin-bottom:1rem">
@@ -1517,19 +1528,35 @@ async function submitQuickTask(){
   const claimVal = document.getElementById('qtClaimId').value;
   const dueDate = document.getElementById('qtDueDate').value || null;
   const comment = (document.getElementById('qtComment')?.value || '').trim();
+  const category = document.getElementById('qtCategory')?.value || '';
   const requiresApproval = !!(document.getElementById('qtRequiresApproval') || {}).checked;
+  const fileInput = document.getElementById('qtCreateFile');
+  const file = fileInput && fileInput.files && fileInput.files[0];
   const taskType = window._qtRequestMode ? 'request' : 'assignment';
   const body = { title, priority, requires_approval: requiresApproval, task_type: taskType };
   if (assigneeVal) body.assigned_to_staff_id = parseInt(assigneeVal);
   if (claimVal) body.claim_id = parseInt(claimVal);
   if (dueDate) body.due_date = dueDate;
-  if (comment) body.initial_comment = comment;
+  if (category) body.category_code = category;
+  // When a file is attached, the comment rides along with it on the first note
+  // (multipart) after create; otherwise send it inline in the create body.
+  if (comment && !file) body.initial_comment = comment;
   const r = await fetch('/nidaan/ops/api/quick-tasks', {
     method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
     body: JSON.stringify(body),
   });
   if (r.ok) {
     const dd = await r.json().catch(()=>({}));
+    const newQid = dd.quick_task_id;
+    // Upload the attachment (with its comment) as the first note.
+    if (file && newQid) {
+      try {
+        const fd = new FormData();
+        fd.append('note', comment || '');
+        fd.append('file', file);
+        await fetch('/nidaan/ops/api/quick-tasks/'+newQid+'/notes', { method:'POST', headers: hdrs(), body: fd });
+      } catch(e){ ndUI.toast('Task created, but the file upload failed — re-attach from the task.','error'); }
+    }
     ndUI.toast(dd.task_type==='request' ? 'Request sent to admins ✓' : 'Quick task created ✓','success');
     document.getElementById('quickTaskModalBg').remove();
     if (_currentPanel === 'tasks') loadTasks();
@@ -1538,6 +1565,14 @@ async function submitQuickTask(){
     const e = await r.json().catch(()=>({detail:'Error'}));
     ndUI.toast(_extractErr(e, 'Create failed'),'error');
   }
+}
+
+function _qtCreateFilePicked(){
+  const f = document.getElementById('qtCreateFile');
+  const lbl = document.getElementById('qtCreateFileName');
+  if (!f || !lbl) return;
+  if (f.files && f.files[0]) { lbl.textContent = '📎 ' + f.files[0].name; lbl.style.display='block'; }
+  else { lbl.style.display='none'; }
 }
 
 // ── Widget: My Quick Tasks ───────────────────────────────────────────────────
@@ -1568,7 +1603,7 @@ async function loadTeamQuickTasksWidget(){ /* replaced by loadTaskRegistry */ }
 //  of status (open / in progress / done / cancelled), with admin delete and an
 //  audit view of soft-deleted rows. This is the durable history surface.
 // ════════════════════════════════════════════════════════════════════════════
-let _registryState = {status:'all', type:'', assignee:'', q:'', includeDeleted:false};
+let _registryState = {status:'all', type:'', category:'', assignee:'', q:'', includeDeleted:false};
 let _registrySearchTimer = null;
 
 async function loadTaskRegistry(){
@@ -1589,12 +1624,15 @@ async function loadTaskRegistry(){
   else { p.set('include_done','true');
          if (_st && _st!=='all') p.set('status', _st); }
   if (_registryState.type) p.set('task_type', _registryState.type);
+  if (_registryState.category) p.set('category', _registryState.category);
   if (_registryState.assignee) p.set('assignee', _registryState.assignee);
   if (_registryState.q) p.set('q', _registryState.q);
   if (_registryState.includeDeleted && isAdmin) p.set('include_deleted','true');
 
   let assignees = [];
   if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
+  let categories = [];
+  try { categories = await _loadTaskCategoriesOnce(); } catch(e){}
 
   const r = await fetch('/nidaan/ops/api/quick-tasks?'+p.toString(), { headers: hdrs() });
   if (!r.ok) { box.innerHTML = `<div class="nd-card" style="padding:1rem;color:#f87171">Failed to load registry (${r.status})</div>`; return; }
@@ -1626,6 +1664,10 @@ async function loadTaskRegistry(){
           <option value="assignment" ${_registryState.type==='assignment'?'selected':''}>Assignments</option>
           <option value="request" ${_registryState.type==='request'?'selected':''}>Requests</option>
         </select>
+        ${categories.length ? `<select onchange="setRegistryCategory(this.value)" style="${selStyle}">
+          <option value="" ${!_registryState.category?'selected':''}>All categories</option>
+          ${categories.map(c=>`<option value="${esc(c.code)}" ${_registryState.category===c.code?'selected':''}>${esc(c.label)} (${esc(c.code)})</option>`).join('')}
+        </select>` : ''}
         ${isAdmin ? `<select onchange="setRegistryAssignee(this.value)" style="${selStyle}">
           <option value="">All assignees</option>
           <option value="me" ${_registryState.assignee==='me'?'selected':''}>Me</option>
@@ -1657,7 +1699,7 @@ function _qtRegistryRow(qt, isAdmin){
          style="padding:.6rem .25rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start;${deleted?'opacity:.45':''}${qt.assignee_on_leave>0?'background:rgba(251,146,60,.06);':''}">
       <div style="width:3px;align-self:stretch;background:${qt.assignee_on_leave>0?'#fb923c':prio.color};border-radius:2px;flex-shrink:0;min-height:34px"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.88rem;font-weight:600;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${_taskDot(qt)}<span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.9rem;padding:.1rem .45rem;border-radius:6px;flex-shrink:0">#${qt.quick_task_id}</span><span style="${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</span></div>
+        <div style="font-size:.88rem;font-weight:600;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${_taskDot(qt)}<span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.9rem;padding:.1rem .45rem;border-radius:6px;flex-shrink:0">#${qt.quick_task_id}</span>${qt.category_code?_taskCatBadge(qt.category_code):''}<span style="${finished?'text-decoration:line-through;color:rgba(255,255,255,.6)':''}">${esc(qt.title||'')}</span></div>
         <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
           <span style="color:${st.color}">● ${st.label}</span>
           ${typePill}${apprPill}
@@ -1677,6 +1719,7 @@ function _qtRegistryRow(qt, isAdmin){
 
 function setRegistryStatus(s){ _registryState.status=s; loadTaskRegistry(); }
 function setRegistryType(t){ _registryState.type=t; loadTaskRegistry(); }
+function setRegistryCategory(c){ _registryState.category=c; loadTaskRegistry(); }
 function setRegistryAssignee(a){ _registryState.assignee=a; loadTaskRegistry(); }
 function setRegistryDeleted(v){ _registryState.includeDeleted=v; loadTaskRegistry(); }
 function onRegistrySearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 350); }
@@ -1704,7 +1747,7 @@ function _qtRow(qt, showAssignee){
          style="padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;border-left:3px solid ${prio.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:.86rem;font-weight:600;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">${_taskDot(qt)}<span>${prio.icon}</span><span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.88rem;padding:.08rem .4rem;border-radius:6px">#${qt.quick_task_id}</span><span>${esc(qt.title||'')}</span></div>
+          <div style="font-size:.86rem;font-weight:600;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">${_taskDot(qt)}<span>${prio.icon}</span><span style="background:rgba(34,211,238,.16);color:#22d3ee;font-family:monospace;font-weight:800;font-size:.88rem;padding:.08rem .4rem;border-radius:6px">#${qt.quick_task_id}</span>${qt.category_code?_taskCatBadge(qt.category_code):''}<span>${esc(qt.title||'')}</span></div>
           <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.15rem">
             <span style="color:${status.color}">${status.label}</span>${showAssignee&&qt.assignee_name?' · 👤 '+esc(qt.assignee_name):''}${qt.creator_name?' · ✍️ '+esc(qt.creator_name):''}${due}${claim}
           </div>
@@ -1734,6 +1777,8 @@ async function openQuickTaskDrawer(qid){
   // Admins can reassign — load the assignee roster up front.
   let assignees = [];
   if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
+  try { await _loadTaskCategoriesOnce(); } catch(e){}   // for the category pill/badge
+  const _cat = qt.category_code ? _taskCat(qt.category_code) : null;
 
   // Approval state
   const reqAppr = !!qt.requires_approval;
@@ -1796,6 +1841,7 @@ async function openQuickTaskDrawer(qid){
         <span class="task-pill" style="background:${status.color}22;color:${status.color};border:1px solid ${status.color}44">${status.label}</span>
         ${qt.task_type==='request' ? `<span class="task-pill" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">🙋 Request</span>` : ''}
         ${reqAppr && ap ? `<span class="task-pill" style="background:${ap.c}22;color:${ap.c};border:1px solid ${ap.c}44">${ap.t}</span>` : ''}
+        ${_cat ? `<span class="task-pill" style="background:${_cat.color}22;color:${_cat.color};border:1px solid ${_cat.color}55">🏷️ ${esc(_cat.label)} (${esc(_cat.code)})</span>` : ''}
       </div>
       <div style="font-size:1.1rem;font-weight:700;margin-bottom:.6rem">${esc(qt.title||'')}</div>
       ${qt.description ? `<div style="font-size:.86rem;color:rgba(255,255,255,.7);white-space:pre-wrap;margin-bottom:1rem">${esc(qt.description)}</div>` : ''}
@@ -4425,6 +4471,24 @@ async function _loadAssigneesOnce(){
   return _assigneesCache || [];
 }
 
+// ── Task categories (admin-editable tags) ────────────────────────────────────
+let _taskCatsCache = null;
+async function _loadTaskCategoriesOnce(force){
+  if (_taskCatsCache && !force) return _taskCatsCache;
+  const r = await fetch('/nidaan/ops/api/task-categories', { headers: hdrs() });
+  if (r.ok) { const d = await r.json(); _taskCatsCache = d.categories || []; }
+  return _taskCatsCache || [];
+}
+function _taskCat(code){
+  if (!code) return null;
+  return (_taskCatsCache || []).find(c => c.code === code) || {code, label: code, color: '#64748b'};
+}
+function _taskCatBadge(code){
+  const c = _taskCat(code);
+  if (!c) return '';
+  return `<span title="${esc(c.label||c.code)}" style="font-size:.66rem;font-weight:800;letter-spacing:.02em;background:${c.color}22;color:${c.color};border:1px solid ${c.color}55;padding:.05rem .4rem;border-radius:4px;flex-shrink:0">${esc(c.code)}</span>`;
+}
+
 function _statusLabel(slug, statuses) {
   const s = (statuses||[]).find(x => x.slug === slug);
   return s ? s.label_en : slug;
@@ -4906,13 +4970,15 @@ async function loadWorkflowSettings(){
     return;
   }
   panel.innerHTML = '<div style="padding:1.5rem">Loading…</div>';
-  const [stsRes, flagsRes] = await Promise.all([
+  const [stsRes, flagsRes, catRes] = await Promise.all([
     fetch('/nidaan/ops/api/status-config?include_inactive=true', { headers: hdrs() }),
     fetch('/nidaan/ops/api/system-flags', { headers: hdrs() }),
+    fetch('/nidaan/ops/api/task-categories?include_inactive=true', { headers: hdrs() }),
   ]);
   if (!stsRes.ok || !flagsRes.ok) { panel.innerHTML = '<div style="padding:2rem;color:#fca5a5">Failed to load</div>'; return; }
   const sts = (await stsRes.json()).statuses || [];
   const flags = (await flagsRes.json()).flags || [];
+  const cats = catRes.ok ? ((await catRes.json()).categories || []) : [];
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
@@ -4945,6 +5011,10 @@ async function loadWorkflowSettings(){
         }).join('')}
       </div>
 
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🏷️ Task Categories</h2>
+      <div style="color:rgba(255,255,255,.45);font-size:.8rem;margin-bottom:.6rem">Tags shown on tasks and used to filter the task board (e.g. Review Task / General Task). Deactivating keeps the tag on historic tasks.</div>
+      <div id="taskCatManager" class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem"></div>
+
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">📋 Status Registry (${sts.length})</h2>
       <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:.82rem">
@@ -4971,6 +5041,62 @@ async function loadWorkflowSettings(){
       <div style="margin-top:.75rem;font-size:.78rem;color:rgba(255,255,255,.4)">Built-in statuses cannot be deleted but labels/SLAs/colors can be edited via API. Custom status add/edit UI in next iteration.</div>
     </div>`;
   panel.innerHTML = html;
+  renderTaskCatManager(cats);
+}
+
+// ── Task-category manager (renders inside Workflow Settings) ──────────────────
+function renderTaskCatManager(cats){
+  const box = document.getElementById('taskCatManager');
+  if (!box) return;
+  _taskCatsCache = (cats || []).filter(c=>c.active);   // keep pickers in sync
+  const rows = (cats||[]).map(c=>`
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.05);${c.active?'':'opacity:.5'}">
+      <input type="color" value="${esc(c.color||'#64748b')}" onchange="qtCatUpdate(${c.category_id},{color:this.value})" style="width:34px;height:30px;background:transparent;border:none;cursor:pointer;flex-shrink:0" title="Colour">
+      <span style="font-family:monospace;font-weight:800;font-size:.8rem;color:${esc(c.color||'#64748b')};min-width:42px">${esc(c.code)}</span>
+      <input value="${esc(c.label)}" onchange="qtCatUpdate(${c.category_id},{label:this.value})"
+             style="flex:1;min-width:0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.35rem .55rem;border-radius:6px;font-size:.82rem">
+      <input type="number" value="${c.sort_order}" onchange="qtCatUpdate(${c.category_id},{sort_order:parseInt(this.value)||100})" title="Sort order"
+             style="width:64px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.35rem .4rem;border-radius:6px;font-size:.8rem;text-align:center">
+      ${c.active
+        ? `<button class="nd-btn nd-btn-sm nd-btn-ghost" style="color:#fca5a5" onclick="qtCatDelete(${c.category_id},'${esc(c.label)}')">Deactivate</button>`
+        : `<button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="qtCatUpdate(${c.category_id},{active:true})">Reactivate</button>`}
+    </div>`).join('');
+  box.innerHTML = `
+    ${rows || '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No categories yet.</div>'}
+    <div style="display:flex;gap:.5rem;align-items:center;margin-top:.85rem;flex-wrap:wrap">
+      <input type="color" id="newCatColor" value="#22d3ee" style="width:34px;height:30px;background:transparent;border:none;cursor:pointer" title="Colour">
+      <input id="newCatCode" placeholder="CODE" maxlength="12" style="width:80px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.4rem .5rem;border-radius:6px;font-size:.82rem;text-transform:uppercase">
+      <input id="newCatLabel" placeholder="Label (e.g. Follow-up)" style="flex:1;min-width:120px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.4rem .55rem;border-radius:6px;font-size:.82rem">
+      <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="qtCatAdd()">＋ Add category</button>
+    </div>`;
+}
+async function qtCatAdd(){
+  const code = (document.getElementById('newCatCode').value||'').trim().toUpperCase();
+  const label = (document.getElementById('newCatLabel').value||'').trim();
+  const color = document.getElementById('newCatColor').value || '#64748b';
+  if (!code || !label) { ndUI.toast('Code and label are required','error'); return; }
+  const r = await fetch('/nidaan/ops/api/task-categories', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({code, label, color, sort_order:100})
+  });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { ndUI.toast('Category added ✓','success'); _taskCatsCache=null; renderTaskCatManager(d.categories||[]); }
+  else ndUI.toast(_extractErr(d,'Add failed'),'error');
+}
+async function qtCatUpdate(id, patch){
+  const r = await fetch('/nidaan/ops/api/task-categories/'+id, {
+    method:'PATCH', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify(patch)
+  });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { ndUI.toast('Saved ✓','success'); _taskCatsCache=null; renderTaskCatManager(d.categories||[]); }
+  else ndUI.toast('Update failed','error');
+}
+async function qtCatDelete(id, label){
+  if (!confirm('Deactivate category "'+label+'"? It will disappear from pickers but stay on existing tasks.')) return;
+  const r = await fetch('/nidaan/ops/api/task-categories/'+id, { method:'DELETE', headers: hdrs() });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { ndUI.toast('Deactivated','success'); _taskCatsCache=null; renderTaskCatManager(d.categories||[]); }
+  else ndUI.toast('Failed','error');
 }
 
 // ═══════════════════════════════════════════════════════════════

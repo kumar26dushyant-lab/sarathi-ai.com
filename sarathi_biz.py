@@ -4208,6 +4208,7 @@ class _QuickTaskCreateReq(BaseModel):
     initial_comment: str = ""
     requires_approval: bool = False
     task_type: str = Field("assignment", pattern=r"^(assignment|request)$")
+    category_code: Optional[str] = Field(None, max_length=12)
 
 
 class _QuickTaskUpdateReq(BaseModel):
@@ -4243,6 +4244,7 @@ async def ops_quick_tasks_list(request: Request,
                                 assignee: Optional[str] = None,
                                 claim_id: Optional[int] = None,
                                 task_type: Optional[str] = None,
+                                category: Optional[str] = None,
                                 q: Optional[str] = None,
                                 overdue: bool = False,
                                 pending_approval: bool = False,
@@ -4273,7 +4275,7 @@ async def ops_quick_tasks_list(request: Request,
     incl_deleted = bool(include_deleted) and is_admin
     items = await nidaan.list_quick_tasks(
         status=status, assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id,
-        claim_id=claim_id, task_type=task_type, search=q,
+        claim_id=claim_id, task_type=task_type, category_code=category, search=q,
         for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
         include_done=include_done, include_deleted=incl_deleted, limit=limit)
     out = {"quick_tasks": items, "count": len(items)}
@@ -4281,6 +4283,65 @@ async def ops_quick_tasks_list(request: Request,
         out["counts"] = await nidaan.quick_task_status_counts(
             assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id)
     return out
+
+
+# ── Task categories (admin-editable tags) ────────────────────────────────────
+class _TaskCategoryCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=1, max_length=12)
+    label: str = Field(min_length=1, max_length=60)
+    color: str = Field("#64748b", max_length=16)
+    sort_order: int = 100
+
+
+class _TaskCategoryUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: Optional[str] = Field(None, max_length=60)
+    color: Optional[str] = Field(None, max_length=16)
+    sort_order: Optional[int] = None
+    active: Optional[bool] = None
+
+
+@app.get("/nidaan/ops/api/task-categories")
+async def ops_task_categories_list(request: Request, include_inactive: bool = False):
+    """Any staffer reads the active categories (for the picker/filter). Admins may
+    ask for the full list (incl. deactivated) to manage them."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    cats = await nidaan.list_task_categories(include_inactive=bool(include_inactive) and is_admin)
+    return {"categories": cats}
+
+
+@app.post("/nidaan/ops/api/task-categories")
+async def ops_task_category_create(body: _TaskCategoryCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    try:
+        cid = await nidaan.create_task_category(
+            code=body.code, label=body.label, color=body.color, sort_order=body.sort_order)
+    except Exception as e:
+        raise HTTPException(400, f"Could not create category (code may already exist): {e}")
+    return {"category_id": cid, "categories": await nidaan.list_task_categories(include_inactive=True)}
+
+
+@app.patch("/nidaan/ops/api/task-categories/{category_id}")
+async def ops_task_category_update(category_id: int, body: _TaskCategoryUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.update_task_category(
+        category_id, label=body.label, color=body.color,
+        sort_order=body.sort_order, active=body.active)
+    return {"ok": True, "categories": await nidaan.list_task_categories(include_inactive=True)}
+
+
+@app.delete("/nidaan/ops/api/task-categories/{category_id}")
+async def ops_task_category_delete(category_id: int, request: Request):
+    """Soft-deactivate — historic tasks keep their tag."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.deactivate_task_category(category_id)
+    return {"ok": True, "categories": await nidaan.list_task_categories(include_inactive=True)}
 
 
 @app.get("/nidaan/ops/api/quick-tasks/{qid}")
@@ -4339,7 +4400,7 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
         assigned_to_staff_id=body.assigned_to_staff_id,
         priority=body.priority, claim_id=body.claim_id,
         due_date=body.due_date, requires_approval=body.requires_approval,
-        task_type=task_type)
+        task_type=task_type, category_code=body.category_code)
     if body.initial_comment.strip():
         try:
             await nidaan.add_quick_task_note(

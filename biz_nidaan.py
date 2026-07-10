@@ -1658,21 +1658,23 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                              priority: str = "normal", claim_id: Optional[int] = None,
                              due_date: Optional[str] = None, description: str = "",
                              requires_approval: bool = False,
-                             task_type: str = "assignment") -> int:
+                             task_type: str = "assignment",
+                             category_code: Optional[str] = None) -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
     if task_type not in ("assignment", "request"):
         task_type = "assignment"
+    category_code = (category_code or "").strip().upper() or None
     approval_status = "pending" if requires_approval else "none"
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_tasks "
             "(title, description, assigned_to_staff_id, created_by_staff_id, "
-            " priority, claim_id, due_date, requires_approval, approval_status, task_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " priority, claim_id, due_date, requires_approval, approval_status, task_type, category_code) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
              created_by_staff_id, priority, claim_id, due_date,
-             1 if requires_approval else 0, approval_status, task_type))
+             1 if requires_approval else 0, approval_status, task_type, category_code))
         qid = cur.lastrowid
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
@@ -1680,6 +1682,61 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                               note="requires approval" if requires_approval else "")
         await conn.commit()
         return qid
+
+
+# ── Task categories (admin-editable tags) ────────────────────────────────────
+async def list_task_categories(include_inactive: bool = False) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        clause = "" if include_inactive else " WHERE active=1"
+        cur = await conn.execute(
+            "SELECT category_id, code, label, color, sort_order, active "
+            "FROM nidaan_task_categories" + clause +
+            " ORDER BY active DESC, sort_order ASC, label ASC")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def create_task_category(*, code: str, label: str,
+                                color: str = "#64748b", sort_order: int = 100) -> int:
+    code = (code or "").strip().upper()
+    label = (label or "").strip()
+    if not code or not label:
+        raise ValueError("code and label are required")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_task_categories (code,label,color,sort_order) "
+            "VALUES (?,?,?,?)", (code, label, (color or "#64748b").strip(), int(sort_order)))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def update_task_category(category_id: int, *, label: Optional[str] = None,
+                                color: Optional[str] = None,
+                                sort_order: Optional[int] = None,
+                                active: Optional[bool] = None) -> bool:
+    sets, params = [], []
+    if label is not None:      sets.append("label=?");      params.append(label.strip())
+    if color is not None:      sets.append("color=?");      params.append(color.strip())
+    if sort_order is not None: sets.append("sort_order=?"); params.append(int(sort_order))
+    if active is not None:     sets.append("active=?");     params.append(1 if active else 0)
+    if not sets:
+        return False
+    params.append(category_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_task_categories SET " + ", ".join(sets) +
+            " WHERE category_id=?", params)
+        await conn.commit()
+    return True
+
+
+async def deactivate_task_category(category_id: int) -> bool:
+    """Soft-remove: hide from pickers/filters but keep the tag on historic tasks."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_task_categories SET active=0 WHERE category_id=?", (category_id,))
+        await conn.commit()
+    return True
 
 
 async def set_quick_task_approval(quick_task_id: int, decision: str,
@@ -1725,6 +1782,7 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                             viewer_staff_id: Optional[int] = None,
                             claim_id: Optional[int] = None,
                             task_type: Optional[str] = None,
+                            category_code: Optional[str] = None,
                             search: Optional[str] = None,
                             for_staff_id: Optional[int] = None,
                             overdue: bool = False,
@@ -1755,6 +1813,8 @@ async def list_quick_tasks(*, status: Optional[str] = None,
         where.append("q.claim_id = ?"); params.append(claim_id)
     if task_type in ("assignment", "request"):
         where.append("q.task_type = ?"); params.append(task_type)
+    if category_code:
+        where.append("q.category_code = ?"); params.append(category_code.strip().upper())
     if overdue:
         where.append("q.due_date IS NOT NULL AND q.due_date < datetime('now') "
                      "AND q.status NOT IN ('done','cancelled')")
