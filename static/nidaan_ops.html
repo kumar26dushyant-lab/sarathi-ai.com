@@ -1609,7 +1609,7 @@ async function loadTeamQuickTasksWidget(){ /* replaced by loadTaskRegistry */ }
 //  of status (open / in progress / done / cancelled), with admin delete and an
 //  audit view of soft-deleted rows. This is the durable history surface.
 // ════════════════════════════════════════════════════════════════════════════
-let _registryState = {status:'all', type:'', category:'', assignee:'', q:'', includeDeleted:false};
+let _registryState = {status:'all', type:'', category:'', assignee:'', q:'', sort:'smart', includeDeleted:false};
 let _registrySearchTimer = null;
 
 async function loadTaskRegistry(){
@@ -1632,6 +1632,7 @@ async function loadTaskRegistry(){
   if (_registryState.type) p.set('task_type', _registryState.type);
   if (_registryState.category) p.set('category', _registryState.category);
   if (_registryState.assignee) p.set('assignee', _registryState.assignee);
+  if (_registryState.sort && _registryState.sort !== 'smart') p.set('sort', _registryState.sort);
   if (_registryState.q) p.set('q', _registryState.q);
   if (_registryState.includeDeleted && isAdmin) p.set('include_deleted','true');
 
@@ -1674,6 +1675,10 @@ async function loadTaskRegistry(){
           <option value="" ${!_registryState.category?'selected':''}>All categories</option>
           ${categories.map(c=>`<option value="${esc(c.code)}" ${_registryState.category===c.code?'selected':''}>${esc(c.label)} (${esc(c.code)})</option>`).join('')}
         </select>` : ''}
+        <select onchange="setRegistrySort(this.value)" style="${selStyle}" title="Sort tasks">
+          ${[['smart','⭐ Smart (active first)'],['updated','🕒 Recently updated'],['created_desc','🆕 Newest created'],['created_asc','📜 Oldest created'],['id_desc','#️⃣ Task # (high→low)'],['id_asc','#️⃣ Task # (low→high)'],['due','📅 Due date'],['priority','🔺 Priority']]
+            .map(([v,l])=>`<option value="${v}" ${_registryState.sort===v?'selected':''}>${l}</option>`).join('')}
+        </select>
         ${isAdmin ? `<select onchange="setRegistryAssignee(this.value)" style="${selStyle}">
           <option value="">All assignees</option>
           <option value="me" ${_registryState.assignee==='me'?'selected':''}>Me</option>
@@ -1726,6 +1731,7 @@ function _qtRegistryRow(qt, isAdmin){
 function setRegistryStatus(s){ _registryState.status=s; loadTaskRegistry(); }
 function setRegistryType(t){ _registryState.type=t; loadTaskRegistry(); }
 function setRegistryCategory(c){ _registryState.category=c; loadTaskRegistry(); }
+function setRegistrySort(s){ _registryState.sort=s; loadTaskRegistry(); }
 function setRegistryAssignee(a){ _registryState.assignee=a; loadTaskRegistry(); }
 function setRegistryDeleted(v){ _registryState.includeDeleted=v; loadTaskRegistry(); }
 function onRegistrySearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 350); }

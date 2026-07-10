@@ -832,6 +832,41 @@ async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool,
         return (False, "", str(e))
 
 
+# Errors that are SLOT-specific (the number/session is broken) — worth failing
+# over to another line. Recipient-specific errors (not on WhatsApp, blocked,
+# invalid) will fail identically on every slot, so we do NOT retry those.
+_WA_FAILOVER_MARKERS = ("no sessions", "sessionerror", "session", "timeout",
+                        "bad request", "http_4", "http_5", "connection", "econn",
+                        "no instance")
+
+
+async def _send_wa_failover(*, jid: str, message: str,
+                            preferred_slot: int) -> tuple[bool, str, str, int]:
+    """Send with automatic line-failover. Tries the preferred slot first, then the
+    other healthy official lines on a slot/session error, so a single working
+    number keeps WhatsApp flowing even when another line is a dead 'No sessions'
+    ghost. Returns (ok, wa_message_id, error, used_slot)."""
+    try:
+        healthy = await _list_healthy_instances()
+    except Exception:
+        healthy = []
+    order = [preferred_slot] + [h["instance_slot"] for h in (healthy or [])
+                                if h.get("instance_slot") != preferred_slot]
+    seen, slots = set(), []
+    for s in order:
+        if s not in seen:
+            seen.add(s); slots.append(s)
+    last_err, last_slot = "", preferred_slot
+    for slot in slots:
+        ok, wid, err = await _send_wa(instance_slot=slot, jid=jid, message=message)
+        if ok:
+            return (True, wid, "", slot)
+        last_err, last_slot = err, slot
+        if not any(m in (err or "").lower() for m in _WA_FAILOVER_MARKERS):
+            break   # recipient-specific failure — another line won't help
+    return (False, "", last_err, last_slot)
+
+
 async def _send_email(*, to_email: str, subject: str, html_body: str,
                       text_body: str = "") -> tuple[bool, str]:
     try:
@@ -923,8 +958,9 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
                     if not jid:
                         wa_status = "invalid_phone"
                     else:
-                        ok, wa_id, err = await _send_wa(
-                            instance_slot=chosen_slot, jid=jid, message=body)
+                        ok, wa_id, err, used_slot = await _send_wa_failover(
+                            jid=jid, message=body, preferred_slot=chosen_slot)
+                        chosen_slot = used_slot   # record the line that actually sent
                         wa_status = "sent" if ok else "failed"
                         wa_err = err
                         wa_sent_ok = ok
@@ -1193,7 +1229,7 @@ async def on_quick_task_assigned(quick_task: dict):
             recipient_email=quick_task.get("assignee_email") or "",
             subject=f"[Nidaan] Quick task: {title}",
             body="\n".join(body_lines),
-            claim_id=quick_task.get("claim_id"),
+            claim_id=quick_task.get("claim_id"), task_id=qid,
             force_email=True)
 
     # --- Notify the CREATOR (confirmation): EMAIL ONLY ---

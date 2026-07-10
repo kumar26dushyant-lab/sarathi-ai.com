@@ -4246,6 +4246,7 @@ async def ops_quick_tasks_list(request: Request,
                                 task_type: Optional[str] = None,
                                 category: Optional[str] = None,
                                 q: Optional[str] = None,
+                                sort: Optional[str] = None,
                                 overdue: bool = False,
                                 pending_approval: bool = False,
                                 include_done: bool = False,
@@ -4277,7 +4278,7 @@ async def ops_quick_tasks_list(request: Request,
         status=status, assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id,
         claim_id=claim_id, task_type=task_type, category_code=category, search=q,
         for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
-        include_done=include_done, include_deleted=incl_deleted, limit=limit)
+        include_done=include_done, include_deleted=incl_deleted, sort=sort, limit=limit)
     out = {"quick_tasks": items, "count": len(items)}
     if with_counts:
         out["counts"] = await nidaan.quick_task_status_counts(

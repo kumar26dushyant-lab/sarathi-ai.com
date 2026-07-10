@@ -1777,6 +1777,27 @@ async def get_quick_task(quick_task_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def _quick_task_order_sql(sort: Optional[str]) -> str:
+    """ORDER BY clause for the task list. 'smart' (default) keeps active work on top
+    then priority then newest; the rest are explicit user-chosen sorts."""
+    smart = (" ORDER BY "
+             "   CASE q.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 0 ELSE 1 END, "
+             "   CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
+             "                   WHEN 'normal' THEN 2 ELSE 3 END, "
+             "   q.created_at DESC")
+    return {
+        "smart":        smart,
+        "id_desc":      " ORDER BY q.quick_task_id DESC",
+        "id_asc":       " ORDER BY q.quick_task_id ASC",
+        "updated":      " ORDER BY q.updated_at DESC, q.quick_task_id DESC",
+        "created_desc": " ORDER BY q.created_at DESC, q.quick_task_id DESC",
+        "created_asc":  " ORDER BY q.created_at ASC, q.quick_task_id ASC",
+        "due":          " ORDER BY (q.due_date IS NULL), q.due_date ASC, q.quick_task_id DESC",
+        "priority":     (" ORDER BY CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
+                         "WHEN 'normal' THEN 2 ELSE 3 END, q.created_at DESC"),
+    }.get((sort or "smart"), smart)
+
+
 async def list_quick_tasks(*, status: Optional[str] = None,
                             assigned_to_staff_id: Optional[int] = None,
                             viewer_staff_id: Optional[int] = None,
@@ -1789,6 +1810,7 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                             pending_approval: bool = False,
                             include_done: bool = False,
                             include_deleted: bool = False,
+                            sort: Optional[str] = None,
                             limit: int = 100) -> list[dict]:
     """Flexible task query.
     - include_done=False (default): hides done/cancelled (the "open work" view).
@@ -1862,13 +1884,8 @@ async def list_quick_tasks(*, status: Optional[str] = None,
             "LEFT JOIN nidaan_staff a  ON a.staff_id = q.assigned_to_staff_id "
             "LEFT JOIN nidaan_staff cr ON cr.staff_id = q.created_by_staff_id "
             "LEFT JOIN nidaan_claims c ON c.claim_id = q.claim_id "
-            + clause +
-            " ORDER BY "
-            # active work first, finished/cancelled sink to the bottom
-            "   CASE q.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 0 ELSE 1 END, "
-            "   CASE q.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 "
-            "                   WHEN 'normal' THEN 2 ELSE 3 END, "
-            "   q.created_at DESC LIMIT ?", unseen_params + params + [limit])
+            + clause + _quick_task_order_sql(sort) + " LIMIT ?",
+            unseen_params + params + [limit])
         rows = [dict(r) for r in await cur.fetchall()]
         # Green blink = a task with activity I haven't seen yet; gray once I open it.
         #   • MY tasks (assigned/created): blink on any unseen activity (incl. brand new).
