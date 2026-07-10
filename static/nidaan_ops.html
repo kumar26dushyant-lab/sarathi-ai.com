@@ -5018,7 +5018,7 @@ async function loadOfficialNumbers(){
           </div>
         </div>
         <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
-          <button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="showQR(${slot})">📷 ${healthy?'Re-pair':'Connect'} (QR)</button>
+          <button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="showQR(${slot}, ${healthy?1:0})">📷 ${healthy?'Re-pair':'Connect'} (QR)</button>
           <button class="nd-btn nd-btn-sm" style="color:#fca5a5;border:1px solid rgba(248,113,113,.3);background:transparent" onclick="removeOfficialNumber(${slot},'${esc((reg.display_name||'').replace(/'/g,''))}')">🗑 Remove</button>
         </div>
       </div>`;
@@ -5086,8 +5086,9 @@ async function setupInstance(slot, displayName, phone){
   else ndUI.toast('Failed to register','error');
 }
 
-async function showQR(slot){
-  const r = await fetch(`/nidaan/ops/api/official-numbers/${slot}/qr`, { headers: hdrs() });
+async function showQR(slot, force){
+  // force=1 → Re-pair: log the (possibly ghost) session out and issue a fresh QR.
+  const r = await fetch(`/nidaan/ops/api/official-numbers/${slot}/qr${force?'?force=1':''}`, { headers: hdrs() });
   if (!r.ok) {
     const e = await r.json().catch(()=>({detail:'Error'}));
     ndUI.toast('QR fetch failed: ' + _extractErr(e, String(r.status)),'error'); return;

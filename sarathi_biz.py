@@ -5252,9 +5252,11 @@ async def ops_official_delete(slot: int, request: Request):
 
 
 @app.get("/nidaan/ops/api/official-numbers/{slot}/qr")
-async def ops_official_qr(slot: int, request: Request):
+async def ops_official_qr(slot: int, request: Request, force: int = 0):
     """Fetch a fresh QR code from Evolution for a slot (SA only).
     Returns base64 QR + pairing code. SA scans on the SIM's WhatsApp app.
+    force=1 → Re-pair intent: log out first so a fresh QR appears even when
+    Evolution reports 'open' (a ghost connection that shows open but can't send).
     """
     import asyncio as _asyncio
     if not _is_nidaan_host(request): raise HTTPException(404)
@@ -5266,20 +5268,30 @@ async def ops_official_qr(slot: int, request: Request):
     try:
         import biz_whatsapp_evolution as wa_evo
 
-        # 1) If already connected, no QR needed — surface that to the UI cleanly.
-        try:
-            state = await wa_evo.get_connection_state(instance_name)
-            cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
-            if cur_state == "open":
-                return {
-                    "instance_slot": slot,
-                    "evolution_instance": instance_name,
-                    "qr": "",
-                    "pairing_code": "",
-                    "already_connected": True,
-                }
-        except Exception:
-            pass
+        if force:
+            # Re-pair: force a fresh WhatsApp session. Logout so Evolution drops the
+            # (possibly ghost) 'open' state and issues a new QR to scan.
+            try:
+                await wa_evo.logout_instance(instance_name)
+                await nnot.update_instance_health(slot, state="close")
+                await _asyncio.sleep(2)
+            except Exception:
+                pass
+        else:
+            # 1) If already connected, no QR needed — surface that to the UI cleanly.
+            try:
+                state = await wa_evo.get_connection_state(instance_name)
+                cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
+                if cur_state == "open":
+                    return {
+                        "instance_slot": slot,
+                        "evolution_instance": instance_name,
+                        "qr": "",
+                        "pairing_code": "",
+                        "already_connected": True,
+                    }
+            except Exception:
+                pass
 
         # 2) Ensure instance exists on Evolution (idempotent create).
         # tenant_id=0 marks this as a system-level Nidaan official instance.
