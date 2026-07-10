@@ -5265,6 +5265,24 @@ async def ops_official_qr(slot: int, request: Request, force: int = 0):
     if not inst:
         raise HTTPException(404, "Instance slot not registered yet — POST evolution_instance first")
     instance_name = inst["evolution_instance"]
+    # QR spam-guard: after a QR is issued, hold further QR requests for this slot for
+    # a short window so rapid re-generation doesn't invalidate the QR being scanned.
+    QR_LOCK_SECS = 40
+    import time as _t
+    _now_ts = int(_t.time())
+    try:
+        _last_qr = int(await nidaan.get_ops_setting(f"qr_lock_slot{slot}", "0") or "0")
+    except Exception:
+        _last_qr = 0
+    _wait_left = QR_LOCK_SECS - (_now_ts - _last_qr)
+    if _wait_left > 0:
+        return {"instance_slot": slot, "qr": "", "pairing_code": "", "locked": True,
+                "wait_seconds": _wait_left,
+                "message": f"A QR was just generated — scan it now, or wait {_wait_left}s before regenerating."}
+    try:
+        await nidaan.set_ops_setting(f"qr_lock_slot{slot}", str(_now_ts))
+    except Exception:
+        pass
     try:
         import biz_whatsapp_evolution as wa_evo
 

@@ -5003,7 +5003,8 @@ async function loadOfficialNumbers(){
           <span class="task-pill" style="background:${stateColor}22;color:${stateColor};border:1px solid ${stateColor}33;padding:.25rem .65rem">${stateLabel}</span>
         </div>
         ${ghost ? `<div style="margin-top:.6rem;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:.6rem .75rem;font-size:.82rem;color:#fdba74">
-            ⚠️ <b>Shows connected, but messages are failing to send.</b> This is a stale WhatsApp session — click <b>Re-pair (QR)</b> below and re-scan from this SIM's WhatsApp. If it persists, Remove &amp; Add the number again.${sh.last_error ? `<div style="margin-top:.3rem;opacity:.7;font-family:monospace;font-size:.72rem">last error: ${esc(sh.last_error)}</div>` : ''}
+            ⚠️ <b>Shows connected, but messages are failing to send</b> (SessionError).
+            <div style="margin-top:.35rem;color:#fed7aa">The most common cause is that this number is linked from a <b>clone / dual / modified WhatsApp app</b> — those don't support linked devices properly. <b>Fix:</b> link it from the <b>official WhatsApp app</b> — click <b>Re-pair (QR)</b> and scan from the genuine WhatsApp (Settings → Linked devices → Link a device). If it still fails, <b>Remove</b> the number and add it again from the official app.</div>${sh.last_error ? `<div style="margin-top:.3rem;opacity:.7;font-family:monospace;font-size:.72rem">last error: ${esc(sh.last_error)}</div>` : ''}
           </div>` : ''}
         <div style="margin-top:.65rem;font-size:.82rem;color:rgba(255,255,255,.55)">
           Instance: <code style="background:rgba(0,0,0,.25);padding:.1rem .4rem;border-radius:4px">${esc(reg.evolution_instance)}</code>
@@ -5094,6 +5095,10 @@ async function showQR(slot, force){
     ndUI.toast('QR fetch failed: ' + _extractErr(e, String(r.status)),'error'); return;
   }
   const d = await r.json();
+  if (d.locked) {
+    ndUI.toast(d.message || ('Please wait ' + (d.wait_seconds||'a few') + 's before regenerating the QR'), 'info');
+    return;
+  }
   const qrSrc = d.qr ? (d.qr.startsWith('data:') ? d.qr : 'data:image/png;base64,'+d.qr) : '';
   let html;
   if (d.already_connected) {
