@@ -4081,14 +4081,24 @@ async def ops_health(request: Request):
         _today = _date.today().isoformat()
         def _sent_today(i):
             return (i.get("daily_sent_count") or 0) if str(i.get("daily_count_reset_at")) == _today else 0
+        _sh = await nnot.wa_send_health()
         health["wa_instances"] = [
             {"slot": i.get("instance_slot"), "name": i.get("display_name"),
              "phone": i.get("phone_number"), "state": i.get("health_state"),
-             "sent_today": _sent_today(i)}
+             "sent_today": _sent_today(i),
+             "send_broken": bool(_sh.get(i.get("instance_slot"), {}).get("broken")),
+             "last_error": _sh.get(i.get("instance_slot"), {}).get("last_error", "")}
             for i in wa_insts]
+        # A number that's "open" but whose sends are failing is a ghost connection.
+        _ghost = [i for i in wa_insts if i.get("health_state") == "open"
+                  and _sh.get(i.get("instance_slot"), {}).get("broken")]
         if wa_insts:
-            _chk("WhatsApp", len(connected) > 0,
-                 f"{len(connected)}/{len(wa_insts)} official number(s) connected")
+            _can_send = [i for i in connected
+                         if not _sh.get(i.get("instance_slot"), {}).get("broken")]
+            note = f"{len(connected)}/{len(wa_insts)} connected"
+            if _ghost:
+                note += f" · ⚠️ {len(_ghost)} connected but sends FAILING — re-pair (QR)"
+            _chk("WhatsApp", len(_can_send) > 0, note)
         else:
             _chk("WhatsApp", False, "no official numbers configured yet")
     except Exception as _we:
@@ -5201,12 +5211,14 @@ async def ops_official_list(request: Request):
         pass
     insts = await nnot.list_official_instances()
     caps = await nnot.compute_effective_caps()
+    send_health = await nnot.wa_send_health()
     # No hardcoded numbers — the roster is user-driven. Report the free slots so
     # the UI can offer "add a number".
     used = {i.get("instance_slot") for i in insts}
     return {
         "instances": insts,
         "caps": caps,
+        "send_health": send_health,   # {slot: {broken, session_error, last_error, ...}}
         "max_slots": 3,
         "free_slots": [s for s in (1, 2, 3) if s not in used],
     }

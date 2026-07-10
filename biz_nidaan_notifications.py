@@ -257,6 +257,41 @@ async def compute_effective_caps() -> dict:
     return out
 
 
+async def wa_send_health() -> dict:
+    """Per-slot 'can this number actually SEND?' health, derived from recent WhatsApp
+    send outcomes in the notification log. Evolution can report state 'open' while
+    every send fails with SessionError — a ghost connection. Returns
+    {slot: {broken, session_error, last_error, failed_recent, sent_recent}}."""
+    out: dict = {}
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT instance_slot, status, error FROM nidaan_notifications "
+            "WHERE channel='whatsapp' AND instance_slot IS NOT NULL "
+            "AND created_at >= datetime('now','-24 hours') "
+            "ORDER BY notif_id DESC")).fetchall()
+    by_slot: dict = {}
+    for r in rows:
+        by_slot.setdefault(r["instance_slot"], []).append(dict(r))
+    for slot, attempts in by_slot.items():
+        newest = attempts[0]
+        sent_recent = sum(1 for a in attempts if a["status"] == "sent")
+        failed_recent = sum(1 for a in attempts if a["status"] == "failed")
+        # Broken = the most recent attempt failed AND nothing has sent successfully.
+        broken = bool(newest["status"] == "failed" and sent_recent == 0)
+        last_fail = next((a for a in attempts if a["status"] == "failed"), None)
+        last_err = ((last_fail or {}).get("error") or "")
+        session_err = ("session" in last_err.lower()) or ("no sessions" in last_err.lower())
+        out[slot] = {
+            "broken": broken,
+            "session_error": session_err,
+            "last_error": last_err[:120],
+            "failed_recent": failed_recent,
+            "sent_recent": sent_recent,
+        }
+    return out
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  Quiet hours
 # ═════════════════════════════════════════════════════════════════════════════
@@ -785,7 +820,14 @@ async def _send_wa(*, instance_slot: int, jid: str, message: str) -> tuple[bool,
             except Exception:
                 pass
             return (True, wa_id, "")
-        return (False, "", str(result.get("error") if result else "unknown"))
+        # Preserve the real reason (e.g. "SessionError: No sessions") from the
+        # Evolution response detail — not just the generic http_400 — so the ops
+        # UI can flag a ghost "connected-but-can't-send" number.
+        _err = str((result or {}).get("error") or "unknown")
+        _detail = str((result or {}).get("detail") or "").strip()
+        if _detail:
+            _err = f"{_err}: {_detail[:140]}"
+        return (False, "", _err)
     except Exception as e:
         return (False, "", str(e))
 

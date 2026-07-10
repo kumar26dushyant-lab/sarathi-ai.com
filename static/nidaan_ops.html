@@ -4007,9 +4007,13 @@ async function loadHealth() {
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">📱 WhatsApp Numbers</div><button class="btn-sm btn-ghost" onclick="showPanel('numbers')">Manage →</button></div>
       ${(d.wa_instances && d.wa_instances.length) ? `<div class="stats-row">${d.wa_instances.map(w=>{
           const up = w.state==='open';
-          return `<div class="stat-card ${up?'ok':'danger'}">
-            <div class="sv" style="font-size:1rem;color:${up?'#4ade80':'#f87171'}">${up?'🟢 Connected':'🔴 Offline'}</div>
-            <div class="sl">${esc(w.name||('Slot '+w.slot))}<div style="font-size:.66rem;color:rgba(255,255,255,.4)">${esc(w.phone||'—')} · ${w.sent_today||0} sent today</div></div>
+          const ghost = up && w.send_broken;
+          const cls = ghost ? 'warn' : (up ? 'ok' : 'danger');
+          const col = ghost ? '#fb923c' : (up ? '#4ade80' : '#f87171');
+          const lbl = ghost ? '⚠️ Send failing' : (up ? '🟢 Connected' : '🔴 Offline');
+          return `<div class="stat-card ${cls}">
+            <div class="sv" style="font-size:1rem;color:${col}">${lbl}</div>
+            <div class="sl">${esc(w.name||('Slot '+w.slot))}<div style="font-size:.66rem;color:rgba(255,255,255,.4)">${esc(w.phone||'—')} · ${w.sent_today||0} sent today${ghost?' · re-pair (QR)':''}</div></div>
           </div>`;}).join('')}</div>`
         : '<div class="stat-card warn"><div class="sv" style="font-size:1rem;color:#fbbf24">No numbers configured</div><div class="sl">Add one under Official Numbers</div></div>'}
     </div>
@@ -4975,6 +4979,7 @@ async function loadOfficialNumbers(){
   const insts = d.instances || [];
   const caps = d.caps || {by_slot:{}};
   const freeSlots = d.free_slots || [];
+  const sendHealth = d.send_health || {};
 
   // A card per REGISTERED number (user-added). No hardcoded numbers.
   let rows = '';
@@ -4982,8 +4987,10 @@ async function loadOfficialNumbers(){
     const slot = reg.instance_slot;
     const cap = caps.by_slot[slot] || {};
     const healthy = (reg.health_state === 'open' || reg.health_state === 'connected');
-    const stateColor = healthy ? '#22c55e' : '#fbbf24';
-    const stateLabel = healthy ? 'CONNECTED' : 'DISCONNECTED';
+    const sh = sendHealth[slot] || {};
+    const ghost = healthy && sh.broken;   // "open" but sends are failing
+    const stateColor = ghost ? '#f97316' : (healthy ? '#22c55e' : '#fbbf24');
+    const stateLabel = ghost ? '⚠ CONNECTED (SEND FAILING)' : (healthy ? 'CONNECTED' : 'DISCONNECTED');
     const usagePct = cap.usage_pct || 0;
     const effective = cap.effective_cap || 0;
     rows += `
@@ -4995,6 +5002,9 @@ async function loadOfficialNumbers(){
           </div>
           <span class="task-pill" style="background:${stateColor}22;color:${stateColor};border:1px solid ${stateColor}33;padding:.25rem .65rem">${stateLabel}</span>
         </div>
+        ${ghost ? `<div style="margin-top:.6rem;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:.6rem .75rem;font-size:.82rem;color:#fdba74">
+            ⚠️ <b>Shows connected, but messages are failing to send.</b> This is a stale WhatsApp session — click <b>Re-pair (QR)</b> below and re-scan from this SIM's WhatsApp. If it persists, Remove &amp; Add the number again.${sh.last_error ? `<div style="margin-top:.3rem;opacity:.7;font-family:monospace;font-size:.72rem">last error: ${esc(sh.last_error)}</div>` : ''}
+          </div>` : ''}
         <div style="margin-top:.65rem;font-size:.82rem;color:rgba(255,255,255,.55)">
           Instance: <code style="background:rgba(0,0,0,.25);padding:.1rem .4rem;border-radius:4px">${esc(reg.evolution_instance)}</code>
         </div>
