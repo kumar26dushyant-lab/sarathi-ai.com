@@ -3843,6 +3843,15 @@ modal for `plan`. Verify on one real ₹499 payment before enabling for all.
    line is connected (background, flag `nidaan_broadcast_wa`, per-send verify) and skips
    silently when disconnected. Broadcast push URL → `/admin`. (Budget-defer for
    near-cap numbers stays — that's intentional ban protection, not a disconnect backlog.)
+4. **Ghost-connection detection (Jul 10):** ROOT CAUSE of "comment didn't trigger
+   WhatsApp" was NOT code — Evolution reported the number `open` while every send
+   failed with `SessionError: No sessions` (a stale WhatsApp session; number verifies
+   fine, connectionState 'open', but 0 sends). Fix is operational (**Re-pair QR**, or
+   Remove+Add). Code added to surface it: `_send_wa` now preserves the real Evolution
+   error detail; `wa_send_health()` derives per-slot send health from recent WhatsApp
+   outcomes (broken = latest attempt failed + no recent success); Official Numbers page
+   shows an orange **"⚠ CONNECTED (SEND FAILING)"** pill + re-pair banner, App Health
+   flags it too. A single successful send clears the flag.
 
 ---
 
