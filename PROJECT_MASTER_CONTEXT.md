@@ -3852,6 +3852,149 @@ modal for `plan`. Verify on one real ₹499 payment before enabling for all.
    outcomes (broken = latest attempt failed + no recent success); Official Numbers page
    shows an orange **"⚠ CONNECTED (SEND FAILING)"** pill + re-pair banner, App Health
    flags it too. A single successful send clears the flag.
+   *(Superseded Jul 10–11 — see §45.5 "NOT WORKING — RE-PAIR" + §45.6 orchestrator.)*
+
+---
+
+## 45. WHATSAPP RELIABILITY + TASK COLLABORATION + PWA + AI-BOT PLAN — JUL 10–11, 2026
+
+This session hardened WhatsApp end-to-end, made the ops app a real installable app on
+both platforms, added admin-editable task categories + attachments, built multi-party
+task collaboration, and stood up a self-managing WhatsApp orchestrator. All shipped +
+deployed (blue-green) unless marked otherwise.
+
+### 45.1 QR pairing made reliable — "Couldn't link device / try again later" (fixed)
+- **Root cause:** the pairing QR was fetched once and shown as a *frozen image*. WhatsApp
+  rotates its QR every ~20s and invalidates the old ref, so the SA was scanning a dead
+  code → WhatsApp's own "Couldn't link device — try again later". (WhatsApp Web works
+  because it live-refreshes.) The earlier 40s QR spam-guard made it worse by blocking any
+  refresh.
+- **Fix (`ops_official_qr` + `showQR` in `nidaan_ops.html`):** split the heavy **Re-pair**
+  (`force=1`: logout + recreate, throttled 15s) from a lightweight **live-QR poll**
+  (`force=0`, no logout). The UI now polls every ~18s, swaps the QR image live, and
+  auto-detects the connect (state `open` → green "Slot connected!"), stops on drawer
+  close / view change / ~4 min. Guidance: scan promptly, use the official WhatsApp app.
+
+### 45.2 Official-number "save the number" popup firing on every refresh (fixed)
+- Gate compared instances' max `updated_at` to the ack timestamp — but `updated_at` bumps
+  on **every send + every re-pair**, so it kept re-triggering. Now gated on a **signature
+  of the phone-number SET** (add/remove only), acknowledged per-device in localStorage
+  (`nidaan_ops_numack`). Fires only when the set of numbers actually changes.
+
+### 45.3 Admin-editable task categories + attachment on quick-task create
+- **Categories (#6):** new `nidaan_task_categories` table (code/label/colour/sort/active),
+  seeded **RT (Review Task)** + **GT (General Task)**; `nidaan_quick_tasks.category_code`
+  column. API `GET /task-categories` (any staff) + `POST/PATCH/DELETE` (SA, soft-deactivate).
+  Ops UI: category dropdown in the Quick Task form; coloured badge in registry/widgets/drawer;
+  category **filter** on the board; full **category manager in Workflow Settings**
+  (add/rename/recolour/reorder/deactivate). `list_quick_tasks` gained a `category_code` filter.
+- **Attachment on create (#5):** Quick Task form has a 📎 picker; on create the file (with
+  the first comment) is uploaded as the task's first note via the existing multipart notes
+  endpoint.
+- **Task-list sorting (#2):** `list_quick_tasks` gained a `sort` param
+  (`smart` | `updated` | `created_desc/asc` | `id_desc/asc` | `due` | `priority`) via
+  `_quick_task_order_sql`; ops registry has a Sort dropdown.
+
+### 45.4 Real app-install + iOS notifications + mobile app-shell (#3/#4)
+- The "Chrome • possible spam / Unsubscribe" push chrome + missing iOS notifications both
+  come from the app not being installed to the home screen. Fix = make it reliably
+  installable everywhere.
+- New shared **`static/nidaan_install.js`**: captures `beforeinstallprompt` (Android/desktop)
+  for one-tap Install, AND on iOS Safari (no such event; Web Push only works once installed)
+  shows an **"Add to Home Screen"** guide. Standalone-aware, dismissal remembered per app,
+  exposes `NidaanInstall.show()`. Subscriber dashboard swapped its Android-only banner for
+  this module (now covers iPhone). Ops app already had Android+iOS handling — left intact.
+- Mobile app-shell: `viewport-fit=cover` + `@media (display-mode:standalone)` **safe-area
+  insets** on both apps (header clears the notch, content clears the home bar).
+
+### 45.5 WhatsApp send reliability — failover, honest health, task linking
+- **Line-failover (`_send_wa_failover`):** a send tries the picked line first, then
+  automatically fails over to the other healthy official line on a session/slot error, so a
+  single working number keeps WhatsApp flowing when another is a dead ghost. Recipient-
+  specific errors (not-on-WhatsApp / blocked) do NOT retry. `dispatch()` records the line
+  that actually sent. `pick_staff_slot` now prefers lines that are actually sending (skips
+  ghosts when a working line exists).
+- **Honest line health (`wa_send_health`):** was marking a line healthy if it had ANY success
+  in 24h — so a line that sent this morning but fails every send now showed green. Now judges
+  the **current streak**: newest send failed with a session error (or a run of failures with
+  no success since) ⇒ **broken**. Badge relabelled **"NOT WORKING — RE-PAIR"**.
+- **Task linking:** assignment/reassign/comment/status notifications now pass `task_id` so
+  alerts trace to the task and deep-link correctly.
+
+### 45.6 Self-managing WhatsApp ORCHESTRATOR (watchdog) — LIVE
+Deterministic orchestrator (intentionally NOT an LLM — never let an AI guess whether to
+restart a line), worker-only singleton, every 4 min (`run_wa_watchdog_cycle`):
+1. **Routes** through a line that's actually sending (health-aware `pick_staff_slot` + failover).
+2. **Checks** real send-ability per line (from `wa_send_health` + Evolution state).
+3. **Auto-fixes** — `wa_evo.restart_instance` (up to 3×/outage) then a probe send to confirm.
+4. **Escalates** — if it can't self-heal, alerts **every super-admin** via dashboard bell +
+   web push + email (NEVER the dead WhatsApp), **once per outage**, telling them to Re-pair.
+5. **Recovers + resumes** — while down a probe fails silently (nothing delivered, no spam);
+   on recovery it delivers one "back online" ping, clears state, announces recovery, WhatsApp
+   resumes automatically.
+- State in `nidaan_ops_settings` (`wa_wd_slot{n}` JSON); flag `nidaan_wa_watchdog_enabled`
+  (default on); probe target = `wa_probe_number` or first active SA's phone.
+- **Verified live:** cycle logged `{1:'down', 2:'down'}`, restarted 3× each, alerted SAs
+  (staff 1/2/11/13/19/22) — proving detection + escalation work.
+
+### 45.7 The Baileys "No sessions" diagnosis + strategic decision
+- **Proven by direct Evolution API test:** BOTH official lines return
+  `{"error":"Bad Request","message":["SessionError: No sessions"]}` on every send while
+  reporting state `open`. Restart doesn't fix it; number verifies fine. This is inherent
+  fragility of self-hosted **linked-device (Baileys)** automation — sessions die when the
+  host phone sleeps/loses network, or when a **clone/dual WhatsApp app** is used (line 1 /
+  9244144804 is on a clone → unfixable via server; must use genuine WhatsApp or Remove).
+- Today's channel tally proved the *system* is fine: **email 53/53, dashboard 106/106,
+  WhatsApp 5 sent / 29 failed** (all failures after ~06:53). Assignees still got tasks by
+  email + dashboard; only WhatsApp failed.
+- **User decision:** stay on **Baileys** (re-pair when it dies) rather than move to the
+  official WhatsApp Cloud API. The orchestrator (§45.6) exists to make that choice bearable.
+  **Operational TODO (user):** re-pair Annapurna (9826011116) from its *genuine* WhatsApp on
+  a phone kept **online**; line 1 likely to be Removed (clone).
+
+### 45.8 Multi-party task collaboration — @mention / participants / mute (LIVE)
+A task has one assignee but work is collaborative:
+- **@mention** a teammate in a comment (autocomplete in the comment box) → they become a
+  **participant**: task appears in their list, they can open + comment, and get a
+  "🏷️ you were tagged" alert.
+- **All progression** (comments, status changes) notifies **everyone involved** — creator +
+  assignee + every @mentioned participant — minus the actor.
+- Any participant who's done can **Mute** the task (per-person) to stop pings while keeping
+  access (for busy 10-person tasks).
+- Backend: `nidaan_quick_task_watchers` table; `add_task_watchers` / `list_task_watchers` /
+  `set_task_watch_mute` / `is_task_participant` / `get_task_participants`; `list_quick_tasks`
+  visibility widened to @mentioned tasks; note-add accepts `mentions`; `POST .../mute`; get
+  returns `participants` + `me_muted`. Notifications: `on_quick_task_mention` +
+  `_notify_task_participants` fan-out (used by `on_quick_task_comment` / `_status_changed`)
+  respecting mute. UI: @mention autocomplete, "👥 Involved" chips, Mute/Unmute; participants
+  can comment.
+
+### 45.9 AI WhatsApp assistant — PLAN (read-only first; NEXT build)
+- **Confirmed scope:** read-only first. Vision: a staffer/SA sends a WhatsApp text/voice note
+  ("status of the Bajaj escalation task?") → the assistant reads tasks/claims and replies
+  naturally. Honest split agreed: **health/routing/auto-fix = deterministic code (§45.6)**;
+  **Claude Sonnet = the conversation layer** (natural inbound answers with claim/task context).
+- **Architecture:** inbound Evolution webhook (`messages.upsert`) → **strict sender-auth**
+  (only registered staff numbers may query internal data) → (Gemini voice transcription for
+  voice notes) → Claude Sonnet agentic tool-use (search tasks, get status, my open work,
+  claim status) → reply on WhatsApp. Build transport-agnostic so it moves to the official
+  API later with zero rework.
+- **Dependencies/blockers:** no inbound WhatsApp exists yet (send-only today); cannot be
+  tested end-to-end until a line is re-paired (both down). **Status: queued, not started.**
+
+### 45.10 Two platforms + backup posture (reaffirmed — the "kept separate + backed up" answer)
+- **One codebase, two products, cleanly separated.** A single FastAPI app (`sarathi_biz.py`)
+  serves BOTH by **host detection** — `_is_sarathi_host` (sarathi-ai.com, advisor CRM) vs
+  `_is_nidaan_host` (nidaanpartner.com, claim-review + ops portal). Routes 404 on the wrong
+  host, so the products never bleed into each other. `biz_platform_bridge.py` is the ONLY
+  module that reaches from Nidaan into Sarathi tenants/agents (see Infra: Platform Boundary).
+  Nidaan ops lives under its own installable scope `/admin`; subscribers under `/nidaan/`.
+- **Backups (unchanged, healthy):** local **7-day rotation** + off-server **AES-256-encrypted**
+  snapshots pushed to a private repo (`sarathi-db-backups`); passphrase in `biz.env` + off-site.
+  Secrets in `biz.env` (0600, never committed).
+- **Deploy:** `git push origin master` → `ssh root@84.247.172.252 … deploy/auto-deploy-zerodowntime.sh`
+  (blue-green: worker singletons restart, then web@1/@2 roll one at a time with health checks —
+  no downtime). Validate before deploy: `py_compile` + extract inline JS → `node --check`.
 
 ---
 
