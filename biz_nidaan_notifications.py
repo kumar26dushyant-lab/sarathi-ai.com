@@ -1454,80 +1454,115 @@ async def on_quick_task_assigned(quick_task: dict):
             force_email=True)
 
 
-async def on_quick_task_status_changed(quick_task: dict, new_status: str, by_name: str = ""):
+async def on_quick_task_status_changed(quick_task: dict, new_status: str,
+                                        by_name: str = "", by_id: Optional[int] = None):
     """A quick task's status changed (reopened / rejected / cancelled / done, etc.)
-    → notify the ASSIGNEE so they know their task needs attention. Deep-links to
-    the task in the ops app. Skips if there's no assignee."""
+    → notify EVERYONE involved (assignee + creator + @mentioned participants), minus
+    whoever made the change and anyone who muted the task. Deep-links to the task."""
     if not quick_task:
-        return
-    assignee_id = quick_task.get("assigned_to_staff_id")
-    if not assignee_id:
         return
     qid = quick_task.get("quick_task_id")
     title = quick_task.get("title", "") or ""
-    task_priority = (quick_task.get("priority") or "normal").lower()
-    notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
-                      "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)
-    async with aiosqlite.connect(db.DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        staff = await (await conn.execute(
-            "SELECT phone, notify_email, email FROM nidaan_staff WHERE staff_id=?",
-            (assignee_id,))).fetchone()
-    staff = dict(staff) if staff else {}
     label = {"open": "reopened", "in_progress": "reopened", "reopened": "reopened",
              "rejected": "rejected", "cancelled": "cancelled",
              "done": "marked done", "completed": "marked done"}.get(new_status, new_status)
     body = (f"🔄 Task #{qid} \"{title}\" was {label}"
             + (f" by {by_name}" if by_name else "") + ".\n\n"
             f"Open: /admin?qt={qid}")
-    await dispatch(
-        event_key="quick_task.status", priority=notif_priority,
-        recipient_type=RECIPIENT_STAFF, recipient_id=assignee_id,
-        recipient_phone=staff.get("phone") or "",
-        recipient_email=staff.get("notify_email") or staff.get("email") or "",
-        subject=f"[Nidaan] Task #{qid} {label} — {title[:50]}",
-        body=body, task_id=qid, force_email=True)
+    await _notify_task_participants(
+        quick_task=quick_task, actor_id=by_id,
+        event_key="quick_task.status",
+        subject=f"[Nidaan] Task #{qid} {label} — {title[:50]}", body=body)
+
+
+def _task_notif_priority(quick_task: dict) -> str:
+    tp = (quick_task.get("priority") or "normal").lower()
+    return {"low": PRIORITY_P2, "normal": PRIORITY_P2,
+            "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(tp, PRIORITY_P2)
+
+
+async def _notify_task_participants(*, quick_task: dict, actor_id: Optional[int],
+                                    event_key: str, subject: str, body: str,
+                                    exclude_ids: Optional[set] = None):
+    """Fan a task-progression notification out to everyone involved — creator +
+    assignee + @mentioned participants — minus the actor and anyone who muted the
+    task. This is what makes 'all parties get notified on all progression' work,
+    while a participant who's done can mute to stop the noise."""
+    import biz_nidaan as _nid
+    qid = quick_task.get("quick_task_id")
+    if not qid:
+        return
+    parts = await _nid.get_task_participants(qid)
+    skip = set(exclude_ids or set())
+    if actor_id:
+        skip.add(actor_id)
+    prio = _task_notif_priority(quick_task)
+    for p in parts:
+        sid = p.get("staff_id")
+        if sid in skip or p.get("muted"):
+            continue
+        await dispatch(
+            event_key=event_key, priority=prio,
+            recipient_type=RECIPIENT_STAFF, recipient_id=sid,
+            recipient_phone=p.get("phone") or "",
+            recipient_email=p.get("email") or "",
+            subject=subject, body=body, task_id=qid)
+
+
+async def on_quick_task_mention(quick_task: dict, mentioned_ids: list,
+                                by_id: int, by_name: str = "", preview: str = ""):
+    """Someone @mentioned staff into a task → tell each newly-tagged person directly
+    ('you were tagged'), deep-linked, so they pick up their part. dashboard + push +
+    WhatsApp/email."""
+    if not quick_task or not mentioned_ids:
+        return
+    qid = quick_task.get("quick_task_id")
+    title = quick_task.get("title", "") or ""
+    by_name = by_name or "Someone"
+    prio = _task_notif_priority(quick_task)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ph = ",".join("?" * len(mentioned_ids))
+        rows = await (await conn.execute(
+            f"SELECT staff_id, phone, "
+            f"       COALESCE(NULLIF(notify_email,''), email) AS email "
+            f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
+            f"AND status='active' AND deleted_at IS NULL", list(mentioned_ids))).fetchall()
+    body = (f"🏷️ {by_name} tagged you on task #{qid} \"{title}\""
+            + (f":\n\"{preview[:160]}\"" if preview else ".") +
+            f"\n\nYou can now see and work on it.\nOpen: /admin?qt={qid}")
+    for r in rows:
+        if r["staff_id"] == by_id:
+            continue
+        await dispatch(
+            event_key="quick_task.mention", priority=prio,
+            recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
+            recipient_phone=r.get("phone") or "",
+            recipient_email=r.get("email") or "",
+            subject=f"[Nidaan] You were tagged on task #{qid} — {title[:40]}",
+            body=body, task_id=qid)
 
 
 async def on_quick_task_comment(quick_task: dict, commenter_id: int, preview: str):
-    """A new comment on a task → notify the OTHER involved staff (assignee + creator,
-    minus the commenter): dashboard + push + WhatsApp. WhatsApp only fires if an
-    official line is connected; otherwise it dies silently (no backlog) — dashboard
-    and email still reach them (plug-and-play)."""
+    """A new comment on a task → notify EVERYONE involved (creator + assignee +
+    @mentioned participants), minus the commenter and anyone who muted the task:
+    dashboard + push + WhatsApp/email. WhatsApp dies silently if no line is up
+    (no backlog); dashboard + email still reach them."""
     if not quick_task:
         return
     qid = quick_task.get("quick_task_id")
     title = quick_task.get("title", "") or ""
-    recips = set()
-    if quick_task.get("assigned_to_staff_id"):
-        recips.add(quick_task["assigned_to_staff_id"])
-    if quick_task.get("created_by_staff_id"):
-        recips.add(quick_task["created_by_staff_id"])
-    recips.discard(commenter_id)
-    if not recips:
-        return
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cmt = await (await conn.execute(
             "SELECT name FROM nidaan_staff WHERE staff_id=?", (commenter_id,))).fetchone()
         by_name = (cmt["name"] if cmt else "") or "Someone"
-        ph = ",".join("?" * len(recips))
-        rows = {r["staff_id"]: dict(r) for r in await (await conn.execute(
-            f"SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
-            f"WHERE staff_id IN ({ph})", list(recips))).fetchall()}
-    task_priority = (quick_task.get("priority") or "normal").lower()
-    notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
-                      "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)
     body = (f"💬 {by_name} commented on task #{qid} \"{title}\":\n"
             f"\"{(preview or '')[:160]}\"\n\nOpen: /admin?qt={qid}")
-    for sid, st in rows.items():
-        await dispatch(
-            event_key="quick_task.comment", priority=notif_priority,
-            recipient_type=RECIPIENT_STAFF, recipient_id=sid,
-            recipient_phone=st.get("phone") or "",
-            recipient_email=st.get("notify_email") or st.get("email") or "",
-            subject=f"[Nidaan] Comment on task #{qid} — {title[:40]}",
-            body=body, task_id=qid)
+    await _notify_task_participants(
+        quick_task=quick_task, actor_id=commenter_id,
+        event_key="quick_task.comment",
+        subject=f"[Nidaan] Comment on task #{qid} — {title[:40]}", body=body)
 
 
 async def on_quick_task_approval_request(quick_task: dict):

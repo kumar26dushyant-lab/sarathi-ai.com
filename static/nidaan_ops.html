@@ -1778,17 +1778,23 @@ async function openQuickTaskDrawer(qid){
   const d = await r.json();
   const qt = d.quick_task;
   const notes = d.notes || [];
+  const participants = d.participants || [];
+  const meMuted = !!d.me_muted;
+  window._qtMentions = {};   // fresh @mention picks for this drawer
   const prio = QT_PRIORITY_PILLS[qt.priority] || QT_PRIORITY_PILLS.normal;
   const status = QT_STATUS_PILLS[qt.status] || QT_STATUS_PILLS.open;
   const isAssignee = qt.assigned_to_staff_id === _staffId;
   const isCreator = qt.created_by_staff_id === _staffId;
   const isAdmin = (_role==='super_admin' || _role==='sub_super_admin');
+  const iAmParticipant = (d.participants||[]).some(p => p.staff_id === _staffId);
   const canTransition = isAssignee || isAdmin;
-  const canComment = isAssignee || isCreator || isAdmin;
+  // Anyone involved — assignee, creator, admin, or an @mentioned collaborator — can comment.
+  const canComment = isAssignee || isCreator || isAdmin || iAmParticipant;
 
-  // Admins can reassign — load the assignee roster up front.
+  // Load the staff roster up front — admins use it to reassign, and EVERYONE uses
+  // it for @mention autocomplete in the comment box.
   let assignees = [];
-  if (isAdmin) { try { assignees = await _loadAssigneesOnce(); } catch(e){} }
+  try { assignees = await _loadAssigneesOnce(); } catch(e){}
   try { await _loadTaskCategoriesOnce(); } catch(e){}   // for the category pill/badge
   const _cat = qt.category_code ? _taskCat(qt.category_code) : null;
 
@@ -1867,6 +1873,15 @@ async function openQuickTaskDrawer(qid){
         ${qt.completed_at ? `<div><span style="color:rgba(255,255,255,.45)">Completed</span><br>${ndUI.timeAgo(qt.completed_at)}</div>` : ''}
       </div>
 
+      <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem">
+        <span style="font-size:.72rem;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.04em">👥 Involved</span>
+        ${participants.map(p=>{
+          const ri={creator:'✍️',assignee:'👤',owner:'👤',mentioned:'🏷️',watcher:'👁️'}[p.relation]||'•';
+          return `<span title="${esc(p.relation)}" style="font-size:.74rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:.12rem .5rem;border-radius:999px">${ri} ${esc(p.name||('#'+p.staff_id))}${p.muted?' 🔕':''}</span>`;
+        }).join('')}
+        <button class="btn-sm btn-ghost" style="margin-left:auto;font-size:.76rem" onclick="qtToggleMute(${qt.quick_task_id}, ${meMuted?0:1})">${meMuted?'🔔 Unmute':'🔕 Mute'}</button>
+      </div>
+
       ${approvalActions}
       ${statusActions}
       ${manageActions}
@@ -1877,14 +1892,17 @@ async function openQuickTaskDrawer(qid){
           ${_renderQTThread(notes, qt.quick_task_id, canComment)}
         </div>
         ${canComment ? `
-          <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
-            <input id="qtNoteInput" placeholder="Add a comment…"
-                   onkeydown="if(event.key==='Enter')qtAddNote(${qt.quick_task_id})"
+          <div style="position:relative;margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
+            <div id="qtMentionBox" style="display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;max-height:200px;overflow-y:auto;background:#0f1e3a;border:1px solid rgba(255,255,255,.18);border-radius:8px;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
+            <input id="qtNoteInput" placeholder="Add a comment…  (type @ to tag someone)" autocomplete="off"
+                   oninput="_qtMentionInput(this)"
+                   onkeydown="if(event.key==='Enter'&&document.getElementById('qtMentionBox').style.display==='none')qtAddNote(${qt.quick_task_id})"
                    style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;padding:.55rem .75rem;border-radius:8px;font-size:.88rem">
             <input type="file" id="qtNoteFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtFilePicked()">
             <button class="btn-sm" title="Attach a file" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
+          <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task — they'll be notified and can work on it.</div>
           <div id="qtNoteFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-top:.3rem"></div>` : ''}
       </div>
     </div>`;
@@ -2103,6 +2121,51 @@ function _qtFilePicked(){
   if (f.files && f.files[0]) { lbl.textContent = '📎 ' + f.files[0].name + ' — press Send to attach'; lbl.style.display='block'; }
   else { lbl.style.display='none'; }
 }
+// ── @mention autocomplete in the task comment box ────────────────────────────
+let _qtMentionMatches = [];
+function _qtMentionInput(el){
+  const box = document.getElementById('qtMentionBox');
+  if (!box) return;
+  const caret = el.selectionStart || el.value.length;
+  const upto = el.value.slice(0, caret);
+  const at = upto.lastIndexOf('@');
+  if (at < 0) { box.style.display='none'; return; }
+  const query = upto.slice(at + 1);
+  if (query.length > 24) { box.style.display='none'; return; }   // moved past a mention
+  const q = query.trim().toLowerCase();
+  _qtMentionMatches = (_assigneesCache || [])
+      .filter(s => (s.name||'').toLowerCase().includes(q))
+      .filter(s => s.staff_id !== _staffId)
+      .slice(0, 6);
+  if (!_qtMentionMatches.length) { box.style.display='none'; return; }
+  box.dataset.at = at;
+  box.innerHTML = _qtMentionMatches.map((s,i)=>
+    `<div onmousedown="event.preventDefault();_qtPickMention(${i})" style="padding:.5rem .7rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">👤 ${esc(s.name)}</div>`).join('');
+  box.style.display='block';
+}
+function _qtPickMention(idx){
+  const el = document.getElementById('qtNoteInput');
+  const box = document.getElementById('qtMentionBox');
+  const s = _qtMentionMatches[idx];
+  if (!el || !box || !s) return;
+  const at = parseInt(box.dataset.at || '-1');
+  const caret = el.selectionStart || el.value.length;
+  if (at >= 0) el.value = el.value.slice(0, at) + '@' + s.name + ' ' + el.value.slice(caret);
+  window._qtMentions = window._qtMentions || {};
+  window._qtMentions[s.staff_id] = s.name;
+  box.style.display='none';
+  el.focus();
+}
+function qtToggleMute(qid, muted){
+  fetch('/nidaan/ops/api/quick-tasks/'+qid+'/mute', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({muted: !!muted})
+  }).then(r=>{
+    if (r.ok){ ndUI.toast(muted?'🔕 Muted — you won\'t get pings for this task':'🔔 Unmuted','success'); openQuickTaskDrawer(qid); }
+    else ndUI.toast('Failed','error');
+  });
+}
+
 async function qtAddNote(qid, parentNoteId){
   const inputId = parentNoteId ? ('qtReplyInput_'+parentNoteId) : 'qtNoteInput';
   const input = document.getElementById(inputId);
@@ -2115,6 +2178,11 @@ async function qtAddNote(qid, parentNoteId){
   fd.append('note', note);
   if (parentNoteId) fd.append('parent_note_id', parentNoteId);
   if (file) fd.append('file', file);
+  // Include @mentions still present in the text (top-level box only).
+  if (!parentNoteId && window._qtMentions){
+    const ids = Object.keys(window._qtMentions).filter(id => note.includes('@' + window._qtMentions[id]));
+    if (ids.length) fd.append('mentions', ids.join(','));
+  }
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid+'/notes', {
     method:'POST', headers: hdrs(),   // multipart — let the browser set Content-Type
     body: fd,

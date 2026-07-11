@@ -1739,6 +1739,106 @@ async def deactivate_task_category(category_id: int) -> bool:
     return True
 
 
+# ── Task collaboration: watchers / @mention participants / mute ──────────────
+async def add_task_watchers(quick_task_id: int, staff_ids: list[int],
+                             added_by: int, relation: str = "mentioned") -> list[int]:
+    """Add staff as watchers/participants of a task. Returns the staff_ids that were
+    NEWLY added (already-present watchers are skipped) so callers can notify only the
+    freshly-tagged people."""
+    newly: list[int] = []
+    if not staff_ids:
+        return newly
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for sid in staff_ids:
+            if not sid:
+                continue
+            cur = await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_quick_task_watchers "
+                "(quick_task_id, staff_id, relation, added_by_staff_id) VALUES (?,?,?,?)",
+                (quick_task_id, sid, relation, added_by))
+            if cur.rowcount:
+                newly.append(sid)
+        await conn.commit()
+    return newly
+
+
+async def list_task_watchers(quick_task_id: int) -> list[dict]:
+    """Explicitly-added watchers (mentioned participants) with name/role + mute."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT w.staff_id, w.relation, w.muted, w.added_by_staff_id, w.added_at, "
+            "       s.name, s.role "
+            "FROM nidaan_quick_task_watchers w "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = w.staff_id "
+            "WHERE w.quick_task_id = ? ORDER BY w.added_at ASC", (quick_task_id,))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def set_task_watch_mute(quick_task_id: int, staff_id: int, muted: bool) -> bool:
+    """Mute/unmute a task for one staffer. Creates a watcher row (relation='owner')
+    if they weren't a mentioned participant — so the assignee/creator can mute too."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_quick_task_watchers (quick_task_id, staff_id, relation, muted, added_by_staff_id) "
+            "VALUES (?,?,'owner',?,?) "
+            "ON CONFLICT(quick_task_id, staff_id) DO UPDATE SET muted=excluded.muted",
+            (quick_task_id, staff_id, 1 if muted else 0, staff_id))
+        await conn.commit()
+    return True
+
+
+async def is_task_participant(quick_task_id: int, staff_id: int) -> bool:
+    """True if the staffer is the creator, assignee, or a watcher of the task."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT 1 FROM nidaan_quick_tasks "
+            "WHERE quick_task_id=? AND (created_by_staff_id=? OR assigned_to_staff_id=?) "
+            "UNION SELECT 1 FROM nidaan_quick_task_watchers "
+            "WHERE quick_task_id=? AND staff_id=? LIMIT 1",
+            (quick_task_id, staff_id, staff_id, quick_task_id, staff_id))).fetchone()
+        return row is not None
+
+
+async def get_task_participants(quick_task_id: int) -> list[dict]:
+    """Everyone involved in a task — creator + assignee + mentioned watchers — unified
+    with each person's mute state and contact details. Drives notification fan-out."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        task = await (await conn.execute(
+            "SELECT created_by_staff_id, assigned_to_staff_id FROM nidaan_quick_tasks "
+            "WHERE quick_task_id=?", (quick_task_id,))).fetchone()
+        if not task:
+            return []
+        meta: dict[int, dict] = {}
+        if task["created_by_staff_id"]:
+            meta[task["created_by_staff_id"]] = {"relation": "creator", "muted": 0}
+        if task["assigned_to_staff_id"]:
+            meta.setdefault(task["assigned_to_staff_id"], {"relation": "assignee", "muted": 0})
+        wrows = await (await conn.execute(
+            "SELECT staff_id, relation, muted FROM nidaan_quick_task_watchers WHERE quick_task_id=?",
+            (quick_task_id,))).fetchall()
+        for w in wrows:
+            prev = meta.get(w["staff_id"])
+            # keep the creator/assignee label but carry the mute flag from the row
+            rel = prev["relation"] if prev else w["relation"]
+            meta[w["staff_id"]] = {"relation": rel, "muted": int(w["muted"])}
+        if not meta:
+            return []
+        ph = ",".join("?" * len(meta))
+        srows = await (await conn.execute(
+            f"SELECT staff_id, name, role, phone, "
+            f"       COALESCE(NULLIF(notify_email,''), email) AS email "
+            f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
+            f"AND status='active' AND deleted_at IS NULL", list(meta.keys()))).fetchall()
+        out = []
+        for r in srows:
+            m = meta.get(r["staff_id"], {})
+            d = dict(r); d["relation"] = m.get("relation", "watcher"); d["muted"] = m.get("muted", 0)
+            out.append(d)
+        return out
+
+
 async def set_quick_task_approval(quick_task_id: int, decision: str,
                                    changed_by: int, note: str = "") -> bool:
     """Approve or reject a quick task. decision: 'approved' | 'rejected'."""
@@ -1823,8 +1923,12 @@ async def list_quick_tasks(*, status: Optional[str] = None,
     if not include_deleted:
         where.append("q.deleted_at IS NULL")
     if viewer_staff_id is not None:
-        where.append("(q.assigned_to_staff_id = ? OR q.created_by_staff_id = ?)")
-        params += [viewer_staff_id, viewer_staff_id]
+        # Associates see tasks assigned TO / created BY them, PLUS tasks they've been
+        # @mentioned into (collaboration participants).
+        where.append("(q.assigned_to_staff_id = ? OR q.created_by_staff_id = ? "
+                     "OR EXISTS (SELECT 1 FROM nidaan_quick_task_watchers w "
+                     "WHERE w.quick_task_id = q.quick_task_id AND w.staff_id = ?))")
+        params += [viewer_staff_id, viewer_staff_id, viewer_staff_id]
     if status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:

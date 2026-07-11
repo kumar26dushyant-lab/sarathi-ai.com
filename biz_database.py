@@ -1614,6 +1614,28 @@ async def init_db():
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ── Task collaboration: @mention participants + per-person mute ──────
+        # A task has one assignee, but work is collaborative: anyone involved can
+        # @mention another staffer, who becomes a participant (task shows in their
+        # list, they get progress notifications). A busy 10-person task would spam
+        # everyone, so each participant can mute that task while keeping access.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_watchers (
+                watcher_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                quick_task_id     INTEGER NOT NULL REFERENCES nidaan_quick_tasks(quick_task_id),
+                staff_id          INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                relation          TEXT NOT NULL DEFAULT 'mentioned',   -- mentioned | owner
+                muted             INTEGER NOT NULL DEFAULT 0,
+                added_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                added_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(quick_task_id, staff_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqtw_task ON nidaan_quick_task_watchers(quick_task_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqtw_staff ON nidaan_quick_task_watchers(staff_id)")
+
         # Seed the two categories the user named (Review Task, General Task) once.
         for _code, _label, _color, _sort in [
             ("RT", "Review Task",  "#3b82f6", 10),

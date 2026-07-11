@@ -4352,18 +4352,41 @@ async def ops_quick_task_get(qid: int, request: Request):
     qt = await nidaan.get_quick_task(qid)
     if not qt:
         raise HTTPException(404)
-    # Team members can only view tasks they're assigned to OR created
-    if staff.get("role") == "team_member":
-        if qt.get("assigned_to_staff_id") != staff["staff_id"] and \
-           qt.get("created_by_staff_id") != staff["staff_id"]:
-            raise HTTPException(403)
+    # Team members can view tasks they're assigned to / created / @mentioned into.
+    if staff.get("role") == "team_member" and \
+       not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        raise HTTPException(403)
     # Opening the task = reading its comments (read-receipts).
     await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
     for _n in notes:
         if _n.get("attachment_stored_name"):
             _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
-    return {"quick_task": qt, "notes": notes, "me": staff["staff_id"]}
+    participants = await nidaan.get_task_participants(qid)
+    me_muted = any(p["staff_id"] == staff["staff_id"] and p.get("muted") for p in participants)
+    return {"quick_task": qt, "notes": notes, "me": staff["staff_id"],
+            "participants": participants, "me_muted": me_muted}
+
+
+class _TaskMuteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    muted: bool = True
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/mute")
+async def ops_quick_task_mute(qid: int, body: _TaskMuteReq, request: Request):
+    """Mute/unmute a task's progress notifications for the current staffer. They keep
+    full access — this only silences the pings (for busy multi-person tasks)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    if staff.get("role") == "team_member" and \
+       not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        raise HTTPException(403)
+    await nidaan.set_task_watch_mute(qid, staff["staff_id"], body.muted)
+    return {"ok": True, "muted": body.muted}
 
 
 class _NoteApprovalReq(BaseModel):
@@ -4447,10 +4470,10 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
         # Notify the assignee that their task changed status (reopened/rejected/etc.)
         try:
             _sqt = await nidaan.get_quick_task(qid)
-            if _sqt and _sqt.get("assigned_to_staff_id"):
+            if _sqt:
                 import asyncio as _asyncio
                 _asyncio.create_task(nnot.on_quick_task_status_changed(
-                    _sqt, body.status, staff.get("name", "")))
+                    _sqt, body.status, staff.get("name", ""), by_id=staff["staff_id"]))
         except Exception:
             pass
     if body.assigned_to_staff_id is not None:
@@ -4539,16 +4562,18 @@ async def ops_quick_task_merge(qid: int, body: _QuickTaskMergeReq, request: Requ
 async def ops_quick_task_note_add(qid: int, request: Request,
                                   note: str = Form(""),
                                   parent_note_id: Optional[int] = Form(None),
+                                  mentions: str = Form(""),
                                   file: Optional[UploadFile] = File(None)):
-    """Add a task comment, optionally with a file attachment (multipart)."""
+    """Add a task comment, optionally with a file attachment and @mentions (multipart).
+    `mentions` = comma-separated staff_ids to tag as collaborators on this task."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     qt = await nidaan.get_quick_task(qid)
     if not qt:
         raise HTTPException(404)
     role = staff.get("role", "")
-    if role == "team_member" and qt.get("assigned_to_staff_id") != staff["staff_id"] \
-       and qt.get("created_by_staff_id") != staff["staff_id"]:
+    # Participants (creator / assignee / anyone @mentioned) may comment too.
+    if role == "team_member" and not await nidaan.is_task_participant(qid, staff["staff_id"]):
         raise HTTPException(403)
     note = (note or "").strip()
     stored_name = None
@@ -4570,9 +4595,17 @@ async def ops_quick_task_note_add(qid: int, request: Request,
         quick_task_id=qid, staff_id=staff["staff_id"],
         note=note, parent_note_id=parent_note_id,
         attachment_stored_name=stored_name, attachment_original_name=original_name)
-    # Notify the other involved staff (assignee + creator) of the new comment.
+    # @mentions → add the tagged staff as participants and alert the new ones.
+    mention_ids = [int(x) for x in (mentions or "").split(",") if x.strip().isdigit()]
+    mention_ids = [m for m in mention_ids if m != staff["staff_id"]]
     try:
         import asyncio as _asyncio
+        if mention_ids:
+            newly = await nidaan.add_task_watchers(qid, mention_ids, added_by=staff["staff_id"])
+            if newly:
+                _asyncio.create_task(nnot.on_quick_task_mention(
+                    qt, newly, staff["staff_id"], staff.get("name", ""), note))
+        # Notify everyone involved (assignee + creator + participants) of the comment.
         _asyncio.create_task(nnot.on_quick_task_comment(qt, staff["staff_id"], note))
     except Exception:
         pass
