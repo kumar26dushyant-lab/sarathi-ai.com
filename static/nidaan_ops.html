@@ -372,6 +372,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-settings" class="panel" style="display:none"></div>
       <div id="panel-numbers" class="panel" style="display:none"></div>
       <div id="panel-telegram" class="panel" style="display:none"></div>
+      <div id="panel-guide" class="panel" style="display:none"></div>
       <div id="panel-revenue" class="panel" style="display:none"></div>
       <div id="panel-health" class="panel" style="display:none"></div>
     </main>
@@ -485,7 +486,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','claims','accounts','branches','staff','settings','numbers','telegram','revenue','health'];
+  const KNOWN_PANELS = ['tasks','overview','claims','accounts','branches','staff','settings','numbers','telegram','guide','revenue','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -603,6 +604,7 @@ function buildSidebar() {
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
     {id:'numbers',    label:'📞 Official Numbers', minRank:2},
     {id:'telegram',   label:'✈️ Telegram Bot',     minRank:0},
+    {id:'guide',      label:'📖 How to use',       minRank:0},
     null,
     {id:'revenue',    label:'💰 Revenue',       minRank:2, ownerOnly:true},
     {id:'health',     label:'🖥️ App Health',   minRank:2},
@@ -648,6 +650,7 @@ function showPanel(id, fromHistory) {
     settings: loadWorkflowSettings,
     numbers: loadOfficialNumbers,
     telegram: loadTelegramPanel,
+    guide: loadGuidePanel,
     revenue: loadRevenue,
     health: loadHealth,
   };
@@ -5372,6 +5375,99 @@ async function qtCatDelete(id, label){
   if (r.ok) { ndUI.toast('Deactivated','success'); _taskCatsCache=null; renderTaskCatManager(d.categories||[]); }
   else ndUI.toast('Failed','error');
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  HOW TO USE — the staff guide.
+//  Content comes from the server's capability registry (the same one that builds
+//  the Telegram bot's help), so this page can never describe a feature that no
+//  longer exists. The spoken guide reads that same text aloud.
+// ═══════════════════════════════════════════════════════════════
+let _guideLang = 'en';
+let _guideSpeech = '';
+
+async function loadGuidePanel(){
+  const panel = document.getElementById('panel-guide');
+  if (!panel) return;
+  panel.innerHTML = '<div style="padding:1.5rem;color:rgba(255,255,255,.4)">Loading…</div>';
+  const r = await fetch('/nidaan/ops/api/capabilities?lang='+_guideLang, { headers: hdrs() });
+  if (!r.ok) { panel.innerHTML = '<div style="padding:2rem;color:#fca5a5">Failed to load the guide</div>'; return; }
+  const d = await r.json();
+  _guideSpeech = d.speech || '';
+  const hi = d.lang === 'hi';
+
+  const list = (items, accent) => items.map(c=>`
+    <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div style="color:${accent};flex-shrink:0;font-size:1rem;line-height:1.3">●</div>
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:.92rem">${esc(c.title)}</div>
+        <div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-top:.1rem">${esc(c.detail)}</div>
+      </div>
+    </div>`).join('');
+
+  panel.innerHTML = `
+    <div style="padding:1.25rem 1.5rem;max-width:900px">
+      <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:.3rem">📖 ${hi?'यह ऐप कैसे इस्तेमाल करें':'How to use this system'}</h1>
+      <div style="color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1rem">
+        ${hi?'आपकी भूमिका के अनुसार — आप क्या कर सकते हैं और कहाँ।':'Tailored to your role — what you can do, and where.'}
+      </div>
+
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1.25rem">
+        <button class="btn-sm ${_guideLang==='en'?'':'btn-ghost'}" style="${_guideLang==='en'?'background:#22d3ee;color:#0a1628;font-weight:700':''}" onclick="setGuideLang('en')">English</button>
+        <button class="btn-sm ${_guideLang==='hi'?'':'btn-ghost'}" style="${_guideLang==='hi'?'background:#22d3ee;color:#0a1628;font-weight:700':''}" onclick="setGuideLang('hi')">हिंदी</button>
+        <span style="width:1px;height:20px;background:rgba(255,255,255,.15)"></span>
+        <button id="guidePlayBtn" class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="guideSpeak()">🔊 ${hi?'सुनें':'Listen'}</button>
+        <button class="btn-sm btn-ghost" onclick="guideStop()">⏹ ${hi?'रोकें':'Stop'}</button>
+        <span id="guideAudioNote" style="font-size:.74rem;color:rgba(255,255,255,.4)"></span>
+      </div>
+
+      <div class="nd-card" style="padding:1rem;margin-bottom:1rem;border-color:rgba(56,189,248,.3)">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:.2rem">✈️ ${hi?'टेलीग्राम बॉट से कर सकते हैं':'You can do these in Telegram'}
+          <span style="font-size:.78rem;color:rgba(255,255,255,.45);font-weight:500">· ${d.counts.telegram}</span></div>
+        <div style="font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:.4rem">${hi?'फ़ोन से, कहीं से भी — बटन दबाकर।':'From your phone, anywhere — just tap the buttons.'}</div>
+        ${list(d.telegram, '#38bdf8')}
+      </div>
+
+      <div class="nd-card" style="padding:1rem;margin-bottom:1rem;border-color:rgba(167,139,250,.3)">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:.2rem">🌐 ${hi?'सिर्फ़ वेब पोर्टल / ऐप पर':'Only in the web portal / installed app'}
+          <span style="font-size:.78rem;color:rgba(255,255,255,.45);font-weight:500">· ${d.counts.web_only}</span></div>
+        <div style="font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:.4rem">${hi?'इनके लिए पूरा स्क्रीन चाहिए — फाइलें, फॉर्म और सेटिंग्स।':'These need the full screen — files, forms and settings.'}</div>
+        ${list(d.web_only, '#a78bfa')}
+      </div>
+
+      <div style="font-size:.76rem;color:rgba(255,255,255,.35)">
+        ${hi?'यह गाइड अपने आप अपडेट होती है — फीचर बदलेगा तो यहाँ और बॉट में भी बदल जाएगा।'
+            :'This guide updates itself — when a feature changes, this page, the Telegram help and the audio all change with it.'}
+      </div>
+    </div>`;
+}
+
+function setGuideLang(l){ guideStop(); _guideLang = l; loadGuidePanel(); }
+
+function guideSpeak(){
+  if (!('speechSynthesis' in window)) {
+    ndUI.toast('Your browser does not support audio playback','error'); return;
+  }
+  guideStop();
+  if (!_guideSpeech) return;
+  const note = document.getElementById('guideAudioNote');
+  const u = new SpeechSynthesisUtterance(_guideSpeech);
+  u.lang = (_guideLang === 'hi') ? 'hi-IN' : 'en-IN';
+  u.rate = 0.95;
+  // Prefer a matching installed voice; fall back gracefully if none exists.
+  const voices = window.speechSynthesis.getVoices() || [];
+  const match = voices.find(v => v.lang === u.lang) || voices.find(v => (v.lang||'').startsWith(_guideLang === 'hi' ? 'hi' : 'en'));
+  if (match) u.voice = match;
+  else if (note && _guideLang === 'hi') note.textContent = 'Hindi voice not installed on this device — using default.';
+  u.onstart = () => { const b=document.getElementById('guidePlayBtn'); if(b) b.textContent='🔊 Playing…'; };
+  u.onend   = () => { const b=document.getElementById('guidePlayBtn'); if(b) b.textContent = (_guideLang==='hi'?'🔊 सुनें':'🔊 Listen'); };
+  window.speechSynthesis.speak(u);
+}
+function guideStop(){
+  try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch(e){}
+  const b=document.getElementById('guidePlayBtn'); if(b) b.textContent = (_guideLang==='hi'?'🔊 सुनें':'🔊 Listen');
+}
+// Voice lists load asynchronously in most browsers.
+try { if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = ()=>{}; } catch(e){}
 
 // ═══════════════════════════════════════════════════════════════
 //  TELEGRAM BOT — self-service setup for everyone

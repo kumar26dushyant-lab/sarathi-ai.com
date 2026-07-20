@@ -5337,6 +5337,20 @@ async def ops_telegram_test(request: Request):
     return {"ok": True}
 
 
+@app.get("/nidaan/ops/api/capabilities")
+async def ops_capabilities(request: Request, lang: str = "en"):
+    """What THIS staffer can do, and where — generated from the single capability
+    registry that also drives the Telegram bot's help and the spoken guide, so the
+    three can never contradict each other."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    import biz_nidaan_capabilities as caps
+    role = staff.get("role", "team_member")
+    guide = caps.build_guide(role, lang)
+    guide["speech"] = caps.speech_text(role, lang)
+    return guide
+
+
 @app.post("/nidaan/ops/api/me/comms-onboarded")
 async def ops_me_comms_onboarded(request: Request):
     """One-time acknowledgement of the comms/Telegram onboarding popup."""

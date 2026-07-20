@@ -527,18 +527,22 @@ async def _handle_callback(cq: dict) -> None:
         if data == "m:home":
             t, kb = _main_menu(staff); await _edit(chat_id, message_id, t, kb); await ack(); return
 
-        if data == "h:help":
-            await _edit(chat_id, message_id,
-                "*❓ Help*\n\n"
-                "• *Pending with me* — tasks assigned to you\n"
-                "• *Assigned by me* — what you handed to others\n"
-                "• *I'm involved* — tasks you were tagged into\n"
-                "• *Approvals* — decide tasks awaiting you (admins)\n"
-                "• *Apply leave / WFH* — send a request for approval\n"
-                "• *Ask AI* — ask anything about your work in plain language\n\n"
-                "You can also just *type a question* any time.\n"
-                "Send /menu to come back here.",
-                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]])); await ack(); return
+        if data.startswith("h:help"):
+            # Generated from the shared capability registry — the bot's help, the web
+            # guide and the audio narration always describe the same feature set.
+            import biz_nidaan_capabilities as caps
+            lang = "hi" if data.endswith(":hi") else "en"
+            other = "en" if lang == "hi" else "hi"
+            txt = caps.telegram_help_text(staff.get("role", "team_member"), lang)
+            txt += ("\n\n" + ("_कभी भी सीधे सवाल टाइप कर सकते हैं। /menu से मेन्यू खोलें।_"
+                              if lang == "hi" else
+                              "_You can also just type a question any time. Send /menu for the menu._"))
+            await _edit(chat_id, message_id, txt, _kb([
+                [{"text": "🇮🇳 हिंदी में" if lang == "en" else "🇬🇧 In English",
+                  "callback_data": f"h:help:{other}"}],
+                [{"text": "🔊 Audio guide", "url": f"{_base_url()}/admin#guide"}],
+                [{"text": "⬅️ Menu", "callback_data": "m:home"}],
+            ])); await ack(); return
 
         if data.startswith("t:"):
             parts = data.split(":")
