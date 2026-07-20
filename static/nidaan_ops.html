@@ -5417,7 +5417,17 @@ async function loadGuidePanel(){
         <span style="width:1px;height:20px;background:rgba(255,255,255,.15)"></span>
         <button id="guidePlayBtn" class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="guideSpeak()">🔊 ${hi?'सुनें':'Listen'}</button>
         <button class="btn-sm btn-ghost" onclick="guideStop()">⏹ ${hi?'रोकें':'Stop'}</button>
+        <button class="btn-sm btn-ghost" style="font-size:.74rem" onclick="guideShowVoices()">🎙 ${hi?'आवाज़ें जाँचें':'Check voices'}</button>
         <span id="guideAudioNote" style="font-size:.74rem;color:rgba(255,255,255,.4)"></span>
+      </div>
+      <div id="guideVoiceList" style="display:none;font-size:.76rem;color:rgba(255,255,255,.6);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.6rem .75rem;margin-bottom:.85rem;line-height:1.6"></div>
+      <div id="guideVoiceHelp" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:.7rem .85rem;margin-bottom:.85rem;font-size:.82rem;line-height:1.65;color:rgba(255,255,255,.8)">
+        <b style="color:#fbbf24">${hi?'इस डिवाइस में हिंदी आवाज़ नहीं है':'This device has no Hindi voice installed'}</b><br>
+        ${hi?'हिंदी ऑडियो के लिए एक बार यह करें:':'To get Hindi audio, install one once:'}<br>
+        • <b>Android:</b> Settings → ${hi?'भाषा एवं इनपुट':'Language &amp; input'} → Text-to-speech → Google TTS → ${hi?'हिंदी इंस्टॉल करें':'install Hindi'}<br>
+        • <b>iPhone/iPad:</b> Settings → Accessibility → Spoken Content → Voices → ${hi?'हिंदी':'Hindi'}<br>
+        • <b>Windows:</b> Settings → Time &amp; language → ${hi?'भाषा जोड़ें':'Add a language'} → ${hi?'हिंदी (भाषण सहित)':'Hindi (with Speech)'}<br>
+        ${hi?'फ़ोन पर आमतौर पर हिंदी पहले से होती है — मोबाइल पर खोलकर देखें।':'Phones usually already have Hindi — try opening this on your mobile.'}
       </div>
 
       <div class="nd-card" style="padding:1rem;margin-bottom:1rem;border-color:rgba(56,189,248,.3)">
@@ -5443,31 +5453,102 @@ async function loadGuidePanel(){
 
 function setGuideLang(l){ guideStop(); _guideLang = l; loadGuidePanel(); }
 
-function guideSpeak(){
+// Browser speech has three well-known traps we have to handle explicitly:
+//  1. getVoices() is EMPTY on first call (voices load async) → wait for them.
+//  2. Chrome silently fails on long utterances → speak in short chunks.
+//  3. Chrome halts synthesis after ~15s → keep it alive with resume().
+let _guideQueue = [], _guideIdx = 0, _guideKeepAlive = null, _guideStopped = false;
+
+function _guideVoices(){
+  return new Promise(resolve => {
+    const got = window.speechSynthesis.getVoices();
+    if (got && got.length) return resolve(got);
+    let done = false;
+    const finish = () => { if(!done){ done = true; resolve(window.speechSynthesis.getVoices()||[]); } };
+    window.speechSynthesis.onvoiceschanged = finish;
+    setTimeout(finish, 1200);   // some browsers never fire the event
+  });
+}
+
+function _guideChunks(text){
+  // Split on sentence ends (Hindi danda too), then pack into ~180-char pieces.
+  const parts = String(text).split(/(?<=[।.!?])\s+/);
+  const out = []; let buf = '';
+  for (const p of parts) {
+    if ((buf + ' ' + p).trim().length > 180) { if (buf.trim()) out.push(buf.trim()); buf = p; }
+    else buf += ' ' + p;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.filter(Boolean);
+}
+
+async function guideSpeak(){
   if (!('speechSynthesis' in window)) {
-    ndUI.toast('Your browser does not support audio playback','error'); return;
+    ndUI.toast('This browser cannot play audio','error'); return;
   }
   guideStop();
+  _guideStopped = false;
   if (!_guideSpeech) return;
   const note = document.getElementById('guideAudioNote');
-  const u = new SpeechSynthesisUtterance(_guideSpeech);
-  u.lang = (_guideLang === 'hi') ? 'hi-IN' : 'en-IN';
-  u.rate = 0.95;
-  // Prefer a matching installed voice; fall back gracefully if none exists.
-  const voices = window.speechSynthesis.getVoices() || [];
-  const match = voices.find(v => v.lang === u.lang) || voices.find(v => (v.lang||'').startsWith(_guideLang === 'hi' ? 'hi' : 'en'));
-  if (match) u.voice = match;
-  else if (note && _guideLang === 'hi') note.textContent = 'Hindi voice not installed on this device — using default.';
-  u.onstart = () => { const b=document.getElementById('guidePlayBtn'); if(b) b.textContent='🔊 Playing…'; };
-  u.onend   = () => { const b=document.getElementById('guidePlayBtn'); if(b) b.textContent = (_guideLang==='hi'?'🔊 सुनें':'🔊 Listen'); };
-  window.speechSynthesis.speak(u);
+  const wantHi = (_guideLang === 'hi');
+  const lang = wantHi ? 'hi-IN' : 'en-IN';
+
+  if (note) note.textContent = 'Loading voice…';
+  const voices = await _guideVoices();
+  const voice = voices.find(v => v.lang === lang)
+             || voices.find(v => (v.lang||'').replace('_','-').toLowerCase().startsWith(wantHi ? 'hi' : 'en'));
+
+  if (wantHi && !voice) {
+    // Be honest rather than playing silence.
+    if (note) note.innerHTML = '<span style="color:#fbbf24">No Hindi voice on this device — see note below.</span>';
+    const help = document.getElementById('guideVoiceHelp');
+    if (help) help.style.display = 'block';
+    return;
+  }
+  if (note) note.textContent = voice ? ('Voice: ' + voice.name) : '';
+
+  _guideQueue = _guideChunks(_guideSpeech);
+  _guideIdx = 0;
+  const btn = document.getElementById('guidePlayBtn');
+  const speakNext = () => {
+    if (_guideStopped || _guideIdx >= _guideQueue.length) { guideStop(); return; }
+    const u = new SpeechSynthesisUtterance(_guideQueue[_guideIdx]);
+    u.lang = lang; u.rate = 0.95;
+    if (voice) u.voice = voice;
+    u.onend = () => { _guideIdx++; if (!_guideStopped) speakNext(); };
+    u.onerror = () => { _guideIdx++; if (!_guideStopped) speakNext(); };
+    if (btn) btn.textContent = `⏸ ${_guideIdx+1}/${_guideQueue.length}`;
+    window.speechSynthesis.speak(u);
+  };
+  // Keep Chrome from pausing mid-narration.
+  _guideKeepAlive = setInterval(() => {
+    try { if (window.speechSynthesis.speaking) window.speechSynthesis.resume(); } catch(e){}
+  }, 8000);
+  speakNext();
 }
+
 function guideStop(){
+  _guideStopped = true;
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch(e){}
-  const b=document.getElementById('guidePlayBtn'); if(b) b.textContent = (_guideLang==='hi'?'🔊 सुनें':'🔊 Listen');
+  if (_guideKeepAlive) { clearInterval(_guideKeepAlive); _guideKeepAlive = null; }
+  _guideQueue = []; _guideIdx = 0;
+  const b = document.getElementById('guidePlayBtn');
+  if (b) b.textContent = (_guideLang==='hi' ? '🔊 सुनें' : '🔊 Listen');
 }
-// Voice lists load asynchronously in most browsers.
-try { if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = ()=>{}; } catch(e){}
+
+// Show what this device actually has — makes "no Hindi audio" diagnosable.
+async function guideShowVoices(){
+  const box = document.getElementById('guideVoiceList');
+  if (!box) return;
+  const v = await _guideVoices();
+  const hi = v.filter(x => (x.lang||'').toLowerCase().startsWith('hi'));
+  box.style.display = 'block';
+  box.innerHTML = `<b>${v.length}</b> voices found on this device · <b>${hi.length}</b> Hindi.<br>` +
+    (hi.length ? hi.map(x=>`✅ ${esc(x.name)} (${esc(x.lang)})`).join('<br>')
+               : '<span style="color:#fbbf24">No Hindi voice installed — that is why Hindi audio is silent.</span>');
+}
+// Warm the voice list early so the first tap works.
+try { if ('speechSynthesis' in window) { window.speechSynthesis.getVoices(); } } catch(e){}
 
 // ═══════════════════════════════════════════════════════════════
 //  TELEGRAM BOT — self-service setup for everyone
