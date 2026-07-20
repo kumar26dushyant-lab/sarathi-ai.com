@@ -1843,6 +1843,9 @@ async def init_db():
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_username TEXT",
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_linked_at TIMESTAMP",
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_link_code TEXT",
+            # Lightweight conversation state for Telegram flows that need a typed
+            # reply (add a comment, ask the AI, broadcast). JSON blob, cleared on use.
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_pending TEXT",
             # One-time onboarding acknowledgement (replaces the repeating WhatsApp popup)
             "ALTER TABLE nidaan_staff ADD COLUMN comms_onboarded_at TIMESTAMP",
         ]:

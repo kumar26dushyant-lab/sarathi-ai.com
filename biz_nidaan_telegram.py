@@ -132,10 +132,14 @@ async def send_message(chat_id: str, text: str,
     if not chat_id:
         return (False, "no_chat_id")
     payload: dict = {"chat_id": str(chat_id), "text": text[:4000],
-                     "disable_web_page_preview": True}
+                     "parse_mode": "Markdown", "disable_web_page_preview": True}
     if buttons:
         payload["reply_markup"] = {"inline_keyboard": buttons}
     res = await _call("sendMessage", payload)
+    if not res.get("ok"):
+        # User-supplied content can break Markdown parsing — resend as plain text.
+        payload.pop("parse_mode", None)
+        res = await _call("sendMessage", payload)
     if res.get("ok"):
         return (True, "")
     err = res.get("description") or res.get("error") or "unknown"
@@ -194,45 +198,529 @@ async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict
         return {"staff_id": row["staff_id"], "name": row["name"]}
 
 
-async def handle_update(update: dict) -> None:
-    """Process one webhook update. Only /start <code> linking is supported for now
-    (read-only AI querying comes later); anything else gets a gentle hint."""
+# ═════════════════════════════════════════════════════════════════════════════
+#  THE OFFICE, IN TELEGRAM — role-aware button UI
+#  Every action re-checks the staffer's role server-side from their chat_id; a
+#  button is never trusted on its own. Roles and capabilities mirror the web app
+#  exactly, so the portal, the PWA and the bot can never drift apart.
+# ═════════════════════════════════════════════════════════════════════════════
+ROLE_RANK = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
+
+
+async def _staff_by_chat(chat_id) -> Optional[dict]:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT staff_id, name, role, telegram_pending FROM nidaan_staff "
+            "WHERE telegram_chat_id=? AND status='active' AND deleted_at IS NULL",
+            (str(chat_id),))).fetchone()
+        return dict(row) if row else None
+
+
+def _can(staff: dict, need: str) -> bool:
+    return ROLE_RANK.get((staff or {}).get("role", ""), -1) >= ROLE_RANK.get(need, 99)
+
+
+async def _set_pending(staff_id: int, payload: Optional[dict]) -> None:
+    import json as _json
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("UPDATE nidaan_staff SET telegram_pending=? WHERE staff_id=?",
+                           (_json.dumps(payload) if payload else None, staff_id))
+        await conn.commit()
+
+
+def _kb(rows: list) -> list:
+    """Filter out empty rows so role-gated menus never render blank buttons."""
+    return [r for r in rows if r]
+
+
+def _main_menu(staff: dict) -> tuple[str, list]:
+    admin = _can(staff, "sub_super_admin")
+    sa = _can(staff, "super_admin")
+    text = (f"🏢 *NidaanPartner Ops*\n"
+            f"Hi {staff.get('name','')} — {(staff.get('role') or '').replace('_',' ')}\n\n"
+            f"Run your day right here. Pick anything below 👇")
+    kb = _kb([
+        [{"text": "📥 Pending with me", "callback_data": "t:mine"},
+         {"text": "📤 Assigned by me", "callback_data": "t:byme"}],
+        [{"text": "🏷️ I'm involved", "callback_data": "t:inv"},
+         {"text": "🗄️ Archived", "callback_data": "t:arch"}],
+        [{"text": "⏳ Approvals", "callback_data": "ap:list"}] if admin else None,
+        [{"text": "🌴 Apply leave", "callback_data": "lv:new:leave"},
+         {"text": "🏠 Apply WFH", "callback_data": "lv:new:wfh"}],
+        [{"text": "🤖 Ask AI", "callback_data": "ai:ask"}],
+        [{"text": "📣 Broadcast", "callback_data": "bc:new"}] if sa else None,
+        [{"text": "❓ Help", "callback_data": "h:help"}],
+    ])
+    return text, kb
+
+
+# ── task helpers ─────────────────────────────────────────────────────────────
+_STATUS_ICON = {"open": "🔵", "in_progress": "🟡", "done": "✅", "cancelled": "⛔"}
+_PRIO_ICON = {"low": "⚪", "normal": "🔵", "high": "🟠", "urgent": "🔴"}
+
+
+async def _task_list(staff: dict, scope: str) -> tuple[str, list]:
+    import biz_nidaan as nidaan
+    titles = {"assigned_to_me": "📥 Pending with me", "created_by_me": "📤 Assigned by me",
+              "involved": "🏷️ I'm involved", "archived": "🗄️ Archived"}
+    if scope == "archived":
+        rows = await nidaan.list_quick_tasks(
+            status="archived", viewer_staff_id=(None if _can(staff, "sub_super_admin") else staff["staff_id"]),
+            include_done=True, sort="updated", limit=10)
+    else:
+        rows = await nidaan.list_quick_tasks(
+            scope=scope, scope_staff_id=staff["staff_id"], sort="smart", limit=10)
+        rows = [r for r in rows if r.get("status") not in ("done", "cancelled")]
+    head = titles.get(scope, "Tasks")
+    if not rows:
+        return (f"*{head}*\n\nNothing here right now ✓", _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    lines = [f"*{head}* — {len(rows)} shown"]
+    btns = []
+    for r in rows:
+        icon = _STATUS_ICON.get(r.get("status"), "•")
+        pr = _PRIO_ICON.get((r.get("priority") or "normal"), "")
+        cat = f" [{r['category_code']}]" if r.get("category_code") else ""
+        lines.append(f"\n{icon} *#{r['quick_task_id']}*{cat} {r.get('title','')[:70]}")
+        meta = []
+        if r.get("assignee_name"):
+            meta.append(f"👤 {r['assignee_name']}")
+        if r.get("due_date"):
+            meta.append(f"📅 {str(r['due_date'])[:10]}")
+        if meta:
+            lines.append("   " + " · ".join(meta))
+        btns.append([{"text": f"{pr} #{r['quick_task_id']} {r.get('title','')[:28]}",
+                      "callback_data": f"t:v:{r['quick_task_id']}"}])
+    btns.append([{"text": "⬅️ Menu", "callback_data": "m:home"}])
+    return ("\n".join(lines), _kb(btns))
+
+
+async def _task_detail(staff: dict, qid: int) -> tuple[str, list]:
+    import biz_nidaan as nidaan
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        return ("Task not found.", _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    # Same visibility rule as the web app.
+    if not _can(staff, "sub_super_admin") and not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        return ("🔒 You don't have access to this task.",
+                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    icon = _STATUS_ICON.get(qt.get("status"), "•")
+    lines = [f"{icon} *Task #{qid}*", f"*{qt.get('title','')}*"]
+    if qt.get("description"):
+        lines.append(f"\n{qt['description'][:400]}")
+    meta = [f"Status: {qt.get('status')}", f"Priority: {qt.get('priority')}"]
+    if qt.get("category_code"):
+        meta.append(f"Category: {qt['category_code']}")
+    if qt.get("assignee_name"):
+        meta.append(f"Assignee: {qt['assignee_name']}")
+    if qt.get("creator_name"):
+        meta.append(f"Created by: {qt['creator_name']}")
+    if qt.get("due_date"):
+        meta.append(f"Due: {str(qt['due_date'])[:10]}")
+    if qt.get("complainant_name"):
+        meta.append(f"Complainant: {qt['complainant_name']} {qt.get('complainant_phone') or ''}")
+    lines.append("\n" + "\n".join(meta))
     try:
+        notes = await nidaan.list_quick_task_notes(qid)
+        if notes:
+            lines.append("\n💬 *Latest comments*")
+            for n in notes[-3:]:
+                lines.append(f"• {n.get('staff_name','')}: {(n.get('note') or '')[:90]}")
+    except Exception:
+        pass
+    is_assignee = qt.get("assigned_to_staff_id") == staff["staff_id"]
+    can_move = is_assignee or _can(staff, "sub_super_admin")
+    row1 = []
+    if can_move and qt.get("status") == "open":
+        row1.append({"text": "▶️ Start", "callback_data": f"t:s:{qid}:in_progress"})
+    if can_move and qt.get("status") not in ("done", "cancelled"):
+        row1.append({"text": "✅ Mark done", "callback_data": f"t:s:{qid}:done"})
+    if can_move and qt.get("status") in ("done", "cancelled"):
+        row1.append({"text": "↺ Reopen", "callback_data": f"t:s:{qid}:open"})
+    kb = _kb([
+        row1,
+        [{"text": "💬 Add comment", "callback_data": f"t:c:{qid}"}],
+        [{"text": "🔗 Open in portal", "url": f"{_base_url()}/admin?qt={qid}"}],
+        [{"text": "⬅️ Menu", "callback_data": "m:home"}],
+    ])
+    return ("\n".join(lines), kb)
+
+
+def _base_url() -> str:
+    import os as _os
+    return _os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com")
+
+
+async def _approvals_view(staff: dict) -> tuple[str, list]:
+    import biz_nidaan as nidaan
+    rows = await nidaan.list_quick_tasks(pending_approval=True, include_done=True, limit=10)
+    # Only what THIS admin should decide: tasks naming them, or unassigned-approver ones.
+    mine = [r for r in rows if (r.get("approver_staff_id") in (None, staff["staff_id"]))
+            or _can(staff, "super_admin")]
+    if not mine:
+        return ("*⏳ Approvals*\n\nNothing awaiting your approval ✓",
+                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    lines = ["*⏳ Awaiting your approval*"]
+    btns = []
+    for r in mine:
+        qid = r["quick_task_id"]
+        lines.append(f"\n• *#{qid}* {r.get('title','')[:70]}\n   by {r.get('creator_name','')}")
+        btns.append([{"text": f"✅ Approve #{qid}", "callback_data": f"ap:{qid}:approved"},
+                     {"text": f"❌ Reject #{qid}", "callback_data": f"ap:{qid}:rejected"}])
+    btns.append([{"text": "⬅️ Menu", "callback_data": "m:home"}])
+    return ("\n".join(lines), _kb(btns))
+
+
+# ── Gemini brain (read-only, role-scoped) ────────────────────────────────────
+async def _ask_gemini(staff: dict, question: str) -> str:
+    """Answer a natural-language question using ONLY the tasks this staffer may see.
+    Read-only by design: the model summarises context we hand it, it cannot act."""
+    import os as _os
+    import biz_nidaan as nidaan
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        return "The AI brain isn't configured yet (no GEMINI_API_KEY)."
+    admin = _can(staff, "sub_super_admin")
+    try:
+        rows = await nidaan.list_quick_tasks(
+            viewer_staff_id=(None if admin else staff["staff_id"]),
+            include_done=True, sort="updated", limit=60)
+    except Exception:
+        rows = []
+    ctx = []
+    for r in rows:
+        ctx.append(
+            f"#{r['quick_task_id']} | {r.get('title','')} | status={r.get('status')} | "
+            f"priority={r.get('priority')} | assignee={r.get('assignee_name') or '-'} | "
+            f"creator={r.get('creator_name') or '-'} | due={str(r.get('due_date') or '-')[:10]} | "
+            f"category={r.get('category_code') or '-'}")
+    prompt = (
+        "You are the NidaanPartner office assistant inside Telegram. Answer the staff "
+        "member's question using ONLY the task records below. Be concise and practical "
+        "(a few short lines, Telegram-friendly, no markdown tables). Refer to tasks as #id. "
+        "If the answer isn't in the data, say so plainly and suggest what to check.\n\n"
+        f"Staff member: {staff.get('name')} (role: {staff.get('role')})\n"
+        f"Today: {__import__('datetime').date.today().isoformat()}\n\n"
+        f"TASK RECORDS ({len(ctx)}):\n" + "\n".join(ctx) +
+        f"\n\nQUESTION: {question}\n\nANSWER:")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            r = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+            data = r.json()
+        cand = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        out = (cand[0].get("text") or "").strip()
+        return out or "I couldn't form an answer for that — try rephrasing."
+    except Exception as e:
+        logger.warning("Gemini ask failed: %s", e)
+        return "The AI brain is unreachable right now. Please try again in a moment."
+
+
+# ── update routing ───────────────────────────────────────────────────────────
+async def handle_update(update: dict) -> None:
+    """Route one webhook update: /start linking, button presses, and typed replies."""
+    try:
+        if update.get("callback_query"):
+            await _handle_callback(update["callback_query"])
+            return
         msg = update.get("message") or {}
-        chat = msg.get("chat") or {}
-        chat_id = chat.get("id")
+        chat_id = (msg.get("chat") or {}).get("id")
         text = (msg.get("text") or "").strip()
         username = (msg.get("from") or {}).get("username") or ""
         if not chat_id or not text:
             return
+
         if text.startswith("/start"):
             parts = text.split(maxsplit=1)
             code = parts[1].strip() if len(parts) > 1 else ""
             if code:
                 linked = await _link_by_code(code, str(chat_id), username)
                 if linked:
+                    staff = await _staff_by_chat(chat_id)
+                    t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
                     await send_message(str(chat_id),
-                        f"✅ Connected, {linked['name']}!\n\n"
-                        f"You'll now get your NidaanPartner task and approval "
-                        f"notifications right here.\n\n"
-                        f"You can unlink anytime from the portal → Telegram Bot.")
+                        f"✅ Connected, {linked['name']}!\n\nYour NidaanPartner office is now "
+                        f"in Telegram.\n\n{t}", kb)
                     return
                 await send_message(str(chat_id),
-                    "⚠️ That link code isn't valid or has expired.\n\n"
-                    "Open the NidaanPartner portal → Telegram Bot and use your personal "
-                    "link again.")
+                    "⚠️ That link code isn't valid or has expired.\n\nOpen the portal → "
+                    "Telegram Bot and tap your personal connect link again.")
                 return
-            await send_message(str(chat_id),
-                "👋 This is the NidaanPartner ops bot.\n\n"
-                "To receive your notifications, open the portal → Telegram Bot and tap "
-                "your personal connect link.")
+            staff = await _staff_by_chat(chat_id)
+            if staff:
+                t, kb = _main_menu(staff)
+                await send_message(str(chat_id), t, kb)
+            else:
+                await send_message(str(chat_id),
+                    "👋 This is the NidaanPartner ops bot.\n\nTo connect, open the portal → "
+                    "*Telegram Bot* and tap your personal link.")
             return
-        # Any other message — keep it simple and safe for now.
-        await send_message(str(chat_id),
-            "This bot delivers your NidaanPartner ops notifications.\n"
-            "Manage it from the portal → Telegram Bot.")
+
+        staff = await _staff_by_chat(chat_id)
+        if not staff:
+            await send_message(str(chat_id),
+                "🔒 This Telegram isn't linked to a NidaanPartner account.\n\nOpen the portal "
+                "→ *Telegram Bot* and tap your personal connect link.")
+            return
+
+        if text.lower() in ("/menu", "menu", "/home", "hi", "hello"):
+            t, kb = _main_menu(staff)
+            await send_message(str(chat_id), t, kb)
+            return
+
+        # A pending flow expecting typed input?
+        import json as _json
+        pending = {}
+        try:
+            pending = _json.loads(staff.get("telegram_pending") or "{}")
+        except Exception:
+            pending = {}
+        act = pending.get("a")
+        if act == "comment" and pending.get("qid"):
+            await _do_comment(staff, int(pending["qid"]), text, chat_id)
+            await _set_pending(staff["staff_id"], None)
+            return
+        if act == "ai":
+            await _set_pending(staff["staff_id"], None)
+            await send_message(str(chat_id), "🤖 Thinking…")
+            ans = await _ask_gemini(staff, text)
+            await send_message(str(chat_id), ans,
+                               _kb([[{"text": "🤖 Ask again", "callback_data": "ai:ask"},
+                                     {"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+            return
+        if act == "broadcast" and _can(staff, "super_admin"):
+            await _set_pending(staff["staff_id"], None)
+            await _do_broadcast(staff, text, chat_id)
+            return
+        if act == "leave" and pending.get("kind"):
+            await _set_pending(staff["staff_id"], None)
+            await _do_leave(staff, pending["kind"], text, chat_id)
+            return
+
+        # Free text with no pending flow → treat as a question for the AI.
+        await send_message(str(chat_id), "🤖 Thinking…")
+        ans = await _ask_gemini(staff, text)
+        await send_message(str(chat_id), ans,
+                           _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
     except Exception as e:
         logger.warning("Telegram update handling failed: %s", e)
+
+
+async def _handle_callback(cq: dict) -> None:
+    data = (cq.get("data") or "").strip()
+    msg = cq.get("message") or {}
+    chat_id = (msg.get("chat") or {}).get("id")
+    message_id = msg.get("message_id")
+    cq_id = cq.get("id")
+
+    async def ack(text: str = ""):
+        await _call("answerCallbackQuery",
+                    {"callback_query_id": cq_id, "text": text[:180]} if text
+                    else {"callback_query_id": cq_id})
+
+    staff = await _staff_by_chat(chat_id)
+    if not staff:
+        await ack("Not linked")
+        return
+    try:
+        if data == "m:home":
+            t, kb = _main_menu(staff); await _edit(chat_id, message_id, t, kb); await ack(); return
+
+        if data == "h:help":
+            await _edit(chat_id, message_id,
+                "*❓ Help*\n\n"
+                "• *Pending with me* — tasks assigned to you\n"
+                "• *Assigned by me* — what you handed to others\n"
+                "• *I'm involved* — tasks you were tagged into\n"
+                "• *Approvals* — decide tasks awaiting you (admins)\n"
+                "• *Apply leave / WFH* — send a request for approval\n"
+                "• *Ask AI* — ask anything about your work in plain language\n\n"
+                "You can also just *type a question* any time.\n"
+                "Send /menu to come back here.",
+                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]])); await ack(); return
+
+        if data.startswith("t:"):
+            parts = data.split(":")
+            kind = parts[1]
+            if kind in ("mine", "byme", "inv", "arch"):
+                scope = {"mine": "assigned_to_me", "byme": "created_by_me",
+                         "inv": "involved", "arch": "archived"}[kind]
+                t, kb = await _task_list(staff, scope)
+                await _edit(chat_id, message_id, t, kb); await ack(); return
+            if kind == "v":
+                t, kb = await _task_detail(staff, int(parts[2]))
+                await _edit(chat_id, message_id, t, kb); await ack(); return
+            if kind == "s":
+                qid, new_status = int(parts[2]), parts[3]
+                ok = await _do_status(staff, qid, new_status)
+                await ack("Updated ✓" if ok else "Not allowed")
+                t, kb = await _task_detail(staff, qid)
+                await _edit(chat_id, message_id, t, kb); return
+            if kind == "c":
+                qid = int(parts[2])
+                await _set_pending(staff["staff_id"], {"a": "comment", "qid": qid})
+                await send_message(str(chat_id),
+                    f"💬 Type your comment for *task #{qid}* and send it.\n"
+                    f"_Everyone involved will be notified._")
+                await ack(); return
+
+        if data.startswith("ap:"):
+            if not _can(staff, "sub_super_admin"):
+                await ack("Admins only"); return
+            parts = data.split(":")
+            if parts[1] == "list":
+                t, kb = await _approvals_view(staff)
+                await _edit(chat_id, message_id, t, kb); await ack(); return
+            qid, decision = int(parts[1]), parts[2]
+            ok = await _do_approval(staff, qid, decision)
+            await ack("Done ✓" if ok else "Failed")
+            t, kb = await _approvals_view(staff)
+            await _edit(chat_id, message_id, t, kb); return
+
+        if data == "ai:ask":
+            await _set_pending(staff["staff_id"], {"a": "ai"})
+            await send_message(str(chat_id),
+                "🤖 *Ask me anything about your work*\n\n"
+                "For example:\n"
+                "• _what's pending with me?_\n"
+                "• _which tasks are overdue?_\n"
+                "• _status of task 55_\n\nType your question 👇")
+            await ack(); return
+
+        if data.startswith("lv:new:"):
+            kind = data.split(":")[2]
+            await _set_pending(staff["staff_id"], {"a": "leave", "kind": kind})
+            label = "Work From Home" if kind == "wfh" else "Leave"
+            await send_message(str(chat_id),
+                f"{'🏠' if kind=='wfh' else '🌴'} *Apply for {label}*\n\n"
+                f"Reply with the dates and reason, e.g.\n"
+                f"`2026-07-25 to 2026-07-26 family function`\n"
+                f"or `2026-07-25 personal work` for a single day.")
+            await ack(); return
+
+        if data == "bc:new":
+            if not _can(staff, "super_admin"):
+                await ack("Super admin only"); return
+            await _set_pending(staff["staff_id"], {"a": "broadcast"})
+            await send_message(str(chat_id),
+                "📣 *Broadcast to all staff*\n\nType the message to send to everyone's bell.")
+            await ack(); return
+
+        await ack()
+    except Exception as e:
+        logger.warning("Telegram callback failed (%s): %s", data, e)
+        try:
+            await ack("Something went wrong")
+        except Exception:
+            pass
+
+
+async def _edit(chat_id, message_id, text: str, buttons: Optional[list] = None) -> None:
+    payload = {"chat_id": str(chat_id), "message_id": message_id, "text": text[:4000],
+               "parse_mode": "Markdown", "disable_web_page_preview": True}
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": buttons}
+    res = await _call("editMessageText", payload)
+    if not res.get("ok"):
+        # Markdown can trip on user content — retry as plain text.
+        payload.pop("parse_mode", None)
+        await _call("editMessageText", payload)
+
+
+# ── actions (each re-checks permission server-side) ──────────────────────────
+async def _do_status(staff: dict, qid: int, new_status: str) -> bool:
+    import biz_nidaan as nidaan
+    import biz_nidaan_notifications as nnot
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        return False
+    is_assignee = qt.get("assigned_to_staff_id") == staff["staff_id"]
+    if not (is_assignee or _can(staff, "sub_super_admin")):
+        return False
+    await nidaan.update_quick_task_status(qid, new_status, changed_by=staff["staff_id"])
+    try:
+        fresh = await nidaan.get_quick_task(qid)
+        if fresh:
+            await nnot.on_quick_task_status_changed(fresh, new_status, staff.get("name", ""),
+                                                    by_id=staff["staff_id"])
+    except Exception:
+        pass
+    return True
+
+
+async def _do_comment(staff: dict, qid: int, text: str, chat_id) -> None:
+    import biz_nidaan as nidaan
+    import biz_nidaan_notifications as nnot
+    if not await nidaan.is_task_participant(qid, staff["staff_id"]) and not _can(staff, "sub_super_admin"):
+        await send_message(str(chat_id), "🔒 You don't have access to that task.")
+        return
+    await nidaan.add_quick_task_note(quick_task_id=qid, staff_id=staff["staff_id"], note=text)
+    try:
+        qt = await nidaan.get_quick_task(qid)
+        if qt:
+            await nnot.on_quick_task_comment(qt, staff["staff_id"], text)
+    except Exception:
+        pass
+    await send_message(str(chat_id), f"✅ Comment added to task #{qid}. Everyone involved was notified.",
+                       _kb([[{"text": f"📄 Open #{qid}", "callback_data": f"t:v:{qid}"},
+                             {"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+
+
+async def _do_approval(staff: dict, qid: int, decision: str) -> bool:
+    import biz_nidaan as nidaan
+    import biz_nidaan_notifications as nnot
+    if not _can(staff, "sub_super_admin"):
+        return False
+    try:
+        await nidaan.set_quick_task_approval(qid, decision, changed_by=staff["staff_id"])
+        qt = await nidaan.get_quick_task(qid)
+        if qt:
+            await nnot.on_quick_task_approval(qt, decision)
+        return True
+    except Exception as e:
+        logger.warning("Telegram approval failed #%s: %s", qid, e)
+        return False
+
+
+async def _do_leave(staff: dict, kind: str, text: str, chat_id) -> None:
+    """Parse a free-text leave/WFH request: dates + reason."""
+    import re as _re
+    import biz_nidaan as nidaan
+    import biz_nidaan_notifications as nnot
+    dates = _re.findall(r"\d{4}-\d{2}-\d{2}", text)
+    if not dates:
+        await send_message(str(chat_id),
+            "I couldn't find a date. Please use `YYYY-MM-DD`, e.g. `2026-07-25 personal work`.")
+        return
+    start = dates[0]
+    end = dates[1] if len(dates) > 1 else dates[0]
+    reason = _re.sub(r"\d{4}-\d{2}-\d{2}|to", " ", text).strip() or "-"
+    if end < start:
+        start, end = end, start
+    lid = await nidaan.create_leave_request(
+        staff_id=staff["staff_id"], start_date=start, end_date=end,
+        reason=reason, request_kind=kind)
+    try:
+        lv = await nidaan.get_leave_request(lid)
+        if lv:
+            await nnot.on_leave_requested(lv)
+    except Exception:
+        pass
+    label = "WFH" if kind == "wfh" else "Leave"
+    await send_message(str(chat_id),
+        f"✅ *{label} request sent*\n{start} → {end}\nReason: {reason}\n\nAdmins have been notified.",
+        _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+
+
+async def _do_broadcast(staff: dict, text: str, chat_id) -> None:
+    import biz_nidaan_notifications as nnot
+    if not _can(staff, "super_admin"):
+        await send_message(str(chat_id), "🔒 Super admin only.")
+        return
+    n = await nnot.record_broadcast(staff["staff_id"], staff.get("name", "Staff"), text)
+    await send_message(str(chat_id), f"📣 Broadcast sent to {n} staff member(s).",
+                       _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
 
 
 # ── notification fan-out ─────────────────────────────────────────────────────
