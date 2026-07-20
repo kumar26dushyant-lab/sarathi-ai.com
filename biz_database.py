@@ -1592,11 +1592,34 @@ async def init_db():
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approved_at TIMESTAMP",
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN merged_into INTEGER REFERENCES nidaan_quick_tasks(quick_task_id)",
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN category_code TEXT",   # e.g. RT | GT (admin-editable set)
+            # Approval routing: the creator names WHO should approve. NULL → fall back
+            # to super-admins only (previously every admin was pinged for every task).
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN approver_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
         ]:
             try:
                 await conn.execute(_alt)
             except Exception:
                 pass
+
+        # ── Multiple attachments per task comment ────────────────────────────
+        # nidaan_quick_task_notes keeps its single legacy attachment_* columns for
+        # old rows; every NEW upload (including the first) is recorded here so a
+        # comment can carry many files.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_quick_task_attachments (
+                attachment_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                quick_task_id   INTEGER NOT NULL REFERENCES nidaan_quick_tasks(quick_task_id),
+                note_id         INTEGER REFERENCES nidaan_quick_task_notes(note_id),
+                stored_name     TEXT NOT NULL,
+                original_name   TEXT,
+                uploaded_by     INTEGER REFERENCES nidaan_staff(staff_id),
+                uploaded_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqta_note ON nidaan_quick_task_attachments(note_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nqta_task ON nidaan_quick_task_attachments(quick_task_id)")
 
         # ── Admin-editable task categories (tags) ────────────────────────────
         # A small, super-admin-managed list of task tags (code + label + colour).

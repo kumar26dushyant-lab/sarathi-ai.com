@@ -4209,12 +4209,20 @@ class _QuickTaskCreateReq(BaseModel):
     requires_approval: bool = False
     task_type: str = Field("assignment", pattern=r"^(assignment|request)$")
     category_code: Optional[str] = Field(None, max_length=12)
+    approver_staff_id: Optional[int] = None      # who must approve (else SA fallback)
+    mention_ids: list[int] = Field(default_factory=list)   # involve people at creation
 
 
 class _QuickTaskUpdateReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     status: Optional[str] = Field(None, pattern=r"^(open|in_progress|done|cancelled)$")
     assigned_to_staff_id: Optional[int] = None
+    # Content edits (creator or super-admin only) — for typos/mistakes after creation.
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    description: Optional[str] = Field(None, max_length=4000)
+    category_code: Optional[str] = Field(None, max_length=12)
+    due_date: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
 
 
 class _QuickTaskApprovalReq(BaseModel):
@@ -4359,9 +4367,18 @@ async def ops_quick_task_get(qid: int, request: Request):
     # Opening the task = reading its comments (read-receipts).
     await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
+    _atts = await nidaan.list_note_attachments(qid)
     for _n in notes:
         if _n.get("attachment_stored_name"):
             _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
+        # Multi-attachment list (falls back to the legacy single file for old notes).
+        _rows = _atts.get(_n.get("note_id")) or []
+        if not _rows and _n.get("attachment_stored_name"):
+            _rows = [{"stored_name": _n["attachment_stored_name"],
+                      "original_name": _n.get("attachment_original_name")}]
+        _n["attachments"] = [{"url": _nidaan_doc_url(a["stored_name"]),
+                              "name": a.get("original_name") or "attachment"}
+                             for a in _rows]
     participants = await nidaan.get_task_participants(qid)
     me_muted = any(p["staff_id"] == staff["staff_id"] and p.get("muted") for p in participants)
     return {"quick_task": qt, "notes": notes, "me": staff["staff_id"],
@@ -4424,7 +4441,15 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
         assigned_to_staff_id=body.assigned_to_staff_id,
         priority=body.priority, claim_id=body.claim_id,
         due_date=body.due_date, requires_approval=body.requires_approval,
-        task_type=task_type, category_code=body.category_code)
+        task_type=task_type, category_code=body.category_code,
+        approver_staff_id=body.approver_staff_id)
+    # Involve people right at creation (same collaborator model as @mention).
+    _new_watchers = []
+    if body.mention_ids:
+        _mids = [m for m in body.mention_ids if m and m != staff["staff_id"]]
+        if _mids:
+            _new_watchers = await nidaan.add_task_watchers(
+                qid, _mids, added_by=staff["staff_id"])
     if body.initial_comment.strip():
         try:
             await nidaan.add_quick_task_note(
@@ -4441,10 +4466,15 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
                 _asyncio.create_task(nnot.on_quick_task_request(qt))
             else:
                 _asyncio.create_task(nnot.on_quick_task_assigned(qt))
-            # A task that needs approval alerts the approvers (was silent when the
-            # task was self-assigned).
+            # A task that needs approval alerts the approver (named on the task, else
+            # super-admins) — no longer every admin.
             if qt.get("requires_approval"):
                 _asyncio.create_task(nnot.on_quick_task_approval_request(qt))
+            # Tell anyone involved at creation that they're on this task.
+            if _new_watchers:
+                _asyncio.create_task(nnot.on_quick_task_mention(
+                    qt, _new_watchers, staff["staff_id"], staff.get("name", ""),
+                    body.initial_comment or ""))
     except Exception as ne:
         logger.warning("Quick task notification dispatch failed: %s", ne)
     return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid),
@@ -4459,12 +4489,25 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
     if not qt:
         raise HTTPException(404)
     role = staff.get("role", "")
-    # Team members can only mark status on their own assigned tasks
-    if role == "team_member" and qt.get("assigned_to_staff_id") != staff["staff_id"]:
+    is_admin = role in ("super_admin", "sub_super_admin")
+    is_creator = qt.get("created_by_staff_id") == staff["staff_id"]
+    is_assignee = qt.get("assigned_to_staff_id") == staff["staff_id"]
+    # Per-operation permissions (checked independently so a creator who isn't the
+    # assignee can still fix a typo on their own task).
+    _edit_fields = {"title": body.title, "description": body.description,
+                    "category_code": body.category_code,
+                    "due_date": body.due_date, "priority": body.priority}
+    _wants_edit = any(v is not None for v in _edit_fields.values())
+    if _wants_edit and not (is_creator or role == "super_admin"):
+        raise HTTPException(403, "Only the task creator or a super admin can edit task details")
+    if body.status is not None and not (is_assignee or is_admin):
         raise HTTPException(403)
-    # Only admin/SA can reassign
-    if body.assigned_to_staff_id is not None and role == "team_member":
+    if body.assigned_to_staff_id is not None and not is_admin:
         raise HTTPException(403, "Only admin or SA can reassign")
+    if _wants_edit:
+        # Content edit (typo/mistake fix) — every field change is written to the
+        # immutable task history. Deliberately does NOT notify (avoids noise).
+        await nidaan.update_quick_task_fields(qid, _edit_fields, changed_by=staff["staff_id"])
     if body.status is not None:
         await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"])
         # Notify the assignee that their task changed status (reopened/rejected/etc.)
@@ -4563,9 +4606,11 @@ async def ops_quick_task_note_add(qid: int, request: Request,
                                   note: str = Form(""),
                                   parent_note_id: Optional[int] = Form(None),
                                   mentions: str = Form(""),
-                                  file: Optional[UploadFile] = File(None)):
-    """Add a task comment, optionally with a file attachment and @mentions (multipart).
-    `mentions` = comma-separated staff_ids to tag as collaborators on this task."""
+                                  file: Optional[UploadFile] = File(None),
+                                  files: Optional[list[UploadFile]] = File(None)):
+    """Add a task comment, optionally with attachments and @mentions (multipart).
+    `mentions` = comma-separated staff_ids to tag as collaborators on this task.
+    `files` accepts MULTIPLE attachments; `file` is kept for backward compatibility."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     qt = await nidaan.get_quick_task(qid)
@@ -4576,25 +4621,36 @@ async def ops_quick_task_note_add(qid: int, request: Request,
     if role == "team_member" and not await nidaan.is_task_participant(qid, staff["staff_id"]):
         raise HTTPException(403)
     note = (note or "").strip()
-    stored_name = None
-    original_name = None
+    # Collect every uploaded file (multi `files[]` plus the legacy single `file`).
+    _incoming = [f for f in (files or []) if f is not None and (f.filename or "")]
     if file is not None and (file.filename or ""):
-        content = await file.read()
+        _incoming.append(file)
+    if len(_incoming) > 10:
+        raise HTTPException(400, "Up to 10 attachments per comment")
+    saved: list[dict] = []
+    import uuid as _uuid
+    for _f in _incoming:
+        content = await _f.read()
         if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(413, "Attachment exceeds 10 MB")
-        import uuid as _uuid
-        ext = os.path.splitext(file.filename)[1][:10]
-        stored_name = f"{_uuid.uuid4().hex}{ext}"
-        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
-        original_name = file.filename
-    if not note and not stored_name:
+            raise HTTPException(413, f"Attachment '{_f.filename}' exceeds 10 MB")
+        ext = os.path.splitext(_f.filename)[1][:10]
+        _stored = f"{_uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
+        saved.append({"stored_name": _stored, "original_name": _f.filename})
+    if not note and not saved:
         raise HTTPException(400, "Empty comment")
-    if not note and original_name:
-        note = f"📎 {original_name}"
+    if not note and saved:
+        note = ("📎 " + saved[0]["original_name"]) if len(saved) == 1 \
+               else f"📎 {len(saved)} attachments"
+    # First file also fills the legacy single-attachment columns (old readers).
     nid = await nidaan.add_quick_task_note(
         quick_task_id=qid, staff_id=staff["staff_id"],
         note=note, parent_note_id=parent_note_id,
-        attachment_stored_name=stored_name, attachment_original_name=original_name)
+        attachment_stored_name=(saved[0]["stored_name"] if saved else None),
+        attachment_original_name=(saved[0]["original_name"] if saved else None))
+    if saved:
+        await nidaan.add_note_attachments(quick_task_id=qid, note_id=nid,
+                                          files=saved, uploaded_by=staff["staff_id"])
     # @mentions → add the tagged staff as participants and alert the new ones.
     mention_ids = [int(x) for x in (mentions or "").split(",") if x.strip().isdigit()]
     mention_ids = [m for m in mention_ids if m != staff["staff_id"]]
@@ -18908,8 +18964,11 @@ async def main():
             while True:
                 try:
                     res = await nnot.run_wa_watchdog_cycle()
-                    if res and any(v == "down" for v in res.values()):
-                        logger.warning("📡 WA watchdog cycle: %s", res)
+                    # INFO, not WARNING: a persistently-down line already raised a
+                    # one-time WARNING + super-admin alert when it transitioned. Repeating
+                    # it every 4 min just floods App Health's error ring.
+                    if res:
+                        logger.info("📡 WA watchdog cycle: %s", res)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:

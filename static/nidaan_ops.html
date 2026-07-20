@@ -1388,8 +1388,10 @@ async function openQuickTaskModal(presetClaimId){
         <div>
           <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">${requestMode ? 'Suggest who handles it' : 'Assign to'}</label>
           <select id="qtAssignee" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem">
-            <option value="">Unassigned</option>
-            ${assignees.map(a => `<option value="${a.staff_id}" ${a.staff_id===_staffId?'selected':''}>${esc(a.name)}${a.staff_id===_staffId?' (me)':''}</option>`).join('')}
+            <!-- Defaults to None on purpose: pre-selecting the current user silently
+                 self-assigned tasks whenever the picker was left untouched. -->
+            <option value="" selected>— None (unassigned) —</option>
+            ${assignees.map(a => `<option value="${a.staff_id}">${esc(a.name)}${a.staff_id===_staffId?' (me)':''}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -1397,6 +1399,12 @@ async function openQuickTaskModal(presetClaimId){
           <input id="qtDueDate" type="date" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem">
         </div>
       </div>
+
+      <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Involve others (optional) — they can see &amp; work on this task</label>
+      <select id="qtInvolve" multiple size="4" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.4rem .5rem;border-radius:6px;font-size:.84rem;margin-bottom:.25rem">
+        ${assignees.filter(a=>a.staff_id!==_staffId).map(a => `<option value="${a.staff_id}">${esc(a.name)}</option>`).join('')}
+      </select>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-bottom:.85rem">Ctrl/Cmd-click to pick more than one. They're notified and can collaborate.</div>
 
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.35rem">Priority — pick how loud the nudge should be</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.85rem">${priorityRadios}</div>
@@ -1407,19 +1415,27 @@ async function openQuickTaskModal(presetClaimId){
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin:.85rem 0 .2rem">First comment (optional)</label>
       <textarea id="qtComment" rows="2" placeholder="Any context, instructions, etc."
                 style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:.5rem"></textarea>
-      <input type="file" id="qtCreateFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtCreateFilePicked()">
+      <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtCreateFilePicked()">
       <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
-              style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0;margin-bottom:.4rem">📎 Attach a file</button>
+              style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0;margin-bottom:.4rem">📎 Attach file(s)</button>
       <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-bottom:.6rem"></div>
 
       ${(_role==='super_admin'||_role==='sub_super_admin') ? `
-      <label style="display:flex;align-items:flex-start;gap:.55rem;padding:.55rem .65rem;border:1px solid rgba(167,139,250,.25);border-radius:8px;background:rgba(167,139,250,.06);cursor:pointer;margin-bottom:1rem">
-        <input type="checkbox" id="qtRequiresApproval" style="margin-top:.15rem;accent-color:#a78bfa">
+      <label style="display:flex;align-items:flex-start;gap:.55rem;padding:.55rem .65rem;border:1px solid rgba(167,139,250,.25);border-radius:8px;background:rgba(167,139,250,.06);cursor:pointer;margin-bottom:.5rem">
+        <input type="checkbox" id="qtRequiresApproval" onchange="document.getElementById('qtApproverWrap').style.display=this.checked?'block':'none'" style="margin-top:.15rem;accent-color:#a78bfa">
         <div style="min-width:0;flex:1">
           <div style="font-weight:600;font-size:.84rem;color:#c4b5fd">Requires approval before it's considered done</div>
-          <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.1rem">An admin/super-admin must approve. Creator &amp; assignee are notified of the decision.</div>
+          <div style="font-size:.74rem;color:rgba(255,255,255,.55);margin-top:.1rem">Creator &amp; assignee are notified of the decision.</div>
         </div>
-      </label>` : ''}
+      </label>
+      <div id="qtApproverWrap" style="display:none;margin-bottom:1rem">
+        <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Who should approve it?</label>
+        <select id="qtApprover" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem">
+          <option value="">— Any super admin —</option>
+          ${assignees.filter(a=>a.role==='super_admin'||a.role==='sub_super_admin').map(a=>`<option value="${a.staff_id}">${esc(a.name)}</option>`).join('')}
+        </select>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.2rem">Only this person is pinged — no more all-admin blasts.</div>
+      </div>` : ''}
 
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <button class="btn-sm btn-ghost" onclick="document.getElementById('quickTaskModalBg').remove()">Cancel</button>
@@ -1536,17 +1552,22 @@ async function submitQuickTask(){
   const comment = (document.getElementById('qtComment')?.value || '').trim();
   const category = document.getElementById('qtCategory')?.value || '';
   const requiresApproval = !!(document.getElementById('qtRequiresApproval') || {}).checked;
+  const approverVal = (document.getElementById('qtApprover') || {}).value || '';
+  const involveEl = document.getElementById('qtInvolve');
+  const involveIds = involveEl ? Array.from(involveEl.selectedOptions).map(o=>parseInt(o.value)).filter(Boolean) : [];
   const fileInput = document.getElementById('qtCreateFile');
-  const file = fileInput && fileInput.files && fileInput.files[0];
+  const pickedFiles = (fileInput && fileInput.files) ? Array.from(fileInput.files) : [];
   const taskType = window._qtRequestMode ? 'request' : 'assignment';
   const body = { title, priority, requires_approval: requiresApproval, task_type: taskType };
   if (assigneeVal) body.assigned_to_staff_id = parseInt(assigneeVal);
   if (claimVal) body.claim_id = parseInt(claimVal);
   if (dueDate) body.due_date = dueDate;
   if (category) body.category_code = category;
-  // When a file is attached, the comment rides along with it on the first note
+  if (requiresApproval && approverVal) body.approver_staff_id = parseInt(approverVal);
+  if (involveIds.length) body.mention_ids = involveIds;
+  // When files are attached, the comment rides along with them on the first note
   // (multipart) after create; otherwise send it inline in the create body.
-  if (comment && !file) body.initial_comment = comment;
+  if (comment && !pickedFiles.length) body.initial_comment = comment;
   const r = await fetch('/nidaan/ops/api/quick-tasks', {
     method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
     body: JSON.stringify(body),
@@ -1554,12 +1575,12 @@ async function submitQuickTask(){
   if (r.ok) {
     const dd = await r.json().catch(()=>({}));
     const newQid = dd.quick_task_id;
-    // Upload the attachment (with its comment) as the first note.
-    if (file && newQid) {
+    // Upload the attachment(s) (with the comment) as the first note.
+    if (pickedFiles.length && newQid) {
       try {
         const fd = new FormData();
         fd.append('note', comment || '');
-        fd.append('file', file);
+        pickedFiles.forEach(f => fd.append('files', f));
         await fetch('/nidaan/ops/api/quick-tasks/'+newQid+'/notes', { method:'POST', headers: hdrs(), body: fd });
       } catch(e){ ndUI.toast('Task created, but the file upload failed — re-attach from the task.','error'); }
     }
@@ -1577,8 +1598,11 @@ function _qtCreateFilePicked(){
   const f = document.getElementById('qtCreateFile');
   const lbl = document.getElementById('qtCreateFileName');
   if (!f || !lbl) return;
-  if (f.files && f.files[0]) { lbl.textContent = '📎 ' + f.files[0].name; lbl.style.display='block'; }
-  else { lbl.style.display='none'; }
+  const n = f.files ? f.files.length : 0;
+  if (n) {
+    lbl.textContent = '📎 ' + (n === 1 ? f.files[0].name : n + ' files: ' + Array.from(f.files).map(x=>x.name).join(', '));
+    lbl.style.display='block';
+  } else { lbl.style.display='none'; }
 }
 
 // ── Widget: My Quick Tasks ───────────────────────────────────────────────────
@@ -1845,10 +1869,12 @@ async function openQuickTaskDrawer(qid){
           ${assignees.map(a=>`<option value="${a.staff_id}" ${a.staff_id===qt.assigned_to_staff_id?'selected':''}>${esc(a.name)} · ${esc((a.role||'').replace(/_/g,' '))}</option>`).join('')}
         </select>
         <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="qtReassign(${qt.quick_task_id})">⇄ Reassign</button>` : ''}
+      ${(isCreator || _role==='super_admin') ? `<button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="qtOpenEdit(${qt.quick_task_id})">✏️ Edit</button>` : ''}
       <button class="btn-sm btn-ghost" onclick="qtShowHistory(${qt.quick_task_id})">📜 History</button>
       ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#c4b5fd" onclick="openMergeModal(${qt.quick_task_id})">⧉ Merge</button>` : ''}
       ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#fca5a5;margin-left:auto" onclick="qtDelete(${qt.quick_task_id})">🗑 Delete</button>` : ''}
     </div>
+    <div id="qtEditBox" style="display:none;margin-bottom:1rem"></div>
     <div id="qtHistoryBox" style="display:none;margin-bottom:1rem"></div>`;
 
   body.innerHTML = `
@@ -1898,8 +1924,8 @@ async function openQuickTaskDrawer(qid){
                    oninput="_qtMentionInput(this)"
                    onkeydown="if(event.key==='Enter'&&document.getElementById('qtMentionBox').style.display==='none')qtAddNote(${qt.quick_task_id})"
                    style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;padding:.55rem .75rem;border-radius:8px;font-size:.88rem">
-            <input type="file" id="qtNoteFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtFilePicked()">
-            <button class="btn-sm" title="Attach a file" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
+            <input type="file" id="qtNoteFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtFilePicked()">
+            <button class="btn-sm" title="Attach file(s)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
           <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task — they'll be notified and can work on it.</div>
@@ -1935,7 +1961,9 @@ function _renderQTThread(notes, qid, canComment){
           <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
-        ${n.attachment_url ? `<div style="margin-top:.25rem"><a href="${esc(n.attachment_url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(n.attachment_original_name||'attachment')}</a></div>` : ''}
+        ${(n.attachments && n.attachments.length)
+          ? `<div style="margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem">${n.attachments.map(a=>`<a href="${esc(a.url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(a.name||'attachment')}</a>`).join('')}</div>`
+          : (n.attachment_url ? `<div style="margin-top:.25rem"><a href="${esc(n.attachment_url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(n.attachment_original_name||'attachment')}</a></div>` : '')}
         ${(!isReply && canComment) ? `
           <button onclick="qtToggleReply(${n.note_id})"
                   style="font-size:.72rem;background:transparent;border:none;color:rgba(34,211,238,.85);cursor:pointer;padding:.15rem 0">↩ Reply</button>
@@ -2118,8 +2146,11 @@ function _qtFilePicked(){
   const f = document.getElementById('qtNoteFile');
   const lbl = document.getElementById('qtNoteFileName');
   if (!f || !lbl) return;
-  if (f.files && f.files[0]) { lbl.textContent = '📎 ' + f.files[0].name + ' — press Send to attach'; lbl.style.display='block'; }
-  else { lbl.style.display='none'; }
+  const n = f.files ? f.files.length : 0;
+  if (n) {
+    lbl.textContent = '📎 ' + (n === 1 ? f.files[0].name : n + ' files') + ' — press Send to attach';
+    lbl.style.display='block';
+  } else { lbl.style.display='none'; }
 }
 // ── @mention autocomplete in the task comment box ────────────────────────────
 let _qtMentionMatches = [];
@@ -2156,6 +2187,69 @@ function _qtPickMention(idx){
   box.style.display='none';
   el.focus();
 }
+// ── Edit a task's own content (creator or super admin) — typo/mistake fixes ──
+async function qtOpenEdit(qid){
+  const box = document.getElementById('qtEditBox');
+  if (!box) return;
+  if (box.style.display === 'block') { box.style.display='none'; return; }
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, { headers: hdrs() });
+  if (!r.ok) { ndUI.toast('Could not load task','error'); return; }
+  const qt = (await r.json()).quick_task || {};
+  const cats = await _loadTaskCategoriesOnce();
+  const inp = 'width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.45rem .6rem;border-radius:6px;font-size:.85rem';
+  box.innerHTML = `
+    <div style="padding:.75rem;background:rgba(125,211,252,.06);border:1px solid rgba(125,211,252,.28);border-radius:8px">
+      <div style="font-size:.8rem;font-weight:700;color:#7dd3fc;margin-bottom:.5rem">✏️ Edit task #${qid}</div>
+      <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Title</label>
+      <input id="qtEdTitle" value="${esc(qt.title||'')}" style="${inp};margin-bottom:.5rem">
+      <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Description</label>
+      <textarea id="qtEdDesc" rows="2" style="${inp};resize:vertical;margin-bottom:.5rem">${esc(qt.description||'')}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+        <div>
+          <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Category</label>
+          <select id="qtEdCat" style="${inp}">
+            <option value="">— none —</option>
+            ${cats.map(c=>`<option value="${esc(c.code)}" ${qt.category_code===c.code?'selected':''}>${esc(c.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Due date</label>
+          <input id="qtEdDue" type="date" value="${esc((qt.due_date||'').slice(0,10))}" style="${inp}">
+        </div>
+        <div>
+          <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Priority</label>
+          <select id="qtEdPrio" style="${inp}">
+            ${['low','normal','high','urgent'].map(p=>`<option value="${p}" ${qt.priority===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="btn-sm btn-ghost" onclick="document.getElementById('qtEditBox').style.display='none'">Cancel</button>
+        <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtSaveEdit(${qid})">Save changes</button>
+      </div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.4rem">Every edit is recorded in the task history.</div>
+    </div>`;
+  box.style.display = 'block';
+}
+async function qtSaveEdit(qid){
+  const payload = {
+    title: (document.getElementById('qtEdTitle').value||'').trim(),
+    description: document.getElementById('qtEdDesc').value||'',
+    category_code: document.getElementById('qtEdCat').value||'',
+    due_date: document.getElementById('qtEdDue').value||'',
+    priority: document.getElementById('qtEdPrio').value||'normal',
+  };
+  if (payload.title.length < 2) { ndUI.toast('Title is required','error'); return; }
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {
+    method:'PATCH', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  });
+  if (r.ok) { ndUI.toast('Task updated ✓','success'); openQuickTaskDrawer(qid); }
+  else {
+    const e = await r.json().catch(()=>({}));
+    ndUI.toast(_extractErr(e,'Update failed'),'error');
+  }
+}
+
 function qtToggleMute(qid, muted){
   fetch('/nidaan/ops/api/quick-tasks/'+qid+'/mute', {
     method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
@@ -2172,12 +2266,12 @@ async function qtAddNote(qid, parentNoteId){
   const note = (input?.value || '').trim();
   // Attachments only on the top-level comment box (not replies).
   const fileInput = parentNoteId ? null : document.getElementById('qtNoteFile');
-  const file = fileInput && fileInput.files && fileInput.files[0];
-  if (!note && !file) return;
+  const picked = (fileInput && fileInput.files) ? Array.from(fileInput.files) : [];
+  if (!note && !picked.length) return;
   const fd = new FormData();
   fd.append('note', note);
   if (parentNoteId) fd.append('parent_note_id', parentNoteId);
-  if (file) fd.append('file', file);
+  picked.forEach(f => fd.append('files', f));
   // Include @mentions still present in the text (top-level box only).
   if (!parentNoteId && window._qtMentions){
     const ids = Object.keys(window._qtMentions).filter(id => note.includes('@' + window._qtMentions[id]));

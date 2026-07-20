@@ -402,7 +402,18 @@ async def run_wa_watchdog_cycle() -> dict:
     import biz_whatsapp_evolution as wa_evo
     health = await wa_send_health()
     result: dict = {}
-    for inst in await _all_registered_instances():
+    instances = await _all_registered_instances()
+    # Drop watchdog state for slots that no longer exist (number removed), so a
+    # deleted line can't linger as a phantom "down" record.
+    try:
+        import biz_nidaan as _nid
+        _live = {i["instance_slot"] for i in instances}
+        for _slot in range(1, 4):
+            if _slot not in _live and (await _nid.get_ops_setting(f"wa_wd_slot{_slot}", "")):
+                await _nid.set_ops_setting(f"wa_wd_slot{_slot}", "")
+    except Exception:
+        pass
+    for inst in instances:
         slot = inst["instance_slot"]
         name = inst.get("display_name") or f"Line {slot}"
         phone = inst.get("phone_number") or ""
@@ -1575,12 +1586,21 @@ async def on_quick_task_approval_request(quick_task: dict):
     qid = quick_task.get("quick_task_id")
     title = quick_task.get("title", "") or ""
     creator_id = quick_task.get("created_by_staff_id")
+    approver_id = quick_task.get("approver_staff_id")
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        admins = [dict(r) for r in await (await conn.execute(
-            "SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
-            "WHERE role IN ('super_admin','sub_super_admin') AND status='active' "
-            "AND deleted_at IS NULL")).fetchall()]
+        if approver_id:
+            # Creator named an approver → ping ONLY them (no more all-admins blast).
+            admins = [dict(r) for r in await (await conn.execute(
+                "SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
+                "WHERE staff_id=? AND status='active' AND deleted_at IS NULL",
+                (approver_id,))).fetchall()]
+        else:
+            # No approver named → fall back to super-admins only.
+            admins = [dict(r) for r in await (await conn.execute(
+                "SELECT staff_id, phone, notify_email, email FROM nidaan_staff "
+                "WHERE role='super_admin' AND status='active' "
+                "AND deleted_at IS NULL")).fetchall()]
     task_priority = (quick_task.get("priority") or "normal").lower()
     notif_priority = {"low": PRIORITY_P2, "normal": PRIORITY_P2,
                       "high": PRIORITY_P1, "urgent": PRIORITY_P0}.get(task_priority, PRIORITY_P2)

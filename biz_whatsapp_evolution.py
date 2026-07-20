@@ -110,7 +110,12 @@ async def _request(method: str, path: str, *, json: Optional[dict] = None,
             except Exception:
                 return {"ok": True, "raw": resp.text[:500]}
     except httpx.TimeoutException:
-        logger.error("Evolution timeout: %s %s", method, path)
+        # Routine health polling of a disconnected line times out constantly; the
+        # real, actionable signal is the line's health state (surfaced in the ops UI
+        # and by the watchdog), so don't flood App Health's error ring with these.
+        # Non-routine paths (sends) still log at WARNING.
+        _routine = ("/instance/connectionState/" in path or "/chat/whatsappNumbers/" in path)
+        (logger.info if _routine else logger.warning)("Evolution timeout: %s %s", method, path)
         return {"error": "timeout"}
     except Exception as e:
         logger.error("Evolution request error: %s", e)

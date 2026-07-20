@@ -1659,7 +1659,8 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                              due_date: Optional[str] = None, description: str = "",
                              requires_approval: bool = False,
                              task_type: str = "assignment",
-                             category_code: Optional[str] = None) -> int:
+                             category_code: Optional[str] = None,
+                             approver_staff_id: Optional[int] = None) -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
     if task_type not in ("assignment", "request"):
@@ -1670,11 +1671,13 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_tasks "
             "(title, description, assigned_to_staff_id, created_by_staff_id, "
-            " priority, claim_id, due_date, requires_approval, approval_status, task_type, category_code) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " priority, claim_id, due_date, requires_approval, approval_status, task_type, "
+            " category_code, approver_staff_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
              created_by_staff_id, priority, claim_id, due_date,
-             1 if requires_approval else 0, approval_status, task_type, category_code))
+             1 if requires_approval else 0, approval_status, task_type,
+             category_code, approver_staff_id))
         qid = cur.lastrowid
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
@@ -1737,6 +1740,83 @@ async def deactivate_task_category(category_id: int) -> bool:
             "UPDATE nidaan_task_categories SET active=0 WHERE category_id=?", (category_id,))
         await conn.commit()
     return True
+
+
+_QT_EDITABLE_FIELDS = ("title", "description", "category_code", "due_date", "priority")
+
+
+async def update_quick_task_fields(quick_task_id: int, fields: dict,
+                                    changed_by: int) -> list[str]:
+    """Edit a task's own content (title / description / category / due date /
+    priority) — for fixing typos and mistakes after creation. Every change is written
+    to the immutable task log. Returns the list of fields actually changed."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur_row = await (await conn.execute(
+            "SELECT title, description, category_code, due_date, priority "
+            "FROM nidaan_quick_tasks WHERE quick_task_id=?", (quick_task_id,))).fetchone()
+        if not cur_row:
+            return []
+        current = dict(cur_row)
+        sets, params, changed = [], [], []
+        for k in _QT_EDITABLE_FIELDS:
+            if k not in fields or fields[k] is None:
+                continue
+            new_val = fields[k]
+            if k == "priority" and new_val not in QUICK_TASK_PRIORITIES:
+                continue
+            if k in ("title", "description") and isinstance(new_val, str):
+                new_val = new_val.strip()
+            if k == "category_code" and isinstance(new_val, str):
+                new_val = new_val.strip().upper() or None
+            if str(current.get(k) or "") == str(new_val or ""):
+                continue  # no-op
+            sets.append(f"{k}=?"); params.append(new_val); changed.append(k)
+            await _log_quick_task(conn, quick_task_id, "edit",
+                                  from_value=str(current.get(k) or "")[:120],
+                                  to_value=str(new_val or "")[:120],
+                                  changed_by=changed_by, note=k)
+        if not sets:
+            return []
+        params.append(quick_task_id)
+        await conn.execute(
+            "UPDATE nidaan_quick_tasks SET " + ", ".join(sets) +
+            ", updated_at = CURRENT_TIMESTAMP WHERE quick_task_id=?", params)
+        await conn.commit()
+        return changed
+
+
+# ── Multiple attachments per comment ─────────────────────────────────────────
+async def add_note_attachments(*, quick_task_id: int, note_id: Optional[int],
+                                files: list[dict], uploaded_by: int) -> int:
+    """files = [{'stored_name':…, 'original_name':…}, …]. Returns rows inserted."""
+    if not files:
+        return 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for f in files:
+            if not f.get("stored_name"):
+                continue
+            await conn.execute(
+                "INSERT INTO nidaan_quick_task_attachments "
+                "(quick_task_id, note_id, stored_name, original_name, uploaded_by) "
+                "VALUES (?,?,?,?,?)",
+                (quick_task_id, note_id, f["stored_name"], f.get("original_name"), uploaded_by))
+        await conn.commit()
+    return len(files)
+
+
+async def list_note_attachments(quick_task_id: int) -> dict:
+    """{note_id: [ {stored_name, original_name}, … ]} for a task's comments."""
+    out: dict = {}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT note_id, stored_name, original_name FROM nidaan_quick_task_attachments "
+            "WHERE quick_task_id=? ORDER BY attachment_id ASC", (quick_task_id,))).fetchall()
+        for r in rows:
+            out.setdefault(r["note_id"], []).append(
+                {"stored_name": r["stored_name"], "original_name": r["original_name"]})
+    return out
 
 
 # ── Task collaboration: watchers / @mention participants / mute ──────────────

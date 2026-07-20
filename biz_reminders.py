@@ -1874,7 +1874,8 @@ async def run_sarathi_subscription_renewal_scan():
             conn.row_factory = aiosqlite.Row
             cursor = await conn.execute(
                 """SELECT tenant_id, owner_name, email, firm_name,
-                          subscription_status, subscription_plan, subscription_expires_at
+                          subscription_status, plan AS subscription_plan,
+                          subscription_expires_at
                    FROM tenants
                    WHERE subscription_status IN ('active', 'paid')
                      AND subscription_expires_at IS NOT NULL
