@@ -663,7 +663,7 @@ async def _record_notification(**kw) -> int:
               kw.get("error"), kw.get("sent_at"), kw.get("deferred_until")))
         await conn.commit()
         notif_id = cur.lastrowid
-    # Web Push mirror: only for a real staff dashboard notification.
+    # Web Push + Telegram mirror: only for a real staff dashboard notification.
     if (kw.get("channel") == CHANNEL_DASHBOARD
             and kw.get("recipient_type") == RECIPIENT_STAFF
             and kw.get("recipient_id")):
@@ -677,7 +677,27 @@ async def _record_notification(**kw) -> int:
                    kw.get("subject") or "Nidaan Ops",
                    kw.get("body") or "",
                    url, kw.get("event_key") or "nidaan")
+        # Telegram: the reliable internal-ops channel (official Bot API, no ban risk).
+        # Fire-and-forget so a slow/edge Telegram call never blocks the request.
+        try:
+            _tg_text = ((kw.get("subject") or "Nidaan Ops") + "\n\n" + (kw.get("body") or "")).strip()
+            asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
+                                                 NIDAAN_BASE_URL + url))
+        except Exception:
+            pass
     return notif_id
+
+
+async def _telegram_mirror(staff_id: int, text: str, url: str) -> None:
+    """Best-effort Telegram delivery for a staff notification. Silent when the bot
+    isn't configured or the staffer hasn't linked — those aren't errors."""
+    try:
+        import biz_nidaan_telegram as _tg
+        ok, err = await _tg.notify_staff(staff_id, text, url=url)
+        if not ok and err not in ("not_linked", "telegram_disabled", "no_chat_id"):
+            logger.info("Telegram notify failed for staff %s: %s", staff_id, err)
+    except Exception as e:
+        logger.info("Telegram mirror error: %s", e)
 
 
 # ── Web Push (PWA push notifications) ────────────────────────────────────────

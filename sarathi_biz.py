@@ -62,7 +62,11 @@ import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
+import biz_nidaan_telegram as tg
 import biz_wa_agent as wa_agent
+
+# Public base URL for Nidaan (deep links + Telegram webhook registration).
+NIDAAN_BASE_URL = os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com")
 
 # =============================================================================
 #  LOGGING
@@ -5239,6 +5243,130 @@ async def ops_assignees(request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request)
     return {"staff": await ntasks.list_active_associates()}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TELEGRAM OPS BOT (Phase 5) — official Bot API, no ban risk, no phone to keep
+#  online. Super admin configures the bot once; each staffer self-links.
+# ══════════════════════════════════════════════════════════════════════════════
+class _TelegramTokenReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bot_token: str = Field(min_length=20, max_length=120)
+
+
+class _TelegramToggleReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+@app.get("/nidaan/ops/api/telegram/config")
+async def ops_telegram_config(request: Request):
+    """Bot status + MY personal link state. Any staffer can read this — they need
+    their own connect link; only the token hint is exposed, never the token."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    cfg = await tg.get_config()
+    mine = await tg.get_staff_telegram(staff["staff_id"])
+    out = {
+        "bot": cfg,
+        "is_super_admin": staff.get("role") == "super_admin",
+        "linked": bool((mine or {}).get("telegram_chat_id")),
+        "telegram_username": (mine or {}).get("telegram_username") or "",
+        "linked_at": (mine or {}).get("telegram_linked_at") or "",
+        "connect_url": "",
+    }
+    if cfg.get("configured") and cfg.get("bot_username"):
+        code = await tg.get_or_create_link_code(staff["staff_id"])
+        out["connect_url"] = f"https://t.me/{cfg['bot_username']}?start={code}"
+        out["link_code"] = code
+    if staff.get("role") == "super_admin":
+        out["linked_staff"] = await tg.linked_staff_count()
+    return out
+
+
+@app.post("/nidaan/ops/api/telegram/config")
+async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
+    """SA pastes the @BotFather token — we verify it, store it, and register the
+    webhook so the bot starts receiving /start link requests."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    token = body.bot_token.strip()
+    check = await tg.verify_token(token)
+    if not check.get("ok"):
+        raise HTTPException(400, f"That bot token was rejected by Telegram: {check.get('error')}")
+    await nidaan.set_ops_setting("telegram_bot_token", token)
+    await nidaan.set_ops_setting("telegram_bot_username", check.get("username", ""))
+    await nidaan.set_ops_setting("telegram_enabled", "1")
+    hook = await tg.set_webhook(NIDAAN_BASE_URL, token=token)
+    await _ops_audit(request, "telegram.configure", "telegram", 0,
+                     f"bot @{check.get('username','')}")
+    return {"ok": True, "bot_username": check.get("username", ""),
+            "webhook_ok": bool(hook.get("ok")),
+            "webhook_error": hook.get("description") or hook.get("error") or ""}
+
+
+@app.post("/nidaan/ops/api/telegram/toggle")
+async def ops_telegram_toggle(body: _TelegramToggleReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("telegram_enabled", "1" if body.enabled else "0")
+    return {"ok": True, "enabled": body.enabled}
+
+
+@app.post("/nidaan/ops/api/telegram/unlink")
+async def ops_telegram_unlink(request: Request):
+    """Unlink MY Telegram (stops my notifications there)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await tg.unlink_staff(staff["staff_id"])
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/telegram/test")
+async def ops_telegram_test(request: Request):
+    """Send myself a test message — proves the link end-to-end."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    ok, err = await tg.notify_staff(
+        staff["staff_id"],
+        f"🔔 Test notification\n\nHi {staff.get('name','')}, your NidaanPartner "
+        f"Telegram notifications are working.",
+        url=f"{NIDAAN_BASE_URL}/admin")
+    if not ok:
+        raise HTTPException(400, f"Could not send: {err}")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/me/comms-onboarded")
+async def ops_me_comms_onboarded(request: Request):
+    """One-time acknowledgement of the comms/Telegram onboarding popup."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_staff SET comms_onboarded_at=CURRENT_TIMESTAMP WHERE staff_id=?",
+            (staff["staff_id"],))
+        await conn.commit()
+    return {"ok": True}
+
+
+@app.post("/nidaan/telegram/webhook/{secret}")
+async def nidaan_telegram_webhook(secret: str, request: Request):
+    """Telegram pushes updates here. The path secret is derived from the bot token,
+    so only Telegram (which we gave the URL to) can reach it."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    token = await tg.get_bot_token()
+    if not token or secret != tg.webhook_secret(token):
+        raise HTTPException(404)
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True}
+    try:
+        await tg.handle_update(update)
+    except Exception as e:
+        logger.warning("Telegram webhook error: %s", e)
+    return {"ok": True}
 
 
 # ── Broadcast + notification bell (P4) ────────────────────────────────────────

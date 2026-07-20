@@ -1835,6 +1835,21 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_staff ADD COLUMN saved_official_numbers_at TIMESTAMP")
         except Exception:
             pass
+        # ── Telegram ops bot: per-staff link (Phase 5) ───────────────────────
+        # telegram_chat_id is set when the staffer taps Start on the bot with their
+        # personal link code; notifications then reach them on Telegram.
+        for _tg in [
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_chat_id TEXT",
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_username TEXT",
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_linked_at TIMESTAMP",
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_link_code TEXT",
+            # One-time onboarding acknowledgement (replaces the repeating WhatsApp popup)
+            "ALTER TABLE nidaan_staff ADD COLUMN comms_onboarded_at TIMESTAMP",
+        ]:
+            try:
+                await conn.execute(_tg)
+            except Exception:
+                pass
 
         # ═════════════════════════════════════════════════════════════════════
         # NIDAAN ERP — Phase 4: Notifications + Comms Hub (Jun 2026)

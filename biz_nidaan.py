@@ -3563,7 +3563,8 @@ async def get_staff_by_id(staff_id: int) -> Optional[dict]:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT staff_id,name,email,role,status,created_at,last_login_at,"
-            "       phone,notify_email,saved_official_numbers_at "
+            "       phone,notify_email,saved_official_numbers_at,"
+            "       comms_onboarded_at,telegram_chat_id "
             "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
         )
         row = await cur.fetchone()
