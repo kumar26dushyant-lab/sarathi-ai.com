@@ -777,15 +777,17 @@ async function loadTasks() {
         <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
+    <!-- Leave/WFH tiles sit ABOVE the task sections — who's away is context you need
+         before you read the board. -->
+    <div id="tasksLeave" style="margin-bottom:1.1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem"></div>
     <div id="tasksDash" style="margin-bottom:1.1rem"></div>
-    <div id="tasksQuickTop" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
+    <div id="tasksQuickTop">
       <div id="overviewMyQuickTasks"></div>
     </div>
     <div id="tasksRegistry" style="margin-top:1.25rem"></div>
     <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
-    </div>
-    <div id="tasksLeave" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem"></div>`;
+    </div>`;
   loadTasksDashboard();
   loadMyQuickTasksWidget();
   loadTaskRegistry();
@@ -1379,10 +1381,22 @@ async function openQuickTaskModal(presetClaimId){
              style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.55rem .75rem;border-radius:6px;font-size:.88rem;margin-bottom:.85rem">
 
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Category</label>
-      <select id="qtCategory" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem;margin-bottom:.85rem">
+      <select id="qtCategory" onchange="_qtCategoryChanged()" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem;margin-bottom:.85rem">
         <option value="">— no category —</option>
-        ${(categories||[]).map(c=>`<option value="${esc(c.code)}">${esc(c.label)} (${esc(c.code)})</option>`).join('')}
+        ${(categories||[]).map(c=>`<option value="${esc(c.code)}" data-rc="${c.requires_complainant?1:0}">${esc(c.label)} (${esc(c.code)})</option>`).join('')}
       </select>
+
+      <!-- Shown only for categories flagged "requires complainant" (e.g. Review Task).
+           Once captured, this stays on the task even if the category changes later. -->
+      <div id="qtComplainantWrap" style="display:none;margin-bottom:.85rem;padding:.65rem;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.25);border-radius:8px">
+        <div style="font-size:.75rem;font-weight:700;color:#93c5fd;margin-bottom:.45rem">Complainant details <span style="color:#fbbf24">*</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <input id="qtComplainantName" placeholder="Complainant name"
+                 style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.45rem .6rem;border-radius:6px;font-size:.85rem">
+          <input id="qtComplainantPhone" placeholder="Mobile number" inputmode="numeric"
+                 style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.45rem .6rem;border-radius:6px;font-size:.85rem">
+        </div>
+      </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.85rem">
         <div>
@@ -1563,6 +1577,16 @@ async function submitQuickTask(){
   if (claimVal) body.claim_id = parseInt(claimVal);
   if (dueDate) body.due_date = dueDate;
   if (category) body.category_code = category;
+  // Complainant details are mandatory for categories flagged as needing them.
+  const _cw = document.getElementById('qtComplainantWrap');
+  if (_cw && _cw.style.display === 'block') {
+    const cn = (document.getElementById('qtComplainantName').value||'').trim();
+    const cp = (document.getElementById('qtComplainantPhone').value||'').trim();
+    if (!cn || !cp) { ndUI.toast('Complainant name and mobile number are required for this category','error'); return; }
+    if (cp.replace(/\D/g,'').length < 10) { ndUI.toast('Enter a valid complainant mobile number','error'); return; }
+    body.complainant_name = cn;
+    body.complainant_phone = cp;
+  }
   if (requiresApproval && approverVal) body.approver_staff_id = parseInt(approverVal);
   if (involveIds.length) body.mention_ids = involveIds;
   // When files are attached, the comment rides along with them on the first note
@@ -1594,6 +1618,15 @@ async function submitQuickTask(){
   }
 }
 
+// Reveal the mandatory complainant fields when the chosen category demands them.
+function _qtCategoryChanged(){
+  const sel = document.getElementById('qtCategory');
+  const wrap = document.getElementById('qtComplainantWrap');
+  if (!sel || !wrap) return;
+  const opt = sel.options[sel.selectedIndex];
+  wrap.style.display = (opt && opt.dataset.rc === '1') ? 'block' : 'none';
+}
+
 function _qtCreateFilePicked(){
   const f = document.getElementById('qtCreateFile');
   const lbl = document.getElementById('qtCreateFileName');
@@ -1606,23 +1639,45 @@ function _qtCreateFilePicked(){
 }
 
 // ── Widget: My Quick Tasks ───────────────────────────────────────────────────
+// Personalised task view — replaces the single "My Open Quick Tasks" list with the
+// three slices every staffer actually needs: what's on MY plate, what I handed to
+// others, and what I've been pulled into.
 async function loadMyQuickTasksWidget(){
   const el = document.getElementById('overviewMyQuickTasks');
   if (!el) return;
-  el.innerHTML = '<div class="nd-card" style="padding:1rem"><div style="font-weight:700;font-size:.98rem;margin-bottom:.85rem">📌 My Open Quick Tasks</div><div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div></div>';
-  const r = await fetch('/nidaan/ops/api/quick-tasks?assignee=me', { headers: hdrs() });
-  if (!r.ok) { el.innerHTML = '<div class="nd-card" style="padding:1rem;color:#fca5a5">Failed to load</div>'; return; }
-  const d = await r.json();
-  const items = d.quick_tasks || [];
-  el.innerHTML = `
-    <div class="nd-card" style="padding:1rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.85rem">
-        <div style="font-weight:700;font-size:.98rem">📌 My Open Quick Tasks</div>
-        <div style="font-size:.78rem;color:rgba(255,255,255,.45)">${items.length} open</div>
-      </div>
-      ${items.length ? items.map(_qtRow).join('') :
-        '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Nothing assigned to you ✓</div>'}
-    </div>`;
+  el.innerHTML = '<div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading your tasks…</div>';
+  const get = async (scope) => {
+    try {
+      const r = await fetch('/nidaan/ops/api/quick-tasks?scope='+scope+'&limit=50', { headers: hdrs() });
+      if (!r.ok) return [];
+      return (await r.json()).quick_tasks || [];
+    } catch(e){ return []; }
+  };
+  const [mine, byMe, involved] = await Promise.all([
+    get('assigned_to_me'), get('created_by_me'), get('involved')
+  ]);
+  try { await _loadTaskCategoriesOnce(); } catch(e){}
+
+  const section = (id, icon, title, subtitle, items, emptyMsg, color) => {
+    const open = items.filter(t => t.status!=='done' && t.status!=='cancelled');
+    return `
+      <div class="nd-card" style="padding:1rem;margin-bottom:.85rem">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
+          <div>
+            <span style="font-weight:700;font-size:.98rem">${icon} ${title}</span>
+            <span style="font-size:.74rem;color:rgba(255,255,255,.4);margin-left:.4rem">${subtitle}</span>
+          </div>
+          <span style="font-size:.75rem;font-weight:800;color:${color};background:${color}1f;border:1px solid ${color}44;padding:.1rem .5rem;border-radius:999px">${open.length} open</span>
+        </div>
+        ${open.length ? open.map(t=>_qtRow(t,true)).join('')
+          : `<div style="padding:.9rem;text-align:center;color:rgba(255,255,255,.35);font-size:.84rem">${emptyMsg}</div>`}
+      </div>`;
+  };
+
+  el.innerHTML =
+    section('s1','📥','Pending with me','assigned to you', mine,'Nothing on your plate ✓','#22d3ee') +
+    section('s2','📤','Assigned by me','you created / handed over', byMe,'You haven\'t assigned anything yet','#a78bfa') +
+    section('s3','🏷️','I\'m involved','tagged into by teammates', involved,'You haven\'t been tagged into any task','#fbbf24');
 }
 
 // Legacy alias — the team widget is superseded by the full Task Registry.
@@ -1897,6 +1952,8 @@ async function openQuickTaskDrawer(qid){
         ${qt.due_date ? `<div><span style="color:rgba(255,255,255,.45)">Due</span><br>${esc(qt.due_date)}</div>` : ''}
         <div><span style="color:rgba(255,255,255,.45)">Created</span><br>${ndUI.timeAgo(qt.created_at)}</div>
         ${qt.completed_at ? `<div><span style="color:rgba(255,255,255,.45)">Completed</span><br>${ndUI.timeAgo(qt.completed_at)}</div>` : ''}
+        ${qt.complainant_name ? `<div><span style="color:rgba(255,255,255,.45)">Complainant</span><br>${esc(qt.complainant_name)}</div>` : ''}
+        ${qt.complainant_phone ? `<div><span style="color:rgba(255,255,255,.45)">Complainant mobile</span><br><a href="tel:${esc(qt.complainant_phone)}" style="color:#22d3ee">${esc(qt.complainant_phone)}</a></div>` : ''}
       </div>
 
       <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -2223,6 +2280,16 @@ async function qtOpenEdit(qid){
           </select>
         </div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+        <div>
+          <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Complainant name</label>
+          <input id="qtEdCompName" value="${esc(qt.complainant_name||'')}" style="${inp}">
+        </div>
+        <div>
+          <label style="display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">Complainant mobile</label>
+          <input id="qtEdCompPhone" value="${esc(qt.complainant_phone||'')}" style="${inp}">
+        </div>
+      </div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end">
         <button class="btn-sm btn-ghost" onclick="document.getElementById('qtEditBox').style.display='none'">Cancel</button>
         <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtSaveEdit(${qid})">Save changes</button>
@@ -2238,6 +2305,8 @@ async function qtSaveEdit(qid){
     category_code: document.getElementById('qtEdCat').value||'',
     due_date: document.getElementById('qtEdDue').value||'',
     priority: document.getElementById('qtEdPrio').value||'normal',
+    complainant_name: document.getElementById('qtEdCompName').value||'',
+    complainant_phone: document.getElementById('qtEdCompPhone').value||'',
   };
   if (payload.title.length < 2) { ndUI.toast('Title is required','error'); return; }
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {
@@ -5231,6 +5300,9 @@ function renderTaskCatManager(cats){
              style="flex:1;min-width:0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.35rem .55rem;border-radius:6px;font-size:.82rem">
       <input type="number" value="${c.sort_order}" onchange="qtCatUpdate(${c.category_id},{sort_order:parseInt(this.value)||100})" title="Sort order"
              style="width:64px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:.35rem .4rem;border-radius:6px;font-size:.8rem;text-align:center">
+      <label title="Require complainant name + mobile when this category is chosen" style="display:flex;align-items:center;gap:.25rem;font-size:.72rem;color:rgba(255,255,255,.6);cursor:pointer;white-space:nowrap">
+        <input type="checkbox" ${c.requires_complainant?'checked':''} onchange="qtCatUpdate(${c.category_id},{requires_complainant:this.checked})" style="accent-color:#3b82f6"> complainant
+      </label>
       ${c.active
         ? `<button class="nd-btn nd-btn-sm nd-btn-ghost" style="color:#fca5a5" onclick="qtCatDelete(${c.category_id},'${esc(c.label)}')">Deactivate</button>`
         : `<button class="nd-btn nd-btn-sm nd-btn-secondary" onclick="qtCatUpdate(${c.category_id},{active:true})">Reactivate</button>`}

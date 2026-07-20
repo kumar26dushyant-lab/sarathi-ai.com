@@ -4211,6 +4211,8 @@ class _QuickTaskCreateReq(BaseModel):
     category_code: Optional[str] = Field(None, max_length=12)
     approver_staff_id: Optional[int] = None      # who must approve (else SA fallback)
     mention_ids: list[int] = Field(default_factory=list)   # involve people at creation
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=20)
 
 
 class _QuickTaskUpdateReq(BaseModel):
@@ -4223,6 +4225,8 @@ class _QuickTaskUpdateReq(BaseModel):
     category_code: Optional[str] = Field(None, max_length=12)
     due_date: Optional[str] = None
     priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=20)
 
 
 class _QuickTaskApprovalReq(BaseModel):
@@ -4255,6 +4259,7 @@ async def ops_quick_tasks_list(request: Request,
                                 category: Optional[str] = None,
                                 q: Optional[str] = None,
                                 sort: Optional[str] = None,
+                                scope: Optional[str] = None,
                                 overdue: bool = False,
                                 pending_approval: bool = False,
                                 include_done: bool = False,
@@ -4286,7 +4291,8 @@ async def ops_quick_tasks_list(request: Request,
         status=status, assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id,
         claim_id=claim_id, task_type=task_type, category_code=category, search=q,
         for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
-        include_done=include_done, include_deleted=incl_deleted, sort=sort, limit=limit)
+        include_done=include_done, include_deleted=incl_deleted, sort=sort,
+        scope=scope, scope_staff_id=staff["staff_id"], limit=limit)
     out = {"quick_tasks": items, "count": len(items)}
     if with_counts:
         out["counts"] = await nidaan.quick_task_status_counts(
@@ -4301,6 +4307,7 @@ class _TaskCategoryCreateReq(BaseModel):
     label: str = Field(min_length=1, max_length=60)
     color: str = Field("#64748b", max_length=16)
     sort_order: int = 100
+    requires_complainant: bool = False
 
 
 class _TaskCategoryUpdateReq(BaseModel):
@@ -4309,6 +4316,7 @@ class _TaskCategoryUpdateReq(BaseModel):
     color: Optional[str] = Field(None, max_length=16)
     sort_order: Optional[int] = None
     active: Optional[bool] = None
+    requires_complainant: Optional[bool] = None
 
 
 @app.get("/nidaan/ops/api/task-categories")
@@ -4340,7 +4348,8 @@ async def ops_task_category_update(category_id: int, body: _TaskCategoryUpdateRe
     _require_staff(request, "super_admin")
     await nidaan.update_task_category(
         category_id, label=body.label, color=body.color,
-        sort_order=body.sort_order, active=body.active)
+        sort_order=body.sort_order, active=body.active,
+        requires_complainant=body.requires_complainant)
     return {"ok": True, "categories": await nidaan.list_task_categories(include_inactive=True)}
 
 
@@ -4435,6 +4444,11 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
     if task_type == "assignment" and \
        nidaan.role_rank(staff.get("role", "")) < nidaan.role_rank(min_role):
         task_type = "request"  # nudge, don't block
+    # Categories flagged requires_complainant (e.g. Review Task) must carry the
+    # complainant's name + mobile. Enforced server-side, not just in the form.
+    if await nidaan.category_requires_complainant(body.category_code):
+        if not (body.complainant_name or "").strip() or not (body.complainant_phone or "").strip():
+            raise HTTPException(400, "Complainant name and mobile number are required for this task category")
     qid = await nidaan.create_quick_task(
         title=body.title, description=body.description,
         created_by_staff_id=staff["staff_id"],
@@ -4442,7 +4456,9 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
         priority=body.priority, claim_id=body.claim_id,
         due_date=body.due_date, requires_approval=body.requires_approval,
         task_type=task_type, category_code=body.category_code,
-        approver_staff_id=body.approver_staff_id)
+        approver_staff_id=body.approver_staff_id,
+        complainant_name=body.complainant_name,
+        complainant_phone=body.complainant_phone)
     # Involve people right at creation (same collaborator model as @mention).
     _new_watchers = []
     if body.mention_ids:
@@ -4496,7 +4512,9 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
     # assignee can still fix a typo on their own task).
     _edit_fields = {"title": body.title, "description": body.description,
                     "category_code": body.category_code,
-                    "due_date": body.due_date, "priority": body.priority}
+                    "due_date": body.due_date, "priority": body.priority,
+                    "complainant_name": body.complainant_name,
+                    "complainant_phone": body.complainant_phone}
     _wants_edit = any(v is not None for v in _edit_fields.values())
     if _wants_edit and not (is_creator or role == "super_admin"):
         raise HTTPException(403, "Only the task creator or a super admin can edit task details")

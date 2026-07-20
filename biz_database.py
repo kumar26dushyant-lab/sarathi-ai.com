@@ -1595,6 +1595,10 @@ async def init_db():
             # Approval routing: the creator names WHO should approve. NULL → fall back
             # to super-admins only (previously every admin was pinged for every task).
             "ALTER TABLE nidaan_quick_tasks ADD COLUMN approver_staff_id INTEGER REFERENCES nidaan_staff(staff_id)",
+            # Complainant details captured for categories that require them (e.g. Review
+            # Task). Kept on the task PERMANENTLY even if the category changes later.
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN complainant_name TEXT",
+            "ALTER TABLE nidaan_quick_tasks ADD COLUMN complainant_phone TEXT",
         ]:
             try:
                 await conn.execute(_alt)
@@ -1637,6 +1641,18 @@ async def init_db():
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Category-driven mandatory complainant capture (admin-editable, not hardcoded
+        # to a code) — picking such a category makes name + mobile required.
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_task_categories ADD COLUMN requires_complainant INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                "UPDATE nidaan_task_categories SET requires_complainant=1 WHERE code='RT'")
+        except Exception:
+            pass
         # ── Task collaboration: @mention participants + per-person mute ──────
         # A task has one assignee, but work is collaborative: anyone involved can
         # @mention another staffer, who becomes a participant (task shows in their

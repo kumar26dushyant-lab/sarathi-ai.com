@@ -1660,7 +1660,9 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                              requires_approval: bool = False,
                              task_type: str = "assignment",
                              category_code: Optional[str] = None,
-                             approver_staff_id: Optional[int] = None) -> int:
+                             approver_staff_id: Optional[int] = None,
+                             complainant_name: Optional[str] = None,
+                             complainant_phone: Optional[str] = None) -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
     if task_type not in ("assignment", "request"):
@@ -1672,12 +1674,14 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
             "INSERT INTO nidaan_quick_tasks "
             "(title, description, assigned_to_staff_id, created_by_staff_id, "
             " priority, claim_id, due_date, requires_approval, approval_status, task_type, "
-            " category_code, approver_staff_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " category_code, approver_staff_id, complainant_name, complainant_phone) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (title.strip(), description.strip(), assigned_to_staff_id,
              created_by_staff_id, priority, claim_id, due_date,
              1 if requires_approval else 0, approval_status, task_type,
-             category_code, approver_staff_id))
+             category_code, approver_staff_id,
+             (complainant_name or "").strip() or None,
+             (complainant_phone or "").strip() or None))
         qid = cur.lastrowid
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
@@ -1693,10 +1697,21 @@ async def list_task_categories(include_inactive: bool = False) -> list[dict]:
         conn.row_factory = aiosqlite.Row
         clause = "" if include_inactive else " WHERE active=1"
         cur = await conn.execute(
-            "SELECT category_id, code, label, color, sort_order, active "
+            "SELECT category_id, code, label, color, sort_order, active, requires_complainant "
             "FROM nidaan_task_categories" + clause +
             " ORDER BY active DESC, sort_order ASC, label ASC")
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def category_requires_complainant(code: Optional[str]) -> bool:
+    """True if the given category demands complainant name + mobile."""
+    if not code:
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT requires_complainant FROM nidaan_task_categories WHERE code=?",
+            (code.strip().upper(),))).fetchone()
+        return bool(row and row[0])
 
 
 async def create_task_category(*, code: str, label: str,
@@ -1716,12 +1731,15 @@ async def create_task_category(*, code: str, label: str,
 async def update_task_category(category_id: int, *, label: Optional[str] = None,
                                 color: Optional[str] = None,
                                 sort_order: Optional[int] = None,
-                                active: Optional[bool] = None) -> bool:
+                                active: Optional[bool] = None,
+                                requires_complainant: Optional[bool] = None) -> bool:
     sets, params = [], []
     if label is not None:      sets.append("label=?");      params.append(label.strip())
     if color is not None:      sets.append("color=?");      params.append(color.strip())
     if sort_order is not None: sets.append("sort_order=?"); params.append(int(sort_order))
     if active is not None:     sets.append("active=?");     params.append(1 if active else 0)
+    if requires_complainant is not None:
+        sets.append("requires_complainant=?"); params.append(1 if requires_complainant else 0)
     if not sets:
         return False
     params.append(category_id)
@@ -1742,7 +1760,8 @@ async def deactivate_task_category(category_id: int) -> bool:
     return True
 
 
-_QT_EDITABLE_FIELDS = ("title", "description", "category_code", "due_date", "priority")
+_QT_EDITABLE_FIELDS = ("title", "description", "category_code", "due_date", "priority",
+                       "complainant_name", "complainant_phone")
 
 
 async def update_quick_task_fields(quick_task_id: int, fields: dict,
@@ -1753,7 +1772,8 @@ async def update_quick_task_fields(quick_task_id: int, fields: dict,
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur_row = await (await conn.execute(
-            "SELECT title, description, category_code, due_date, priority "
+            "SELECT title, description, category_code, due_date, priority, "
+            "       complainant_name, complainant_phone "
             "FROM nidaan_quick_tasks WHERE quick_task_id=?", (quick_task_id,))).fetchone()
         if not cur_row:
             return []
@@ -1991,6 +2011,8 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                             include_done: bool = False,
                             include_deleted: bool = False,
                             sort: Optional[str] = None,
+                            scope: Optional[str] = None,
+                            scope_staff_id: Optional[int] = None,
                             limit: int = 100) -> list[dict]:
     """Flexible task query.
     - include_done=False (default): hides done/cancelled (the "open work" view).
@@ -2009,6 +2031,21 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                      "OR EXISTS (SELECT 1 FROM nidaan_quick_task_watchers w "
                      "WHERE w.quick_task_id = q.quick_task_id AND w.staff_id = ?))")
         params += [viewer_staff_id, viewer_staff_id, viewer_staff_id]
+    if scope_staff_id is not None and scope in ("assigned_to_me", "created_by_me", "involved"):
+        # Personalised dashboard slices.
+        if scope == "assigned_to_me":
+            where.append("q.assigned_to_staff_id = ?")
+            params.append(scope_staff_id)
+        elif scope == "created_by_me":
+            where.append("q.created_by_staff_id = ?")
+            params.append(scope_staff_id)
+        else:  # involved: @mentioned in, but NOT mine by assignment/creation
+            where.append("EXISTS (SELECT 1 FROM nidaan_quick_task_watchers w "
+                         "WHERE w.quick_task_id = q.quick_task_id AND w.staff_id = ? "
+                         "AND w.relation = 'mentioned') "
+                         "AND COALESCE(q.assigned_to_staff_id,-1) != ? "
+                         "AND COALESCE(q.created_by_staff_id,-1) != ?")
+            params += [scope_staff_id, scope_staff_id, scope_staff_id]
     if status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:
