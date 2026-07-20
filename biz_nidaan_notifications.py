@@ -372,6 +372,40 @@ async def _wd_probe(slot: int) -> Optional[bool]:
     return bool(ok)
 
 
+async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
+                             event_key: str = "ops.notice", email: bool = True) -> int:
+    """Dashboard bell + web push (+ optional email) to specific staff. Never WhatsApp —
+    used for notices that must land regardless of messaging-channel state."""
+    if not staff_ids:
+        return 0
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ph = ",".join("?" * len(staff_ids))
+        rows = [dict(r) for r in await (await conn.execute(
+            f"SELECT staff_id, COALESCE(NULLIF(notify_email,''), email) AS email "
+            f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
+            f"AND status='active' AND deleted_at IS NULL", list(staff_ids))).fetchall()]
+    sent = 0
+    for r in rows:
+        try:
+            await _record_notification(
+                event_key=event_key, priority=PRIORITY_P2,
+                recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
+                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
+                status="sent", sent_at=ts)
+            sent += 1
+        except Exception as e:
+            logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
+        if email and r.get("email"):
+            try:
+                await _send_email(to_email=r["email"], subject=f"[Nidaan] {subject}",
+                                  html_body=body.replace("\n", "<br>"), text_body=body)
+            except Exception:
+                pass
+    return sent
+
+
 async def _wd_alert_admins(*, subject: str, body: str, event_key: str) -> None:
     """Alert every super-admin via dashboard bell + web push + email. NEVER WhatsApp
     (the whole point is that WhatsApp is down)."""

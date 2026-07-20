@@ -71,6 +71,7 @@ async def get_config() -> dict:
         "configured": bool(token),
         "enabled": (await _get_setting("telegram_enabled", "1")) == "1",
         "bot_username": await _get_setting("telegram_bot_username", ""),
+        "bot_id": await _get_setting("telegram_bot_id", ""),
         "token_hint": (f"…{token[-6:]}" if token else ""),
         "webhook_set_at": await _get_setting("telegram_webhook_set_at", ""),
     }
@@ -104,12 +105,49 @@ async def _call(method: str, payload: Optional[dict] = None,
 
 
 async def verify_token(token: str) -> dict:
-    """getMe — validates a pasted token and returns the bot's identity."""
+    """getMe — validates a pasted token and returns the bot's identity. `bot_id` is
+    stable for the life of a bot even if its token is regenerated, so it's what we
+    use to tell "same bot, new token" (links survive) from "different bot" (links are
+    dead, because a chat_id only means anything to the bot that issued it)."""
     res = await _call("getMe", token=token)
     if res.get("ok"):
-        return {"ok": True, "username": (res.get("result") or {}).get("username", ""),
-                "name": (res.get("result") or {}).get("first_name", "")}
+        r = res.get("result") or {}
+        return {"ok": True, "username": r.get("username", ""),
+                "name": r.get("first_name", ""), "bot_id": str(r.get("id") or "")}
     return {"ok": False, "error": res.get("description") or res.get("error") or "invalid_token"}
+
+
+async def clear_all_links() -> int:
+    """Drop every staff link. Used when the bot IDENTITY changes — those chat_ids can
+    never work again, so keeping them would just fail silently forever."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
+            "telegram_linked_at=NULL WHERE telegram_chat_id IS NOT NULL")
+        await conn.commit()
+        return cur.rowcount or 0
+
+
+async def list_unlinked_staff() -> list[dict]:
+    """Active staff who still need to connect (used to nudge them)."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT staff_id, name, COALESCE(NULLIF(notify_email,''), email) AS email "
+            "FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+            "AND (telegram_chat_id IS NULL OR telegram_chat_id='')")).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def disconnect_bot() -> None:
+    """Remove the bot token (stops Telegram delivery) but KEEP staff links, so
+    re-adding the SAME bot later restores everyone instantly."""
+    try:
+        await _call("deleteWebhook", {"drop_pending_updates": True})
+    except Exception:
+        pass
+    await _set_setting("telegram_bot_token", "")
+    await _set_setting("telegram_webhook_set_at", "")
 
 
 async def set_webhook(base_url: str, token: Optional[str] = None) -> dict:

@@ -5294,15 +5294,59 @@ async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
     check = await tg.verify_token(token)
     if not check.get("ok"):
         raise HTTPException(400, f"That bot token was rejected by Telegram: {check.get('error')}")
+    new_id = check.get("bot_id") or ""
+    prev_id = await nidaan.get_ops_setting("telegram_bot_id", "")
+    # A chat_id is only meaningful to the bot that issued it. Same bot (even with a
+    # regenerated token) → every existing link keeps working. DIFFERENT bot → the old
+    # links are dead, so clear them rather than let delivery fail silently forever.
+    links_cleared = 0
+    same_bot = bool(prev_id) and prev_id == new_id
+    if prev_id and not same_bot:
+        links_cleared = await tg.clear_all_links()
     await nidaan.set_ops_setting("telegram_bot_token", token)
     await nidaan.set_ops_setting("telegram_bot_username", check.get("username", ""))
+    await nidaan.set_ops_setting("telegram_bot_id", new_id)
     await nidaan.set_ops_setting("telegram_enabled", "1")
     hook = await tg.set_webhook(NIDAAN_BASE_URL, token=token)
     await _ops_audit(request, "telegram.configure", "telegram", 0,
-                     f"bot @{check.get('username','')}")
+                     f"bot @{check.get('username','')} same_bot={same_bot} cleared={links_cleared}")
     return {"ok": True, "bot_username": check.get("username", ""),
             "webhook_ok": bool(hook.get("ok")),
-            "webhook_error": hook.get("description") or hook.get("error") or ""}
+            "webhook_error": hook.get("description") or hook.get("error") or "",
+            "same_bot": same_bot, "links_cleared": links_cleared,
+            "linked_staff": await tg.linked_staff_count()}
+
+
+@app.post("/nidaan/ops/api/telegram/disconnect")
+async def ops_telegram_disconnect(request: Request):
+    """Turn the bot off completely (removes the token + webhook). Staff links are
+    KEPT, so pasting the SAME bot's token later restores everyone instantly with no
+    re-linking. Notifications fall back to dashboard + push + email meanwhile."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await tg.disconnect_bot()
+    await _ops_audit(request, "telegram.disconnect", "telegram", 0, "bot disconnected")
+    return {"ok": True, "links_kept": await tg.linked_staff_count()}
+
+
+@app.post("/nidaan/ops/api/telegram/remind-unlinked")
+async def ops_telegram_remind_unlinked(request: Request):
+    """Nudge every staffer who hasn't connected yet — via their dashboard bell, app
+    push and email (never Telegram, since that's the thing they're missing)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    pending = await tg.list_unlinked_staff()
+    if not pending:
+        return {"ok": True, "notified": 0}
+    n = await nnot.notify_staff_inapp(
+        [p["staff_id"] for p in pending],
+        subject="Connect your Telegram for instant updates",
+        body=("Your NidaanPartner task alerts, mentions and approvals can now reach you "
+              "on Telegram.\n\nOpen the portal → ✈️ Telegram Bot → tap “Connect my "
+              "Telegram” → press Start. It takes two taps and only needs doing once.\n\n"
+              f"{NIDAAN_BASE_URL}/admin"),
+        event_key="telegram.connect_reminder")
+    return {"ok": True, "notified": n}
 
 
 @app.post("/nidaan/ops/api/telegram/toggle")

@@ -5633,7 +5633,30 @@ async function loadTelegramPanel(){
         <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="tgSaveToken()">Save &amp; connect</button>
       </div>
       <div style="font-size:.74rem;color:rgba(255,255,255,.4);margin-top:.4rem">The token is stored server-side and never shown again — only the last 6 characters.</div>
-      ${bot.configured ? `<div style="margin-top:.75rem"><button class="btn-sm btn-ghost" onclick="tgToggle(${bot.enabled?0:1})">${bot.enabled?'⏸ Pause Telegram notifications':'▶ Resume Telegram notifications'}</button></div>` : ''}
+      ${bot.configured ? `
+      <div style="margin-top:.85rem;display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn-sm btn-ghost" onclick="tgToggle(${bot.enabled?0:1})">${bot.enabled?'⏸ Pause notifications':'▶ Resume notifications'}</button>
+        <button class="btn-sm btn-ghost" onclick="tgRemind()">📨 Remind unconnected staff</button>
+        <button class="btn-sm btn-ghost" style="color:#fca5a5;margin-left:auto" onclick="tgDisconnect()">⏏ Disconnect bot</button>
+      </div>
+      <details style="margin-top:.85rem">
+        <summary style="cursor:pointer;font-size:.84rem;color:#7dd3fc;font-weight:600">🔄 What happens if I pause, disconnect, or change the bot?</summary>
+        <div style="font-size:.83rem;line-height:1.75;color:rgba(255,255,255,.75);margin-top:.5rem">
+          <b>⏸ Pause</b> — Telegram messages stop; token and everyone's connection stay intact.
+          Resume and it all works again instantly. <i>Nobody reconnects.</i><br>
+          <b>⏏ Disconnect bot</b> — removes the token, Telegram goes quiet, but staff links are
+          <b>kept</b>. Paste the <b>same</b> bot's token later and everyone is live again.
+          <i>Nobody reconnects.</i><br>
+          <b>🔑 New token, same bot</b> (regenerated in BotFather) — just paste it. Connections
+          survive, because they belong to the bot, not the token. <i>Nobody reconnects.</i><br>
+          <b>🤖 A different bot</b> — Telegram ties each connection to one bot, so old links can
+          never work again. We detect this, clear them automatically, and tell you how many
+          people must reconnect. Use <b>📨 Remind unconnected staff</b> to nudge them by
+          email + app notification.<br>
+          <b>Throughout all of the above</b>, dashboard, app push and email keep delivering —
+          so no notification is ever lost, only the Telegram copy pauses.
+        </div>
+      </details>` : ''}
     </div>`;
   }
 
@@ -5657,9 +5680,33 @@ async function tgSaveToken(){
   });
   const d = await r.json().catch(()=>({}));
   if (r.ok) {
-    ndUI.toast('Bot connected: @'+(d.bot_username||'')+(d.webhook_ok?'':' (webhook pending)'),'success');
+    if (d.links_cleared) {
+      alert('Connected to a DIFFERENT bot (@'+(d.bot_username||'')+').\n\n'
+          + d.links_cleared + ' staff connection(s) were cleared, because Telegram ties each '
+          + 'connection to one specific bot — the old ones can never work again.\n\n'
+          + 'Use "Remind unconnected staff" to ask everyone to reconnect (two taps each).');
+    } else {
+      ndUI.toast('Bot connected: @'+(d.bot_username||'')
+        + (d.same_bot ? ' — all existing connections kept ✓' : '')
+        + (d.webhook_ok ? '' : ' (webhook pending)'), 'success');
+    }
     loadTelegramPanel();
   } else ndUI.toast(_extractErr(d,'Could not connect bot'),'error');
+}
+async function tgDisconnect(){
+  if (!confirm('Disconnect the Telegram bot?\n\nTelegram messages stop, but every staff '
+             + 'connection is KEPT — paste the same bot token later and everyone is live '
+             + 'again with no reconnecting.\n\nDashboard, app push and email keep working.')) return;
+  const r = await fetch('/nidaan/ops/api/telegram/disconnect', { method:'POST', headers: hdrs() });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) { ndUI.toast('Bot disconnected · '+(d.links_kept||0)+' connection(s) preserved','success'); loadTelegramPanel(); }
+  else ndUI.toast('Failed','error');
+}
+async function tgRemind(){
+  const r = await fetch('/nidaan/ops/api/telegram/remind-unlinked', { method:'POST', headers: hdrs() });
+  const d = await r.json().catch(()=>({}));
+  if (r.ok) ndUI.toast(d.notified ? ('Reminder sent to '+d.notified+' staff member(s)') : 'Everyone is already connected ✓','success');
+  else ndUI.toast('Failed','error');
 }
 async function tgToggle(on){
   const r = await fetch('/nidaan/ops/api/telegram/toggle', {
