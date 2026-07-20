@@ -1723,6 +1723,9 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nleave_status ON nidaan_leave_requests(status, start_date)")
         # Leave overhaul: half-day support + handover (tasks-in-hand) + cover person.
         for _lalt in [
+            # Work-From-Home reuses the whole leave pipeline (apply → approve → tiles);
+            # request_kind is what separates the two. 'leave' | 'wfh'.
+            "ALTER TABLE nidaan_leave_requests ADD COLUMN request_kind TEXT DEFAULT 'leave'",
             "ALTER TABLE nidaan_leave_requests ADD COLUMN leave_type TEXT DEFAULT 'full_day'",  # full_day | half_day
             "ALTER TABLE nidaan_leave_requests ADD COLUMN half_period TEXT DEFAULT ''",          # first_half | second_half
             "ALTER TABLE nidaan_leave_requests ADD COLUMN start_time TEXT DEFAULT ''",           # HH:MM (optional)

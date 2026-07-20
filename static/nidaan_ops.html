@@ -773,7 +773,8 @@ async function loadTasks() {
       <div><div class="section-title">Tasks</div>
       <div class="section-sub">Office tasks, assignments, workload & leave</div></div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <button class="btn-sm btn-ghost" onclick="openLeaveModal()">🌴 Apply for Leave</button>
+        <button class="btn-sm btn-ghost" onclick="openLeaveModal('leave')">🌴 Apply for Leave</button>
+        <button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="openLeaveModal('wfh')">🏠 Apply WFH</button>
         <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
@@ -876,14 +877,19 @@ async function loadLeaveSection(){
   const all = d.leave || [];
   const mine = all.filter(l => l.staff_id === _staffId);
   const pending = isAdmin ? all.filter(l => l.status === 'pending') : [];
-  const onLeave = d.on_leave_now || [];
+  const onLeaveAll = d.on_leave_now || [];
+  const onLeave = onLeaveAll.filter(s => (s.request_kind||'leave') !== 'wfh');
+  const onWfh   = onLeaveAll.filter(s => (s.request_kind||'leave') === 'wfh');
+  const kindPill = (l) => (l.request_kind==='wfh')
+    ? `<span class="task-pill" style="background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844;margin-left:.35rem">🏠 WFH</span>`
+    : '';
 
   const row = (l, opts={}) => {
     const p = LEAVE_PILL[l.status] || LEAVE_PILL.pending;
     return `<div style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
       <div style="flex:1;min-width:0">
         <div style="font-size:.86rem;font-weight:600">${_leaveWhen(l)}
-          <span class="task-pill" style="background:${p.c}22;color:${p.c};border:1px solid ${p.c}44;margin-left:.35rem">${p.t}</span></div>
+          <span class="task-pill" style="background:${p.c}22;color:${p.c};border:1px solid ${p.c}44;margin-left:.35rem">${p.t}</span>${kindPill(l)}</div>
         ${opts.showWho ? `<div style="font-size:.78rem;color:rgba(255,255,255,.6)">👤 ${esc(l.staff_name||'')}${l.staff_role?` · ${esc((l.staff_role||'').replace(/_/g,' '))}`:''}${(l.open_tasks)?` · <span style="color:#fbbf24">${l.open_tasks} task(s) in hand</span>`:''}</div>` : ''}
         ${l.reason ? `<div style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.1rem">${esc(l.reason)}</div>` : ''}
         ${(opts.showWho && l.cover_name) ? `<div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-top:.1rem">🤝 Cover: ${esc(l.cover_name)}</div>` : ''}
@@ -917,19 +923,35 @@ async function loadLeaveSection(){
       <div id="leaveTasksBox" style="margin-top:.5rem"></div>
     </div>`;
 
-  // My leave (everyone)
+  // Currently working from home — same awareness value as the on-leave tile.
+  cards += `<div class="nd-card" style="padding:1rem${onWfh.length?';border-color:rgba(56,189,248,.3)':''}">
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">🏠 Working From Home ${onWfh.length?`<span style="color:#38bdf8">(${onWfh.length})</span>`:''}</div>
+      ${onWfh.length ? onWfh.map(s=>`
+        <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.86rem;font-weight:600">${esc(s.staff_name||'')} ${(s.leave_type==='half_day')?`<span style="font-size:.68rem;color:#fbbf24">½ day</span>`:''}</div>
+            <div style="font-size:.76rem;color:rgba(255,255,255,.55)">until ${esc(s.end_date)} · ${s.open_tasks} open task${s.open_tasks==1?'':'s'}</div>
+            ${s.reason?`<div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.15rem">${esc(s.reason)}</div>`:''}
+          </div>
+        </div>`).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No one is working from home today.</div>'}
+    </div>`;
+
+  // My leave + WFH (everyone)
   cards += `<div class="nd-card" style="padding:1rem">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem">
-      <div style="font-weight:700;font-size:.98rem">🌴 My Leave</div>
-      <button class="btn-sm btn-ghost" onclick="openLeaveModal()">+ Apply</button>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+      <div style="font-weight:700;font-size:.98rem">🌴 My Leave / WFH</div>
+      <div style="display:flex;gap:.35rem">
+        <button class="btn-sm btn-ghost" onclick="openLeaveModal('leave')">+ Leave</button>
+        <button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="openLeaveModal('wfh')">+ WFH</button>
+      </div>
     </div>
-    ${mine.length ? mine.map(l=>row(l,{})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No leave requests yet.</div>'}
+    ${mine.length ? mine.map(l=>row(l,{})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No leave or WFH requests yet.</div>'}
   </div>`;
 
   // Admin: pending approvals
   if (isAdmin) {
     cards += `<div class="nd-card" style="padding:1rem">
-      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">⏳ Pending Leave Approvals ${pending.length?`<span style="color:#fbbf24">(${pending.length})</span>`:''}</div>
+      <div style="font-weight:700;font-size:.98rem;margin-bottom:.6rem">⏳ Pending Approvals ${pending.length?`<span style="color:#fbbf24">(${pending.length})</span>`:''}</div>
       ${pending.length ? pending.map(l=>row(l,{admin:true,showWho:true})).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">Nothing awaiting approval.</div>'}
     </div>`;
 
@@ -950,23 +972,7 @@ async function loadLeaveSection(){
     </div>`;
   }
 
-  // Super-admin: task-creation permission
-  if (_role === 'super_admin') {
-    const minRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
-    const opt = (v,t)=>`<option value="${v}" ${minRole===v?'selected':''}>${t}</option>`;
-    cards += `<div class="nd-card" style="padding:1rem">
-      <div style="font-weight:700;font-size:.98rem;margin-bottom:.5rem">🔐 Task Permissions</div>
-      <div style="font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:.6rem">Minimum role to create a <b>direct assignment</b>. Anyone below this can still raise an upward <b>request</b>.</div>
-      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <select id="permMinRole" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.4rem .55rem;border-radius:6px;font-size:.85rem">
-          ${opt('team_member','Everyone (associates +)')}
-          ${opt('sub_super_admin','Admins & Super Admins')}
-          ${opt('super_admin','Super Admins only')}
-        </select>
-        <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="savePermissions()">Save</button>
-      </div>
-    </div>`;
-  }
+  // (Task Permissions moved to Workflow Settings — it's a config, not a leave tile.)
 
   wrap.innerHTML = cards;
 }
@@ -987,7 +993,9 @@ function lvToggleType(){
   document.getElementById('lvEndWrap').style.display = half ? 'none' : '';
   if (half) { document.getElementById('lvEnd').value = document.getElementById('lvStart').value; }
 }
-async function openLeaveModal(){
+async function openLeaveModal(kind){
+  kind = (kind === 'wfh') ? 'wfh' : 'leave';
+  window._lvKind = kind;
   const existing = document.getElementById('leaveModalBg');
   if (existing) existing.remove();
   const today = new Date().toISOString().slice(0,10);
@@ -1013,7 +1021,7 @@ async function openLeaveModal(){
   bg.innerHTML = `
     <div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:460px;width:100%;max-height:92vh;overflow-y:auto;padding:1.5rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-        <h2 style="font-size:1.1rem;font-weight:800">🌴 Apply for Leave</h2>
+        <h2 style="font-size:1.1rem;font-weight:800">${kind==='wfh'?'🏠 Apply for Work From Home':'🌴 Apply for Leave'}</h2>
         <button onclick="document.getElementById('leaveModalBg').remove()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.25rem;cursor:pointer">✕</button>
       </div>
 
@@ -1075,7 +1083,9 @@ async function submitLeave(){
   const cover_staff_id = document.getElementById('lvCover').value ? parseInt(document.getElementById('lvCover').value) : null;
   if (!start_date || !end_date) { ndUI.toast('Pick a date','error'); return; }
   if (end_date < start_date) { ndUI.toast('End date is before start date','error'); return; }
+  const kind = (window._lvKind === 'wfh') ? 'wfh' : 'leave';
   const body = {start_date, end_date, reason, leave_type, half_period, handover_notes,
+    request_kind: kind,
     start_time: (document.getElementById('lvStartTime').value||''),
     end_time: (document.getElementById('lvEndTime').value||'')};
   if (cover_staff_id) body.cover_staff_id = cover_staff_id;
@@ -1084,7 +1094,7 @@ async function submitLeave(){
     body: JSON.stringify(body)
   });
   if (r.ok) {
-    ndUI.toast('Leave request sent — admins notified','success');
+    ndUI.toast((kind==='wfh'?'WFH request sent':'Leave request sent')+' — admins notified','success');
     document.getElementById('leaveModalBg')?.remove();
     if (_currentPanel === 'tasks') loadLeaveSection();
   } else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Request failed'),'error'); }
@@ -5222,6 +5232,8 @@ async function loadWorkflowSettings(){
   const sts = (await stsRes.json()).statuses || [];
   const flags = (await flagsRes.json()).flags || [];
   const cats = catRes.ok ? ((await catRes.json()).categories || []) : [];
+  await _loadOpsSettings(true);
+  const _permMinRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
@@ -5252,6 +5264,20 @@ async function loadWorkflowSettings(){
             </div>`;
           }
         }).join('')}
+      </div>
+
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🔐 Task Permissions</h2>
+      <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.6rem">Minimum role to create a <b>direct assignment</b>. Anyone below this can still raise an upward <b>request</b>.</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <select id="permMinRole" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.4rem .55rem;border-radius:6px;font-size:.85rem">
+            ${['team_member','sub_super_admin','super_admin'].map(v=>{
+              const t = {team_member:'Everyone (associates +)',sub_super_admin:'Admins & Super Admins',super_admin:'Super Admins only'}[v];
+              return `<option value="${v}" ${_permMinRole===v?'selected':''}>${t}</option>`;
+            }).join('')}
+          </select>
+          <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="savePermissions()">Save</button>
+        </div>
       </div>
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🏷️ Task Categories</h2>

@@ -4698,6 +4698,7 @@ class _LeaveCreateReq(BaseModel):
     cover_staff_id: Optional[int] = None
     start_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
     end_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
+    request_kind: str = Field("leave", pattern=r"^(leave|wfh)$")
 
 
 class _LeaveDecisionReq(BaseModel):
@@ -4708,7 +4709,7 @@ class _LeaveDecisionReq(BaseModel):
 
 @app.post("/nidaan/ops/api/leave")
 async def ops_leave_create(body: _LeaveCreateReq, request: Request):
-    """Any staffer applies for leave; all admins/SA are notified."""
+    """Any staffer applies for leave OR work-from-home; admins/SA are notified."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     if body.end_date < body.start_date:
@@ -4718,7 +4719,8 @@ async def ops_leave_create(body: _LeaveCreateReq, request: Request):
         end_date=body.end_date, reason=body.reason,
         leave_type=body.leave_type, half_period=body.half_period,
         handover_notes=body.handover_notes, cover_staff_id=body.cover_staff_id,
-        start_time=body.start_time, end_time=body.end_time)
+        start_time=body.start_time, end_time=body.end_time,
+        request_kind=body.request_kind)
     try:
         leave = await nidaan.get_leave_request(leave_id)
         if leave:

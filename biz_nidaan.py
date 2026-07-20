@@ -2288,7 +2288,10 @@ async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
                                 reason: str = "", leave_type: str = "full_day",
                                 half_period: str = "", handover_notes: str = "",
                                 cover_staff_id: Optional[int] = None,
-                                start_time: str = "", end_time: str = "") -> int:
+                                start_time: str = "", end_time: str = "",
+                                request_kind: str = "leave") -> int:
+    if request_kind not in ("leave", "wfh"):
+        request_kind = "leave"
     if leave_type not in ("full_day", "half_day"):
         leave_type = "full_day"
     if leave_type == "half_day":
@@ -2301,11 +2304,11 @@ async def create_leave_request(*, staff_id: int, start_date: str, end_date: str,
         cur = await conn.execute(
             "INSERT INTO nidaan_leave_requests "
             "(staff_id, start_date, end_date, reason, leave_type, half_period, "
-            " handover_notes, cover_staff_id, start_time, end_time) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " handover_notes, cover_staff_id, start_time, end_time, request_kind) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (staff_id, start_date, end_date, (reason or "").strip(), leave_type,
              half_period, (handover_notes or "").strip(), cover_staff_id,
-             (start_time or "").strip(), (end_time or "").strip()))
+             (start_time or "").strip(), (end_time or "").strip(), request_kind))
         await conn.commit()
         return cur.lastrowid
 
@@ -2405,6 +2408,7 @@ async def list_staff_on_leave_now() -> list[dict]:
         cur = await conn.execute(
             "SELECT l.leave_id, l.staff_id, l.start_date, l.end_date, l.reason, "
             "       l.leave_type, l.half_period, l.handover_notes, "
+            "       COALESCE(l.request_kind,'leave') AS request_kind, "
             "       s.name AS staff_name, s.role AS staff_role, "
             "       cov.name AS cover_name, "
             "       (SELECT COUNT(*) FROM nidaan_quick_tasks q "

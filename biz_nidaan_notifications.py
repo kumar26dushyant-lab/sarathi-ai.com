@@ -1732,7 +1732,10 @@ async def on_leave_requested(leave: dict):
     when = _leave_when(leave)
     link = f"{NIDAAN_BASE_URL}/nidaan/ops?leave={leave.get('leave_id')}"
     open_tasks = leave.get("open_tasks")
-    lines = [f"🌴 Leave request from {who}", f"When: {when}"]
+    _is_wfh = (leave.get("request_kind") == "wfh")
+    _kind_label = "Work-from-home" if _is_wfh else "Leave"
+    _kind_icon = "🏠" if _is_wfh else "🌴"
+    lines = [f"{_kind_icon} {_kind_label} request from {who}", f"When: {when}"]
     if leave.get("reason"):
         lines.append(f"Reason: {leave['reason']}")
     if open_tasks:
@@ -1743,7 +1746,7 @@ async def on_leave_requested(leave: dict):
         lines.append(f"Handover: {leave['handover_notes']}")
     lines.append(f"Approve/Reject: {link}")
     body = "\n".join(lines)
-    subject = f"[Nidaan] Leave request — {who} ({when})"
+    subject = f"[Nidaan] {_kind_label} request — {who} ({when})"
     # EMAIL each admin (their own inbox); WHATSAPP only to the connected official
     # line(s) — not to admins' personal numbers.
     for a in await _active_admins():
