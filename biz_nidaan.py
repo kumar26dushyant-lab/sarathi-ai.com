@@ -2046,7 +2046,11 @@ async def list_quick_tasks(*, status: Optional[str] = None,
                          "AND COALESCE(q.assigned_to_staff_id,-1) != ? "
                          "AND COALESCE(q.created_by_staff_id,-1) != ?")
             params += [scope_staff_id, scope_staff_id, scope_staff_id]
-    if status:
+    if status == "archived":
+        # Archive = finished work (done + cancelled). Kept out of the working board so
+        # the list doesn't grow forever, but always retrievable.
+        where.append("q.status IN ('done','cancelled')")
+    elif status:
         where.append("q.status = ?"); params.append(status)
     elif not include_done:
         where.append("q.status NOT IN ('done','cancelled')")
@@ -2153,6 +2157,7 @@ async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
             params)).fetchone())[0]
     rows["all"] = sum(rows.values())
     rows["active"] = rows.get("open", 0) + rows.get("in_progress", 0)
+    rows["archived"] = rows.get("done", 0) + rows.get("cancelled", 0)
     rows["overdue"] = overdue
     rows["pending_approval"] = pending_appr
     return rows

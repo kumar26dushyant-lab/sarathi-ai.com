@@ -1695,7 +1695,9 @@ async function loadTeamQuickTasksWidget(){ /* replaced by loadTaskRegistry */ }
 //  of status (open / in progress / done / cancelled), with admin delete and an
 //  audit view of soft-deleted rows. This is the durable history surface.
 // ════════════════════════════════════════════════════════════════════════════
-let _registryState = {status:'all', type:'', category:'', assignee:'', q:'', sort:'smart', includeDeleted:false};
+// Defaults to ACTIVE work — completed/cancelled tasks live in the Archived view so
+// the working board stays short instead of growing forever.
+let _registryState = {status:'active', type:'', category:'', assignee:'', q:'', sort:'smart', includeDeleted:false};
 let _registrySearchTimer = null;
 
 async function loadTaskRegistry(){
@@ -1743,13 +1745,16 @@ async function loadTaskRegistry(){
   box.innerHTML = `
     <div class="nd-card" style="padding:1rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
-        <div style="font-weight:700;font-size:1rem">📋 All Tasks <span style="color:rgba(255,255,255,.4);font-weight:500;font-size:.82rem">— complete record</span></div>
+        <div style="font-weight:700;font-size:1rem">${_registryState.status==='archived'?'🗄️ Archived Tasks':'📋 All Tasks'}
+          <span style="color:rgba(255,255,255,.4);font-weight:500;font-size:.82rem">— ${_registryState.status==='archived'
+            ? (isAdmin?'completed &amp; cancelled (everyone)':'your completed &amp; cancelled tasks')
+            : (isAdmin?'complete record':'tasks you\'re involved in')}</span></div>
         <input id="regSearch" value="${esc(_registryState.q)}" placeholder="🔍 search title or #id…"
                oninput="onRegistrySearch(this.value)"
                style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.35rem .6rem;border-radius:6px;font-size:.82rem;min-width:150px">
       </div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
-        ${chip('all','All')}${chip('active','Active')}${chip('open','Open')}${chip('in_progress','In progress')}${chip('done','Done')}${chip('cancelled','Cancelled')}${chip('overdue','⏰ Overdue')}${chip('pending_approval','⏳ Pending approval')}
+        ${chip('active','Active')}${chip('open','Open')}${chip('in_progress','In progress')}${chip('overdue','⏰ Overdue')}${chip('pending_approval','⏳ Pending approval')}${chip('archived','🗄️ Archived')}${chip('all','All')}
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center">
         <select onchange="setRegistryType(this.value)" style="${selStyle}">

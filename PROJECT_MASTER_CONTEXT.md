@@ -3998,5 +3998,113 @@ A task has one assignee but work is collaborative:
 
 ---
 
+## 46. OPS PHASES 1–5 — TASK UPGRADES, WFH, TELEGRAM OPS BOT — JUL 20, 2026
+
+Agreed up front with the user: discuss → phase → build. All phases below are shipped and
+verified in production unless flagged. Governing decisions this round: approval
+notifications go to a **named approver** (fallback super-admins only — no more all-admin
+blasts); tasks are **editable by their creator** (audit-logged); ops comms **move to
+Telegram** (WhatsApp/Baileys stays customer-facing, best-effort).
+
+### 46.0 Bug found + fixed: Sarathi renewal reminders were dead (revenue impact)
+`run_sarathi_subscription_renewal_scan` selected a non-existent column `subscription_plan`
+from `tenants` (real column: **`plan`**), so the scan raised on every run and **Sarathi-AI
+renewal reminder emails had silently stopped**. Fixed with `plan AS subscription_plan`;
+verified against live data. Found while triaging the "lots of errors in App Health" report.
+
+### 46.1 App Health noise triage (most of it was NOT actionable)
+- `Evolution timeout` on routine health polling → now **INFO**; the actionable signal is the
+  line's health state, already surfaced honestly in the UI.
+- Watchdog `cycle: {n:'down'}` → **INFO** (it already WARNs + alerts once on transition).
+- Watchdog now **clears stale state** for slots whose number was removed.
+- `Exception in ASGI application` (×1) = client disconnect mid-response — benign.
+
+### 46.2 Phase 1 — task upgrades
+- **Assign-to defaults to "None (unassigned)"** — it pre-selected the current user, so an
+  untouched picker silently self-assigned.
+- **Multiple attachments** — new `nidaan_quick_task_attachments` table; notes endpoint takes
+  `files` (up to 10; legacy single `file` still honoured); create form + comment box are
+  multi-file; every attachment renders as a chip.
+- **Task edit** — creator **or** super-admin can fix title / description / category / due
+  date / priority via PATCH; every field change written to the immutable task log. New
+  ✏️ Edit panel.
+- **Involve people at creation** — multi-select adds collaborators up front (same watcher
+  model as @mention) and notifies them.
+- **Approval routing** — `nidaan_quick_tasks.approver_staff_id`; only the named approver is
+  pinged, falling back to super-admins.
+
+### 46.3 Category-driven complainant capture (not hardcoded to "RT")
+Mandatory "Complainant name + mobile" for Review Task, implemented as an admin-editable
+**`requires_complainant`** flag on `nidaan_task_categories` (seeded ON for RT, checkbox in
+the category manager) rather than hardcoding a code — any future category can demand it with
+no code change. `complainant_name` / `complainant_phone` live on the task and **persist
+permanently even if the category changes later** (explicit requirement). Enforced in the form
+AND server-side; shown in the drawer; editable via ✏️ Edit.
+
+### 46.4 Phase 2 — personalized task dashboard + archive
+- `list_quick_tasks` gained `scope=assigned_to_me | created_by_me | involved`
+  ("involved" = @mentioned in, excluding tasks already yours).
+- "My Open Quick Tasks" became three slices: **📥 Pending with me · 📤 Assigned by me ·
+  🏷️ I'm involved**, each with an open count.
+- **Leave/WFH tiles moved ABOVE** the task sections.
+- **Archive:** the board defaulted to "All" so it grew forever. Registry now defaults to
+  **Active**, with a dedicated **🗄️ Archived** view (`status=archived` → `done + cancelled`,
+  plus an `archived` count). Scope is automatic — associates see their own archived tasks
+  (viewer scoping), admins/SA see everyone's.
+
+### 46.5 Phase 3 — Work From Home
+WFH reuses the **entire** leave pipeline instead of duplicating it: `nidaan_leave_requests`
+gained **`request_kind` ('leave' | 'wfh')**, so apply → notify → approve/reject → "currently
+away" tiles all work for both through one tested path.
+- "🏠 Apply WFH" button; modal retitles itself; new **🏠 Working From Home** tile; WFH pill on
+  rows; approvals panel renamed "Pending Approvals"; notification copy is kind-aware.
+- **Task Permissions** moved out of the leave tiles into **Workflow Settings**.
+
+### 46.6 Phase 5 — TELEGRAM OPS BOT (the strategic shift)
+Rationale: Baileys WhatsApp kept dying (`SessionError: No sessions`) and carries real ban
+risk. Telegram's **official Bot API** has no ban risk, needs no phone kept online, has no
+session to re-pair, is free, and supports inline buttons/files/voice.
+
+New **`biz_nidaan_telegram.py`** — Nidaan-owned (patterns borrowed from the Sarathi bot but
+**no shared state or dependency**, per the user: "copy, don't reuse"):
+- `verify_token` (getMe), `set_webhook` with a **token-derived secret path**, `send_message`
+  with inline buttons, per-staff link codes, `/start <code>` linking, `notify_staff`.
+- Config in `nidaan_ops_settings` (`telegram_bot_token/_username/_enabled`); staff link
+  fields on `nidaan_staff` (`telegram_chat_id`, `telegram_username`, `telegram_linked_at`,
+  `telegram_link_code`).
+- Endpoints: `GET/POST /telegram/config`, `/telegram/toggle`, `/telegram/unlink`,
+  `/telegram/test`, `POST /nidaan/telegram/webhook/{secret}` (404s unless the secret matches).
+- **Delivery:** staff dashboard notifications mirror to Telegram alongside web push —
+  fire-and-forget, silent when unconfigured/unlinked so rollout can't break anything.
+- **UI — self-service by design** (explicit requirement): new **✈️ Telegram Bot** menu panel.
+  Staff get a one-tap Connect deep link + `/start <code>` desktop fallback, test button and
+  Disconnect. Super admin gets a step-by-step @BotFather guide, token paste, live status,
+  linked-staff count, pause/resume.
+
+### 46.7 One-time comms onboarding popup
+The "Official WhatsApp numbers updated" modal kept re-appearing (it re-fired whenever the
+number set changed). Now a **one-time** Telegram onboarding acknowledged **server-side** via
+`nidaan_staff.comms_onboarded_at` — once dismissed it never returns on any device.
+
+### 46.8 Email — OPEN ITEM (blocked on credentials)
+**Brevo rejected** (300/day then costly). Chosen: **Gmail SMTP with `nidaanpartner@gmail.com`**
+— free, ~500/day vs ~53/day actual. (Cloudflare **cannot send** — inbound routing only;
+Amazon SES ≈ ₹15/month is the scale path if Gmail is outgrown.)
+**Status:** the app password in `biz.env` still belongs to `kumar26.dushyant@gmail.com`
+(verified `LOGIN OK` as that account; key ends `feqi`). The correct key for
+`nidaanpartner@gmail.com` ends `hoqx` but was never saved. Needed in `biz.env`: `SMTP_USER`,
+`SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NOREPLY`, `SMTP_FROM_SUPPORT`,
+`NIDAAN_FROM_EMAIL` → all `nidaanpartner@gmail.com` + the new key. Deliberately NOT changed
+unilaterally — swapping addresses against the wrong account's password breaks all email.
+
+### 46.9 Next up
+- Finish 46.8 once the correct app password is saved, then verify a real send end-to-end.
+- **AI Telegram assistant (read-only)** — now the natural home for the assistant idea: a
+  staffer asks "status of task X?" → agent reads tasks/claims → natural reply. Strict
+  sender-auth (bound Telegram user ↔ staff record). Telegram gives clean, reliable inbound,
+  so this is far safer and simpler than the WhatsApp route.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
