@@ -84,13 +84,13 @@ def webhook_secret(token: str) -> str:
 
 # ── raw API ──────────────────────────────────────────────────────────────────
 async def _call(method: str, payload: Optional[dict] = None,
-                token: Optional[str] = None) -> dict:
+                token: Optional[str] = None, timeout: Optional[float] = None) -> dict:
     tok = token if token is not None else await get_bot_token()
     if not tok:
         return {"ok": False, "error": "no_token"}
     url = API_BASE.format(token=tok, method=method)
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=timeout or _TIMEOUT) as client:
             r = await client.post(url, json=payload or {})
             try:
                 return r.json()
@@ -117,6 +117,11 @@ async def verify_token(token: str) -> dict:
     return {"ok": False, "error": res.get("description") or res.get("error") or "invalid_token"}
 
 
+async def delete_webhook() -> dict:
+    """Remove any registered webhook (required before getUpdates polling can run)."""
+    return await _call("deleteWebhook", {"drop_pending_updates": False})
+
+
 async def clear_all_links() -> int:
     """Drop every staff link. Used when the bot IDENTITY changes — those chat_ids can
     never work again, so keeping them would just fail silently forever."""
@@ -137,6 +142,58 @@ async def list_unlinked_staff() -> list[dict]:
             "FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
             "AND (telegram_chat_id IS NULL OR telegram_chat_id='')")).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── LONG-POLLING (Cloudflare-independent) ────────────────────────────────────
+# We PULL updates from Telegram (outbound from our server) instead of Telegram
+# pushing to us (inbound, which Cloudflare's bot protection blocks with a 520).
+# Runs as a single worker-only loop, so each update is processed exactly once.
+_poll_offset = 0
+
+
+async def run_polling_loop() -> None:
+    """Continuously pull + process updates. Self-heals across token changes,
+    pause/resume and network blips."""
+    global _poll_offset
+    import asyncio as _asyncio
+    last_token = None
+    logger.info("📡 Telegram polling loop starting")
+    while True:
+        try:
+            token = await get_bot_token()
+            if not token or (await _get_setting("telegram_enabled", "1")) != "1":
+                await _asyncio.sleep(8)
+                last_token = None if not token else last_token
+                continue
+            if token != last_token:
+                # New/changed bot → getUpdates and webhook are mutually exclusive,
+                # so drop any webhook first, and start from a clean offset.
+                await _call("deleteWebhook", {"drop_pending_updates": False}, token=token)
+                await _set_setting("telegram_webhook_set_at", "")
+                await _set_setting("telegram_poll_active", "1")
+                last_token = token
+                _poll_offset = 0
+                logger.info("📡 Telegram polling active for @%s",
+                            await _get_setting("telegram_bot_username", ""))
+            res = await _call("getUpdates",
+                              {"offset": _poll_offset, "timeout": 25,
+                               "allowed_updates": ["message", "callback_query"]},
+                              token=token, timeout=35)
+            if not res.get("ok"):
+                # 409 = a webhook is still set somewhere; clear it and retry.
+                if "409" in str(res.get("error", "")) or "conflict" in str(res.get("description", "")).lower():
+                    await _call("deleteWebhook", {"drop_pending_updates": False}, token=token)
+                await _asyncio.sleep(3)
+                continue
+            for u in res.get("result", []):
+                _poll_offset = u.get("update_id", _poll_offset) + 1
+                try:
+                    await handle_update(u)
+                except Exception as e:
+                    logger.warning("Telegram update processing error: %s", e)
+        except Exception as e:
+            logger.warning("Telegram polling loop error: %s", e)
+            await _asyncio.sleep(5)
 
 
 async def disconnect_bot() -> None:

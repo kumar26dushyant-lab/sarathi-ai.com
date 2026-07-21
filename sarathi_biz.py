@@ -5307,12 +5307,17 @@ async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
     await nidaan.set_ops_setting("telegram_bot_username", check.get("username", ""))
     await nidaan.set_ops_setting("telegram_bot_id", new_id)
     await nidaan.set_ops_setting("telegram_enabled", "1")
-    hook = await tg.set_webhook(NIDAAN_BASE_URL, token=token)
+    # We use long-polling (the worker pulls updates), which is immune to Cloudflare's
+    # bot protection that blocks inbound webhooks. Ensure no webhook is set so
+    # getUpdates is allowed; the worker's poll loop picks up the new token within ~8s.
+    try:
+        await tg.delete_webhook()
+    except Exception:
+        pass
     await _ops_audit(request, "telegram.configure", "telegram", 0,
                      f"bot @{check.get('username','')} same_bot={same_bot} cleared={links_cleared}")
     return {"ok": True, "bot_username": check.get("username", ""),
-            "webhook_ok": bool(hook.get("ok")),
-            "webhook_error": hook.get("description") or hook.get("error") or "",
+            "webhook_ok": True, "mode": "polling",
             "same_bot": same_bot, "links_cleared": links_cleared,
             "linked_staff": await tg.linked_staff_count()}
 
@@ -19187,6 +19192,19 @@ async def main():
                     logger.error("WA watchdog error: %s", e)
                 await asyncio.sleep(240)  # every 4 minutes
         asyncio.create_task(wa_watchdog_loop())
+
+        # Step 6i: Telegram ops bot — long-polling consumer (worker-only singleton).
+        # We PULL updates instead of receiving webhooks, so Cloudflare's inbound bot
+        # protection can never block the bot. Exactly one consumer → no double-processing.
+        async def telegram_poll_loop():
+            await asyncio.sleep(20)  # let startup settle
+            try:
+                await tg.run_polling_loop()   # runs forever, self-heals internally
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error("Telegram poll loop crashed: %s", e)
+        asyncio.create_task(telegram_poll_loop())
     else:
         logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
 
