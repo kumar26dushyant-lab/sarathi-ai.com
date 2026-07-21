@@ -274,23 +274,47 @@ async def unlink_staff(staff_id: int) -> None:
         await conn.commit()
 
 
-async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict]:
-    """Bind a Telegram chat to the staffer holding this link code."""
-    if not code:
+def _digits(s: str) -> str:
+    import re as _re
+    return _re.sub(r"\D", "", s or "")
+
+
+async def _link_by_phone(phone: str, chat_id: str, username: str) -> Optional[dict]:
+    """SECURE binding: link a Telegram chat to the staffer whose REGISTERED mobile
+    matches the Telegram-verified phone number. Returns None if the number isn't a
+    registered staff number — so only real staff can ever connect."""
+    d10 = _digits(phone)[-10:]
+    if len(d10) < 10:
         return None
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        row = await (await conn.execute(
-            "SELECT staff_id, name FROM nidaan_staff WHERE telegram_link_code=? "
-            "AND status='active' AND deleted_at IS NULL", (code,))).fetchone()
-        if not row:
+        staff = [dict(r) for r in await (await conn.execute(
+            "SELECT staff_id, name, phone FROM nidaan_staff "
+            "WHERE status='active' AND deleted_at IS NULL")).fetchall()]
+        match = next((s for s in staff
+                      if _digits(s.get("phone"))[-10:] == d10 and len(_digits(s.get("phone"))) >= 10), None)
+        if not match:
             return None
+        # Free this Telegram chat from any other staff first (one chat → one staffer),
+        # then bind it to the verified owner (also replaces that staffer's old chat).
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
+            "telegram_linked_at=NULL WHERE telegram_chat_id=?", (str(chat_id),))
         await conn.execute(
             "UPDATE nidaan_staff SET telegram_chat_id=?, telegram_username=?, "
             "telegram_linked_at=CURRENT_TIMESTAMP WHERE staff_id=?",
-            (str(chat_id), username or "", row["staff_id"]))
+            (str(chat_id), username or "", match["staff_id"]))
         await conn.commit()
-        return {"staff_id": row["staff_id"], "name": row["name"]}
+        return {"staff_id": match["staff_id"], "name": match["name"]}
+
+
+async def _request_phone(chat_id, text: str) -> None:
+    """Send a message with a Telegram 'share my phone number' button. The number
+    Telegram returns is verified by Telegram and can't be spoofed or forwarded."""
+    kb = {"keyboard": [[{"text": "📱 Share my phone number", "request_contact": True}]],
+          "one_time_keyboard": True, "resize_keyboard": True}
+    await _call("sendMessage", {"chat_id": str(chat_id), "text": text[:4000],
+                                "parse_mode": "Markdown", "reply_markup": kb})
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -523,40 +547,61 @@ async def handle_update(update: dict) -> None:
         chat_id = (msg.get("chat") or {}).get("id")
         text = (msg.get("text") or "").strip()
         username = (msg.get("from") or {}).get("username") or ""
-        if not chat_id or not text:
+        from_id = (msg.get("from") or {}).get("id")
+        contact = msg.get("contact")
+        if not chat_id:
+            return
+
+        # ── SECURE LINKING: verified phone number ────────────────────────────
+        # A shared contact is how a staffer proves identity. We accept ONLY the
+        # sender's OWN Telegram-verified number, and link ONLY if it matches a
+        # registered staff mobile — so a leaked connect link is useless to anyone
+        # whose Telegram number isn't already staff.
+        if contact:
+            if str(contact.get("user_id")) != str(from_id):
+                await send_message(str(chat_id),
+                    "⚠️ Please tap the *📱 Share my phone number* button to share YOUR OWN "
+                    "number — a forwarded contact won't work.")
+                return
+            linked = await _link_by_phone(contact.get("phone_number"), str(chat_id), username)
+            if linked:
+                staff = await _staff_by_chat(chat_id)
+                await _call("sendMessage", {"chat_id": str(chat_id),
+                    "text": f"✅ Verified & connected, {linked['name']}!",
+                    "reply_markup": {"remove_keyboard": True}})
+                t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
+                await send_message(str(chat_id), t, kb)
+                logger.info("🔐 Telegram linked staff_id=%s by verified phone", linked["staff_id"])
+            else:
+                await _call("sendMessage", {"chat_id": str(chat_id),
+                    "text": ("🔒 *Not connected.*\n\nThis Telegram number is not registered for "
+                             "any staff member. Ask your admin to check the mobile number on your "
+                             "staff profile, then try again from the correct Telegram account."),
+                    "parse_mode": "Markdown", "reply_markup": {"remove_keyboard": True}})
+            return
+
+        if not text:
             return
 
         if text.startswith("/start"):
-            parts = text.split(maxsplit=1)
-            code = parts[1].strip() if len(parts) > 1 else ""
-            if code:
-                linked = await _link_by_code(code, str(chat_id), username)
-                if linked:
-                    staff = await _staff_by_chat(chat_id)
-                    t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
-                    await send_message(str(chat_id),
-                        f"✅ Connected, {linked['name']}!\n\nYour NidaanPartner office is now "
-                        f"in Telegram.\n\n{t}", kb)
-                    return
-                await send_message(str(chat_id),
-                    "⚠️ That link code isn't valid or has expired.\n\nOpen the portal → "
-                    "Telegram Bot and tap your personal connect link again.")
-                return
             staff = await _staff_by_chat(chat_id)
             if staff:
                 t, kb = _main_menu(staff)
                 await send_message(str(chat_id), t, kb)
-            else:
-                await send_message(str(chat_id),
-                    "👋 This is the NidaanPartner ops bot.\n\nTo connect, open the portal → "
-                    "*Telegram Bot* and tap your personal link.")
+                return
+            # Not linked yet → require a verified phone number to connect.
+            await _request_phone(str(chat_id),
+                "🔐 *Connect securely*\n\nTo receive your NidaanPartner notifications, tap the "
+                "button below to share your phone number.\n\nIt must match the mobile number "
+                "registered for you in the office system — Telegram verifies it, so nobody can "
+                "connect using someone else's number.")
             return
 
         staff = await _staff_by_chat(chat_id)
         if not staff:
-            await send_message(str(chat_id),
-                "🔒 This Telegram isn't linked to a NidaanPartner account.\n\nOpen the portal "
-                "→ *Telegram Bot* and tap your personal connect link.")
+            await _request_phone(str(chat_id),
+                "🔒 This Telegram isn't linked yet.\n\nTap the button below to connect with your "
+                "registered mobile number.")
             return
 
         if text.lower() in ("/menu", "menu", "/home", "hi", "hello"):
