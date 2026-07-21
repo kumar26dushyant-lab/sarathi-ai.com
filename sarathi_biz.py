@@ -5420,10 +5420,16 @@ async def nidaan_telegram_webhook(secret: str, request: Request):
         update = await request.json()
     except Exception:
         return {"ok": True}
-    try:
-        await tg.handle_update(update)
-    except Exception as e:
-        logger.warning("Telegram webhook error: %s", e)
+    # Answer Telegram INSTANTLY and do the work in the background. Processing calls the
+    # Telegram API (~1-2s), and if we blocked on it a slow send or a mid-deploy restart
+    # could make the origin look unresponsive (Cloudflare 520) and queue updates.
+    import asyncio as _asyncio
+    async def _bg():
+        try:
+            await tg.handle_update(update)
+        except Exception as e:
+            logger.warning("Telegram update processing error: %s", e)
+    _asyncio.create_task(_bg())
     return {"ok": True}
 
 
