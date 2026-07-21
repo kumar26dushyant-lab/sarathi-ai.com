@@ -1869,6 +1869,9 @@ async def init_db():
             "ALTER TABLE nidaan_staff ADD COLUMN comms_onboarded_at TIMESTAMP",
             # Preferred language for the Telegram bot UI: 'en' | 'hi'.
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_lang TEXT DEFAULT 'en'",
+            # Profile photo (stored filename in the nidaan-docs dir; shown on task cards,
+            # @mentions, and the staffer's own profile).
+            "ALTER TABLE nidaan_staff ADD COLUMN profile_pic TEXT",
         ]:
             try:
                 await conn.execute(_tg)

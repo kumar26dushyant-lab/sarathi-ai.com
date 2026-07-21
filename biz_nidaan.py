@@ -2098,8 +2098,8 @@ async def list_quick_tasks(*, status: Optional[str] = None,
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT q.*, "
-            "       a.name AS assignee_name, a.role AS assignee_role, "
-            "       cr.name AS creator_name, "
+            "       a.name AS assignee_name, a.role AS assignee_role, a.profile_pic AS assignee_pic, "
+            "       cr.name AS creator_name, cr.profile_pic AS creator_pic, "
             "       c.insured_name, "
             "       (SELECT COUNT(*) FROM nidaan_leave_requests lv "
             "          WHERE lv.staff_id = q.assigned_to_staff_id AND lv.status='approved' "
@@ -3579,13 +3579,20 @@ async def authenticate_staff(email: str, password: str) -> Optional[dict]:
     return staff
 
 
+async def set_staff_profile_pic(staff_id: int, stored_name: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE nidaan_staff SET profile_pic=? WHERE staff_id=?",
+                           (stored_name, staff_id))
+        await conn.commit()
+
+
 async def get_staff_by_id(staff_id: int) -> Optional[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT staff_id,name,email,role,status,created_at,last_login_at,"
             "       phone,notify_email,saved_official_numbers_at,"
-            "       comms_onboarded_at,telegram_chat_id "
+            "       comms_onboarded_at,telegram_chat_id,telegram_lang,profile_pic "
             "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
         )
         row = await cur.fetchone()

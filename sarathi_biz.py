@@ -3165,6 +3165,66 @@ async def ops_me(request: Request):
     return record
 
 
+@app.get("/nidaan/ops/api/me/profile")
+async def ops_me_profile(request: Request):
+    """The signed-in staffer's own profile — details are view-only; they may change
+    only their photo and bot language (email/phone stay locked for non-admins)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    rec = await nidaan.get_staff_by_id(staff["staff_id"]) or {}
+    pic = rec.get("profile_pic")
+    tg_info = await tg.get_staff_telegram(staff["staff_id"])
+    return {
+        "staff_id": rec.get("staff_id"),
+        "name": rec.get("name", ""),
+        "email": rec.get("email", ""),
+        "notify_email": rec.get("notify_email", ""),
+        "phone": rec.get("phone", ""),
+        "role": rec.get("role", ""),
+        "telegram_lang": rec.get("telegram_lang") or "en",
+        "profile_pic_url": (_nidaan_doc_url(pic) if pic else ""),
+        "telegram": {"linked": tg_info.get("linked", False),
+                     "device_count": tg_info.get("count", 0)},
+        # Only super admins/admins can edit other people; nobody edits their own
+        # email/phone here — that stays with Staff management (admin-controlled).
+        "can_edit_details": staff.get("role") in ("super_admin", "sub_super_admin"),
+    }
+
+
+@app.post("/nidaan/ops/api/me/profile-pic")
+async def ops_me_profile_pic(request: Request, file: UploadFile = File(...)):
+    """Upload/replace my profile photo (image only, ≤5 MB)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    if not (file.filename or ""):
+        raise HTTPException(400, "No file")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        raise HTTPException(400, "Please upload an image (jpg, png, webp)")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Image exceeds 5 MB")
+    import uuid as _uuid
+    stored = f"avatar_{_uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+    await nidaan.set_staff_profile_pic(staff["staff_id"], stored)
+    return {"ok": True, "profile_pic_url": _nidaan_doc_url(stored)}
+
+
+class _MeLangReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lang: str = Field(pattern=r"^(en|hi)$")
+
+
+@app.post("/nidaan/ops/api/me/language")
+async def ops_me_language(body: _MeLangReq, request: Request):
+    """Set my bot/UI language preference (also used by the Telegram bot)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await tg.set_staff_lang(staff["staff_id"], body.lang)
+    return {"ok": True, "lang": body.lang}
+
+
 class _StaffSavedNumbersReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     phone: str = ""
@@ -4297,6 +4357,9 @@ async def ops_quick_tasks_list(request: Request,
         for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
         include_done=include_done, include_deleted=incl_deleted, sort=sort,
         scope=scope, scope_staff_id=staff["staff_id"], limit=limit)
+    for it in items:
+        it["assignee_avatar"] = _nidaan_doc_url(it["assignee_pic"]) if it.get("assignee_pic") else ""
+        it["creator_avatar"] = _nidaan_doc_url(it["creator_pic"]) if it.get("creator_pic") else ""
     out = {"quick_tasks": items, "count": len(items)}
     if with_counts:
         out["counts"] = await nidaan.quick_task_status_counts(
@@ -5253,7 +5316,10 @@ async def ops_flags_set(body: _SystemFlagReq, request: Request):
 async def ops_assignees(request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request)
-    return {"staff": await ntasks.list_active_associates()}
+    rows = await ntasks.list_active_associates()
+    for r in rows:
+        r["avatar_url"] = _nidaan_doc_url(r["profile_pic"]) if r.get("profile_pic") else ""
+    return {"staff": rows}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
