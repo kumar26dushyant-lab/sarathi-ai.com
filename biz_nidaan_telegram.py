@@ -550,6 +550,43 @@ _BOT_TXT: dict = {
                      "hi": "🙏 कृपया शिष्ट भाषा में बात करें। अनुचित शब्दों के बिना दोबारा कहें।"},
     "voice_nonsense":{"en": "🤔 I couldn't make out a clear request. Try saying e.g. “what's pending with me” or tap 💬 Add comment first.",
                      "hi": "🤔 साफ़ अनुरोध समझ नहीं आया। जैसे कहें “मेरे पास क्या पेंडिंग है”, या पहले 💬 कमेंट जोड़ें दबाएँ।"},
+    # ── New-task creation flow ──
+    "b_newtask":    {"en": "➕ New task", "hi": "➕ नया टास्क"},
+    "nt_title":     {"en": "➕ *New task*\n\nSpeak or type the *title* — what needs doing?",
+                     "hi": "➕ *नया टास्क*\n\n*टाइटल* बोलें या टाइप करें — क्या करना है?"},
+    "nt_need_title":{"en": "Please give a short title first (speak or type).",
+                     "hi": "पहले एक छोटा टाइटल दें (बोलें या टाइप करें)।"},
+    "nt_cat":       {"en": "📂 Pick a *category*:", "hi": "📂 *कैटेगरी* चुनें:"},
+    "b_cat_none":   {"en": "— No category —", "hi": "— कोई कैटेगरी नहीं —"},
+    "nt_comp_name": {"en": "🧾 This category needs complainant details.\n\nSpeak or type the *complainant's name*:",
+                     "hi": "🧾 इस कैटेगरी के लिए शिकायतकर्ता की जानकारी चाहिए।\n\n*शिकायतकर्ता का नाम* बोलें या टाइप करें:"},
+    "nt_comp_phone":{"en": "📱 Now the complainant's *mobile number* (10 digits):",
+                     "hi": "📱 अब शिकायतकर्ता का *मोबाइल नंबर* (10 अंक):"},
+    "nt_bad_phone": {"en": "That's not a valid 10-digit mobile number — please say/type it again.",
+                     "hi": "यह सही 10-अंकों का मोबाइल नंबर नहीं है — दोबारा बोलें/टाइप करें।"},
+    "nt_assignee":  {"en": "👤 *Assign to* (or leave unassigned):", "hi": "👤 *किसे सौंपें* (या बिना असाइन):"},
+    "nt_suggest":   {"en": "👤 *Suggest who should handle it* (this goes as a request):",
+                     "hi": "👤 *किसे संभालना चाहिए, सुझाएँ* (यह रिक्वेस्ट के रूप में जाएगा):"},
+    "b_unassigned": {"en": "— Unassigned —", "hi": "— बिना असाइन —"},
+    "nt_priority":  {"en": "🎚️ Pick the *priority*:", "hi": "🎚️ *प्राथमिकता* चुनें:"},
+    "nt_due":       {"en": "📅 *Due date*?", "hi": "📅 *ड्यू डेट*?"},
+    "b_due_today":  {"en": "Today", "hi": "आज"},
+    "b_due_tmrw":   {"en": "Tomorrow", "hi": "कल"},
+    "b_due_none":   {"en": "No due date", "hi": "कोई ड्यू डेट नहीं"},
+    "b_due_type":   {"en": "Type a date", "hi": "तारीख़ टाइप करें"},
+    "nt_due_type":  {"en": "Type the due date as YYYY-MM-DD (e.g. 2026-07-30):",
+                     "hi": "ड्यू डेट YYYY-MM-DD में टाइप करें (जैसे 2026-07-30):"},
+    "nt_bad_date":  {"en": "Please use the format YYYY-MM-DD.", "hi": "कृपया YYYY-MM-DD फ़ॉर्मैट में लिखें।"},
+    "b_create":     {"en": "✅ Create task", "hi": "✅ टास्क बनाएँ"},
+    "nt_review":    {"en": "🔎 *Review — create this task?*\n\n*Title:* {title}\n*Category:* {cat}\n*Assign:* {asg}\n*Priority:* {prio}\n*Due:* {due}{comp}\n\n_After it's created, any corrections are done on the web/app._",
+                     "hi": "🔎 *जाँचें — यह टास्क बनाएँ?*\n\n*टाइटल:* {title}\n*कैटेगरी:* {cat}\n*असाइन:* {asg}\n*प्राथमिकता:* {prio}\n*ड्यू:* {due}{comp}\n\n_बनने के बाद सुधार वेब/ऐप पर ही होंगे।_"},
+    "nt_created":   {"en": "✅ *Task #{id} created!*\nEveryone involved has been notified.",
+                     "hi": "✅ *टास्क #{id} बन गया!*\nसभी संबंधित लोगों को सूचना दे दी गई।"},
+    "nt_created_req":{"en": "✅ *Request #{id} raised* — sent to the admins for assignment.",
+                     "hi": "✅ *रिक्वेस्ट #{id} भेजी गई* — असाइनमेंट के लिए एडमिन को।"},
+    "b_open_task2": {"en": "📄 Open #{id}", "hi": "📄 खोलें #{id}"},
+    "nt_use_buttons":{"en": "👆 Please tap one of the buttons above to continue.",
+                     "hi": "👆 आगे बढ़ने के लिए ऊपर दिए बटनों में से एक दबाएँ।"},
     "code_bad":     {"en": "⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).",
                      "hi": "⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।"},
     "connect_howto":{"en": "🔐 *This Telegram account isn't connected yet.*\n\n1️⃣ Open the NidaanPartner portal *on this device*\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Open Telegram & connect* → press *Start*\n4️⃣ Done — you'll get a ✅ confirmation\n\n💡 Already connected elsewhere? That was a *different* Telegram account — each account connects once.\n\n_Your code is only for you and expires in 15 minutes._",
@@ -633,6 +670,7 @@ def _main_menu(staff: dict) -> tuple[str, list]:
          {"text": T(lang, "b_byme"), "callback_data": "t:byme"}],
         [{"text": T(lang, "b_involved"), "callback_data": "t:inv"},
          {"text": T(lang, "b_archived"), "callback_data": "t:arch"}],
+        [{"text": T(lang, "b_newtask"), "callback_data": "nt:new"}],
         [{"text": T(lang, "b_approvals"), "callback_data": "ap:list"}] if admin else None,
         [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
          {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
@@ -932,16 +970,20 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
     """Route a linked staffer's text — typed, OR transcribed from a voice note. This is
     the single place message intent is handled, so voice and text behave identically."""
     lang = _lang(staff)
-    if text.lower().strip() in ("/menu", "menu", "/home", "home", "hi", "hello", "मेन्यू", "मेनू"):
-        t, kb = _main_menu(staff)
-        await send_message(str(chat_id), t, kb)
-        return
     import json as _json
     try:
         pending = _json.loads(staff.get("telegram_pending") or "{}")
     except Exception:
         pending = {}
     act = pending.get("a")
+    # A guided new-task flow expecting typed/voiced input takes priority.
+    if act == "create":
+        await _create_text_step(staff, pending, text, chat_id)
+        return
+    if text.lower().strip() in ("/menu", "menu", "/home", "home", "hi", "hello", "मेन्यू", "मेनू"):
+        t, kb = _main_menu(staff)
+        await send_message(str(chat_id), t, kb)
+        return
     if act == "comment" and pending.get("qid"):
         # Safest path: confirm WHICH task before saving, so a comment can never land on
         # the wrong task (one extra tap) — this also lets the sender verify a voice
@@ -1198,6 +1240,15 @@ async def _handle_callback(cq: dict) -> None:
                             _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
             return
 
+        if data == "nt:new":
+            await _set_pending(staff["staff_id"], {"a": "create", "step": "title", "data": {}})
+            await send_message(str(chat_id), T(lang, "nt_title"))
+            await ack(); return
+
+        if data.startswith("cr:"):
+            await _create_callback(staff, data, chat_id, ack)
+            return
+
         if data == "ai:ask":
             await _set_pending(staff["staff_id"], {"a": "ai"})
             await send_message(str(chat_id), T(lang, "ask_ai"))
@@ -1332,6 +1383,215 @@ async def _do_leave(staff: dict, kind: str, text: str, chat_id) -> None:
     await send_message(str(chat_id),
         T(lang, "leave_sent", label=label, start=start, end=end, reason=reason),
         _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+
+
+# ── Guided new-task creation (hybrid: speak the free part, tap the exact fields) ──
+# Every step is confirmed; the FINAL review card is the extra safety check. Creation
+# goes through the SAME create_quick_task backend + validation as the web form, so a
+# task made here is identical and stays in sync. The bot never EDITS a task — all
+# corrections happen on the web/app.
+async def _create_text_step(staff: dict, pending: dict, text: str, chat_id) -> None:
+    lang = _lang(staff)
+    import re as _re
+    step = pending.get("step")
+    data = pending.get("data") or {}
+    if step == "title":
+        title = text.strip()
+        if len(title) < 2:
+            await send_message(str(chat_id), T(lang, "nt_need_title")); return
+        data["title"] = title[:200]
+        await _create_send_category(staff, data, chat_id); return
+    if step == "comp_name":
+        data["complainant_name"] = text.strip()[:120]
+        await _set_pending(staff["staff_id"], {"a": "create", "step": "comp_phone", "data": data})
+        await send_message(str(chat_id), T(lang, "nt_comp_phone")); return
+    if step == "comp_phone":
+        digits = _re.sub(r"\D", "", text)
+        if len(digits) < 10:
+            await send_message(str(chat_id), T(lang, "nt_bad_phone")); return
+        data["complainant_phone"] = digits[-10:]
+        await _create_send_assignee(staff, data, chat_id); return
+    if step == "due_type":
+        m = _re.search(r"\d{4}-\d{2}-\d{2}", text)
+        if not m:
+            await send_message(str(chat_id), T(lang, "nt_bad_date")); return
+        data["due"] = m.group(0)
+        await _create_review(staff, data, chat_id); return
+    # Any other step expects a BUTTON, not text — gently nudge.
+    await send_message(str(chat_id), T(lang, "nt_use_buttons"))
+
+
+async def _create_send_category(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    import biz_nidaan as _nid
+    cats = await _nid.list_task_categories()
+    await _set_pending(staff["staff_id"], {"a": "create", "step": "category", "data": data})
+    btns = [[{"text": f"{c['code']} · {c['label']}"[:40], "callback_data": f"cr:cat:{c['code']}"}]
+            for c in (cats or [])[:8]]
+    btns.append([{"text": T(lang, "b_cat_none"), "callback_data": "cr:cat:_none"}])
+    btns.append([{"text": T(lang, "b_confirm_no"), "callback_data": "cr:cancel"}])
+    await send_message(str(chat_id), T(lang, "nt_cat"), btns)
+
+
+async def _create_send_assignee(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    import biz_nidaan_tasks as _nt
+    people = await _nt.list_active_associates()
+    await _set_pending(staff["staff_id"], {"a": "create", "step": "assignee", "data": data})
+    prompt = T(lang, "nt_assignee" if _can(staff, "sub_super_admin") else "nt_suggest")
+    btns, row = [], []
+    for s in (people or [])[:12]:
+        row.append({"text": (s.get("name") or "?")[:20], "callback_data": f"cr:asg:{s['staff_id']}"})
+        if len(row) == 2:
+            btns.append(row); row = []
+    if row:
+        btns.append(row)
+    btns.append([{"text": T(lang, "b_unassigned"), "callback_data": "cr:asg:_none"}])
+    btns.append([{"text": T(lang, "b_confirm_no"), "callback_data": "cr:cancel"}])
+    await send_message(str(chat_id), prompt, btns)
+
+
+async def _create_send_priority(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    await _set_pending(staff["staff_id"], {"a": "create", "step": "priority", "data": data})
+    btns = [
+        [{"text": "⚪ Low", "callback_data": "cr:prio:low"},
+         {"text": "🔵 Normal", "callback_data": "cr:prio:normal"}],
+        [{"text": "🟠 High", "callback_data": "cr:prio:high"},
+         {"text": "🔴 Urgent", "callback_data": "cr:prio:urgent"}],
+        [{"text": T(lang, "b_confirm_no"), "callback_data": "cr:cancel"}],
+    ]
+    await send_message(str(chat_id), T(lang, "nt_priority"), btns)
+
+
+async def _create_send_due(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    await _set_pending(staff["staff_id"], {"a": "create", "step": "due", "data": data})
+    btns = [
+        [{"text": T(lang, "b_due_today"), "callback_data": "cr:due:today"},
+         {"text": T(lang, "b_due_tmrw"), "callback_data": "cr:due:tmrw"}],
+        [{"text": T(lang, "b_due_none"), "callback_data": "cr:due:none"},
+         {"text": T(lang, "b_due_type"), "callback_data": "cr:due:type"}],
+        [{"text": T(lang, "b_confirm_no"), "callback_data": "cr:cancel"}],
+    ]
+    await send_message(str(chat_id), T(lang, "nt_due"), btns)
+
+
+async def _create_review(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    import biz_nidaan as _nid
+    await _set_pending(staff["staff_id"], {"a": "create", "step": "review", "data": data})
+    cat = data.get("category") or "—"
+    if data.get("assignee"):
+        s = await _nid.get_staff_by_id(data["assignee"])
+        asg = (s or {}).get("name", "—")
+    else:
+        asg = T(lang, "b_unassigned")
+    comp = ""
+    if data.get("complainant_name"):
+        comp = f"\n*Complainant:* {data['complainant_name']} {data.get('complainant_phone','')}"
+    txt = T(lang, "nt_review", title=data.get("title", ""), cat=cat, asg=asg,
+            prio=data.get("priority", "normal"), due=(data.get("due") or "—"), comp=comp)
+    btns = _kb([[{"text": T(lang, "b_create"), "callback_data": "cr:create"}],
+                [{"text": T(lang, "b_confirm_no"), "callback_data": "cr:cancel"}]])
+    await send_message(str(chat_id), txt, btns)
+
+
+async def _do_create(staff: dict, data: dict, chat_id) -> None:
+    lang = _lang(staff)
+    import biz_nidaan as _nid
+    import biz_nidaan_notifications as _nnot
+    # Same role rule as the web: below the min role → a 'request', not a direct assignment.
+    min_role = await _nid.get_ops_setting("task_create_min_role", "team_member")
+    task_type = "assignment"
+    if _nid.role_rank(staff.get("role", "")) < _nid.role_rank(min_role):
+        task_type = "request"
+    cat = data.get("category") or None
+    # Defensive: never create a complainant-required task without the details.
+    if cat and await _nid.category_requires_complainant(cat) and not (
+            data.get("complainant_name") and data.get("complainant_phone")):
+        await _set_pending(staff["staff_id"], {"a": "create", "step": "comp_name", "data": data})
+        await send_message(str(chat_id), T(lang, "nt_comp_name")); return
+    qid = await _nid.create_quick_task(
+        title=data["title"], created_by_staff_id=staff["staff_id"],
+        assigned_to_staff_id=data.get("assignee"),
+        priority=data.get("priority", "normal"),
+        due_date=(data.get("due") or None),
+        category_code=cat, task_type=task_type,
+        complainant_name=data.get("complainant_name"),
+        complainant_phone=data.get("complainant_phone"),
+        source="telegram")
+    await _set_pending(staff["staff_id"], None)
+    try:
+        qt = await _nid.get_quick_task(qid)
+        if qt:
+            if task_type == "request":
+                await _nnot.on_quick_task_request(qt)
+            else:
+                await _nnot.on_quick_task_assigned(qt)
+    except Exception:
+        pass
+    key = "nt_created_req" if task_type == "request" else "nt_created"
+    await send_message(str(chat_id), T(lang, key, id=qid),
+        _kb([[{"text": T(lang, "b_open_task2", id=qid), "callback_data": f"t:v:{qid}"},
+              {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+
+
+async def _create_callback(staff: dict, data: str, chat_id, ack) -> None:
+    lang = _lang(staff)
+    import json as _json
+    try:
+        pending = _json.loads(staff.get("telegram_pending") or "{}")
+    except Exception:
+        pending = {}
+    if pending.get("a") != "create":
+        await ack(); return
+    d = pending.get("data") or {}
+    parts = data.split(":")
+    kind = parts[1] if len(parts) > 1 else ""
+    if kind == "cancel":
+        await _set_pending(staff["staff_id"], None)
+        await ack(T(lang, "cancelled"))
+        await send_message(str(chat_id), T(lang, "cancelled"),
+                           _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+        return
+    if kind == "cat":
+        code = parts[2] if len(parts) > 2 else "_none"
+        import biz_nidaan as _nid
+        d["category"] = "" if code == "_none" else code
+        await ack()
+        if d["category"] and await _nid.category_requires_complainant(d["category"]):
+            await _set_pending(staff["staff_id"], {"a": "create", "step": "comp_name", "data": d})
+            await send_message(str(chat_id), T(lang, "nt_comp_name")); return
+        await _create_send_assignee(staff, d, chat_id); return
+    if kind == "asg":
+        aid = parts[2] if len(parts) > 2 else "_none"
+        d["assignee"] = None if aid == "_none" else int(aid)
+        await ack()
+        await _create_send_priority(staff, d, chat_id); return
+    if kind == "prio":
+        d["priority"] = parts[2] if len(parts) > 2 else "normal"
+        await ack()
+        await _create_send_due(staff, d, chat_id); return
+    if kind == "due":
+        import datetime as _dt
+        preset = parts[2] if len(parts) > 2 else "none"
+        if preset == "today":
+            d["due"] = _dt.date.today().isoformat()
+        elif preset == "tmrw":
+            d["due"] = (_dt.date.today() + _dt.timedelta(days=1)).isoformat()
+        elif preset == "none":
+            d["due"] = ""
+        elif preset == "type":
+            await _set_pending(staff["staff_id"], {"a": "create", "step": "due_type", "data": d})
+            await ack()
+            await send_message(str(chat_id), T(lang, "nt_due_type")); return
+        await ack()
+        await _create_review(staff, d, chat_id); return
+    if kind == "create":
+        await ack(T(lang, "thinking"))
+        await _do_create(staff, d, chat_id); return
+    await ack()
 
 
 async def _do_broadcast(staff: dict, text: str, chat_id) -> None:
