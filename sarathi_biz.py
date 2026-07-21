@@ -4456,6 +4456,8 @@ async def ops_quick_task_get(qid: int, request: Request):
                               "name": a.get("original_name") or "attachment"}
                              for a in _rows]
     participants = await nidaan.get_task_participants(qid)
+    for _p in participants:
+        _p["avatar_url"] = _nidaan_doc_url(_p["profile_pic"]) if _p.get("profile_pic") else ""
     me_muted = any(p["staff_id"] == staff["staff_id"] and p.get("muted") for p in participants)
     return {"quick_task": qt, "notes": notes, "me": staff["staff_id"],
             "participants": participants, "me_muted": me_muted}
@@ -5559,6 +5561,42 @@ async def nidaan_telegram_webhook(secret: str, request: Request):
 class _BroadcastReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=1000)
+
+
+class _AnnounceReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=2, max_length=140)
+    message: str = Field(min_length=2, max_length=2000)
+    roles: list[str] = Field(default_factory=list)   # empty = everyone
+
+
+@app.post("/nidaan/ops/api/announce")
+async def ops_announce(body: _AnnounceReq, request: Request):
+    """Super-admin posts a 'what's new / changed' feature update. It reaches every
+    active staffer whose ROLE it's relevant to — on their bell, app push, Telegram and
+    email — so people learn about features that apply to them (and aren't bothered by
+    ones that don't)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    valid = {"team_member", "sub_super_admin", "super_admin"}
+    roles = [r for r in (body.roles or []) if r in valid]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        if roles:
+            ph = ",".join("?" * len(roles))
+            q = (f"SELECT staff_id FROM nidaan_staff WHERE status='active' "
+                 f"AND deleted_at IS NULL AND role IN ({ph})")
+            rows = await (await conn.execute(q, roles)).fetchall()
+        else:
+            rows = await (await conn.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE status='active' "
+                "AND deleted_at IS NULL")).fetchall()
+    ids = [r[0] for r in rows]
+    n = await nnot.notify_staff_inapp(
+        ids, subject=f"🆕 What's new: {body.title}", body=body.message,
+        event_key="ops.announcement")
+    await _ops_audit(request, "announce", "announcement", 0,
+                     f"{body.title} → {len(ids)} staff ({','.join(roles) or 'all'})")
+    return {"ok": True, "notified": n, "targeted": len(ids)}
 
 
 @app.post("/nidaan/ops/api/broadcast")

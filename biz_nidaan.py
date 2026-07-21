@@ -1928,7 +1928,7 @@ async def get_task_participants(quick_task_id: int) -> list[dict]:
             return []
         ph = ",".join("?" * len(meta))
         srows = await (await conn.execute(
-            f"SELECT staff_id, name, role, phone, "
+            f"SELECT staff_id, name, role, phone, profile_pic, "
             f"       COALESCE(NULLIF(notify_email,''), email) AS email "
             f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
             f"AND status='active' AND deleted_at IS NULL", list(meta.keys()))).fetchall()
