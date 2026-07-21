@@ -529,10 +529,15 @@ _BOT_TXT: dict = {
     "done_ok":      {"en": "Done ✓", "hi": "हो गया ✓"},
     "failed":       {"en": "Failed", "hi": "विफल"},
     "lang_set":     {"en": "Language set to English", "hi": "भाषा हिंदी कर दी गई"},
+    "confirm_comment":{"en": "Add this comment to *#{id} — {title}*?\n\n“{text}”",
+                       "hi": "यह कमेंट *#{id} — {title}* में जोड़ें?\n\n“{text}”"},
+    "b_confirm_yes":{"en": "✅ Yes, add", "hi": "✅ हाँ, जोड़ें"},
+    "b_confirm_no": {"en": "✕ Cancel", "hi": "✕ रद्द करें"},
+    "cancelled":    {"en": "Cancelled — nothing was saved.", "hi": "रद्द — कुछ सेव नहीं हुआ।"},
     "code_bad":     {"en": "⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).",
                      "hi": "⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।"},
-    "connect_howto":{"en": "🔐 *Connect in 4 steps:*\n\n1️⃣ Open the NidaanPartner portal\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Connect* — it opens me with your code, or shows a code to send here\n4️⃣ Done — you'll get a ✅ confirmation\n\n_Your code works only for you and expires in 15 minutes, so it stays secure._",
-                     "hi": "🔐 *4 आसान स्टेप में कनेक्ट करें:*\n\n1️⃣ निदान पार्टनर पोर्टल खोलें\n2️⃣ बाएँ मेन्यू में *Telegram Bot* पर जाएँ\n3️⃣ *Connect* दबाएँ — यह आपके कोड के साथ बॉट खोलेगा, या कोड दिखाएगा जिसे यहाँ भेजें\n4️⃣ हो गया — ✅ पुष्टि मिलेगी\n\n_आपका कोड सिर्फ़ आपके लिए है और 15 मिनट में समाप्त हो जाता है, इसलिए सुरक्षित रहता है।_"},
+    "connect_howto":{"en": "🔐 *This Telegram account isn't connected yet.*\n\n1️⃣ Open the NidaanPartner portal *on this device*\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Open Telegram & connect* → press *Start*\n4️⃣ Done — you'll get a ✅ confirmation\n\n💡 Already connected elsewhere? That was a *different* Telegram account — each account connects once.\n\n_Your code is only for you and expires in 15 minutes._",
+                     "hi": "🔐 *यह टेलीग्राम अकाउंट अभी कनेक्ट नहीं है।*\n\n1️⃣ इसी डिवाइस पर निदान पार्टनर पोर्टल खोलें\n2️⃣ बाएँ मेन्यू में *Telegram Bot* पर जाएँ\n3️⃣ *Open Telegram & connect* दबाएँ → *Start* दबाएँ\n4️⃣ हो गया — ✅ पुष्टि मिलेगी\n\n💡 किसी और डिवाइस पर कनेक्ट है? वह अलग टेलीग्राम अकाउंट था — हर अकाउंट एक बार कनेक्ट होता है।\n\n_आपका कोड सिर्फ़ आपके लिए है और 15 मिनट में समाप्त होता है।_"},
 }
 
 
@@ -882,8 +887,17 @@ async def handle_update(update: dict) -> None:
             pending = {}
         act = pending.get("a")
         if act == "comment" and pending.get("qid"):
-            await _do_comment(staff, int(pending["qid"]), text, chat_id)
-            await _set_pending(staff["staff_id"], None)
+            # Safest path: confirm WHICH task before saving, so a comment can never land
+            # on the wrong task (one extra tap).
+            import biz_nidaan as _nid
+            qid = int(pending["qid"])
+            _qt = await _nid.get_quick_task(qid)
+            _title = ((_qt.get("title") if _qt else "") or "")[:55]
+            await _set_pending(staff["staff_id"], {"a": "comment_confirm", "qid": qid, "text": text})
+            await send_message(str(chat_id),
+                T(lang, "confirm_comment", id=qid, title=_title, text=text[:250]),
+                _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"cc:yes:{qid}"},
+                      {"text": T(lang, "b_confirm_no"), "callback_data": "cc:no"}]]))
             return
         if act == "ai":
             await _set_pending(staff["staff_id"], None)
@@ -1008,6 +1022,28 @@ async def _handle_callback(cq: dict) -> None:
             t, kb = await _approvals_view(staff)
             await _edit(chat_id, message_id, t, kb); return
 
+        if data.startswith("cc:"):
+            # Confirm/cancel a pending comment (wrong-task safeguard).
+            import json as _json
+            try:
+                pend = _json.loads(staff.get("telegram_pending") or "{}")
+            except Exception:
+                pend = {}
+            await _set_pending(staff["staff_id"], None)
+            if data.startswith("cc:yes") and pend.get("a") == "comment_confirm" and pend.get("qid"):
+                await _do_comment(staff, int(pend["qid"]), pend.get("text", ""), chat_id)
+                await ack(T(lang, "done_ok"))
+                try:
+                    await _call("editMessageReplyMarkup", {"chat_id": str(chat_id),
+                        "message_id": message_id, "reply_markup": {"inline_keyboard": []}})
+                except Exception:
+                    pass
+            else:
+                await ack()
+                await _edit(chat_id, message_id, T(lang, "cancelled"),
+                            _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            return
+
         if data == "ai:ask":
             await _set_pending(staff["staff_id"], {"a": "ai"})
             await send_message(str(chat_id), T(lang, "ask_ai"))
@@ -1059,7 +1095,7 @@ async def _do_status(staff: dict, qid: int, new_status: str) -> bool:
     is_assignee = qt.get("assigned_to_staff_id") == staff["staff_id"]
     if not (is_assignee or _can(staff, "sub_super_admin")):
         return False
-    await nidaan.update_quick_task_status(qid, new_status, changed_by=staff["staff_id"])
+    await nidaan.update_quick_task_status(qid, new_status, changed_by=staff["staff_id"], source="telegram")
     try:
         fresh = await nidaan.get_quick_task(qid)
         if fresh:
@@ -1077,7 +1113,7 @@ async def _do_comment(staff: dict, qid: int, text: str, chat_id) -> None:
     if not await nidaan.is_task_participant(qid, staff["staff_id"]) and not _can(staff, "sub_super_admin"):
         await send_message(str(chat_id), T(lang, "no_access"))
         return
-    note_id = await nidaan.add_quick_task_note(quick_task_id=qid, staff_id=staff["staff_id"], note=text)
+    note_id = await nidaan.add_quick_task_note(quick_task_id=qid, staff_id=staff["staff_id"], note=text, source="telegram")
     # Non-destructive translation aid: a Hindi comment keeps its ORIGINAL text; we store
     # an auto English rendering alongside for the English web dashboard. Never overwrite.
     if _has_devanagari(text):
@@ -1104,7 +1140,7 @@ async def _do_approval(staff: dict, qid: int, decision: str) -> bool:
     if not _can(staff, "sub_super_admin"):
         return False
     try:
-        await nidaan.set_quick_task_approval(qid, decision, changed_by=staff["staff_id"])
+        await nidaan.set_quick_task_approval(qid, decision, changed_by=staff["staff_id"], source="telegram")
         qt = await nidaan.get_quick_task(qid)
         if qt:
             await nnot.on_quick_task_approval(qt, decision)

@@ -1611,6 +1611,10 @@ async def init_db():
         for _tr in [
             "ALTER TABLE nidaan_quick_task_notes ADD COLUMN note_lang TEXT",
             "ALTER TABLE nidaan_quick_task_notes ADD COLUMN note_translation TEXT",
+            # Where an activity originated — 'web' | 'mobile-web' | 'telegram' — so the
+            # task history shows the source of every update (traceability).
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN source TEXT",
+            "ALTER TABLE nidaan_quick_task_log ADD COLUMN source TEXT",
         ]:
             try:
                 await conn.execute(_tr)

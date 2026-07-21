@@ -2035,7 +2035,7 @@ function _renderQTThread(notes, qid, canComment){
       <div style="${isReply?'margin-left:1.25rem;border-left:2px solid '+c+'33;padding-left:.6rem':''};margin-bottom:.6rem">
         <div style="font-size:.74rem;color:rgba(255,255,255,.55)">
           <span style="color:${c};font-weight:700">[${l}]</span>
-          <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick}
+          <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick} ${_srcBadge(n.source)}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
         ${n.note_translation ? `<div style="font-size:.8rem;margin-top:.25rem;color:#93c5fd;background:rgba(59,130,246,.08);border-left:2px solid rgba(59,130,246,.45);padding:.2rem .55rem;border-radius:0 5px 5px 0">🌐 English (auto): ${esc(n.note_translation)}</div>` : ''}
@@ -2193,6 +2193,18 @@ const _QT_ACTION_LABEL = {
   reopen:'Reopened', delete:'Deleted', approve:'Approved', reject:'Rejected',
   merge:'Merged'
 };
+// Source-of-activity chip — where an update came from (traceability).
+function _srcBadge(src){
+  if (!src) return '';
+  const m = {
+    'telegram':   ['✈️ Telegram', '#38bdf8'],
+    'web':        ['💻 Web',      '#a3a3a3'],
+    'mobile-web': ['📱 Mobile',   '#a78bfa'],
+  }[src];
+  if (!m) return '';
+  return `<span style="font-size:.66rem;color:${m[1]};background:${m[1]}1f;border:1px solid ${m[1]}44;padding:.02rem .3rem;border-radius:4px;margin-left:.3rem">${m[0]}</span>`;
+}
+
 async function qtShowHistory(qid){
   const box = document.getElementById('qtHistoryBox');
   if (!box) return;
@@ -2213,7 +2225,7 @@ async function qtShowHistory(qid){
         return `<div style="font-size:.8rem;margin-bottom:.4rem;display:flex;gap:.5rem">
           <span style="color:#a78bfa;font-weight:600;min-width:96px">${esc(lbl)}</span>
           <span style="flex:1">${chg}${h.note?` · <span style="color:rgba(255,255,255,.6)">${esc(h.note)}</span>`:''}
-            <div style="color:rgba(255,255,255,.4);font-size:.72rem">${esc(h.by_name||'—')} · ${ndUI.timeAgo(h.changed_at)}</div>
+            <div style="color:rgba(255,255,255,.4);font-size:.72rem">${esc(h.by_name||'—')} · ${ndUI.timeAgo(h.changed_at)} ${_srcBadge(h.source)}</div>
           </span>
         </div>`;
       }).join('')}

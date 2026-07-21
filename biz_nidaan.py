@@ -1662,7 +1662,8 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
                              category_code: Optional[str] = None,
                              approver_staff_id: Optional[int] = None,
                              complainant_name: Optional[str] = None,
-                             complainant_phone: Optional[str] = None) -> int:
+                             complainant_phone: Optional[str] = None,
+                             source: Optional[str] = None) -> int:
     if priority not in QUICK_TASK_PRIORITIES:
         priority = "normal"
     if task_type not in ("assignment", "request"):
@@ -1686,7 +1687,7 @@ async def create_quick_task(*, title: str, created_by_staff_id: int,
         await _log_quick_task(conn, qid, "created",
                               to_value=str(assigned_to_staff_id) if assigned_to_staff_id else None,
                               changed_by=created_by_staff_id,
-                              note="requires approval" if requires_approval else "")
+                              note="requires approval" if requires_approval else "", source=source)
         await conn.commit()
         return qid
 
@@ -1765,7 +1766,7 @@ _QT_EDITABLE_FIELDS = ("title", "description", "category_code", "due_date", "pri
 
 
 async def update_quick_task_fields(quick_task_id: int, fields: dict,
-                                    changed_by: int) -> list[str]:
+                                    changed_by: int, source: str = None) -> list[str]:
     """Edit a task's own content (title / description / category / due date /
     priority) — for fixing typos and mistakes after creation. Every change is written
     to the immutable task log. Returns the list of fields actually changed."""
@@ -1795,7 +1796,7 @@ async def update_quick_task_fields(quick_task_id: int, fields: dict,
             await _log_quick_task(conn, quick_task_id, "edit",
                                   from_value=str(current.get(k) or "")[:120],
                                   to_value=str(new_val or "")[:120],
-                                  changed_by=changed_by, note=k)
+                                  changed_by=changed_by, note=k, source=source)
         if not sets:
             return []
         params.append(quick_task_id)
@@ -1940,7 +1941,7 @@ async def get_task_participants(quick_task_id: int) -> list[dict]:
 
 
 async def set_quick_task_approval(quick_task_id: int, decision: str,
-                                   changed_by: int, note: str = "") -> bool:
+                                   changed_by: int, note: str = "", source: str = None) -> bool:
     """Approve or reject a quick task. decision: 'approved' | 'rejected'."""
     decision = (decision or "").lower()
     if decision not in ("approved", "rejected"):
@@ -1952,7 +1953,7 @@ async def set_quick_task_approval(quick_task_id: int, decision: str,
             "WHERE quick_task_id=?", (decision, changed_by, quick_task_id))
         await _log_quick_task(conn, quick_task_id,
                               "approve" if decision == "approved" else "reject",
-                              to_value=decision, changed_by=changed_by, note=note)
+                              to_value=decision, changed_by=changed_by, note=note, source=source)
         await conn.commit()
     return True
 
@@ -2165,17 +2166,20 @@ async def quick_task_status_counts(*, assigned_to_staff_id: Optional[int] = None
 
 async def _log_quick_task(conn, quick_task_id: int, action: str,
                           from_value: str = None, to_value: str = None,
-                          changed_by: int = None, note: str = "") -> None:
-    """Append an immutable history row (uses an existing open connection)."""
+                          changed_by: int = None, note: str = "",
+                          source: str = None) -> None:
+    """Append an immutable history row (uses an existing open connection).
+    `source` records where the action came from: web | mobile-web | telegram."""
     await conn.execute(
         "INSERT INTO nidaan_quick_task_log "
-        "(quick_task_id, action, from_value, to_value, changed_by_staff_id, note) "
-        "VALUES (?,?,?,?,?,?)",
-        (quick_task_id, action, from_value, to_value, changed_by, note or ""))
+        "(quick_task_id, action, from_value, to_value, changed_by_staff_id, note, source) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (quick_task_id, action, from_value, to_value, changed_by, note or "", source))
 
 
 async def update_quick_task_status(quick_task_id: int, status: str,
-                                   changed_by: int = None, note: str = "") -> bool:
+                                   changed_by: int = None, note: str = "",
+                                   source: str = None) -> bool:
     if status not in QUICK_TASK_STATUSES:
         return False
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -2196,13 +2200,14 @@ async def update_quick_task_status(quick_task_id: int, status: str,
         await _log_quick_task(conn, quick_task_id,
                               "reopen" if reopening else "status",
                               from_value=prev, to_value=status,
-                              changed_by=changed_by, note=note)
+                              changed_by=changed_by, note=note, source=source)
         await conn.commit()
     return True
 
 
 async def reassign_quick_task(quick_task_id: int, assignee_staff_id: Optional[int],
-                              changed_by: int = None, note: str = "") -> bool:
+                              changed_by: int = None, note: str = "",
+                              source: str = None) -> bool:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         prev = await (await conn.execute(
@@ -2215,7 +2220,7 @@ async def reassign_quick_task(quick_task_id: int, assignee_staff_id: Optional[in
         await _log_quick_task(conn, quick_task_id, "reassign",
                               from_value=str(prev["assigned_to_staff_id"]) if prev and prev["assigned_to_staff_id"] else None,
                               to_value=str(assignee_staff_id) if assignee_staff_id else None,
-                              changed_by=changed_by, note=note)
+                              changed_by=changed_by, note=note, source=source)
         await conn.commit()
     return True
 
@@ -2432,7 +2437,8 @@ async def list_staff_on_leave_now() -> list[dict]:
 async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
                                 parent_note_id: Optional[int] = None,
                                 attachment_stored_name: Optional[str] = None,
-                                attachment_original_name: Optional[str] = None) -> int:
+                                attachment_original_name: Optional[str] = None,
+                                source: Optional[str] = None) -> int:
     # Flatten: a reply-to-a-reply becomes a reply to the original parent.
     if parent_note_id:
         async with aiosqlite.connect(DB_PATH) as conn:
@@ -2448,9 +2454,9 @@ async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
         cur = await conn.execute(
             "INSERT INTO nidaan_quick_task_notes "
             "(quick_task_id, staff_id, note, parent_note_id, attachment_stored_name, "
-            " attachment_original_name) VALUES (?, ?, ?, ?, ?, ?)",
+            " attachment_original_name, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (quick_task_id, staff_id, note.strip(), parent_note_id,
-             attachment_stored_name, attachment_original_name))
+             attachment_stored_name, attachment_original_name, source))
         await conn.commit()
         return cur.lastrowid
 

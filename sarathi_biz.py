@@ -4438,6 +4438,14 @@ async def ops_quick_task_note_approval(qid: int, note_id: int,
 
 
 @app.post("/nidaan/ops/api/quick-tasks")
+def _req_source(request: Request) -> str:
+    """Where a web/app action came from — 'mobile-web' vs 'web' — for task-history
+    traceability. (Telegram actions pass 'telegram' from the bot.)"""
+    ua = (request.headers.get("user-agent") or "").lower()
+    return "mobile-web" if any(m in ua for m in
+        ("iphone", "android", "ipad", "ipod", "mobile")) else "web"
+
+
 async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     # Everyone can create. A permission setting can require a minimum role for
@@ -4462,7 +4470,8 @@ async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
         task_type=task_type, category_code=body.category_code,
         approver_staff_id=body.approver_staff_id,
         complainant_name=body.complainant_name,
-        complainant_phone=body.complainant_phone)
+        complainant_phone=body.complainant_phone,
+        source=_req_source(request))
     # Involve people right at creation (same collaborator model as @mention).
     _new_watchers = []
     if body.mention_ids:
@@ -4529,9 +4538,9 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
     if _wants_edit:
         # Content edit (typo/mistake fix) — every field change is written to the
         # immutable task history. Deliberately does NOT notify (avoids noise).
-        await nidaan.update_quick_task_fields(qid, _edit_fields, changed_by=staff["staff_id"])
+        await nidaan.update_quick_task_fields(qid, _edit_fields, changed_by=staff["staff_id"], source=_req_source(request))
     if body.status is not None:
-        await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"])
+        await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"], source=_req_source(request))
         # Notify the assignee that their task changed status (reopened/rejected/etc.)
         try:
             _sqt = await nidaan.get_quick_task(qid)
@@ -4542,7 +4551,7 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
         except Exception:
             pass
     if body.assigned_to_staff_id is not None:
-        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id, changed_by=staff["staff_id"])
+        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id, changed_by=staff["staff_id"], source=_req_source(request))
         # Notify new assignee if priority demands it
         try:
             new_qt = await nidaan.get_quick_task(qid)
@@ -4589,7 +4598,8 @@ async def ops_quick_task_approval(qid: int, body: _QuickTaskApprovalReq, request
     if not qt.get("requires_approval"):
         raise HTTPException(400, "This task does not require approval")
     await nidaan.set_quick_task_approval(qid, body.decision,
-                                         changed_by=staff["staff_id"], note=body.note)
+                                         changed_by=staff["staff_id"], note=body.note,
+                                         source=_req_source(request))
     # Notify creator + assignee of the decision (deep-linked).
     try:
         fresh = await nidaan.get_quick_task(qid)
@@ -4669,7 +4679,8 @@ async def ops_quick_task_note_add(qid: int, request: Request,
         quick_task_id=qid, staff_id=staff["staff_id"],
         note=note, parent_note_id=parent_note_id,
         attachment_stored_name=(saved[0]["stored_name"] if saved else None),
-        attachment_original_name=(saved[0]["original_name"] if saved else None))
+        attachment_original_name=(saved[0]["original_name"] if saved else None),
+        source=_req_source(request))
     if saved:
         await nidaan.add_note_attachments(quick_task_id=qid, note_id=nid,
                                           files=saved, uploaded_by=staff["staff_id"])
