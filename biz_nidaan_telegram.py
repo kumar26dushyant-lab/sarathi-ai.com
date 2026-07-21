@@ -242,19 +242,67 @@ async def send_message(chat_id: str, text: str,
 
 
 # ── staff linking ────────────────────────────────────────────────────────────
-async def get_or_create_link_code(staff_id: int) -> str:
-    """A stable per-staff code used in the bot deep link."""
+LINK_CODE_TTL_MIN = 15   # a connect code is valid for this long, then expires
+
+
+async def issue_link_code(staff_id: int) -> str:
+    """Issue a SHORT-LIVED, single-use connect code for a portal-authenticated staffer.
+    Reuses the current code if it still has plenty of life left (so re-opening the panel
+    doesn't churn), otherwise mints a fresh one. Security: the code only ever exists for a
+    logged-in staff member, expires in {TTL} min, and is consumed on first successful use —
+    so a leaked/forwarded link can't quietly connect the wrong Telegram account."""
+    import datetime as _dt
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT telegram_link_code FROM nidaan_staff WHERE staff_id=?", (staff_id,))).fetchone()
+            "SELECT telegram_link_code, telegram_link_code_at FROM nidaan_staff WHERE staff_id=?",
+            (staff_id,))).fetchone()
         code = (row["telegram_link_code"] if row else "") or ""
-        if not code:
-            code = secrets.token_urlsafe(9).replace("-", "").replace("_", "")[:12]
+        fresh_enough = False
+        if code and row["telegram_link_code_at"]:
+            try:
+                age = (_dt.datetime.utcnow() - _dt.datetime.fromisoformat(
+                    str(row["telegram_link_code_at"]).replace("Z", ""))).total_seconds()
+                fresh_enough = age < (LINK_CODE_TTL_MIN - 3) * 60
+            except Exception:
+                fresh_enough = False
+        if not (code and fresh_enough):
+            code = secrets.token_hex(4).upper()   # 8 hex chars, easy to read/type
             await conn.execute(
-                "UPDATE nidaan_staff SET telegram_link_code=? WHERE staff_id=?", (code, staff_id))
+                "UPDATE nidaan_staff SET telegram_link_code=?, "
+                "telegram_link_code_at=CURRENT_TIMESTAMP WHERE staff_id=?", (code, staff_id))
             await conn.commit()
         return code
+
+
+async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict]:
+    """Consume a valid, unexpired connect code and bind this Telegram chat to the staffer
+    it was issued to. Returns None if the code is unknown/expired. Single-use."""
+    code = (code or "").strip().upper()
+    if not code or len(code) < 4:
+        return None
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT staff_id, name FROM nidaan_staff "
+            "WHERE telegram_link_code=? AND telegram_link_code_at IS NOT NULL "
+            "AND telegram_link_code_at >= datetime('now', ?) "
+            "AND status='active' AND deleted_at IS NULL",
+            (code, f"-{LINK_CODE_TTL_MIN} minutes"))).fetchone()
+        if not row:
+            return None
+        # One chat → one staffer: free this chat from any prior staff, then bind, and
+        # consume the code so it can't be reused.
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
+            "telegram_linked_at=NULL WHERE telegram_chat_id=?", (str(chat_id),))
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=?, telegram_username=?, "
+            "telegram_linked_at=CURRENT_TIMESTAMP, telegram_link_code=NULL, "
+            "telegram_link_code_at=NULL WHERE staff_id=?",
+            (str(chat_id), username or "", row["staff_id"]))
+        await conn.commit()
+        return {"staff_id": row["staff_id"], "name": row["name"]}
 
 
 async def get_staff_telegram(staff_id: int) -> dict:
@@ -438,6 +486,10 @@ _BOT_TXT: dict = {
     "done_ok":      {"en": "Done ✓", "hi": "हो गया ✓"},
     "failed":       {"en": "Failed", "hi": "विफल"},
     "lang_set":     {"en": "Language set to English", "hi": "भाषा हिंदी कर दी गई"},
+    "code_bad":     {"en": "⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).",
+                     "hi": "⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।"},
+    "connect_howto":{"en": "🔐 *Connect in 4 steps:*\n\n1️⃣ Open the NidaanPartner portal\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Connect* — it opens me with your code, or shows a code to send here\n4️⃣ Done — you'll get a ✅ confirmation\n\n_Your code works only for you and expires in 15 minutes, so it stays secure._",
+                     "hi": "🔐 *4 आसान स्टेप में कनेक्ट करें:*\n\n1️⃣ निदान पार्टनर पोर्टल खोलें\n2️⃣ बाएँ मेन्यू में *Telegram Bot* पर जाएँ\n3️⃣ *Connect* दबाएँ — यह आपके कोड के साथ बॉट खोलेगा, या कोड दिखाएगा जिसे यहाँ भेजें\n4️⃣ हो गया — ✅ पुष्टि मिलेगी\n\n_आपका कोड सिर्फ़ आपके लिए है और 15 मिनट में समाप्त हो जाता है, इसलिए सुरक्षित रहता है।_"},
 }
 
 
@@ -751,17 +803,27 @@ async def handle_update(update: dict) -> None:
         lang = _lang(staff)
 
         if text.startswith("/start"):
+            parts = text.split(maxsplit=1)
+            code = parts[1].strip() if len(parts) > 1 else ""
+            if not staff and code:
+                linked = await _link_by_code(code, str(chat_id), username)
+                if linked:
+                    await _after_link(chat_id, linked); return
+                await send_message(str(chat_id), T("en", "code_bad")); return
             if staff:
                 t, kb = _main_menu(staff)
                 await send_message(str(chat_id), t, kb)
                 return
-            # Not linked yet → require a verified phone number to connect.
-            await _request_phone(str(chat_id), T("en", "connect_secure"))
-            return
+            await send_message(str(chat_id), T("en", "connect_howto")); return
 
         if not staff:
-            await _request_phone(str(chat_id), T("en", "not_linked_tap"))
-            return
+            # An unlinked user typing → maybe they pasted their connect code.
+            guess = text.strip()
+            if 4 <= len(guess) <= 16 and guess.replace(" ", "").isalnum():
+                linked = await _link_by_code(guess, str(chat_id), username)
+                if linked:
+                    await _after_link(chat_id, linked); return
+            await send_message(str(chat_id), T("en", "connect_howto")); return
 
         if text.lower() in ("/menu", "menu", "/home", "hi", "hello"):
             t, kb = _main_menu(staff)
@@ -804,6 +866,18 @@ async def handle_update(update: dict) -> None:
                            _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
     except Exception as e:
         logger.warning("Telegram update handling failed: %s", e)
+
+
+async def _after_link(chat_id, linked: dict) -> None:
+    """Shared post-link success: confirm + show the menu in the staffer's language."""
+    staff = await _staff_by_chat(chat_id)
+    lang = _lang(staff)
+    await _call("sendMessage", {"chat_id": str(chat_id),
+        "text": T(lang, "connected", name=linked["name"]),
+        "parse_mode": "Markdown", "reply_markup": {"remove_keyboard": True}})
+    t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
+    await send_message(str(chat_id), t, kb)
+    logger.info("🔐 Telegram linked staff_id=%s via connect code", linked["staff_id"])
 
 
 async def _handle_callback(cq: dict) -> None:

@@ -1855,6 +1855,9 @@ async def init_db():
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_username TEXT",
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_linked_at TIMESTAMP",
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_link_code TEXT",
+            # When the current link code was issued — codes expire (single-use, short-lived)
+            # so a connect link can't be reused or forwarded to link the wrong account.
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_link_code_at TIMESTAMP",
             # Lightweight conversation state for Telegram flows that need a typed
             # reply (add a comment, ask the AI, broadcast). JSON blob, cleared on use.
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_pending TEXT",
