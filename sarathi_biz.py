@@ -5270,14 +5270,17 @@ async def ops_telegram_config(request: Request):
     out = {
         "bot": cfg,
         "is_super_admin": staff.get("role") == "super_admin",
-        "linked": bool((mine or {}).get("telegram_chat_id")),
+        "linked": bool((mine or {}).get("linked")),
+        "device_count": (mine or {}).get("count", 0),
+        "devices": (mine or {}).get("devices", []),
         "telegram_username": (mine or {}).get("telegram_username") or "",
         "linked_at": (mine or {}).get("telegram_linked_at") or "",
         "connect_url": "",
     }
-    # Issue a fresh, short-lived connect code for THIS logged-in staffer (only when not
-    # already linked). The deep link opens the bot with the code on any platform.
-    if cfg.get("configured") and cfg.get("bot_username") and not out["linked"]:
+    # Always issue a fresh, short-lived connect code — a staffer can add MORE devices
+    # (phone + desktop + web) at any time. The deep link opens the bot with the code on
+    # any platform.
+    if cfg.get("configured") and cfg.get("bot_username"):
         code = await tg.issue_link_code(staff["staff_id"])
         out["connect_url"] = f"https://t.me/{cfg['bot_username']}?start={code}"
         out["link_code"] = code

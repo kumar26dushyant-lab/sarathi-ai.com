@@ -123,10 +123,11 @@ async def delete_webhook() -> dict:
 
 
 async def clear_all_links() -> int:
-    """Drop every staff link. Used when the bot IDENTITY changes — those chat_ids can
-    never work again, so keeping them would just fail silently forever."""
+    """Drop every staff link (all devices). Used when the bot IDENTITY changes — those
+    chat_ids can never work again."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
-        cur = await conn.execute(
+        cur = await conn.execute("DELETE FROM nidaan_staff_telegram")
+        await conn.execute(
             "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
             "telegram_linked_at=NULL WHERE telegram_chat_id IS NOT NULL")
         await conn.commit()
@@ -134,13 +135,13 @@ async def clear_all_links() -> int:
 
 
 async def list_unlinked_staff() -> list[dict]:
-    """Active staff who still need to connect (used to nudge them)."""
+    """Active staff with NO linked Telegram device (used to nudge them)."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT staff_id, name, COALESCE(NULLIF(notify_email,''), email) AS email "
-            "FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
-            "AND (telegram_chat_id IS NULL OR telegram_chat_id='')")).fetchall()
+            "SELECT s.staff_id, s.name, COALESCE(NULLIF(s.notify_email,''), s.email) AS email "
+            "FROM nidaan_staff s WHERE s.status='active' AND s.deleted_at IS NULL "
+            "AND NOT EXISTS (SELECT 1 FROM nidaan_staff_telegram t WHERE t.staff_id=s.staff_id)")).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -291,31 +292,34 @@ async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict
             (code, f"-{LINK_CODE_TTL_MIN} minutes"))).fetchone()
         if not row:
             return None
-        # One chat → one staffer: free this chat from any prior staff, then bind, and
-        # consume the code so it can't be reused.
+        # Consume the code (single-use) so it can't be reused.
         await conn.execute(
-            "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
-            "telegram_linked_at=NULL WHERE telegram_chat_id=?", (str(chat_id),))
-        await conn.execute(
-            "UPDATE nidaan_staff SET telegram_chat_id=?, telegram_username=?, "
-            "telegram_linked_at=CURRENT_TIMESTAMP, telegram_link_code=NULL, "
-            "telegram_link_code_at=NULL WHERE staff_id=?",
-            (str(chat_id), username or "", row["staff_id"]))
+            "UPDATE nidaan_staff SET telegram_link_code=NULL, telegram_link_code_at=NULL "
+            "WHERE staff_id=?", (row["staff_id"],))
         await conn.commit()
-        return {"staff_id": row["staff_id"], "name": row["name"]}
+    # Add this device to the staffer (multi-device supported).
+    await _bind_chat(row["staff_id"], str(chat_id), username)
+    return {"staff_id": row["staff_id"], "name": row["name"]}
 
 
 async def get_staff_telegram(staff_id: int) -> dict:
+    """All linked devices for a staffer + a summary."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        row = await (await conn.execute(
-            "SELECT telegram_chat_id, telegram_username, telegram_linked_at "
-            "FROM nidaan_staff WHERE staff_id=?", (staff_id,))).fetchone()
-        return dict(row) if row else {}
+        rows = [dict(r) for r in await (await conn.execute(
+            "SELECT chat_id, username, linked_at FROM nidaan_staff_telegram "
+            "WHERE staff_id=? ORDER BY linked_at ASC", (staff_id,))).fetchall()]
+    return {"devices": rows, "count": len(rows), "linked": len(rows) > 0,
+            # legacy fields (first device) for any older reader
+            "telegram_chat_id": (rows[0]["chat_id"] if rows else None),
+            "telegram_username": (rows[0]["username"] if rows else ""),
+            "telegram_linked_at": (rows[0]["linked_at"] if rows else "")}
 
 
 async def unlink_staff(staff_id: int) -> None:
+    """Disconnect ALL of a staffer's Telegram devices."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("DELETE FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,))
         await conn.execute(
             "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
             "telegram_linked_at=NULL WHERE staff_id=?", (staff_id,))
@@ -343,17 +347,9 @@ async def _link_by_phone(phone: str, chat_id: str, username: str) -> Optional[di
                       if _digits(s.get("phone"))[-10:] == d10 and len(_digits(s.get("phone"))) >= 10), None)
         if not match:
             return None
-        # Free this Telegram chat from any other staff first (one chat → one staffer),
-        # then bind it to the verified owner (also replaces that staffer's old chat).
-        await conn.execute(
-            "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
-            "telegram_linked_at=NULL WHERE telegram_chat_id=?", (str(chat_id),))
-        await conn.execute(
-            "UPDATE nidaan_staff SET telegram_chat_id=?, telegram_username=?, "
-            "telegram_linked_at=CURRENT_TIMESTAMP WHERE staff_id=?",
-            (str(chat_id), username or "", match["staff_id"]))
-        await conn.commit()
-        return {"staff_id": match["staff_id"], "name": match["name"]}
+    # Add this device to the verified owner (multi-device supported).
+    await _bind_chat(match["staff_id"], str(chat_id), username)
+    return {"staff_id": match["staff_id"], "name": match["name"]}
 
 
 async def _request_phone(chat_id, text: str) -> None:
@@ -378,11 +374,42 @@ async def _staff_by_chat(chat_id) -> Optional[dict]:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT staff_id, name, role, telegram_pending, "
-            "       COALESCE(telegram_lang,'en') AS telegram_lang FROM nidaan_staff "
-            "WHERE telegram_chat_id=? AND status='active' AND deleted_at IS NULL",
+            "SELECT s.staff_id, s.name, s.role, s.telegram_pending, "
+            "       COALESCE(s.telegram_lang,'en') AS telegram_lang "
+            "FROM nidaan_staff_telegram t JOIN nidaan_staff s ON s.staff_id = t.staff_id "
+            "WHERE t.chat_id=? AND s.status='active' AND s.deleted_at IS NULL",
             (str(chat_id),))).fetchone()
         return dict(row) if row else None
+
+
+async def _bind_chat(staff_id: int, chat_id: str, username: str) -> None:
+    """Add (or move) a Telegram chat to a staffer. A chat belongs to ONE staffer, but a
+    staffer can have MANY chats (devices/accounts). Also mirror onto nidaan_staff for
+    any legacy reader."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_staff_telegram (chat_id, staff_id, username, linked_at) "
+            "VALUES (?,?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(chat_id) DO UPDATE SET staff_id=excluded.staff_id, "
+            "username=excluded.username, linked_at=CURRENT_TIMESTAMP",
+            (str(chat_id), staff_id, username or ""))
+        # Keep the legacy single-column pointer roughly in sync (latest device).
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=NULL WHERE telegram_chat_id=?", (str(chat_id),))
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=?, telegram_username=?, "
+            "telegram_linked_at=CURRENT_TIMESTAMP WHERE staff_id=?",
+            (str(chat_id), username or "", staff_id))
+        await conn.commit()
+
+
+async def _prune_chat(chat_id: str) -> None:
+    """Remove a dead chat (bot blocked / account deleted)."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("DELETE FROM nidaan_staff_telegram WHERE chat_id=?", (str(chat_id),))
+        await conn.execute(
+            "UPDATE nidaan_staff SET telegram_chat_id=NULL WHERE telegram_chat_id=?", (str(chat_id),))
+        await conn.commit()
 
 
 async def set_staff_lang(staff_id: int, lang: str) -> None:
@@ -1113,21 +1140,37 @@ async def _do_broadcast(staff: dict, text: str, chat_id) -> None:
 
 
 # ── notification fan-out ─────────────────────────────────────────────────────
+_DEAD_CHAT_MARKERS = ("blocked", "deactivated", "chat not found", "bot was kicked",
+                      "user is deactivated", "peer_id_invalid", "chat_id is empty")
+
+
 async def notify_staff(staff_id: int, text: str, url: Optional[str] = None) -> tuple[bool, str]:
-    """Send an ops notification to one staffer's linked Telegram."""
+    """Send an ops notification to ALL of a staffer's linked devices/accounts. Succeeds if
+    at least one delivers; prunes any device the bot can no longer reach (blocked/deleted)."""
     if not await is_enabled():
         return (False, "telegram_disabled")
-    tg = await get_staff_telegram(staff_id)
-    chat_id = (tg or {}).get("telegram_chat_id")
-    if not chat_id:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        chats = [r[0] for r in await (await conn.execute(
+            "SELECT chat_id FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,))).fetchall()]
+    if not chats:
         return (False, "not_linked")
     buttons = [[{"text": "Open in portal", "url": url}]] if url else None
-    return await send_message(chat_id, text, buttons)
+    ok_any, last_err = False, ""
+    for c in chats:
+        ok, err = await send_message(c, text, buttons)
+        if ok:
+            ok_any = True
+        else:
+            last_err = err
+            if any(m in (err or "").lower() for m in _DEAD_CHAT_MARKERS):
+                await _prune_chat(c)
+    return (ok_any, "" if ok_any else last_err)
 
 
 async def linked_staff_count() -> int:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         row = await (await conn.execute(
-            "SELECT COUNT(*) FROM nidaan_staff WHERE telegram_chat_id IS NOT NULL "
-            "AND telegram_chat_id != '' AND status='active' AND deleted_at IS NULL")).fetchone()
+            "SELECT COUNT(DISTINCT t.staff_id) FROM nidaan_staff_telegram t "
+            "JOIN nidaan_staff s ON s.staff_id=t.staff_id "
+            "WHERE s.status='active' AND s.deleted_at IS NULL")).fetchone()
         return int(row[0]) if row else 0

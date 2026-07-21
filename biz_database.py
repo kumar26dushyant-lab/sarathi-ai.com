@@ -1870,6 +1870,28 @@ async def init_db():
                 await conn.execute(_tg)
             except Exception:
                 pass
+        # A staffer can link MULTIPLE Telegram accounts/devices (a Telegram account is
+        # already shared across all its own devices; this covers people who use different
+        # Telegram accounts on phone vs desktop). One chat belongs to one staffer.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_staff_telegram (
+                chat_id    TEXT PRIMARY KEY,
+                staff_id   INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                username   TEXT,
+                linked_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nst_staff ON nidaan_staff_telegram(staff_id)")
+        # Migrate existing single links into the multi-device table (idempotent).
+        try:
+            await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_staff_telegram (chat_id, staff_id, username, linked_at) "
+                "SELECT telegram_chat_id, staff_id, telegram_username, "
+                "       COALESCE(telegram_linked_at, CURRENT_TIMESTAMP) "
+                "FROM nidaan_staff WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''")
+        except Exception:
+            pass
 
         # ═════════════════════════════════════════════════════════════════════
         # NIDAAN ERP — Phase 4: Notifications + Comms Hub (Jun 2026)
