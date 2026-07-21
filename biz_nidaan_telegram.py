@@ -778,16 +778,44 @@ async def _ask_gemini(staff: dict, question: str) -> str:
     try:
         rows = await nidaan.list_quick_tasks(
             viewer_staff_id=(None if admin else staff["staff_id"]),
-            include_done=True, sort="updated", limit=60)
+            include_done=True, sort="updated", limit=80)
     except Exception:
         rows = []
-    ctx = []
-    for r in rows:
-        ctx.append(
-            f"#{r['quick_task_id']} | {r.get('title','')} | status={r.get('status')} | "
-            f"priority={r.get('priority')} | assignee={r.get('assignee_name') or '-'} | "
-            f"creator={r.get('creator_name') or '-'} | due={str(r.get('due_date') or '-')[:10]} | "
-            f"category={r.get('category_code') or '-'}")
+    seen_ids = {r.get("quick_task_id") for r in rows}
+    # ALWAYS include any task the user names by number, even if it's older than the
+    # recent window — otherwise "status of #333" wrongly answers "not found".
+    import re as _re
+    asked_ids = []
+    for _m in _re.findall(r"(?:task\s*#?|#|number\s*)\s*0*(\d{1,7})", question, _re.I):
+        try:
+            asked_ids.append(int(_m))
+        except Exception:
+            pass
+    for _tid in asked_ids:
+        if _tid in seen_ids:
+            continue
+        try:
+            _qt = await nidaan.get_quick_task(_tid)
+        except Exception:
+            _qt = None
+        if not _qt:
+            continue
+        # Respect access: associates only get their own / involved tasks.
+        if not admin and not await nidaan.is_task_participant(_tid, staff["staff_id"]):
+            continue
+        rows.append(_qt)
+        seen_ids.add(_tid)
+
+    def _fmt(r):
+        line = (f"#{r['quick_task_id']} | {r.get('title','')} | status={r.get('status')} | "
+                f"priority={r.get('priority')} | assignee={r.get('assignee_name') or '-'} | "
+                f"creator={r.get('creator_name') or '-'} | due={str(r.get('due_date') or '-')[:10]} | "
+                f"category={r.get('category_code') or '-'}")
+        # Richer detail for explicitly-asked tasks so status answers are useful.
+        if r.get("quick_task_id") in asked_ids and r.get("description"):
+            line += f" | details: {str(r['description'])[:220]}"
+        return line
+    ctx = [_fmt(r) for r in rows]
     _reply_lang = ("Reply in simple Hindi (Devanagari). Keep task titles, names, numbers "
                    "and #ids exactly as-is (do not translate them)."
                    if lang == "hi" else "Reply in English.")
