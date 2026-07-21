@@ -1605,6 +1605,18 @@ async def init_db():
             except Exception:
                 pass
 
+        # Non-destructive translation aid: a comment typed in Hindi keeps its original
+        # text; note_translation holds an auto English rendering shown on the (English)
+        # web dashboard. The original is NEVER overwritten.
+        for _tr in [
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN note_lang TEXT",
+            "ALTER TABLE nidaan_quick_task_notes ADD COLUMN note_translation TEXT",
+        ]:
+            try:
+                await conn.execute(_tr)
+            except Exception:
+                pass
+
         # ── Multiple attachments per task comment ────────────────────────────
         # nidaan_quick_task_notes keeps its single legacy attachment_* columns for
         # old rows; every NEW upload (including the first) is recorded here so a
@@ -1848,6 +1860,8 @@ async def init_db():
             "ALTER TABLE nidaan_staff ADD COLUMN telegram_pending TEXT",
             # One-time onboarding acknowledgement (replaces the repeating WhatsApp popup)
             "ALTER TABLE nidaan_staff ADD COLUMN comms_onboarded_at TIMESTAMP",
+            # Preferred language for the Telegram bot UI: 'en' | 'hi'.
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_lang TEXT DEFAULT 'en'",
         ]:
             try:
                 await conn.execute(_tg)

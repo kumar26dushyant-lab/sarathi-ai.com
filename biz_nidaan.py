@@ -2455,6 +2455,16 @@ async def add_quick_task_note(*, quick_task_id: int, staff_id: int, note: str,
         return cur.lastrowid
 
 
+async def set_note_translation(note_id: int, lang: str, translation: str) -> None:
+    """Attach an auto English translation to a comment (non-destructive — the original
+    note text is never touched). Shown as an aid on the English web dashboard."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_quick_task_notes SET note_lang=?, note_translation=? WHERE note_id=?",
+            (lang, translation, note_id))
+        await conn.commit()
+
+
 async def list_quick_task_notes(quick_task_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

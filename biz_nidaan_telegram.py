@@ -330,10 +330,158 @@ async def _staff_by_chat(chat_id) -> Optional[dict]:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT staff_id, name, role, telegram_pending FROM nidaan_staff "
+            "SELECT staff_id, name, role, telegram_pending, "
+            "       COALESCE(telegram_lang,'en') AS telegram_lang FROM nidaan_staff "
             "WHERE telegram_chat_id=? AND status='active' AND deleted_at IS NULL",
             (str(chat_id),))).fetchone()
         return dict(row) if row else None
+
+
+async def set_staff_lang(staff_id: int, lang: str) -> None:
+    lang = "hi" if lang == "hi" else "en"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("UPDATE nidaan_staff SET telegram_lang=? WHERE staff_id=?",
+                           (lang, staff_id))
+        await conn.commit()
+
+
+def _lang(staff: Optional[dict]) -> str:
+    l = (staff or {}).get("telegram_lang", "en")
+    return "hi" if l == "hi" else "en"
+
+
+# ── Bot string translations (fixed text — zero mistranslation risk) ──────────
+# {key: {"en": ..., "hi": ...}}. Use T(lang, key, **fmt). Task CONTENT (titles,
+# comments) is user data and is shown as-is; only the bot's own chrome is translated.
+_BOT_TXT: dict = {
+    "menu_title":   {"en": "🏢 *NidaanPartner Ops*", "hi": "🏢 *निदान पार्टनर ऑफिस*"},
+    "menu_hi":      {"en": "Hi {name} — {role}", "hi": "नमस्ते {name} — {role}"},
+    "menu_pick":    {"en": "Run your day right here. Pick anything below 👇",
+                     "hi": "अपना पूरा काम यहीं से करें। नीचे से कुछ भी चुनें 👇"},
+    "b_pending":    {"en": "📥 Pending with me", "hi": "📥 मेरे पेंडिंग"},
+    "b_byme":       {"en": "📤 Assigned by me", "hi": "📤 मेरे दिए हुए"},
+    "b_involved":   {"en": "🏷️ I'm involved", "hi": "🏷️ मैं शामिल हूँ"},
+    "b_archived":   {"en": "🗄️ Archived", "hi": "🗄️ आर्काइव"},
+    "b_approvals":  {"en": "⏳ Approvals", "hi": "⏳ अप्रूवल"},
+    "b_leave":      {"en": "🌴 Apply leave", "hi": "🌴 छुट्टी"},
+    "b_wfh":        {"en": "🏠 Apply WFH", "hi": "🏠 वर्क फ्रॉम होम"},
+    "b_ai":         {"en": "🤖 Ask AI", "hi": "🤖 AI से पूछें"},
+    "b_broadcast":  {"en": "📣 Broadcast", "hi": "📣 ब्रॉडकास्ट"},
+    "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
+    "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
+    "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
+    "b_start":      {"en": "▶️ Start", "hi": "▶️ शुरू करें"},
+    "b_done":       {"en": "✅ Mark done", "hi": "✅ पूरा करें"},
+    "b_reopen":     {"en": "↺ Reopen", "hi": "↺ दोबारा खोलें"},
+    "b_comment":    {"en": "💬 Add comment", "hi": "💬 कमेंट जोड़ें"},
+    "b_open_portal":{"en": "🔗 Open in portal", "hi": "🔗 पोर्टल में खोलें"},
+    "b_approve":    {"en": "✅ Approve #{id}", "hi": "✅ अप्रूव #{id}"},
+    "b_reject":     {"en": "❌ Reject #{id}", "hi": "❌ रिजेक्ट #{id}"},
+    "b_ask_again":  {"en": "🤖 Ask again", "hi": "🤖 फिर पूछें"},
+    "nothing_here": {"en": "*{head}*\n\nNothing here right now ✓",
+                     "hi": "*{head}*\n\nअभी यहाँ कुछ नहीं है ✓"},
+    "list_shown":   {"en": "*{head}* — {n} shown", "hi": "*{head}* — {n} दिख रहे हैं"},
+    "h_pending":    {"en": "📥 Pending with me", "hi": "📥 मेरे पेंडिंग"},
+    "h_byme":       {"en": "📤 Assigned by me", "hi": "📤 मेरे दिए हुए"},
+    "h_involved":   {"en": "🏷️ I'm involved", "hi": "🏷️ मैं शामिल हूँ"},
+    "h_archived":   {"en": "🗄️ Archived", "hi": "🗄️ आर्काइव"},
+    "task_hdr":     {"en": "Task #{id}", "hi": "टास्क #{id}"},
+    "l_status":     {"en": "Status", "hi": "स्थिति"},
+    "l_priority":   {"en": "Priority", "hi": "प्राथमिकता"},
+    "l_category":   {"en": "Category", "hi": "कैटेगरी"},
+    "l_assignee":   {"en": "Assignee", "hi": "असाइनी"},
+    "l_creator":    {"en": "Created by", "hi": "बनाया"},
+    "l_due":        {"en": "Due", "hi": "ड्यू"},
+    "l_complainant":{"en": "Complainant", "hi": "शिकायतकर्ता"},
+    "latest_comments":{"en": "💬 *Latest comments*", "hi": "💬 *ताज़ा कमेंट*"},
+    "no_access":    {"en": "🔒 You don't have access to this task.",
+                     "hi": "🔒 इस टास्क का एक्सेस आपके पास नहीं है।"},
+    "task_notfound":{"en": "Task not found.", "hi": "टास्क नहीं मिला।"},
+    "appr_none":    {"en": "*⏳ Approvals*\n\nNothing awaiting your approval ✓",
+                     "hi": "*⏳ अप्रूवल*\n\nआपके अप्रूवल के लिए कुछ नहीं ✓"},
+    "appr_hdr":     {"en": "*⏳ Awaiting your approval*", "hi": "*⏳ आपके अप्रूवल का इंतज़ार*"},
+    "appr_by":      {"en": "by {name}", "hi": "द्वारा {name}"},
+    "ask_comment":  {"en": "💬 Type your comment for *task #{id}* and send it.\n_Everyone involved will be notified._",
+                     "hi": "💬 *टास्क #{id}* के लिए अपना कमेंट टाइप करके भेजें।\n_सभी संबंधित लोगों को सूचना जाएगी।_"},
+    "ask_ai":       {"en": "🤖 *Ask me anything about your work*\n\nFor example:\n• _what's pending with me?_\n• _which tasks are overdue?_\n• _status of task 55_\n\nType your question 👇",
+                     "hi": "🤖 *अपने काम के बारे में कुछ भी पूछें*\n\nजैसे:\n• _मेरे पास क्या पेंडिंग है?_\n• _कौन से टास्क ओवरड्यू हैं?_\n• _टास्क 55 की स्थिति_\n\nअपना सवाल टाइप करें 👇"},
+    "thinking":     {"en": "🤖 Thinking…", "hi": "🤖 सोच रहा हूँ…"},
+    "ask_leave":    {"en": "{icon} *Apply for {label}*\n\nReply with the dates and reason, e.g.\n`2026-07-25 to 2026-07-26 family function`\nor `2026-07-25 personal work` for a single day.",
+                     "hi": "{icon} *{label} के लिए आवेदन*\n\nतारीख़ और कारण भेजें, जैसे\n`2026-07-25 to 2026-07-26 पारिवारिक कार्यक्रम`\nया एक दिन के लिए `2026-07-25 निजी काम`।"},
+    "ask_broadcast":{"en": "📣 *Broadcast to all staff*\n\nType the message to send to everyone's bell.",
+                     "hi": "📣 *सभी स्टाफ को ब्रॉडकास्ट*\n\nसबकी बेल पर भेजने के लिए संदेश टाइप करें।"},
+    "leave_label":  {"en": "Leave", "hi": "छुट्टी"},
+    "wfh_label":    {"en": "Work From Home", "hi": "वर्क फ्रॉम होम"},
+    "comment_added":{"en": "✅ Comment added to task #{id}. Everyone involved was notified.",
+                     "hi": "✅ टास्क #{id} में कमेंट जुड़ गया। सभी संबंधित लोगों को सूचना दे दी गई।"},
+    "b_open_task":  {"en": "📄 Open #{id}", "hi": "📄 खोलें #{id}"},
+    "leave_sent":   {"en": "✅ *{label} request sent*\n{start} → {end}\nReason: {reason}\n\nAdmins have been notified.",
+                     "hi": "✅ *{label} रिक्वेस्ट भेजी गई*\n{start} → {end}\nकारण: {reason}\n\nएडमिन को सूचना दे दी गई।"},
+    "leave_nodate": {"en": "I couldn't find a date. Please use `YYYY-MM-DD`, e.g. `2026-07-25 personal work`.",
+                     "hi": "तारीख़ नहीं मिली। कृपया `YYYY-MM-DD` लिखें, जैसे `2026-07-25 निजी काम`।"},
+    "bcast_sent":   {"en": "📣 Broadcast sent to {n} staff member(s).",
+                     "hi": "📣 {n} स्टाफ को ब्रॉडकास्ट भेजा गया।"},
+    "connected":    {"en": "✅ Verified & connected, {name}!", "hi": "✅ सत्यापित और कनेक्ट हो गया, {name}!"},
+    "not_staff":    {"en": "🔒 *Not connected.*\n\nThis Telegram number is not registered for any staff member. Ask your admin to check the mobile number on your staff profile, then try again from the correct Telegram account.",
+                     "hi": "🔒 *कनेक्ट नहीं हुआ।*\n\nयह टेलीग्राम नंबर किसी स्टाफ के रूप में रजिस्टर्ड नहीं है। अपने एडमिन से स्टाफ प्रोफ़ाइल का मोबाइल नंबर जँचवाएँ, फिर सही टेलीग्राम अकाउंट से दोबारा कोशिश करें।"},
+    "share_own":    {"en": "⚠️ Please tap the *📱 Share my phone number* button to share YOUR OWN number — a forwarded contact won't work.",
+                     "hi": "⚠️ कृपया *📱 अपना फ़ोन नंबर शेयर करें* बटन दबाकर अपना ही नंबर शेयर करें — फ़ॉरवर्ड किया गया कॉन्टैक्ट नहीं चलेगा।"},
+    "connect_secure":{"en": "🔐 *Connect securely*\n\nTo receive your NidaanPartner notifications, tap the button below to share your phone number.\n\nIt must match the mobile number registered for you in the office system — Telegram verifies it, so nobody can connect using someone else's number.",
+                     "hi": "🔐 *सुरक्षित कनेक्ट करें*\n\nअपने निदान पार्टनर नोटिफिकेशन पाने के लिए नीचे बटन दबाकर अपना फ़ोन नंबर शेयर करें।\n\nयह ऑफिस सिस्टम में आपके रजिस्टर्ड मोबाइल नंबर से मेल खाना चाहिए — टेलीग्राम इसे सत्यापित करता है, इसलिए कोई और किसी के नंबर से कनेक्ट नहीं कर सकता।"},
+    "share_btn":    {"en": "📱 Share my phone number", "hi": "📱 अपना फ़ोन नंबर शेयर करें"},
+    "not_linked_tap":{"en": "🔒 This Telegram isn't linked yet.\n\nTap the button below to connect with your registered mobile number.",
+                     "hi": "🔒 यह टेलीग्राम अभी लिंक नहीं है।\n\nअपने रजिस्टर्ड मोबाइल नंबर से कनेक्ट करने के लिए नीचे बटन दबाएँ।"},
+    "not_allowed":  {"en": "Not allowed", "hi": "अनुमति नहीं"},
+    "admins_only":  {"en": "Admins only", "hi": "सिर्फ़ एडमिन"},
+    "sa_only":      {"en": "Super admin only", "hi": "सिर्फ़ सुपर एडमिन"},
+    "updated_ok":   {"en": "Updated ✓", "hi": "अपडेट हो गया ✓"},
+    "done_ok":      {"en": "Done ✓", "hi": "हो गया ✓"},
+    "failed":       {"en": "Failed", "hi": "विफल"},
+    "lang_set":     {"en": "Language set to English", "hi": "भाषा हिंदी कर दी गई"},
+}
+
+
+def T(lang: str, key: str, **fmt) -> str:
+    entry = _BOT_TXT.get(key, {})
+    s = entry.get("hi" if lang == "hi" else "en") or entry.get("en") or key
+    if fmt:
+        try:
+            s = s.format(**fmt)
+        except Exception:
+            pass
+    return s
+
+
+def _has_devanagari(s: str) -> bool:
+    return any("ऀ" <= ch <= "ॿ" for ch in (s or ""))
+
+
+async def translate_to_english(text: str) -> Optional[str]:
+    """Best-effort English rendering of a Hindi note, for the English web dashboard.
+    Preserves names, numbers, amounts and IDs verbatim. Returns None on failure — we
+    NEVER overwrite the original with a bad translation; the original always stands."""
+    import os as _os
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key or not text.strip():
+        return None
+    prompt = (
+        "Translate the following Hindi/Hinglish office note into natural English. "
+        "CRITICAL: keep all proper names, company/insurer names, person names, phone "
+        "numbers, claim numbers, amounts and dates EXACTLY as written — do not translate "
+        "or transliterate them. Output ONLY the translation, nothing else.\n\n"
+        f"NOTE: {text}")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+            data = r.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        out = (parts[0].get("text") or "").strip()
+        return out or None
+    except Exception as e:
+        logger.info("note translation failed: %s", e)
+        return None
 
 
 def _can(staff: dict, need: str) -> bool:
@@ -356,20 +504,26 @@ def _kb(rows: list) -> list:
 def _main_menu(staff: dict) -> tuple[str, list]:
     admin = _can(staff, "sub_super_admin")
     sa = _can(staff, "super_admin")
-    text = (f"🏢 *NidaanPartner Ops*\n"
-            f"Hi {staff.get('name','')} — {(staff.get('role') or '').replace('_',' ')}\n\n"
-            f"Run your day right here. Pick anything below 👇")
+    lang = _lang(staff)
+    role_disp = (staff.get("role") or "").replace("_", " ")
+    if lang == "hi":
+        role_disp = {"super admin": "सुपर एडमिन", "sub super admin": "एडमिन",
+                     "team member": "टीम मेंबर"}.get(role_disp, role_disp)
+    text = (T(lang, "menu_title") + "\n" +
+            T(lang, "menu_hi", name=staff.get("name", ""), role=role_disp) + "\n\n" +
+            T(lang, "menu_pick"))
     kb = _kb([
-        [{"text": "📥 Pending with me", "callback_data": "t:mine"},
-         {"text": "📤 Assigned by me", "callback_data": "t:byme"}],
-        [{"text": "🏷️ I'm involved", "callback_data": "t:inv"},
-         {"text": "🗄️ Archived", "callback_data": "t:arch"}],
-        [{"text": "⏳ Approvals", "callback_data": "ap:list"}] if admin else None,
-        [{"text": "🌴 Apply leave", "callback_data": "lv:new:leave"},
-         {"text": "🏠 Apply WFH", "callback_data": "lv:new:wfh"}],
-        [{"text": "🤖 Ask AI", "callback_data": "ai:ask"}],
-        [{"text": "📣 Broadcast", "callback_data": "bc:new"}] if sa else None,
-        [{"text": "❓ Help", "callback_data": "h:help"}],
+        [{"text": T(lang, "b_pending"), "callback_data": "t:mine"},
+         {"text": T(lang, "b_byme"), "callback_data": "t:byme"}],
+        [{"text": T(lang, "b_involved"), "callback_data": "t:inv"},
+         {"text": T(lang, "b_archived"), "callback_data": "t:arch"}],
+        [{"text": T(lang, "b_approvals"), "callback_data": "ap:list"}] if admin else None,
+        [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
+         {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
+        [{"text": T(lang, "b_ai"), "callback_data": "ai:ask"}],
+        [{"text": T(lang, "b_broadcast"), "callback_data": "bc:new"}] if sa else None,
+        [{"text": T(lang, "b_help"), "callback_data": "h:help"},
+         {"text": T(lang, "b_lang"), "callback_data": "lang:toggle"}],
     ])
     return text, kb
 
@@ -381,8 +535,9 @@ _PRIO_ICON = {"low": "⚪", "normal": "🔵", "high": "🟠", "urgent": "🔴"}
 
 async def _task_list(staff: dict, scope: str) -> tuple[str, list]:
     import biz_nidaan as nidaan
-    titles = {"assigned_to_me": "📥 Pending with me", "created_by_me": "📤 Assigned by me",
-              "involved": "🏷️ I'm involved", "archived": "🗄️ Archived"}
+    lang = _lang(staff)
+    head = {"assigned_to_me": T(lang, "h_pending"), "created_by_me": T(lang, "h_byme"),
+            "involved": T(lang, "h_involved"), "archived": T(lang, "h_archived")}.get(scope, "Tasks")
     if scope == "archived":
         rows = await nidaan.list_quick_tasks(
             status="archived", viewer_staff_id=(None if _can(staff, "sub_super_admin") else staff["staff_id"]),
@@ -391,10 +546,10 @@ async def _task_list(staff: dict, scope: str) -> tuple[str, list]:
         rows = await nidaan.list_quick_tasks(
             scope=scope, scope_staff_id=staff["staff_id"], sort="smart", limit=10)
         rows = [r for r in rows if r.get("status") not in ("done", "cancelled")]
-    head = titles.get(scope, "Tasks")
     if not rows:
-        return (f"*{head}*\n\nNothing here right now ✓", _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
-    lines = [f"*{head}* — {len(rows)} shown"]
+        return (T(lang, "nothing_here", head=head),
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+    lines = [T(lang, "list_shown", head=head, n=len(rows))]
     btns = []
     for r in rows:
         icon = _STATUS_ICON.get(r.get("status"), "•")
@@ -410,39 +565,40 @@ async def _task_list(staff: dict, scope: str) -> tuple[str, list]:
             lines.append("   " + " · ".join(meta))
         btns.append([{"text": f"{pr} #{r['quick_task_id']} {r.get('title','')[:28]}",
                       "callback_data": f"t:v:{r['quick_task_id']}"}])
-    btns.append([{"text": "⬅️ Menu", "callback_data": "m:home"}])
+    btns.append([{"text": T(lang, "b_menu"), "callback_data": "m:home"}])
     return ("\n".join(lines), _kb(btns))
 
 
 async def _task_detail(staff: dict, qid: int) -> tuple[str, list]:
     import biz_nidaan as nidaan
+    lang = _lang(staff)
+    _menu_btn = [{"text": T(lang, "b_menu"), "callback_data": "m:home"}]
     qt = await nidaan.get_quick_task(qid)
     if not qt:
-        return ("Task not found.", _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+        return (T(lang, "task_notfound"), _kb([_menu_btn]))
     # Same visibility rule as the web app.
     if not _can(staff, "sub_super_admin") and not await nidaan.is_task_participant(qid, staff["staff_id"]):
-        return ("🔒 You don't have access to this task.",
-                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+        return (T(lang, "no_access"), _kb([_menu_btn]))
     icon = _STATUS_ICON.get(qt.get("status"), "•")
-    lines = [f"{icon} *Task #{qid}*", f"*{qt.get('title','')}*"]
+    lines = [f"{icon} *{T(lang, 'task_hdr', id=qid)}*", f"*{qt.get('title','')}*"]
     if qt.get("description"):
         lines.append(f"\n{qt['description'][:400]}")
-    meta = [f"Status: {qt.get('status')}", f"Priority: {qt.get('priority')}"]
+    meta = [f"{T(lang,'l_status')}: {qt.get('status')}", f"{T(lang,'l_priority')}: {qt.get('priority')}"]
     if qt.get("category_code"):
-        meta.append(f"Category: {qt['category_code']}")
+        meta.append(f"{T(lang,'l_category')}: {qt['category_code']}")
     if qt.get("assignee_name"):
-        meta.append(f"Assignee: {qt['assignee_name']}")
+        meta.append(f"{T(lang,'l_assignee')}: {qt['assignee_name']}")
     if qt.get("creator_name"):
-        meta.append(f"Created by: {qt['creator_name']}")
+        meta.append(f"{T(lang,'l_creator')}: {qt['creator_name']}")
     if qt.get("due_date"):
-        meta.append(f"Due: {str(qt['due_date'])[:10]}")
+        meta.append(f"{T(lang,'l_due')}: {str(qt['due_date'])[:10]}")
     if qt.get("complainant_name"):
-        meta.append(f"Complainant: {qt['complainant_name']} {qt.get('complainant_phone') or ''}")
+        meta.append(f"{T(lang,'l_complainant')}: {qt['complainant_name']} {qt.get('complainant_phone') or ''}")
     lines.append("\n" + "\n".join(meta))
     try:
         notes = await nidaan.list_quick_task_notes(qid)
         if notes:
-            lines.append("\n💬 *Latest comments*")
+            lines.append("\n" + T(lang, "latest_comments"))
             for n in notes[-3:]:
                 lines.append(f"• {n.get('staff_name','')}: {(n.get('note') or '')[:90]}")
     except Exception:
@@ -451,16 +607,16 @@ async def _task_detail(staff: dict, qid: int) -> tuple[str, list]:
     can_move = is_assignee or _can(staff, "sub_super_admin")
     row1 = []
     if can_move and qt.get("status") == "open":
-        row1.append({"text": "▶️ Start", "callback_data": f"t:s:{qid}:in_progress"})
+        row1.append({"text": T(lang, "b_start"), "callback_data": f"t:s:{qid}:in_progress"})
     if can_move and qt.get("status") not in ("done", "cancelled"):
-        row1.append({"text": "✅ Mark done", "callback_data": f"t:s:{qid}:done"})
+        row1.append({"text": T(lang, "b_done"), "callback_data": f"t:s:{qid}:done"})
     if can_move and qt.get("status") in ("done", "cancelled"):
-        row1.append({"text": "↺ Reopen", "callback_data": f"t:s:{qid}:open"})
+        row1.append({"text": T(lang, "b_reopen"), "callback_data": f"t:s:{qid}:open"})
     kb = _kb([
         row1,
-        [{"text": "💬 Add comment", "callback_data": f"t:c:{qid}"}],
-        [{"text": "🔗 Open in portal", "url": f"{_base_url()}/admin?qt={qid}"}],
-        [{"text": "⬅️ Menu", "callback_data": "m:home"}],
+        [{"text": T(lang, "b_comment"), "callback_data": f"t:c:{qid}"}],
+        [{"text": T(lang, "b_open_portal"), "url": f"{_base_url()}/admin?qt={qid}"}],
+        _menu_btn,
     ])
     return ("\n".join(lines), kb)
 
@@ -472,21 +628,22 @@ def _base_url() -> str:
 
 async def _approvals_view(staff: dict) -> tuple[str, list]:
     import biz_nidaan as nidaan
+    lang = _lang(staff)
     rows = await nidaan.list_quick_tasks(pending_approval=True, include_done=True, limit=10)
     # Only what THIS admin should decide: tasks naming them, or unassigned-approver ones.
     mine = [r for r in rows if (r.get("approver_staff_id") in (None, staff["staff_id"]))
             or _can(staff, "super_admin")]
     if not mine:
-        return ("*⏳ Approvals*\n\nNothing awaiting your approval ✓",
-                _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
-    lines = ["*⏳ Awaiting your approval*"]
+        return (T(lang, "appr_none"),
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+    lines = [T(lang, "appr_hdr")]
     btns = []
     for r in mine:
         qid = r["quick_task_id"]
-        lines.append(f"\n• *#{qid}* {r.get('title','')[:70]}\n   by {r.get('creator_name','')}")
-        btns.append([{"text": f"✅ Approve #{qid}", "callback_data": f"ap:{qid}:approved"},
-                     {"text": f"❌ Reject #{qid}", "callback_data": f"ap:{qid}:rejected"}])
-    btns.append([{"text": "⬅️ Menu", "callback_data": "m:home"}])
+        lines.append(f"\n• *#{qid}* {r.get('title','')[:70]}\n   {T(lang,'appr_by', name=r.get('creator_name',''))}")
+        btns.append([{"text": T(lang, "b_approve", id=qid), "callback_data": f"ap:{qid}:approved"},
+                     {"text": T(lang, "b_reject", id=qid), "callback_data": f"ap:{qid}:rejected"}])
+    btns.append([{"text": T(lang, "b_menu"), "callback_data": "m:home"}])
     return ("\n".join(lines), _kb(btns))
 
 
@@ -496,9 +653,11 @@ async def _ask_gemini(staff: dict, question: str) -> str:
     Read-only by design: the model summarises context we hand it, it cannot act."""
     import os as _os
     import biz_nidaan as nidaan
+    lang = _lang(staff)
     key = _os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        return "The AI brain isn't configured yet (no GEMINI_API_KEY)."
+        return ("AI ब्रेन अभी सेट नहीं है।" if lang == "hi"
+                else "The AI brain isn't configured yet (no GEMINI_API_KEY).")
     admin = _can(staff, "sub_super_admin")
     try:
         rows = await nidaan.list_quick_tasks(
@@ -513,11 +672,15 @@ async def _ask_gemini(staff: dict, question: str) -> str:
             f"priority={r.get('priority')} | assignee={r.get('assignee_name') or '-'} | "
             f"creator={r.get('creator_name') or '-'} | due={str(r.get('due_date') or '-')[:10]} | "
             f"category={r.get('category_code') or '-'}")
+    _reply_lang = ("Reply in simple Hindi (Devanagari). Keep task titles, names, numbers "
+                   "and #ids exactly as-is (do not translate them)."
+                   if lang == "hi" else "Reply in English.")
     prompt = (
         "You are the NidaanPartner office assistant inside Telegram. Answer the staff "
         "member's question using ONLY the task records below. Be concise and practical "
         "(a few short lines, Telegram-friendly, no markdown tables). Refer to tasks as #id. "
-        "If the answer isn't in the data, say so plainly and suggest what to check.\n\n"
+        "If the answer isn't in the data, say so plainly and suggest what to check. "
+        + _reply_lang + "\n\n"
         f"Staff member: {staff.get('name')} (role: {staff.get('role')})\n"
         f"Today: {__import__('datetime').date.today().isoformat()}\n\n"
         f"TASK RECORDS ({len(ctx)}):\n" + "\n".join(ctx) +
@@ -530,10 +693,14 @@ async def _ask_gemini(staff: dict, question: str) -> str:
             data = r.json()
         cand = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
         out = (cand[0].get("text") or "").strip()
-        return out or "I couldn't form an answer for that — try rephrasing."
+        if out:
+            return out
+        return ("इसका जवाब नहीं बना — दोबारा पूछें।" if lang == "hi"
+                else "I couldn't form an answer for that — try rephrasing.")
     except Exception as e:
         logger.warning("Gemini ask failed: %s", e)
-        return "The AI brain is unreachable right now. Please try again in a moment."
+        return ("AI ब्रेन अभी उपलब्ध नहीं है, थोड़ी देर में दोबारा कोशिश करें।" if lang == "hi"
+                else "The AI brain is unreachable right now. Please try again in a moment.")
 
 
 # ── update routing ───────────────────────────────────────────────────────────
@@ -559,49 +726,41 @@ async def handle_update(update: dict) -> None:
         # whose Telegram number isn't already staff.
         if contact:
             if str(contact.get("user_id")) != str(from_id):
-                await send_message(str(chat_id),
-                    "⚠️ Please tap the *📱 Share my phone number* button to share YOUR OWN "
-                    "number — a forwarded contact won't work.")
+                await send_message(str(chat_id), T("en", "share_own"))
                 return
             linked = await _link_by_phone(contact.get("phone_number"), str(chat_id), username)
             if linked:
                 staff = await _staff_by_chat(chat_id)
+                lang = _lang(staff)
                 await _call("sendMessage", {"chat_id": str(chat_id),
-                    "text": f"✅ Verified & connected, {linked['name']}!",
-                    "reply_markup": {"remove_keyboard": True}})
+                    "text": T(lang, "connected", name=linked["name"]),
+                    "parse_mode": "Markdown", "reply_markup": {"remove_keyboard": True}})
                 t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
                 await send_message(str(chat_id), t, kb)
                 logger.info("🔐 Telegram linked staff_id=%s by verified phone", linked["staff_id"])
             else:
                 await _call("sendMessage", {"chat_id": str(chat_id),
-                    "text": ("🔒 *Not connected.*\n\nThis Telegram number is not registered for "
-                             "any staff member. Ask your admin to check the mobile number on your "
-                             "staff profile, then try again from the correct Telegram account."),
+                    "text": T("en", "not_staff"),
                     "parse_mode": "Markdown", "reply_markup": {"remove_keyboard": True}})
             return
 
         if not text:
             return
 
+        staff = await _staff_by_chat(chat_id)
+        lang = _lang(staff)
+
         if text.startswith("/start"):
-            staff = await _staff_by_chat(chat_id)
             if staff:
                 t, kb = _main_menu(staff)
                 await send_message(str(chat_id), t, kb)
                 return
             # Not linked yet → require a verified phone number to connect.
-            await _request_phone(str(chat_id),
-                "🔐 *Connect securely*\n\nTo receive your NidaanPartner notifications, tap the "
-                "button below to share your phone number.\n\nIt must match the mobile number "
-                "registered for you in the office system — Telegram verifies it, so nobody can "
-                "connect using someone else's number.")
+            await _request_phone(str(chat_id), T("en", "connect_secure"))
             return
 
-        staff = await _staff_by_chat(chat_id)
         if not staff:
-            await _request_phone(str(chat_id),
-                "🔒 This Telegram isn't linked yet.\n\nTap the button below to connect with your "
-                "registered mobile number.")
+            await _request_phone(str(chat_id), T("en", "not_linked_tap"))
             return
 
         if text.lower() in ("/menu", "menu", "/home", "hi", "hello"):
@@ -623,11 +782,11 @@ async def handle_update(update: dict) -> None:
             return
         if act == "ai":
             await _set_pending(staff["staff_id"], None)
-            await send_message(str(chat_id), "🤖 Thinking…")
+            await send_message(str(chat_id), T(lang, "thinking"))
             ans = await _ask_gemini(staff, text)
             await send_message(str(chat_id), ans,
-                               _kb([[{"text": "🤖 Ask again", "callback_data": "ai:ask"},
-                                     {"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+                               _kb([[{"text": T(lang, "b_ask_again"), "callback_data": "ai:ask"},
+                                     {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
             return
         if act == "broadcast" and _can(staff, "super_admin"):
             await _set_pending(staff["staff_id"], None)
@@ -639,10 +798,10 @@ async def handle_update(update: dict) -> None:
             return
 
         # Free text with no pending flow → treat as a question for the AI.
-        await send_message(str(chat_id), "🤖 Thinking…")
+        await send_message(str(chat_id), T(lang, "thinking"))
         ans = await _ask_gemini(staff, text)
         await send_message(str(chat_id), ans,
-                           _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+                           _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
     except Exception as e:
         logger.warning("Telegram update handling failed: %s", e)
 
@@ -663,25 +822,37 @@ async def _handle_callback(cq: dict) -> None:
     if not staff:
         await ack("Not linked")
         return
+    lang = _lang(staff)
     try:
         if data == "m:home":
             t, kb = _main_menu(staff); await _edit(chat_id, message_id, t, kb); await ack(); return
 
+        if data == "lang:toggle":
+            new_lang = "hi" if lang == "en" else "en"
+            await set_staff_lang(staff["staff_id"], new_lang)
+            staff["telegram_lang"] = new_lang
+            t, kb = _main_menu(staff)
+            await _edit(chat_id, message_id, t, kb)
+            await ack(T(new_lang, "lang_set")); return
+
         if data.startswith("h:help"):
             # Generated from the shared capability registry — the bot's help, the web
-            # guide and the audio narration always describe the same feature set.
+            # guide and the audio narration always describe the same feature set. Defaults
+            # to the staffer's chosen language.
             import biz_nidaan_capabilities as caps
-            lang = "hi" if data.endswith(":hi") else "en"
-            other = "en" if lang == "hi" else "hi"
-            txt = caps.telegram_help_text(staff.get("role", "team_member"), lang)
+            hlang = "hi" if (data.endswith(":hi") or (data == "h:help" and lang == "hi")) else "en"
+            if data.endswith(":en"):
+                hlang = "en"
+            other = "en" if hlang == "hi" else "hi"
+            txt = caps.telegram_help_text(staff.get("role", "team_member"), hlang)
             txt += ("\n\n" + ("_कभी भी सीधे सवाल टाइप कर सकते हैं। /menu से मेन्यू खोलें।_"
-                              if lang == "hi" else
+                              if hlang == "hi" else
                               "_You can also just type a question any time. Send /menu for the menu._"))
             await _edit(chat_id, message_id, txt, _kb([
-                [{"text": "🇮🇳 हिंदी में" if lang == "en" else "🇬🇧 In English",
+                [{"text": "🇮🇳 हिंदी में" if hlang == "en" else "🇬🇧 In English",
                   "callback_data": f"h:help:{other}"}],
                 [{"text": "🔊 Audio guide", "url": f"{_base_url()}/admin#guide"}],
-                [{"text": "⬅️ Menu", "callback_data": "m:home"}],
+                [{"text": T(lang, "b_menu"), "callback_data": "m:home"}],
             ])); await ack(); return
 
         if data.startswith("t:"):
@@ -698,57 +869,46 @@ async def _handle_callback(cq: dict) -> None:
             if kind == "s":
                 qid, new_status = int(parts[2]), parts[3]
                 ok = await _do_status(staff, qid, new_status)
-                await ack("Updated ✓" if ok else "Not allowed")
+                await ack(T(lang, "updated_ok") if ok else T(lang, "not_allowed"))
                 t, kb = await _task_detail(staff, qid)
                 await _edit(chat_id, message_id, t, kb); return
             if kind == "c":
                 qid = int(parts[2])
                 await _set_pending(staff["staff_id"], {"a": "comment", "qid": qid})
-                await send_message(str(chat_id),
-                    f"💬 Type your comment for *task #{qid}* and send it.\n"
-                    f"_Everyone involved will be notified._")
+                await send_message(str(chat_id), T(lang, "ask_comment", id=qid))
                 await ack(); return
 
         if data.startswith("ap:"):
             if not _can(staff, "sub_super_admin"):
-                await ack("Admins only"); return
+                await ack(T(lang, "admins_only")); return
             parts = data.split(":")
             if parts[1] == "list":
                 t, kb = await _approvals_view(staff)
                 await _edit(chat_id, message_id, t, kb); await ack(); return
             qid, decision = int(parts[1]), parts[2]
             ok = await _do_approval(staff, qid, decision)
-            await ack("Done ✓" if ok else "Failed")
+            await ack(T(lang, "done_ok") if ok else T(lang, "failed"))
             t, kb = await _approvals_view(staff)
             await _edit(chat_id, message_id, t, kb); return
 
         if data == "ai:ask":
             await _set_pending(staff["staff_id"], {"a": "ai"})
-            await send_message(str(chat_id),
-                "🤖 *Ask me anything about your work*\n\n"
-                "For example:\n"
-                "• _what's pending with me?_\n"
-                "• _which tasks are overdue?_\n"
-                "• _status of task 55_\n\nType your question 👇")
+            await send_message(str(chat_id), T(lang, "ask_ai"))
             await ack(); return
 
         if data.startswith("lv:new:"):
             kind = data.split(":")[2]
             await _set_pending(staff["staff_id"], {"a": "leave", "kind": kind})
-            label = "Work From Home" if kind == "wfh" else "Leave"
+            label = T(lang, "wfh_label") if kind == "wfh" else T(lang, "leave_label")
             await send_message(str(chat_id),
-                f"{'🏠' if kind=='wfh' else '🌴'} *Apply for {label}*\n\n"
-                f"Reply with the dates and reason, e.g.\n"
-                f"`2026-07-25 to 2026-07-26 family function`\n"
-                f"or `2026-07-25 personal work` for a single day.")
+                T(lang, "ask_leave", icon=("🏠" if kind == "wfh" else "🌴"), label=label))
             await ack(); return
 
         if data == "bc:new":
             if not _can(staff, "super_admin"):
-                await ack("Super admin only"); return
+                await ack(T(lang, "sa_only")); return
             await _set_pending(staff["staff_id"], {"a": "broadcast"})
-            await send_message(str(chat_id),
-                "📣 *Broadcast to all staff*\n\nType the message to send to everyone's bell.")
+            await send_message(str(chat_id), T(lang, "ask_broadcast"))
             await ack(); return
 
         await ack()
@@ -796,19 +956,29 @@ async def _do_status(staff: dict, qid: int, new_status: str) -> bool:
 async def _do_comment(staff: dict, qid: int, text: str, chat_id) -> None:
     import biz_nidaan as nidaan
     import biz_nidaan_notifications as nnot
+    lang = _lang(staff)
     if not await nidaan.is_task_participant(qid, staff["staff_id"]) and not _can(staff, "sub_super_admin"):
-        await send_message(str(chat_id), "🔒 You don't have access to that task.")
+        await send_message(str(chat_id), T(lang, "no_access"))
         return
-    await nidaan.add_quick_task_note(quick_task_id=qid, staff_id=staff["staff_id"], note=text)
+    note_id = await nidaan.add_quick_task_note(quick_task_id=qid, staff_id=staff["staff_id"], note=text)
+    # Non-destructive translation aid: a Hindi comment keeps its ORIGINAL text; we store
+    # an auto English rendering alongside for the English web dashboard. Never overwrite.
+    if _has_devanagari(text):
+        try:
+            en = await translate_to_english(text)
+            if en:
+                await nidaan.set_note_translation(note_id, "hi", en)
+        except Exception:
+            pass
     try:
         qt = await nidaan.get_quick_task(qid)
         if qt:
             await nnot.on_quick_task_comment(qt, staff["staff_id"], text)
     except Exception:
         pass
-    await send_message(str(chat_id), f"✅ Comment added to task #{qid}. Everyone involved was notified.",
-                       _kb([[{"text": f"📄 Open #{qid}", "callback_data": f"t:v:{qid}"},
-                             {"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    await send_message(str(chat_id), T(lang, "comment_added", id=qid),
+                       _kb([[{"text": T(lang, "b_open_task", id=qid), "callback_data": f"t:v:{qid}"},
+                             {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
 
 
 async def _do_approval(staff: dict, qid: int, decision: str) -> bool:
@@ -832,10 +1002,10 @@ async def _do_leave(staff: dict, kind: str, text: str, chat_id) -> None:
     import re as _re
     import biz_nidaan as nidaan
     import biz_nidaan_notifications as nnot
+    lang = _lang(staff)
     dates = _re.findall(r"\d{4}-\d{2}-\d{2}", text)
     if not dates:
-        await send_message(str(chat_id),
-            "I couldn't find a date. Please use `YYYY-MM-DD`, e.g. `2026-07-25 personal work`.")
+        await send_message(str(chat_id), T(lang, "leave_nodate"))
         return
     start = dates[0]
     end = dates[1] if len(dates) > 1 else dates[0]
@@ -851,20 +1021,21 @@ async def _do_leave(staff: dict, kind: str, text: str, chat_id) -> None:
             await nnot.on_leave_requested(lv)
     except Exception:
         pass
-    label = "WFH" if kind == "wfh" else "Leave"
+    label = T(lang, "wfh_label") if kind == "wfh" else T(lang, "leave_label")
     await send_message(str(chat_id),
-        f"✅ *{label} request sent*\n{start} → {end}\nReason: {reason}\n\nAdmins have been notified.",
-        _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+        T(lang, "leave_sent", label=label, start=start, end=end, reason=reason),
+        _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
 
 
 async def _do_broadcast(staff: dict, text: str, chat_id) -> None:
     import biz_nidaan_notifications as nnot
+    lang = _lang(staff)
     if not _can(staff, "super_admin"):
-        await send_message(str(chat_id), "🔒 Super admin only.")
+        await send_message(str(chat_id), T(lang, "sa_only"))
         return
     n = await nnot.record_broadcast(staff["staff_id"], staff.get("name", "Staff"), text)
-    await send_message(str(chat_id), f"📣 Broadcast sent to {n} staff member(s).",
-                       _kb([[{"text": "⬅️ Menu", "callback_data": "m:home"}]]))
+    await send_message(str(chat_id), T(lang, "bcast_sent", n=n),
+                       _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
 
 
 # ── notification fan-out ─────────────────────────────────────────────────────

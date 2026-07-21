@@ -2033,6 +2033,7 @@ function _renderQTThread(notes, qid, canComment){
           <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
+        ${n.note_translation ? `<div style="font-size:.8rem;margin-top:.25rem;color:#93c5fd;background:rgba(59,130,246,.08);border-left:2px solid rgba(59,130,246,.45);padding:.2rem .55rem;border-radius:0 5px 5px 0">🌐 English (auto): ${esc(n.note_translation)}</div>` : ''}
         ${(n.attachments && n.attachments.length)
           ? `<div style="margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem">${n.attachments.map(a=>`<a href="${esc(a.url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(a.name||'attachment')}</a>`).join('')}</div>`
           : (n.attachment_url ? `<div style="margin-top:.25rem"><a href="${esc(n.attachment_url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(n.attachment_original_name||'attachment')}</a></div>` : '')}
@@ -4862,6 +4863,7 @@ function _renderTaskThread(notes, taskId, canComment){
           <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)}
         </div>
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
+        ${n.note_translation ? `<div style="font-size:.8rem;margin-top:.25rem;color:#93c5fd;background:rgba(59,130,246,.08);border-left:2px solid rgba(59,130,246,.45);padding:.2rem .55rem;border-radius:0 5px 5px 0">🌐 English (auto): ${esc(n.note_translation)}</div>` : ''}
         ${(!isReply && canComment) ? `
           <button onclick="toggleReply(${n.note_id})"
                   style="font-size:.72rem;background:transparent;border:none;color:rgba(34,211,238,.85);cursor:pointer;padding:.15rem 0;margin-top:.15rem">↩ Reply</button>
