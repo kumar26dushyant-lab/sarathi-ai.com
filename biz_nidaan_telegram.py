@@ -246,12 +246,28 @@ async def send_message(chat_id: str, text: str,
 LINK_CODE_TTL_MIN = 15   # a connect code is valid for this long, then expires
 
 
-async def issue_link_code(staff_id: int) -> str:
-    """Issue a SHORT-LIVED, single-use connect code for a portal-authenticated staffer.
-    Reuses the current code if it still has plenty of life left (so re-opening the panel
-    doesn't churn), otherwise mints a fresh one. Security: the code only ever exists for a
-    logged-in staff member, expires in {TTL} min, and is consumed on first successful use —
-    so a leaked/forwarded link can't quietly connect the wrong Telegram account."""
+async def staff_connection_status() -> list[dict]:
+    """Every active staffer + their Telegram connection state — powers the super-admin
+    bot-manager view."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT s.staff_id, s.name, s.role, s.phone, "
+            "  (SELECT COUNT(*) FROM nidaan_staff_telegram t WHERE t.staff_id=s.staff_id) AS device_count, "
+            "  (SELECT username FROM nidaan_staff_telegram t WHERE t.staff_id=s.staff_id "
+            "     ORDER BY linked_at DESC LIMIT 1) AS username, "
+            "  (SELECT MAX(linked_at) FROM nidaan_staff_telegram t WHERE t.staff_id=s.staff_id) AS linked_at "
+            "FROM nidaan_staff s WHERE s.status='active' AND s.deleted_at IS NULL "
+            "ORDER BY device_count DESC, s.role DESC, s.name ASC")).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def issue_link_code(staff_id: int, force: bool = False) -> str:
+    """Issue a SHORT-LIVED, single-use connect code for a staffer. Reuses the current code
+    if it still has plenty of life left (unless force=True mints a fresh one, e.g. for a
+    super-admin generating an instant link). Security: the code only ever exists for a
+    real staff member, expires in {TTL} min, and is consumed on first successful use — so a
+    leaked/forwarded link can't quietly connect the wrong Telegram account."""
     import datetime as _dt
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -260,7 +276,7 @@ async def issue_link_code(staff_id: int) -> str:
             (staff_id,))).fetchone()
         code = (row["telegram_link_code"] if row else "") or ""
         fresh_enough = False
-        if code and row["telegram_link_code_at"]:
+        if not force and code and row["telegram_link_code_at"]:
             try:
                 age = (_dt.datetime.utcnow() - _dt.datetime.fromisoformat(
                     str(row["telegram_link_code_at"]).replace("Z", ""))).total_seconds()

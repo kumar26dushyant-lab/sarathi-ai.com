@@ -5328,6 +5328,40 @@ async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
             "linked_staff": await tg.linked_staff_count()}
 
 
+@app.get("/nidaan/ops/api/telegram/staff-status")
+async def ops_telegram_staff_status(request: Request):
+    """Super-admin bot manager: who's connected, how many devices, who's pending."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    rows = await tg.staff_connection_status()
+    return {"staff": rows,
+            "connected": sum(1 for r in rows if (r.get("device_count") or 0) > 0),
+            "pending": sum(1 for r in rows if not (r.get("device_count") or 0)),
+            "total": len(rows),
+            "devices": sum((r.get("device_count") or 0) for r in rows)}
+
+
+@app.post("/nidaan/ops/api/telegram/instant-link/{staff_id}")
+async def ops_telegram_instant_link(staff_id: int, request: Request):
+    """Super-admin generates a one-time connect link for a specific staffer who is
+    struggling to connect. The SA shares it directly; one tap links that staffer.
+    Single-use + short-lived, bound to that exact staff_id."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    cfg = await tg.get_config()
+    if not cfg.get("bot_username"):
+        raise HTTPException(400, "Bot is not configured yet")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target:
+        raise HTTPException(404, "Staff not found")
+    code = await tg.issue_link_code(staff_id, force=True)   # fresh, invalidates any prior
+    await _ops_audit(request, "telegram.instant_link", "staff", staff_id,
+                     f"instant connect link for {target.get('name','')}")
+    return {"ok": True, "staff_name": target.get("name", ""),
+            "connect_url": f"https://t.me/{cfg['bot_username']}?start={code}",
+            "code": code, "ttl_min": tg.LINK_CODE_TTL_MIN}
+
+
 @app.post("/nidaan/ops/api/telegram/disconnect")
 async def ops_telegram_disconnect(request: Request):
     """Turn the bot off completely (removes the token + webhook). Staff links are

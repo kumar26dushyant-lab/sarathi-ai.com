@@ -772,9 +772,12 @@ async function loadTasks() {
     <div class="section-hdr">
       <div><div class="section-title">Tasks</div>
       <div class="section-sub">Office tasks, assignments, workload & leave</div></div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <button class="btn-sm btn-ghost" onclick="openLeaveModal('leave')">🌴 Apply for Leave</button>
-        <button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="openLeaveModal('wfh')">🏠 Apply WFH</button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input id="tasksTopSearch" placeholder="🔍 Search tasks or #id…" value="${esc(_registryState.q||'')}"
+               oninput="tasksTopSearch(this.value)"
+               style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .7rem;border-radius:8px;font-size:.85rem;min-width:180px">
+        <button class="btn-sm btn-ghost" onclick="openLeaveModal('leave')">🌴 Leave</button>
+        <button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="openLeaveModal('wfh')">🏠 WFH</button>
         <button class="btn-primary" onclick="openQuickTaskModal()">${canAssign ? '+ New Task' : '🙋 Raise Request'}</button>
       </div>
     </div>
@@ -1829,6 +1832,8 @@ function setRegistrySort(s){ _registryState.sort=s; loadTaskRegistry(); }
 function setRegistryAssignee(a){ _registryState.assignee=a; loadTaskRegistry(); }
 function setRegistryDeleted(v){ _registryState.includeDeleted=v; loadTaskRegistry(); }
 function onRegistrySearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 350); }
+// Top-of-page task search (near the New Task button) — drives the same registry filter.
+function tasksTopSearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 300); }
 async function qtDeleteRow(qid){
   if(!confirm('Delete this task? It is removed from active lists; its history is preserved.')) return;
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {method:'DELETE', headers:hdrs()});
@@ -5602,14 +5607,17 @@ async function loadTelegramPanel(){
       <a href="${esc(d.connect_url)}" target="_blank" rel="noopener"
          style="display:block;text-align:center;background:#38bdf8;color:#04121f;font-weight:800;padding:.75rem 1rem;border-radius:10px;text-decoration:none;font-size:.95rem">✈️ Open Telegram &amp; connect</a>
 
-      <div style="margin-top:.85rem;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:8px;padding:.65rem .75rem">
-        <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-bottom:.3rem">Button didn't open Telegram? Open <b>@${esc(bot.bot_username||'')}</b> yourself and send this code:</div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <code style="font-size:1.15rem;font-weight:800;letter-spacing:.15em;color:#7dd3fc;background:rgba(56,189,248,.12);padding:.25rem .7rem;border-radius:6px">${esc(d.link_code||'')}</code>
-          <button class="btn-sm btn-ghost" onclick="navigator.clipboard.writeText('${esc(d.link_code||'')}').then(()=>ndUI.toast('Code copied','success'))">📋 Copy</button>
+      <details style="margin-top:.7rem">
+        <summary style="cursor:pointer;font-size:.78rem;color:rgba(255,255,255,.5)">Button didn't open Telegram? Use a code instead</summary>
+        <div style="margin-top:.5rem;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:8px;padding:.65rem .75rem">
+          <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-bottom:.3rem">Open <b>@${esc(bot.bot_username||'')}</b> in Telegram and send this code:</div>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <code style="font-size:1.15rem;font-weight:800;letter-spacing:.15em;color:#7dd3fc;background:rgba(56,189,248,.12);padding:.25rem .7rem;border-radius:6px">${esc(d.link_code||'')}</code>
+            <button class="btn-sm btn-ghost" onclick="navigator.clipboard.writeText('${esc(d.link_code||'')}').then(()=>ndUI.toast('Code copied','success'))">📋 Copy</button>
+          </div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.35rem">🔐 Only for you · expires in ${d.code_ttl_min||15} min · one-time.</div>
         </div>
-        <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.35rem">🔐 This code is only for you and expires in ${d.code_ttl_min||15} minutes — that's what keeps it staff-only.</div>
-      </div>
+      </details>
 
       <div style="margin-top:.7rem"><button class="btn-sm btn-ghost" onclick="loadTelegramPanel()">↻ I've connected — refresh</button></div>
     </div>`;
@@ -5669,7 +5677,8 @@ async function loadTelegramPanel(){
           so no notification is ever lost, only the Telegram copy pauses.
         </div>
       </details>` : ''}
-    </div>`;
+    </div>
+    ${bot.configured ? `<div id="tgTeamStatus" class="nd-card" style="padding:1rem;margin-bottom:1rem"><div style="color:rgba(255,255,255,.4);font-size:.85rem">Loading team connections…</div></div>` : ''}`;
   }
 
   panel.innerHTML = `
@@ -5681,6 +5690,61 @@ async function loadTelegramPanel(){
       ${mine}
       ${admin}
     </div>`;
+  if (isSA && bot.configured) loadTgTeamStatus();
+}
+
+// Super-admin bot manager: who's connected, who's pending, generate instant links.
+async function loadTgTeamStatus(){
+  const box = document.getElementById('tgTeamStatus');
+  if (!box) return;
+  const r = await fetch('/nidaan/ops/api/telegram/staff-status', { headers: hdrs() });
+  if (!r.ok) { box.innerHTML = '<div style="color:#fca5a5;font-size:.85rem">Failed to load team status</div>'; return; }
+  const d = await r.json();
+  const roleShort = {super_admin:'SA', sub_super_admin:'Admin', team_member:'Staff'};
+  const rows = (d.staff||[]).map(s=>{
+    const on = (s.device_count||0) > 0;
+    return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.88rem;font-weight:600">${esc(s.name)} <span style="font-size:.7rem;color:rgba(255,255,255,.4)">${roleShort[s.role]||''}</span></div>
+        <div style="font-size:.75rem;color:rgba(255,255,255,.5)">${on
+          ? `✅ Connected${s.device_count>1?` · ${s.device_count} devices`:''}${s.username?` · @${esc(s.username)}`:''}`
+          : '<span style="color:#fbbf24">⏳ Not connected</span>'}</div>
+      </div>
+      ${on ? '<span style="color:#22c55e;font-size:1.1rem;flex-shrink:0">●</span>'
+           : `<button class="btn-sm btn-ghost" style="flex-shrink:0;color:#7dd3fc" onclick="tgInstantLink(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')">🔗 Instant link</button>`}
+    </div>`;
+  }).join('');
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
+      <div style="font-weight:700;font-size:1rem">👥 Team connections</div>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.55)"><b style="color:#22c55e">${d.connected}</b> connected · <b style="color:#fbbf24">${d.pending}</b> pending · ${d.total} staff</div>
+    </div>
+    <div style="font-size:.76rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">For anyone struggling, tap <b>Instant link</b> and share it with them — one tap connects them (valid 15 min, one-time).</div>
+    ${rows}
+    <div style="margin-top:.7rem"><button class="btn-sm btn-ghost" onclick="loadTgTeamStatus()">↻ Refresh</button></div>`;
+}
+
+async function tgInstantLink(staffId, name){
+  const r = await fetch('/nidaan/ops/api/telegram/instant-link/'+staffId, { method:'POST', headers: hdrs() });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { ndUI.toast(_extractErr(d,'Failed'),'error'); return; }
+  const url = d.connect_url || '';
+  // Show a small modal with the link + copy + share.
+  let bg = document.getElementById('tgLinkBg'); if (bg) bg.remove();
+  bg = document.createElement('div'); bg.id='tgLinkBg';
+  bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem';
+  bg.onclick=(e)=>{ if(e.target===bg) bg.remove(); };
+  bg.innerHTML = `<div style="background:#0a1628;border:1px solid rgba(255,255,255,.18);border-radius:14px;max-width:460px;width:100%;padding:1.5rem">
+    <div style="font-weight:800;font-size:1.05rem;margin-bottom:.4rem">🔗 Instant link for ${esc(name)}</div>
+    <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:.85rem">Send this to <b>${esc(name)}</b> (WhatsApp, SMS, anywhere). When they tap it and press Start, they're connected instantly. Valid 15 min, one-time.</div>
+    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:.5rem .65rem;font-size:.8rem;color:#7dd3fc;word-break:break-all;margin-bottom:.75rem">${esc(url)}</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>ndUI.toast('Link copied','success'))">📋 Copy link</button>
+      <a class="btn-sm btn-ghost" style="text-decoration:none;color:#22c55e" target="_blank" href="https://wa.me/?text=${encodeURIComponent('Connect to NidaanPartner Telegram: '+url)}">📲 Share on WhatsApp</a>
+      <button class="btn-sm btn-ghost" style="margin-left:auto" onclick="document.getElementById('tgLinkBg').remove()">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
 }
 
 async function tgSaveToken(){
