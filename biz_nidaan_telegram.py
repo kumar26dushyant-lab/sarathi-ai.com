@@ -492,10 +492,10 @@ _BOT_TXT: dict = {
                      "hi": "*⏳ अप्रूवल*\n\nआपके अप्रूवल के लिए कुछ नहीं ✓"},
     "appr_hdr":     {"en": "*⏳ Awaiting your approval*", "hi": "*⏳ आपके अप्रूवल का इंतज़ार*"},
     "appr_by":      {"en": "by {name}", "hi": "द्वारा {name}"},
-    "ask_comment":  {"en": "💬 Type your comment for *task #{id}* and send it.\n_Everyone involved will be notified._",
-                     "hi": "💬 *टास्क #{id}* के लिए अपना कमेंट टाइप करके भेजें।\n_सभी संबंधित लोगों को सूचना जाएगी।_"},
-    "ask_ai":       {"en": "🤖 *Ask me anything about your work*\n\nFor example:\n• _what's pending with me?_\n• _which tasks are overdue?_\n• _status of task 55_\n\nType your question 👇",
-                     "hi": "🤖 *अपने काम के बारे में कुछ भी पूछें*\n\nजैसे:\n• _मेरे पास क्या पेंडिंग है?_\n• _कौन से टास्क ओवरड्यू हैं?_\n• _टास्क 55 की स्थिति_\n\nअपना सवाल टाइप करें 👇"},
+    "ask_comment":  {"en": "💬 Type your comment for *task #{id}* — or send a 🎤 voice note.\nYou'll confirm it before it's saved. _Everyone involved will be notified._",
+                     "hi": "💬 *टास्क #{id}* के लिए कमेंट टाइप करें — या 🎤 वॉइस नोट भेजें।\nसेव होने से पहले आप पुष्टि करेंगे। _सभी संबंधित लोगों को सूचना जाएगी।_"},
+    "ask_ai":       {"en": "🤖 *Ask me anything about your work*\n\nFor example:\n• _what's pending with me?_\n• _which tasks are overdue?_\n• _status of task 55_\n\nType your question — or send a 🎤 voice note 👇",
+                     "hi": "🤖 *अपने काम के बारे में कुछ भी पूछें*\n\nजैसे:\n• _मेरे पास क्या पेंडिंग है?_\n• _कौन से टास्क ओवरड्यू हैं?_\n• _टास्क 55 की स्थिति_\n\nसवाल टाइप करें — या 🎤 वॉइस नोट भेजें 👇"},
     "thinking":     {"en": "🤖 Thinking…", "hi": "🤖 सोच रहा हूँ…"},
     "ask_leave":    {"en": "{icon} *Apply for {label}*\n\nReply with the dates and reason, e.g.\n`2026-07-25 to 2026-07-26 family function`\nor `2026-07-25 personal work` for a single day.",
                      "hi": "{icon} *{label} के लिए आवेदन*\n\nतारीख़ और कारण भेजें, जैसे\n`2026-07-25 to 2026-07-26 पारिवारिक कार्यक्रम`\nया एक दिन के लिए `2026-07-25 निजी काम`।"},
@@ -534,6 +534,22 @@ _BOT_TXT: dict = {
     "b_confirm_yes":{"en": "✅ Yes, add", "hi": "✅ हाँ, जोड़ें"},
     "b_confirm_no": {"en": "✕ Cancel", "hi": "✕ रद्द करें"},
     "cancelled":    {"en": "Cancelled — nothing was saved.", "hi": "रद्द — कुछ सेव नहीं हुआ।"},
+    "voice_listening":{"en": "🎧 Listening to your voice note…", "hi": "🎧 आपका वॉइस नोट सुन रहा हूँ…"},
+    "voice_heard":  {"en": "🗣️ I heard: “{text}”", "hi": "🗣️ मैंने सुना: “{text}”"},
+    "voice_failed": {"en": "⚠️ I couldn't process that audio. Please try again, or type your message.",
+                     "hi": "⚠️ यह ऑडियो प्रोसेस नहीं हो पाया। दोबारा भेजें या टाइप करके भेजें।"},
+    "voice_too_long":{"en": "⏱️ That voice note is a bit long. Please keep it under ~2 minutes and try again.",
+                     "hi": "⏱️ यह वॉइस नोट थोड़ा लंबा है। कृपया ~2 मिनट के अंदर रखकर दोबारा भेजें।"},
+    "voice_unclear":{"en": "🙉 I couldn't catch that clearly. Please re-record and speak a little slower and clearer.",
+                     "hi": "🙉 साफ़ समझ नहीं आया। कृपया थोड़ा धीरे और साफ़ बोलकर दोबारा रिकॉर्ड करें।"},
+    "voice_noisy":  {"en": "🔊 There's a lot of background noise. Please move to a quieter place and record again.",
+                     "hi": "🔊 पीछे बहुत शोर है। कृपया किसी शांत जगह जाकर दोबारा रिकॉर्ड करें।"},
+    "voice_silent": {"en": "🤫 I didn't hear any speech. Please record again and speak close to the mic.",
+                     "hi": "🤫 कोई आवाज़ नहीं सुनाई दी। कृपया माइक के पास बोलकर दोबारा रिकॉर्ड करें।"},
+    "voice_abusive":{"en": "🙏 Let's keep it professional. Please rephrase without inappropriate language.",
+                     "hi": "🙏 कृपया शिष्ट भाषा में बात करें। अनुचित शब्दों के बिना दोबारा कहें।"},
+    "voice_nonsense":{"en": "🤔 I couldn't make out a clear request. Try saying e.g. “what's pending with me” or tap 💬 Add comment first.",
+                     "hi": "🤔 साफ़ अनुरोध समझ नहीं आया। जैसे कहें “मेरे पास क्या पेंडिंग है”, या पहले 💬 कमेंट जोड़ें दबाएँ।"},
     "code_bad":     {"en": "⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).",
                      "hi": "⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।"},
     "connect_howto":{"en": "🔐 *This Telegram account isn't connected yet.*\n\n1️⃣ Open the NidaanPartner portal *on this device*\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Open Telegram & connect* → press *Start*\n4️⃣ Done — you'll get a ✅ confirmation\n\n💡 Already connected elsewhere? That was a *different* Telegram account — each account connects once.\n\n_Your code is only for you and expires in 15 minutes._",
@@ -844,11 +860,17 @@ async def handle_update(update: dict) -> None:
                     "parse_mode": "Markdown", "reply_markup": {"remove_keyboard": True}})
             return
 
-        if not text:
-            return
-
+        # Voice note → transcribe (clarity + safety checks) → route like typed text.
+        voice = msg.get("voice") or msg.get("audio")
         staff = await _staff_by_chat(chat_id)
         lang = _lang(staff)
+        if voice:
+            if not staff:
+                await send_message(str(chat_id), T("en", "connect_howto")); return
+            await _handle_voice(staff, voice, chat_id); return
+
+        if not text:
+            return
 
         if text.startswith("/start"):
             parts = text.split(maxsplit=1)
@@ -873,56 +895,160 @@ async def handle_update(update: dict) -> None:
                     await _after_link(chat_id, linked); return
             await send_message(str(chat_id), T("en", "connect_howto")); return
 
-        if text.lower() in ("/menu", "menu", "/home", "hi", "hello"):
-            t, kb = _main_menu(staff)
-            await send_message(str(chat_id), t, kb)
-            return
+        await _process_message_text(staff, text, chat_id)
+    except Exception as e:
+        logger.warning("Telegram update handling failed: %s", e)
 
-        # A pending flow expecting typed input?
-        import json as _json
+
+async def _process_message_text(staff: dict, text: str, chat_id) -> None:
+    """Route a linked staffer's text — typed, OR transcribed from a voice note. This is
+    the single place message intent is handled, so voice and text behave identically."""
+    lang = _lang(staff)
+    if text.lower().strip() in ("/menu", "menu", "/home", "home", "hi", "hello", "मेन्यू", "मेनू"):
+        t, kb = _main_menu(staff)
+        await send_message(str(chat_id), t, kb)
+        return
+    import json as _json
+    try:
+        pending = _json.loads(staff.get("telegram_pending") or "{}")
+    except Exception:
         pending = {}
-        try:
-            pending = _json.loads(staff.get("telegram_pending") or "{}")
-        except Exception:
-            pending = {}
-        act = pending.get("a")
-        if act == "comment" and pending.get("qid"):
-            # Safest path: confirm WHICH task before saving, so a comment can never land
-            # on the wrong task (one extra tap).
-            import biz_nidaan as _nid
-            qid = int(pending["qid"])
-            _qt = await _nid.get_quick_task(qid)
-            _title = ((_qt.get("title") if _qt else "") or "")[:55]
-            await _set_pending(staff["staff_id"], {"a": "comment_confirm", "qid": qid, "text": text})
-            await send_message(str(chat_id),
-                T(lang, "confirm_comment", id=qid, title=_title, text=text[:250]),
-                _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"cc:yes:{qid}"},
-                      {"text": T(lang, "b_confirm_no"), "callback_data": "cc:no"}]]))
-            return
-        if act == "ai":
-            await _set_pending(staff["staff_id"], None)
-            await send_message(str(chat_id), T(lang, "thinking"))
-            ans = await _ask_gemini(staff, text)
-            await send_message(str(chat_id), ans,
-                               _kb([[{"text": T(lang, "b_ask_again"), "callback_data": "ai:ask"},
-                                     {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
-            return
-        if act == "broadcast" and _can(staff, "super_admin"):
-            await _set_pending(staff["staff_id"], None)
-            await _do_broadcast(staff, text, chat_id)
-            return
-        if act == "leave" and pending.get("kind"):
-            await _set_pending(staff["staff_id"], None)
-            await _do_leave(staff, pending["kind"], text, chat_id)
-            return
-
-        # Free text with no pending flow → treat as a question for the AI.
+    act = pending.get("a")
+    if act == "comment" and pending.get("qid"):
+        # Safest path: confirm WHICH task before saving, so a comment can never land on
+        # the wrong task (one extra tap) — this also lets the sender verify a voice
+        # transcript before it is saved.
+        import biz_nidaan as _nid
+        qid = int(pending["qid"])
+        _qt = await _nid.get_quick_task(qid)
+        _title = ((_qt.get("title") if _qt else "") or "")[:55]
+        await _set_pending(staff["staff_id"], {"a": "comment_confirm", "qid": qid, "text": text})
+        await send_message(str(chat_id),
+            T(lang, "confirm_comment", id=qid, title=_title, text=text[:250]),
+            _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"cc:yes:{qid}"},
+                  {"text": T(lang, "b_confirm_no"), "callback_data": "cc:no"}]]))
+        return
+    if act == "ai":
+        await _set_pending(staff["staff_id"], None)
         await send_message(str(chat_id), T(lang, "thinking"))
         ans = await _ask_gemini(staff, text)
         await send_message(str(chat_id), ans,
-                           _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+                           _kb([[{"text": T(lang, "b_ask_again"), "callback_data": "ai:ask"},
+                                 {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+        return
+    if act == "broadcast" and _can(staff, "super_admin"):
+        await _set_pending(staff["staff_id"], None)
+        await _do_broadcast(staff, text, chat_id)
+        return
+    if act == "leave" and pending.get("kind"):
+        await _set_pending(staff["staff_id"], None)
+        await _do_leave(staff, pending["kind"], text, chat_id)
+        return
+    # Free text with no pending flow → treat as a question for the AI.
+    await send_message(str(chat_id), T(lang, "thinking"))
+    ans = await _ask_gemini(staff, text)
+    await send_message(str(chat_id), ans,
+                       _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+
+
+# ── Voice notes: download → transcribe + assess (clarity/safety) → route ─────
+async def _download_file(file_id: str) -> Optional[bytes]:
+    """Fetch a Telegram file's bytes via getFile + the file download endpoint."""
+    token = await get_bot_token()
+    if not token or not file_id:
+        return None
+    res = await _call("getFile", {"file_id": file_id})
+    fp = ((res.get("result") or {}).get("file_path")) if res.get("ok") else None
+    if not fp:
+        return None
+    url = f"https://api.telegram.org/file/bot{token}/{fp}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            r = await c.get(url)
+            if r.status_code == 200:
+                return r.content
     except Exception as e:
-        logger.warning("Telegram update handling failed: %s", e)
+        logger.info("Telegram file download failed: %s", e)
+    return None
+
+
+async def _transcribe_and_assess(audio: bytes, mime: str) -> Optional[dict]:
+    """Gemini listens once and returns BOTH a transcript and an assessment
+    (clear / unclear / noisy / silent / abusive / nonsense), so a single call handles
+    transcription, clarity gating and content moderation. Returns None on failure."""
+    import os as _os, base64 as _b64, json as _json
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        return None
+    prompt = (
+        "You are the voice front-end of an office task app. Listen to the audio and reply "
+        "with ONLY a JSON object (no markdown) of exactly this shape:\n"
+        '{"status":"clear|unclear|noisy|silent|abusive|nonsense","transcript":"...","language":"hi|en"}\n'
+        "Rules:\n"
+        "- 'silent' if there is no discernible speech.\n"
+        "- 'noisy' if background noise makes the words impossible to make out reliably.\n"
+        "- 'unclear' if the speech is mumbled, cut off, or too soft to transcribe with confidence.\n"
+        "- 'abusive' if it contains profanity, abuse, slurs, sexual content, or harassment.\n"
+        "- 'nonsense' if it is not a meaningful work-related message or request.\n"
+        "- otherwise 'clear', and put the EXACT spoken words in transcript. Keep names, numbers, "
+        "amounts and IDs verbatim. Never invent or guess words you didn't hear.")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    payload = {
+        "contents": [{"parts": [
+            {"text": prompt},
+            {"inline_data": {"mime_type": mime or "audio/ogg", "data": _b64.b64encode(audio).decode()}},
+        ]}],
+        "generationConfig": {"response_mime_type": "application/json", "temperature": 0},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as c:
+            r = await c.post(url, json=payload)
+            data = r.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        raw = (parts[0].get("text") or "").strip()
+        if not raw:
+            # Safety filters (e.g. blocked content) can yield no candidate → treat as abusive.
+            if (data.get("promptFeedback") or {}).get("blockReason"):
+                return {"status": "abusive", "transcript": "", "language": "en"}
+            return None
+        out = _json.loads(raw)
+        st = out.get("status", "unclear")
+        if st not in ("clear", "unclear", "noisy", "silent", "abusive", "nonsense"):
+            st = "unclear"
+        out["status"] = st
+        return out
+    except Exception as e:
+        logger.info("Voice transcription failed: %s", e)
+        return None
+
+
+async def _handle_voice(staff: dict, voice: dict, chat_id) -> None:
+    lang = _lang(staff)
+    dur = int(voice.get("duration") or 0)
+    size = int(voice.get("file_size") or 0)
+    if dur and dur > 150:
+        await send_message(str(chat_id), T(lang, "voice_too_long")); return
+    if size and size > 15 * 1024 * 1024:
+        await send_message(str(chat_id), T(lang, "voice_too_long")); return
+    await send_message(str(chat_id), T(lang, "voice_listening"))
+    audio = await _download_file(voice.get("file_id"))
+    if not audio:
+        await send_message(str(chat_id), T(lang, "voice_failed")); return
+    result = await _transcribe_and_assess(audio, voice.get("mime_type") or "audio/ogg")
+    if not result:
+        await send_message(str(chat_id), T(lang, "voice_failed")); return
+    status = result.get("status")
+    if status == "abusive":
+        await send_message(str(chat_id), T(lang, "voice_abusive")); return
+    if status in ("noisy", "silent", "unclear", "nonsense"):
+        await send_message(str(chat_id), T(lang, "voice_" + status)); return
+    transcript = (result.get("transcript") or "").strip()
+    if not transcript:
+        await send_message(str(chat_id), T(lang, "voice_unclear")); return
+    # Show what we heard (human touch + transparency), then route exactly like text.
+    await send_message(str(chat_id), T(lang, "voice_heard", text=transcript[:400]))
+    await _process_message_text(staff, transcript, chat_id)
 
 
 async def _after_link(chat_id, linked: dict) -> None:
