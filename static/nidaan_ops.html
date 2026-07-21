@@ -5598,8 +5598,7 @@ async function loadTelegramPanel(){
       <a href="${esc(d.connect_url)}" target="_blank" rel="noopener"
          style="display:inline-block;background:#38bdf8;color:#04121f;font-weight:800;padding:.6rem 1rem;border-radius:8px;text-decoration:none">✈️ Connect my Telegram</a>
       <div style="font-size:.74rem;color:rgba(255,255,255,.4);margin-top:.6rem">
-        On a desktop without Telegram? Open <b>@${esc(bot.bot_username||'')}</b> in the Telegram app and send:
-        <code style="background:rgba(255,255,255,.08);padding:.1rem .35rem;border-radius:4px">/start ${esc(d.link_code||'')}</code>
+        📱 <b>Use the Telegram app on your phone</b> to connect — sharing your number (which verifies it's you) needs the mobile app, not desktop/web. Open <b>@${esc(bot.bot_username||'')}</b> there, press <b>Start</b>, then tap <b>Share my phone number</b>.
       </div>
       <div style="margin-top:.6rem"><button class="btn-sm btn-ghost" onclick="loadTelegramPanel()">↻ I've connected — refresh</button></div>
     </div>`;
