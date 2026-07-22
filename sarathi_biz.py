@@ -4502,7 +4502,6 @@ async def ops_quick_task_note_approval(qid: int, note_id: int,
     return {"ok": True}
 
 
-@app.post("/nidaan/ops/api/quick-tasks")
 def _req_source(request: Request) -> str:
     """Where a web/app action came from — 'mobile-web' vs 'web' — for task-history
     traceability. (Telegram actions pass 'telegram' from the bot.)"""
@@ -4511,6 +4510,7 @@ def _req_source(request: Request) -> str:
         ("iphone", "android", "ipad", "ipod", "mobile")) else "web"
 
 
+@app.post("/nidaan/ops/api/quick-tasks")
 async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     # Everyone can create. A permission setting can require a minimum role for
