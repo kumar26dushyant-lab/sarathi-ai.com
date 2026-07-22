@@ -104,7 +104,49 @@ async def send_email(to_email: str, subject: str, html_body: str,
     reply_addr = reply_to or FROM_NOREPLY or sender_email
     unsubscribe_header = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
 
-    # ─── Path 1: Brevo (free 300/day, proper DKIM, recommended) ──────────
+    async def _smtp_send() -> bool:
+        """Send via Gmail SMTP. Returns True on success; never raises."""
+        try:
+            import aiosmtplib
+            import uuid
+            msg = MIMEMultipart("alternative")
+            msg["From"] = f"{sender_name} <{sender_email}>"
+            msg["To"] = ", ".join(_recips) if _recips else to_email
+            msg["Subject"] = subject
+            msg["Reply-To"] = reply_to or FROM_NOREPLY or sender_email
+            # Sender header: who actually sent (on behalf of From), for RFC-compliant clients.
+            if SMTP_USER and SMTP_USER != sender_email:
+                msg["Sender"] = f"{sender_name} <{SMTP_USER}>"
+            msg["MIME-Version"] = "1.0"
+            msg["Message-ID"] = f"<{uuid.uuid4()}@sarathi-ai.com>"
+            msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
+            msg["X-Mailer"] = "Sarathi-AI CRM"
+            msg.attach(MIMEText(plain, "plain", "utf-8"))
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+            # Port 465 = implicit TLS; 587/others = STARTTLS. Many cloud hosts block 587
+            # outbound, so 465 is the reliable path.
+            _implicit_tls = (int(SMTP_PORT) == 465)
+            await aiosmtplib.send(
+                msg, hostname=SMTP_HOST, port=SMTP_PORT,
+                username=SMTP_USER, password=SMTP_PASSWORD,
+                use_tls=_implicit_tls, start_tls=(not _implicit_tls), timeout=30)
+            logger.info("📧 SMTP ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+            return True
+        except Exception as e:
+            logger.error("📧 SMTP failed: '%s' → %s: %s", subject, to_email, e)
+            return False
+
+    # When the sender IS the authenticated Gmail SMTP account (Nidaan's
+    # nidaanpartner@gmail.com), send DIRECTLY via Gmail FIRST: SPF/DKIM align so it lands
+    # in the inbox (not spam) and there is no 300/day cap. The API transports below stay
+    # as automatic fallback. Other senders (e.g. Sarathi) keep API-first, since this Gmail
+    # account is not their authorized sender and SMTP would misalign their domain.
+    _smtp_ready = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+    _smtp_aligned = _smtp_ready and (sender_email or "").lower() == (SMTP_USER or "").lower()
+    if _smtp_aligned and await _smtp_send():
+        return True
+
+    # ─── Path 1: Brevo (free 300/day, proper DKIM) — fallback for aligned senders ─
     brevo_key = os.getenv("BREVO_API_KEY", "").strip()
     if brevo_key:
         try:
@@ -171,46 +213,13 @@ async def send_email(to_email: str, subject: str, html_body: str,
         except Exception as e:
             logger.error("📧 Resend transport failed: %s — falling back to SMTP", e)
 
-    # ─── Path 2: Gmail SMTP fallback (legacy) ───────────────────────────
-    try:
-        import aiosmtplib
-        import uuid
+    # ─── Gmail SMTP: fallback for non-aligned senders, or if the APIs had no key ──
+    if _smtp_ready and not _smtp_aligned:
+        if await _smtp_send():
+            return True
 
-        msg = MIMEMultipart("alternative")
-        msg["From"] = f"{sender_name} <{sender_email}>"
-        msg["To"] = ", ".join(_recips) if _recips else to_email
-        msg["Subject"] = subject
-        msg["Reply-To"] = reply_to or FROM_NOREPLY or sender_email
-        # Sender header: tells RFC-compliant clients who actually sent (on behalf of From)
-        if SMTP_USER and SMTP_USER != sender_email:
-            msg["Sender"] = f"{sender_name} <{SMTP_USER}>"
-        msg["MIME-Version"] = "1.0"
-        msg["Message-ID"] = f"<{uuid.uuid4()}@sarathi-ai.com>"
-        msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
-        msg["X-Mailer"] = "Sarathi-AI CRM"
-
-        msg.attach(MIMEText(plain, "plain", "utf-8"))
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        # Port 465 = implicit TLS (use_tls); 587/others = STARTTLS. Many cloud
-        # hosts block 587 outbound, so 465 is the reliable path.
-        _implicit_tls = (int(SMTP_PORT) == 465)
-        await aiosmtplib.send(
-            msg,
-            hostname=SMTP_HOST,
-            port=SMTP_PORT,
-            username=SMTP_USER,
-            password=SMTP_PASSWORD,
-            use_tls=_implicit_tls,
-            start_tls=(not _implicit_tls),
-            timeout=30,
-        )
-        logger.info("📧 SMTP ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
-        return True
-
-    except Exception as e:
-        logger.error("📧 Email failed: '%s' → %s: %s", subject, to_email, e)
-        return False
+    logger.error("📧 Email failed on all transports: '%s' → %s", subject, to_email)
+    return False
 
 
 async def send_support_email(to_email: str, subject: str, html_body: str,
