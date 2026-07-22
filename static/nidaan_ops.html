@@ -4748,28 +4748,34 @@ function _renderBell(){
   const dd = document.getElementById('bellDropdown'); if(!dd) return;
   const items = window._bellData || [];
   const bcs = window._bcData || [];
-  const bcHtml = bcs.length ? `
-    <div style="padding:.4rem .8rem;font-size:.7rem;font-weight:800;color:#c4b5fd;text-transform:uppercase;letter-spacing:.05em;background:rgba(167,139,250,.06)">📢 Broadcasts</div>
-    ${bcs.slice(0,6).map(b=>{
-      return `<div style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05)">
-        <div style="font-size:.82rem"><b style="color:#c4b5fd">${esc(b.sender_name||'Staff')}</b> <span style="color:rgba(255,255,255,.35);font-size:.68rem">· ${b.created_at?ndUI.timeAgo(b.created_at):''}</span></div>
+  // Merge broadcasts + notifications into ONE timeline sorted newest-first, so the most
+  // recent thing is always at the top (broadcasts are no longer pinned above everything).
+  const _ts = (s)=>{ const d=new Date(String(s||'').replace(' ','T')); const t=d.getTime(); return isNaN(t)?0:t; };
+  const merged = [];
+  bcs.forEach(b=> merged.push({kind:'bc', ts:_ts(b.created_at), b}));
+  items.forEach(n=>{ if(n.event_key==='broadcast') return; merged.push({kind:'nt', ts:_ts(n.created_at), n}); });
+  merged.sort((a,b)=> b.ts - a.ts);
+  const rowHtml = merged.slice(0,60).map(m=>{
+    if (m.kind==='bc'){ const b=m.b;
+      return `<div style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);border-left:3px solid rgba(167,139,250,.55)">
+        <div style="font-size:.82rem">📢 <b style="color:#c4b5fd">${esc(b.sender_name||'Staff')}</b> <span style="color:rgba(255,255,255,.35);font-size:.68rem">· ${b.created_at?ndUI.timeAgo(b.created_at):''}</span></div>
         <div style="font-size:.85rem;color:rgba(255,255,255,.85);margin:.15rem 0 .35rem;white-space:pre-wrap">${esc(b.message||'')}</div>
         ${_reactionBar(b)}
       </div>`;
-    }).join('')}` : '';
-  const notifHtml = items.length ? items.map(n=>{
-      if (n.event_key==='broadcast') return '';  // shown in the broadcast section
-      const unread = !n.read_at;
-      const _b = String(n.body||'');
-      const qtM = _b.match(/[?&]qt=(\d+)/);
-      const acM = _b.match(/[?&]account=(\d+)/);
-      const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()`
-               : acM ? `openAccountDrawer(${acM[1]});toggleBell()` : '';
-      return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
-        <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
-        <div style="font-size:.76rem;color:rgba(255,255,255,.6);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
-        <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.15rem">${n.created_at?ndUI.timeAgo(n.created_at):''}</div>
-      </div>`; }).join('') : '';
+    }
+    const n=m.n;
+    const unread = !n.read_at;
+    const _b = String(n.body||'');
+    const qtM = _b.match(/[?&]qt=(\d+)/);
+    const acM = _b.match(/[?&]account=(\d+)/);
+    const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()`
+             : acM ? `openAccountDrawer(${acM[1]});toggleBell()` : '';
+    return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
+      <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
+      <div style="font-size:.76rem;color:rgba(255,255,255,.6);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
+      <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.15rem">${n.created_at?ndUI.timeAgo(n.created_at):''}</div>
+    </div>`;
+  }).join('');
   dd.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1628;z-index:1">
       <div style="font-weight:700;font-size:.9rem">🔔 Notifications</div>
@@ -4779,8 +4785,7 @@ function _renderBell(){
       <span id="pushRowLabel" style="color:rgba(255,255,255,.6)">📲 Phone push alerts</span>
       <button id="pushToggleBtn" class="btn-sm" onclick="event.stopPropagation();togglePush()" style="font-size:.72rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none">Enable</button>
     </div>
-    ${bcHtml}
-    ${notifHtml || (bcHtml ? '' : '<div style="padding:1.2rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Nothing yet</div>')}`;
+    ${rowHtml || '<div style="padding:1.2rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">Nothing yet</div>'}`;
   refreshPushRow();
 }
 async function reactBroadcast(bid, emoji){

@@ -285,41 +285,50 @@
 
 
 /* Toast (positioned by JS) ─────────────────────────────────────────────── */
+/* Toasts are confirmations — show them CENTERED on screen (not tucked in a corner)
+   and large enough to read at a glance. They pop in and fade, and stack from center. */
 #nd-toast-stack {
   position: fixed;
-  top: var(--nd-space-5);
-  right: var(--nd-space-5);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  gap: var(--nd-space-2);
+  align-items: center;
+  gap: var(--nd-space-3);
   z-index: var(--nd-z-toast);
-  max-width: 380px;
+  max-width: min(92vw, 460px);
   pointer-events: none;
 }
 .nd-toast {
   pointer-events: auto;
   background: var(--nd-bg-elev-blur);
   border: 1px solid var(--nd-border-strong);
-  border-radius: var(--nd-radius-md);
-  padding: var(--nd-space-3) var(--nd-space-4);
+  border-radius: var(--nd-radius-lg);
+  padding: var(--nd-space-4) var(--nd-space-5);
   color: var(--nd-text-primary);
-  font-size: var(--nd-text-sm);
-  font-weight: var(--nd-weight-medium);
-  box-shadow: var(--nd-shadow-lg);
-  transform: translateX(120%);
+  font-size: var(--nd-text-md);
+  font-weight: var(--nd-weight-semibold);
+  box-shadow: var(--nd-shadow-xl);
+  opacity: 0;
+  transform: scale(0.82);
   animation: ndToastIn var(--nd-motion-slow) var(--nd-ease-spring) forwards;
   display: flex;
   align-items: center;
   gap: var(--nd-space-3);
-  min-width: 240px;
+  min-width: 260px;
+  max-width: min(92vw, 460px);
+  text-align: left;
+  line-height: 1.35;
 }
+.nd-toast > span:first-child { font-size: 1.35em; }
 .nd-toast.out { animation: ndToastOut var(--nd-motion-base) var(--nd-ease-in) forwards; }
-.nd-toast-success { border-left: 3px solid var(--nd-success); }
-.nd-toast-error   { border-left: 3px solid var(--nd-danger);  }
-.nd-toast-warning { border-left: 3px solid var(--nd-warning); }
-.nd-toast-info    { border-left: 3px solid var(--nd-info);    }
-@keyframes ndToastIn  { to { transform: translateX(0); } }
-@keyframes ndToastOut { to { transform: translateX(120%); opacity: 0; } }
+.nd-toast-success { border-left: 4px solid var(--nd-success); }
+.nd-toast-error   { border-left: 4px solid var(--nd-danger);  }
+.nd-toast-warning { border-left: 4px solid var(--nd-warning); }
+.nd-toast-info    { border-left: 4px solid var(--nd-info);    }
+@keyframes ndToastIn  { to { transform: scale(1);    opacity: 1; } }
+@keyframes ndToastOut { to { transform: scale(0.92); opacity: 0; } }
 
 
 /* Modal ─────────────────────────────────────────────────────────────────── */

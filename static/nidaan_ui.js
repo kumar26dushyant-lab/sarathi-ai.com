@@ -47,7 +47,7 @@
     t.className = 'nd-toast nd-toast-' + type;
     const iconMap = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
     t.innerHTML =
-      '<span style="font-size:1.1em;flex-shrink:0">' + (iconMap[type] || 'ℹ') + '</span>' +
+      '<span style="flex-shrink:0">' + (iconMap[type] || 'ℹ') + '</span>' +
       '<span style="flex:1">' + ndUI.escapeHtml(String(msg)) + '</span>';
     stack.appendChild(t);
     if (duration > 0) {
