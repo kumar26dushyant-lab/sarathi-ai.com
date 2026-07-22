@@ -4099,10 +4099,166 @@ unilaterally — swapping addresses against the wrong account's password breaks 
 
 ### 46.9 Next up
 - Finish 46.8 once the correct app password is saved, then verify a real send end-to-end.
-- **AI Telegram assistant (read-only)** — now the natural home for the assistant idea: a
-  staffer asks "status of task X?" → agent reads tasks/claims → natural reply. Strict
-  sender-auth (bound Telegram user ↔ staff record). Telegram gives clean, reliable inbound,
-  so this is far safer and simpler than the WhatsApp route.
+- **AI Telegram assistant (read-only)** — now the natural home for the assistant idea.
+
+---
+
+## 47. TELEGRAM OPS PLATFORM — FULL BUILD, VOICE, TASK-CREATE, PROFILES — JUL 20–22, 2026
+
+The Telegram bot went from notifications-only to **running the office**: role-aware button
+UI, an AI brain, voice notes, and task creation — all in sync with web/mobile because every
+action calls the SAME backend. Module: **`biz_nidaan_telegram.py`** (Nidaan-owned; Gemini
+key `GEMINI_API_KEY`, model `gemini-2.5-flash`). Bot: **@NidaanOpsBot** (`bot_id` stored).
+All shipped + verified in production.
+
+### 47.1 Email — FIXED (was §46.8 blocker)
+The app password was saved only in the LOCAL `C:\sarathi-business\biz.env`; production reads
+`/opt/sarathi/biz.env` on the server. Copied the correct key (ends `hoqx`) to the server via
+SSH (piped, never printed), de-duped `SMTP_` lines, re-locked 0600. **Verified**: SMTP
+`LOGIN OK` as `nidaanpartner@gmail.com` + a real test email delivered. All Nidaan mail now
+sends from/replies to `nidaanpartner@gmail.com`. Also set super-admin Dushyant's `notify_email`
+→ `nidaanpartner@gmail.com` (was routing to a personal Gmail via a domain forward on
+`dushyant@nidaanpartner.com`). `8696483340` confirmed NOT in any staff record (it was only the
+"Sonal" Telegram account); staff phone is `8875674400`.
+
+### 47.2 Delivery transport — LONG-POLLING (not webhooks)
+Cloudflare's bot protection returned **520** to Telegram's inbound webhook (our own curl to
+the same URL got 200). Switched to **outbound long-polling** (`run_polling_loop`, worker-only
+singleton, `getUpdates` timeout 25) so Cloudflare is out of the path entirely. Single consumer
+= each update processed once; self-heals across token change / pause / network blips. Saving a
+token now `deleteWebhook`s rather than setting one. The webhook endpoint still exists but is
+unused.
+
+### 47.3 Secure linking (staff-only) — the "non-staff got a message" fix
+Incident: a non-staff Telegram account linked via a **shareable connect code** (bearer token).
+Fixed twice over:
+- **Phone-verified** (`_link_by_phone`) — Telegram's request_contact button; link only if the
+  verified number matches a registered staff mobile. BUT request_contact is **mobile-app only**
+  (no button on Telegram Web) — so:
+- **Universal one-time code** (`issue_link_code` / `_link_by_code`) — 8-char, 15-min, single-use,
+  bound to the portal-authenticated staffer, consumed on first use. Deep link
+  `t.me/<bot>?start=<code>` works on web/desktop/mobile. This is the primary path; a leaked link
+  is useless because it expires + is single-use. Portal card redesigned to 3 clean steps + a
+  collapsed code fallback.
+
+### 47.4 Multi-device — one staffer, many Telegram accounts
+Telegram bot links are per-ACCOUNT (already shared across that account's devices). Users who run
+DIFFERENT Telegram accounts on phone vs web needed each linked. New table
+**`nidaan_staff_telegram`** (chat_id PK, staff_id, username, linked_at); existing single links
+migrated in. `_bind_chat` adds/moves a device; linking ADDS (not replaces); `notify_staff` fans
+out to ALL a staffer's devices and prunes dead ones (bot blocked/deleted); lookup/count/
+unlink-all/clear-all rewritten against the table. Portal shows device count + "➕ Connect another
+device". The legacy `nidaan_staff.telegram_chat_id` column is kept loosely in sync but the table
+is the source of truth.
+
+### 47.5 The office, in Telegram (role-aware button UI)
+Every action re-checks role SERVER-SIDE from the chat_id (a button is never trusted). Menu:
+📥 Pending with me · 📤 Assigned by me · 🏷️ I'm involved · 🗄️ Archived (same four slices +
+scoping as web) · ➕ New task · ⏳ Approvals (admins) · 🌴 Leave / 🏠 WFH · 🤖 Ask AI · 📣
+Broadcast (SA) · ❓ Help · 🌐 language toggle. Task detail: ▶️ Start / ✅ Done / ↺ Reopen
+(assignee or admin), 💬 Add comment, 🔗 open in portal. Approvals: inline Approve/Reject filtered
+to the named approver. Leave/WFH: free-text dates+reason → same approval pipeline.
+
+### 47.6 Gemini AI brain (read-only, role-scoped)
+`_ask_gemini`: answers ONLY from tasks the asker may see (associates = their own; admins =
+org-wide), so it can't leak across roles or act. Replies in the staffer's language.
+**Fix (Jul 21):** "status of #333" wrongly said not-found because only the 60 most-recent tasks
+were in context (≈295 total). Now every task number named in the question (#333 / task 336 /
+number 340) is fetched DIRECTLY via `get_quick_task` (with access check) and added to context,
+with its description for richer answers; recent window 60→80. Applies to text AND voice.
+
+### 47.7 Bilingual (Hindi/English) + non-destructive translation
+Per-staff `telegram_lang`; 🌐 toggle. All bot chrome routed through a fixed EN/HI table
+(`T(lang,key)`, `_BOT_TXT`) — zero mistranslation risk (pre-written). Task CONTENT shown as-is.
+Typed/spoken Hindi comments keep the ORIGINAL text and store an auto **English aid**
+(`nidaan_quick_task_notes.note_lang/note_translation`, Devanagari-detected) shown on the web
+dashboard as "🌐 English (auto): …" — original is NEVER overwritten. `translate_to_english`
+preserves names/numbers/IDs.
+
+### 47.8 Self-syncing staff guide + audio
+`biz_nidaan_capabilities.py` is ONE registry (each capability: EN/HI text, telegram?, web?,
+min_role). It generates the web "📖 How to use" panel, the bot ❓ Help, AND the spoken narration
+— so they can never contradict the product. Web guide has an EN/हिंदी toggle + 🔊 Listen using
+the browser SpeechSynthesis API (chunked for Chrome's long-text limit, async voice load,
+keep-alive resume, honest "no Hindi voice installed" fallback + install steps).
+
+### 47.9 Voice notes (transcribe + clarity + safety) — Jul 21
+Send a 🎤 voice note (any language). ONE Gemini call transcribes AND assesses, returning
+`status ∈ {clear, unclear, noisy, silent, abusive, nonsense}`:
+- clear → shows "🗣️ I heard: …" then routes exactly like typed text (`_process_message_text`).
+- silent/noisy/unclear → specific human prompt (speak up / quieter place / re-record).
+- abusive → politely refused (also catches Gemini safety `blockReason`).
+- nonsense → asks for a clear request.
+Safeguards: ≤~2.5 min / 15 MB, temperature 0, "never invent words", download/transcription
+failure → "try again or type". Comments via voice still go through the confirm-before-save step.
+`_download_file` (getFile + file endpoint), `_transcribe_and_assess` (inline base64 audio,
+response_mime_type application/json). **Cost:** Gemini bills ~32 tokens/sec of audio → ~₹0.06–0.20
+per note; ~₹300–450/month at 100/day. Trivial.
+
+### 47.10 Create tasks from Telegram — hybrid (speak + tap + review), Jul 22
+➕ New task flow: speak/type the TITLE (voice ok) → pick the exact fields with BUTTONS
+(category → assignee → priority → due) so people/categories/dates can't be misheard → if the
+category requires complainant details (e.g. Review Task) the bot demands name + a validated
+10-digit mobile (same as web) → FINAL review card (every field) → ✅ Create. Role-based like web
+(admins assign; team members raise a request). Calls the SAME `create_quick_task`
+(`source='telegram'`) → identical task, in sync, notifies everyone. **The bot never EDITS a
+task** — all corrections/error-fixes happen on web/app (deliberate, avoids conflicting edits).
+State machine in `telegram_pending`; stale text at a button step nudges to use buttons.
+
+### 47.11 Bot manager + instant connect link (super admin)
+Telegram Bot panel shows a live **Team connections** list (connected / device count / @username /
+pending) with counts. **🔗 Instant link**: SA generates a fresh one-time (force) code for a
+struggling staffer → copy / share on WhatsApp → they tap → connected. Endpoints
+`GET telegram/staff-status`, `POST telegram/instant-link/{staff_id}` (SA, audited).
+**Bot lifecycle** documented + handled: pause (token+links kept), disconnect (links kept —
+re-add SAME bot restores all), new token same bot (survives — `bot_id` compared), DIFFERENT bot
+(old links dead → auto-cleared + told how many must reconnect); "📨 Remind unconnected staff"
+nudges via bell+push+email. Throughout, dashboard+push+email keep delivering — only the Telegram
+copy pauses.
+
+### 47.12 Traceability + wrong-task safeguard (Phase B)
+- **Activity source** on every task action: `source` column on notes + log; threaded through
+  create/status/reopen/reassign/edit/approval/comment. Web sets it from the User-Agent
+  (`_req_source` → web | mobile-web); bot passes `telegram`. UI shows a chip (✈️/💻/📱) in the
+  activity log and on each comment.
+- **Wrong-task confirm**: commenting from Telegram asks "Add this comment to #321 — <title>?
+  ✅/✕" and only saves on confirm — a comment can't land on the wrong task (also lets the sender
+  verify a voice transcript before saving).
+
+### 47.13 Staff profile + avatars (Phase C)
+Top-bar avatar+name → **My Profile** modal: VIEW-ONLY name/role/email/mobile/Telegram status;
+team members may change ONLY their **photo** (≤5 MB, `nidaan_staff.profile_pic`, served via
+signed doc URLs so `<img>` works) and **language** (EN/HI, shared with the bot). Email/mobile are
+admin-managed. Avatars now show on task cards (assignee), @mention dropdowns, task-drawer
+"Involved" chips, and the top bar (initials fallback). Endpoints: `GET me/profile`,
+`POST me/profile-pic`, `POST me/language`.
+
+### 47.14 Involve-tagging fix + role-targeted announcements
+- **Involve others** on the create form: replaced the native multi-select (which visibly
+  deselected) with @-tag chips (type → pick → chip, remove with ✕); ids sent as `mention_ids`.
+- **🆕 Announce** (SA): compose title + details + role checkboxes → reaches ONLY those roles on
+  bell + push + Telegram + email (via `notify_staff_inapp`). So staff learn about features
+  relevant to their role. Endpoint `POST /nidaan/ops/api/announce` (SA, audited).
+
+### 47.15 Also this session
+- **Archived tasks view** — registry defaults to Active; 🗄️ Archived (done+cancelled), scoped
+  (associates see own, admins all), so the board stays short.
+- **Sarathi renewal-scan bug** — `run_sarathi_subscription_renewal_scan` selected a non-existent
+  `subscription_plan` (real col `plan`) → crashed every run → renewal emails had stopped. Fixed
+  (`plan AS subscription_plan`), verified.
+- **App Health noise** downgraded (routine Evolution timeouts + watchdog cycles → INFO; stale
+  watchdog state cleared).
+- **Task search** moved to the top of the Tasks panel; **Task Permissions** moved into Workflow
+  Settings; **complainant fields** category-driven (`requires_complainant`); **WFH** via
+  `request_kind`; **task categories** admin-editable; **@mention collaboration** + mute; **task
+  edit** (creator/SA, audited); **multiple attachments**; **assign-to defaults to None**;
+  **approval routing** to a named approver.
+
+### 47.16 Next up / parked
+- Admin "move a comment/attachment to another task" — corrective tool, parked until a real mix-up.
+- Natural Telegram additions when desired: claims lookup, staff workload, morning digest.
+- WhatsApp (Evolution/Baileys) remains customer-facing best-effort with the self-healing
+  watchdog; internal ops now runs on Telegram.
 
 ---
 
