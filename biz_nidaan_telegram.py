@@ -962,8 +962,18 @@ async def handle_update(update: dict) -> None:
             await send_message(str(chat_id), T("en", "connect_howto")); return
 
         await _process_message_text(staff, text, chat_id)
-    except Exception as e:
-        logger.warning("Telegram update handling failed: %s", e)
+    except Exception:
+        # Full traceback so a failure is diagnosable, and a visible reply so the user
+        # never faces dead silence (which reads as "the bot is broken / nothing happens").
+        logger.exception("Telegram update handling failed for update: %s", str(update)[:400])
+        try:
+            cid = ((update.get("message") or {}).get("chat") or {}).get("id")
+            if cid:
+                await send_message(str(cid),
+                    "⚠️ Something went wrong just now. Please try again — if it keeps "
+                    "happening, let the admin know.")
+        except Exception:
+            pass
 
 
 async def _process_message_text(staff: dict, text: str, chat_id) -> None:
@@ -976,6 +986,13 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
     except Exception:
         pending = {}
     act = pending.get("a")
+    # Universal escape — always works, even mid-flow, so a stuck guided step can never
+    # trap a staffer (input would otherwise be swallowed by the pending flow).
+    if text.lower().strip() in ("/cancel", "cancel", "/menu", "/home", "/start"):
+        await _set_pending(staff["staff_id"], None)
+        t, kb = _main_menu(staff)
+        await send_message(str(chat_id), t, kb)
+        return
     # A guided new-task flow expecting typed/voiced input takes priority.
     if act == "create":
         await _create_text_step(staff, pending, text, chat_id)
@@ -1270,10 +1287,15 @@ async def _handle_callback(cq: dict) -> None:
             await ack(); return
 
         await ack()
-    except Exception as e:
-        logger.warning("Telegram callback failed (%s): %s", data, e)
+    except Exception:
+        logger.exception("Telegram callback failed (data=%s)", data)
         try:
             await ack("Something went wrong")
+        except Exception:
+            pass
+        try:
+            await send_message(str(chat_id),
+                "⚠️ That didn't go through. Please tap the button again, or send /menu to restart.")
         except Exception:
             pass
 
