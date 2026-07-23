@@ -1622,14 +1622,29 @@ async def on_quick_task_comment(quick_task: dict, commenter_id: int, preview: st
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cmt = await (await conn.execute(
-            "SELECT name FROM nidaan_staff WHERE staff_id=?", (commenter_id,))).fetchone()
-        by_name = (cmt["name"] if cmt else "") or "Someone"
+            "SELECT name, phone, COALESCE(NULLIF(notify_email,''), email) AS email "
+            "FROM nidaan_staff WHERE staff_id=?", (commenter_id,))).fetchone()
+    by_name = (cmt["name"] if cmt else "") or "Someone"
     body = (f"💬 {by_name} commented on task #{qid} \"{title}\":\n"
             f"\"{(preview or '')[:160]}\"\n\nOpen: /admin?qt={qid}")
     await _notify_task_participants(
         quick_task=quick_task, actor_id=commenter_id,
         event_key="quick_task.comment",
         subject=f"[Nidaan] Comment on task #{qid} — {title[:40]}", body=body)
+    # Confirmation copy to the AUTHOR too ("your comment was posted") — on every channel
+    # they're on. Doubles as a delivery canary: if the author receives it, the fan-out to
+    # everyone else on the task fired on the same channels.
+    if cmt:
+        conf = (f"✅ Your comment was posted on task #{qid} \"{title}\":\n"
+                f"\"{(preview or '')[:160]}\"\n\nEveryone involved has been notified.\n"
+                f"Open: /admin?qt={qid}")
+        await dispatch(
+            event_key="quick_task.comment_ack",
+            priority=_task_notif_priority(quick_task),
+            recipient_type=RECIPIENT_STAFF, recipient_id=commenter_id,
+            recipient_phone=(cmt["phone"] or ""), recipient_email=(cmt["email"] or ""),
+            subject=f"[Nidaan] Your comment on task #{qid} — {title[:40]}",
+            body=conf, task_id=qid)
 
 
 async def on_quick_task_approval_request(quick_task: dict):

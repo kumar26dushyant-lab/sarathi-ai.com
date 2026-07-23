@@ -101,8 +101,12 @@ async def send_email(to_email: str, subject: str, html_body: str,
         plain = _re.sub(r'<[^>]+>', '', html_body or "")
         plain = _re.sub(r'\s+', ' ', plain).strip()
 
-    reply_addr = reply_to or FROM_NOREPLY or sender_email
-    unsubscribe_header = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
+    # Reply-To and unsubscribe default to THIS email's own sender address — never a
+    # global fallback — so Nidaan mail replies to the Nidaan address and Sarathi mail to
+    # the Sarathi address (a global FROM_NOREPLY/FROM_SUPPORT would leak one product's
+    # address onto the other's mail).
+    reply_addr = reply_to or sender_email
+    unsubscribe_header = f"<mailto:{sender_email}?subject=Unsubscribe>"
 
     async def _smtp_send() -> bool:
         """Send via Gmail SMTP. Returns True on success; never raises."""
@@ -113,7 +117,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
             msg["From"] = f"{sender_name} <{sender_email}>"
             msg["To"] = ", ".join(_recips) if _recips else to_email
             msg["Subject"] = subject
-            msg["Reply-To"] = reply_to or FROM_NOREPLY or sender_email
+            msg["Reply-To"] = reply_to or sender_email
             # Sender header: who actually sent (on behalf of From), for RFC-compliant clients.
             if SMTP_USER and SMTP_USER != sender_email:
                 msg["Sender"] = f"{sender_name} <{SMTP_USER}>"
