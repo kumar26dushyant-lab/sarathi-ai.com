@@ -8351,8 +8351,10 @@ async function waStepNext() {
             if (setupData.qr_base64) waShowQr(setupData.qr_base64);
             waStartQrPolling();
         } catch(e) {
+            // Re-enable ONLY on failure so the user can retry. On success the button
+            // stays disabled through the transition to step 3 (where it's hidden), so a
+            // double-click can never fire a second setup while the QR is generating.
             showToast(_dt('wa_setup_failed'),'error');
-        } finally {
             btn.disabled = false; btn.textContent = _dt('next');
         }
     }
