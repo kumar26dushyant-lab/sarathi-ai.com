@@ -191,6 +191,24 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
+# ── Request timing (latency profiling) ───────────────────────────────────────
+# Logs any request slower than the threshold and exposes per-request timing via an
+# X-Response-Time-ms response header (visible in browser devtools Network tab), so the
+# post-login "buffering" can be traced to the exact slow endpoint.
+@app.middleware("http")
+async def _timing_middleware(request: Request, call_next):
+    _start = _time.perf_counter()
+    response = await call_next(request)
+    _ms = (_time.perf_counter() - _start) * 1000.0
+    if _ms > 800:
+        logger.warning("⏱️ SLOW %.0fms %s %s", _ms, request.method, request.url.path)
+    try:
+        response.headers["X-Response-Time-ms"] = f"{_ms:.0f}"
+    except Exception:
+        pass
+    return response
+
+
 # ── Server Start Time (for uptime) ──────────────────────────────────────────
 SERVER_START_TIME = _time.time()
 
