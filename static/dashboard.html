@@ -2402,7 +2402,7 @@ function exitImpersonation() {
             </div>
             <div class="form-row">
                 <div class="form-group"><label data-i18n="email">Email</label><input type="email" id="lead-email"></div>
-                <div class="form-group"><label data-i18n="dob">DOB *</label><input type="date" id="lead-dob" required></div>
+                <div class="form-group"><label data-i18n="dob">DOB</label><input type="date" id="lead-dob"></div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label data-i18n="city">City</label><input type="text" id="lead-city"></div>
@@ -3512,7 +3512,7 @@ const _DT = {
   type_reply:{en:'Type a reply...',hi:'उत्तर लिखें...'},
   lead_name:{en:'Name *',hi:'नाम *'},
   lead_phone:{en:'Phone *',hi:'फ़ोन *'},
-  dob:{en:'DOB *',hi:'जन्म तिथि *'},
+  dob:{en:'DOB',hi:'जन्म तिथि'},
   new_support_ticket:{en:'🎫 New Support Ticket',hi:'🎫 नया सहायता टिकट'},
   transfer_agent_data:{en:'Transfer Agent Data',hi:'एजेंट डेटा ट्रांसफर'},
   change_lead_stage:{en:'Change Lead Stage',hi:'लीड चरण बदलें'},
@@ -4377,7 +4377,7 @@ async function saveLead() {
     // Loud, blocking validation so the user can never miss what's wrong
     if (!name) { alert(_dt('name_is_required')||'Name is required'); return; }
     if (!editId && !phone) { alert(_dt('phone_is_required')||'Phone is required'); return; }
-    if (!editId && !dob) { alert(_dt('dob_is_required')||'Date of birth is required'); return; }
+    // Only Name + Phone are mandatory; DOB (and email/city/etc.) are optional.
     if (phone && !/^[6-9]\d{9}$/.test(phone)) { alert((_dt('invalid_phone')||'Invalid phone')+'\n\nIndian mobile: 10 digits, starting with 6/7/8/9.\nExample: 9876543210\n\nYou entered: '+phone); return; }
 
     const btn = document.getElementById('lead-save-btn'); const origText = btn.textContent;

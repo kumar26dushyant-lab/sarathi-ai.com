@@ -6932,12 +6932,27 @@ async def add_lead_admin(tenant_id: int, name: str, phone: str = None,
             else:
                 return {'success': False, 'error': 'No agent found for owner'}
         else:
-            # Fallback: first active agent
+            # Fallback: first agent. If the tenant has NONE (a Google-signup that never
+            # got an owner agent, or a previously-wiped account whose agents were removed),
+            # auto-create an owner agent from the tenant so lead creation never dead-ends
+            # with "No agents available".
             agents = await get_agents_by_tenant(tenant_id)
             if agents:
                 target_agent_id = agents[0]['agent_id']
             else:
-                return {'success': False, 'error': 'No agents available'}
+                tg_id = tenant.get('owner_telegram_id') or f"web_{tenant_id}"
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    cur = await conn.execute(
+                        """INSERT INTO agents
+                           (tenant_id, telegram_id, name, phone, email, role, lang)
+                           VALUES (?, ?, ?, ?, ?, 'owner', ?)""",
+                        (tenant_id, tg_id, tenant.get('owner_name') or 'Owner',
+                         tenant.get('phone') or None, tenant.get('email') or None,
+                         tenant.get('lang') or 'en'))
+                    await conn.commit()
+                    target_agent_id = cur.lastrowid
+                logger.info("add_lead_admin: auto-created owner agent %d for tenant %d "
+                            "(had no agents)", target_agent_id, tenant_id)
 
     # Check for duplicate within tenant
     if phone:
