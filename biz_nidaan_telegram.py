@@ -152,6 +152,25 @@ async def list_unlinked_staff() -> list[dict]:
 _poll_offset = 0
 
 
+async def _publish_bot_commands(token: str) -> None:
+    """Register a CLEAN, safe command list so the in-app Menu button shows only a
+    harmless '📋 Open the main menu' — not a 'start / reconnect' entry that staff tap by
+    mistake. This OVERRIDES whatever was set in BotFather. /start still works and is safe:
+    for a linked staffer it simply opens the menu and never unlinks or re-pairs. Set for
+    both default and Hindi so the label reads well in either language."""
+    try:
+        await _call("setMyCommands",
+                    {"commands": [{"command": "menu", "description": "📋 Open the main menu"}]},
+                    token=token)
+        await _call("setMyCommands",
+                    {"commands": [{"command": "menu", "description": "📋 मुख्य मेन्यू खोलें"}],
+                     "language_code": "hi"}, token=token)
+        # Make the input-bar Menu button show that (single, safe) command list.
+        await _call("setChatMenuButton", {"menu_button": {"type": "commands"}}, token=token)
+    except Exception as e:
+        logger.info("setMyCommands failed: %s", e)
+
+
 async def run_polling_loop() -> None:
     """Continuously pull + process updates. Self-heals across token changes,
     pause/resume and network blips."""
@@ -174,6 +193,7 @@ async def run_polling_loop() -> None:
                 await _set_setting("telegram_poll_active", "1")
                 last_token = token
                 _poll_offset = 0
+                await _publish_bot_commands(token)
                 logger.info("📡 Telegram polling active for @%s",
                             await _get_setting("telegram_bot_username", ""))
             res = await _call("getUpdates",

@@ -141,6 +141,31 @@ app = FastAPI(
     redoc_url=None,
 )
 
+
+# ── Background-task safety net ────────────────────────────────────────────────
+# Fire-and-forget `asyncio.create_task(...)` (used widely for notification dispatch)
+# swallows exceptions into an "unretrieved future" warning that is easy to miss — an
+# aiosqlite.Row.get() bug in on_quick_task_mention silently stopped @mention Telegram/
+# email alerts before it was noticed. This handler turns ANY unhandled background-task
+# exception into a loud ERROR with a full traceback, so such failures surface at once.
+def _log_background_task_exception(loop, context):
+    exc = context.get("exception")
+    msg = context.get("message") or "background task error"
+    if exc is not None:
+        logger.error("⚠️ UNHANDLED BACKGROUND TASK: %s", msg,
+                     exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.error("⚠️ UNHANDLED BACKGROUND TASK: %s", msg)
+
+
+@app.on_event("startup")
+async def _install_bg_exception_handler():
+    try:
+        asyncio.get_running_loop().set_exception_handler(_log_background_task_exception)
+        logger.info("🛡️  Background-task exception handler installed")
+    except Exception as _e:
+        logger.warning("Could not install bg exception handler: %s", _e)
+
 # ── Rate Limiting ────────────────────────────────────────────────────────────
 # IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
 # to actually fire. Without it, the decorators are silently inert. Discovered
@@ -19096,6 +19121,13 @@ async def webhook_receive(request: Request):
 
 async def main():
     """Start everything — database, web server, Telegram bot, scheduler."""
+
+    # Same background-task safety net as the web app, for the worker's loop (scheduled
+    # reminders, watchdog, Telegram poll all fire-and-forget tasks here).
+    try:
+        asyncio.get_running_loop().set_exception_handler(_log_background_task_exception)
+    except Exception:
+        pass
 
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
     if not TELEGRAM_TOKEN:

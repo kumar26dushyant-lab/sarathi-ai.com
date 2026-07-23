@@ -1588,11 +1588,13 @@ async def on_quick_task_mention(quick_task: dict, mentioned_ids: list,
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         ph = ",".join("?" * len(mentioned_ids))
-        rows = await (await conn.execute(
+        # dict(...) so .get()/indexing both work — a bare aiosqlite.Row has no .get(),
+        # which was silently crashing this fire-and-forget task (mentions never notified).
+        rows = [dict(x) for x in await (await conn.execute(
             f"SELECT staff_id, phone, "
             f"       COALESCE(NULLIF(notify_email,''), email) AS email "
             f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
-            f"AND status='active' AND deleted_at IS NULL", list(mentioned_ids))).fetchall()
+            f"AND status='active' AND deleted_at IS NULL", list(mentioned_ids))).fetchall()]
     body = (f"🏷️ {by_name} tagged you on task #{qid} \"{title}\""
             + (f":\n\"{preview[:160]}\"" if preview else ".") +
             f"\n\nYou can now see and work on it.\nOpen: /admin?qt={qid}")
