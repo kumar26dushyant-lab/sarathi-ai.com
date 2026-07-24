@@ -165,6 +165,11 @@ async def _install_bg_exception_handler():
         logger.info("🛡️  Background-task exception handler installed")
     except Exception as _e:
         logger.warning("Could not install bg exception handler: %s", _e)
+    # Seed the DB-backed Nidaan plan config (idempotent) so plans become editable in ops.
+    try:
+        await nidaan.seed_plans_config()
+    except Exception as _pe:
+        logger.warning("nidaan plan-config seed failed: %s", _pe)
 
 # ── Rate Limiting ────────────────────────────────────────────────────────────
 # IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
@@ -620,7 +625,7 @@ async def nidaan_api_plans(request: Request):
     and the claim-form disputed-amount cap nudge. Single source of truth."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return {"plans": nidaan.public_plans()}
+    return {"plans": await nidaan.public_plans()}
 
 
 async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, phone: str):

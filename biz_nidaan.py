@@ -49,20 +49,112 @@ PLAN_LIMITS: dict[str, dict] = {
     "platinum_annual": {"price": 19990, "max_users": None, "claims_per_month": 10, "disputed_cap": 5000000,  "sarathi_bundle": True},
 }
 
-def public_plans() -> list[dict]:
-    """Public monthly plan tiers for the pricing UI + the disputed-amount cap nudge.
-    Single source of truth (derived from PLAN_LIMITS)."""
+# ── Plan config (DB-backed, super-admin editable) ─────────────────────────────
+# PLAN_LIMITS + NIDAAN_RAZORPAY_PLANS (below) are the SEED/defaults. Once seeded into
+# nidaan_plans_config, THAT table is the single source of truth — editable from ops with
+# no code changes. get_plans_config() reads it (cached); accessors below derive from it,
+# with a safe fallback to the hardcoded defaults until the table is seeded.
+_PLANS_CACHE: dict | None = None
+
+
+async def seed_plans_config():
+    """Create the plan-config table + seed it from the hardcoded defaults (once)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_plans_config (
+                plan_key TEXT PRIMARY KEY,
+                label TEXT, tier TEXT, billing TEXT,
+                price_paise INTEGER, claims_per_month INTEGER, disputed_cap INTEGER,
+                max_users INTEGER, sarathi_bundle INTEGER DEFAULT 1,
+                features TEXT DEFAULT '[]', badge TEXT DEFAULT '',
+                razorpay_plan_id TEXT DEFAULT '', period TEXT, interval_n INTEGER DEFAULT 1,
+                period_days INTEGER, active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        cur = await conn.execute("SELECT COUNT(*) FROM nidaan_plans_config")
+        if (await cur.fetchone())[0] > 0:
+            await conn.commit()
+            return
+        order = {"silver": 1, "gold": 2, "platinum": 3,
+                 "silver_annual": 4, "gold_annual": 5, "platinum_annual": 6}
+        for key, lim in PLAN_LIMITS.items():
+            rz = NIDAAN_RAZORPAY_PLANS.get(key, {})
+            tier = key.replace("_annual", "")
+            billing = "yearly" if key.endswith("_annual") else "monthly"
+            await conn.execute(
+                """INSERT OR IGNORE INTO nidaan_plans_config
+                   (plan_key,label,tier,billing,price_paise,claims_per_month,disputed_cap,
+                    max_users,sarathi_bundle,features,badge,period,interval_n,period_days,
+                    active,sort_order)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (key, tier.capitalize(), tier, billing,
+                 rz.get("amount_paise") or (lim.get("price", 0) * 100),
+                 lim.get("claims_per_month"), lim.get("disputed_cap"), lim.get("max_users"),
+                 1 if lim.get("sarathi_bundle") else 0, "[]",
+                 "MOST POPULAR" if tier == "gold" else "",
+                 rz.get("period", "monthly"), rz.get("interval", 1), rz.get("period_days"),
+                 1, order.get(key, 99)))
+        await conn.commit()
+        logger.info("nidaan_plans_config seeded from defaults (%d plans)", len(PLAN_LIMITS))
+
+
+async def get_plans_config(force: bool = False) -> dict:
+    """All plans as {plan_key: {...}} — cached. Single source of truth once seeded."""
+    global _PLANS_CACHE
+    if _PLANS_CACHE is not None and not force:
+        return _PLANS_CACHE
+    out: dict = {}
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cur = await conn.execute("SELECT * FROM nidaan_plans_config")
+            for r in await cur.fetchall():
+                d = dict(r)
+                try:
+                    d["features"] = json.loads(d.get("features") or "[]")
+                except Exception:
+                    d["features"] = []
+                out[d["plan_key"]] = d
+    except Exception:
+        out = {}
+    _PLANS_CACHE = out
+    return out
+
+
+async def get_plan_cfg(plan_key: str) -> dict:
+    return (await get_plans_config()).get(plan_key, {})
+
+
+def invalidate_plans_cache():
+    global _PLANS_CACHE
+    _PLANS_CACHE = None
+
+
+async def public_plans() -> list[dict]:
+    """Public monthly plan tiers for the pricing UI + disputed-amount cap nudge — read
+    from the config table (falls back to PLAN_LIMITS until seeded)."""
+    cfg = await get_plans_config()
     out = []
     for key in ("silver", "gold", "platinum"):
-        lim = PLAN_LIMITS.get(key, {})
-        out.append({
-            "plan": key,
-            "label": key.capitalize(),
-            "price": lim.get("price"),
-            "claims_per_month": lim.get("claims_per_month"),
-            "disputed_cap": lim.get("disputed_cap"),
-            "max_users": lim.get("max_users"),
-        })
+        p = cfg.get(key)
+        if p:
+            if not p.get("active"):
+                continue
+            out.append({
+                "plan": key, "label": p.get("label") or key.capitalize(),
+                "price": round((p.get("price_paise") or 0) / 100),
+                "claims_per_month": p.get("claims_per_month"),
+                "disputed_cap": p.get("disputed_cap"),
+                "max_users": p.get("max_users"),
+                "features": p.get("features", []), "badge": p.get("badge", ""),
+            })
+        else:  # fallback: config not seeded yet
+            lim = PLAN_LIMITS.get(key, {})
+            out.append({
+                "plan": key, "label": key.capitalize(), "price": lim.get("price"),
+                "claims_per_month": lim.get("claims_per_month"),
+                "disputed_cap": lim.get("disputed_cap"), "max_users": lim.get("max_users"),
+                "features": [], "badge": "MOST POPULAR" if key == "gold" else "",
+            })
     return out
 
 
