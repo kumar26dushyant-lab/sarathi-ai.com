@@ -1402,18 +1402,48 @@ async def update_review_request_status(
 # =============================================================================
 
 async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict]:
-    """Admin: list all Nidaan accounts with their active plan."""
+    """Admin: list all Nidaan accounts, classified by account_type with plan caps + usage.
+      account_type: 'subscriber' (active sub) | 'per_claim' (paid ₹499, no sub) | 'lead'.
+    Adds claims_used / claims_cap (None = unlimited) for the usage bar, disputed_cap, and
+    per-claim balance. Caps come from the super-admin-editable plans config."""
+    cfg = await get_plans_config()
+    window_floor = (date.today() - timedelta(days=30)).isoformat()
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
-            """SELECT a.*, s.plan, s.status AS sub_status, s.current_period_end
+            """SELECT a.*, s.plan, s.status AS sub_status, s.current_period_end,
+                      q.claims_this_window, q.current_window_start,
+                      (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
+                        WHERE p.account_id = a.account_id AND p.status = 'paid') AS per_claim_total,
+                      (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
+                        WHERE p.account_id = a.account_id AND p.status = 'paid'
+                          AND p.linked_claim_id IS NULL) AS per_claim_balance
                FROM nidaan_accounts a
                LEFT JOIN nidaan_subscriptions s ON s.account_id = a.account_id
                    AND s.status = 'active'
+               LEFT JOIN nidaan_plan_quota q ON q.account_id = a.account_id
                ORDER BY a.created_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+    for r in rows:
+        plan = r.get("plan")
+        if plan:
+            r["account_type"] = "subscriber"
+            pc = cfg.get(plan, {}) if cfg else {}
+            r["claims_cap"] = pc.get("claims_per_month")   # None = unlimited
+            r["disputed_cap"] = pc.get("disputed_cap")
+            used = r.get("claims_this_window") or 0
+            ws = r.get("current_window_start")
+            if not ws or str(ws) < window_floor:
+                used = 0                                    # window rolled over → resets on next claim
+            r["claims_used"] = used
+        else:
+            r["account_type"] = "per_claim" if (r.get("per_claim_total") or 0) > 0 else "lead"
+            r["claims_cap"] = None
+            r["disputed_cap"] = None
+            r["claims_used"] = 0
+    return rows
 
 
 async def get_overview_widgets(staff_id: int, staff_role: str,
