@@ -926,9 +926,8 @@
       <div class="field">
         <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
         <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
-        <input type="text" id="claimBranchCode" list="branchList" maxlength="12" autocomplete="off"
-               placeholder="e.g. MUM-01 — pick your Nidaan branch" oninput="this.value=this.value.toUpperCase()">
-        <datalist id="branchList"></datalist>
+        <input type="text" id="claimBranchCode" maxlength="12" autocomplete="off"
+               placeholder="e.g. MUM-01 — code given by your Nidaan branch" oninput="this.value=this.value.toUpperCase()">
         <p class="en" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">If a Nidaan branch referred you, pick their code — otherwise leave it blank.</p>
         <p class="hi" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">अगर किसी Nidaan ब्रांच ने आपको भेजा है तो उनका कोड चुनें — वरना खाली छोड़ें।</p>
       </div>
@@ -2430,11 +2429,9 @@ async function loadBranchList() {
     const res = await fetch('/nidaan/api/branches');
     if (!res || !res.ok) return;
     const branches = (await res.json()).branches || [];
+    // Build the validation set (free-text input — no dropdown — but the code must be a
+    // real active branch; server also re-validates via is_valid_branch).
     window._nidaanBranchSet = new Set(branches.map(b => (b.branch_code || '').toUpperCase()));
-    const _e = s => String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-    const dl = document.getElementById('branchList');
-    if (dl) dl.innerHTML = branches.map(b =>
-      `<option value="${_e((b.branch_code || '').toUpperCase())}">${_e(b.city || '')} — ${_e(b.name || '')}</option>`).join('');
   } catch(_) {}
 }
 
@@ -2465,7 +2462,7 @@ function checkDisputedCap() {
     m += isHi
       ? ` यदि सही है, तो <b>${fit.label}</b> (${_fmtL(fit.disputed_cap)} तक) में अपग्रेड करें।`
       : ` If it's genuinely higher, upgrade to <b>${fit.label}</b> (up to ${_fmtL(fit.disputed_cap)}) to proceed.`;
-    m += ` <a href="#" onclick="event.preventDefault();try{openSubscribeModal()}catch(e){}" style="color:#22d3ee;font-weight:700;text-decoration:underline">${isHi ? 'अपग्रेड करें →' : 'Upgrade →'}</a>`;
+    m += ` <a href="#" onclick="event.preventDefault();try{closeModal();switchPlan('${fit.plan}')}catch(e){}" style="color:#22d3ee;font-weight:700;text-decoration:underline">${isHi ? `${fit.label} में अपग्रेड करें →` : `Upgrade to ${fit.label} →`}</a>`;
   }
   nudge.innerHTML = '⚠️ ' + m;
   nudge.style.display = 'block';
