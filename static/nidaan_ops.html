@@ -3416,7 +3416,7 @@ async function loadAccounts() {
   const el = document.getElementById('panel-accounts');
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Advisor Accounts</div><div class="section-sub">All registered advisors</div></div>
+      <div><div class="section-title">Advisor Accounts</div><div class="section-sub">Subscribers, ₹499 one-time &amp; leads — with plan usage &amp; caps</div></div>
       ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
     </div>
     ${_role==='super_admin'?`<div id="accBulkBar" style="display:none;align-items:center;gap:.75rem;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.35);border-radius:10px;padding:.5rem .85rem;margin-bottom:.75rem">
@@ -3424,6 +3424,7 @@ async function loadAccounts() {
       <button class="btn" style="background:#dc2626;color:#fff;font-size:.8rem;padding:.35rem .8rem" onclick="deleteSelectedAccounts()">🗑️ Delete selected</button>
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_accSel.clear();renderAccounts(window._allAccounts);">Clear</button>
     </div>`:''}
+    <div id="accSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem"></div>
     <div class="filter-bar">
       <input id="accSearch" placeholder="🔍 Search name / email / firm…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
     </div>
@@ -3433,16 +3434,53 @@ async function loadAccounts() {
   if (!r.ok) return;
   const d = await r.json();
   window._allAccounts = d.accounts;
-  renderAccounts(d.accounts);
+  window._accSeg = 'all';
+  window._accQuery = '';
+  renderAccSegBar();
+  applyAccFilters();
 }
 
-function filterAccounts(q) {
+// Segment filter (subscribers / ₹499 / leads) + search, combined.
+const _ACC_SEGS = [['all','All'],['subscriber','Subscribers'],['per_claim','₹499 one-time'],['lead','Leads']];
+function renderAccSegBar(){
+  const all = window._allAccounts||[];
+  const cnt = t => t==='all' ? all.length : all.filter(a=>a.account_type===t).length;
+  const bar = document.getElementById('accSegBar'); if(!bar) return;
+  bar.innerHTML = _ACC_SEGS.map(([k,label])=>
+    `<button class="btn ${(window._accSeg||'all')===k?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="segAccounts('${k}')">${label} (${cnt(k)})</button>`
+  ).join('');
+}
+function segAccounts(seg){ window._accSeg = seg; renderAccSegBar(); applyAccFilters(); }
+function filterAccounts(q){ window._accQuery = q; applyAccFilters(); }
+function applyAccFilters(){
+  const q = (window._accQuery||'').toLowerCase();
+  const seg = window._accSeg||'all';
   const list = (window._allAccounts||[]).filter(a=>
-    !q || (a.owner_name||'').toLowerCase().includes(q.toLowerCase()) ||
-    (a.email||'').toLowerCase().includes(q.toLowerCase()) ||
-    (a.firm_name||'').toLowerCase().includes(q.toLowerCase())
+    (seg==='all' || a.account_type===seg) &&
+    (!q || (a.owner_name||'').toLowerCase().includes(q) ||
+      (a.email||'').toLowerCase().includes(q) ||
+      (a.firm_name||'').toLowerCase().includes(q))
   );
   renderAccounts(list);
+}
+// Usage/entitlement cell per account type.
+function accUsageCell(a){
+  if(a.account_type==='subscriber'){
+    if(a.claims_cap==null) return '<span style="font-size:.72rem;color:#4ade80">∞ unlimited</span>';
+    const used=a.claims_used||0, cap=a.claims_cap, pct=cap?Math.min(100,Math.round(used/cap*100)):0;
+    const col = used>=cap?'#f87171':(used>=cap*0.7?'#fbbf24':'#22d3ee');
+    return `<div style="min-width:92px"><div style="font-size:.72rem;color:rgba(255,255,255,.6);margin-bottom:2px">${used}/${cap} claims</div><div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col}"></div></div></div>`;
+  }
+  if(a.account_type==='per_claim') return `<span style="font-size:.72rem;color:#c4b5fd">${a.per_claim_balance||0} left · ${a.per_claim_total||0} bought</span>`;
+  return '<span style="color:rgba(255,255,255,.3)">—</span>';
+}
+function accTypeBadge(a){
+  if(a.account_type==='subscriber'){
+    const cap = a.disputed_cap!=null ? ` · ≤₹${Math.round(a.disputed_cap/100000)}L` : '';
+    return `<span class="pill-status s-${a.plan}" title="Disputed cap${cap}">${a.plan}${cap}</span>`;
+  }
+  if(a.account_type==='per_claim') return '<span class="pill-status" style="background:rgba(168,85,247,.18);color:#c4b5fd">₹499</span>';
+  return '<span class="pill-status" style="background:rgba(148,163,184,.18);color:#cbd5e1">Lead</span>';
 }
 
 function renderAccounts(accounts) {
@@ -3458,9 +3496,10 @@ function renderAccounts(accounts) {
       <td><strong>#${a.account_id}</strong></td>
       <td>${esc(a.owner_name)}</td>
       <td>${esc(a.firm_name||'—')}</td>
-      <td>${esc(a.email)}</td>
+      <td>${esc(a.email||'—')}</td>
       <td>${esc(a.phone||'—')}</td>
-      <td><span class="pill-status s-${a.plan||'free'}">${a.plan||'free'}</span></td>
+      <td>${accTypeBadge(a)}</td>
+      <td>${accUsageCell(a)}</td>
       <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(a.created_at)}</td>
       <td onclick="event.stopPropagation()">
@@ -3475,7 +3514,7 @@ function renderAccounts(accounts) {
     <div style="font-size:.75rem;color:rgba(255,255,255,.35);margin-bottom:.4rem">💡 Click any row to view account details, claims and reviews</div>
     <div class="table-wrap">
       <table>
-        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Plan</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
