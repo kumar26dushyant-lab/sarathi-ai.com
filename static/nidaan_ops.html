@@ -382,6 +382,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-telegram" class="panel" style="display:none"></div>
       <div id="panel-guide" class="panel" style="display:none"></div>
       <div id="panel-revenue" class="panel" style="display:none"></div>
+      <div id="panel-plans" class="panel" style="display:none"></div>
       <div id="panel-health" class="panel" style="display:none"></div>
     </main>
   </div>
@@ -499,7 +500,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','claims','accounts','branches','staff','settings','numbers','telegram','guide','revenue','health'];
+  const KNOWN_PANELS = ['tasks','overview','claims','accounts','branches','staff','settings','numbers','telegram','guide','revenue','plans','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -755,6 +756,7 @@ function buildSidebar() {
     {id:'guide',      label:'📖 How to use',       minRank:0},
     null,
     {id:'revenue',    label:'💰 Revenue',       minRank:2, ownerOnly:true},
+    {id:'plans',      label:'💳 Plans & Billing', minRank:2},
     {id:'health',     label:'🖥️ App Health',   minRank:2},
   ];
   const sb = document.getElementById('sidebar');
@@ -800,6 +802,7 @@ function showPanel(id, fromHistory) {
     telegram: loadTelegramPanel,
     guide: loadGuidePanel,
     revenue: loadRevenue,
+    plans: loadPlansConfig,
     health: loadHealth,
   };
   if (loaders[id]) loaders[id]();
@@ -4480,6 +4483,64 @@ async function loadRevenue() {
 // ═══════════════════════════════════════════════════════════════
 //  APP HEALTH
 // ═══════════════════════════════════════════════════════════════
+// ── Plans & Billing (super-admin) ─────────────────────────────────────────────
+async function loadPlansConfig() {
+  const el = document.getElementById('panel-plans');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">Plans &amp; Billing</div></div><div class="empty"><p>Loading…</p></div>';
+  const r = await API('/plans-config');
+  if (!r.ok) { el.innerHTML = '<div class="section-hdr"><div class="section-title">Plans &amp; Billing</div></div><div class="empty"><p>Failed to load (super-admin only).</p></div>'; return; }
+  const plans = (await r.json()).plans || [];
+  const _cap = v => (v === null || v === undefined) ? '' : v;   // null (∞) → blank
+  const card = p => `
+    <div class="pcfg-card" data-plan="${esc(p.plan_key)}" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+        <div style="font-weight:800;font-size:1.05rem">${esc(p.label || p.plan_key)} <span style="font-size:.7rem;color:rgba(255,255,255,.4);font-family:monospace">${esc(p.plan_key)} · ${esc(p.billing || '')}</span></div>
+        <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" class="pcfg-active" ${p.active ? 'checked' : ''}> Active</label>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem">
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Label<input class="pcfg-label form-input" value="${esc(p.label || '')}" maxlength="40"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Price ₹ <span style="color:rgba(255,255,255,.3)">(read-only)</span><input class="form-input" value="${Math.round((p.price_paise || 0) / 100)}" disabled title="Price editing arrives with the Razorpay-wiring step"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Claims / month <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-claims form-input" type="number" min="0" value="${_cap(p.claims_per_month)}"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Disputed cap ₹ <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-cap form-input" type="number" min="0" value="${_cap(p.disputed_cap)}"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">CRM seats <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-users form-input" type="number" min="1" value="${_cap(p.max_users)}"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Badge<input class="pcfg-badge form-input" value="${esc(p.badge || '')}" maxlength="30" placeholder="e.g. MOST POPULAR"></label>
+      </div>
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-top:.6rem">Features (one per line — shown on pricing cards)
+        <textarea class="pcfg-features form-input" rows="3">${esc((p.features || []).join('\n'))}</textarea></label>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;margin-top:.6rem">
+        <span class="pcfg-msg" style="font-size:.78rem"></span>
+        <button class="btn btn-primary" style="font-size:.85rem;padding:.4rem .9rem" onclick="savePlanConfig('${esc(p.plan_key)}')">💾 Save</button>
+      </div>
+    </div>`;
+  const monthly = plans.filter(p => p.billing === 'monthly');
+  const yearly = plans.filter(p => p.billing === 'yearly');
+  el.innerHTML = `
+    <div class="section-hdr"><div><div class="section-title">Plans &amp; Billing</div><div class="section-sub">Edit caps, features &amp; availability — applies everywhere instantly. Price editing arrives with the payment-wiring step.</div></div><button class="btn btn-ghost" onclick="loadPlansConfig()">🔄 Refresh</button></div>
+    <div style="font-size:.85rem;font-weight:700;color:#22d3ee;margin:.4rem 0 .55rem">Monthly plans</div>
+    ${monthly.map(card).join('') || '<div class="empty"><p>No monthly plans.</p></div>'}
+    ${yearly.length ? `<div style="font-size:.85rem;font-weight:700;color:#22d3ee;margin:1rem 0 .55rem">Yearly plans</div>${yearly.map(card).join('')}` : ''}`;
+}
+
+async function savePlanConfig(planKey) {
+  const cardEl = document.querySelector(`.pcfg-card[data-plan="${planKey}"]`);
+  if (!cardEl) return;
+  const msg = cardEl.querySelector('.pcfg-msg');
+  const _num = sel => { const v = (cardEl.querySelector(sel).value || '').trim(); return v === '' ? -1 : parseInt(v); };  // blank = ∞ (-1)
+  const body = {
+    label: (cardEl.querySelector('.pcfg-label').value || '').trim(),
+    claims_per_month: _num('.pcfg-claims'),
+    disputed_cap: _num('.pcfg-cap'),
+    max_users: _num('.pcfg-users'),
+    badge: (cardEl.querySelector('.pcfg-badge').value || '').trim(),
+    active: cardEl.querySelector('.pcfg-active').checked,
+    features: (cardEl.querySelector('.pcfg-features').value || '').split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12),
+  };
+  msg.style.color = '#94a3b8'; msg.textContent = 'Saving…';
+  const r = await API('/plans-config/' + encodeURIComponent(planKey), { method: 'PATCH', body: JSON.stringify(body) });
+  if (r.ok) { msg.style.color = '#4ade80'; msg.textContent = '✓ Saved'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+  else { const d = await r.json().catch(() => ({})); msg.style.color = '#f87171'; msg.textContent = '✕ ' + (d.detail || 'Failed'); }
+}
+
 async function loadHealth() {
   const el = document.getElementById('panel-health');
   el.innerHTML = '<div class="section-hdr"><div class="section-title">App Health</div><div class="section-sub">Live system diagnostics</div></div><div class="empty"><p>Loading…</p></div>';

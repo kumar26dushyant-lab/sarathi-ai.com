@@ -129,6 +129,70 @@ def invalidate_plans_cache():
     _PLANS_CACHE = None
 
 
+# Fields the super-admin editor may change. price/razorpay are handled in a later increment
+# (they require Razorpay plan re-creation), so they are intentionally NOT editable here.
+_EDITABLE_PLAN_FIELDS = {"label", "claims_per_month", "disputed_cap", "max_users",
+                         "features", "badge", "active", "sort_order"}
+
+
+async def update_plan_config(plan_key: str, fields: dict) -> dict:
+    """Validated update of an EXISTING plan's config (super-admin only, enforced at the
+    route). Whitelists fields, coerces + bounds-checks values, parameterizes the query, and
+    invalidates the cache. Returns the updated plan. Raises ValueError on bad input."""
+    cfg = await get_plans_config(force=True)
+    if plan_key not in cfg:
+        raise ValueError("unknown_plan")
+    # Partial update: only NON-None fields change. Caps use -1 (or any negative) to mean
+    # "unlimited" (stored NULL) — explicit, so an omitted field never flips a cap by accident.
+    sets, vals = [], []
+    for k, v in (fields or {}).items():
+        if k not in _EDITABLE_PLAN_FIELDS or v is None:
+            continue  # ignore non-editable keys + unset fields (defense in depth)
+        if k in ("claims_per_month", "disputed_cap", "max_users"):
+            cv = int(v)
+            if cv < 0:
+                cv = None  # -1 = unlimited
+            elif cv > 1_000_000_000:
+                raise ValueError(f"{k}_out_of_range")
+            elif k == "max_users" and cv == 0:
+                raise ValueError("max_users_min_1")
+            sets.append(f"{k}=?"); vals.append(cv)
+        elif k == "active":
+            sets.append("active=?"); vals.append(1 if v in (True, 1, "1", "true", "on") else 0)
+        elif k == "sort_order":
+            sets.append("sort_order=?"); vals.append(max(0, min(999, int(v))))
+        elif k == "label":
+            s = str(v).strip()[:40]
+            if not s:
+                raise ValueError("label_required")
+            sets.append("label=?"); vals.append(s)
+        elif k == "badge":
+            sets.append("badge=?"); vals.append(str(v).strip()[:30])
+        elif k == "features":
+            if not isinstance(v, list):
+                raise ValueError("features_must_be_list")
+            feats = [str(x).strip()[:120] for x in v if str(x).strip()][:12]
+            sets.append("features=?"); vals.append(json.dumps(feats))
+    if not sets:
+        raise ValueError("nothing_to_update")
+    sets.append("updated_at=CURRENT_TIMESTAMP")
+    vals.append(plan_key)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_plans_config SET {', '.join(sets)} WHERE plan_key=?", vals)
+        await conn.commit()
+    invalidate_plans_cache()
+    return (await get_plans_config(force=True)).get(plan_key, {})
+
+
+async def all_plans_config_full() -> list[dict]:
+    """Every plan (all billing types, active + inactive) for the super-admin editor,
+    ordered by sort_order. Includes price_paise + razorpay id (read-only for now)."""
+    cfg = await get_plans_config(force=True)
+    rows = sorted(cfg.values(), key=lambda p: (p.get("sort_order", 99), p.get("plan_key", "")))
+    return rows
+
+
 async def public_plans() -> list[dict]:
     """Public monthly plan tiers for the pricing UI + disputed-amount cap nudge — read
     from the config table (falls back to PLAN_LIMITS until seeded)."""
@@ -688,7 +752,10 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     sub = await get_active_subscription(account_id)
     if sub:
         plan = sub["plan"]
-        limit = PLAN_LIMITS.get(plan, {}).get("claims_per_month")
+        # Read the claim cap from the (super-admin editable) config; fall back to the
+        # hardcoded default only if the config hasn't been seeded.
+        _cfg = await get_plan_cfg(plan)
+        limit = _cfg.get("claims_per_month") if _cfg else PLAN_LIMITS.get(plan, {}).get("claims_per_month")
         if limit is None:
             return True, "ok"  # platinum / unlimited
 

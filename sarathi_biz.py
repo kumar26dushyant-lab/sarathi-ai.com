@@ -3543,6 +3543,47 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
     return {"ok": True}
 
 
+# ── Plans & billing config (SUPER-ADMIN only — sensitive) ─────────────────────
+@app.get("/nidaan/ops/api/plans-config")
+async def ops_plans_config(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return {"plans": await nidaan.all_plans_config_full()}
+
+
+class OpsPlanConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")   # reject any unexpected field
+    label: Optional[str] = Field(None, max_length=40)
+    claims_per_month: Optional[int] = Field(None, ge=-1, le=1_000_000_000)   # -1 = unlimited
+    disputed_cap: Optional[int] = Field(None, ge=-1, le=1_000_000_000)       # -1 = unlimited
+    max_users: Optional[int] = Field(None, ge=-1, le=1_000_000)              # -1 = unlimited
+    features: Optional[list[str]] = Field(None, max_length=12)
+    badge: Optional[str] = Field(None, max_length=30)
+    active: Optional[bool] = None
+    sort_order: Optional[int] = Field(None, ge=0, le=999)
+
+
+@app.patch("/nidaan/ops/api/plans-config/{plan_key}")
+@limiter.limit("20/minute")
+async def ops_update_plan_config(plan_key: str, body: OpsPlanConfigUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if plan_key not in (await nidaan.get_plans_config()):
+        raise HTTPException(status_code=404, detail="Unknown plan")
+    changes = body.model_dump(exclude_none=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    try:
+        updated = await nidaan.update_plan_config(plan_key, changes)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "plan.config_update", "plan", plan_key,
+                     ", ".join(f"{k}={v}" for k, v in changes.items())[:200])
+    return {"ok": True, "plan": updated}
+
+
 @app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")
 async def ops_branch_unpaid_leads(branch_code: str, request: Request):
     """Attributed accounts for this branch that haven't paid yet — the fallback
