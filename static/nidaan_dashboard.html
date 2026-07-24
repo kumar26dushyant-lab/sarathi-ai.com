@@ -1937,8 +1937,11 @@ async function doSubscribe() {
       const planLabel = data.plan.replace('_annual','').charAt(0).toUpperCase() + data.plan.replace('_annual','').slice(1);
       const periodLabel = isAnnual ? '12 months access' : '1 month access';
 
-      // Store pending payment — recovery fallback for UPI app-switch / browser context loss
-      sessionStorage.setItem('nidaan_pending_order', JSON.stringify({
+      // Store pending payment — recovery fallback for UPI app-switch / browser context loss.
+      // localStorage (NOT sessionStorage) is deliberate: mobile browsers often KILL the tab
+      // during a UPI app-switch, which wipes sessionStorage. localStorage survives, so even a
+      // fresh tab recovers the order on load (30-min expiry). The webhook is the final backstop.
+      localStorage.setItem('nidaan_pending_order', JSON.stringify({
         order_id: data.order_id,
         plan: data.plan,
         amount: data.amount,
@@ -1990,7 +1993,7 @@ async function doSubscribe() {
               localStorage.setItem(TOKEN_KEY, vd.token);
               localStorage.setItem('nidaan_plan', vd.plan);
             }
-            sessionStorage.removeItem('nidaan_pending_order');
+            localStorage.removeItem('nidaan_pending_order');
             closeSubscribeModal();
             location.href = '/nidaan/dashboard?payment=success';
           } catch(e) {
@@ -2378,12 +2381,12 @@ setLang(_lang);
 // If UPI app switch caused JS context loss, handler never fired.
 // We check the order status server-side and activate if paid.
 async function recoverPendingPayment(showFeedback) {
-  const raw = sessionStorage.getItem('nidaan_pending_order');
+  const raw = localStorage.getItem('nidaan_pending_order');
   if (!raw) return;
   let pending;
-  try { pending = JSON.parse(raw); } catch(e) { sessionStorage.removeItem('nidaan_pending_order'); return; }
+  try { pending = JSON.parse(raw); } catch(e) { localStorage.removeItem('nidaan_pending_order'); return; }
   // Expire recovery after 30 minutes
-  if (Date.now() - pending.ts > 30 * 60 * 1000) { sessionStorage.removeItem('nidaan_pending_order'); return; }
+  if (Date.now() - pending.ts > 30 * 60 * 1000) { localStorage.removeItem('nidaan_pending_order'); return; }
   try {
     const r = await fetch('/nidaan/api/subscribe/check?order_id=' + encodeURIComponent(pending.order_id), {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY) }
@@ -2394,13 +2397,13 @@ async function recoverPendingPayment(showFeedback) {
       // Payment captured — activate and reload
       localStorage.setItem(TOKEN_KEY, d.token);
       localStorage.setItem('nidaan_plan', d.plan);
-      sessionStorage.removeItem('nidaan_pending_order');
+      localStorage.removeItem('nidaan_pending_order');
       location.href = '/nidaan/dashboard?payment=success';
       return;
     }
     // Any non-success state (failed or attempted-but-not-captured)
     if (showFeedback) {
-      sessionStorage.removeItem('nidaan_pending_order');
+      localStorage.removeItem('nidaan_pending_order');
       // Show banner explaining what happened
       const banner = document.getElementById('subBanner');
       if (banner) {
@@ -2412,7 +2415,7 @@ async function recoverPendingPayment(showFeedback) {
               If you paid on mobile and it shows success there, your plan will activate automatically within a few minutes.
               Otherwise, click below to try again.
             </span>
-            <button onclick="sessionStorage.removeItem('nidaan_pending_order');openSubscribeModal();selectPlan('${pending.plan || 'silver'}');"
+            <button onclick="localStorage.removeItem('nidaan_pending_order');openSubscribeModal();selectPlan('${pending.plan || 'silver'}');"
               style="margin-top:.35rem;padding:.45rem 1rem;background:#06b6d4;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem">
               🔄 Try Again
             </button>
