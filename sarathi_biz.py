@@ -558,9 +558,21 @@ class NidaanSignupReq(BaseModel):
     branch_code: str = ""   # optional affiliate branch attribution (validated strictly if given)
 
 
+class NidaanMobileSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: str = Field(..., min_length=1, max_length=100)
+    phone: str                       # 10-digit mobile — primary identity (required)
+    password: str
+    email: str = ""                  # OPTIONAL — verified via OTP only if provided
+    email_otp: str = ""              # required only when email is given
+    firm_name: str = ""
+    plan: str = "silver"
+    branch_code: str = ""            # affiliate branch — locked at signup for profit-share
+
+
 class NidaanLoginReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
-    email: str
+    email: str                       # accepts email OR 10-digit mobile (login identifier)
     password: str
 
 
@@ -619,6 +631,25 @@ async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
         raise HTTPException(status_code=400, detail="Invalid email")
     account = await nidaan.get_account_by_email(email)
     return {"exists": account is not None}
+
+
+class NidaanCheckPhoneReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    phone: str
+
+
+@app.post("/nidaan/api/check-phone")
+@limiter.limit("10/minute")
+async def nidaan_api_check_phone(body: NidaanCheckPhoneReq, request: Request):
+    """Check if a 10-digit mobile already has an account. Entry point of the mobile-first
+    signup flow: exists → password login; new → register. Returns {valid, exists}."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ph = nidaan.normalize_phone(body.phone)
+    if not ph:
+        return {"valid": False, "exists": False}
+    account = await nidaan.get_account_by_phone(ph)
+    return {"valid": True, "exists": account is not None}
 
 
 @app.get("/nidaan/api/branches")
@@ -773,6 +804,72 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         ),
         from_name="Nidaan Partner",
     ))
+    return {"access_token": token, "account_id": account_id, "plan": plan}
+
+
+@app.post("/nidaan/api/signup/mobile")
+@limiter.limit("5/minute")
+async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request):
+    """Mobile-first signup: name + 10-digit mobile + password (email OPTIONAL). No email
+    OTP gate unless an email is supplied — the Razorpay payment verifies the person.
+    Branch code is captured + locked here for profit-share attribution."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    name = body.owner_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter your name")
+    ph = nidaan.normalize_phone(body.phone)
+    if not ph:
+        raise HTTPException(status_code=400, detail="Please enter a valid 10-digit mobile number")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Email is optional — but if given, it must be valid AND OTP-verified (unlocks email
+    # receipts + the free Sarathi CRM). Blank email is fine; account is created without one.
+    email = ""
+    if body.email.strip():
+        email = auth.sanitize_email(body.email)
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid email address")
+        if not auth.verify_email_otp(email, body.email_otp):
+            raise HTTPException(status_code=401, detail="Invalid or expired email code. Please request a new OTP, or leave email blank.")
+    # Affiliate branch attribution — optional, validated strictly if given, locked at signup.
+    branch_code = (body.branch_code or "").strip().upper()
+    if branch_code and not await nidaan.is_valid_branch(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive branch code. Leave blank if you don't have one.")
+    # Dedup before insert for clean messages (one mobile = one account).
+    if await nidaan.get_account_by_phone(ph):
+        raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+    if email and await nidaan.get_account_by_email(email):
+        raise HTTPException(status_code=409, detail="This email is already registered. Please log in.")
+    plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
+    account_id = await nidaan.create_account(
+        owner_name=name, phone=ph, password=body.password, email=email,
+        firm_name=body.firm_name.strip(), branch_code=branch_code,
+    )
+    if account_id is None:
+        # Lost the unique-mobile race → the account now exists; tell them to log in.
+        raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+    token = nidaan.create_nidaan_token(account_id, email, plan)
+    import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
+    if branch_code:
+        _asyncio.create_task(_notify_branch_signup(branch_code, name, email, ph))
+    if email:  # welcome email only when we actually have one
+        _asyncio.create_task(email_svc.send_email(
+            to_email=email,
+            subject="Welcome to Nidaan Partner! 🛡️",
+            html_body=(
+                f"<p>Hi {name},</p>"
+                f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
+                f"<p>Your account is ready.</p>"
+                f"<p>— Nidaan Partner Team</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
     return {"access_token": token, "account_id": account_id, "plan": plan}
 
 
