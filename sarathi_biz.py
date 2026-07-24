@@ -464,6 +464,23 @@ def _nidaan_bearer(request: Request) -> Optional[dict]:
     return None
 
 
+async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict]:
+    """Resolve the Nidaan account from a verified token payload. Prefers the account_id
+    (`sub`) so accounts WITHOUT an email still resolve; falls back to the token email for
+    older tokens. Behaviour-preserving for existing email accounts (same row either way)."""
+    if not payload:
+        return None
+    aid = payload.get("sub")
+    if aid:
+        acct = await nidaan.get_account_by_id(int(aid))
+        if acct:
+            return acct
+    em = payload.get("email")
+    if em:
+        return await nidaan.get_account_by_email(em)
+    return None
+
+
 # ── Page routes ───────────────────────────────────────────────────────────────
 
 @app.get("/nidaan/start", response_class=HTMLResponse)
@@ -1062,7 +1079,7 @@ async def nidaan_api_me(request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     sub = await nidaan.get_active_subscription(account["account_id"])
@@ -1476,13 +1493,13 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
     if _admin_email:
         import asyncio as _asyncio_nc
-        account = await nidaan.get_account_by_email(payload["email"])
+        account = await _nidaan_account_from_payload(payload)
         _asyncio_nc.ensure_future(
             email_svc.send_nidaan_new_claim_admin_email(
                 admin_email=_admin_email,
                 claim_id=claim_id,
                 advisor_name=account["owner_name"] if account else payload.get("email", ""),
-                advisor_email=payload["email"],
+                advisor_email=(account["email"] if account else "") or payload.get("email", ""),
                 insured_name=body.insured_name,
                 claim_type=body.claim_type,
                 insurer_name=body.insurer_name or "",
@@ -2308,7 +2325,7 @@ async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
     _valid_nidaan_plans = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
     if body.plan not in _valid_nidaan_plans:
         raise HTTPException(status_code=400, detail="Invalid plan")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
@@ -2344,7 +2361,7 @@ async def nidaan_sarathi_access(request: Request):
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Nidaan account not found")
     account_id = account["account_id"]
@@ -2599,7 +2616,7 @@ async def nidaan_subscribe_check(order_id: str, request: Request):
 
     # Verify this order belongs to this user's account
     notes = order_data.get("notes", {})
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     if notes.get("nidaan_account_id") != str(account["account_id"]):
@@ -2663,7 +2680,7 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
     if plan not in _valid:
         raise HTTPException(status_code=400, detail=f"Invalid plan '{plan}'")
 
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -2713,7 +2730,7 @@ async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request)
                         "silver_annual", "gold_annual", "platinum_annual")
     if body.plan not in _valid_sub_plans:
         raise HTTPException(status_code=400, detail="Invalid plan for recurring subscription")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
@@ -2756,7 +2773,7 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
               "silver_annual", "gold_annual", "platinum_annual")
     if body.plan not in _valid:
         raise HTTPException(status_code=400, detail=f"Invalid plan '{body.plan}'")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
@@ -2798,7 +2815,7 @@ async def nidaan_account_delete(request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     result = await nidaan.request_account_deletion(account["account_id"])
@@ -2830,7 +2847,7 @@ async def nidaan_account_delete_cancel(request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     ok = await nidaan.cancel_account_deletion(account["account_id"])
@@ -2852,7 +2869,7 @@ async def nidaan_subscribe_cancel(request: Request):
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -2977,7 +2994,7 @@ async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     await nidaan.update_account_profile(
@@ -3005,7 +3022,7 @@ async def nidaan_change_password(body: NidaanChangePasswordReq, request: Request
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    account = await nidaan.get_account_by_email(payload["email"])
+    account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     # Verify current password
