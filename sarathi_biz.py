@@ -3555,6 +3555,7 @@ async def ops_plans_config(request: Request):
 class OpsPlanConfigUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")   # reject any unexpected field
     label: Optional[str] = Field(None, max_length=40)
+    price: Optional[int] = Field(None, ge=1, le=1_000_000)   # in RUPEES; new price for NEW checkouts only (existing subs grandfathered)
     claims_per_month: Optional[int] = Field(None, ge=-1, le=1_000_000_000)   # -1 = unlimited
     disputed_cap: Optional[int] = Field(None, ge=-1, le=1_000_000_000)       # -1 = unlimited
     max_users: Optional[int] = Field(None, ge=-1, le=1_000_000)              # -1 = unlimited

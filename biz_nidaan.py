@@ -147,9 +147,12 @@ def invalidate_plans_cache():
     _PLANS_CACHE = None
 
 
-# Fields the super-admin editor may change. price/razorpay are handled in a later increment
-# (they require Razorpay plan re-creation), so they are intentionally NOT editable here.
-_EDITABLE_PLAN_FIELDS = {"label", "claims_per_month", "disputed_cap", "max_users",
+# Fields the super-admin editor may change. `price` is accepted in RUPEES and stored as
+# price_paise. Because checkout uses one-time Razorpay ORDERS (amount set server-side at
+# order creation from this config), a price change flows straight to NEW checkouts with no
+# Razorpay-plan re-creation — and existing subscribers are grandfathered automatically
+# (their subscription row already holds the amount Razorpay actually charged them).
+_EDITABLE_PLAN_FIELDS = {"label", "price", "claims_per_month", "disputed_cap", "max_users",
                          "features", "badge", "active", "sort_order"}
 
 
@@ -179,6 +182,13 @@ async def update_plan_config(plan_key: str, fields: dict) -> dict:
             sets.append("active=?"); vals.append(1 if v in (True, 1, "1", "true", "on") else 0)
         elif k == "sort_order":
             sets.append("sort_order=?"); vals.append(max(0, min(999, int(v))))
+        elif k == "price":
+            pv = int(v)  # RUPEES from the editor → stored as paise
+            if pv < 1:
+                raise ValueError("price_min_1_rupee")
+            if pv > 1_000_000:  # ₹10 lakh sanity ceiling
+                raise ValueError("price_out_of_range")
+            sets.append("price_paise=?"); vals.append(pv * 100)
         elif k == "label":
             s = str(v).strip()[:40]
             if not s:
@@ -2878,6 +2888,19 @@ async def create_nidaan_razorpay_order(
     info = NIDAAN_RAZORPAY_PLANS.get(plan)
     if not info:
         return {"error": f"Unknown plan: {plan}"}
+    # Live price comes from the editable config table (single source of truth); fall back to
+    # the hardcoded seed only until the table is seeded. This is the ONLY place the charge
+    # amount is set, so an edited price applies to new checkouts immediately.
+    cfg = await get_plan_cfg(plan)
+    if cfg and not cfg.get("active"):
+        return {"error": f"Plan not available: {plan}"}
+    if cfg and cfg.get("price_paise"):
+        amount_paise = int(cfg["price_paise"])
+        _bill = cfg.get("billing", info.get("period", "monthly"))
+        amount_display = f"₹{amount_paise // 100:,}/{'year' if _bill == 'yearly' else 'month'}"
+    else:
+        amount_paise = int(info["amount_paise"])
+        amount_display = info["display"]
     try:
         import time
         receipt = f"nidaan_{account_id}_{plan}_{int(time.time())}"
@@ -2886,7 +2909,7 @@ async def create_nidaan_razorpay_order(
                 "https://api.razorpay.com/v1/orders",
                 auth=(rzp_key_id, rzp_key_secret),
                 json={
-                    "amount": info["amount_paise"],
+                    "amount": amount_paise,
                     "currency": "INR",
                     "receipt": receipt[:40],   # Razorpay receipt max 40 chars
                     "notes": {
@@ -2906,9 +2929,9 @@ async def create_nidaan_razorpay_order(
             logger.info("Nidaan order created: account=%d plan=%s order=%s", account_id, plan, result["id"])
             return {
                 "order_id": result["id"],
-                "amount": info["amount_paise"],
+                "amount": amount_paise,
                 "plan": plan,
-                "amount_display": info["display"],
+                "amount_display": amount_display,
                 "razorpay_key_id": rzp_key_id,
             }
     except Exception as e:

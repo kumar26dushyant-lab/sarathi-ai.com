@@ -4499,7 +4499,7 @@ async function loadPlansConfig() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem">
         <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Label<input class="pcfg-label form-input" value="${esc(p.label || '')}" maxlength="40"></label>
-        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Price ₹ <span style="color:rgba(255,255,255,.3)">(read-only)</span><input class="form-input" value="${Math.round((p.price_paise || 0) / 100)}" disabled title="Price editing arrives with the Razorpay-wiring step"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Price ₹ <span style="color:rgba(255,255,255,.3)">(new checkouts only)</span><input class="pcfg-price form-input" type="number" min="1" value="${Math.round((p.price_paise || 0) / 100)}" data-orig="${Math.round((p.price_paise || 0) / 100)}" title="Applies to NEW subscriptions only. Existing subscribers keep their current price until they change plans."></label>
         <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Claims / month <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-claims form-input" type="number" min="0" value="${_cap(p.claims_per_month)}"></label>
         <label style="font-size:.72rem;color:rgba(255,255,255,.5)">Disputed cap ₹ <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-cap form-input" type="number" min="0" value="${_cap(p.disputed_cap)}"></label>
         <label style="font-size:.72rem;color:rgba(255,255,255,.5)">CRM seats <span style="color:rgba(255,255,255,.3)">(blank = ∞)</span><input class="pcfg-users form-input" type="number" min="1" value="${_cap(p.max_users)}"></label>
@@ -4515,7 +4515,7 @@ async function loadPlansConfig() {
   const monthly = plans.filter(p => p.billing === 'monthly');
   const yearly = plans.filter(p => p.billing === 'yearly');
   el.innerHTML = `
-    <div class="section-hdr"><div><div class="section-title">Plans &amp; Billing</div><div class="section-sub">Edit caps, features &amp; availability — applies everywhere instantly. Price editing arrives with the payment-wiring step.</div></div><button class="btn btn-ghost" onclick="loadPlansConfig()">🔄 Refresh</button></div>
+    <div class="section-hdr"><div><div class="section-title">Plans &amp; Billing</div><div class="section-sub">Edit price, caps, features &amp; availability — applies everywhere instantly. Price changes affect NEW checkouts only; existing subscribers are grandfathered.</div></div><button class="btn btn-ghost" onclick="loadPlansConfig()">🔄 Refresh</button></div>
     <div style="font-size:.85rem;font-weight:700;color:#22d3ee;margin:.4rem 0 .55rem">Monthly plans</div>
     ${monthly.map(card).join('') || '<div class="empty"><p>No monthly plans.</p></div>'}
     ${yearly.length ? `<div style="font-size:.85rem;font-weight:700;color:#22d3ee;margin:1rem 0 .55rem">Yearly plans</div>${yearly.map(card).join('')}` : ''}`;
@@ -4526,8 +4526,20 @@ async function savePlanConfig(planKey) {
   if (!cardEl) return;
   const msg = cardEl.querySelector('.pcfg-msg');
   const _num = sel => { const v = (cardEl.querySelector(sel).value || '').trim(); return v === '' ? -1 : parseInt(v); };  // blank = ∞ (-1)
+  // Price: RUPEES. A change applies to NEW checkouts only — confirm the grandfather rule.
+  const priceEl = cardEl.querySelector('.pcfg-price');
+  const newPrice = parseInt((priceEl.value || '').trim(), 10);
+  const origPrice = parseInt(priceEl.getAttribute('data-orig'), 10);
+  if (!newPrice || newPrice < 1) { msg.style.color = '#f87171'; msg.textContent = '✕ Price must be ≥ ₹1'; return; }
+  if (newPrice !== origPrice &&
+      !confirm(`Change ${planKey} price from ₹${origPrice} to ₹${newPrice}?\n\n` +
+               `This applies to NEW subscriptions only. Existing subscribers keep ₹${origPrice} ` +
+               `until they change plans — they are not re-charged.`)) {
+    msg.textContent = ''; return;
+  }
   const body = {
     label: (cardEl.querySelector('.pcfg-label').value || '').trim(),
+    price: newPrice,
     claims_per_month: _num('.pcfg-claims'),
     disputed_cap: _num('.pcfg-cap'),
     max_users: _num('.pcfg-users'),
