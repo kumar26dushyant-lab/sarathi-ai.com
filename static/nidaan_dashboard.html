@@ -633,17 +633,17 @@
         </div>
         <div class="plan-opt" id="po-gold" onclick="switchPlan('gold')">
           <div class="po-name">Gold</div>
-          <div class="po-price">₹1,000</div>
+          <div class="po-price">₹999</div>
           <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
-          <div class="po-quota en">10 claims/month · up to ₹10L each</div>
-          <div class="po-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
+          <div class="po-quota en">3 claims/month · up to ₹10L each</div>
+          <div class="po-quota hi">3 क्लेम/माह · प्रति ₹10 लाख तक</div>
         </div>
         <div class="plan-opt" id="po-platinum" onclick="switchPlan('platinum')">
           <div class="po-name">Platinum</div>
-          <div class="po-price">₹2,000</div>
+          <div class="po-price">₹1,999</div>
           <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
-          <div class="po-quota en">Unlimited claims · up to ₹50L each</div>
-          <div class="po-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
+          <div class="po-quota en">10 claims/month · up to ₹50L each</div>
+          <div class="po-quota hi">10 क्लेम/माह · प्रति ₹50 लाख तक</div>
         </div>
       </div>
       <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="en">
@@ -774,19 +774,19 @@
       </div>
       <div class="plan-card" id="pc-gold" onclick="selectPlan('gold')">
         <div class="pc-name">Gold</div>
-        <div class="pc-price">₹1,000</div>
+        <div class="pc-price">₹999</div>
         <div class="pc-period en">per month</div>
         <div class="pc-period hi">प्रति माह</div>
-        <div class="pc-quota en">10 claims/month · up to ₹10L each</div>
-        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
+        <div class="pc-quota en">3 claims/month · up to ₹10L each</div>
+        <div class="pc-quota hi">3 क्लेम/माह · प्रति ₹10 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-platinum" onclick="selectPlan('platinum')">
         <div class="pc-name">Platinum</div>
-        <div class="pc-price">₹2,000</div>
+        <div class="pc-price">₹1,999</div>
         <div class="pc-period en">per month</div>
         <div class="pc-period hi">प्रति माह</div>
-        <div class="pc-quota en">Unlimited claims · up to ₹50L each</div>
-        <div class="pc-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
+        <div class="pc-quota en">10 claims/month · up to ₹50L each</div>
+        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹50 लाख तक</div>
       </div>
     </div>
 
@@ -802,19 +802,19 @@
       </div>
       <div class="plan-card" id="pc-gold-annual" onclick="selectPlan('gold_annual')">
         <div class="pc-name">Gold</div>
-        <div class="pc-price">₹10,000</div>
+        <div class="pc-price">₹9,990</div>
         <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">2 months free</span></div>
         <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span></div>
-        <div class="pc-quota en">10 claims/month · up to ₹10L each</div>
-        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹10 लाख तक</div>
+        <div class="pc-quota en">3 claims/month · up to ₹10L each</div>
+        <div class="pc-quota hi">3 क्लेम/माह · प्रति ₹10 लाख तक</div>
       </div>
       <div class="plan-card" id="pc-platinum-annual" onclick="selectPlan('platinum_annual')">
         <div class="pc-name">Platinum</div>
-        <div class="pc-price">₹20,000</div>
+        <div class="pc-price">₹19,990</div>
         <div class="pc-period en">per year <span style="color:#22c55e;font-size:.8em">2 months free</span></div>
         <div class="pc-period hi">प्रति वर्ष <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span></div>
-        <div class="pc-quota en">Unlimited claims · up to ₹50L each</div>
-        <div class="pc-quota hi">असीमित क्लेम · प्रति ₹50 लाख तक</div>
+        <div class="pc-quota en">10 claims/month · up to ₹50L each</div>
+        <div class="pc-quota hi">10 क्लेम/माह · प्रति ₹50 लाख तक</div>
       </div>
     </div>
 
@@ -905,7 +905,10 @@
         <div class="field">
           <label class="en">Disputed Amount (₹)</label>
           <label class="hi">विवादित राशि (₹)</label>
-          <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0">
+          <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0" oninput="checkDisputedCap()">
+          <p class="en" style="font-size:.71rem;color:rgba(255,255,255,.5);margin:.25rem 0 0">Enter only the <b>disputed</b> amount — the shortfall you're fighting for, <b>not</b> the sum assured. E.g. cover ₹50L → claimed ₹10L → insurer paid ₹6L → <b>disputed = ₹4L</b>.</p>
+          <p class="hi" style="font-size:.71rem;color:rgba(255,255,255,.5);margin:.25rem 0 0">केवल <b>विवादित</b> राशि भरें — वह अंतर जिसके लिए आप लड़ रहे हैं, <b>बीमा राशि नहीं</b>। जैसे कवर ₹50L → क्लेम ₹10L → कंपनी ने दिए ₹6L → <b>विवादित = ₹4L</b>।</p>
+          <div id="disputedCapNudge" style="display:none;font-size:.74rem;margin:.45rem 0 0;padding:.5rem .7rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.32);border-radius:8px;color:#fcd34d;line-height:1.45"></div>
         </div>
       </div>
       <div class="row2">
@@ -1095,6 +1098,7 @@ async function loadDashboard() {
 
   // Plan badge
   const plan = me.subscription ? me.subscription.plan : '';
+  window._myPlan = plan;   // used by the disputed-amount cap nudge on the claim form
   const planEl = document.getElementById('planBadge');
   planEl.textContent = plan ? plan.toUpperCase() : 'NO PLAN';
   document.getElementById('statPlan').textContent = plan || '—';
@@ -2434,8 +2438,42 @@ async function loadBranchList() {
   } catch(_) {}
 }
 
+// Monthly plan tiers (price / claims / disputed cap) — for the disputed-amount cap nudge.
+let _nidaanPlans = [];
+async function loadPlans() {
+  try {
+    const r = await fetch('/nidaan/api/plans');
+    if (r && r.ok) _nidaanPlans = (await r.json()).plans || [];
+  } catch(_) {}
+}
+function _fmtL(n){ return '₹' + Math.round((n || 0) / 100000).toLocaleString('en-IN') + 'L'; }
+// Educate + SOFT-nudge (never blocks) if the disputed amount exceeds the customer's plan
+// cap — the #1 confusion is entering the sum assured instead of the disputed shortfall.
+function checkDisputedCap() {
+  const nudge = document.getElementById('disputedCapNudge');
+  if (!nudge) return;
+  const amt = parseInt(document.getElementById('disputedAmt')?.value) || 0;
+  const mine = _nidaanPlans.find(p => p.plan === window._myPlan);
+  const cap = mine ? mine.disputed_cap : null;
+  if (!amt || !cap || amt <= cap) { nudge.style.display = 'none'; return; }
+  const isHi = document.body.classList.contains('hi');
+  const fit = _nidaanPlans.find(p => (p.disputed_cap || 0) >= amt);
+  let m = isHi
+    ? `यह राशि आपके <b>${(window._myPlan || 'plan').toUpperCase()}</b> प्लान की सीमा (${_fmtL(cap)}) से ऊपर है। कृपया जाँचें कि आपने केवल <b>विवादित</b> राशि भरी है।`
+    : `This is above your <b>${(window._myPlan || 'plan').toUpperCase()}</b> plan limit (${_fmtL(cap)}). Please double-check you entered only the <b>disputed</b> amount.`;
+  if (fit) {
+    m += isHi
+      ? ` यदि सही है, तो <b>${fit.label}</b> (${_fmtL(fit.disputed_cap)} तक) में अपग्रेड करें।`
+      : ` If it's genuinely higher, upgrade to <b>${fit.label}</b> (up to ${_fmtL(fit.disputed_cap)}) to proceed.`;
+    m += ` <a href="#" onclick="event.preventDefault();try{openSubscribeModal()}catch(e){}" style="color:#22d3ee;font-weight:700;text-decoration:underline">${isHi ? 'अपग्रेड करें →' : 'Upgrade →'}</a>`;
+  }
+  nudge.innerHTML = '⚠️ ' + m;
+  nudge.style.display = 'block';
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadBranchList();
+loadPlans();
 loadDashboard().then(() => {
   const params = new URLSearchParams(location.search);
   const plan = params.get('subscribe');

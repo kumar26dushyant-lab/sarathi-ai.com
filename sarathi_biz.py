@@ -613,6 +613,16 @@ async def nidaan_api_list_branches(request: Request):
         for r in (rows or [])]}
 
 
+@app.get("/nidaan/api/plans")
+@limiter.limit("30/minute")
+async def nidaan_api_plans(request: Request):
+    """Public monthly plan tiers (price, claims/mo, disputed cap) — for the pricing UI
+    and the claim-form disputed-amount cap nudge. Single source of truth."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"plans": nidaan.public_plans()}
+
+
 async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, phone: str):
     """Email the affiliate branch that a lead signed up under their code (still unpaid)."""
     def _esc(s):

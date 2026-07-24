@@ -34,16 +34,37 @@ DB_PATH = os.environ.get("DB_PATH", "sarathi_biz.db")
 
 # ── Plan limits ───────────────────────────────────────────────────────────────
 PLAN_LIMITS: dict[str, dict] = {
-    # Monthly plans: Silver 3 claims/mo (≤₹5L each), Gold 10 claims/mo (≤₹10L),
-    # Platinum unlimited (≤₹50L). Claim quota window is 30 days (see can_submit_claim).
-    "silver":          {"max_users": 1,    "claims_per_month": 3,    "sarathi_bundle": True},
-    "gold":            {"max_users": 5,    "claims_per_month": 10,   "sarathi_bundle": True},
-    "platinum":        {"max_users": None, "claims_per_month": None, "sarathi_bundle": True},
-    # Annual variants — same monthly claim allowance, billed yearly
-    "silver_annual":   {"max_users": 1,    "claims_per_month": 3,    "sarathi_bundle": True},
-    "gold_annual":     {"max_users": 5,    "claims_per_month": 10,   "sarathi_bundle": True},
-    "platinum_annual": {"max_users": None, "claims_per_month": None, "sarathi_bundle": True},
+    # Monthly plans (billed monthly, cancel anytime). Caps: claims per 30-day window
+    # (HARD-enforced in can_submit_claim) + max DISPUTED value per claim (`disputed_cap`,
+    # SOFT — the claim form educates + nudges an upgrade, but doesn't hard-block).
+    #   Silver   ₹500  · 3 claims/mo · ≤ ₹5L each  · 1 CRM seat
+    #   Gold     ₹999  · 3 claims/mo · ≤ ₹10L each · 5 CRM seats
+    #   Platinum ₹1999 · 10 claims/mo · ≤ ₹50L each · unlimited CRM seats
+    "silver":          {"price": 500,   "max_users": 1,    "claims_per_month": 3,  "disputed_cap": 500000,   "sarathi_bundle": True},
+    "gold":            {"price": 999,   "max_users": 5,    "claims_per_month": 3,  "disputed_cap": 1000000,  "sarathi_bundle": True},
+    "platinum":        {"price": 1999,  "max_users": None, "claims_per_month": 10, "disputed_cap": 5000000,  "sarathi_bundle": True},
+    # Annual variants — same claim allowance + caps, billed yearly (10× monthly = 2 months free)
+    "silver_annual":   {"price": 5000,  "max_users": 1,    "claims_per_month": 3,  "disputed_cap": 500000,   "sarathi_bundle": True},
+    "gold_annual":     {"price": 9990,  "max_users": 5,    "claims_per_month": 3,  "disputed_cap": 1000000,  "sarathi_bundle": True},
+    "platinum_annual": {"price": 19990, "max_users": None, "claims_per_month": 10, "disputed_cap": 5000000,  "sarathi_bundle": True},
 }
+
+def public_plans() -> list[dict]:
+    """Public monthly plan tiers for the pricing UI + the disputed-amount cap nudge.
+    Single source of truth (derived from PLAN_LIMITS)."""
+    out = []
+    for key in ("silver", "gold", "platinum"):
+        lim = PLAN_LIMITS.get(key, {})
+        out.append({
+            "plan": key,
+            "label": key.capitalize(),
+            "price": lim.get("price"),
+            "claims_per_month": lim.get("claims_per_month"),
+            "disputed_cap": lim.get("disputed_cap"),
+            "max_users": lim.get("max_users"),
+        })
+    return out
+
 
 CLAIM_STATUSES = (
     "intimated", "assigned", "in_review", "in_negotiation",
@@ -2586,12 +2607,12 @@ NIDAAN_RAZORPAY_PLANS = {
     # (Razorpay plans are immutable). The dict KEY (silver/gold/...) stays the
     # internal plan id used everywhere else (checkout, DB, webhook), unchanged.
     "silver":          {"amount_paise": 50000,   "display": "₹500/month",    "period_days": 30,  "period": "monthly", "interval": 1, "tag": "silver_m1"},
-    "gold":            {"amount_paise": 100000,  "display": "₹1,000/month",  "period_days": 30,  "period": "monthly", "interval": 1, "tag": "gold_m1"},
-    "platinum":        {"amount_paise": 200000,  "display": "₹2,000/month",  "period_days": 30,  "period": "monthly", "interval": 1, "tag": "platinum_m1"},
+    "gold":            {"amount_paise": 99900,   "display": "₹999/month",    "period_days": 30,  "period": "monthly", "interval": 1, "tag": "gold_m2"},
+    "platinum":        {"amount_paise": 199900,  "display": "₹1,999/month",  "period_days": 30,  "period": "monthly", "interval": 1, "tag": "platinum_m2"},
     # Annual plans — recurring yearly, 10× monthly (2 months free)
     "silver_annual":   {"amount_paise": 500000,  "display": "₹5,000/year",   "period_days": 365, "period": "yearly",  "interval": 1, "tag": "silver_annual_m1"},
-    "gold_annual":     {"amount_paise": 1000000, "display": "₹10,000/year",  "period_days": 365, "period": "yearly",  "interval": 1, "tag": "gold_annual_m1"},
-    "platinum_annual": {"amount_paise": 2000000, "display": "₹20,000/year",  "period_days": 365, "period": "yearly",  "interval": 1, "tag": "platinum_annual_m1"},
+    "gold_annual":     {"amount_paise": 999000,  "display": "₹9,990/year",   "period_days": 365, "period": "yearly",  "interval": 1, "tag": "gold_annual_m2"},
+    "platinum_annual": {"amount_paise": 1999000, "display": "₹19,990/year",  "period_days": 365, "period": "yearly",  "interval": 1, "tag": "platinum_annual_m2"},
 }
 
 # Cache: plan_key → razorpay_plan_id
