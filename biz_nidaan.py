@@ -297,31 +297,44 @@ def _verify_password(password: str, stored: str) -> bool:
         return False
 
 
+def normalize_phone(phone: str) -> str:
+    """Reduce a phone to a bare 10-digit Indian mobile — strips +91 / 91 / leading 0,
+    spaces, dashes, brackets. Returns '' if it doesn't look like a valid 10-digit mobile
+    (must start 6-9). Used as the canonical stored form + the login/dedup key."""
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) > 10:
+        digits = digits[-10:]          # drop 91 / 0 country/trunk prefix
+    return digits if len(digits) == 10 and digits[0] in "6789" else ""
+
+
 async def create_account(
     owner_name: str,
-    email: str,
     phone: str,
     password: str,
+    email: str = "",
     firm_name: str = "",
     branch_code: str = "",
 ) -> Optional[int]:
-    """Create a new Nidaan account. Returns account_id or None on duplicate email.
-    branch_code attributes the sale to an affiliate city branch (already validated
-    by the caller; stored as-is)."""
+    """Create a new Nidaan account. Mobile (phone) is the PRIMARY identity — required and
+    unique. Email is OPTIONAL (stored NULL when blank; unique only when present). Returns
+    account_id, or None on a duplicate mobile or email. branch_code attributes the sale to
+    an affiliate city branch (validated by the caller; stored as-is)."""
     pw_hash = _hash_password(password)
+    em = (email or "").lower().strip() or None       # NULL when blank → email-less accounts don't collide
+    ph = normalize_phone(phone) or (phone or "").strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
                 """INSERT INTO nidaan_accounts
                    (owner_name, email, phone, password_hash, firm_name, branch_code)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (owner_name, email.lower().strip(), phone, pw_hash, firm_name,
+                (owner_name, em, ph, pw_hash, firm_name,
                  (branch_code or "").strip().upper()),
             )
             await conn.commit()
             return cur.lastrowid
-    except aiosqlite.IntegrityError:
-        logger.warning("nidaan create_account: duplicate email %s", email)
+    except aiosqlite.IntegrityError as e:
+        logger.warning("nidaan create_account: duplicate mobile/email (%s)", e)
         return None
 
 
@@ -528,11 +541,29 @@ async def set_branch_status(code: str, status: str) -> bool:
 
 
 async def get_account_by_email(email: str) -> Optional[dict]:
+    em = (email or "").lower().strip()
+    if not em:
+        return None   # never match email-less accounts (email stored NULL) on a blank query
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "SELECT * FROM nidaan_accounts WHERE email = ? AND status != 'suspended'",
-            (email.lower().strip(),),
+            (em,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def get_account_by_phone(phone: str) -> Optional[dict]:
+    """Look up an account by its 10-digit mobile (normalized). None if not found."""
+    ph = normalize_phone(phone)
+    if not ph:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM nidaan_accounts WHERE phone = ? AND status != 'suspended'",
+            (ph,),
         )
         row = await cur.fetchone()
         return dict(row) if row else None
@@ -664,9 +695,15 @@ async def create_account_google(
         return None
 
 
-async def authenticate_account(email: str, password: str) -> Optional[dict]:
-    """Return account dict if credentials valid, else None."""
-    account = await get_account_by_email(email)
+async def authenticate_account(identifier: str, password: str) -> Optional[dict]:
+    """Return account dict if credentials valid, else None. `identifier` may be an email
+    OR a 10-digit mobile — mobile is the primary login id, and email still works when the
+    account has one."""
+    ident = (identifier or "").strip()
+    if "@" in ident:
+        account = await get_account_by_email(ident)
+    else:
+        account = await get_account_by_phone(ident) or await get_account_by_email(ident)
     if not account:
         return None
     if not _verify_password(password, account.get("password_hash", "")):
@@ -4359,7 +4396,8 @@ async def create_account_by_admin(
 ) -> Optional[int]:
     """Create a new advisor account directly (no password — invite flow or set later)."""
     tmp_pw = secrets.token_hex(16)  # random unguessable password — admin must reset
-    return await create_account(owner_name, email, phone, tmp_pw, firm_name)
+    return await create_account(owner_name=owner_name, email=email, phone=phone,
+                                password=tmp_pw, firm_name=firm_name)
 
 
 async def admin_set_account_password(account_id: int, new_password: str) -> bool:

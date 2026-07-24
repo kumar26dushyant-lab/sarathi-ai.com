@@ -964,7 +964,7 @@ async def init_db():
                 account_id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_name        TEXT NOT NULL,
                 firm_name         TEXT,
-                email             TEXT NOT NULL UNIQUE,
+                email             TEXT UNIQUE,          -- optional; mobile is the primary identity (multiple NULLs allowed under UNIQUE)
                 phone             TEXT NOT NULL,
                 password_hash     TEXT,
                 google_sub        TEXT,
@@ -975,6 +975,9 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_nidaan_accounts_email
                 ON nidaan_accounts(email);
+            -- One mobile = one account (only enforced for non-empty phones)
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_nidaan_accounts_phone_unique
+                ON nidaan_accounts(phone) WHERE phone != '';
 
             -- Sub-users under an account
             CREATE TABLE IF NOT EXISTS nidaan_users (
@@ -1240,6 +1243,59 @@ async def init_db():
                 await conn.execute(m)
             except Exception:
                 pass
+
+        # ── Email-optional migration (mobile is the primary identity, Jul 2026) ──
+        # nidaan_accounts.email was NOT NULL UNIQUE. Making it optional (multiple NULLs
+        # allowed under UNIQUE) needs a table rebuild — SQLite can't drop NOT NULL via
+        # ALTER. Idempotent: rebuilds ONLY when email is still NOT NULL, so it is a
+        # no-op on already-migrated DBs. All account_ids are preserved verbatim, so every
+        # foreign key referencing nidaan_accounts stays valid. (Production was migrated
+        # in place; this keeps fresh installs / DB restores consistent.)
+        try:
+            _cols = await (await conn.execute("PRAGMA table_info(nidaan_accounts)")).fetchall()
+            _email_notnull = next((c[3] for c in _cols if c[1] == "email"), 0)
+            if _email_notnull:
+                await conn.commit()  # close any open txn before the rebuild script
+                await conn.execute("PRAGMA foreign_keys=OFF")
+                await conn.executescript("""
+                    BEGIN;
+                    CREATE TABLE nidaan_accounts_new (
+                        account_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                        owner_name        TEXT NOT NULL,
+                        firm_name         TEXT,
+                        email             TEXT UNIQUE,
+                        phone             TEXT NOT NULL,
+                        password_hash     TEXT,
+                        google_sub        TEXT,
+                        status            TEXT DEFAULT 'active',
+                        notes             TEXT,
+                        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_login_at     TIMESTAMP,
+                        deletion_requested_at TIMESTAMP,
+                        deleted_at        TIMESTAMP,
+                        branch_code       TEXT DEFAULT '',
+                        branch_unpaid_reminded_at TIMESTAMP
+                    );
+                    INSERT INTO nidaan_accounts_new
+                       (account_id, owner_name, firm_name, email, phone, password_hash,
+                        google_sub, status, notes, created_at, last_login_at,
+                        deletion_requested_at, deleted_at, branch_code, branch_unpaid_reminded_at)
+                    SELECT account_id, owner_name, firm_name, NULLIF(email,''), phone,
+                        password_hash, google_sub, status, notes, created_at, last_login_at,
+                        deletion_requested_at, deleted_at, branch_code, branch_unpaid_reminded_at
+                    FROM nidaan_accounts;
+                    DROP TABLE nidaan_accounts;
+                    ALTER TABLE nidaan_accounts_new RENAME TO nidaan_accounts;
+                    CREATE INDEX IF NOT EXISTS idx_nidaan_accounts_email
+                        ON nidaan_accounts(email);
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_nidaan_accounts_phone_unique
+                        ON nidaan_accounts(phone) WHERE phone != '';
+                    COMMIT;
+                """)
+                await conn.execute("PRAGMA foreign_keys=ON")
+                logger.info("nidaan_accounts rebuilt: email is now optional (mobile-primary identity)")
+        except Exception as e:
+            logger.error("nidaan_accounts email-optional migration failed: %s", e)
 
         # ── nidaan_branches: affiliate city branches (offline vendors selling
         # subscriptions). Superadmin creates codes; signup validates against

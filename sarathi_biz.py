@@ -2171,9 +2171,13 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
     expected = _hmac_mod.new(rzp_key_secret.encode(), msg, _hs.sha256).hexdigest()
     if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(status_code=400, detail="Invalid payment signature")
-    # Find or create Nidaan account → gives this advisor dashboard access
+    # Find or create Nidaan account → gives this advisor dashboard access.
+    # Mobile is the primary identity: match by email first (if given), then by mobile,
+    # so a repeat customer using a different/blank email still reuses their account.
     email = body.advisor_email.strip().lower()
-    account = await nidaan.get_account_by_email(email)
+    account = (await nidaan.get_account_by_email(email)) if email else None
+    if not account:
+        account = await nidaan.get_account_by_phone(body.advisor_phone.strip())
     if account:
         account_id = account["account_id"]
     else:
@@ -2186,7 +2190,14 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
             password=tmp_pw,
             firm_name="",
         )
-        account = await nidaan.get_account_by_id(account_id)
+        # Lost a create race on the unique mobile? Recover by looking the account up.
+        if account_id is None:
+            account = await nidaan.get_account_by_phone(body.advisor_phone.strip())
+            if not account:
+                raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+            account_id = account["account_id"]
+        else:
+            account = await nidaan.get_account_by_id(account_id)
         try:
             import asyncio as _asyncio2, biz_nidaan_notifications as _nnot
             _asyncio2.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin (new signup)
