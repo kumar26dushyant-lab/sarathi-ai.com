@@ -70,8 +70,25 @@ async def seed_plans_config():
                 razorpay_plan_id TEXT DEFAULT '', period TEXT, interval_n INTEGER DEFAULT 1,
                 period_days INTEGER, active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        # Default selling-point features per tier (the caps — claims/₹ — are rendered
+        # separately from the cap fields, so these are the NON-cap bullets).
+        DEFAULT_FEATURES = {
+            "silver":   ["Sarathi-AI CRM (sarathi-ai.com) — FREE", "SMS status updates",
+                         "Success fee only after resolution"],
+            "gold":     ["Sarathi-AI CRM (sarathi-ai.com) — FREE", "Priority SMS + email updates",
+                         "Success fee only after resolution"],
+            "platinum": ["Sarathi-AI CRM (sarathi-ai.com) — FREE", "Priority SMS + email updates",
+                         "Success fee only after resolution"],
+        }
         cur = await conn.execute("SELECT COUNT(*) FROM nidaan_plans_config")
         if (await cur.fetchone())[0] > 0:
+            # One-time backfill: the first seed stored empty features. Only touches rows
+            # still at the empty '[]' default, so an admin's edited features are preserved.
+            for tier, feats in DEFAULT_FEATURES.items():
+                await conn.execute(
+                    "UPDATE nidaan_plans_config SET features=? "
+                    "WHERE tier=? AND (features IS NULL OR features='' OR features='[]')",
+                    (json.dumps(feats), tier))
             await conn.commit()
             return
         order = {"silver": 1, "gold": 2, "platinum": 3,
@@ -89,7 +106,8 @@ async def seed_plans_config():
                 (key, tier.capitalize(), tier, billing,
                  rz.get("amount_paise") or (lim.get("price", 0) * 100),
                  lim.get("claims_per_month"), lim.get("disputed_cap"), lim.get("max_users"),
-                 1 if lim.get("sarathi_bundle") else 0, "[]",
+                 1 if lim.get("sarathi_bundle") else 0,
+                 json.dumps(DEFAULT_FEATURES.get(tier, [])),
                  "MOST POPULAR" if tier == "gold" else "",
                  rz.get("period", "monthly"), rz.get("interval", 1), rz.get("period_days"),
                  1, order.get(key, 99)))
@@ -194,30 +212,39 @@ async def all_plans_config_full() -> list[dict]:
 
 
 async def public_plans() -> list[dict]:
-    """Public monthly plan tiers for the pricing UI + disputed-amount cap nudge — read
-    from the config table (falls back to PLAN_LIMITS until seeded)."""
+    """All ACTIVE plan tiers (monthly + yearly) for the pricing UI + disputed-amount cap
+    nudge — read from the config table (falls back to PLAN_LIMITS monthly tiers until
+    seeded). Each entry carries billing + price + display so the UI renders dynamically."""
     cfg = await get_plans_config()
     out = []
-    for key in ("silver", "gold", "platinum"):
-        p = cfg.get(key)
-        if p:
+    if cfg:
+        for key, p in cfg.items():
             if not p.get("active"):
                 continue
+            billing = p.get("billing", "monthly")
+            price = round((p.get("price_paise") or 0) / 100)
             out.append({
-                "plan": key, "label": p.get("label") or key.capitalize(),
-                "price": round((p.get("price_paise") or 0) / 100),
+                "plan": key, "label": p.get("label") or key.replace("_annual", "").capitalize(),
+                "billing": billing, "price": price,
+                "price_display": f"₹{price:,}/{'year' if billing == 'yearly' else 'month'}",
                 "claims_per_month": p.get("claims_per_month"),
                 "disputed_cap": p.get("disputed_cap"),
                 "max_users": p.get("max_users"),
                 "features": p.get("features", []), "badge": p.get("badge", ""),
+                "sort_order": p.get("sort_order", 99),
             })
-        else:  # fallback: config not seeded yet
+        out.sort(key=lambda x: x.get("sort_order", 99))
+    else:  # fallback: config not seeded — monthly tiers from PLAN_LIMITS
+        for key in ("silver", "gold", "platinum"):
             lim = PLAN_LIMITS.get(key, {})
+            price = lim.get("price") or 0
             out.append({
-                "plan": key, "label": key.capitalize(), "price": lim.get("price"),
+                "plan": key, "label": key.capitalize(), "billing": "monthly",
+                "price": price, "price_display": f"₹{price:,}/month",
                 "claims_per_month": lim.get("claims_per_month"),
                 "disputed_cap": lim.get("disputed_cap"), "max_users": lim.get("max_users"),
                 "features": [], "badge": "MOST POPULAR" if key == "gold" else "",
+                "sort_order": {"silver": 1, "gold": 2, "platinum": 3}.get(key, 9),
             })
     return out
 

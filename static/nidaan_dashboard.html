@@ -2440,10 +2440,47 @@ let _nidaanPlans = [];
 async function loadPlans() {
   try {
     const r = await fetch('/nidaan/api/plans');
-    if (r && r.ok) _nidaanPlans = (await r.json()).plans || [];
+    if (r && r.ok) { _nidaanPlans = (await r.json()).plans || []; renderPlanCardsUI(); }
   } catch(_) {}
 }
 function _fmtL(n){ return '₹' + Math.round((n || 0) / 100000).toLocaleString('en-IN') + 'L'; }
+function _planEsc(s){ return String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+// Quota line for a plan (claims/mo + disputed cap), EN or HI.
+function _planQuota(p, hi){
+  const claims = (p.claims_per_month==null) ? (hi?'असीमित':'Unlimited') : p.claims_per_month;
+  const capL = (p.disputed_cap==null) ? '' : ('₹'+Math.round(p.disputed_cap/100000)+'L');
+  if (hi) return `${claims} क्लेम/माह${capL?` · प्रति ${capL} तक`:''}`;
+  return `${claims} claims/month${capL?` · up to ${capL} each`:''}`;
+}
+// Render the subscribe-modal cards + upgrade options from the LIVE plan config, so a
+// super-admin edit (label, price, caps) reflects everywhere without any code change.
+function renderPlanCardsUI(){
+  const plans = _nidaanPlans || [];
+  if (!plans.length) return;
+  const inr = n => '₹' + (Number(n)||0).toLocaleString('en-IN');
+  const monthly = plans.filter(p => (p.billing||'monthly')==='monthly');
+  const yearly  = plans.filter(p => p.billing==='yearly');
+  const subCard = p => `
+    <div class="plan-card" id="pc-${_planEsc(p.plan)}" onclick="selectPlan('${_planEsc(p.plan)}')">
+      <div class="pc-name">${_planEsc(p.label)}</div>
+      <div class="pc-price">${inr(p.price)}</div>
+      <div class="pc-period en">per ${p.billing==='yearly'?'year':'month'}${p.billing==='yearly'?' <span style="color:#22c55e;font-size:.8em">2 months free</span>':''}</div>
+      <div class="pc-period hi">प्रति ${p.billing==='yearly'?'वर्ष':'माह'}${p.billing==='yearly'?' <span style="color:#22c55e;font-size:.8em">2 माह मुफ्त</span>':''}</div>
+      <div class="pc-quota en">${_planQuota(p,false)}</div>
+      <div class="pc-quota hi">${_planQuota(p,true)}</div>
+    </div>`;
+  const m = document.getElementById('nidaan-plan-cards-quarterly'); if (m) m.innerHTML = monthly.map(subCard).join('');
+  const y = document.getElementById('nidaan-plan-cards-yearly');    if (y) y.innerHTML = yearly.map(subCard).join('');
+  const optCard = p => `
+    <div class="plan-opt" id="po-${_planEsc(p.plan)}" onclick="switchPlan('${_planEsc(p.plan)}')">
+      <div class="po-name">${_planEsc(p.label)}</div>
+      <div class="po-price">${inr(p.price)}</div>
+      <div class="po-period en">per month</div><div class="po-period hi">प्रति माह</div>
+      <div class="po-quota en">${_planQuota(p,false)}</div>
+      <div class="po-quota hi">${_planQuota(p,true)}</div>
+    </div>`;
+  const grid = document.querySelector('.plan-upgrade-grid'); if (grid) grid.innerHTML = monthly.map(optCard).join('');
+}
 // Educate + SOFT-nudge (never blocks) if the disputed amount exceeds the customer's plan
 // cap — the #1 confusion is entering the sum assured instead of the disputed shortfall.
 function checkDisputedCap() {
@@ -2454,7 +2491,10 @@ function checkDisputedCap() {
   const cap = mine ? mine.disputed_cap : null;
   if (!amt || !cap || amt <= cap) { nudge.style.display = 'none'; return; }
   const isHi = document.body.classList.contains('hi');
-  const fit = _nidaanPlans.find(p => (p.disputed_cap || 0) >= amt);
+  const fit = _nidaanPlans
+    .filter(p => (p.billing || 'monthly') === 'monthly')
+    .sort((a, b) => (a.disputed_cap || 0) - (b.disputed_cap || 0))
+    .find(p => (p.disputed_cap || 0) >= amt);
   let m = isHi
     ? `यह राशि आपके <b>${(window._myPlan || 'plan').toUpperCase()}</b> प्लान की सीमा (${_fmtL(cap)}) से ऊपर है। कृपया जाँचें कि आपने केवल <b>विवादित</b> राशि भरी है।`
     : `This is above your <b>${(window._myPlan || 'plan').toUpperCase()}</b> plan limit (${_fmtL(cap)}). Please double-check you entered only the <b>disputed</b> amount.`;

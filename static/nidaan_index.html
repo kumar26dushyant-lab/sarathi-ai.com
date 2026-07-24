@@ -858,6 +858,9 @@ span.hi-inline{display:none}
 
     <div class="plans-grid">
 
+      <div id="home-plan-cards" style="display:contents">
+      <!-- Tier cards render from /nidaan/api/plans (live config). Static markup below is
+           the fallback until the script replaces it. -->
       <!-- SILVER -->
       <div class="plan-card">
         <div class="plan-name en">🥈 Silver</div>
@@ -931,6 +934,7 @@ span.hi-inline{display:none}
           <span class="en">Choose Platinum</span><span class="hi" style="display:none">निशुल्क शुरू करें</span>
         </button>
       </div>
+      </div><!-- /home-plan-cards -->
 
       <!-- ₹499 ONE-TIME REVIEW — eye-catcher row -->
       <div class="plan-card" style="grid-column:1/-1;border:2px solid #f59e0b;background:linear-gradient(135deg,#fffbeb,#fef3c7);padding:1.75rem 2rem;margin-top:.5rem;position:relative">
@@ -1325,6 +1329,46 @@ function setLang(l) {
     a.style.display = a.classList.contains(l) ? '' : 'none';
   });
 }
+// ── Dynamic pricing: render tier cards from live super-admin config ──
+// Falls back silently to the static markup if the API is unavailable.
+async function renderHomepagePlans(){
+  try {
+    const r = await fetch('/nidaan/api/plans');
+    if (!r.ok) return;
+    const plans = ((await r.json()).plans || []).filter(p => (p.billing || 'monthly') === 'monthly');
+    if (!plans.length) return;
+    const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    const inr = n => (Number(n) || 0).toLocaleString('en-IN');
+    const card = p => {
+      const rec  = (p.badge || '').trim() ? ' recommended' : '';
+      const badge = (p.badge || '').trim()
+        ? `<div class="plan-badge">${esc(p.badge)}</div>` : '';
+      const cl = (p.claims_per_month == null) ? null : p.claims_per_month;
+      const cp = (p.disputed_cap == null) ? null : Math.round(p.disputed_cap / 100000);
+      const feats = [];
+      feats.push(cl == null
+        ? ['Unlimited disputed claims per month', 'असीमित विवादित क्लेम प्रति माह']
+        : [`${cl} disputed claims per month`, `${cl} विवादित क्लेम प्रति माह`]);
+      if (cp != null) feats.push([`Up to ₹${cp} lakh disputed value each`, `प्रति क्लेम ₹${cp} लाख तक`]);
+      (p.features || []).forEach(f => feats.push([f, f]));
+      const li = feats.map(([en, hi]) =>
+        `<li class="en">${esc(en)}</li><li class="hi" style="display:none">${esc(hi)}</li>`).join('');
+      return `<div class="plan-card${rec}">
+        ${badge}
+        <div class="plan-name en">${esc(p.label)}</div>
+        <div class="plan-name hi" style="display:none">${esc(p.label)}</div>
+        <div class="plan-price">₹${inr(p.price)} <span class="en">/month</span><span class="hi" style="display:none">/माह</span></div>
+        <div class="plan-annual en">Billed monthly · cancel anytime</div>
+        <div class="plan-annual hi" style="display:none">मासिक बिलिंग · कभी भी रद्द करें</div>
+        <ul class="plan-features">${li}</ul>
+        <button class="plan-cta" onclick="window.location='/nidaan/start?plan=${encodeURIComponent(p.plan)}'"><span class="en">Choose ${esc(p.label)}</span><span class="hi" style="display:none">${esc(p.label)} चुनें</span></button>
+      </div>`;
+    };
+    const el = document.getElementById('home-plan-cards');
+    if (el) el.innerHTML = plans.map(card).join('');
+  } catch (_) { /* keep static fallback */ }
+}
+renderHomepagePlans();
 // First-time visitors open the site in HINDI and get a one-time centered popup to pick
 // their language. The choice persists (localStorage) across visits until they clear
 // cache/cookies or switch manually from the top ribbon — no popup on return visits.
