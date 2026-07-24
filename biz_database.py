@@ -1206,6 +1206,7 @@ async def init_db():
             # ₹499 form: policy inception date + TPA (both optional).
             "ALTER TABLE nidaan_claims ADD COLUMN policy_inception_date DATE",
             "ALTER TABLE nidaan_claims ADD COLUMN tpa_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN branch_code TEXT DEFAULT ''",  # affiliate branch, per-claim (survives branch edits)
             # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
             "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
             # DPDP retention for unpaid leads: we keep their documents only while the

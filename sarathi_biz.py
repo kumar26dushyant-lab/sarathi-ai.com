@@ -599,6 +599,20 @@ async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
     return {"exists": account is not None}
 
 
+@app.get("/nidaan/api/branches")
+@limiter.limit("30/minute")
+async def nidaan_api_list_branches(request: Request):
+    """Public list of ACTIVE branches (code + city + name) for the claim/signup
+    branch-code picker (datalist/autocomplete). Reflects the live branch list, so it
+    auto-updates as branches are added/edited/removed in ops. No sensitive fields."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    rows = await nidaan.list_branches(include_disabled=False)
+    return {"branches": [
+        {"branch_code": r.get("branch_code"), "city": r.get("city"), "name": r.get("name")}
+        for r in (rows or [])]}
+
+
 async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, phone: str):
     """Email the affiliate branch that a lead signed up under their code (still unpaid)."""
     def _esc(s):
@@ -1355,6 +1369,12 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         _pay_status, _skip_elig = "paid", False
     else:
         _pay_status, _skip_elig = "unpaid_lead", True
+    # Optional branch code — validate against the LIVE active-branch list if given
+    # (branches can be added/edited/removed in ops, so we never hardcode a pattern).
+    _bc = (body.branch_code or "").strip().upper()
+    if _bc and not await nidaan.is_valid_branch(_bc):
+        raise HTTPException(status_code=400,
+            detail=f"Branch code '{_bc}' is not a valid or active branch — please pick from the list, or leave it blank.")
     claim_id, reason = await nidaan.submit_claim(
         account_id=payload["sub"],
         user_id=None,
@@ -1371,6 +1391,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         notes_from_agent=body.notes_from_agent,
         intermediary_code=body.intermediary_code,
         intermediary_name=body.intermediary_name,
+        branch_code=_bc,
         payment_status=_pay_status,
         skip_eligibility=_skip_elig,
     )
@@ -1379,12 +1400,10 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     # Optional affiliate branch from the claim form — store on the account if it
     # has none yet (covers Google sign-up, which skips the signup branch field).
     # Validate strictly; notify the branch about this newly-attributed lead.
-    _bc = (body.branch_code or "").strip().upper()
-    if _bc:
+    if _bc:  # already validated as an active branch above
         try:
             _acct = await nidaan.get_account_by_id(payload["sub"])
-            if (_acct and not (_acct.get("branch_code") or "").strip()
-                    and await nidaan.is_valid_branch(_bc)):
+            if _acct and not (_acct.get("branch_code") or "").strip():
                 await nidaan.set_account_branch(payload["sub"], _bc)
                 import asyncio as _aio
                 _aio.create_task(_notify_branch_signup(
@@ -4190,6 +4209,31 @@ async def ops_health(request: Request):
     _chk("Database", health is not None, "SQLite reachable")
     _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
     _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
+    # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe
+    # (same Bot API the send path uses), delivery enabled, and staff actually linked.
+    try:
+        import biz_nidaan_telegram as _tg
+        _tok = await _tg.get_bot_token()
+        if not _tok:
+            _chk("Telegram Bot", False, "not configured — no bot token")
+        else:
+            _tg_enabled = (await _tg._get_setting("telegram_enabled", "1")) == "1"
+            _me = await _tg._call("getMe", {}, token=_tok)
+            if _me and _me.get("ok"):
+                _uname = ((_me.get("result") or {}).get("username")) or "NidaanOpsBot"
+                _chk("Telegram Bot", _tg_enabled,
+                     f"@{_uname} reachable & delivering" if _tg_enabled
+                     else f"@{_uname} reachable — delivery DISABLED")
+            else:
+                _chk("Telegram Bot", False,
+                     f"unreachable / invalid token ({(_me or {}).get('error') or (_me or {}).get('description') or 'no response'})")
+        async with aiosqlite.connect(db.DB_PATH) as _tc:
+            _cur = await _tc.execute("SELECT COUNT(DISTINCT staff_id) FROM nidaan_staff_telegram")
+            _linked = (await _cur.fetchone())[0]
+        _chk("Telegram Staff Linked", _linked > 0,
+             f"{_linked} staff linked" if _linked else "no staff linked — alerts reach no one")
+    except Exception as _te:
+        _chk("Telegram Bot", False, f"check failed: {str(_te)[:80]}")
     # WhatsApp status comes from the NIDAAN official instances (not the Sarathi
     # wa_instances table). health_state 'open' == connected.
     try:

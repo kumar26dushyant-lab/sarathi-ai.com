@@ -41,6 +41,7 @@ async def run_full_health_check(manual: bool = False) -> dict:
     results += await _check_database(rid)
     results += await _check_email(rid)
     results += await _check_bots(rid)
+    results += await _check_nidaan_telegram(rid)
     results += await _check_queue(rid)
     results += await _check_disk(rid)
     results += await _check_data_integrity(rid)
@@ -255,6 +256,59 @@ async def _check_bots(rid: str) -> list:
     except Exception as e:
         results.append({"category": "bots", "name": "Bot Health",
                         "status": "warning", "detail": str(e)[:120], "ms": 0})
+    return results
+
+
+async def _check_nidaan_telegram(rid: str) -> list:
+    """Nidaan ops Telegram bot (@NidaanOpsBot, long-polling) — configured, reachable
+    (getMe), delivery enabled, and how many staff are linked. This is the internal-ops
+    notification channel, so an outage here means task/mention/approval alerts stop."""
+    results = []
+    try:
+        import biz_nidaan_telegram as _tg
+        token = await _tg.get_bot_token()
+        if not token:
+            results.append({"category": "telegram", "name": "Nidaan Ops Bot",
+                            "status": "warning",
+                            "detail": "Not configured — no bot token set in ops", "ms": 0})
+            return results
+        enabled = (await _tg._get_setting("telegram_enabled", "1")) == "1"
+        # Reachability + token validity via getMe (also confirms the send path works,
+        # since notifications use the same Bot API).
+        t0 = time.time()
+        res = await _tg._call("getMe", {}, token=token)
+        ms = int((time.time() - t0) * 1000)
+        if not res or not res.get("ok"):
+            results.append({"category": "telegram", "name": "Nidaan Ops Bot",
+                            "status": "critical",
+                            "detail": f"Telegram unreachable / invalid token ({(res or {}).get('error') or (res or {}).get('description') or 'no response'})",
+                            "ms": ms})
+            return results
+        uname = ((res.get("result") or {}).get("username")) or "NidaanOpsBot"
+        if not enabled:
+            results.append({"category": "telegram", "name": "Nidaan Ops Bot",
+                            "status": "warning",
+                            "detail": f"@{uname} reachable, but delivery is DISABLED (telegram_enabled=0)",
+                            "ms": ms})
+        else:
+            results.append({"category": "telegram", "name": "Nidaan Ops Bot",
+                            "status": "healthy",
+                            "detail": f"@{uname} configured, reachable & delivering", "ms": ms})
+        # Linked-staff count — if nobody's linked, notifications reach no one.
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            try:
+                cur = await conn.execute("SELECT COUNT(DISTINCT staff_id) FROM nidaan_staff_telegram")
+                linked = (await cur.fetchone())[0]
+            except Exception:
+                linked = 0
+        results.append({"category": "telegram", "name": "Staff Linked to Telegram",
+                        "status": "healthy" if linked > 0 else "warning",
+                        "detail": (f"{linked} staff linked" if linked > 0
+                                   else "No staff linked — ops Telegram alerts reach no one"),
+                        "ms": 0})
+    except Exception as e:
+        results.append({"category": "telegram", "name": "Nidaan Ops Bot",
+                        "status": "warning", "detail": f"Check error: {str(e)[:120]}", "ms": 0})
     return results
 
 

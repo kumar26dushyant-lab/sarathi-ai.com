@@ -670,6 +670,7 @@ async def submit_claim(
     notes_from_agent: str = "",
     intermediary_code: str = "",
     intermediary_name: str = "",
+    branch_code: str = "",
     payment_status: str = "subscription",
     skip_eligibility: bool = False,
 ) -> tuple[Optional[int], str]:
@@ -700,13 +701,14 @@ async def submit_claim(
                (account_id, user_id, claim_type, insured_name, insured_phone,
                 insured_email, insurer_name, policy_no, disputed_amount,
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
-                notes_from_agent, intermediary_code, intermediary_name, payment_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
              type_specific_json, notes_from_agent,
              (intermediary_code or "").strip(), (intermediary_name or "").strip(),
+             (branch_code or "").strip().upper(),
              payment_status),
         )
         claim_id = cur.lastrowid

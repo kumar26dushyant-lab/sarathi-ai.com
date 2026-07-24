@@ -921,6 +921,15 @@
         </div>
       </div>
       <div class="field">
+        <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
+        <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
+        <input type="text" id="claimBranchCode" list="branchList" maxlength="12" autocomplete="off"
+               placeholder="e.g. MUM-01 — pick your Nidaan branch" oninput="this.value=this.value.toUpperCase()">
+        <datalist id="branchList"></datalist>
+        <p class="en" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">If a Nidaan branch referred you, pick their code — otherwise leave it blank.</p>
+        <p class="hi" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">अगर किसी Nidaan ब्रांच ने आपको भेजा है तो उनका कोड चुनें — वरना खाली छोड़ें।</p>
+      </div>
+      <div class="field">
         <label class="en">Supporting Documents <span style="opacity:.5;font-weight:400">(optional)</span></label>
         <label class="hi">सहायक दस्तावेज़ <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
         <div style="margin-top:.35rem;background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
@@ -1404,6 +1413,16 @@ async function submitClaim(e) {
   const msg = document.getElementById('claimMsg');
   btn.disabled = true;
   msg.className = 'msg';
+  // Branch code is optional, but if given it must be a real active branch.
+  const _bc = (document.getElementById('claimBranchCode')?.value || '').trim().toUpperCase();
+  if (_bc && window._nidaanBranchSet && !window._nidaanBranchSet.has(_bc)) {
+    const isHi = document.body.classList.contains('hi');
+    msg.className = 'msg err';
+    msg.textContent = isHi
+      ? `ब्रांच कोड '${_bc}' मान्य नहीं है — सूची से चुनें या खाली छोड़ें।`
+      : `Branch code '${_bc}' isn't a valid branch — pick from the list or leave it blank.`;
+    btn.disabled = false; return;
+  }
   try {
     const res = await api('/nidaan/api/claims/submit', {
       method: 'POST',
@@ -1415,8 +1434,7 @@ async function submitClaim(e) {
         policy_no: document.getElementById('policyNo').value.trim(),
         disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,
         notes_from_agent: document.getElementById('notes').value.trim(),
-        intermediary_code: (document.getElementById('intermediaryCode')?.value || '').trim(),
-        intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim(),
+        branch_code: (document.getElementById('claimBranchCode')?.value || '').trim().toUpperCase(),
         policy_inception_date: (document.getElementById('policyInception')?.value || '') || null,
         tpa_name: (document.getElementById('tpaName')?.value || '').trim()
       })
@@ -2401,7 +2419,23 @@ async function recoverPendingPayment(showFeedback) {
   } catch(e) { /* network error — leave pending, try next visit */ }
 }
 
+// Load ACTIVE branches for the claim-form branch-code picker (datalist + validation
+// set). Reflects the live ops branch list, so it auto-updates as branches change.
+async function loadBranchList() {
+  try {
+    const res = await fetch('/nidaan/api/branches');
+    if (!res || !res.ok) return;
+    const branches = (await res.json()).branches || [];
+    window._nidaanBranchSet = new Set(branches.map(b => (b.branch_code || '').toUpperCase()));
+    const _e = s => String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    const dl = document.getElementById('branchList');
+    if (dl) dl.innerHTML = branches.map(b =>
+      `<option value="${_e((b.branch_code || '').toUpperCase())}">${_e(b.city || '')} — ${_e(b.name || '')}</option>`).join('');
+  } catch(_) {}
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+loadBranchList();
 loadDashboard().then(() => {
   const params = new URLSearchParams(location.search);
   const plan = params.get('subscribe');
