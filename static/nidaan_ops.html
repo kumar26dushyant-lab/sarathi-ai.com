@@ -2915,15 +2915,32 @@ async function drillIntoTaskStatus(statusSlug, label) {
 // ═══════════════════════════════════════════════════════════════
 function claimStatusClass(s){ return 's-' + (s||'').replace(' ','_'); }
 
-async function loadClaims(statusFilter='', search='') {
+// Active-branch codes for the claim filter (fetched once, cached).
+let _claimBranchOpts = null;
+async function _getClaimBranchOpts(){
+  if (_claimBranchOpts) return _claimBranchOpts;
+  try { const r = await API('/branches'); if (r.ok){ const d = await r.json();
+    _claimBranchOpts = (d.branches||[]).map(b=>b.branch_code).filter(Boolean).sort(); } }
+  catch(e){ _claimBranchOpts = []; }
+  return _claimBranchOpts || [];
+}
+function _cfVal(id){ const e=document.getElementById(id); return e?e.value:''; }
+// Single entry point — reads every claim filter control so they compose cleanly.
+function applyClaimFilters(){
+  loadClaims(_cfVal('claimStatusFilter'), _cfVal('claimSearch'),
+             _cfVal('claimBranchFilter'), _cfVal('claimPlanFilter'), _cfVal('claimAssignFilter'));
+}
+async function loadClaims(statusFilter='', search='', branch='', plan='', assigned='') {
   const el = document.getElementById('panel-claims');
+  const branchOpts = await _getClaimBranchOpts();
+  const branchOptsHtml = branchOpts.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Claims</div><div class="section-sub">All claims across the platform</div></div>
     </div>
     <div class="filter-bar">
-      <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="loadClaims(document.getElementById('claimStatusFilter').value, this.value)" style="flex:1;min-width:160px">
-      <select id="claimStatusFilter" onchange="loadClaims(this.value, document.getElementById('claimSearch').value)">
+      <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="applyClaimFilters()" style="flex:1;min-width:160px">
+      <select id="claimStatusFilter" onchange="applyClaimFilters()">
         <option value="">All Statuses</option>
         <option value="intimated">Intimated</option>
         <option value="assigned">Assigned</option>
@@ -2934,15 +2951,31 @@ async function loadClaims(statusFilter='', search='') {
         <option value="closed">Closed</option>
         <option value="withdrawn">Withdrawn</option>
       </select>
-      ${_role!=='team_member'?'<select id="claimAssignFilter" onchange="loadClaims(document.getElementById(\'claimStatusFilter\').value,document.getElementById(\'claimSearch\').value)"><option value="">All Staff</option></select>':''}
+      <select id="claimPlanFilter" onchange="applyClaimFilters()">
+        <option value="">All Plans</option>
+        <option value="silver">Silver</option>
+        <option value="gold">Gold</option>
+        <option value="platinum">Platinum</option>
+      </select>
+      <select id="claimBranchFilter" onchange="applyClaimFilters()">
+        <option value="">All Branches</option>
+        ${branchOptsHtml}
+      </select>
+      ${_role!=='team_member'?'<select id="claimAssignFilter" onchange="applyClaimFilters()"><option value="">All Staff</option></select>':''}
     </div>
     <div id="claimTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading claims…</p></div></div>`;
 
+  // Re-apply the active filter values (the panel re-renders its controls each call).
   if (statusFilter) document.getElementById('claimStatusFilter').value = statusFilter;
+  if (plan)   document.getElementById('claimPlanFilter').value = plan;
+  if (branch) document.getElementById('claimBranchFilter').value = branch;
 
   const params = new URLSearchParams();
   if (statusFilter) params.set('status', statusFilter);
   if (search) params.set('search', search);
+  if (branch) params.set('branch', branch);
+  if (plan) params.set('plan', plan);
+  if (assigned) params.set('assigned_to', assigned);
   params.set('limit','200');
 
   const r = await API('/claims?' + params);
