@@ -3728,6 +3728,9 @@ async def ops_list_claims(
     claim_type: Optional[str] = None,
     search: Optional[str] = None,
     payment_status: Optional[str] = None,
+    branch: Optional[str] = None,
+    plan: Optional[str] = None,
+    account_id: Optional[int] = None,
     limit: int = 100,
     offset: int = 0,
 ):
@@ -3739,6 +3742,7 @@ async def ops_list_claims(
         status=status, assigned_to=assigned_to,
         claim_type=claim_type, search=search,
         payment_status=payment_status,
+        branch=branch, plan=plan, account_id=account_id,
         limit=limit, offset=offset,
     )
     # Pipeline counters (global, independent of the active filter) so the ops UI

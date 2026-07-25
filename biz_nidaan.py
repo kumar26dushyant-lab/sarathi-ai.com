@@ -4023,6 +4023,9 @@ async def get_claims_ops(
     claim_type: Optional[str] = None,
     search: Optional[str] = None,
     payment_status: Optional[str] = None,
+    branch: Optional[str] = None,
+    plan: Optional[str] = None,
+    account_id: Optional[int] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -4051,6 +4054,15 @@ async def get_claims_ops(
         if claim_type:
             conditions.append("c.claim_type=?")
             params.append(claim_type)
+        if branch:
+            conditions.append("UPPER(a.branch_code)=?")
+            params.append(branch.strip().upper())
+        if plan:
+            conditions.append("sub.plan=?")
+            params.append(plan)
+        if account_id is not None:
+            conditions.append("c.account_id=?")
+            params.append(account_id)
         if search:
             conditions.append(
                 "(c.insured_name LIKE ? OR c.insured_phone LIKE ? "
@@ -4065,11 +4077,13 @@ async def get_claims_ops(
             f"""SELECT c.*,
                     a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
                     a.branch_code,
+                    sub.plan AS account_plan,
                     s.name AS assigned_staff_name,
                     (SELECT COUNT(*) FROM nidaan_followups f
                      WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks
                FROM nidaan_claims c
                JOIN nidaan_accounts a ON a.account_id = c.account_id
+               LEFT JOIN nidaan_subscriptions sub ON sub.account_id = a.account_id AND sub.status = 'active'
                LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
                {where}
                ORDER BY (c.payment_status='unpaid_lead') ASC, c.created_at DESC
