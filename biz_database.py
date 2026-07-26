@@ -1363,6 +1363,18 @@ async def init_db():
                 ON nidaan_support_messages(thread_id);
             CREATE INDEX IF NOT EXISTS idx_nidaan_support_threads_status
                 ON nidaan_support_threads(status, last_at);
+
+            -- Support-rep duty roster: a staffer is "on duty" when today is within [start,end].
+            CREATE TABLE IF NOT EXISTS nidaan_support_reps (
+                rep_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                staff_id    INTEGER NOT NULL,
+                start_date  TEXT NOT NULL,          -- YYYY-MM-DD (IST)
+                end_date    TEXT NOT NULL,          -- YYYY-MM-DD (IST, inclusive)
+                created_by  INTEGER,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_support_reps_dates
+                ON nidaan_support_reps(start_date, end_date);
         """)
 
         # ── nidaan_audit_log: control-center activity trail. Every sensitive ops

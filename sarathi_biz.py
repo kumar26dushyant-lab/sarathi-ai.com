@@ -4024,6 +4024,48 @@ async def ops_support_hours_set(body: OpsSupportHoursReq, request: Request):
     return {"ok": True, "hours": cfg}
 
 
+# ── Support-rep duty roster (super-admin assigns who's on support duty) ────────
+@app.get("/nidaan/ops/api/support/reps")
+async def ops_support_reps_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"reps": await nidaan.list_support_reps()}
+
+
+class OpsSupportRepReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: int
+    start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.post("/nidaan/ops/api/support/reps")
+async def ops_support_reps_add(body: OpsSupportRepReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    try:
+        rep_id = await nidaan.add_support_rep(body.staff_id, body.start_date, body.end_date,
+                                              created_by=staff["staff_id"])
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "support.rep_add", "support",
+                     str(body.staff_id), f"{body.start_date}..{body.end_date}")
+    return {"ok": True, "rep_id": rep_id}
+
+
+@app.delete("/nidaan/ops/api/support/reps/{rep_id}")
+async def ops_support_reps_remove(rep_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.remove_support_rep(rep_id):
+        raise HTTPException(status_code=404, detail="Roster entry not found")
+    await _ops_audit(request, "support.rep_remove", "support", str(rep_id), "removed")
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")
 async def ops_branch_unpaid_leads(branch_code: str, request: Request):
     """Attributed accounts for this branch that haven't paid yet — the fallback

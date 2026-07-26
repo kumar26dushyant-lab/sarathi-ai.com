@@ -1509,6 +1509,58 @@ async def is_within_business_hours() -> bool:
     return cfg["start"] <= now.strftime("%H:%M") < cfg["end"]
 
 
+# ── Support-rep duty roster ───────────────────────────────────────────────────
+async def add_support_rep(staff_id: int, start_date: str, end_date: str,
+                          created_by: Optional[int] = None) -> int:
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", start_date or "") or not re.match(r"^\d{4}-\d{2}-\d{2}$", end_date or ""):
+        raise ValueError("bad_date_format")
+    if end_date < start_date:
+        raise ValueError("end_before_start")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_support_reps (staff_id, start_date, end_date, created_by) VALUES (?,?,?,?)",
+            (staff_id, start_date, end_date, created_by))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def remove_support_rep(rep_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute("DELETE FROM nidaan_support_reps WHERE rep_id=?", (rep_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def list_support_reps() -> list[dict]:
+    """Roster rows with staff name + an on_duty flag (today within range, IST)."""
+    today = _now_ist().strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            """SELECT r.rep_id, r.staff_id, r.start_date, r.end_date, r.created_at,
+                      s.name AS staff_name, s.role AS staff_role
+               FROM nidaan_support_reps r
+               LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id
+               ORDER BY r.end_date DESC, r.start_date DESC""")).fetchall()]
+    for r in rows:
+        r["on_duty"] = (r["start_date"] <= today <= r["end_date"])
+    return rows
+
+
+async def on_duty_rep_ids() -> list[int]:
+    """staff_ids on support duty right now (today within range, IST, active staff)."""
+    today = _now_ist().strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            """SELECT DISTINCT r.staff_id FROM nidaan_support_reps r
+               JOIN nidaan_staff s ON s.staff_id = r.staff_id
+               WHERE r.start_date <= ? AND r.end_date >= ?
+                 AND s.status='active' AND s.deleted_at IS NULL""",
+            (today, today))).fetchall()
+        return [r["staff_id"] for r in rows]
+
+
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
     """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
     Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one

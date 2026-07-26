@@ -735,9 +735,11 @@ async def _telegram_mirror(staff_id: int, text: str, url: str) -> None:
 
 
 async def on_support_escalated(thread_id: int) -> None:
-    """A website support chat needs a human. Alert admins on bell + push + email +
-    Telegram so someone picks it up in the ops Support inbox. Fire-and-forget."""
+    """A website support chat needs a human. Route to the ON-DUTY support reps (roster) on
+    bell + push + email + Telegram — falling back to all admins so nothing is ever missed.
+    In-hours = 'reply now'; after-hours = a ticket to follow up. Fire-and-forget."""
     try:
+        import biz_nidaan as _nid
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             th = await (await conn.execute(
@@ -747,16 +749,25 @@ async def on_support_escalated(thread_id: int) -> None:
                 "SELECT body FROM nidaan_support_messages WHERE thread_id=? AND sender_type='customer' "
                 "ORDER BY msg_id DESC LIMIT 1", (thread_id,))).fetchone()
         who = ((dict(th).get("name") if th else "") or "A visitor").strip()
+        contact = ((dict(th).get("contact") if th else "") or "").strip()
         q = ((dict(last).get("body") if last else "") or "").strip()
-        subject = f"💬 Support chat needs a human — #{thread_id}"
-        body = (f"{who} needs help on the website chat.\n\n\"{q[:300]}\"\n\n"
-                f"Open the Support inbox in ops to reply.")
-        admins = await _super_admin_staff()
-        ids = [a["staff_id"] for a in admins]
-        if ids:
-            await notify_staff_inapp(ids, subject, body, event_key="support.escalated", email=True)
-            for sid in ids:
-                await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+        in_hours = await _nid.is_within_business_hours()
+        ids = await _nid.on_duty_rep_ids()          # on-duty reps first
+        if not ids:                                  # nobody rostered → don't miss it
+            ids = [a["staff_id"] for a in await _super_admin_staff()]
+        if not ids:
+            return
+        if in_hours:
+            subject = f"💬 Support chat needs a human now — Ticket #{thread_id}"
+            tail = "Open the Support inbox in ops to reply live."
+        else:
+            subject = f"🎫 Support ticket #{thread_id} (after hours)"
+            tail = "Follow up during support hours (Mon–Fri, 10am–6pm IST)."
+        cline = f"\nContact: {contact}" if contact else ""
+        body = f"{who} — website chat.{cline}\n\n\"{q[:300]}\"\n\n{tail}"
+        await notify_staff_inapp(ids, subject, body, event_key="support.escalated", email=True)
+        for sid in ids:
+            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
     except Exception as e:
         logger.warning("on_support_escalated failed: %s", e)
 

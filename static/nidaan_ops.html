@@ -4649,9 +4649,10 @@ async function loadSupport(){
       <div class="section-sub">Website chat threads. Escalated = a customer is waiting for a human.</div></div>
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadSupport()">🔄 Refresh</button></div>
     <div id="supHours" style="margin-bottom:.7rem"></div>
+    <div id="supReps" style="margin-bottom:.7rem"></div>
     <div id="supSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem"></div>
     <div id="supListWrap"><div class="empty"><p>Loading…</p></div></div>`;
-  loadSupportHours();
+  loadSupportHours(); loadSupportReps();
   const segs = [['escalated','🔔 Needs human'],['ai','AI-handled'],['closed','Closed'],['','All']];
   document.getElementById('supSegBar').innerHTML = segs.map(([k,label])=>
     `<button class="btn ${(_supportFilter===k)?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="_supportFilter='${k}';loadSupport()">${label}</button>`).join('');
@@ -4675,6 +4676,50 @@ async function loadSupport(){
       <tbody>${rows}</tbody></table></div>`;
 }
 
+async function loadSupportReps(){
+  const wrap=document.getElementById('supReps'); if(!wrap) return;
+  const r=await API('/support/reps'); if(!r.ok){ wrap.innerHTML=''; return; }
+  const reps=(await r.json()).reps||[];
+  const canEdit=(_role==='super_admin');
+  const onDuty=reps.filter(x=>x.on_duty);
+  const dutyTxt = onDuty.length ? onDuty.map(x=>esc(x.staff_name||('#'+x.staff_id))).join(', ') : '<span style="color:#fbbf24">nobody rostered (alerts fall back to admins)</span>';
+  const rows=reps.map(x=>`<tr>
+     <td>${esc(x.staff_name||('#'+x.staff_id))} <span style="font-size:.68rem;color:rgba(255,255,255,.4)">${esc(x.staff_role||'')}</span></td>
+     <td style="font-size:.8rem">${esc(x.start_date)} → ${esc(x.end_date)}</td>
+     <td>${x.on_duty?'<span class="pill-status" style="background:rgba(52,211,153,.18);color:#4ade80">on duty</span>':'<span style="color:rgba(255,255,255,.35);font-size:.75rem">scheduled</span>'}</td>
+     <td>${canEdit?`<button class="btn-icon" title="Remove" onclick="removeSupportRep(${x.rep_id})" style="color:#fca5a5">🗑️</button>`:''}</td>
+   </tr>`).join('');
+  wrap.innerHTML=`<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.7rem .85rem">
+    <div style="font-size:.82rem;margin-bottom:.5rem">🎧 <b>On duty now:</b> ${dutyTxt}</div>
+    ${reps.length?`<div class="table-wrap"><table><thead><tr><th>Rep</th><th>Dates</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div style="font-size:.78rem;color:rgba(255,255,255,.4)">No reps assigned yet.</div>'}
+    ${canEdit?`<div id="supRepAdd" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-top:.6rem">
+      <label style="font-size:.75rem">Staff<br><select id="supRepStaff" style="min-width:150px"><option value="">Loading…</option></select></label>
+      <label style="font-size:.75rem">From<br><input id="supRepStart" type="date" style="max-width:150px"></label>
+      <label style="font-size:.75rem">To<br><input id="supRepEnd" type="date" style="max-width:150px"></label>
+      <button class="btn btn-primary" style="font-size:.8rem;padding:.35rem .8rem" onclick="addSupportRep()">+ Assign</button>
+      <span id="supRepMsg" style="font-size:.78rem"></span>
+    </div>`:''}
+  </div>`;
+  if(canEdit){
+    const sr=await API('/staff'); if(sr.ok){ const sd=await sr.json(); const staff=(sd.staff||sd||[]).filter(s=>!s.deleted_at);
+      const sel=document.getElementById('supRepStaff'); if(sel) sel.innerHTML='<option value="">Select staff…</option>'+staff.map(s=>`<option value="${s.staff_id}">${esc(s.name||('#'+s.staff_id))}</option>`).join(''); }
+  }
+}
+async function addSupportRep(){
+  const staff_id=parseInt(document.getElementById('supRepStaff').value);
+  const start_date=document.getElementById('supRepStart').value;
+  const end_date=document.getElementById('supRepEnd').value;
+  const msg=document.getElementById('supRepMsg');
+  if(!staff_id){ msg.style.color='#f87171'; msg.textContent='Pick a staff member'; return; }
+  if(!start_date||!end_date){ msg.style.color='#f87171'; msg.textContent='Pick dates'; return; }
+  const r=await API('/support/reps',{method:'POST', body:JSON.stringify({staff_id,start_date,end_date})});
+  if(r.ok){ loadSupportReps(); } else { const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+}
+async function removeSupportRep(id){
+  if(!confirm('Remove this rep from the roster?')) return;
+  const r=await API('/support/reps/'+id,{method:'DELETE'});
+  if(r.ok) loadSupportReps(); else alert('Failed to remove');
+}
 const _DAYNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 async function loadSupportHours(){
   const wrap=document.getElementById('supHours'); if(!wrap) return;
