@@ -4513,8 +4513,26 @@ Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudf
   of truth. This is where "AI answers validated & correct" is enforced. NOT auto-shipped — draft →
   user approves → deploy.
 
-**Engine status: S1 · S2 · anti-hallucination · S3 · context-separation · S4 all SHIPPED + verified.
-Only S5 (KB, user-approved) remains.**
+- **S5 SHIPPED + verified (Jul 27):** KB finalized from the owner's confirmed answers. Facts now
+  encoded: covers ANY insurance (health/life/travel/auto/…); we sell the expert REVIEW (go/no-go),
+  NEVER a guarantee/promise (hard rule). Two audiences — policyholders (worth-fighting opinion) +
+  advisor/agent subscribers (offload disputes, focus on selling → cross/upsell). ₹499 review 48–72
+  business hrs; "can be fought" → legal team takes it forward, status on dashboard/chat; success fee
+  only after resolution (case-by-case); refund window = 2 HOURS then non-refundable (plan refunds →
+  human). Persona = warm customer-service + sales rep. Verified: no-guarantee, all insurance types,
+  refund policy.
+
+**ENGINE COMPLETE (S1–S5 + anti-hallucination + guide/support separation) — all SHIPPED + verified.**
+
+## 50. L2 LEGAL PORTAL INTEGRATION — PLANNED (surfaced Jul 27)
+
+When a claim is marked **"can be fought"** in NidaanPartner (L1) ops, it must transfer to the **L2
+legal portal** (likely **Nidaanlegalindia.com** — user to confirm) where all L2 claims data +
+legal process flow live. Need a secure integration (API or equivalent) that: (a) pushes an
+accepted claim from L1 → L2, and (b) pulls **customer-facing status updates** from L2 back so the
+customer sees them on their nidaanpartner.com **dashboard** and can ask about status via **chat
+support**. This extends the earlier L1↔L2 sync idea (see memory `project_nidaan_legal_api`).
+Scope/portal URL + auth model to be confirmed before building. Depends on the L2 portal existing.
 
 ---
 
