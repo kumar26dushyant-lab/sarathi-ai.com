@@ -4408,6 +4408,32 @@ Requested focus: smooth payment, no dead-ends, recover if the user drops mid-pay
   mailbox as its `contact_email` in ops → Branches. OTP login works the moment the inbox is real.
   (Google Workspace signup itself is the user's action; deferred until they subscribe.)
 
+### 48.10 AI customer-support module + Google Workspace (Jul 26)
+- **Google Workspace LIVE**: MX switched to `smtp.google.com` on Cloudflare (Email Routing
+  disabled), domain verified, Gmail active. Sending is UNCHANGED by this (MX = receiving only):
+  app still sends Nidaan mail from `nidaanpartner@gmail.com` (SMTP_USER), Sarathi from
+  `info@sarathi-ai.com`; admin alerts go TO `kumar26.dushyant@gmail.com` + `ashwin.kaushal@gmail.com`
+  (gmail, so no bounce risk from the MX change). Optional upgrade queued: send app mail from
+  `info@nidaanpartner.com` (create mailbox + app password → update SMTP_USER/PASSWORD/NIDAAN_FROM_EMAIL).
+  Workspace admin = `dushyant@nidaanpartner.com`; the two gmail accounts are billing/recovery only.
+  Branch-portal login (§48.9) uses these @nidaanpartner.com mailboxes — create one per branch and
+  set it as the branch's contact_email.
+- **AI customer support (nidaanpartner.com)** — increments 1–3 SHIPPED + verified:
+  - Backend: `nidaan_support_threads`/`nidaan_support_messages` (thread_key = per-thread secret,
+    enumeration-safe). `biz_ai.nidaan_support_reply()` = bilingual Gemini answer from a fixed KB;
+    never quotes prices/caps/case outcomes; fails safe (escalate on error).
+  - Endpoints: `POST /nidaan/api/support/message` (new/continue thread, AI reply, escalate),
+    `GET /nidaan/api/support/thread` (key-gated).
+  - Widget: `static/nidaan_support_widget.js` floating chat on the homepage + dashboard;
+    persists thread in localStorage; mobile-first.
+  - Escalation → `on_support_escalated()` alerts admins (bell + push + email + Telegram).
+  - Ops **💬 Support** panel: thread inbox (Needs-human / AI / Closed / All), conversation drawer,
+    staff reply (clears escalation), mark-closed. Verified: escalation loop, ops list, auth-gating.
+  - Later increments: realtime staff-reply push to the customer widget; WhatsApp + email channels.
+- One-click @nidaanpartner.com inbox creation from ops (Admin SDK Directory API + service account
+  with domain-wide delegation) is FEASIBLE but deferred — manual mailbox creation in the Workspace
+  admin console is the easy path for a handful of branches.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
