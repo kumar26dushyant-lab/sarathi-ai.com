@@ -92,11 +92,18 @@
 
   function el(s){ var d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
   function scroll(){ msgs.scrollTop = msgs.scrollHeight; }
+  function linkify(html){
+    // clickable absolute URLs + site paths (/nidaan/… , /#plans) so the AI can guide visitors
+    html = html.replace(/(https?:\/\/[^\s<]+)/g, function(u){ return '<a href="'+u+'" target="_blank" rel="noopener" style="color:#67e8f9">'+u+'</a>'; });
+    html = html.replace(/(^|[\s(])(\/(?:nidaan[^\s<]*|#[a-z]+))/g, function(m,pre,path){ return pre+'<a href="'+path+'" target="_blank" rel="noopener" style="color:#67e8f9">'+path+'</a>'; });
+    return html;
+  }
   function bubble(text, who){
     var b=document.createElement('div');
     b.className='nsw-b '+(who==='customer'?'me':(who==='staff'?'staff':'ai'));
     var tag = who==='staff' ? '<div class="nsw-tag">Support agent</div>' : '';
-    b.innerHTML = tag + el(text); msgs.appendChild(b); scroll();
+    var content = (who==='customer') ? el(text) : linkify(el(text));
+    b.innerHTML = tag + content; msgs.appendChild(b); scroll();
   }
   function note(text){ var n=document.createElement('div'); n.className='nsw-note'; n.innerHTML=el(text); msgs.appendChild(n); scroll(); }
 

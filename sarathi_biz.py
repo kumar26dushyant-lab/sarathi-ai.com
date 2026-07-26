@@ -623,14 +623,26 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         tid, tkey = started["thread_id"], started["thread_key"]
     await nidaan.add_support_message(tid, "customer", msg)
     history = await nidaan.get_support_messages(tid)
+    # Loop / anomaly guard: if the visitor repeats the same question or the chat drags on without
+    # resolution, hand to a human instead of letting the AI re-explain in circles.
+    import re as _re_sup
+    _cust = [h["body"] for h in history if h["sender_type"] == "customer"]
+    def _norm_sup(s):
+        return _re_sup.sub(r"\W+", " ", (s or "").lower()).strip()
+    _nmsg = _norm_sup(msg)
+    _repeat = bool(_nmsg) and sum(1 for p in _cust if _norm_sup(p) == _nmsg) >= 2
+    _force_human = _repeat or len(_cust) >= 6
     import biz_ai as ai_mod
     ai = await ai_mod.nidaan_support_reply(
         msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history], lang=_lang)
     answer = (ai.get("answer") or "").strip() or (
         "Thanks for reaching out! A member of our team will get back to you during support "
         "hours (Mon–Fri, 10am–6pm IST).")
+    escalated = bool(ai.get("escalate")) or _force_human
+    if _force_human and not bool(ai.get("escalate")):
+        answer += ("\n\nLet me connect you with a human teammate who can help further — "
+                   "they'll follow up during support hours (Mon–Fri, 10am–6pm IST).")
     await nidaan.add_support_message(tid, "ai", answer)
-    escalated = bool(ai.get("escalate"))
     if escalated:
         await nidaan.set_support_status(tid, "escalated")
         try:  # staff alert wiring lands in the next increment
