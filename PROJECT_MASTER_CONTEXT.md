@@ -4436,5 +4436,47 @@ Requested focus: smooth payment, no dead-ends, recover if the user drops mid-pay
 
 ---
 
+## 49. CHAT SUPPORT + LEAD-GEN ENGINE — PLAN (Jul 26, 2026; building next)
+
+**Working rule (user-set):** keep THIS doc updated *simultaneously* with the work — it is the
+cross-session "project brain" (context + plans + open decisions + todos). A new session should
+read it and know exactly where we are and what's next. Also parked: **Google Workspace / email**
+(resume ~Jul 27; MX/domain already live — remaining is per-branch mailboxes + optional
+send-from-info@ upgrade).
+
+**Vision (user):** evolve the increment-1–3 support widget into a proper **chat support + lead
+generation engine** — greets + guides visitors, bilingual (EN/HI/Hinglish, asks preferred
+language), never misses a lead (out-of-hours fallback capture), realtime, and secure/anti-spam.
+Ops assigns support reps on a duty roster; they're alerted on all channels during office hours,
+and get ticket-number notifications after hours.
+
+**Phased plan (S1–S5):**
+- **S1 — realtime + language + greeting:** widget polls the thread while open (~4s) so staff
+  replies appear without refresh (ops drawer polls too). First-open **preferred-language picker**
+  (EN / हिंदी / Hinglish) stored on the thread; AI + greeting in that language. Proactive greeting
+  with quick-action buttons (Check my claim / See plans / Talk to a human) to guide visitors.
+- **S2 — business hours + lead-capture fallback:** super-admin-configurable hours (default Mon–Fri
+  10–6 IST). Out-of-hours (or human unavailable) → widget shows a "leave your details" form
+  (name + email/mobile + message) → creates a ticket with a **ticket number**; ONE submission per
+  browser (localStorage + server rate-limit). Lead = name + contact captured on the thread.
+- **S3 — support-rep duty roster + routing:** super-admin assigns staff as support reps for a date
+  range (days/weeks/months). New chat/escalation during office hours → alert on-duty reps on ALL
+  channels (Telegram + web bell + PWA push). After hours → ticket created, reps get the
+  ticket-number notification (async).
+- **S4 — hardening (security/anomaly/spam):** per-IP + per-thread rate limits, message-length +
+  messages-per-thread caps, honeypot / min-interval bot check, block abusive IPs (reuse
+  `is_ip_blocked`), spam heuristic; escalate-safe. (Baked in from S1 onward.)
+- **S5 — AI correctness/validation:** expand + verify the knowledge base to cover the ENTIRE
+  business structure accurately; **user reviews/approves the KB draft** (this is where "validated
+  and correct" is enforced); strict prompt + escalate-when-unsure guardrails.
+
+**Open decisions (pending user confirmation before build):**
+1. Office-hours alert trigger: only on human-needed/lead (recommended) vs. every new chat vs. both.
+2. Lead destination: support ticket in ops (recommended) vs. also create a Nidaan lead/account.
+3. Business hours: super-admin editable (recommended) vs. fixed for now.
+Realtime = polling (chosen — simple/reliable through Cloudflare, no persistent sockets).
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
