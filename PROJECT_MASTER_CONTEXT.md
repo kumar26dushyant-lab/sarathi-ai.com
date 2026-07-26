@@ -4503,9 +4503,18 @@ Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudf
   NEVER sends the customer token or exposes account data); dashboard chat = **support** mode
   (logged-in — account-aware from a minimal CUSTOMER CONTEXT name/plan/active). Mode derived from a
   valid Nidaan token server-side; threads namespaced per mode in the widget. Verified both paths.
-- **S4 next:** security/anti-spam/anomaly hardening (IP-block gate, per-thread cap, honeypot). Note:
-  Cloudflare already fronts the site (edge DDoS/bot mitigation) — app layer is the 2nd line.
-- **S5 next:** expand + USER-APPROVE the AI knowledge base for full business correctness.
+- **S4 SHIPPED + verified (Jul 26):** anti-spam/anomaly hardening — IP-block gate
+  (`auth.is_ip_blocked`) on /support/message + /support/lead; honeypot field `hp` (bots fill →
+  `record_failed_login` + benign no-op, so repeat offenders auto-block); per-thread flood cap (80
+  msgs → 429); existing per-IP limits (20/min chat, 4/hr lead) retained. Cloudflare edge is the 1st
+  line. Verified: honeypot made no thread, normal chat unaffected.
+- **S5 (LAST phase, needs USER APPROVAL):** expand the AI knowledge base (`_NIDAAN_SUPPORT_KB` in
+  biz_ai.py) to cover the ENTIRE business accurately; the user reviews/edits before it's the source
+  of truth. This is where "AI answers validated & correct" is enforced. NOT auto-shipped — draft →
+  user approves → deploy.
+
+**Engine status: S1 · S2 · anti-hallucination · S3 · context-separation · S4 all SHIPPED + verified.
+Only S5 (KB, user-approved) remains.**
 
 ---
 
