@@ -1354,16 +1354,17 @@ async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
 # ── Customer support chat (AI first-line + human handoff) ─────────────────────
 async def create_support_thread(name: str = "", contact: str = "",
                                 account_id: Optional[int] = None,
-                                channel: str = "web") -> dict:
+                                channel: str = "web", lang: str = "") -> dict:
     """Start a support conversation. Returns {thread_id, thread_key}. thread_key is a
     per-thread secret the client must present to continue/read (enumeration-safe)."""
     key = secrets.token_urlsafe(24)
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel)
-               VALUES (?,?,?,?,?)""",
+            """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel, lang)
+               VALUES (?,?,?,?,?,?)""",
             (key, account_id, (name or "").strip()[:80], (contact or "").strip()[:120],
-             channel if channel in ("web", "whatsapp", "email") else "web"))
+             channel if channel in ("web", "whatsapp", "email") else "web",
+             lang if lang in ("en", "hi", "hinglish") else ""))
         await conn.commit()
         return {"thread_id": cur.lastrowid, "thread_key": key}
 
@@ -1395,12 +1396,15 @@ async def add_support_message(thread_id: int, sender_type: str, body: str) -> in
         return cur.lastrowid
 
 
-async def get_support_messages(thread_id: int, limit: int = 100) -> list[dict]:
+async def get_support_messages(thread_id: int, limit: int = 200, after_id: int = 0) -> list[dict]:
+    """Messages for a thread. `after_id` returns only messages with msg_id > after_id
+    (used by the widget's realtime poll to fetch just the new ones)."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT sender_type, body, created_at FROM nidaan_support_messages "
-            "WHERE thread_id=? ORDER BY msg_id ASC LIMIT ?", (thread_id, limit))).fetchall()
+            "SELECT msg_id, sender_type, body, created_at FROM nidaan_support_messages "
+            "WHERE thread_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",
+            (thread_id, after_id, limit))).fetchall()
         return [dict(r) for r in rows]
 
 

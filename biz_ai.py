@@ -1193,7 +1193,7 @@ KNOWLEDGE:
 {kb}
 
 Rules:
-- Reply in the SAME language/style the customer used (English, Hindi, or Hinglish). Match them.
+- {lang_rule}
 - NEVER invent specifics you don't have: exact prices, claim limits, caps, timelines beyond
   the ranges above, or the outcome/status of a specific case. Point to the website when asked
   for exact plan numbers.
@@ -1211,16 +1211,28 @@ Customer's new message: {message}
 Respond with JSON only: {{"answer": "<your reply in the customer's language>", "escalate": <true|false>, "reason": "<short reason if escalating, else empty>"}}"""
 
 
-async def nidaan_support_reply(message: str, history: Optional[list] = None) -> dict:
+_SUPPORT_LANG_RULE = {
+    "en": "Reply in clear, simple ENGLISH.",
+    "hi": "Reply in HINDI (Devanagari script). Keep it simple and warm.",
+    "hinglish": "Reply in HINGLISH (Hindi in Roman/English script, mixed with English) — the way "
+                "Indians casually chat. Keep it warm and simple.",
+}
+
+
+async def nidaan_support_reply(message: str, history: Optional[list] = None, lang: str = "") -> dict:
     """First-line AI support for NidaanPartner.com customers. Bilingual; answers product /
     process questions from a fixed knowledge base and escalates account/payment/case-specific
-    queries to a human. Returns {answer, escalate, reason}. On any failure, escalates safely."""
+    queries to a human. `lang` (en|hi|hinglish) sets the reply language; blank = match the
+    customer's message. Returns {answer, escalate, reason}. On any failure, escalates safely."""
     hist = ""
     for m in (history or [])[-8:]:
         role = "Customer" if m.get("sender_type") == "customer" else "Assistant"
         hist += f"{role}: {(m.get('body') or '')[:500]}\n"
+    lang_rule = _SUPPORT_LANG_RULE.get(lang,
+        "Reply in the SAME language/style the customer used (English, Hindi, or Hinglish). Match them.")
     prompt = _NIDAAN_SUPPORT_PROMPT.format(
-        kb=_NIDAAN_SUPPORT_KB, history=hist or "(none)", message=(message or "")[:1500])
+        kb=_NIDAAN_SUPPORT_KB, lang_rule=lang_rule, history=hist or "(none)",
+        message=(message or "")[:1500])
     try:
         raw = await _ask_gemini(prompt, json_mode=True)
         data = _clean_json(raw)

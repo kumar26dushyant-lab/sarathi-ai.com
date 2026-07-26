@@ -595,6 +595,7 @@ class NidaanSupportMsgReq(BaseModel):
     thread_key: Optional[str] = None
     name: str = Field("", max_length=80)
     contact: str = Field("", max_length=120)
+    lang: str = Field("", max_length=10)   # en | hi | hinglish (preferred reply language)
 
 
 @app.post("/nidaan/api/support/message")
@@ -609,19 +610,22 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     if not msg:
         raise HTTPException(status_code=400, detail="Empty message")
     # Continue a validated thread, or open a new one.
+    _lang = body.lang if body.lang in ("en", "hi", "hinglish") else ""
     if body.thread_id and body.thread_key:
         thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
         if not thread:
             raise HTTPException(status_code=403, detail="Invalid conversation")
         tid, tkey = thread["thread_id"], body.thread_key
+        _lang = _lang or (thread.get("lang") or "")
     else:
-        started = await nidaan.create_support_thread(name=body.name, contact=body.contact, channel="web")
+        started = await nidaan.create_support_thread(
+            name=body.name, contact=body.contact, channel="web", lang=_lang)
         tid, tkey = started["thread_id"], started["thread_key"]
     await nidaan.add_support_message(tid, "customer", msg)
     history = await nidaan.get_support_messages(tid)
     import biz_ai as ai_mod
     ai = await ai_mod.nidaan_support_reply(
-        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history])
+        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history], lang=_lang)
     answer = (ai.get("answer") or "").strip() or (
         "Thanks for reaching out! A member of our team will get back to you during support "
         "hours (Mon–Fri, 10am–6pm IST).")
@@ -641,16 +645,17 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
 
 
 @app.get("/nidaan/api/support/thread")
-@limiter.limit("30/minute")
-async def nidaan_support_thread(thread_id: int, thread_key: str, request: Request):
-    """Fetch a support thread's messages — only with the matching thread_key."""
+@limiter.limit("120/minute")
+async def nidaan_support_thread(thread_id: int, thread_key: str, request: Request, after_id: int = 0):
+    """Fetch a support thread's messages — only with the matching thread_key. `after_id`
+    returns only newer messages (the widget polls this ~every 4s for live staff replies)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     thread = await nidaan.get_support_thread(thread_id, thread_key)
     if not thread:
         raise HTTPException(status_code=403, detail="Invalid conversation")
     return {"thread_id": thread_id, "status": thread.get("status"),
-            "messages": await nidaan.get_support_messages(thread_id)}
+            "messages": await nidaan.get_support_messages(thread_id, after_id=max(0, after_id))}
 
 
 @app.get("/nidaan-sw.js")

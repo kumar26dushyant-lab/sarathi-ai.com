@@ -4470,11 +4470,15 @@ and get ticket-number notifications after hours.
   business structure accurately; **user reviews/approves the KB draft** (this is where "validated
   and correct" is enforced); strict prompt + escalate-when-unsure guardrails.
 
-**Open decisions (pending user confirmation before build):**
-1. Office-hours alert trigger: only on human-needed/lead (recommended) vs. every new chat vs. both.
-2. Lead destination: support ticket in ops (recommended) vs. also create a Nidaan lead/account.
-3. Business hours: super-admin editable (recommended) vs. fixed for now.
-Realtime = polling (chosen — simple/reliable through Cloudflare, no persistent sockets).
+**Decisions (CONFIRMED by user Jul 26):**
+1. Office-hours alert trigger = **only on human-needed / lead** (AI handles routine silently; reps
+   pinged on escalation / human request / details left). Low noise.
+2. Lead destination = **support ticket in ops** (thread → ticket w/ name+contact in Support inbox;
+   'convert to Nidaan lead/account' can come later).
+3. Business hours = **super-admin editable** in ops (default Mon–Fri 10–6 IST).
+Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudflare).
+
+**Build status:** S1 in progress (realtime polling + language picker + greeting/quick-actions).
 
 ---
 
