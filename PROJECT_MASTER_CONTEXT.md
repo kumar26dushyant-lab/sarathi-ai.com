@@ -4388,6 +4388,26 @@ Requested focus: smooth payment, no dead-ends, recover if the user drops mid-pay
 - Housekeeping: one harmless pre-existing orphan `nidaan_plan_quota` row for deleted account 22
   (can be cleaned anytime).
 
+### 48.9 Phase 1C-d — branch profit-share + portal (BUILT, Jul 26)
+- **1C-d.1 reconciliation (ops)**: `nidaan_branches.share_pct` (super-admin editable %, money
+  config gated to super_admin). `list_branches` computes **revenue** (subscription ₹ collected from
+  attributed accounts — `amount_paid` is stored in RUPEES) and **payout** = revenue × share_pct.
+  Ops → Branches shows Revenue / Share % / Payout (a reconciliation figure, not auto-paid).
+  Verified: acct 36 (silver ₹500) @ 20% → payout 100.
+- **1C-d.2 branch portal** at `/nidaan/branch` (`static/nidaan_branch.html`): affiliate branches log
+  in with **email OTP to their registered branch email** (the `@nidaanpartner.com` Workspace inbox)
+  and see their referrals + earnings. Secure: branch JWT (`typ=nidaan_branch`) scoped to ONE
+  branch_code (every endpoint resolves branch from the token, never a param); request-otp returns a
+  generic response always (no email enumeration); only ACTIVE branches log in; accounts view is
+  masked (mobile last-4, no claim details). Endpoints: `request-otp`, `verify-otp`, `me`, `accounts`.
+  Verified end-to-end (401 no-token, share math, masking, enumeration-safe, wrong-OTP → 401).
+- **Branch login = the branch's `@nidaanpartner.com` email** → this is WHY we need Google Workspace.
+  Guidance given: subscribe at workspace.google.com Business Starter (~₹136/user/mo), use existing
+  domain `nidaanpartner.com`, verify via TXT record, set MX records (⚠️ changes where @domain mail
+  is delivered — check nothing else uses it first), create one mailbox per branch, set each branch's
+  mailbox as its `contact_email` in ops → Branches. OTP login works the moment the inbox is real.
+  (Google Workspace signup itself is the user's action; deferred until they subscribe.)
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
