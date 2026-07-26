@@ -1335,6 +1335,36 @@ async def init_db():
             except Exception:
                 pass
 
+        # ── Customer support chat (AI first-line + human handoff). A thread is one
+        # conversation; messages are customer/ai/staff. thread_key is a per-thread secret
+        # the client holds to continue/read (enumeration-safe for anonymous web chat).
+        await conn.executescript("""
+            CREATE TABLE IF NOT EXISTS nidaan_support_threads (
+                thread_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_key        TEXT NOT NULL,
+                account_id        INTEGER,                 -- linked if the customer is logged in
+                name              TEXT DEFAULT '',
+                contact           TEXT DEFAULT '',         -- mobile/email if provided
+                channel           TEXT DEFAULT 'web',      -- web | whatsapp | email
+                status            TEXT DEFAULT 'ai',       -- ai | escalated | closed
+                lang              TEXT DEFAULT '',
+                assigned_staff_id INTEGER,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS nidaan_support_messages (
+                msg_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id    INTEGER NOT NULL,
+                sender_type  TEXT DEFAULT 'customer',      -- customer | ai | staff
+                body         TEXT NOT NULL,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_support_msg_thread
+                ON nidaan_support_messages(thread_id);
+            CREATE INDEX IF NOT EXISTS idx_nidaan_support_threads_status
+                ON nidaan_support_threads(status, last_at);
+        """)
+
         # ── nidaan_audit_log: control-center activity trail. Every sensitive ops
         # action (create/delete/disable/assign/status/login) records who did what
         # to whom — surfaced in the superadmin Control Center.

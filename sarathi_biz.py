@@ -587,6 +587,72 @@ async def nidaan_branch_accounts(request: Request):
     return {"accounts": await nidaan.get_branch_attributed_accounts(code)}
 
 
+# ── Customer support chat (public; AI first-line + human handoff) ─────────────
+class NidaanSupportMsgReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=1500)
+    thread_id: Optional[int] = None
+    thread_key: Optional[str] = None
+    name: str = Field("", max_length=80)
+    contact: str = Field("", max_length=120)
+
+
+@app.post("/nidaan/api/support/message")
+@limiter.limit("20/minute")
+async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
+    """A customer sends a support message. Continues an existing thread (validated by its
+    thread_key) or starts a new one, stores the message, gets an AI first-line reply, and
+    escalates to a human when needed. Public + rate-limited; anonymous is fine."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    msg = body.message.strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Empty message")
+    # Continue a validated thread, or open a new one.
+    if body.thread_id and body.thread_key:
+        thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+        if not thread:
+            raise HTTPException(status_code=403, detail="Invalid conversation")
+        tid, tkey = thread["thread_id"], body.thread_key
+    else:
+        started = await nidaan.create_support_thread(name=body.name, contact=body.contact, channel="web")
+        tid, tkey = started["thread_id"], started["thread_key"]
+    await nidaan.add_support_message(tid, "customer", msg)
+    history = await nidaan.get_support_messages(tid)
+    import biz_ai as ai_mod
+    ai = await ai_mod.nidaan_support_reply(
+        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history])
+    answer = (ai.get("answer") or "").strip() or (
+        "Thanks for reaching out! A member of our team will get back to you during support "
+        "hours (Mon–Fri, 10am–6pm IST).")
+    await nidaan.add_support_message(tid, "ai", answer)
+    escalated = bool(ai.get("escalate"))
+    if escalated:
+        await nidaan.set_support_status(tid, "escalated")
+        try:  # staff alert wiring lands in the next increment
+            import biz_nidaan_notifications as _nnot
+            if hasattr(_nnot, "on_support_escalated"):
+                import asyncio as _aio
+                _aio.create_task(_nnot.on_support_escalated(tid))
+        except Exception:
+            pass
+    return {"thread_id": tid, "thread_key": tkey, "reply": answer,
+            "escalated": escalated, "support_hours": "Mon–Fri, 10am–6pm IST"}
+
+
+@app.get("/nidaan/api/support/thread")
+@limiter.limit("30/minute")
+async def nidaan_support_thread(thread_id: int, thread_key: str, request: Request):
+    """Fetch a support thread's messages — only with the matching thread_key."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    thread = await nidaan.get_support_thread(thread_id, thread_key)
+    if not thread:
+        raise HTTPException(status_code=403, detail="Invalid conversation")
+    return {"thread_id": thread_id, "status": thread.get("status"),
+            "messages": await nidaan.get_support_messages(thread_id)}
+
+
 @app.get("/nidaan-sw.js")
 async def nidaan_service_worker():
     """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""

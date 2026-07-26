@@ -1351,6 +1351,68 @@ async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
     return out
 
 
+# ── Customer support chat (AI first-line + human handoff) ─────────────────────
+async def create_support_thread(name: str = "", contact: str = "",
+                                account_id: Optional[int] = None,
+                                channel: str = "web") -> dict:
+    """Start a support conversation. Returns {thread_id, thread_key}. thread_key is a
+    per-thread secret the client must present to continue/read (enumeration-safe)."""
+    key = secrets.token_urlsafe(24)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel)
+               VALUES (?,?,?,?,?)""",
+            (key, account_id, (name or "").strip()[:80], (contact or "").strip()[:120],
+             channel if channel in ("web", "whatsapp", "email") else "web"))
+        await conn.commit()
+        return {"thread_id": cur.lastrowid, "thread_key": key}
+
+
+async def get_support_thread(thread_id: int, thread_key: str) -> Optional[dict]:
+    """Fetch a thread only if the thread_key matches (constant-time)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_support_threads WHERE thread_id=?", (thread_id,))).fetchone()
+    if not row:
+        return None
+    import hmac as _hmac
+    if not _hmac.compare_digest(row["thread_key"] or "", thread_key or ""):
+        return None
+    return dict(row)
+
+
+async def add_support_message(thread_id: int, sender_type: str, body: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_support_messages (thread_id, sender_type, body) VALUES (?,?,?)",
+            (thread_id, sender_type if sender_type in ("customer", "ai", "staff") else "customer",
+             (body or "")[:4000]))
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
+            (thread_id,))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_support_messages(thread_id: int, limit: int = 100) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT sender_type, body, created_at FROM nidaan_support_messages "
+            "WHERE thread_id=? ORDER BY msg_id ASC LIMIT ?", (thread_id, limit))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def set_support_status(thread_id: int, status: str) -> None:
+    if status not in ("ai", "escalated", "closed"):
+        return
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET status=? WHERE thread_id=?", (status, thread_id))
+        await conn.commit()
+
+
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
     """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
     Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one

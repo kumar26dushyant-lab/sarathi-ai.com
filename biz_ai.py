@@ -1162,3 +1162,73 @@ async def ai_support_auto_respond(subject: str, description: str,
     except Exception as e:
         logger.warning("Support AI L1 failed: %s", e)
         return None
+
+
+# ── NidaanPartner.com customer support chat (conversational, bilingual) ────────
+# Knowledge is intentionally GENERAL (no prices/caps/case outcomes — those live in the
+# editable plans config + are case-specific), so the AI never quotes stale or wrong numbers.
+_NIDAAN_SUPPORT_KB = """
+Nidaan Partner (nidaanpartner.com) helps policyholders and insurance advisors challenge
+insurance claims that were REJECTED or UNDERPAID, through an expert legal review.
+
+- ₹499 one-time claim review: our legal experts assess whether a rejected/underpaid claim
+  can be fought. You submit the claim details + documents; the assessment is delivered in
+  ~48–72 business hours. Outcome is either "can be fought" (our legal team then contacts you)
+  or "no scope" (settled fairly / no basis to challenge).
+- Subscription plans (for advisors/agents): monthly plans with a set number of disputed
+  claims per month, disputed-value caps, and a FREE Sarathi-AI CRM (sarathi-ai.com). Exact
+  prices, claim limits and caps are shown live on the Plans section of the website — do NOT
+  quote specific numbers; point the customer to the Plans page.
+- To start: create a free account (name + mobile), submit your claim. No payment to just get
+  the review going for the free-lead flow; the ₹499 review is a one-time paid assessment.
+- Data safety: we follow all data guidelines of every competent government authority.
+- Human support hours: Monday–Friday, 10am–6pm IST.
+"""
+
+_NIDAAN_SUPPORT_PROMPT = """You are the friendly first-line support assistant for Nidaan Partner
+(insurance claim dispute resolution). Use ONLY the knowledge below. Be warm, concise (2–5
+sentences), and honest.
+
+KNOWLEDGE:
+{kb}
+
+Rules:
+- Reply in the SAME language/style the customer used (English, Hindi, or Hinglish). Match them.
+- NEVER invent specifics you don't have: exact prices, claim limits, caps, timelines beyond
+  the ranges above, or the outcome/status of a specific case. Point to the website when asked
+  for exact plan numbers.
+- Set "escalate": true when the query needs a human — anything account/login/payment/refund
+  specific, the status of a specific claim, a complaint, legal advice on a specific case, a
+  request that needs the customer's personal data, or when you are unsure. When escalating,
+  still give a brief, kind holding reply and mention a human agent will follow up during
+  support hours (Mon–Fri 10–6 IST).
+- Otherwise "escalate": false.
+
+Conversation so far:
+{history}
+Customer's new message: {message}
+
+Respond with JSON only: {{"answer": "<your reply in the customer's language>", "escalate": <true|false>, "reason": "<short reason if escalating, else empty>"}}"""
+
+
+async def nidaan_support_reply(message: str, history: Optional[list] = None) -> dict:
+    """First-line AI support for NidaanPartner.com customers. Bilingual; answers product /
+    process questions from a fixed knowledge base and escalates account/payment/case-specific
+    queries to a human. Returns {answer, escalate, reason}. On any failure, escalates safely."""
+    hist = ""
+    for m in (history or [])[-8:]:
+        role = "Customer" if m.get("sender_type") == "customer" else "Assistant"
+        hist += f"{role}: {(m.get('body') or '')[:500]}\n"
+    prompt = _NIDAAN_SUPPORT_PROMPT.format(
+        kb=_NIDAAN_SUPPORT_KB, history=hist or "(none)", message=(message or "")[:1500])
+    try:
+        raw = await _ask_gemini(prompt, json_mode=True)
+        data = _clean_json(raw)
+        answer = (data.get("answer") or "").strip()
+        if not answer:
+            raise ValueError("empty answer")
+        return {"answer": answer, "escalate": bool(data.get("escalate", False)),
+                "reason": (data.get("reason") or "")[:200]}
+    except Exception as e:
+        logger.warning("Nidaan support AI failed: %s", e)
+        return {"answer": "", "escalate": True, "reason": "ai_error"}
