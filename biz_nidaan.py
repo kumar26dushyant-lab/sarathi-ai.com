@@ -351,22 +351,33 @@ _BRANCH_PAID_EXISTS = (
 
 
 async def list_branches(include_disabled: bool = True) -> list[dict]:
-    """All branches with live signup / paid / unpaid attribution counts."""
+    """All branches with live signup / paid / unpaid counts + profit-share reconciliation.
+    revenue = subscription rupees collected from attributed accounts (sum of amount_paid
+    across their subscription rows); share = revenue × share_pct. Amounts are in RUPEES."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         where = "" if include_disabled else "WHERE b.status='active'"
         cur = await conn.execute(
             f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.status, b.created_at,
+                       COALESCE(b.share_pct, 0) AS share_pct,
                        (SELECT COUNT(*) FROM nidaan_accounts a
                         WHERE UPPER(a.branch_code)=b.branch_code) AS signups,
                        (SELECT COUNT(*) FROM nidaan_accounts a
-                        WHERE UPPER(a.branch_code)=b.branch_code AND {_BRANCH_PAID_EXISTS}) AS paid
+                        WHERE UPPER(a.branch_code)=b.branch_code AND {_BRANCH_PAID_EXISTS}) AS paid,
+                       (SELECT COALESCE(SUM(su.amount_paid), 0)
+                          FROM nidaan_subscriptions su
+                          JOIN nidaan_accounts a2 ON a2.account_id = su.account_id
+                         WHERE UPPER(a2.branch_code)=b.branch_code) AS revenue
                 FROM nidaan_branches b {where}
                 ORDER BY b.city, b.branch_code""")
         rows = [dict(r) for r in await cur.fetchall()]
     for r in rows:
         r["accounts"] = r.get("signups", 0)   # back-compat alias
         r["unpaid"] = max(0, int(r.get("signups", 0)) - int(r.get("paid", 0)))
+        rev = int(r.get("revenue") or 0)
+        pct = float(r.get("share_pct") or 0)
+        r["revenue"] = rev                    # rupees
+        r["share"] = round(rev * pct / 100)   # rupees owed to the branch
     return rows
 
 
@@ -512,8 +523,9 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
 
 
 async def update_branch(code: str, status: Optional[str] = None,
-                        contact_email: Optional[str] = None) -> bool:
-    """Update a branch's status and/or contact email."""
+                        contact_email: Optional[str] = None,
+                        share_pct: Optional[float] = None) -> bool:
+    """Update a branch's status, contact email, and/or profit-share %."""
     code = (code or "").strip().upper()
     sets, params = [], []
     if status is not None:
@@ -525,6 +537,15 @@ async def update_branch(code: str, status: Optional[str] = None,
             return False
         sets.append("contact_email=?")
         params.append(email)
+    if share_pct is not None:
+        try:
+            pct = float(share_pct)
+        except (TypeError, ValueError):
+            return False
+        if pct < 0 or pct > 100:
+            return False
+        sets.append("share_pct=?")
+        params.append(round(pct, 2))
     if not sets:
         return False
     params.append(code)

@@ -1315,6 +1315,11 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN contact_email TEXT DEFAULT ''")
         except Exception:
             pass
+        # Profit-share: % of subscription revenue paid to the attributing branch (super-admin set).
+        try:
+            await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
+        except Exception:
+            pass
         # Seed the initial branches (idempotent — INSERT OR IGNORE on the PK).
         for _code, _city, _name in [
             ("IND-HO", "Indore", "Indore Head Office"),

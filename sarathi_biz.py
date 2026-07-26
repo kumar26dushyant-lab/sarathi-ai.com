@@ -3653,17 +3653,21 @@ class OpsBranchUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Optional[str] = None          # active | disabled
     contact_email: Optional[str] = None
+    share_pct: Optional[float] = Field(None, ge=0, le=100)   # profit-share % (super-admin only)
 
 
 @app.patch("/nidaan/ops/api/branches/{branch_code}")
 async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
-    if not await nidaan.update_branch(branch_code, status=body.status, contact_email=body.contact_email):
+    # Profit-share % is money config → super_admin only; status/email → sub_super_admin.
+    _require_staff(request, "super_admin" if body.share_pct is not None else "sub_super_admin")
+    if not await nidaan.update_branch(branch_code, status=body.status,
+                                      contact_email=body.contact_email, share_pct=body.share_pct):
         raise HTTPException(status_code=404, detail="Branch not found or nothing to update")
     _bb = [x for x in ((f"status={body.status}" if body.status else ""),
-                       ("email updated" if body.contact_email is not None else "")) if x]
+                       ("email updated" if body.contact_email is not None else ""),
+                       (f"share_pct={body.share_pct}" if body.share_pct is not None else "")) if x]
     await _ops_audit(request, "branch.update", "branch", branch_code.strip().upper(), "; ".join(_bb) or "updated")
     return {"ok": True}
 

@@ -3050,14 +3050,26 @@ async function loadBranches() {
       <td style="text-align:center">${b.signups||0}</td>
       <td style="text-align:center;color:#34d399">${b.paid||0}</td>
       <td style="text-align:center">${unpaid>0?`<a href="#" onclick="showBranchUnpaid('${esc(b.branch_code)}');return false" style="background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;padding:.1rem .5rem;font-weight:700;text-decoration:none">${unpaid}</a>`:'<span style="color:rgba(255,255,255,.25)">0</span>'}</td>
+      <td style="text-align:right;font-size:.78rem">₹${fmt(b.revenue||0)}</td>
+      <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:#22d3ee;font-size:.7rem">edit</a>`:''}</td>
+      <td style="text-align:right;font-size:.78rem;color:#fbbf24">₹${fmt(b.share||0)}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'#34d399':'#fca5a5'}">${b.status}</span></td>
       <td><button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">Click an <b style="color:#fca5a5">unpaid</b> count to see those leads. Add an alert email so the branch is notified automatically.</div>`;
+    <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">Click an <b style="color:#fca5a5">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this branch's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per branch.</div>`;
+}
+async function setBranchShare(code, current){
+  const v = prompt('Profit-share % for branch '+code+'\n(0–100 — % of subscription revenue from accounts attributed to this branch):', current||0);
+  if (v===null) return;
+  const pct = parseFloat(v);
+  if (isNaN(pct) || pct<0 || pct>100){ alert('Enter a number between 0 and 100.'); return; }
+  const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({share_pct: pct})});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update share %.'); return; }
+  loadBranches();
 }
 async function createBranch() {
   const code = (document.getElementById('brCode').value||'').trim().toUpperCase();
