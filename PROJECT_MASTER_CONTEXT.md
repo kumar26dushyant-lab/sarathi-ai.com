@@ -4483,8 +4483,14 @@ Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudf
   dedup by msg_id) → staff replies appear live without refresh; preferred-language picker
   (EN/हिंदी/Hinglish) stored on the thread; greeting + quick-reply chips; `nidaan_support_reply(lang)`.
   Verified: Hinglish reply, poll delta returns only new staff msg.
-- **S2 next:** super-admin business hours + out-of-hours lead-capture fallback (name+contact → ticket #,
-  one per browser).
+- **S2 SHIPPED + verified (Jul 26):** super-admin-editable support hours (IST) in ops → Support
+  (days + start/end; default Mon–Fri 10–6); `is_within_business_hours()`. Public GET `/support/status`.
+  Widget shows an offline note + "Leave my details" form (name + email/mobile) → POST `/support/lead`
+  → ticket #; one submission per browser (localStorage) + 4/hr/IP. "Talk to a human" routes to the
+  form when offline. Lead = escalated thread w/ contact → ops inbox + admin alert. Verified end-to-end.
+- **S3 next:** support-rep duty roster (super-admin assigns staff for a date range) + route new
+  human-needed/lead events to ON-DUTY reps on all channels during hours; after-hours ticket-number
+  notifications.
 
 ---
 
