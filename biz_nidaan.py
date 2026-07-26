@@ -1272,6 +1272,85 @@ def verify_nidaan_token(token: str) -> Optional[dict]:
         return None
 
 
+# ── Branch portal (affiliate self-service) ────────────────────────────────────
+def create_branch_token(branch_code: str) -> str:
+    """Signed JWT for a branch-portal session (7 days), scoped to ONE branch_code."""
+    payload = {
+        "typ": "nidaan_branch",
+        "sub": (branch_code or "").strip().upper(),
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int((datetime.utcnow() + timedelta(days=7)).timestamp()),
+    }
+    return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
+
+
+def verify_branch_token(token: str) -> Optional[str]:
+    """Decode a branch-portal token → branch_code, or None if invalid/wrong type."""
+    try:
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        if payload.get("typ") != "nidaan_branch":
+            return None
+        code = (payload.get("sub") or "").strip().upper()
+        return code or None
+    except Exception:
+        return None
+
+
+async def get_branch_by_email(email: str) -> Optional[dict]:
+    """Find an ACTIVE branch by its login/contact email (the @nidaanpartner.com address).
+    Disabled branches cannot log in."""
+    em = (email or "").strip().lower()
+    if not em or "@" not in em:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT * FROM nidaan_branches WHERE LOWER(contact_email)=? AND status='active'",
+            (em,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def get_branch_reconciliation(branch_code: str) -> Optional[dict]:
+    """One branch's reconciliation summary (revenue, share_pct, payout, counts)."""
+    code = (branch_code or "").strip().upper()
+    for b in await list_branches(include_disabled=True):
+        if b["branch_code"] == code:
+            return b
+    return None
+
+
+async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
+    """Accounts attributed to a branch (name, MASKED mobile, signup date, paid flag, plan) —
+    only what the branch needs to reconcile its commission. No customer claim details / PII
+    beyond a masked mobile."""
+    code = (branch_code or "").strip().upper()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            f"""SELECT a.owner_name, a.phone, a.created_at, s.plan AS plan,
+                       {_BRANCH_PAID_EXISTS} AS is_paid
+                FROM nidaan_accounts a
+                LEFT JOIN nidaan_subscriptions s
+                       ON s.account_id=a.account_id AND s.status='active'
+                WHERE UPPER(a.branch_code)=?
+                ORDER BY a.created_at DESC""",
+            (code,))
+        rows = [dict(r) for r in await cur.fetchall()]
+    out = []
+    for r in rows:
+        ph = (r.get("phone") or "").strip()
+        masked = ("•••• " + ph[-4:]) if len(ph) >= 4 else "—"
+        out.append({
+            "owner_name": r.get("owner_name") or "—",
+            "mobile_masked": masked,
+            "created_at": r.get("created_at"),
+            "plan": r.get("plan"),
+            "paid": bool(r.get("is_paid")),
+        })
+    return out
+
+
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
     """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
     Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one

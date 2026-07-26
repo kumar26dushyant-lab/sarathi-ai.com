@@ -497,6 +497,96 @@ async def nidaan_about_page(request: Request):
     return _nidaan_page("nidaan_about.html")
 
 
+@app.get("/nidaan/branch", response_class=HTMLResponse)
+async def nidaan_branch_page(request: Request):
+    """Affiliate branch self-service portal (login via their @nidaanpartner.com email OTP)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_branch.html")
+
+
+# ── Branch portal API (affiliate self-service; email-OTP auth, scoped to one branch) ──
+def _branch_bearer(request: Request) -> Optional[str]:
+    """Extract + verify a branch-portal token → branch_code, or None."""
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        return nidaan.verify_branch_token(h[7:])
+    return None
+
+
+class BranchOtpReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+
+
+class BranchVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+    otp: str
+
+
+@app.post("/nidaan/branch/api/request-otp")
+@limiter.limit("5/minute")
+async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
+    """Send a login OTP IF the email is an active branch's login address. Always returns a
+    generic success so branch emails can't be enumerated."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    generic = {"status": "otp_sent"}
+    email = auth.sanitize_email(body.email)
+    if not email:
+        return generic
+    branch = await nidaan.get_branch_by_email(email)
+    if not branch:
+        return generic  # do not reveal whether this is a real branch login
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)  # OTP cooldown
+    await email_svc.send_nidaan_otp_email(email, result["otp"], branch.get("name") or "")
+    return generic
+
+
+@app.post("/nidaan/branch/api/verify-otp")
+@limiter.limit("10/minute")
+async def nidaan_branch_verify_otp(body: BranchVerifyReq, request: Request):
+    """Verify the OTP + that the email is an active branch → issue a branch session token."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(body.email)
+    if not email or not auth.verify_email_otp(email, body.otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+    branch = await nidaan.get_branch_by_email(email)
+    if not branch:
+        raise HTTPException(status_code=403, detail="This email is not a branch login")
+    token = nidaan.create_branch_token(branch["branch_code"])
+    return {"access_token": token, "branch_code": branch["branch_code"], "name": branch.get("name") or ""}
+
+
+@app.get("/nidaan/branch/api/me")
+async def nidaan_branch_me(request: Request):
+    """Branch's own reconciliation summary (revenue, share %, payout, counts)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    recon = await nidaan.get_branch_reconciliation(code)
+    if not recon:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    return {"branch": recon}
+
+
+@app.get("/nidaan/branch/api/accounts")
+async def nidaan_branch_accounts(request: Request):
+    """Branch's own attributed accounts (masked) — scoped strictly to the token's branch."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"accounts": await nidaan.get_branch_attributed_accounts(code)}
+
+
 @app.get("/nidaan-sw.js")
 async def nidaan_service_worker():
     """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""
