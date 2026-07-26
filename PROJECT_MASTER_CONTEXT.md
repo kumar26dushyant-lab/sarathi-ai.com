@@ -4488,9 +4488,18 @@ Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudf
   Widget shows an offline note + "Leave my details" form (name + email/mobile) → POST `/support/lead`
   → ticket #; one submission per browser (localStorage) + 4/hr/IP. "Talk to a human" routes to the
   form when offline. Lead = escalated thread w/ contact → ops inbox + admin alert. Verified end-to-end.
-- **S3 next:** support-rep duty roster (super-admin assigns staff for a date range) + route new
-  human-needed/lead events to ON-DUTY reps on all channels during hours; after-hours ticket-number
-  notifications.
+- **Anti-hallucination hardening SHIPPED + verified (Jul 26, per user ask):** AI prompt grounded to
+  the KB only (no guessing; unsure → point to page/human); canonical WHERE-TO-GUIDE links; "guide,
+  don't loop" rule. Server loop guard: repeated question or ≥6 customer turns → force human handoff.
+  Widget linkifies URLs + /nidaan paths. Verified: weather Q refused (no hallucination), "how to
+  submit" returned /nidaan/start, repeated Q escalated.
+- **S3 SHIPPED + verified (Jul 26):** duty roster `nidaan_support_reps` (staff + date range);
+  super-admin assigns in ops → Support (dropdown + From/To; on-duty vs scheduled + remove).
+  `on_support_escalated` routes to ON-DUTY reps (fallback = all admins so nothing is missed) on
+  bell + push + email + Telegram. In-hours = "reply now"; after-hours = "ticket #N, follow up".
+  Verified: on_duty resolution, after-hours framing, routing.
+- **S4 next:** security/anti-spam/anomaly hardening (per-IP + per-thread caps, honeypot, IP block).
+- **S5 next:** expand + USER-APPROVE the AI knowledge base for full business correctness.
 
 ---
 
