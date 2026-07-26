@@ -4478,7 +4478,13 @@ and get ticket-number notifications after hours.
 3. Business hours = **super-admin editable** in ops (default Mon–Fri 10–6 IST).
 Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudflare).
 
-**Build status:** S1 in progress (realtime polling + language picker + greeting/quick-actions).
+**Build status:**
+- **S1 SHIPPED + verified (Jul 26):** widget polls `GET /support/thread?after_id=` (~4s while open,
+  dedup by msg_id) → staff replies appear live without refresh; preferred-language picker
+  (EN/हिंदी/Hinglish) stored on the thread; greeting + quick-reply chips; `nidaan_support_reply(lang)`.
+  Verified: Hinglish reply, poll delta returns only new staff msg.
+- **S2 next:** super-admin business hours + out-of-hours lead-capture fallback (name+contact → ticket #,
+  one per browser).
 
 ---
 
