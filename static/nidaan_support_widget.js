@@ -6,8 +6,17 @@
   if (window.__nidaanSupportLoaded) return;
   window.__nidaanSupportLoaded = true;
 
-  var TKEY = 'nidaan_support_thread';
+  // Mode: 'support' (dashboard — the page sets window.NIDAAN_SUPPORT_MODE, account-aware) or
+  // 'guide' (homepage — lead-gen/info only, NEVER sends the customer token). Threads are kept
+  // separate per mode so a homepage guide chat and a dashboard support chat don't mix.
+  var wmode = (window.NIDAAN_SUPPORT_MODE === 'support') ? 'support' : 'guide';
+  var TKEY = 'nidaan_support_thread' + (wmode === 'support' ? '_s' : '');
   var LKEY = 'nidaan_support_lang';
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json' };
+    if (wmode === 'support') { var t=null; try{ t=localStorage.getItem('nidaan_token'); }catch(e){} if(t) h['Authorization']='Bearer '+t; }
+    return h;
+  }
   var thread = null, lang = '';
   try { thread = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) { thread = null; }
   try { lang = localStorage.getItem(LKEY) || ''; } catch (e) { lang = ''; }
@@ -175,7 +184,7 @@
     try{
       var body={ name:name, contact:contact, message:m, lang:lang };
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
-      var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       var d=await r.json().catch(function(){return {};});
       if(!r.ok){ errEl.textContent=d.detail||'Could not submit. Please try again later.'; btn.disabled=false; return; }
       if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key}; localStorage.setItem(TKEY, JSON.stringify(thread)); }
@@ -235,7 +244,7 @@
     try{
       var body={ message:text, lang:lang };
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
-      var r = await fetch('/nidaan/api/support/message', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var r = await fetch('/nidaan/api/support/message', { method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       typing.remove();
       var d = await r.json().catch(function(){ return {}; });
       if(!r.ok){ bubble(d.detail||'Sorry, something went wrong. Please try again.', 'ai'); busy=false; sendBtn.disabled=false; return; }

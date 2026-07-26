@@ -1198,6 +1198,8 @@ sentences), and honest.
 KNOWLEDGE:
 {kb}
 
+{mode_block}
+
 Rules:
 - {lang_rule}
 - GROUND every answer ONLY in the knowledge above. If the knowledge does not clearly cover the
@@ -1215,7 +1217,7 @@ Rules:
   will follow up during support hours (Mon–Fri 10–6 IST).
 - Otherwise "escalate": false.
 
-Conversation so far:
+{customer_block}Conversation so far:
 {history}
 Customer's new message: {message}
 
@@ -1230,20 +1232,49 @@ _SUPPORT_LANG_RULE = {
 }
 
 
-async def nidaan_support_reply(message: str, history: Optional[list] = None, lang: str = "") -> dict:
+_SUPPORT_MODE_BLOCK = {
+    "guide": (
+        "CONTEXT — you are speaking to a WEBSITE VISITOR who is NOT logged in. Your job: explain what "
+        "Nidaan Partner does, guide them to the right page, and encourage them to get started (lead "
+        "generation). You have NO access to any customer account. If they ask about a SPECIFIC "
+        "account, subscription/plan status, payments/invoices, a claim's status, or documents, do NOT "
+        "answer from data — tell them to LOG IN to their dashboard (/nidaan/dashboard) or start at "
+        "/nidaan/start. Never reveal or imply any customer's personal or account information."),
+    "support": (
+        "CONTEXT — you are helping a LOGGED-IN CUSTOMER. Be supportive and specific using ONLY the "
+        "CUSTOMER CONTEXT below. You may discuss their plan and general status from that context. For "
+        "actions (cancel, refund, changing/paying a claim, document problems) or anything not in the "
+        "context, escalate to a human. Never invent account details that aren't in the context."),
+}
+
+
+async def nidaan_support_reply(message: str, history: Optional[list] = None, lang: str = "",
+                               mode: str = "guide", account_ctx: Optional[dict] = None) -> dict:
     """First-line AI support for NidaanPartner.com customers. Bilingual; answers product /
     process questions from a fixed knowledge base and escalates account/payment/case-specific
     queries to a human. `lang` (en|hi|hinglish) sets the reply language; blank = match the
-    customer's message. Returns {answer, escalate, reason}. On any failure, escalates safely."""
+    customer's message. `mode`: 'guide' (anonymous homepage — lead-gen, no account info) or
+    'support' (logged-in dashboard — account-aware from account_ctx). Returns {answer, escalate,
+    reason}. On any failure, escalates safely."""
     hist = ""
     for m in (history or [])[-8:]:
         role = "Customer" if m.get("sender_type") == "customer" else "Assistant"
         hist += f"{role}: {(m.get('body') or '')[:500]}\n"
     lang_rule = _SUPPORT_LANG_RULE.get(lang,
         "Reply in the SAME language/style the customer used (English, Hindi, or Hinglish). Match them.")
+    mode_block = _SUPPORT_MODE_BLOCK.get(mode, _SUPPORT_MODE_BLOCK["guide"])
+    customer_block = ""
+    if mode == "support" and account_ctx:
+        parts = []
+        if account_ctx.get("name"): parts.append(f"name={account_ctx['name']}")
+        if account_ctx.get("plan"): parts.append(f"plan={account_ctx['plan']}")
+        parts.append(f"subscription={'active' if account_ctx.get('active') else 'none'}")
+        if account_ctx.get("claims_used") is not None:
+            parts.append(f"claims_used_this_month={account_ctx['claims_used']}")
+        customer_block = "CUSTOMER CONTEXT (this logged-in user): " + ", ".join(parts) + "\n\n"
     prompt = _NIDAAN_SUPPORT_PROMPT.format(
-        kb=_NIDAAN_SUPPORT_KB, lang_rule=lang_rule, history=hist or "(none)",
-        message=(message or "")[:1500])
+        kb=_NIDAAN_SUPPORT_KB, mode_block=mode_block, lang_rule=lang_rule,
+        customer_block=customer_block, history=hist or "(none)", message=(message or "")[:1500])
     try:
         raw = await _ask_gemini(prompt, json_mode=True)
         data = _clean_json(raw)

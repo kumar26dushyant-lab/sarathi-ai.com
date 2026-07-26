@@ -611,6 +611,16 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         raise HTTPException(status_code=400, detail="Empty message")
     # Continue a validated thread, or open a new one.
     _lang = body.lang if body.lang in ("en", "hi", "hinglish") else ""
+    # A logged-in customer (valid Nidaan token) → 'support' mode (account-aware, dashboard);
+    # anonymous homepage visitor → 'guide' mode (lead-gen/info only, NO account data).
+    _payload = _nidaan_bearer(request)
+    _account = (await _nidaan_account_from_payload(_payload)) if _payload else None
+    _mode = "support" if _account else "guide"
+    _acct_ctx = None
+    if _account:
+        _sub = await nidaan.get_active_subscription(_account["account_id"])
+        _acct_ctx = {"name": _account.get("owner_name"),
+                     "plan": (_sub or {}).get("plan"), "active": bool(_sub)}
     if body.thread_id and body.thread_key:
         thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
         if not thread:
@@ -619,7 +629,9 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         _lang = _lang or (thread.get("lang") or "")
     else:
         started = await nidaan.create_support_thread(
-            name=body.name, contact=body.contact, channel="web", lang=_lang)
+            name=(_account.get("owner_name") if _account else body.name),
+            contact=body.contact, channel="web", lang=_lang,
+            account_id=(_account["account_id"] if _account else None))
         tid, tkey = started["thread_id"], started["thread_key"]
     await nidaan.add_support_message(tid, "customer", msg)
     history = await nidaan.get_support_messages(tid)
@@ -634,7 +646,8 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     _force_human = _repeat or len(_cust) >= 6
     import biz_ai as ai_mod
     ai = await ai_mod.nidaan_support_reply(
-        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history], lang=_lang)
+        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history],
+        lang=_lang, mode=_mode, account_ctx=_acct_ctx)
     answer = (ai.get("answer") or "").strip() or (
         "Thanks for reaching out! A member of our team will get back to you during support "
         "hours (Mon–Fri, 10am–6pm IST).")
