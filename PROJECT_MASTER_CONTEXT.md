@@ -4262,5 +4262,133 @@ admin-managed. Avatars now show on task cards (assignee), @mention dropdowns, ta
 
 ---
 
+## 48. FLEXIBLE PLANS + MOBILE-FIRST IDENTITY + OPS RESTRUCTURE — JUL 24–26, 2026
+
+Theme: make the whole subscription/pricing machine super-admin editable (no code changes),
+switch customer identity to mobile-first (email optional), harden payments against drop-off,
+and restructure the ops Accounts/Claims views. All shipped to prod via blue-green + verified.
+
+### 48.0 Housekeeping fixed earlier this session
+- **Off-server encrypted backup restored** — `deploy/git-db-backup.sh` was untracked and got
+  wiped by `git clean`; reconstructed, tracked, `.gitattributes` pins `*.sh` to LF. (Hot sqlite
+  `.backup` → gzip → AES-256-cbc pbkdf2 → private repo `sarathi-db-backups`.)
+- **Web task creation was dead** — a `_req_source` helper sat between `@app.post(".../quick-tasks")`
+  and its handler, so the route bound to the helper (always returned "web", never created). Moved
+  the helper above the decorator.
+- **@mention notifications silently failing** — `aiosqlite.Row.get()` crash in a fire-and-forget
+  task; fixed with `dict()`, added a global background-task exception handler (`_install_bg_exception_handler`).
+- **UX**: confirmation toasts centered + larger; bell notifications newest-first; App Health now
+  reports Telegram bot + staff-linked status.
+- **Telegram bot**: clean `/menu` (setMyCommands removes start/reconnect clutter), universal
+  escape (/menu, /cancel), full tracebacks on errors.
+- **Email**: reply-to leak fixed (uses `sender_email`, not the global FROM), SMTP-first for the
+  aligned Gmail sender.
+- **Sarathi-AI**: "no agents available" fixed (auto-create owner agent when a tenant has none);
+  DOB optional (only name + mobile mandatory on add-lead); request-timing middleware added to
+  trace post-login latency.
+- **Claim form** (nidaan_dashboard): branch-code free-text field (validated, uppercased), DOB
+  optional, disclaimer simplified (no IRDA/DPDP wording); homepage walkthrough "Direct
+  Policyholders" line reworded.
+- **WhatsApp connect debugging**: disk was 100% full (69 GB Evolution container log) → truncated +
+  logrotate + daemon.json caps; dead residential proxy replaced; redsocks → **gost bridge**
+  (`gost-wa.service`). Rotating residential proxies proved unsuitable for Baileys' persistent
+  socket → decision to use a **stable India 4G mobile proxy (iProxy)**. See §48.7.
+
+### 48.1 Phase 1B — plans/pricing fully super-admin editable (single source of truth)
+- **`nidaan_plans_config` table** is now the source of truth (seeded from `PLAN_LIMITS` +
+  `NIDAAN_RAZORPAY_PLANS`). Editable in **ops → Plans & Billing**: price, claims/mo, disputed cap,
+  CRM seats, features, badge, active, sort_order. Caps use `-1 = unlimited` (stored NULL).
+- **Propagates everywhere**: `/nidaan/api/plans` (public) feeds the **homepage** tier cards and the
+  **dashboard** upgrade/change-plan cards (both render dynamically now, with a static fallback);
+  the claim-form disputed-cap nudge; quota enforcement (`can_submit_claim` reads `get_plan_cfg`);
+  and the actual Razorpay charge amount.
+- **Editable price with grandfathering**: checkout uses one-time Razorpay **ORDERS keyed on
+  amount** (not immutable plan objects), so a price change needs no Razorpay-plan recreation.
+  `create_nidaan_razorpay_order` sources the amount from config; existing subscribers keep the
+  amount already charged (their sub row holds it) — only NEW checkouts use the new price. Ops UI
+  confirms the grandfather rule before saving. Validated live: bad prices rejected, round-trip OK.
+- Helpers: `seed_plans_config`, `get_plans_config`/`get_plan_cfg` (cached, `invalidate_plans_cache`),
+  `update_plan_config` (field whitelist + bounds, parameterized), `public_plans`.
+
+### 48.2 Phase 1C-c — mobile-primary identity (email OPTIONAL, payment-verified)
+Decision (see §48.6): mobile is the primary identity; email optional; the Razorpay payment (not an
+email/SMS OTP) verifies a real person; login by mobile OR email.
+- **C-c1 keystone**: sessions resolve by token `account_id` via `_nidaan_account_from_payload()`
+  (falls back to email) — migrated all 13 `get_account_by_email(payload["email"])` call sites.
+  Behaviour-preserving for email accounts; lets email-less sessions work.
+- **C-c2 schema rebuild (live, prod)**: `nidaan_accounts.email` was `NOT NULL UNIQUE`. Rebuilt the
+  table so **email is nullable** (multiple NULLs OK under UNIQUE) + a **partial UNIQUE index on
+  non-empty phone** (one mobile = one account). Backup taken first
+  (`/opt/sarathi/backups/pre_email_migration_20260725_010228.db`); 17 rows + every FK preserved
+  (account_ids kept verbatim); `integrity_check = ok`. Idempotent guarded rebuild added to
+  `biz_database.py` (no-op on prod, self-heals dev/restores). `create_account` now: mobile
+  required + unique, email optional (NULL when blank); `normalize_phone()` = canonical 10-digit
+  key; `get_account_by_phone`; `authenticate_account` accepts mobile or email.
+- **C-c3 backend**: `POST /nidaan/api/check-phone` (mobile-first entry) + `POST /nidaan/api/signup/mobile`
+  (name + mobile + password, email optional & OTP-verified only if supplied, branch code locked at
+  signup). 7/7 HTTP tests pass (invalid → 400, dup mobile → 409, email-less signup → token).
+- **C-c3 UI (PAUSED)**: the mobile-first `nidaan_start.html` rewrite + `→ /nidaan/dashboard?subscribe=<plan>`
+  handoff is intentionally deferred for the user's on-device testing (revenue-critical, mobile-first).
+  The existing email-first signup still works and nothing is broken.
+
+### 48.3 Payment drop-off resilience (three layers)
+Requested focus: smooth payment, no dead-ends, recover if the user drops mid-payment.
+1. **Client success**: Razorpay `handler` → `/subscribe/verify` → token+plan → `?payment=success`.
+2. **Client recovery**: pending order moved from `sessionStorage` → **`localStorage`** (survives a
+   mobile-UPI tab-kill); `recoverPendingPayment()` runs on load + on dismiss, calls
+   `/subscribe/check`, activates idempotently (30-min expiry). `backdropclose/escape=false`.
+3. **Server backstop**: signed webhook `/nidaan/api/webhook` (`payment.captured`) activates the plan
+   idempotently regardless of the client. `RAZORPAY_KEY_ID/SECRET` + `RAZORPAY_WEBHOOK_SECRET` all
+   confirmed present on the server.
+
+### 48.4 Phase 1C-a — ops Accounts restructure
+- `get_all_accounts_admin` enriched: `account_type` (subscriber / per_claim / lead), `claims_used`
+  vs `claims_cap` (from config, honoring the 30-day window rollover), `disputed_cap`, per-claim
+  balance. UI: segment tabs with counts (All / Subscribers / ₹499 one-time / Leads), plan badge
+  (+ disputed cap), colour-coded usage bar. Verified live: 3 subscribers, 14 leads.
+
+### 48.5 Phase 1C-b — All-Claims filters
+- `get_claims_ops` + `/ops/api/claims` gained **branch**, **plan** (via active-subscription join),
+  and **account_id** filters; returns `account_plan` per claim. Ops Claims panel: Plan + Branch
+  dropdowns (branch list fetched once) routed through one `applyClaimFilters()` so all filters
+  compose. Verified live (plan=silver→1, account=36→1, bad params → 422/401).
+
+### 48.6 Decisions locked this session
+- **Identity**: mobile-primary, email optional, **payment-verified** (no SMS gateway). Trade-off
+  accepted: no email ⇒ no self-service password reset (nudge email; support otherwise).
+- **Pricing**: price editable, **existing subscribers grandfathered**; checkout is one-time orders.
+- **Branch profit-share** (planned): a configurable **% of subscription revenue** to the attributing
+  branch; **branch attribution locked at signup** (no gaming). Attribution already flows via
+  `branch_code` on `create_account`.
+- **WhatsApp proxy**: use a **dedicated always-on Android phone** on the WhatsApp/data SIM running
+  iProxy (stable IP), not the user's primary carry phone. Endpoint is swappable in ~2 min via
+  `gost-wa.service`.
+
+### 48.7 WhatsApp proxy — how we'll move (user action pending)
+- iProxy turns an Android phone's mobile-data connection into a **fixed proxy endpoint**
+  (`host:port` + creds) that stays constant even as the carrier IP rotates. WhatsApp *number* (the
+  business SIM, dual-SIM OK) is separate from the proxy *IP*.
+- Stability is the real constraint — a carried phone flips WiFi/cells (the failure we hit). Use a
+  spare phone kept plugged in at home/office. Content is TLS to WhatsApp, so iProxy can't read it;
+  keep it off the personal SIM for privacy + battery.
+- **Next**: user arranges a separate phone → installs iProxy → sends the endpoint → swap
+  `gost-wa.service` + restart → test connect. Parked until the phone is arranged.
+
+### 48.8 Next up / planned to-dos
+- **Signup UI (mobile-first)** — build `nidaan_start.html` rewrite + `?subscribe=` handoff. Backend
+  is 100% ready; paused for the user's device testing first.
+- **Phase 1C-d — branch profit-share + branch portal**: configurable %-of-revenue per branch,
+  super-admin reconciliation view (ops), then a branch-facing portal (separate login) for a branch
+  to see its attributed accounts + earnings. Attribution data already exists.
+- **AI-driven customer support module** (large, standalone): multi-channel (WhatsApp reactive for
+  customers, web chat, email), Telegram staff alerts, chat→ticket, AI auto-answer + human fallback
+  (Mon–Fri 10–6).
+- **Google Workspace branch emails** (`xyz@nidaanpartner.com`) — deferred to the end by the user.
+- **WhatsApp proxy** (§48.7) — awaiting a dedicated phone + iProxy endpoint.
+- Housekeeping: one harmless pre-existing orphan `nidaan_plan_quota` row for deleted account 22
+  (can be cleaned anytime).
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
