@@ -1413,6 +1413,38 @@ async def set_support_status(thread_id: int, status: str) -> None:
         await conn.commit()
 
 
+async def list_support_threads_ops(status: Optional[str] = None, limit: int = 150) -> list[dict]:
+    """Ops support inbox: all threads (escalated first, newest activity first) with a preview."""
+    where, params = "", []
+    if status in ("ai", "escalated", "closed"):
+        where = "WHERE t.status=?"
+        params.append(status)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            f"""SELECT t.thread_id, t.name, t.contact, t.channel, t.status,
+                       t.created_at, t.last_at,
+                       (SELECT COUNT(*) FROM nidaan_support_messages m
+                         WHERE m.thread_id=t.thread_id) AS msg_count,
+                       (SELECT body FROM nidaan_support_messages m
+                         WHERE m.thread_id=t.thread_id AND m.sender_type='customer'
+                         ORDER BY m.msg_id DESC LIMIT 1) AS last_customer
+                FROM nidaan_support_threads t {where}
+                ORDER BY (t.status='escalated') DESC, t.last_at DESC LIMIT ?""",
+            params + [limit])).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def get_support_thread_meta(thread_id: int) -> Optional[dict]:
+    """Thread row for ops (no key needed — staff-authed at the route)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT thread_id, name, contact, channel, status, created_at, last_at "
+            "FROM nidaan_support_threads WHERE thread_id=?", (thread_id,))).fetchone()
+        return dict(row) if row else None
+
+
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
     """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
     Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one

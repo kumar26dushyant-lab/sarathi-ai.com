@@ -3870,6 +3870,57 @@ async def ops_update_plan_config(plan_key: str, body: OpsPlanConfigUpdate, reque
     return {"ok": True, "plan": updated}
 
 
+# ── Ops: customer-support inbox (staff read + reply) ──────────────────────────
+@app.get("/nidaan/ops/api/support/threads")
+async def ops_support_threads(request: Request, status: Optional[str] = None):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"threads": await nidaan.list_support_threads_ops(status=status)}
+
+
+@app.get("/nidaan/ops/api/support/threads/{thread_id}")
+async def ops_support_thread(thread_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    return {"thread": meta, "messages": await nidaan.get_support_messages(thread_id)}
+
+
+class OpsSupportReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/reply")
+@limiter.limit("60/minute")
+async def ops_support_reply(thread_id: int, body: OpsSupportReplyReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    await nidaan.add_support_message(thread_id, "staff", body.message.strip())
+    # A staff reply takes the thread out of the escalation queue (mark handled = 'ai'
+    # so it's no longer flagged as waiting; 'closed' is explicit via the close action).
+    if meta.get("status") == "escalated":
+        await nidaan.set_support_status(thread_id, "ai")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/close")
+async def ops_support_close(thread_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    await nidaan.set_support_status(thread_id, "closed")
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")
 async def ops_branch_unpaid_leads(branch_code: str, request: Request):
     """Attributed accounts for this branch that haven't paid yet — the fallback

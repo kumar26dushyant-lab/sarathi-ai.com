@@ -734,6 +734,33 @@ async def _telegram_mirror(staff_id: int, text: str, url: str) -> None:
         logger.info("Telegram mirror error: %s", e)
 
 
+async def on_support_escalated(thread_id: int) -> None:
+    """A website support chat needs a human. Alert admins on bell + push + email +
+    Telegram so someone picks it up in the ops Support inbox. Fire-and-forget."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            th = await (await conn.execute(
+                "SELECT name, contact FROM nidaan_support_threads WHERE thread_id=?",
+                (thread_id,))).fetchone()
+            last = await (await conn.execute(
+                "SELECT body FROM nidaan_support_messages WHERE thread_id=? AND sender_type='customer' "
+                "ORDER BY msg_id DESC LIMIT 1", (thread_id,))).fetchone()
+        who = ((dict(th).get("name") if th else "") or "A visitor").strip()
+        q = ((dict(last).get("body") if last else "") or "").strip()
+        subject = f"💬 Support chat needs a human — #{thread_id}"
+        body = (f"{who} needs help on the website chat.\n\n\"{q[:300]}\"\n\n"
+                f"Open the Support inbox in ops to reply.")
+        admins = await _super_admin_staff()
+        ids = [a["staff_id"] for a in admins]
+        if ids:
+            await notify_staff_inapp(ids, subject, body, event_key="support.escalated", email=True)
+            for sid in ids:
+                await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+    except Exception as e:
+        logger.warning("on_support_escalated failed: %s", e)
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
 def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")
