@@ -596,6 +596,7 @@ class NidaanSupportMsgReq(BaseModel):
     name: str = Field("", max_length=80)
     contact: str = Field("", max_length=120)
     lang: str = Field("", max_length=10)   # en | hi | hinglish (preferred reply language)
+    hp: str = Field("", max_length=100)    # honeypot — must stay empty (bots fill it)
 
 
 @app.post("/nidaan/api/support/message")
@@ -606,6 +607,13 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     escalates to a human when needed. Public + rate-limited; anonymous is fine."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
+    _ip = request.client.host if request.client else ""
+    if auth.is_ip_blocked(_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    if body.hp:   # honeypot: bots fill hidden fields, humans never do → flag IP + benign no-op
+        auth.record_failed_login(_ip)
+        return {"thread_id": 0, "thread_key": "", "reply": "Thanks!", "escalated": False,
+                "support_hours": "Mon–Fri, 10am–6pm IST"}
     msg = body.message.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Empty message")
@@ -633,6 +641,10 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
             contact=body.contact, channel="web", lang=_lang,
             account_id=(_account["account_id"] if _account else None))
         tid, tkey = started["thread_id"], started["thread_key"]
+    # Per-thread flood cap: stop a single conversation from being spammed unbounded.
+    if body.thread_id and len(await nidaan.get_support_messages(tid, limit=200)) >= 80:
+        raise HTTPException(status_code=429,
+                            detail="This conversation is very long — please start a new chat or leave your details.")
     await nidaan.add_support_message(tid, "customer", msg)
     history = await nidaan.get_support_messages(tid)
     # Loop / anomaly guard: if the visitor repeats the same question or the chat drags on without
@@ -703,6 +715,7 @@ class NidaanSupportLeadReq(BaseModel):
     thread_id: Optional[int] = None
     thread_key: Optional[str] = None
     lang: str = Field("", max_length=10)
+    hp: str = Field("", max_length=100)    # honeypot — must stay empty
 
 
 @app.post("/nidaan/api/support/lead")
@@ -713,6 +726,12 @@ async def nidaan_support_lead(body: NidaanSupportLeadReq, request: Request):
     staff. Returns a ticket number. Rate-limited (4/hour/IP) + one-per-browser on the client."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
+    _ip = request.client.host if request.client else ""
+    if auth.is_ip_blocked(_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    if body.hp:   # honeypot → flag + benign fake success
+        auth.record_failed_login(_ip)
+        return {"ok": True, "ticket": 0, "thread_key": ""}
     name = body.name.strip()
     contact = body.contact.strip()
     is_email = ("@" in contact and "." in contact.rsplit("@", 1)[-1])

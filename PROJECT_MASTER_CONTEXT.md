@@ -4498,7 +4498,13 @@ Realtime = **polling** (~4s while a chat is open; simple/reliable through Cloudf
   `on_support_escalated` routes to ON-DUTY reps (fallback = all admins so nothing is missed) on
   bell + push + email + Telegram. In-hours = "reply now"; after-hours = "ticket #N, follow up".
   Verified: on_duty resolution, after-hours framing, routing.
-- **S4 next:** security/anti-spam/anomaly hardening (per-IP + per-thread caps, honeypot, IP block).
+- **Context separation SHIPPED + verified (Jul 26, user ask):** homepage chat = **guide/lead-gen**
+  mode (anonymous — refuses account/subscription/status/doc questions, redirects to login/dashboard,
+  NEVER sends the customer token or exposes account data); dashboard chat = **support** mode
+  (logged-in — account-aware from a minimal CUSTOMER CONTEXT name/plan/active). Mode derived from a
+  valid Nidaan token server-side; threads namespaced per mode in the widget. Verified both paths.
+- **S4 next:** security/anti-spam/anomaly hardening (IP-block gate, per-thread cap, honeypot). Note:
+  Cloudflare already fronts the site (edge DDoS/bot mitigation) — app layer is the 2nd line.
 - **S5 next:** expand + USER-APPROVE the AI knowledge base for full business correctness.
 
 ---
