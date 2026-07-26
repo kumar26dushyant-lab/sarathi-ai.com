@@ -4648,8 +4648,10 @@ async function loadSupport(){
     <div class="section-hdr"><div><div class="section-title">Customer Support</div>
       <div class="section-sub">Website chat threads. Escalated = a customer is waiting for a human.</div></div>
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadSupport()">🔄 Refresh</button></div>
+    <div id="supHours" style="margin-bottom:.7rem"></div>
     <div id="supSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem"></div>
     <div id="supListWrap"><div class="empty"><p>Loading…</p></div></div>`;
+  loadSupportHours();
   const segs = [['escalated','🔔 Needs human'],['ai','AI-handled'],['closed','Closed'],['','All']];
   document.getElementById('supSegBar').innerHTML = segs.map(([k,label])=>
     `<button class="btn ${(_supportFilter===k)?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="_supportFilter='${k}';loadSupport()">${label}</button>`).join('');
@@ -4673,6 +4675,40 @@ async function loadSupport(){
       <tbody>${rows}</tbody></table></div>`;
 }
 
+const _DAYNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+async function loadSupportHours(){
+  const wrap=document.getElementById('supHours'); if(!wrap) return;
+  const r=await API('/support/hours'); if(!r.ok){ wrap.innerHTML=''; return; }
+  const h=(await r.json()).hours||{days:[],start:'',end:''};
+  const daysTxt=(h.days||[]).map(d=>_DAYNAMES[d]).join(', ')||'—';
+  const canEdit=(_role==='super_admin');
+  wrap.innerHTML=`<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .85rem;font-size:.82rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+    <div>🕑 <b>Support hours (IST):</b> ${daysTxt} · ${esc(h.start)}–${esc(h.end)} <span style="color:rgba(255,255,255,.4)">— outside these, the widget captures leads.</span></div>
+    ${canEdit?`<button class="btn btn-ghost" style="font-size:.78rem;padding:.3rem .7rem" onclick="editSupportHours(${JSON.stringify(h.days)}, '${esc(h.start)}','${esc(h.end)}')">Edit</button>`:''}
+  </div><div id="supHoursEdit"></div>`;
+}
+function editSupportHours(days, start, end){
+  const box=document.getElementById('supHoursEdit'); if(!box) return;
+  const dayBtns=_DAYNAMES.map((n,i)=>`<label style="font-size:.78rem;display:inline-flex;align-items:center;gap:.2rem;margin-right:.5rem"><input type="checkbox" class="supDay" value="${i}" ${days.includes(i)?'checked':''}> ${n}</label>`).join('');
+  box.innerHTML=`<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.7rem .85rem;margin-top:.5rem">
+    <div style="margin-bottom:.5rem">${dayBtns}</div>
+    <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.78rem">Start <input id="supStart" type="time" value="${esc(start)}" style="max-width:120px"></label>
+      <label style="font-size:.78rem">End <input id="supEnd" type="time" value="${esc(end)}" style="max-width:120px"></label>
+      <button class="btn btn-primary" style="font-size:.8rem;padding:.35rem .8rem" onclick="saveSupportHours()">💾 Save</button>
+      <span id="supHoursMsg" style="font-size:.78rem"></span>
+    </div></div>`;
+}
+async function saveSupportHours(){
+  const days=Array.from(document.querySelectorAll('.supDay:checked')).map(c=>parseInt(c.value));
+  const start=(document.getElementById('supStart').value||'').trim();
+  const end=(document.getElementById('supEnd').value||'').trim();
+  const msg=document.getElementById('supHoursMsg');
+  if(!days.length){ msg.style.color='#f87171'; msg.textContent='Pick at least one day'; return; }
+  const r=await API('/support/hours',{method:'PATCH', body:JSON.stringify({days,start,end})});
+  if(r.ok){ msg.style.color='#4ade80'; msg.textContent='✓ Saved'; setTimeout(loadSupportHours,900); }
+  else{ const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+}
 async function openSupportThread(id){
   const r = await API('/support/threads/'+id);
   if (!r.ok){ alert('Could not open conversation.'); return; }

@@ -658,6 +658,64 @@ async def nidaan_support_thread(thread_id: int, thread_key: str, request: Reques
             "messages": await nidaan.get_support_messages(thread_id, after_id=max(0, after_id))}
 
 
+@app.get("/nidaan/api/support/status")
+@limiter.limit("60/minute")
+async def nidaan_support_status(request: Request):
+    """Whether the human team is currently online (business hours, IST) — the widget uses
+    this to offer the leave-your-details fallback out of hours."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    cfg = await nidaan.get_business_hours()
+    return {"open": await nidaan.is_within_business_hours(),
+            "days": cfg["days"], "start": cfg["start"], "end": cfg["end"]}
+
+
+class NidaanSupportLeadReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=80)
+    contact: str = Field(..., min_length=3, max_length=120)   # email or 10-digit mobile
+    message: str = Field("", max_length=1000)
+    thread_id: Optional[int] = None
+    thread_key: Optional[str] = None
+    lang: str = Field("", max_length=10)
+
+
+@app.post("/nidaan/api/support/lead")
+@limiter.limit("4/hour")
+async def nidaan_support_lead(body: NidaanSupportLeadReq, request: Request):
+    """Capture a lead from the widget (out-of-hours / callback request). Creates or continues
+    a thread with the visitor's name + contact, marks it escalated (needs a human), and alerts
+    staff. Returns a ticket number. Rate-limited (4/hour/IP) + one-per-browser on the client."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    name = body.name.strip()
+    contact = body.contact.strip()
+    is_email = ("@" in contact and "." in contact.rsplit("@", 1)[-1])
+    is_mobile = bool(nidaan.normalize_phone(contact))
+    if not (is_email or is_mobile):
+        raise HTTPException(status_code=400, detail="Please enter a valid email or 10-digit mobile")
+    _lang = body.lang if body.lang in ("en", "hi", "hinglish") else ""
+    if body.thread_id and body.thread_key:
+        thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+        if not thread:
+            raise HTTPException(status_code=403, detail="Invalid conversation")
+        tid, tkey = thread["thread_id"], body.thread_key
+        await nidaan.update_support_thread_contact(tid, name=name, contact=contact)
+    else:
+        started = await nidaan.create_support_thread(name=name, contact=contact, channel="web", lang=_lang)
+        tid, tkey = started["thread_id"], started["thread_key"]
+    note = body.message.strip() or "(Requested a callback — left contact details)"
+    await nidaan.add_support_message(tid, "customer", f"📇 Lead — {name} · {contact}\n{note}")
+    await nidaan.set_support_status(tid, "escalated")
+    try:
+        import biz_nidaan_notifications as _nnot
+        import asyncio as _aio
+        _aio.create_task(_nnot.on_support_escalated(tid))
+    except Exception:
+        pass
+    return {"ok": True, "ticket": tid, "thread_key": tkey}
+
+
 @app.get("/nidaan-sw.js")
 async def nidaan_service_worker():
     """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""
@@ -3924,6 +3982,34 @@ async def ops_support_close(thread_id: int, request: Request):
     _require_staff(request, "team_member")
     await nidaan.set_support_status(thread_id, "closed")
     return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/support/hours")
+async def ops_support_hours_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"hours": await nidaan.get_business_hours()}
+
+
+class OpsSupportHoursReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    days: list[int] = Field(..., max_length=7)   # Mon=0 … Sun=6
+    start: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+
+@app.patch("/nidaan/ops/api/support/hours")
+async def ops_support_hours_set(body: OpsSupportHoursReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        cfg = await nidaan.set_business_hours(body.days, body.start, body.end)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "support.hours_update", "support", "hours", str(cfg)[:200])
+    return {"ok": True, "hours": cfg}
 
 
 @app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")

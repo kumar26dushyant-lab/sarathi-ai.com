@@ -1449,6 +1449,66 @@ async def get_support_thread_meta(thread_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+async def update_support_thread_contact(thread_id: int, name: str = "", contact: str = "") -> None:
+    """Fill in a thread's name/contact (used when a visitor leaves details as a lead)."""
+    sets, params = [], []
+    if name:
+        sets.append("name=?"); params.append(name.strip()[:80])
+    if contact:
+        sets.append("contact=?"); params.append(contact.strip()[:120])
+    if not sets:
+        return
+    params.append(thread_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"UPDATE nidaan_support_threads SET {', '.join(sets)} WHERE thread_id=?", params)
+        await conn.commit()
+
+
+# ── Support business hours (super-admin editable) ─────────────────────────────
+_DEFAULT_BUSINESS_HOURS = {"days": [0, 1, 2, 3, 4], "start": "10:00", "end": "18:00"}  # Mon–Fri 10–6 IST
+
+
+async def get_business_hours() -> dict:
+    """Support business hours (IST). days = Python weekdays (Mon=0 … Sun=6)."""
+    raw = await get_ops_setting("support_business_hours", "")
+    if raw:
+        try:
+            d = json.loads(raw)
+            days = [int(x) for x in d.get("days", _DEFAULT_BUSINESS_HOURS["days"]) if 0 <= int(x) <= 6]
+            return {"days": days or _DEFAULT_BUSINESS_HOURS["days"],
+                    "start": str(d.get("start", "10:00")), "end": str(d.get("end", "18:00"))}
+        except Exception:
+            pass
+    return dict(_DEFAULT_BUSINESS_HOURS)
+
+
+async def set_business_hours(days: list, start: str, end: str) -> dict:
+    days = sorted({int(x) for x in days if 0 <= int(x) <= 6})
+    if not days:
+        raise ValueError("select_at_least_one_day")
+    if not re.match(r"^\d{2}:\d{2}$", start or "") or not re.match(r"^\d{2}:\d{2}$", end or ""):
+        raise ValueError("bad_time_format")
+    if start >= end:
+        raise ValueError("start_must_be_before_end")
+    cfg = {"days": days, "start": start, "end": end}
+    await set_ops_setting("support_business_hours", json.dumps(cfg))
+    return cfg
+
+
+def _now_ist() -> datetime:
+    from datetime import timezone
+    return datetime.now(timezone(timedelta(hours=5, minutes=30)))
+
+
+async def is_within_business_hours() -> bool:
+    cfg = await get_business_hours()
+    now = _now_ist()
+    if now.weekday() not in cfg["days"]:
+        return False
+    return cfg["start"] <= now.strftime("%H:%M") < cfg["end"]
+
+
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
     """Short-lived, claim-bound token for the WhatsApp one-tap pay link.
     Purpose-scoped (typ='nidaan_paylink') so it can ONLY unlock paying this one

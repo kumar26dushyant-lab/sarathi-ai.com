@@ -12,6 +12,19 @@
   try { thread = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) { thread = null; }
   try { lang = localStorage.getItem(LKEY) || ''; } catch (e) { lang = ''; }
   var lastMsgId = 0, pollTimer = null, busy = false, greeted = false;
+  var supportOpen = true, LEADKEY = 'nidaan_support_lead';
+
+  var OFFLINE = {
+    en: "Our team is offline right now. I can still answer your questions — or leave your details and we'll get back to you.",
+    hi: "हमारी टीम अभी ऑफ़लाइन है। मैं आपके सवालों का जवाब दे सकता हूँ — या अपना विवरण छोड़ें, हम आपसे संपर्क करेंगे।",
+    hinglish: "Hamari team abhi offline hai. Main aapke sawaalon ka jawab de sakta hoon — ya apna detail chhod dein, hum aapse contact karenge."
+  };
+  var LEADCHIP = { en: "📝 Leave my details", hi: "📝 मेरा विवरण छोड़ें", hinglish: "📝 Apna detail chhodein" };
+  var LEADLABELS = {
+    en: { name: "Your name", contact: "Email or mobile", msg: "How can we help? (optional)", submit: "Submit", done: "✅ Thanks! Ticket #", follow: " — our team will reach out during working hours." },
+    hi: { name: "आपका नाम", contact: "ईमेल या मोबाइल", msg: "हम कैसे मदद करें? (वैकल्पिक)", submit: "भेजें", done: "✅ धन्यवाद! टिकट #", follow: " — हमारी टीम कार्य समय में संपर्क करेगी।" },
+    hinglish: { name: "Aapka naam", contact: "Email ya mobile", msg: "Hum kaise help karein? (optional)", submit: "Bhejein", done: "✅ Dhanyawaad! Ticket #", follow: " — hamari team working hours mein contact karegi." }
+  };
 
   var GREET = {
     en: "Hi! 👋 I'm the Nidaan Partner assistant. I can help with rejected or underpaid claim reviews, our plans, and how everything works. What would you like to know?",
@@ -103,21 +116,72 @@
     inBox.style.display=''; showGreeting(); startPoll();
     setTimeout(function(){ input.focus(); }, 80);
   }
-  function showGreeting(){
+  async function fetchStatus(){
+    try{ var r=await fetch('/nidaan/api/support/status'); if(r.ok){ var d=await r.json(); supportOpen=!!d.open; } }catch(e){}
+  }
+  async function showGreeting(){
     if(greeted) return; greeted = true;
+    await fetchStatus();
     bubble(GREET[lang]||GREET.en, 'ai');
+    if(!supportOpen) bubble(OFFLINE[lang]||OFFLINE.en, 'ai');
     renderChips();
   }
+  function leadDoneTicket(){ try{ return localStorage.getItem(LEADKEY); }catch(e){ return null; } }
   function renderChips(){
-    var c = CHIPS[lang]||CHIPS.en;
-    chipsBox.style.display='flex';
-    chipsBox.innerHTML = c.map(function(t){ return '<div class="nsw-chip">'+el(t)+'</div>'; }).join('');
-    Array.prototype.forEach.call(chipsBox.querySelectorAll('.nsw-chip'), function(ch){
-      ch.onclick=function(){ chipsBox.style.display='none'; chipsBox.innerHTML=''; send(ch.textContent.replace(/^[^\wऀ-ॿ]+/, '').trim()); };
+    var chipList = (CHIPS[lang]||CHIPS.en).map(function(t){ return {label:t, action:'send'}; });
+    if(!supportOpen && !leadDoneTicket()) chipList.push({label:(LEADCHIP[lang]||LEADCHIP.en), action:'lead'});
+    chipsBox.style.display='flex'; chipsBox.innerHTML='';
+    chipList.forEach(function(c){
+      var ch=document.createElement('div'); ch.className='nsw-chip'; ch.textContent=c.label;
+      ch.onclick=function(){
+        chipsBox.style.display='none'; chipsBox.innerHTML='';
+        var human=/human|इंसान|insaan/i.test(c.label);
+        if(c.action==='lead' || (human && !supportOpen && !leadDoneTicket())) showLeadForm();
+        else send(c.label.replace(/^[^\wऀ-ॿ]+/, '').trim());
+      };
+      chipsBox.appendChild(ch);
     });
+  }
+  function showLeadForm(){
+    var done=leadDoneTicket(); var L=LEADLABELS[lang]||LEADLABELS.en;
+    if(done){ bubble(L.done+done+L.follow, 'ai'); return; }
+    inBox.style.display='none';
+    var f=document.createElement('div'); f.id='nswLeadForm';
+    f.style.cssText='align-self:stretch;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.8rem;display:flex;flex-direction:column;gap:.5rem';
+    var inS='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:.55rem;color:#fff;font-size:.9rem';
+    f.innerHTML='<input id="nswLeadName" placeholder="'+el(L.name)+'" style="'+inS+'">'
+      +'<input id="nswLeadContact" placeholder="'+el(L.contact)+'" style="'+inS+'">'
+      +'<textarea id="nswLeadMsg" rows="2" placeholder="'+el(L.msg)+'" style="'+inS+';font-family:inherit;resize:none"></textarea>'
+      +'<button id="nswLeadSubmit" style="background:#06b6d4;border:none;border-radius:8px;color:#fff;padding:.55rem;font-weight:700;cursor:pointer">'+el(L.submit)+'</button>'
+      +'<div id="nswLeadErr" style="color:#f87171;font-size:.78rem"></div>';
+    msgs.appendChild(f); scroll();
+    f.querySelector('#nswLeadSubmit').onclick=submitLead;
+  }
+  async function submitLead(){
+    var name=(document.getElementById('nswLeadName').value||'').trim();
+    var contact=(document.getElementById('nswLeadContact').value||'').trim();
+    var m=(document.getElementById('nswLeadMsg').value||'').trim();
+    var errEl=document.getElementById('nswLeadErr');
+    if(name.length<1){ errEl.textContent='Please enter your name.'; return; }
+    if(contact.length<3){ errEl.textContent='Please enter your email or mobile.'; return; }
+    var btn=document.getElementById('nswLeadSubmit'); btn.disabled=true; errEl.textContent='';
+    try{
+      var body={ name:name, contact:contact, message:m, lang:lang };
+      if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
+      var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var d=await r.json().catch(function(){return {};});
+      if(!r.ok){ errEl.textContent=d.detail||'Could not submit. Please try again later.'; btn.disabled=false; return; }
+      if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key}; localStorage.setItem(TKEY, JSON.stringify(thread)); }
+      try{ localStorage.setItem(LEADKEY, String(d.ticket)); }catch(e){}
+      var lf=document.getElementById('nswLeadForm'); if(lf) lf.remove();
+      inBox.style.display='';
+      var L=LEADLABELS[lang]||LEADLABELS.en;
+      bubble(L.done+d.ticket+L.follow, 'ai');
+    }catch(e){ errEl.textContent='Network issue — please try again.'; btn.disabled=false; }
   }
 
   async function loadHistory(){
+    await fetchStatus();
     if(!thread){ if(!lang) showLangPicker(); else { showGreeting(); startPoll(); } return; }
     // existing conversation → pull full history
     try{
@@ -126,6 +190,7 @@
       var d = await r.json();
       (d.messages||[]).forEach(function(m){ bubble(m.body, m.sender_type); if(m.msg_id>lastMsgId) lastMsgId=m.msg_id; });
       if(!(d.messages||[]).length) showGreeting();
+      else if(!supportOpen && !leadDoneTicket()) renderChips();   // offer leave-details when offline
       greeted = true; startPoll();
     }catch(e){ showGreeting(); startPoll(); }
   }
