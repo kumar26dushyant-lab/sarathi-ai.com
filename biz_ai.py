@@ -1223,6 +1223,10 @@ KNOWLEDGE:
 
 Rules:
 - {lang_rule}
+- If the user asks to change language, writes only a language name, or asks a meta question about
+  the chat, respond warmly and briefly (don't give a generic welcome) — tell them they can switch
+  language anytime with the 🌐 button at the top of the chat, and continue in the language they seem
+  to prefer.
 - NEVER guarantee or promise an outcome (winning, a refund from the insurer, a settlement amount,
   or that a claim CAN be fought before our experts review it). We are paid for the expert REVIEW
   (a go / no-go assessment), not for any promise. Be honest and set correct expectations.

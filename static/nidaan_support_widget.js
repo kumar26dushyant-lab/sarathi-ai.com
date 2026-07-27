@@ -74,6 +74,11 @@
     + '.nsw-in textarea:focus{outline:none;border-color:#22d3ee}'
     + '.nsw-in button{background:#06b6d4;border:none;border-radius:10px;color:#fff;padding:0 1rem;font-weight:700;cursor:pointer;font-size:1.1rem}'
     + '.nsw-in button:disabled{opacity:.5;cursor:default}'
+    + '.nsw-lang{position:absolute;top:.7rem;right:2.7rem;background:none;border:none;color:#fff;font-size:1.05rem;cursor:pointer;opacity:.9}'
+    + '.nsw-langmenu{position:absolute;top:2.5rem;right:.6rem;background:#0f1e3a;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:.3rem;display:none;flex-direction:column;gap:.15rem;z-index:6;box-shadow:0 6px 18px rgba(0,0,0,.4)}'
+    + '.nsw-langmenu.open{display:flex}'
+    + '.nsw-langmenu button{background:none;border:none;color:#e2e8f0;text-align:left;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;white-space:nowrap}'
+    + '.nsw-langmenu button:active{background:rgba(6,182,212,.25)}'
     + '@media(max-width:480px){.nsw-panel{right:8px;bottom:78px;height:calc(100vh - 96px)}}';
   var style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
 
@@ -86,7 +91,9 @@
   panel.innerHTML =
     '<div class="nsw-hdr"><h4>Chat with Nidaan Partner</h4>'
     + '<p>AI assistant · human team Mon–Fri, 10am–6pm IST</p>'
-    + '<button class="nsw-x" aria-label="Close">×</button></div>'
+    + '<button class="nsw-lang" id="nswLangBtn" title="Change language" aria-label="Change language">🌐</button>'
+    + '<button class="nsw-x" aria-label="Close">×</button>'
+    + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
     + '<div class="nsw-msgs" id="nswMsgs"></div>'
     + '<div class="nsw-chips" id="nswChips"></div>'
     + '<div class="nsw-in" id="nswIn"><textarea id="nswInput" rows="1" placeholder="Type your question…"></textarea>'
@@ -229,13 +236,65 @@
   btn.addEventListener('click', function(){ panel.classList.contains('open')?closePanel():openPanel(); });
   panel.querySelector('.nsw-x').addEventListener('click', closePanel);
 
+  // ── Language: always-available switcher (header 🌐) + intent detection ──
+  var langBtn = panel.querySelector('#nswLangBtn'), langMenu = panel.querySelector('#nswLangMenu');
+  langBtn.addEventListener('click', function(e){ e.stopPropagation(); langMenu.classList.toggle('open'); });
+  document.addEventListener('click', function(){ langMenu.classList.remove('open'); });
+  Array.prototype.forEach.call(langMenu.querySelectorAll('button'), function(b){
+    b.addEventListener('click', function(e){ e.stopPropagation(); switchLang(b.getAttribute('data-l'), true); });
+  });
+  var LANGCONF = {
+    en: "Done — I'll continue in English. 😊 How can I help?",
+    hi: "हो गया — मैं अब हिंदी में बात करूँगा। 😊 मैं आपकी कैसे मदद करूँ?",
+    hinglish: "Done — ab main Hinglish mein baat karunga. 😊 Bataiye, kaise help karun?"
+  };
+  var LANGASK = {
+    en: "Sure! Which language would you prefer? You can also tap 🌐 at the top anytime.",
+    hi: "ज़रूर! आप कौन-सी भाषा पसंद करेंगे? आप ऊपर 🌐 पर भी टैप कर सकते हैं।",
+    hinglish: "Sure! Aap kaunsi language prefer karenge? Upar 🌐 par bhi tap kar sakte hain."
+  };
+  function switchLang(l, announce){
+    if(!GREET[l]) l = 'en';
+    lang = l; try{ localStorage.setItem(LKEY, l); }catch(e){}
+    langMenu.classList.remove('open');
+    if(announce && panel.classList.contains('open')){ if(!greeted){ greeted = true; startPoll(); } bubble(LANGCONF[l] || LANGCONF.en, 'ai'); }
+  }
+  // Detect a short "please use language X" / "change language" request (not a real question).
+  function langIntent(text){
+    var t = (text || '').trim().toLowerCase();
+    if(t.length > 45) return null;
+    if(/hinglish/.test(t)) return { lang: 'hinglish' };
+    if(/\b(english|angre[zj]i|inglish)\b/.test(t)) return { lang: 'en' };
+    if(/(हिंदी|हिन्दी|\bhindi\b)/.test(t)) return { lang: 'hi' };
+    if(/(change|switch|badl|बदल).*(lang|bhasha|भाषा)|(lang|bhasha|भाषा).*(change|switch|badl|बदल)/.test(t)) return { menu: true };
+    return null;
+  }
+
   input.addEventListener('input', function(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,90)+'px'; });
   input.addEventListener('keydown', function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
   sendBtn.addEventListener('click', function(){ send(); });
 
+  function showLangChips(){
+    chipsBox.style.display='flex'; chipsBox.innerHTML='';
+    [['en','English'],['hi','हिंदी'],['hinglish','Hinglish']].forEach(function(p){
+      var ch=document.createElement('div'); ch.className='nsw-chip'; ch.textContent=p[1];
+      ch.onclick=function(){ chipsBox.style.display='none'; chipsBox.innerHTML=''; switchLang(p[0], true); };
+      chipsBox.appendChild(ch);
+    });
+  }
   async function send(preset){
     var text = (preset!=null?preset:(input.value||'')).trim();
     if(!text || busy) return;
+    // Understand a language request like a human — switch + confirm, no AI round-trip.
+    var li = langIntent(text);
+    if(li){
+      bubble(text, 'customer');
+      if(preset==null){ input.value=''; input.style.height='auto'; }
+      if(chipsBox.style.display!=='none'){ chipsBox.style.display='none'; chipsBox.innerHTML=''; }
+      if(li.menu){ bubble(LANGASK[lang] || LANGASK.en, 'ai'); showLangChips(); }
+      else { switchLang(li.lang, true); }
+      return;
+    }
     busy=true; sendBtn.disabled=true;
     if(chipsBox.style.display!=='none'){ chipsBox.style.display='none'; chipsBox.innerHTML=''; }
     var optimistic=document.createElement('div'); optimistic.className='nsw-b me'; optimistic.innerHTML=el(text); msgs.appendChild(optimistic); scroll();
