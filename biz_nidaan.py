@@ -163,10 +163,16 @@ async def seed_content_config():
         await conn.commit()
 
 
+_CONTENT_CACHE_TS = 0.0
+_CONTENT_TTL = 30.0   # seconds — bounds cross-worker staleness after an edit (2 web workers)
+
+
 async def get_content(force: bool = False) -> dict:
-    """All canonical facts as {key: {label, en, hi}} — cached. Falls back to DEFAULT_CONTENT."""
-    global _CONTENT_CACHE
-    if _CONTENT_CACHE is not None and not force:
+    """All canonical facts as {key: {label, en, hi}} — cached with a short TTL so an edit on one
+    worker propagates to the others within TTL. Falls back to DEFAULT_CONTENT."""
+    global _CONTENT_CACHE, _CONTENT_CACHE_TS
+    import time as _t
+    if not force and _CONTENT_CACHE is not None and (_t.time() - _CONTENT_CACHE_TS) < _CONTENT_TTL:
         return _CONTENT_CACHE
     out: dict = {}
     try:
@@ -179,13 +185,16 @@ async def get_content(force: bool = False) -> dict:
         pass
     for key, d in DEFAULT_CONTENT.items():   # ensure every known key exists (fallback)
         out.setdefault(key, {"label": d["label"], "en": d["en"], "hi": d["hi"]})
+    import time as _t
     _CONTENT_CACHE = out
+    _CONTENT_CACHE_TS = _t.time()
     return out
 
 
 def invalidate_content_cache():
-    global _CONTENT_CACHE
+    global _CONTENT_CACHE, _CONTENT_CACHE_TS
     _CONTENT_CACHE = None
+    _CONTENT_CACHE_TS = 0.0
 
 
 async def update_content(key: str, value_en: str, value_hi: str) -> dict:
