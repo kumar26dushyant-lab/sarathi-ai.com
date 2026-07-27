@@ -4675,6 +4675,25 @@ note-render surface — the datetime import bug):
   (status/assignees/timeline/notes/attachments), matching the quick-tasks panel's polish.
 Owner said: keep g.3/L2 pending (blocked on claimshield.in API); build this as the next step.
 
+**WORKING PRINCIPLE (owner Jul 27):** the software is mature/excellent — move SLOWLY, carefully,
+systematically; be extra careful on high-sensitivity items; NOTHING breaks while building; additive
++ backward-compatible; preventive + security measures; test the exact live path. (See memory
+`feedback_careful_no_break` — a datetime-import regression this session broke task loading.)
+
+## 55. APP HEALTH "COCKPIT" — PLANNED (owner Jul 27; discuss scope)
+
+Owner wants the ops **App Health** panel to become a technical cockpit so small issues can be handled
+without a developer. **SUPER-ADMIN ONLY** (no other staff). Requested capabilities (to refine):
+- Live metrics: request latency, load level, load spikes/alerts, DB size / disk-space warnings, table
+  counts, error-rate; the existing health checks + timing middleware already feed some of this.
+- Self-serve small fixes from the panel (e.g. restart a stuck watchdog, clear a cache, re-run a
+  migration/seed, toggle a flag) — carefully scoped, audited, reversible.
+- **Data export to CSV** (per-table or a selected set) for the owner.
+- Overall "cockpit" view: everything important at a glance + safe one-click actions.
+Notes: this is a SENSITIVE surface (server internals + data export) → build additively, super-admin
+gate + audit every action, no destructive one-clicks without confirm. Owner said "make it a to-do,
+we can discuss more" → NOT building yet; scope to be agreed first.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
