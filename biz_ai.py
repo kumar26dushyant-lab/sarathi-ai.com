@@ -1189,6 +1189,9 @@ WHO IT'S FOR:
 - If it CAN be fought: our legal team takes your case forward and reaches out to you; you'll be
   able to track status updates on your dashboard and ask about the status here in chat.
 - Success fee: applies only after your claim is resolved — discussed case-by-case.
+- Resolution timing: once a claim is being fought, the time to resolve depends on the COMPLEXITY
+  of the case — we always pursue the EARLIEST possible resolution; there is no fixed or "average"
+  timeline. (The ₹499 review assessment itself takes ~48–72 business hours.)
 
 REFUNDS:
 - The ₹499 review can be refunded if requested within 2 HOURS of payment; after 2 hours it is
