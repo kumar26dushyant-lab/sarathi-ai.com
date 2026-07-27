@@ -170,6 +170,11 @@ async def _install_bg_exception_handler():
         await nidaan.seed_plans_config()
     except Exception as _pe:
         logger.warning("nidaan plan-config seed failed: %s", _pe)
+    # Seed canonical content facts (idempotent) — single source for chat KB + homepage.
+    try:
+        await nidaan.seed_content_config()
+    except Exception as _ce:
+        logger.warning("nidaan content-config seed failed: %s", _ce)
 
 # ── Rate Limiting ────────────────────────────────────────────────────────────
 # IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
@@ -657,9 +662,10 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     _repeat = bool(_nmsg) and sum(1 for p in _cust if _norm_sup(p) == _nmsg) >= 2
     _force_human = _repeat or len(_cust) >= 6
     import biz_ai as ai_mod
+    _facts_block = nidaan.content_facts_block(await nidaan.get_content(), lang=(_lang or "en"))
     ai = await ai_mod.nidaan_support_reply(
         msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history],
-        lang=_lang, mode=_mode, account_ctx=_acct_ctx)
+        lang=_lang, mode=_mode, account_ctx=_acct_ctx, facts_block=_facts_block)
     answer = (ai.get("answer") or "").strip() or (
         "Thanks for reaching out! A member of our team will get back to you during support "
         "hours (Mon–Fri, 10am–6pm IST).")
@@ -3936,6 +3942,44 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
 
 
 # ── Plans & billing config (SUPER-ADMIN only — sensitive) ─────────────────────
+@app.get("/nidaan/api/content")
+@limiter.limit("60/minute")
+async def nidaan_public_content(request: Request):
+    """Canonical business facts (both languages) — the homepage reads these so a fact edited in
+    ops updates the site + chat together. Public, read-only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"content": await nidaan.public_content()}
+
+
+@app.get("/nidaan/ops/api/content")
+async def ops_content_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"content": await nidaan.all_content()}
+
+
+class OpsContentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value_en: str = Field(..., max_length=600)
+    value_hi: str = Field("", max_length=600)
+
+
+@app.patch("/nidaan/ops/api/content/{content_key}")
+@limiter.limit("30/minute")
+async def ops_content_set(content_key: str, body: OpsContentUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        updated = await nidaan.update_content(content_key, body.value_en, body.value_hi)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "content.update", "content", content_key, body.value_en[:150])
+    return {"ok": True, "content": updated}
+
+
 @app.get("/nidaan/ops/api/plans-config")
 async def ops_plans_config(request: Request):
     if not _is_nidaan_host(request):

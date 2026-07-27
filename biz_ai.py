@@ -1278,7 +1278,8 @@ _SUPPORT_MODE_BLOCK = {
 
 
 async def nidaan_support_reply(message: str, history: Optional[list] = None, lang: str = "",
-                               mode: str = "guide", account_ctx: Optional[dict] = None) -> dict:
+                               mode: str = "guide", account_ctx: Optional[dict] = None,
+                               facts_block: str = "") -> dict:
     """First-line AI support for NidaanPartner.com customers. Bilingual; answers product /
     process questions from a fixed knowledge base and escalates account/payment/case-specific
     queries to a human. `lang` (en|hi|hinglish) sets the reply language; blank = match the
@@ -1301,8 +1302,13 @@ async def nidaan_support_reply(message: str, history: Optional[list] = None, lan
         if account_ctx.get("claims_used") is not None:
             parts.append(f"claims_used_this_month={account_ctx['claims_used']}")
         customer_block = "CUSTOMER CONTEXT (this logged-in user): " + ", ".join(parts) + "\n\n"
+    # Canonical facts (single source of truth) — authoritative over the static KB prose.
+    kb = _NIDAAN_SUPPORT_KB
+    if facts_block:
+        kb += ("\n\nAUTHORITATIVE FACTS (super-admin-maintained — if anything above differs, "
+               "THESE win; use these exact values):\n" + facts_block)
     prompt = _NIDAAN_SUPPORT_PROMPT.format(
-        kb=_NIDAAN_SUPPORT_KB, mode_block=mode_block, lang_rule=lang_rule,
+        kb=kb, mode_block=mode_block, lang_rule=lang_rule,
         customer_block=customer_block, history=hist or "(none)", message=(message or "")[:1500])
     try:
         raw = await _ask_gemini(prompt, json_mode=True)

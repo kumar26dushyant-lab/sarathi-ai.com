@@ -1375,6 +1375,16 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_nidaan_support_reps_dates
                 ON nidaan_support_reps(start_date, end_date);
+
+            -- Canonical business facts (single source of truth). Both the chat KB and the
+            -- homepage read from here, so a fact is edited once (ops) and updates everywhere.
+            CREATE TABLE IF NOT EXISTS nidaan_content (
+                content_key TEXT PRIMARY KEY,
+                label       TEXT DEFAULT '',
+                value_en    TEXT DEFAULT '',
+                value_hi    TEXT DEFAULT '',
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
 
         # ── nidaan_audit_log: control-center activity trail. Every sensitive ops

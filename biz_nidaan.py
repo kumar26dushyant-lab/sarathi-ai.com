@@ -115,6 +115,121 @@ async def seed_plans_config():
         logger.info("nidaan_plans_config seeded from defaults (%d plans)", len(PLAN_LIMITS))
 
 
+# =============================================================================
+#  CANONICAL CONTENT (single source of truth for business facts) — super-admin editable.
+#  Both the chat KB and the homepage read from here → edit a fact once, it updates everywhere.
+# =============================================================================
+_CONTENT_CACHE: dict | None = None
+
+DEFAULT_CONTENT = {
+    "jurisdictions":     {"label": "Jurisdictions served",
+        "en": "Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab",
+        "hi": "मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब"},
+    "support_hours":     {"label": "Support hours",
+        "en": "Monday–Friday, 10am–6pm IST",
+        "hi": "सोमवार–शुक्रवार, सुबह 10 – शाम 6 IST"},
+    "review_turnaround": {"label": "₹499 review turnaround",
+        "en": "48–72 business hours",
+        "hi": "48–72 कार्य घंटे"},
+    "success_fee":       {"label": "Success-fee terms",
+        "en": "Success fee applies only after your claim is resolved — discussed case-by-case.",
+        "hi": "सफलता शुल्क केवल आपका क्लेम हल होने के बाद लागू होता है — केस के अनुसार तय।"},
+    "resolution_stance": {"label": "Resolution stance",
+        "en": "Resolution time depends on the complexity of each case — we always pursue the earliest possible resolution.",
+        "hi": "समाधान का समय हर मामले की जटिलता पर निर्भर करता है — हम हमेशा जल्द से जल्द समाधान का प्रयास करते हैं।"},
+    "refund_window":     {"label": "Refund window",
+        "en": "The ₹499 review can be refunded within 2 hours of payment; after that it is non-refundable.",
+        "hi": "₹499 समीक्षा भुगतान के 2 घंटे के भीतर वापस की जा सकती है; उसके बाद वापसी नहीं।"},
+    "audience":          {"label": "Who it's for",
+        "en": "For policyholders without an advisor, and for insurance advisors/agents.",
+        "hi": "बिना सलाहकार वाले पॉलिसीधारकों और बीमा सलाहकारों/एजेंटों के लिए।"},
+    "go_no_go":          {"label": "Go / no-go framing",
+        "en": "We provide an expert review — a clear go/no-go on whether a claim can be fought. We never guarantee an outcome.",
+        "hi": "हम विशेषज्ञ समीक्षा देते हैं — क्लेम लड़ा जा सकता है या नहीं, स्पष्ट go/no-go। हम कभी परिणाम की गारंटी नहीं देते।"},
+}
+
+
+async def seed_content_config():
+    """Create + seed the canonical content table (once) from DEFAULT_CONTENT."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""CREATE TABLE IF NOT EXISTS nidaan_content (
+            content_key TEXT PRIMARY KEY, label TEXT DEFAULT '',
+            value_en TEXT DEFAULT '', value_hi TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        for key, d in DEFAULT_CONTENT.items():
+            await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_content (content_key, label, value_en, value_hi) VALUES (?,?,?,?)",
+                (key, d["label"], d["en"], d["hi"]))
+        await conn.commit()
+
+
+async def get_content(force: bool = False) -> dict:
+    """All canonical facts as {key: {label, en, hi}} — cached. Falls back to DEFAULT_CONTENT."""
+    global _CONTENT_CACHE
+    if _CONTENT_CACHE is not None and not force:
+        return _CONTENT_CACHE
+    out: dict = {}
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            for r in await (await conn.execute(
+                    "SELECT content_key, label, value_en, value_hi FROM nidaan_content")).fetchall():
+                out[r["content_key"]] = {"label": r["label"], "en": r["value_en"], "hi": r["value_hi"]}
+    except Exception:
+        pass
+    for key, d in DEFAULT_CONTENT.items():   # ensure every known key exists (fallback)
+        out.setdefault(key, {"label": d["label"], "en": d["en"], "hi": d["hi"]})
+    _CONTENT_CACHE = out
+    return out
+
+
+def invalidate_content_cache():
+    global _CONTENT_CACHE
+    _CONTENT_CACHE = None
+
+
+async def update_content(key: str, value_en: str, value_hi: str) -> dict:
+    """Update one canonical fact (super-admin, enforced at route). Only known keys."""
+    if key not in DEFAULT_CONTENT:
+        raise ValueError("unknown_content_key")
+    en = (value_en or "").strip()[:600]
+    hi = (value_hi or "").strip()[:600]
+    if not en:
+        raise ValueError("value_en_required")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT INTO nidaan_content (content_key, label, value_en, value_hi, updated_at)
+               VALUES (?,?,?,?,CURRENT_TIMESTAMP)
+               ON CONFLICT(content_key) DO UPDATE SET value_en=excluded.value_en,
+                   value_hi=excluded.value_hi, updated_at=CURRENT_TIMESTAMP""",
+            (key, DEFAULT_CONTENT[key]["label"], en, hi))
+        await conn.commit()
+    invalidate_content_cache()
+    return (await get_content(force=True)).get(key, {})
+
+
+async def all_content() -> list[dict]:
+    cfg = await get_content(force=True)
+    return [{"key": k, "label": v["label"], "en": v["en"], "hi": v["hi"]} for k, v in cfg.items()]
+
+
+async def public_content() -> dict:
+    """{key: {en, hi}} for the homepage (both languages)."""
+    cfg = await get_content()
+    return {k: {"en": v["en"], "hi": v["hi"]} for k, v in cfg.items()}
+
+
+def content_facts_block(cfg: dict, lang: str = "en") -> str:
+    """An authoritative facts block for the chat KB, built from the canonical content."""
+    L = lang if lang in ("hi",) else "en"
+    lines = []
+    for key, v in (cfg or {}).items():
+        val = v.get(L) or v.get("en") or ""
+        if val:
+            lines.append(f"- {v.get('label', key)}: {val}")
+    return "\n".join(lines)
+
+
 async def get_plans_config(force: bool = False) -> dict:
     """All plans as {plan_key: {...}} — cached. Single source of truth once seeded."""
     global _PLANS_CACHE

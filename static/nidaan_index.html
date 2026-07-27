@@ -1022,8 +1022,8 @@ span.hi-inline{display:none}
       <div class="trust-card">
         <h4 class="en">⚖️ Proven Track Record Before Competent Authorities</h4>
         <h4 class="hi" style="display:none">⚖️ सक्षम प्राधिकरणों के समक्ष सिद्ध रिकॉर्ड</h4>
-        <p class="en">2,000+ cases resolved. We've appeared before competent authorities, Consumer Courts, and High Courts across Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab.</p>
-        <p class="hi" style="display:none">2,000+ मामले सुलझाए। मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब में सक्षम प्राधिकरणों, उपभोक्ता न्यायालयों और उच्च न्यायालयों के समक्ष।</p>
+        <p class="en">2,000+ cases resolved. We've appeared before competent authorities, Consumer Courts, and High Courts across <span data-nc="jurisdictions" data-lang="en">Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab</span>.</p>
+        <p class="hi" style="display:none">2,000+ मामले सुलझाए। <span data-nc="jurisdictions" data-lang="hi">मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब</span> में सक्षम प्राधिकरणों, उपभोक्ता न्यायालयों और उच्च न्यायालयों के समक्ष।</p>
       </div>
       <div class="trust-card">
         <h4 class="en">🤝 Success-Fee Model — Zero Risk for You</h4>
@@ -1240,8 +1240,8 @@ span.hi-inline{display:none}
   <div class="footer-grid">
     <div class="footer-brand footer-contact">
       <h3>Nidaan – The Legal Consultants LLP</h3>
-      <p class="en">Registered under the Ministry of Corporate Affairs (MCA), Government of India.<br>Serving MP · Chhattisgarh · Maharashtra · Rajasthan · Punjab</p>
-      <p class="hi" style="display:none">भारत सरकार के कॉर्पोरेट कार्य मंत्रालय (MCA) के तहत पंजीकृत।<br>सेवा क्षेत्र: MP · छत्तीसगढ़ · महाराष्ट्र · राजस्थान · पंजाब</p>
+      <p class="en">Registered under the Ministry of Corporate Affairs (MCA), Government of India.<br>Serving <span data-nc="jurisdictions" data-lang="en">Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab</span></p>
+      <p class="hi" style="display:none">भारत सरकार के कॉर्पोरेट कार्य मंत्रालय (MCA) के तहत पंजीकृत।<br>सेवा क्षेत्र: <span data-nc="jurisdictions" data-lang="hi">मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब</span></p>
       <p style="margin-top:.75rem">
         📞 +91-98272 84804 · 98260 11116 · 95844 68804<br>
         📧 <a href="mailto:nidaanhelp@gmail.com">nidaanhelp@gmail.com</a><br>
@@ -1499,6 +1499,20 @@ else _initScrollNav();
 </div>
 
 <script src="/static/nidaan_ui.js?v=2"></script>
+<script>
+// Canonical content injection — fills [data-nc] spans from the single-source config so a fact
+// edited in ops (Content) updates the homepage + chat together. Silent no-op if unavailable.
+(async function(){
+  try{
+    var r = await fetch('/nidaan/api/content'); if(!r.ok) return;
+    var c = (await r.json()).content || {};
+    document.querySelectorAll('[data-nc]').forEach(function(el){
+      var k = el.getAttribute('data-nc'), lg = el.getAttribute('data-lang') || 'en';
+      if(c[k] && c[k][lg]) el.textContent = c[k][lg];
+    });
+  }catch(e){}
+})();
+</script>
 <script src="/static/nidaan_support_widget.js?v=5" defer></script>
 </body>
 </html>
