@@ -4669,11 +4669,13 @@ note-render surface — the datetime import bug):
     `set_claim_assignees` (primary=first, records all), `get_claim_assignees` (primary+extras),
     `is_claim_assignee` (primary OR extra). `assigned_to_staff_id` stays PRIMARY → zero behaviour
     change; nothing calls set_ yet. Verified: claims still load, set→revert clean.
-  - **PART 2 NEXT (sensitive — do carefully):** wire the assign endpoint to accept `staff_ids` (keep
-    `staff_id` back-compat) → set_claim_assignees; notify all; update the 4 claim access sites
-    ADDITIVELY (grant-only): view (sarathi_biz ~4247), 2 action checks (~4336/4455), list scope
-    (~4217 + get_claims_ops) with `OR is_claim_assignee / OR EXISTS(claim_assignees)`; return
-    assignees in the claim detail; multi-select UI. Test each live path before deploy.
+  - **PART 2 SHIPPED + verified (Jul 27):** assign endpoint accepts `staff_ids` (keeps `staff_id`
+    back-compat) → set_claim_assignees; emails all assignees. 4 access sites updated GRANT-ONLY
+    (view + status-update + deliver-review use `is_claim_assignee`; list scope [pipeline counter +
+    get_claims_ops] add `OR EXISTS(nidaan_claim_assignees)`). Claim detail returns `assignees`;
+    checkbox multi-select UI (current assignees pre-checked). Verified LIVE: secondary assignee
+    views claim (200), non-assignee blocked (403), claims list loads for all, assignees in detail
+    [8,9], drawer 200 — clean revert. **g.4b DONE.**
 - **g.4c Claim-note collaboration (the big one):** bring quick-tasks features to claim notes —
   attachments (multi, ≤10/10MB, +delete-within-1h/admin, §53 policy), @mention → participants +
   notifications, reply threads, read receipts, mute. Reuse the quick-task infra patterns.
