@@ -4585,11 +4585,15 @@ complexity-based" (stat card → "48–72 hrs / Review Turnaround"). Verified li
   coverage, mark more homepage spots with `data-nc="<key>"`.
 
 **CHAT ENGINE:**
-- **S6 Chat intent + language switcher:** widget currently has NO way to change language after the
-  first pick, and the AI didn't understand "in english" (returned a canned welcome). Add a
-  persistent language control in the widget header; make the AI detect intent (language-change,
-  "need other help") and respond human-like ("Aap language change karna chahte hain? yahan click
-  karein" + offer the switch). Bilingual, context-aware.
+- **S6 Chat intent + language switcher — SHIPPED + verified (Jul 27):** always-available 🌐 switcher
+  in the widget header (English/हिंदी/Hinglish); client detects a language request in a message
+  ("in english", "hindi me", "change language", "hinglish") and switches + confirms warmly with NO
+  AI round-trip (fixes the canned-welcome bug); AI backstop rule points to the 🌐 button. Widget v6.
+
+**CONTENT CLEANUP EXTENSION (Jul 27, owner "change those too"):** cleaned the `_sample` WIP
+(retired words → competent authority / complexity-based) + added it to the guard. privacy.html &
+terms.html LEFT UNTOUCHED — they're **Sarathi-AI's** legal docs where DPDP-compliance citation is
+correct/required (owner flagged; recommend keeping — removing weakens compliance).
 
 **OPS / DATA-FLOW TRACK:**
 - **1C-e Accounts:** add a **Branch Code** column (subscriber signup captures it) so each account
