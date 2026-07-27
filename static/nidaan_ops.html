@@ -1360,7 +1360,7 @@ async function loadEscalationsWidget(){
         <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin:.2rem 0 .4rem;text-transform:uppercase;letter-spacing:.05em">Awaiting dual approval</div>
         ${pendingRows}` : ''}
       ${inEsc.length ? `
-        <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin:.7rem 0 .4rem;text-transform:uppercase;letter-spacing:.05em">In ombudsman / escalation stages</div>
+        <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin:.7rem 0 .4rem;text-transform:uppercase;letter-spacing:.05em">In competent-authority / escalation stages</div>
         ${escRows}` : ''}
       ${!total ? '<div style="padding:1rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No active escalations ✓</div>' : ''}
     </div>`;
@@ -5242,7 +5242,7 @@ const STAGES = [
   {key:'intake',       label:'1. Intake',        color:'#fbbf24'},
   {key:'preparation',  label:'2. Preparation',   color:'#c4b5fd'},
   {key:'engagement',   label:'3. Engagement',    color:'#22d3ee'},
-  {key:'ombudsman',    label:'4. Ombudsman',     color:'#fb923c'},
+  {key:'ombudsman',    label:'4. Competent Authority', color:'#fb923c'},
   {key:'escalation',   label:'5. Escalation',    color:'#f87171'},
   {key:'closed',       label:'6. Closed',        color:'#86efac'},
 ];
@@ -5601,7 +5601,7 @@ async function openCreateTaskModalForClaim(claimId){
     <div style="font-weight:700;font-size:.92rem;margin-bottom:.65rem">+ New Task on Claim #${fmtClaimNum(claimId)}${claim.insured_name?` — ${esc(claim.insured_name)}`:''}</div>
 
     <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin-bottom:.2rem">Title *</label>
-    <input id="ntTitle_${claimId}" placeholder="e.g. Draft ombudsman complaint"
+    <input id="ntTitle_${claimId}" placeholder="e.g. Draft competent-authority complaint"
            style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.55rem .75rem;border-radius:6px;font-size:.88rem;margin-bottom:.7rem">
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.7rem">

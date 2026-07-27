@@ -4532,10 +4532,12 @@ legal process flow live. Need a secure integration (API or equivalent) that: (a)
 accepted claim from L1 → L2, and (b) pulls **customer-facing status updates** from L2 back so the
 customer sees them on their nidaanpartner.com **dashboard** and can ask about status via **chat
 support**. This extends the earlier L1↔L2 sync idea (see memory `project_nidaan_legal_api`).
-Scope/portal URL + auth model to be confirmed before building. Depends on the L2 portal existing.
-Open questions to owner: (1) does L2 exist + URL = Nidaanlegalindia.com? (2) is L2 ours or a
-third-party? (3) can L2 expose an API + call our webhook, or do we poll? (4) customer-facing status
-stages to show.
+**Owner answers (Jul 27):** L2 portal = **https://claimshield.in/** (NOT Nidaanlegalindia.com).
+It is **built + ours**, but a **separate portal / different architecture**; for anything we
+strictly need, we'll ask the L2 team to add it, and handle the rest on our side. **We POLL
+everything** (no inbound webhook from L2). Customer-facing status **stages come from the L2 portal
++ its comments** (mirror what L2 exposes). → Integration = push an accepted claim L1→L2, then poll
+claimshield.in for status + customer-safe comments and surface them on the L1 dashboard + chat.
 
 ## 51. CONTENT CONSISTENCY — ANTI-DRIFT (owner: "Both — guard now + config next")
 
@@ -4561,6 +4563,46 @@ so a change gets missed somewhere. Decision: **guard now + editable config next.
 Cosmetic content update (Jul 27) SHIPPED: homepage/about/KB now say "competent authority",
 jurisdictions = MP · Chhattisgarh · Maharashtra · Rajasthan · Punjab, and resolution = "early /
 complexity-based" (stat card → "48–72 hrs / Review Turnaround"). Verified live.
+
+## 52. SEGREGATED BACKLOG (owner brain-dump Jul 27 — organized into phases)
+
+**CONTENT TRACK (building now):**
+- **2a Content cleanup (CONFIRMED, in progress):** owner: remove the words IRDA/IRDAI, DPDP, Lokpal,
+  Ombudsman EVERYWHERE in customer-facing + functional UI → use "govt competent authority" /
+  "competent authority". REMOVE the footer line "Insurance is the subject matter of solicitation.
+  IRDAI Reg. applicable." Switch FUNCTIONAL labels too (dashboard claim-status tracker, ops workflow
+  stages) — change display text, keep internal code keys. Expand `content_guard` banned list
+  (irdai/irda/dpdp/lokpal). FLAG: privacy.html/terms.html cite DPDP for legal compliance — separate
+  decision before touching legal docs.
+- **2b Content config (single source):** migrate the ~10 canonical facts to a super-admin-editable
+  content store; chat KB + homepage read from it. (Anti-drift phase 2, owner-requested next.)
+
+**CHAT ENGINE:**
+- **S6 Chat intent + language switcher:** widget currently has NO way to change language after the
+  first pick, and the AI didn't understand "in english" (returned a canned welcome). Add a
+  persistent language control in the widget header; make the AI detect intent (language-change,
+  "need other help") and respond human-like ("Aap language change karna chahte hain? yahan click
+  karein" + offer the switch). Bilingual, context-aware.
+
+**OPS / DATA-FLOW TRACK:**
+- **1C-e Accounts:** add a **Branch Code** column (subscriber signup captures it) so each account
+  shows which branch it came from.
+- **1C-f All-Claims:** show **account + branch + other captured details** per claim; if feasible,
+  a cleaner integrated Accounts+Claims view (only if it doesn't hamper existing function).
+- **1C-g Claims workflow (subscription claims):** intimated → **assign to staff** (switch:
+  auto/manual) → flow starts. Customer-facing comments + internal comments + tagging + notifications
+  + **go/no-go templates** (can-fight / cannot-fight, predefined) + routing. End-to-end defined flow
+  through the go/no-go decision and the handoff to L2 (claimshield.in). Similar to the office-task
+  system but claim-specific with predefined options. Build without hampering existing functions.
+- **1C-h Superadmin Branch Dashboard:** a dedicated dashboard inside the ops Branches section showing
+  everything from branches — account subscriptions, branch-filed claims, walk-in customers the
+  branch initiated, etc. (Complements the branch-facing portal already shipped.)
+
+**L2 INTEGRATION (answers in — see §50):** poll-based sync with claimshield.in; push accepted
+claims, poll status/comments → dashboard + chat.
+
+Sequencing: content 2a → 2b, then S6 (chat intent), then ops 1C-e/f, then 1C-g (claims workflow,
+the big one) + 1C-h (branch dashboard), then L2. Owner said: start with content-config phase 2.
 
 ---
 

@@ -27,27 +27,47 @@ SCAN = [
     "biz_ai.py",                    # chat KB (_NIDAAN_SUPPORT_KB)
     "static/nidaan_index.html",     # live homepage
     "static/nidaan_about.html",     # About page
+    "static/nidaan_start.html",     # signup + claim-submit page (customer-facing)
 ]
 
-# (pattern, human reason). Case-insensitive. Keep tight — only truly-retired phrases.
+# (pattern, human reason). Case-insensitive. Owner rule (Jul 27): the words IRDA/IRDAI, DPDP,
+# Lokpal, Ombudsman must NOT appear in customer-facing content → use "(govt) competent authority" /
+# "applicable data-protection law". Keep tight to avoid false positives.
 BANNED = [
     (r"ombudsman",              'retired — use "competent authority"'),
     (r"लोकपाल",                  'retired — use "सक्षम प्राधिकरण"'),
-    (r"IRDAI\s*[/&]?\s*ombudsman", 'retired — use "competent authority"'),
+    (r"\bIRDAI?\b",             'retired — do not name the regulator; use "competent authority"'),
+    (r"\bDPDP\b",               'retired — use "applicable data-protection law"'),
+    (r"\bLokpal\b",             'retired — use "competent authority"'),
     (r"5\s*[-–]\s*6\s*(months|mo|माह|महीने|महीना)", 'retired — resolution is complexity-based, no fixed timeline'),
     (r"average\s+resolution",   'retired — no average-resolution claim (complexity-based)'),
     (r"avg\.?\s*resolution",    'retired — no average-resolution claim'),
     (r"औसत\s*समाधान",           'retired — no average-resolution claim'),
 ]
 
-# Substrings that are explicitly ALLOWED even if they'd otherwise match (e.g. the regulatory
-# solicitation disclaimer keeps the word "IRDAI" — that's not the retired marketing usage).
-ALLOW_LINE_CONTAINS = [
-    "IRDAI Reg. applicable",
-    "IRDAI पंजीकरण लागू",
-]
+# Lines containing any of these are skipped (none needed now — the solicitation line was removed).
+ALLOW_LINE_CONTAINS: list[str] = []
 
 _compiled = [(re.compile(p, re.IGNORECASE), why) for p, why in BANNED]
+
+
+def _scan_lines(rel: str, text: str):
+    """Return [(lineno, line)] to check. For biz_ai.py we scan ONLY the Nidaan customer-facing
+    knowledge base constant (_NIDAAN_SUPPORT_KB) — the rest of that file (e.g. the Sarathi
+    insurance-advisor AI) legitimately references regulators and is out of scope."""
+    lines = text.splitlines()
+    if rel.replace("\\", "/").endswith("biz_ai.py"):
+        out, capture = [], False
+        for i, ln in enumerate(lines, 1):
+            if not capture:
+                if "_NIDAAN_SUPPORT_KB" in ln and '"""' in ln:
+                    capture = True
+                continue
+            if '"""' in ln:
+                break
+            out.append((i, ln))
+        return out
+    return list(enumerate(lines, 1))
 
 
 def main() -> int:
@@ -56,7 +76,7 @@ def main() -> int:
         fp = ROOT / rel
         if not fp.exists():
             continue
-        for i, line in enumerate(fp.read_text(encoding="utf-8").splitlines(), 1):
+        for i, line in _scan_lines(rel, fp.read_text(encoding="utf-8")):
             if any(a in line for a in ALLOW_LINE_CONTAINS):
                 continue
             for rx, why in _compiled:
