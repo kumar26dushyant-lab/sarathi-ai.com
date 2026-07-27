@@ -4567,13 +4567,14 @@ complexity-based" (stat card → "48–72 hrs / Review Turnaround"). Verified li
 ## 52. SEGREGATED BACKLOG (owner brain-dump Jul 27 — organized into phases)
 
 **CONTENT TRACK (building now):**
-- **2a Content cleanup (CONFIRMED, in progress):** owner: remove the words IRDA/IRDAI, DPDP, Lokpal,
-  Ombudsman EVERYWHERE in customer-facing + functional UI → use "govt competent authority" /
-  "competent authority". REMOVE the footer line "Insurance is the subject matter of solicitation.
-  IRDAI Reg. applicable." Switch FUNCTIONAL labels too (dashboard claim-status tracker, ops workflow
-  stages) — change display text, keep internal code keys. Expand `content_guard` banned list
-  (irdai/irda/dpdp/lokpal). FLAG: privacy.html/terms.html cite DPDP for legal compliance — separate
-  decision before touching legal docs.
+- **2a Content cleanup — SHIPPED + verified (Jul 27):** removed IRDA/IRDAI, DPDP, Lokpal, Ombudsman
+  from LIVE customer-facing + functional surfaces → "competent authority" / "applicable
+  data-protection law". Homepage footer solicitation line removed; dashboard claim-status label +
+  ops workflow label switched (display text, internal keys kept); signup/claim DPDP badges reworded.
+  Guard expanded (bans IRDA/IRDAI/DPDP/Lokpal/Ombudsman + resolution phrases; scans index/about/start
+  + the Nidaan KB block only — Sarathi insurance-AI's legit IRDAI ref not flagged). Deploy is gated
+  on the guard. STILL OPEN: `nidaan_index_sample.html` (WIP /preview — clean at promotion) and
+  privacy.html/terms.html DPDP references (legal-compliance — separate owner decision).
 - **2b Content config (single source):** migrate the ~10 canonical facts to a super-admin-editable
   content store; chat KB + homepage read from it. (Anti-drift phase 2, owner-requested next.)
 
