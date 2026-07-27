@@ -4575,8 +4575,14 @@ complexity-based" (stat card → "48–72 hrs / Review Turnaround"). Verified li
   + the Nidaan KB block only — Sarathi insurance-AI's legit IRDAI ref not flagged). Deploy is gated
   on the guard. STILL OPEN: `nidaan_index_sample.html` (WIP /preview — clean at promotion) and
   privacy.html/terms.html DPDP references (legal-compliance — separate owner decision).
-- **2b Content config (single source):** migrate the ~10 canonical facts to a super-admin-editable
-  content store; chat KB + homepage read from it. (Anti-drift phase 2, owner-requested next.)
+- **2b Content config — SHIPPED + verified (Jul 27):** `nidaan_content` table + helpers (seed at
+  startup; get/update/all/public_content, 30s TTL cache so edits propagate across the 2 web
+  workers). 8 core facts: jurisdictions, support_hours, review_turnaround, success_fee,
+  resolution_stance, refund_window, audience, go_no_go. Chat KB appends an AUTHORITATIVE FACTS block
+  from the config (overrides prose). Ops **📝 Content** panel (super-admin edits EN/HI). Public
+  `GET /nidaan/api/content`; homepage `[data-nc]` spans (jurisdictions) inject from it. Verified
+  change-once: edit jurisdictions → public API + chat facts block both reflect it. To extend
+  coverage, mark more homepage spots with `data-nc="<key>"`.
 
 **CHAT ENGINE:**
 - **S6 Chat intent + language switcher:** widget currently has NO way to change language after the
