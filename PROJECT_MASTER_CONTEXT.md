@@ -4615,6 +4615,21 @@ claims, poll status/comments → dashboard + chat.
 Sequencing: content 2a → 2b, then S6 (chat intent), then ops 1C-e/f, then 1C-g (claims workflow,
 the big one) + 1C-h (branch dashboard), then L2. Owner said: start with content-config phase 2.
 
+## 53. TASK ATTACHMENTS — policy + delete (accommodated Jul 27, live case task #462)
+
+Multi-file attach on task comments ALREADY worked end-to-end (UI `multiple`, sends `files[]`,
+endpoint accepts a list). **Policy: ≤10 files per comment, 10 MB each.** The likely blocker in the
+live case was **iPhone .heic** being outside the `accept` filter. SHIPPED:
+- Broadened accepted formats (both create + comment inputs): pdf, jpg/jpeg, png, webp, **heic/heif**,
+  doc/docx, xls/xlsx, **txt, csv**.
+- **Attachment delete:** the UPLOADER can remove their own attachment within **1 hour**
+  (`ATTACHMENT_DELETE_WINDOW_SEC=3600`); after that only an **admin (super/sub-super)** can.
+  `delete_note_attachment()` + `DELETE /ops/api/quick-tasks/{qid}/attachments/{id}` (removes DB row +
+  disk file + clears legacy note columns; audited). Drawer returns `attachment_id` + a per-attachment
+  `deletable` flag; UI shows a × on removable attachments. Verified (route gated, logic sound).
+Note: this delete-window pattern applies to task-comment attachments; the same policy can be
+extended to other attachment surfaces (claim docs, review docs) if the owner wants it there too.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
