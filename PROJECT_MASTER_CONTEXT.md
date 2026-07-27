@@ -4609,8 +4609,20 @@ correct/required (owner flagged; recommend keeping — removing weakens complian
     claim (not an unpaid lead) auto-assigns to the **least-loaded handler** (fewest OPEN claims;
     stable ties), fire-and-forget, and the handler gets the same assignment email as a manual assign.
     Pool = active associates + sub-admins (fallback any active staff). Owner chose least-loaded.
-  - **g.2 NEXT:** super-admin-editable go/no-go templates (can-fight / cannot-fight customer-facing
-    findings text) used at review delivery. **g.3:** on can_fight → hand off to L2 (claimshield.in).
+  - **g.2 SHIPPED + verified (Jul 27):** `nidaan_review_templates` (outcome can_fight|no_scope,
+    title, body, active; seeded 1 default each). Deliver-review form: choosing an outcome loads its
+    templates into a picker → prefills the customer-facing findings (staff personalise). Ops 📝
+    Content panel manages them (edit/add/deactivate/delete). Endpoints GET (staff) + CRUD (super_admin).
+    Verified seed + CRUD round-trip.
+  - **g.3 (BLOCKED on L2 API contract):** on a can_fight decision → push the claim to L2
+    (claimshield.in). Needs the claimshield.in API details (push endpoint + status/comments poll +
+    auth). Owner said "we poll everything" and will ask the L2 team for anything needed. Until the
+    API contract is known, g.3 + the L2 integration (§50) are on hold.
+
+REGRESSION FIXED (Jul 27): the attachment-delete change used `datetime` in the quick-task drawer GET
+without a local import (sarathi_biz imports datetime per-function) → 500 "Failed to load quick task".
+Added a local import; verified task #467 drawer loads (200). Lesson: sarathi_biz.py has NO module-level
+`datetime` import — always `from datetime import datetime` locally.
 - **(orig) 1C-g Claims workflow (subscription claims):** intimated → **assign to staff** (switch:
   auto/manual) → flow starts. Customer-facing comments + internal comments + tagging + notifications
   + **go/no-go templates** (can-fight / cannot-fight, predefined) + routing. End-to-end defined flow
