@@ -3256,12 +3256,9 @@ async function openClaimDrawer(claimId) {
     </div>`:''}
     ${canAssign?`<div class="drawer-section">
       <h4>Assign To Staff</h4>
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-        <select id="assignSel_${c.claim_id}" class="form-input" style="flex:1;min-width:160px">
-          <option value="">Loading staff…</option>
-        </select>
-        <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
-      </div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Select one or more. The first selected is the primary handler; all assignees can work the claim &amp; are notified.</div>
+      <div id="assignBox_${c.claim_id}" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem;margin-bottom:.5rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.5rem"><span style="color:rgba(255,255,255,.4);font-size:.8rem">Loading staff…</span></div>
+      <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
     <!-- Notes -->
@@ -3303,14 +3300,17 @@ async function openClaimDrawer(claimId) {
       </div>
     </div>`;
 
-  // Load staff for assign dropdown
+  // Load staff into the multi-select assign box (current assignees pre-checked)
   if (canAssign) {
     const sr = await API('/staff');
     if (sr.ok) {
       const sd = await sr.json();
-      const sel = document.getElementById('assignSel_'+c.claim_id);
-      if (sel) sel.innerHTML = '<option value="">— Select staff —</option>' +
-        sd.staff.map(s=>`<option value="${s.staff_id}" ${c.assigned_to_staff_id===s.staff_id?'selected':''}>${esc(s.name)} (${s.role.replace(/_/g,' ')})</option>`).join('');
+      const box = document.getElementById('assignBox_'+c.claim_id);
+      const assigned = new Set((c.assignees||[]).map(a=>a.staff_id));
+      if (!assigned.size && c.assigned_to_staff_id) assigned.add(c.assigned_to_staff_id);
+      if (box) box.innerHTML = (sd.staff||[]).filter(s=>!s.deleted_at).map(s=>
+        `<label style="display:flex;align-items:center;gap:.45rem;font-size:.85rem;cursor:pointer;padding:.15rem 0"><input type="checkbox" class="assignChk_${c.claim_id}" value="${s.staff_id}" ${assigned.has(s.staff_id)?'checked':''}> ${esc(s.name)} <span style="font-size:.7rem;color:rgba(255,255,255,.4)">(${(s.role||'').replace(/_/g,' ')})</span></label>`).join('')
+        || '<span style="color:rgba(255,255,255,.4);font-size:.8rem">No staff found</span>';
     }
   }
 
@@ -3390,15 +3390,16 @@ async function deliverReview(claimId) {
 }
 
 async function assignClaim(claimId) {
-  const sel = document.getElementById('assignSel_'+claimId);
+  const staff_ids = Array.from(document.querySelectorAll('.assignChk_'+claimId+':checked')).map(b=>parseInt(b.value));
   const msgEl = document.getElementById('assignMsg_'+claimId);
-  if (!sel.value) { msgEl.className='msg err'; msgEl.textContent='Select a staff member'; return; }
+  if (!staff_ids.length) { msgEl.className='msg err'; msgEl.textContent='Select at least one staff member'; return; }
+  msgEl.className='msg'; msgEl.textContent='Assigning…';
   const r = await API('/claims/'+claimId+'/assign', {
-    method:'POST', body: JSON.stringify({staff_id: parseInt(sel.value)})
+    method:'POST', body: JSON.stringify({staff_ids})
   });
   const d = await r.json().catch(()=>({}));
   if (r.ok) {
-    msgEl.className='msg ok'; msgEl.textContent='Assigned ✓';
+    msgEl.className='msg ok'; msgEl.textContent='Assigned to '+staff_ids.length+' staff ✓';
     setTimeout(()=>openClaimDrawer(claimId),1000);
   } else {
     msgEl.className='msg err'; msgEl.textContent=_extractErr(d,'Failed');
