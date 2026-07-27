@@ -938,10 +938,10 @@
           <label class="doc-upload-btn" for="claimDocs" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.45);border-radius:6px;cursor:pointer;font-size:.9rem;color:#93c5fd;font-weight:700">
             📂 <span class="en">Select Files to Attach</span><span class="hi">फ़ाइलें चुनें</span>
           </label>
-          <input type="file" id="claimDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="showClaimDocList()">
+          <input type="file" id="claimDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="showClaimDocList()">
           <p style="text-align:center;color:#93c5fd;opacity:.75;font-size:.78rem;margin:.4rem 0 .15rem;font-weight:600">💡 <span class="en">You can select multiple files at once from the file picker</span><span class="hi">आप एक साथ कई फ़ाइलें चुन सकते हैं</span></p>
           <div id="claimDocList" style="margin-top:.5rem;font-size:.82rem"></div>
-          <p style="opacity:.45;font-size:.73rem;margin:.4rem 0 0;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>
+          <p style="opacity:.45;font-size:.73rem;margin:.4rem 0 0;text-align:center">PDF · JPG · PNG · WebP · DOC/DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files<br>iPhone: if a HEIC photo is rejected, share it as “JPG”.</p>
         </div>
       </div>
       <div class="field">
@@ -1176,12 +1176,12 @@ async function loadDashboard() {
           <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:.5rem">📎 SUPPORTING DOCUMENTS</div>
           <div id="rvDocList_${p.purchase_id}" style="font-size:.82rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">Loading…</div>
           <label for="rvDocInput_${p.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.13);border:2px dashed rgba(59,130,246,.35);border-radius:6px;cursor:pointer;font-size:.82rem;color:#93c5fd;font-weight:700">📂 Select Files to Attach</label>
-          <input type="file" id="rvDocInput_${p.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewRvDocs(${p.purchase_id})">
+          <input type="file" id="rvDocInput_${p.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewRvDocs(${p.purchase_id})">
           <p style="text-align:center;color:#93c5fd;opacity:.6;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 You can select multiple files at once</p>
           <div id="rvDocPreview_${p.purchase_id}" style="margin-top:.35rem;font-size:.78rem"></div>
           <button id="rvDocUploadBtn_${p.purchase_id}" onclick="uploadRvDocs(${p.purchase_id},'review')" style="display:none;margin-top:.35rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
           <div id="rvDocMsg_${p.purchase_id}" style="font-size:.78rem;margin-top:.3rem"></div>
-          <p style="opacity:.3;font-size:.7rem;margin:.35rem 0 0;text-align:center">PDF / JPG / PNG / DOCX · uploaded docs sent to our legal team</p>
+          <p style="opacity:.3;font-size:.7rem;margin:.35rem 0 0;text-align:center">PDF · JPG · PNG · WebP · DOC/DOCX · up to 10 MB each · uploaded docs sent to our legal team<br>iPhone: share photos as “JPG” if a HEIC file is rejected.</p>
         </div>`;
       banner.insertAdjacentElement('afterend', claimInfoCard);
       // load existing docs for pending review
@@ -1237,7 +1237,7 @@ async function loadDashboard() {
             <div style="font-size:.72rem;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:.35rem">📎 DOCUMENTS</div>
             <div id="rvDocList_${h.purchase_id}" style="font-size:.8rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Loading…</div>
             <label for="rvDocInput_${h.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.4rem .75rem;background:rgba(59,130,246,.12);border:2px dashed rgba(59,130,246,.32);border-radius:5px;cursor:pointer;font-size:.78rem;color:#93c5fd;font-weight:700">📂 Select Files (multiple allowed)</label>
-            <input type="file" id="rvDocInput_${h.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewRvDocs(${h.purchase_id})">
+            <input type="file" id="rvDocInput_${h.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewRvDocs(${h.purchase_id})">
             <div id="rvDocPreview_${h.purchase_id}" style="margin-top:.3rem;font-size:.76rem"></div>
             <button id="rvDocUploadBtn_${h.purchase_id}" onclick="uploadRvDocs(${h.purchase_id},'review')" style="display:none;margin-top:.3rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:5px;padding:.35rem .75rem;font-size:.78rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
             <div id="rvDocMsg_${h.purchase_id}" style="font-size:.76rem;margin-top:.25rem"></div>
@@ -1612,7 +1612,7 @@ async function openClaimDrawer(claim_id) {
       <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:rgba(255,255,255,.5)">Loading documents…</div>
       <div style="background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
         <label for="drawerDocInput" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);border-radius:6px;cursor:pointer;font-size:.85rem;color:#93c5fd;font-weight:700">📂 ${isHi ? 'दस्तावेज़ चुनें' : 'Select Files to Upload'}</label>
-        <input type="file" id="drawerDocInput" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="previewDrawerDocs()">
+        <input type="file" id="drawerDocInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewDrawerDocs()">
         <p style="text-align:center;color:#93c5fd;opacity:.7;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 ${isHi ? 'एक साथ कई फ़ाइलें चुनें' : 'You can select multiple files at once from the file picker'}</p>
         <div id="drawerDocPreview" style="margin-top:.4rem;font-size:.8rem"></div>
         <p style="opacity:.35;font-size:.72rem;margin:.4rem 0 .5rem;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>

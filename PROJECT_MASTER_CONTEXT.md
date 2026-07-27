@@ -4653,6 +4653,28 @@ live case was **iPhone .heic** being outside the `accept` filter. SHIPPED:
 Note: this delete-window pattern applies to task-comment attachments; the same policy can be
 extended to other attachment surfaces (claim docs, review docs) if the owner wants it there too.
 
+## 54. CLAIM TASK PANEL OVERHAUL → parity with quick-tasks (owner Jul 27)
+
+Owner: the ops claim drawer is unstructured/messy vs the quick-tasks panel. Bring the best
+quick-tasks collaboration features to claims + better routing. Current claim drawer = stacked
+sections; claim internal notes are BASIC (no attachments, no delete, no @mention); assignment is
+SINGLE-select; no read receipts/threads/watchers. Quick-tasks has all of that. This is a
+multi-increment build (1C-g.4); sequence chosen for safety (a regression already hit this exact
+note-render surface — the datetime import bug):
+- **g.4a Attachment helper notes (SAFE, first):** show "Max 10 MB · PDF/JPG/PNG/HEIC/DOC/XLS…" near
+  every attachment upload (ops task create + task comment + customer dashboard claim-doc upload +
+  internal claim panel). Low-risk, explicitly requested.
+- **g.4b Multi-select assignment:** super-admin/admin assign a claim to MULTIPLE staff. Needs a
+  `nidaan_claim_assignees` table (keep `assigned_to_staff_id` as PRIMARY for back-compat) + an
+  `is_claim_assignee()` helper so the access checks (deliver-review, team-member claim view) honour
+  secondary assignees too. Notify all. Multi-select UI.
+- **g.4c Claim-note collaboration (the big one):** bring quick-tasks features to claim notes —
+  attachments (multi, ≤10/10MB, +delete-within-1h/admin, §53 policy), @mention → participants +
+  notifications, reply threads, read receipts, mute. Reuse the quick-task infra patterns.
+- **g.4d UI restructure + routing:** reorganise the claim drawer into a clean, structured layout
+  (status/assignees/timeline/notes/attachments), matching the quick-tasks panel's polish.
+Owner said: keep g.3/L2 pending (blocked on claimshield.in API); build this as the next step.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*

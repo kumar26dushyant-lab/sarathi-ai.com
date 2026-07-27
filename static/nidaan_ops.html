@@ -1606,6 +1606,7 @@ async function openQuickTaskModal(presetClaimId){
       <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" onchange="_qtCreateFilePicked()">
       <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
               style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0;margin-bottom:.4rem">📎 Attach file(s)</button>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-bottom:.4rem">Up to 10 files · 10 MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV.</div>
       <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-bottom:.6rem"></div>
 
       ${(_role==='super_admin'||_role==='sub_super_admin') ? `
@@ -2195,7 +2196,7 @@ async function openQuickTaskDrawer(qid){
             <button class="btn-sm" title="Attach file(s)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
-          <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task — they'll be notified and can work on it.</div>
+          <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task. 📎 Up to 10 files · 10 MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV. You can remove your own attachment within 1 hour.</div>
           <div id="qtNoteFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-top:.3rem"></div>` : ''}
       </div>
     </div>`;
