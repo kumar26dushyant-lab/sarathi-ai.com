@@ -5212,8 +5212,9 @@ async def ops_quick_task_get(qid: int, request: Request):
     await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
     _atts = await nidaan.list_note_attachments(qid)
+    from datetime import datetime as _dtm
     _is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
-    _now = datetime.utcnow()
+    _now = _dtm.utcnow()
     for _n in notes:
         if _n.get("attachment_stored_name"):
             _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
@@ -5229,7 +5230,7 @@ async def ops_quick_task_get(qid: int, request: Request):
             if a.get("uploaded_by") != staff["staff_id"]:
                 return False
             try:
-                up = datetime.fromisoformat(str(a.get("uploaded_at")).replace(" ", "T"))
+                up = _dtm.fromisoformat(str(a.get("uploaded_at")).replace(" ", "T"))
                 return (_now - up).total_seconds() <= nidaan.ATTACHMENT_DELETE_WINDOW_SEC
             except Exception:
                 return False
