@@ -4533,6 +4533,34 @@ accepted claim from L1 → L2, and (b) pulls **customer-facing status updates** 
 customer sees them on their nidaanpartner.com **dashboard** and can ask about status via **chat
 support**. This extends the earlier L1↔L2 sync idea (see memory `project_nidaan_legal_api`).
 Scope/portal URL + auth model to be confirmed before building. Depends on the L2 portal existing.
+Open questions to owner: (1) does L2 exist + URL = Nidaanlegalindia.com? (2) is L2 ours or a
+third-party? (3) can L2 expose an API + call our webhook, or do we poll? (4) customer-facing status
+stages to show.
+
+## 51. CONTENT CONSISTENCY — ANTI-DRIFT (owner: "Both — guard now + config next")
+
+Problem (owner-raised): a business fact lives in many places (homepage EN+HI, About, FAQ, chat KB)
+so a change gets missed somewhere. Decision: **guard now + editable config next.**
+- **Guard SHIPPED (Jul 27):** `_tools/content_guard.py` scans the LIVE marketing + chat surfaces
+  (`nidaan_index.html`, `nidaan_about.html`, `biz_ai.py` KB) for RETIRED phrases (Ombudsman/लोकपाल,
+  "IRDAI+Ombudsman", "5–6 months", "average/avg resolution", "औसत समाधान") and fails the build if
+  any reappears. Wired into `.github/workflows/deploy.yml` as a **gating `content-guard` job**
+  (deploy `needs: content-guard`). Extend by adding a (regex, reason) row to BANNED. Allowlist keeps
+  the "IRDAI Reg. applicable" solicitation line.
+- **Scope note:** `nidaan_ops.html` + `nidaan_dashboard.html` use "Ombudsman" as a FUNCTIONAL
+  claim-status / workflow-stage label (a real filing forum) and `nidaan_index_sample.html` is a WIP
+  preview — all intentionally OUT of the guard's scope for now.
+- **NEXT (config):** migrate the ~10 canonical facts (jurisdictions, hours, fees, success-fee terms,
+  resolution stance, track-record numbers) into a super-admin-editable content store (like Plans);
+  the chat KB + those specific homepage spots read from it → change once, everywhere.
+- **Open owner decisions:** (a) keep/remove the footer compliance line "Insurance is the subject
+  matter of solicitation. IRDAI Reg. applicable."? (b) should FUNCTIONAL "Ombudsman" labels
+  (dashboard status tracker, ops workflow stages) also switch to "competent authority", or stay as
+  the specific forum name?
+
+Cosmetic content update (Jul 27) SHIPPED: homepage/about/KB now say "competent authority",
+jurisdictions = MP · Chhattisgarh · Maharashtra · Rajasthan · Punjab, and resolution = "early /
+complexity-based" (stat card → "48–72 hrs / Review Turnaround"). Verified live.
 
 ---
 

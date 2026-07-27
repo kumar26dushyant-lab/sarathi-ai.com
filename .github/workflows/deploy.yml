@@ -5,7 +5,19 @@ on:
     branches: [master]
 
 jobs:
+  content-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Content consistency guard (retired-phrase check)
+        run: python _tools/content_guard.py
+
   deploy:
+    needs: content-guard          # deploy only if content is consistent
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
