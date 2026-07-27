@@ -28,6 +28,7 @@ SCAN = [
     "static/nidaan_index.html",     # live homepage
     "static/nidaan_about.html",     # About page
     "static/nidaan_start.html",     # signup + claim-submit page (customer-facing)
+    "static/nidaan_index_sample.html",  # WIP /preview redesign (kept clean for when it goes live)
 ]
 
 # (pattern, human reason). Case-insensitive. Owner rule (Jul 27): the words IRDA/IRDAI, DPDP,
