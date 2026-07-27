@@ -1385,6 +1385,18 @@ async def init_db():
                 value_hi    TEXT DEFAULT '',
                 updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- Go/no-go review templates: predefined customer-facing findings text that staff
+            -- pick (and can edit) when delivering a legal assessment. outcome = can_fight | no_scope.
+            CREATE TABLE IF NOT EXISTS nidaan_review_templates (
+                template_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                outcome     TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                body        TEXT NOT NULL,
+                active      INTEGER DEFAULT 1,
+                sort_order  INTEGER DEFAULT 0,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
 
         # ── nidaan_audit_log: control-center activity trail. Every sensitive ops

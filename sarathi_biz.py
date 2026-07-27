@@ -175,6 +175,11 @@ async def _install_bg_exception_handler():
         await nidaan.seed_content_config()
     except Exception as _ce:
         logger.warning("nidaan content-config seed failed: %s", _ce)
+    # Seed go/no-go review templates (idempotent).
+    try:
+        await nidaan.seed_review_templates()
+    except Exception as _rte:
+        logger.warning("nidaan review-templates seed failed: %s", _rte)
 
 # ── Rate Limiting ────────────────────────────────────────────────────────────
 # IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
@@ -4364,6 +4369,70 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
     except Exception:
         pass
     return {"claim_id": claim_id, "status": body.new_status}
+
+
+# ── Go/no-go review templates (staff pick at delivery; super-admin manages) ───
+@app.get("/nidaan/ops/api/review-templates")
+async def ops_review_templates_list(request: Request, outcome: Optional[str] = None,
+                                     include_inactive: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"templates": await nidaan.list_review_templates(
+        outcome=outcome, active_only=not include_inactive)}
+
+
+class OpsReviewTemplateCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str = Field(..., pattern=r"^(can_fight|no_scope)$")
+    title: str = Field(..., min_length=1, max_length=120)
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/review-templates")
+async def ops_review_template_create(body: OpsReviewTemplateCreate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        tid = await nidaan.create_review_template(body.outcome, body.title, body.body)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "review_template.create", "review_template", str(tid), body.title[:80])
+    return {"ok": True, "template_id": tid}
+
+
+class OpsReviewTemplateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: Optional[str] = Field(None, max_length=120)
+    body: Optional[str] = Field(None, max_length=4000)
+    active: Optional[bool] = None
+
+
+@app.patch("/nidaan/ops/api/review-templates/{template_id}")
+async def ops_review_template_update(template_id: int, body: OpsReviewTemplateUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        ok = await nidaan.update_review_template(template_id, title=body.title, body=body.body, active=body.active)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Template not found / nothing to update")
+    await _ops_audit(request, "review_template.update", "review_template", str(template_id), "")
+    return {"ok": True}
+
+
+@app.delete("/nidaan/ops/api/review-templates/{template_id}")
+async def ops_review_template_delete(template_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.delete_review_template(template_id):
+        raise HTTPException(status_code=404, detail="Template not found")
+    await _ops_audit(request, "review_template.delete", "review_template", str(template_id), "")
+    return {"ok": True}
 
 
 class OpsDeliverReviewReq(BaseModel):

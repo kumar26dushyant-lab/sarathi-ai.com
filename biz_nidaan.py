@@ -228,6 +228,97 @@ async def public_content() -> dict:
     return {k: {"en": v["en"], "hi": v["hi"]} for k, v in cfg.items()}
 
 
+# ── Go/no-go review templates (super-admin managed; picked at review delivery) ──
+DEFAULT_REVIEW_TEMPLATES = [
+    ("can_fight", "Standard — Can be challenged",
+     "Based on our expert legal review of your claim documents, we find valid grounds to challenge "
+     "the rejection/underpayment of your claim. Our legal team will contact you shortly to take "
+     "your case forward. Please keep your policy and claim documents handy."),
+    ("no_scope", "Standard — Settled / no scope",
+     "Based on our expert legal review, your claim appears to have been dealt with in line with your "
+     "policy terms, and we do not find sufficient grounds to challenge it further. We'll be glad to "
+     "assist you with any future claims — thank you for trusting Nidaan Partner."),
+]
+
+
+async def seed_review_templates():
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""CREATE TABLE IF NOT EXISTS nidaan_review_templates (
+            template_id INTEGER PRIMARY KEY AUTOINCREMENT, outcome TEXT NOT NULL,
+            title TEXT NOT NULL, body TEXT NOT NULL, active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        n = (await (await conn.execute("SELECT COUNT(*) FROM nidaan_review_templates")).fetchone())[0]
+        if n == 0:
+            for i, (oc, title, body) in enumerate(DEFAULT_REVIEW_TEMPLATES):
+                await conn.execute(
+                    "INSERT INTO nidaan_review_templates (outcome,title,body,sort_order) VALUES (?,?,?,?)",
+                    (oc, title, body, i))
+            await conn.commit()
+
+
+async def list_review_templates(outcome: Optional[str] = None, active_only: bool = True) -> list[dict]:
+    where, params = [], []
+    if outcome in ("can_fight", "no_scope"):
+        where.append("outcome=?"); params.append(outcome)
+    if active_only:
+        where.append("active=1")
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            f"SELECT template_id, outcome, title, body, active, sort_order "
+            f"FROM nidaan_review_templates {wsql} ORDER BY outcome, sort_order, template_id", params)).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def create_review_template(outcome: str, title: str, body: str) -> Optional[int]:
+    if outcome not in ("can_fight", "no_scope"):
+        raise ValueError("bad_outcome")
+    title = (title or "").strip()[:120]
+    body = (body or "").strip()[:4000]
+    if not title or not body:
+        raise ValueError("title_and_body_required")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "INSERT INTO nidaan_review_templates (outcome,title,body) VALUES (?,?,?)",
+            (outcome, title, body))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def update_review_template(template_id: int, *, title: Optional[str] = None,
+                                 body: Optional[str] = None, active: Optional[bool] = None) -> bool:
+    sets, params = [], []
+    if title is not None:
+        t = title.strip()[:120]
+        if not t:
+            raise ValueError("title_required")
+        sets.append("title=?"); params.append(t)
+    if body is not None:
+        b = body.strip()[:4000]
+        if not b:
+            raise ValueError("body_required")
+        sets.append("body=?"); params.append(b)
+    if active is not None:
+        sets.append("active=?"); params.append(1 if active else 0)
+    if not sets:
+        return False
+    params.append(template_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            f"UPDATE nidaan_review_templates SET {', '.join(sets)} WHERE template_id=?", params)
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def delete_review_template(template_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "DELETE FROM nidaan_review_templates WHERE template_id=?", (template_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 def content_facts_block(cfg: dict, lang: str = "en") -> str:
     """An authoritative facts block for the chat KB, built from the canonical content."""
     L = lang if lang in ("hi",) else "en"

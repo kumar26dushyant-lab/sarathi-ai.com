@@ -3242,12 +3242,13 @@ async function openClaimDrawer(claimId) {
       <h4>📋 Deliver Legal Assessment</h4>
       <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">Sets status to <b>Review Delivered</b> and notifies the customer (dashboard + WhatsApp + email).</div>
       <div style="display:flex;flex-direction:column;gap:.5rem">
-        <select id="rvOutcomeSel_${c.claim_id}" class="form-input">
+        <select id="rvOutcomeSel_${c.claim_id}" class="form-input" onchange="rvLoadTemplates(${c.claim_id})">
           <option value="">Select outcome…</option>
           <option value="can_fight">✅ Can be challenged — legal team will contact customer</option>
           <option value="no_scope">⚠️ Settled / no scope to challenge</option>
         </select>
-        <textarea id="rvFindings_${c.claim_id}" class="note-input" style="min-height:90px" placeholder="Assessment shared with the customer (shown on their dashboard + sent to them). Be clear and professional."></textarea>
+        <select id="rvTemplateSel_${c.claim_id}" class="form-input" style="display:none" onchange="rvApplyTemplate(${c.claim_id})"></select>
+        <textarea id="rvFindings_${c.claim_id}" class="note-input" style="min-height:90px" placeholder="Assessment shared with the customer (shown on their dashboard + sent to them). Pick a template above to prefill, then personalise. Be clear and professional."></textarea>
         <button class="btn btn-primary" onclick="deliverReview(${c.claim_id})">Deliver Review to Customer →</button>
       </div>
       <div class="msg" id="rvMsg_${c.claim_id}"></div>
@@ -3357,6 +3358,23 @@ async function updateStatus(claimId) {
   }
 }
 
+async function rvLoadTemplates(claimId){
+  const oc = document.getElementById('rvOutcomeSel_'+claimId).value;
+  const sel = document.getElementById('rvTemplateSel_'+claimId);
+  if(!oc){ sel.style.display='none'; sel.innerHTML=''; return; }
+  const r = await API('/review-templates?outcome='+oc);
+  if(!r.ok){ sel.style.display='none'; return; }
+  const tpls = (await r.json()).templates || [];
+  window._rvTpls = window._rvTpls || {}; window._rvTpls[claimId] = tpls;
+  sel.innerHTML = '<option value="">📋 Insert a template… (optional)</option>' + tpls.map((t,i)=>`<option value="${i}">${esc(t.title)}</option>`).join('');
+  sel.style.display = tpls.length ? '' : 'none';
+}
+function rvApplyTemplate(claimId){
+  const sel = document.getElementById('rvTemplateSel_'+claimId);
+  if(sel.value==='') return;
+  const t = (window._rvTpls && window._rvTpls[claimId]) ? window._rvTpls[claimId][parseInt(sel.value)] : null;
+  if(t){ const fa = document.getElementById('rvFindings_'+claimId); fa.value = t.body; fa.focus(); }
+}
 async function deliverReview(claimId) {
   const outcome = document.getElementById('rvOutcomeSel_'+claimId).value;
   const findings = (document.getElementById('rvFindings_'+claimId).value || '').trim();
@@ -4667,13 +4685,60 @@ async function savePlanConfig(planKey) {
   else { const d = await r.json().catch(() => ({})); msg.style.color = '#f87171'; msg.textContent = '✕ ' + (d.detail || 'Failed'); }
 }
 
+// ── Go/No-Go review templates manager (in Content panel) ──────────────────────
+async function loadReviewTemplates(){
+  const wrap=document.getElementById('reviewTplSection'); if(!wrap) return;
+  const canEdit=(_role==='super_admin');
+  const r=await API('/review-templates?include_inactive=1');
+  if(!r.ok){ wrap.innerHTML=''; return; }
+  const tpls=(await r.json()).templates||[];
+  const byOc={can_fight:[],no_scope:[]};
+  tpls.forEach(t=>{ (byOc[t.outcome]=byOc[t.outcome]||[]).push(t); });
+  const ocLabel={can_fight:'✅ Can be challenged (go)', no_scope:'⚠️ No scope (no-go)'};
+  const card=t=>`<div class="rtpl-card" data-id="${t.template_id}" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.8rem;margin-bottom:.6rem;${t.active?'':'opacity:.55'}">
+    <input class="rtpl-title form-input" value="${esc(t.title)}" maxlength="120" ${canEdit?'':'disabled'} style="font-weight:700;margin-bottom:.4rem">
+    <textarea class="rtpl-body form-input" rows="3" ${canEdit?'':'disabled'}>${esc(t.body)}</textarea>
+    ${canEdit?`<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.4rem">
+      <label style="font-size:.78rem"><input type="checkbox" class="rtpl-active" ${t.active?'checked':''}> Active</label>
+      <span><span class="rtpl-msg" style="font-size:.75rem;margin-right:.5rem"></span>
+      <button class="btn-icon" onclick="deleteReviewTpl(${t.template_id})" title="Delete" style="color:#fca5a5">🗑️</button>
+      <button class="btn btn-primary" style="font-size:.78rem;padding:.3rem .7rem" onclick="saveReviewTpl(${t.template_id})">💾 Save</button></span>
+    </div>`:''}
+  </div>`;
+  wrap.innerHTML=`<div class="section-title" style="font-size:1rem;margin-bottom:.3rem">Go / No-Go review templates</div>
+    <div class="section-sub" style="margin-bottom:.7rem">Predefined findings staff can insert when delivering a legal assessment (then personalise).</div>
+    ${['can_fight','no_scope'].map(oc=>`<div style="margin-bottom:1rem"><div style="font-size:.85rem;font-weight:700;color:#22d3ee;margin-bottom:.5rem">${ocLabel[oc]}</div>${(byOc[oc]||[]).map(card).join('')||'<div style="font-size:.78rem;color:rgba(255,255,255,.4)">No templates.</div>'}${canEdit?`<button class="btn btn-ghost" style="font-size:.78rem;padding:.3rem .8rem" onclick="addReviewTpl('${oc}')">+ Add template</button>`:''}</div>`).join('')}`;
+}
+async function saveReviewTpl(id){
+  const c=document.querySelector(`.rtpl-card[data-id="${id}"]`); if(!c) return;
+  const msg=c.querySelector('.rtpl-msg');
+  const body={ title:c.querySelector('.rtpl-title').value.trim(), body:c.querySelector('.rtpl-body').value.trim(), active:c.querySelector('.rtpl-active').checked };
+  if(!body.title||!body.body){ msg.style.color='#f87171'; msg.textContent='Title + text required'; return; }
+  const r=await API('/review-templates/'+id,{method:'PATCH', body:JSON.stringify(body)});
+  if(r.ok){ msg.style.color='#4ade80'; msg.textContent='✓ Saved'; setTimeout(()=>{msg.textContent='';},2000); }
+  else{ const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+}
+async function deleteReviewTpl(id){
+  if(!confirm('Delete this template?')) return;
+  const r=await API('/review-templates/'+id,{method:'DELETE'});
+  if(r.ok) loadReviewTemplates(); else ndUI.toast('Failed to delete','error');
+}
+async function addReviewTpl(outcome){
+  const title=prompt('Template title:'); if(!title||!title.trim()) return;
+  const body=prompt('Template text (shown to the customer):'); if(!body||!body.trim()) return;
+  const r=await API('/review-templates',{method:'POST', body:JSON.stringify({outcome,title:title.trim(),body:body.trim()})});
+  if(r.ok) loadReviewTemplates(); else { const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Failed to add','error'); }
+}
+
 // ── Canonical content (single source of truth for business facts) ──────────────
 async function loadContentConfig(){
   const el = document.getElementById('panel-content');
   el.innerHTML = `<div class="section-hdr"><div><div class="section-title">Content — canonical facts</div>
     <div class="section-sub">Edit a business fact once here; the website homepage AND the chat assistant both read from it. Change → applies everywhere.</div></div>
     <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadContentConfig()">🔄 Refresh</button></div>
-    <div id="contentWrap"><div class="empty"><p>Loading…</p></div></div>`;
+    <div id="contentWrap"><div class="empty"><p>Loading…</p></div></div>
+    <div id="reviewTplSection" style="margin-top:1.4rem"></div>`;
+  loadReviewTemplates();
   const r = await API('/content');
   if(!r.ok){ document.getElementById('contentWrap').innerHTML='<div class="empty"><p>Failed to load (super-admin only).</p></div>'; return; }
   const items = (await r.json()).content || [];
