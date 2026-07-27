@@ -4683,6 +4683,92 @@ async def assign_claim_to_staff(
     return True
 
 
+# ── Multi-assignee support (additive; assigned_to_staff_id stays the PRIMARY) ──
+async def _ensure_claim_assignees_table(conn) -> None:
+    await conn.execute("""CREATE TABLE IF NOT EXISTS nidaan_claim_assignees (
+        claim_id INTEGER NOT NULL, staff_id INTEGER NOT NULL,
+        assigned_by INTEGER, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(claim_id, staff_id))""")
+
+
+async def set_claim_assignees(claim_id: int, staff_ids: list[int],
+                              assigned_by_id: int, assigned_by_role: str) -> bool:
+    """Assign a claim to one or more staff. staff_ids[0] becomes the PRIMARY
+    (assigned_to_staff_id — everything existing keeps working); ALL are recorded in
+    nidaan_claim_assignees. Sets status='assigned' + logs. Returns True."""
+    ids, seen = [], set()
+    for s in staff_ids:
+        try:
+            s = int(s)
+        except (TypeError, ValueError):
+            continue
+        if s and s not in seen:
+            seen.add(s); ids.append(s)
+    if not ids:
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        if not await (await conn.execute(
+                "SELECT 1 FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone():
+            return False
+        await _ensure_claim_assignees_table(conn)
+        await conn.execute(
+            "UPDATE nidaan_claims SET assigned_to_staff_id=?, status='assigned', "
+            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=?", (ids[0], claim_id))
+        await conn.execute("DELETE FROM nidaan_claim_assignees WHERE claim_id=?", (claim_id,))
+        for s in ids:
+            await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_claim_assignees (claim_id, staff_id, assigned_by) "
+                "VALUES (?,?,?)", (claim_id, s, assigned_by_id))
+        await conn.execute(
+            """INSERT INTO nidaan_claim_status_log
+               (claim_id, from_status, to_status, note, changed_by_type, changed_by_id)
+               VALUES (?, NULL, 'assigned', ?, ?, ?)""",
+            (claim_id, f"Assigned to {len(ids)} staff" if len(ids) > 1 else "Assigned to staff",
+             assigned_by_role, assigned_by_id))
+        await conn.commit()
+    return True
+
+
+async def get_claim_assignees(claim_id: int) -> list[dict]:
+    """All assignees (PRIMARY from assigned_to_staff_id + any extras), with names, deduped."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await _ensure_claim_assignees_table(conn)
+        primary = await (await conn.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        ids = []
+        if primary and primary["assigned_to_staff_id"]:
+            ids.append(primary["assigned_to_staff_id"])
+        for r in await (await conn.execute(
+                "SELECT staff_id FROM nidaan_claim_assignees WHERE claim_id=? ORDER BY assigned_at",
+                (claim_id,))).fetchall():
+            if r["staff_id"] not in ids:
+                ids.append(r["staff_id"])
+        if not ids:
+            return []
+        ph = ",".join("?" * len(ids))
+        rows = await (await conn.execute(
+            f"SELECT staff_id, name, role FROM nidaan_staff WHERE staff_id IN ({ph})", ids)).fetchall()
+        by_id = {r["staff_id"]: dict(r) for r in rows}
+    return [{"staff_id": i, "name": by_id.get(i, {}).get("name", f"#{i}"),
+             "role": by_id.get(i, {}).get("role", ""), "primary": (i == ids[0])} for i in ids]
+
+
+async def is_claim_assignee(claim_id: int, staff_id: int) -> bool:
+    """True if the staff is the primary assignee OR an additional assignee of the claim."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if r and r["assigned_to_staff_id"] == staff_id:
+            return True
+        await _ensure_claim_assignees_table(conn)
+        r2 = await (await conn.execute(
+            "SELECT 1 FROM nidaan_claim_assignees WHERE claim_id=? AND staff_id=?",
+            (claim_id, staff_id))).fetchone()
+        return bool(r2)
+
+
 # ── Claim auto-assignment (least-loaded), super-admin toggle ──────────────────
 CLAIM_OPEN_STATUSES = ("intimated", "assigned", "in_review", "in_negotiation")
 
