@@ -1795,6 +1795,32 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
+    # Auto-assign to the least-loaded handler if enabled + this is a real (payable) claim, not an
+    # unpaid lead. Fire-and-forget so it never blocks or breaks claim submission; notifies the
+    # chosen handler by email exactly like a manual assignment.
+    if _pay_status != "unpaid_lead":
+        try:
+            if await nidaan.is_claim_auto_assign():
+                import asyncio as _aio_aa
+                async def _auto_assign_and_notify(_cid):
+                    try:
+                        sid = await nidaan.auto_assign_claim(_cid)
+                        if not sid:
+                            return
+                        staff = await nidaan.get_staff_by_id(sid)
+                        claim = await nidaan.get_claim_with_account(_cid)
+                        if staff and claim and staff.get("email"):
+                            await email_svc.send_nidaan_claim_assigned_staff_email(
+                                to_email=staff["email"], staff_name=staff["name"], claim_id=_cid,
+                                insured_name=claim.get("insured_name", ""),
+                                claim_type=claim.get("claim_type", ""),
+                                advisor_name=claim.get("owner_name", ""),
+                                advisor_phone=claim.get("advisor_phone", ""))
+                    except Exception as _aae:
+                        logger.warning("auto-assign failed for claim %s: %s", _cid, _aae)
+                _aio_aa.create_task(_auto_assign_and_notify(claim_id))
+        except Exception:
+            pass
     # Optional affiliate branch from the claim form — store on the account if it
     # has none yet (covers Google sign-up, which skips the signup branch field).
     # Validate strictly; notify the branch about this newly-attributed lead.
@@ -4262,6 +4288,30 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
         pass
     await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to staff #{body.staff_id}")
     return {"claim_id": claim_id, "assigned_to": body.staff_id}
+
+
+@app.get("/nidaan/ops/api/claims-auto-assign")
+async def ops_claims_auto_assign_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"on": await nidaan.is_claim_auto_assign()}
+
+
+class OpsAutoAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    on: bool
+
+
+@app.patch("/nidaan/ops/api/claims-auto-assign")
+async def ops_claims_auto_assign_set(body: OpsAutoAssignReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.set_claim_auto_assign(body.on)
+    await _ops_audit(request, "claim.auto_assign_toggle", "claims", "auto_assign",
+                     "on" if body.on else "off")
+    return {"ok": True, "on": body.on}
 
 
 class OpsClaimStatusUpdate(BaseModel):

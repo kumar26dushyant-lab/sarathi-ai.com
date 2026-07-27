@@ -2949,6 +2949,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Claims</div><div class="section-sub">All claims across the platform</div></div>
+      ${_role==='super_admin'?`<button id="claimAutoBtn" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="When ON, new paid/subscription claims auto-assign to the least-loaded handler" onclick="toggleClaimAutoAssign()">⏳ Auto-assign…</button>`:''}
     </div>
     <div class="filter-bar">
       <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="applyClaimFilters()" style="flex:1;min-width:160px">
@@ -2981,6 +2982,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (statusFilter) document.getElementById('claimStatusFilter').value = statusFilter;
   if (plan)   document.getElementById('claimPlanFilter').value = plan;
   if (branch) document.getElementById('claimBranchFilter').value = branch;
+  loadClaimAutoAssignState();
 
   const params = new URLSearchParams();
   if (statusFilter) params.set('status', statusFilter);
@@ -3129,6 +3131,20 @@ async function showBranchUnpaid(code) {
   wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
+async function loadClaimAutoAssignState(){
+  const b=document.getElementById('claimAutoBtn'); if(!b) return;
+  const r=await API('/claims-auto-assign'); if(!r.ok){ b.style.display='none'; return; }
+  const on=(await r.json()).on;
+  b.dataset.on = on?'1':'0';
+  b.innerHTML = on ? '🟢 Auto-assign: ON' : '⚪ Auto-assign: OFF';
+}
+async function toggleClaimAutoAssign(){
+  const b=document.getElementById('claimAutoBtn'); if(!b) return;
+  const next = b.dataset.on!=='1';
+  const r=await API('/claims-auto-assign',{method:'PATCH', body:JSON.stringify({on:next})});
+  if(r.ok){ loadClaimAutoAssignState(); ndUI.toast(next?'Auto-assign turned ON':'Auto-assign turned OFF','success'); }
+  else ndUI.toast('Failed to toggle auto-assign','error');
+}
 async function openClaimDrawer(claimId) {
   document.getElementById('drawerBg').classList.add('open');
   document.getElementById('drawerTitle').textContent = 'Claim #' + claimId;

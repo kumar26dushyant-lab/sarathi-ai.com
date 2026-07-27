@@ -4592,6 +4592,65 @@ async def assign_claim_to_staff(
     return True
 
 
+# ── Claim auto-assignment (least-loaded), super-admin toggle ──────────────────
+CLAIM_OPEN_STATUSES = ("intimated", "assigned", "in_review", "in_negotiation")
+
+
+async def is_claim_auto_assign() -> bool:
+    return (await get_ops_setting("claim_auto_assign", "0")) == "1"
+
+
+async def set_claim_auto_assign(on: bool) -> None:
+    await set_ops_setting("claim_auto_assign", "1" if on else "0")
+
+
+async def get_claim_handler_pool() -> list[int]:
+    """Active staff eligible to auto-receive claims — associates + sub-admins (not the owner).
+    Falls back to any active staff if that set is empty."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+            "AND role IN ('team_member','sub_super_admin') ORDER BY staff_id")).fetchall()
+        ids = [r["staff_id"] for r in rows]
+        if not ids:
+            rows = await (await conn.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+                "ORDER BY staff_id")).fetchall()
+            ids = [r["staff_id"] for r in rows]
+    return ids
+
+
+async def auto_assign_claim(claim_id: int) -> Optional[int]:
+    """Assign a claim to the least-loaded handler (fewest OPEN claims). No-op if already
+    assigned or no handler exists. Returns the chosen staff_id or None."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not c:
+        return None
+    if c["assigned_to_staff_id"]:
+        return c["assigned_to_staff_id"]
+    pool = await get_claim_handler_pool()
+    if not pool:
+        return None
+    ph = ",".join("?" * len(pool))
+    sph = ",".join("?" * len(CLAIM_OPEN_STATUSES))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            f"SELECT assigned_to_staff_id AS sid, COUNT(*) AS n FROM nidaan_claims "
+            f"WHERE assigned_to_staff_id IN ({ph}) AND status IN ({sph}) "
+            f"GROUP BY assigned_to_staff_id", pool + list(CLAIM_OPEN_STATUSES))).fetchall()
+    load = {sid: 0 for sid in pool}
+    for r in rows:
+        load[r["sid"]] = r["n"]
+    chosen = min(pool, key=lambda s: (load.get(s, 0), pool.index(s)))   # least-loaded, stable ties
+    ok = await assign_claim_to_staff(claim_id, chosen, assigned_by_id=0, assigned_by_role="system")
+    return chosen if ok else None
+
+
 # =============================================================================
 #  OPS: NOTES
 # =============================================================================
