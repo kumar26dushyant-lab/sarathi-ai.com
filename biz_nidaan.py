@@ -4604,8 +4604,10 @@ async def get_claims_ops(
         params: list = []
 
         if role == "team_member":
-            conditions.append("c.assigned_to_staff_id=?")
-            params.append(staff_id)
+            # primary OR additional assignee (grant-only)
+            conditions.append("(c.assigned_to_staff_id=? OR EXISTS(SELECT 1 FROM "
+                              "nidaan_claim_assignees ca WHERE ca.claim_id=c.claim_id AND ca.staff_id=?))")
+            params.extend([staff_id, staff_id])
         elif assigned_to is not None:
             conditions.append("c.assigned_to_staff_id=?")
             params.append(assigned_to)

@@ -1397,6 +1397,19 @@ async def init_db():
                 sort_order  INTEGER DEFAULT 0,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- Multi-assignee support for claims. assigned_to_staff_id on nidaan_claims stays the
+            -- PRIMARY assignee (unchanged); this records ALL assignees so several staff can handle
+            -- one claim. Additive — nothing legacy reads it.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_assignees (
+                claim_id    INTEGER NOT NULL,
+                staff_id    INTEGER NOT NULL,
+                assigned_by INTEGER,
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(claim_id, staff_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_claim_assignees_staff
+                ON nidaan_claim_assignees(staff_id);
         """)
 
         # ── nidaan_audit_log: control-center activity trail. Every sensitive ops

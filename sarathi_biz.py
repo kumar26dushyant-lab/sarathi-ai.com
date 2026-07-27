@@ -4213,8 +4213,11 @@ async def ops_list_claims(
     counts = {"unpaid_lead": 0, "paid": 0, "subscription": 0}
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
         _c.row_factory = __import__("aiosqlite").Row
-        # team_member sees only their own assigned scope; admins see everything.
-        _scope = "" if staff["role"] != "team_member" else f" WHERE assigned_to_staff_id={int(staff['staff_id'])}"
+        # team_member sees claims where they are the primary OR an additional assignee (grant-only).
+        _sid = int(staff['staff_id'])
+        _scope = "" if staff["role"] != "team_member" else (
+            f" WHERE (assigned_to_staff_id={_sid} OR EXISTS(SELECT 1 FROM nidaan_claim_assignees ca "
+            f"WHERE ca.claim_id=nidaan_claims.claim_id AND ca.staff_id={_sid}))")
         for r in await (await _c.execute(
                 f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
             counts[r["payment_status"] or "paid"] = r["n"]
@@ -4243,8 +4246,9 @@ async def ops_get_claim(claim_id: int, request: Request):
         if not row:
             raise HTTPException(status_code=404)
         claim = dict(row)
-        # team_member can only see their assigned claims
-        if staff["role"] == "team_member" and claim.get("assigned_to_staff_id") != staff["staff_id"]:
+        # team_member can only see claims they're assigned to (primary or additional assignee)
+        if staff["role"] == "team_member" and claim.get("assigned_to_staff_id") != staff["staff_id"] \
+                and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
             raise HTTPException(status_code=403)
         # Status log
         log_cur = await conn.execute(
@@ -4254,45 +4258,59 @@ async def ops_get_claim(claim_id: int, request: Request):
         claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
     claim["notes"] = await nidaan.get_claim_notes(claim_id)
     claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
+    claim["assignees"] = await nidaan.get_claim_assignees(claim_id)
     return claim
 
 
 class OpsClaimAssign(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
-    staff_id: int
+    staff_id: Optional[int] = None                       # back-compat (single assignee)
+    staff_ids: Optional[list[int]] = Field(None, max_length=20)   # multi-assign
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/assign")
 async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "sub_super_admin")
-    ok = await nidaan.assign_claim_to_staff(
-        claim_id=claim_id, staff_id=body.staff_id,
-        assigned_by_id=caller["staff_id"], assigned_by_role=caller["role"],
-    )
+    # Assignee list from staff_ids (preferred) or the legacy single staff_id. staff_ids[0] = PRIMARY.
+    ids, seen = [], set()
+    for s in ((body.staff_ids or []) + ([body.staff_id] if body.staff_id else [])):
+        try:
+            s = int(s)
+        except (TypeError, ValueError):
+            continue
+        if s and s not in seen:
+            seen.add(s); ids.append(s)
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one staff member")
+    ok = await nidaan.set_claim_assignees(
+        claim_id, ids, assigned_by_id=caller["staff_id"], assigned_by_role=caller["role"])
     if not ok:
         raise HTTPException(status_code=404, detail="Claim not found")
-    # Non-blocking email notification to the assigned staff member
+    # Non-blocking email to every assignee.
     try:
         import asyncio as _ae3
-        async def _notify_assigned():
-            staff = await nidaan.get_staff_by_id(body.staff_id)
+        async def _notify_all():
             claim = await nidaan.get_claim_with_account(claim_id)
-            if staff and claim:
-                await email_svc.send_nidaan_claim_assigned_staff_email(
-                    to_email=staff["email"],
-                    staff_name=staff["name"],
-                    claim_id=claim_id,
-                    insured_name=claim.get("insured_name", ""),
-                    claim_type=claim.get("claim_type", ""),
-                    advisor_name=claim.get("owner_name", ""),
-                    advisor_phone=claim.get("advisor_phone", ""),
-                )
-        _ae3.ensure_future(_notify_assigned())
+            if not claim:
+                return
+            for sid in ids:
+                try:
+                    staff = await nidaan.get_staff_by_id(sid)
+                    if staff and staff.get("email"):
+                        await email_svc.send_nidaan_claim_assigned_staff_email(
+                            to_email=staff["email"], staff_name=staff["name"], claim_id=claim_id,
+                            insured_name=claim.get("insured_name", ""),
+                            claim_type=claim.get("claim_type", ""),
+                            advisor_name=claim.get("owner_name", ""),
+                            advisor_phone=claim.get("advisor_phone", ""))
+                except Exception:
+                    pass
+        _ae3.ensure_future(_notify_all())
     except Exception:
         pass
-    await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to staff #{body.staff_id}")
-    return {"claim_id": claim_id, "assigned_to": body.staff_id}
+    await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to {len(ids)} staff: {ids}")
+    return {"claim_id": claim_id, "assigned_to": ids}
 
 
 @app.get("/nidaan/ops/api/claims-auto-assign")
@@ -4329,15 +4347,9 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
-    # team_member: verify they are assigned to this claim
-    if staff["role"] == "team_member":
-        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
-            cur = await conn.execute(
-                "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,)
-            )
-            row = await cur.fetchone()
-            if not row or row[0] != staff["staff_id"]:
-                raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    # team_member: verify they are an assignee (primary or additional) of this claim
+    if staff["role"] == "team_member" and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
+        raise HTTPException(status_code=403, detail="Not assigned to this claim")
     try:
         ok = await nidaan.update_claim_status(
             claim_id=claim_id, new_status=body.new_status,
@@ -4449,12 +4461,8 @@ async def ops_deliver_review(claim_id: int, body: OpsDeliverReviewReq, request: 
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
-    if staff["role"] == "team_member":
-        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
-            row = await (await conn.execute(
-                "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
-            if not row or row[0] != staff["staff_id"]:
-                raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    if staff["role"] == "team_member" and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
+        raise HTTPException(status_code=403, detail="Not assigned to this claim")
     try:
         ok = await nidaan.deliver_review(
             claim_id=claim_id, outcome=body.outcome, findings=body.findings,
