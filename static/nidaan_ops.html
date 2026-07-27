@@ -3477,7 +3477,7 @@ async function loadAccounts() {
     </div>`:''}
     <div id="accSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem"></div>
     <div class="filter-bar">
-      <input id="accSearch" placeholder="🔍 Search name / email / firm…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
+      <input id="accSearch" placeholder="🔍 Search name / email / firm / branch…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
     </div>
     <div id="accTableWrap"><div class="empty"><p>Loading…</p></div></div>`;
 
@@ -3510,7 +3510,8 @@ function applyAccFilters(){
     (seg==='all' || a.account_type===seg) &&
     (!q || (a.owner_name||'').toLowerCase().includes(q) ||
       (a.email||'').toLowerCase().includes(q) ||
-      (a.firm_name||'').toLowerCase().includes(q))
+      (a.firm_name||'').toLowerCase().includes(q) ||
+      (a.branch_code||'').toLowerCase().includes(q))
   );
   renderAccounts(list);
 }
@@ -3549,6 +3550,7 @@ function renderAccounts(accounts) {
       <td>${esc(a.firm_name||'—')}</td>
       <td>${esc(a.email||'—')}</td>
       <td>${esc(a.phone||'—')}</td>
+      <td>${a.branch_code?`<span style="font-size:.72rem;color:#a78bfa;font-weight:700">${esc(a.branch_code)}</span>`:'<span style="color:rgba(255,255,255,.25)">—</span>'}</td>
       <td>${accTypeBadge(a)}</td>
       <td>${accUsageCell(a)}</td>
       <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>
@@ -3565,7 +3567,7 @@ function renderAccounts(accounts) {
     <div style="font-size:.75rem;color:rgba(255,255,255,.35);margin-bottom:.4rem">💡 Click any row to view account details, claims and reviews</div>
     <div class="table-wrap">
       <table>
-        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Branch</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
