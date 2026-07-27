@@ -4600,7 +4600,18 @@ correct/required (owner flagged; recommend keeping — removing weakens complian
   shows which branch it came from.
 - **1C-f All-Claims:** show **account + branch + other captured details** per claim; if feasible,
   a cleaner integrated Accounts+Claims view (only if it doesn't hamper existing function).
-- **1C-g Claims workflow (subscription claims):** intimated → **assign to staff** (switch:
+- **1C-g grounding (Jul 27):** the claims workflow LARGELY EXISTS — manual assign
+  (`assign_claim_to_staff`), status flow, go/no-go delivery (`deliver_review`: can_fight/no_scope +
+  findings), internal notes (`add_claim_note`) + customer messages. 1C-g = ENHANCE, not greenfield.
+  Increments: **g.1 assignment auto/manual switch → g.2 go/no-go templates → g.3 L2 hand-off.**
+  - **g.1 SHIPPED + verified (Jul 27):** super-admin toggle (ops Claims header 🟢/⚪ Auto-assign;
+    GET/PATCH `/ops/api/claims-auto-assign`; default OFF). When ON, a newly submitted PAID/subscription
+    claim (not an unpaid lead) auto-assigns to the **least-loaded handler** (fewest OPEN claims;
+    stable ties), fire-and-forget, and the handler gets the same assignment email as a manual assign.
+    Pool = active associates + sub-admins (fallback any active staff). Owner chose least-loaded.
+  - **g.2 NEXT:** super-admin-editable go/no-go templates (can-fight / cannot-fight customer-facing
+    findings text) used at review delivery. **g.3:** on can_fight → hand off to L2 (claimshield.in).
+- **(orig) 1C-g Claims workflow (subscription claims):** intimated → **assign to staff** (switch:
   auto/manual) → flow starts. Customer-facing comments + internal comments + tagging + notifications
   + **go/no-go templates** (can-fight / cannot-fight, predefined) + routing. End-to-end defined flow
   through the go/no-go decision and the handoff to L2 (claimshield.in). Similar to the office-task
