@@ -2547,17 +2547,57 @@ async def add_note_attachments(*, quick_task_id: int, note_id: Optional[int],
 
 
 async def list_note_attachments(quick_task_id: int) -> dict:
-    """{note_id: [ {stored_name, original_name}, … ]} for a task's comments."""
+    """{note_id: [ {attachment_id, stored_name, original_name, uploaded_by, uploaded_at}, … ]}."""
     out: dict = {}
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT note_id, stored_name, original_name FROM nidaan_quick_task_attachments "
+            "SELECT attachment_id, note_id, stored_name, original_name, uploaded_by, uploaded_at "
+            "FROM nidaan_quick_task_attachments "
             "WHERE quick_task_id=? ORDER BY attachment_id ASC", (quick_task_id,))).fetchall()
         for r in rows:
-            out.setdefault(r["note_id"], []).append(
-                {"stored_name": r["stored_name"], "original_name": r["original_name"]})
+            out.setdefault(r["note_id"], []).append({
+                "attachment_id": r["attachment_id"], "stored_name": r["stored_name"],
+                "original_name": r["original_name"], "uploaded_by": r["uploaded_by"],
+                "uploaded_at": r["uploaded_at"]})
     return out
+
+
+# Window during which the uploader can delete their own attachment (after that: admin only).
+ATTACHMENT_DELETE_WINDOW_SEC = 3600
+
+
+async def delete_note_attachment(attachment_id: int, staff_id: int, is_admin: bool) -> Optional[dict]:
+    """Delete a task-comment attachment. Allowed if the uploader within 1 hour, or an admin any
+    time. Returns the deleted row (for disk cleanup) or None if not found. Raises PermissionError
+    ('not_owner' | 'too_late') when the current staff may not delete it."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_quick_task_attachments WHERE attachment_id=?",
+            (attachment_id,))).fetchone()
+        if not row:
+            return None
+        row = dict(row)
+        if not is_admin:
+            if row.get("uploaded_by") != staff_id:
+                raise PermissionError("not_owner")
+            try:
+                up = datetime.fromisoformat(str(row["uploaded_at"]).replace(" ", "T"))
+                age = (datetime.utcnow() - up).total_seconds()
+            except Exception:
+                age = 0
+            if age > ATTACHMENT_DELETE_WINDOW_SEC:
+                raise PermissionError("too_late")
+        await conn.execute(
+            "DELETE FROM nidaan_quick_task_attachments WHERE attachment_id=?", (attachment_id,))
+        # If this file also filled the legacy single-attachment columns on the note, clear them.
+        await conn.execute(
+            "UPDATE nidaan_quick_task_notes SET attachment_stored_name=NULL, "
+            "attachment_original_name=NULL WHERE note_id=? AND attachment_stored_name=?",
+            (row.get("note_id"), row.get("stored_name")))
+        await conn.commit()
+        return row
 
 
 # ── Task collaboration: watchers / @mention participants / mute ──────────────

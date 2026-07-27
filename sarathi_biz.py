@@ -5162,6 +5162,8 @@ async def ops_quick_task_get(qid: int, request: Request):
     await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
     notes = await nidaan.list_quick_task_notes(qid)
     _atts = await nidaan.list_note_attachments(qid)
+    _is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    _now = datetime.utcnow()
     for _n in notes:
         if _n.get("attachment_stored_name"):
             _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
@@ -5170,8 +5172,21 @@ async def ops_quick_task_get(qid: int, request: Request):
         if not _rows and _n.get("attachment_stored_name"):
             _rows = [{"stored_name": _n["attachment_stored_name"],
                       "original_name": _n.get("attachment_original_name")}]
+
+        def _deletable(a):
+            if _is_admin:
+                return True
+            if a.get("uploaded_by") != staff["staff_id"]:
+                return False
+            try:
+                up = datetime.fromisoformat(str(a.get("uploaded_at")).replace(" ", "T"))
+                return (_now - up).total_seconds() <= nidaan.ATTACHMENT_DELETE_WINDOW_SEC
+            except Exception:
+                return False
         _n["attachments"] = [{"url": _nidaan_doc_url(a["stored_name"]),
-                              "name": a.get("original_name") or "attachment"}
+                              "name": a.get("original_name") or "attachment",
+                              "id": a.get("attachment_id"),
+                              "deletable": _deletable(a)}
                              for a in _rows]
     participants = await nidaan.get_task_participants(qid)
     for _p in participants:
@@ -5482,6 +5497,33 @@ async def ops_quick_task_note_add(qid: int, request: Request,
     except Exception:
         pass
     return {"note_id": nid}
+
+
+@app.delete("/nidaan/ops/api/quick-tasks/{qid}/attachments/{attachment_id}")
+async def ops_quick_task_attachment_delete(qid: int, attachment_id: int, request: Request):
+    """Delete a task-comment attachment. Allowed for the uploader within 1 hour of upload, or
+    for an admin (super/sub-super) any time. Removes the DB row + the file from disk."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        row = await nidaan.delete_note_attachment(attachment_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own attachment within 1 hour of uploading. "
+                                     "After that, please ask a super-admin to remove it.")
+        raise HTTPException(403, "You can only delete attachments you uploaded.")
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    try:
+        _p = _NIDAAN_DOCS_DIR / row["stored_name"]
+        if _p.exists():
+            _p.unlink()
+    except Exception:
+        pass
+    await _ops_audit(request, "task.attachment_delete", "quick_task", str(qid), f"attachment={attachment_id}")
+    return {"ok": True}
 
 
 # ── Leave management (P4) ─────────────────────────────────────────────────────

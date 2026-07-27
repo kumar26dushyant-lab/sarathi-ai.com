@@ -1603,7 +1603,7 @@ async function openQuickTaskModal(presetClaimId){
       <label style="display:block;font-size:.74rem;color:rgba(255,255,255,.55);margin:.85rem 0 .2rem">First comment (optional)</label>
       <textarea id="qtComment" rows="2" placeholder="Any context, instructions, etc."
                 style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .75rem;border-radius:6px;font-size:.85rem;resize:vertical;margin-bottom:.5rem"></textarea>
-      <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtCreateFilePicked()">
+      <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" onchange="_qtCreateFilePicked()">
       <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
               style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0;margin-bottom:.4rem">📎 Attach file(s)</button>
       <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:#22d3ee;margin-bottom:.6rem"></div>
@@ -2191,7 +2191,7 @@ async function openQuickTaskDrawer(qid){
                    oninput="_qtMentionInput(this)"
                    onkeydown="if(event.key==='Enter'&&document.getElementById('qtMentionBox').style.display==='none')qtAddNote(${qt.quick_task_id})"
                    style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;padding:.55rem .75rem;border-radius:8px;font-size:.88rem">
-            <input type="file" id="qtNoteFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" style="display:none" onchange="_qtFilePicked()">
+            <input type="file" id="qtNoteFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" onchange="_qtFilePicked()">
             <button class="btn-sm" title="Attach file(s)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e2e8f0" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
@@ -2230,7 +2230,7 @@ function _renderQTThread(notes, qid, canComment){
         <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
         ${n.note_translation ? `<div style="font-size:.8rem;margin-top:.25rem;color:#93c5fd;background:rgba(59,130,246,.08);border-left:2px solid rgba(59,130,246,.45);padding:.2rem .55rem;border-radius:0 5px 5px 0">🌐 English (auto): ${esc(n.note_translation)}</div>` : ''}
         ${(n.attachments && n.attachments.length)
-          ? `<div style="margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem">${n.attachments.map(a=>`<a href="${esc(a.url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(a.name||'attachment')}</a>`).join('')}</div>`
+          ? `<div style="margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem">${n.attachments.map(a=>`<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem"><a href="${esc(a.url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem">📎 ${esc(a.name||'attachment')}</a>${a.deletable && a.id ? `<button onclick="qtDeleteAttachment(${qid},${a.id})" title="Remove attachment" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.95rem;line-height:1;padding:0">×</button>` : ''}</span>`).join('')}</div>`
           : (n.attachment_url ? `<div style="margin-top:.25rem"><a href="${esc(n.attachment_url)}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem;display:inline-block">📎 ${esc(n.attachment_original_name||'attachment')}</a></div>` : '')}
         ${(!isReply && canComment) ? `
           <button onclick="qtToggleReply(${n.note_id})"
@@ -2552,6 +2552,12 @@ function qtToggleMute(qid, muted){
   });
 }
 
+async function qtDeleteAttachment(qid, attId){
+  if(!confirm('Remove this attachment? This cannot be undone.')) return;
+  const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid+'/attachments/'+attId, {method:'DELETE', headers:hdrs()});
+  if(r.ok){ openQuickTaskDrawer(qid); }
+  else { const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Could not remove attachment','error'); }
+}
 async function qtAddNote(qid, parentNoteId){
   const inputId = parentNoteId ? ('qtReplyInput_'+parentNoteId) : 'qtNoteInput';
   const input = document.getElementById(inputId);
