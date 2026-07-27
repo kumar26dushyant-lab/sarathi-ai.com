@@ -4664,10 +4664,16 @@ note-render surface — the datetime import bug):
 - **g.4a Attachment helper notes (SAFE, first):** show "Max 10 MB · PDF/JPG/PNG/HEIC/DOC/XLS…" near
   every attachment upload (ops task create + task comment + customer dashboard claim-doc upload +
   internal claim panel). Low-risk, explicitly requested.
-- **g.4b Multi-select assignment:** super-admin/admin assign a claim to MULTIPLE staff. Needs a
-  `nidaan_claim_assignees` table (keep `assigned_to_staff_id` as PRIMARY for back-compat) + an
-  `is_claim_assignee()` helper so the access checks (deliver-review, team-member claim view) honour
-  secondary assignees too. Notify all. Multi-select UI.
+- **g.4b Multi-select assignment** (2 parts, careful/additive):
+  - **PART 1 SHIPPED + verified (Jul 27):** `nidaan_claim_assignees` (lazy-created) + helpers
+    `set_claim_assignees` (primary=first, records all), `get_claim_assignees` (primary+extras),
+    `is_claim_assignee` (primary OR extra). `assigned_to_staff_id` stays PRIMARY → zero behaviour
+    change; nothing calls set_ yet. Verified: claims still load, set→revert clean.
+  - **PART 2 NEXT (sensitive — do carefully):** wire the assign endpoint to accept `staff_ids` (keep
+    `staff_id` back-compat) → set_claim_assignees; notify all; update the 4 claim access sites
+    ADDITIVELY (grant-only): view (sarathi_biz ~4247), 2 action checks (~4336/4455), list scope
+    (~4217 + get_claims_ops) with `OR is_claim_assignee / OR EXISTS(claim_assignees)`; return
+    assignees in the claim detail; multi-select UI. Test each live path before deploy.
 - **g.4c Claim-note collaboration (the big one):** bring quick-tasks features to claim notes —
   attachments (multi, ≤10/10MB, +delete-within-1h/admin, §53 policy), @mention → participants +
   notifications, reply threads, read receipts, mute. Reuse the quick-task infra patterns.
