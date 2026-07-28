@@ -4890,7 +4890,7 @@ async function openSupportThread(id){
     const ai = (m.sender_type==='ai');
     const bg = mine?'linear-gradient(135deg,#06b6d4,#0891b2)':(ai?'rgba(34,211,238,.12)':'rgba(255,255,255,.06)');
     const col = mine?'#fff':'#e2e8f0';
-    const who = mine?'You (staff)':(ai?'AI':esc(custName));
+    const who = mine?'You (staff)':(ai?'NidaanMitra':esc(custName));
     const align = (mine||ai)?'flex-end':'flex-start';
     // customer left, ai+staff right
     const side = m.sender_type==='customer'?'flex-start':'flex-end';

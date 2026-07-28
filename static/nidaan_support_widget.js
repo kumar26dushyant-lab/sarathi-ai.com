@@ -36,9 +36,9 @@
   };
 
   var GREET = {
-    en: "Hi! 👋 I'm the Nidaan Partner assistant. I can help with rejected or underpaid claim reviews, our plans, and how everything works. What would you like to know?",
-    hi: "नमस्ते! 👋 मैं Nidaan Partner असिस्टेंट हूँ। रिजेक्ट या कम भुगतान वाले क्लेम की समीक्षा, हमारे प्लान्स और प्रक्रिया में मदद कर सकता हूँ। आप क्या जानना चाहेंगे?",
-    hinglish: "Namaste! 👋 Main Nidaan Partner assistant hoon. Rejected ya underpaid claim review, plans aur process ke baare mein help kar sakta hoon. Aap kya jaanna chahenge?"
+    en: "Namaste! 🙏 I'm NidaanMitra, from the Nidaan Partner team. If your insurance claim was rejected or underpaid, you're in the right place. Tell me what happened — I'm here to help you take the next step.",
+    hi: "नमस्ते! 🙏 मैं NidaanMitra हूँ, Nidaan Partner टीम से। अगर आपका बीमा क्लेम रिजेक्ट या कम भुगतान हुआ है, तो आप सही जगह पर हैं। मुझे बताइए क्या हुआ — मैं आपकी मदद के लिए यहाँ हूँ।",
+    hinglish: "Namaste! 🙏 Main NidaanMitra hoon, Nidaan Partner team se. Agar aapka insurance claim reject ya kam settle hua hai, to aap sahi jagah par hain. Mujhe bataiye kya hua — main aapki help ke liye yahan hoon."
   };
   var CHIPS = {
     en: ["🛡️ Check my rejected claim", "💳 Plans & pricing", "🙋 Talk to a human"],
@@ -95,8 +95,8 @@
   var panel = document.createElement('div');
   panel.className = 'nsw-panel';
   panel.innerHTML =
-    '<div class="nsw-hdr"><h4>Chat with Nidaan Partner</h4>'
-    + '<p>AI assistant · human team Mon–Fri, 10am–6pm IST</p>'
+    '<div class="nsw-hdr"><h4>Chat with NidaanMitra</h4>'
+    + '<p>Nidaan Partner · team online Mon–Fri, 10am–6pm IST</p>'
     + '<button class="nsw-langbtn" id="nswLangBtn" title="भाषा बदलें / Change language" aria-label="Change language"><span id="nswLangLabel">भाषा</span><span class="cx">▾</span></button>'
     + '<button class="nsw-x" aria-label="Close">×</button>'
     + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
@@ -257,9 +257,9 @@
     hinglish: "Done — ab main Hinglish mein baat karunga. 😊 Bataiye, kaise help karun?"
   };
   var LANGASK = {
-    en: "Sure! Which language would you prefer? You can also tap 🌐 at the top anytime.",
-    hi: "ज़रूर! आप कौन-सी भाषा पसंद करेंगे? आप ऊपर 🌐 पर भी टैप कर सकते हैं।",
-    hinglish: "Sure! Aap kaunsi language prefer karenge? Upar 🌐 par bhi tap kar sakte hain."
+    en: "Sure! Which language would you prefer? You can also tap the हिंदी/English button at the top anytime.",
+    hi: "ज़रूर! आप कौन-सी भाषा पसंद करेंगे? आप ऊपर हिंदी/English बटन पर भी टैप कर सकते हैं।",
+    hinglish: "Sure! Aap kaunsi language prefer karenge? Upar हिंदी/English button par bhi tap kar sakte hain."
   };
   function switchLang(l, announce){
     if(!GREET[l]) l = 'en';
