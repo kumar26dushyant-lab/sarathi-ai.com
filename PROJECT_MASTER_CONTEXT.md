@@ -4784,11 +4784,12 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
 - Ops Customer Support thread labels customer bubbles with the customer's NAME (not "Customer").
 
 **TODO — notifications cluster (next phase, careful/additive):**
-1. **Support agent alerts:** when a customer sends a support message, the handling/assigned ops
-   agents get notified on Telegram + email + ops staff dashboard (bell). Existing base:
-   `on_support_escalated` (biz_nidaan_notifications.py:737) already routes to on-duty reps on
-   bell+push+email+Telegram — extend to fire on new customer messages to a live thread, not only
-   first escalation. (Check: is there a per-thread agent assignment, or use on-duty reps roster?)
+1. **Support agent alerts — DONE (deployed + verified).** New `on_support_customer_reply(thread_id)`
+   (biz_nidaan_notifications.py, after on_support_escalated) fires on customer FOLLOW-UP messages in a
+   human-engaged thread (prev status 'escalated' OR a staffer already replied) → on-duty reps on
+   bell+email+Telegram (falls back to super-admins). Wired in the support-message endpoint
+   (sarathi_biz.py ~682, else-branch; captures `_prev_status`). Skipped for pure-AI threads (no noise).
+   Note: no per-thread agent assignment exists — uses the on-duty reps roster.
 2. **30-min superadmin escalation:** if a support chat has an unanswered customer message for >30 min
    DURING office hours, escalate to superadmin on ALL channels (Telegram + web dashboard + mobile app
    + email). Needs a periodic check in the worker (scan threads: last msg = customer, age>30min,
