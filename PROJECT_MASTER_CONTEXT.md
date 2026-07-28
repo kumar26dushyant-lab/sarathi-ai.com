@@ -4723,7 +4723,9 @@ increment (blue-green via GitHub Actions; content_guard gates the deploy).
 1. **1C-g.4c — claim-note collaboration** (attachments +delete-1h/admin, @mention→participants+notify,
    reply threads, read receipts). BIG; rewrites the claim-notes surface (same area as the datetime
    regression) → build in small, individually-tested increments; reuse the proven quick-task infra.
-   - **Increment 1 (backend) DONE — smoke-tested, committed local, NOT deployed:**
+   - **Increment 1 (backend) DONE — deployed + PROD-VERIFIED (live claim round-trip: note+reply+attach+
+     mention read back with all keys, admin-deleted, zero residue). Chat-widget fixes shipped alongside
+     (visible 🌐 language switcher via new .nsw-langbtn class; chat FAB lifts above sticky CTA; widget v7).**
      schema (biz_database.py: ALTER nidaan_claim_notes +parent_note_id/note_lang/note_translation/source;
      new isolated tables nidaan_claim_note_attachments / _reads / _mentions / _seen — parallel to the
      quick-task tables so the live quick-task path is untouched); helpers (biz_nidaan.py: add_claim_note
@@ -4731,9 +4733,25 @@ increment (blue-green via GitHub Actions; content_guard gates the deploy).
      add_claim_note_attachments / delete_claim_note_attachment(1h|admin) / set_claim_note_mentions /
      mark_claim_notes_read / delete_claim_note(1h|admin, promotes replies) / get_claim_mention_candidates).
      Smoke test (scratchpad/g4c_smoke.py): schema, thread-flatten, attach, mentions, receipts, delete → ALL PASS.
-   - **Increment 2 (NEXT) — endpoints:** extend add-note endpoint (parent_note_id + multipart attachments +
-     mention staff_ids → set_claim_note_mentions + email notify); DELETE claim-note + attachment endpoints;
-     mention-candidates endpoint; mark-read on claim open. Then Increment 3 — drawer UI parity. Deploy ONCE, live-tested.
+   - **Increment 2 (NEXT) — endpoints (fully scoped, execution-ready; all reuse points confirmed):**
+     NON-BREAKING approach (keep the live JSON note path working between increments):
+     * Extend `OpsAddNote` (sarathi_biz.py ~4532) + `ops_add_note` (~4537): add optional `parent_note_id:int`,
+       `mentions:list[int]`; pass `source=_req_source(request)`; after insert → `set_claim_note_mentions` →
+       fire `nnot.on_claim_note_mention(...)`. Keep it JSON (current UI keeps working).
+     * NEW multipart endpoint `POST /nidaan/ops/api/claims/{claim_id}/notes/{note_id}/attachments`
+       (two-step upload) — mirror `ops_quick_task_note_add` file handling: ≤10 files, ≤10MB each, uuid+ext,
+       write to `_NIDAAN_DOCS_DIR`, then `add_claim_note_attachments(...)`. Verify note∈claim first.
+     * `DELETE …/notes/{note_id}/attachments/{attachment_id}` → `delete_claim_note_attachment` + disk unlink + `_ops_audit`.
+     * `DELETE …/notes/{note_id}` → `delete_claim_note` (returns stored names) → unlink each + `_ops_audit`.
+     * `GET …/claims/{claim_id}/mention-candidates` → `get_claim_mention_candidates`.
+     * `POST …/claims/{claim_id}/notes/mark-read` → `mark_claim_notes_read`.
+     * Serve attachments for viewing via existing `_nidaan_doc_url(stored_name)` (signed URL; same guard as
+       quick-task/claim docs). Admin flag = role in (super_admin, sub_super_admin).
+     * NEW notifier `on_claim_note_mention(claim, mentioned_ids, by_id, by_name, preview)` in
+       biz_nidaan_notifications.py — mirror `on_quick_task_mention`; `dispatch(event_key="claim_note.mention",
+       priority=PRIORITY_P1, recipient_type=RECIPIENT_STAFF, claim_id=cid, …)`; deep-link `/admin?claim={cid}`
+       (ops page reads `?claim=` at nidaan_ops.html:5162).
+     * Verify via API with a staff token (like g.4b), then Increment 3 (drawer UI parity) → single tested deploy.
 2. **1C-g.4d** — claim drawer UI restructure (parity with quick-tasks).
 3. **1C-h** — Superadmin Branch Dashboard (self-contained).
 4. **App Health cockpit (§55)** — scope with owner first, then build (super-admin only, audited).
