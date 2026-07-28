@@ -4834,18 +4834,38 @@ async def auto_assign_claim(claim_id: int) -> Optional[int]:
 #  OPS: NOTES
 # =============================================================================
 
-async def add_claim_note(claim_id: int, staff_id: int, note: str) -> int:
-    """Add an internal note. Returns note_id."""
+async def add_claim_note(claim_id: int, staff_id: int, note: str,
+                          parent_note_id: Optional[int] = None,
+                          source: Optional[str] = None) -> int:
+    """Add an internal claim note. Returns note_id.
+
+    Backward-compatible: existing 3-arg callers are unaffected. `parent_note_id`
+    threads a reply (flattened one level, exactly like quick-task notes); `source`
+    records where it originated ('web' | 'mobile-web' | …)."""
+    if parent_note_id:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            row = await (await conn.execute(
+                "SELECT parent_note_id, claim_id FROM nidaan_claim_notes WHERE note_id=?",
+                (parent_note_id,))).fetchone()
+            if not row or row["claim_id"] != claim_id:
+                parent_note_id = None
+            elif row["parent_note_id"]:
+                parent_note_id = row["parent_note_id"]
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "INSERT INTO nidaan_claim_notes (claim_id, staff_id, note) VALUES (?,?,?)",
-            (claim_id, staff_id, note),
+            "INSERT INTO nidaan_claim_notes (claim_id, staff_id, note, parent_note_id, source) "
+            "VALUES (?,?,?,?,?)",
+            (claim_id, staff_id, note.strip(), parent_note_id, source),
         )
         await conn.commit()
         return cur.lastrowid
 
 
 async def get_claim_notes(claim_id: int) -> list[dict]:
+    """Claim internal notes, oldest first. Each note carries extra collaboration
+    keys (reads / attachments / mentions) — additive, so old callers that only read
+    note/staff_name keep working."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
@@ -4855,7 +4875,173 @@ async def get_claim_notes(claim_id: int) -> list[dict]:
                WHERE n.claim_id=? ORDER BY n.created_at ASC""",
             (claim_id,),
         )
-        return [dict(r) for r in await cur.fetchall()]
+        notes = [dict(r) for r in await cur.fetchall()]
+        if not notes:
+            return notes
+        # read-receipts (who read each note, excluding its author)
+        rcur = await conn.execute(
+            "SELECT r.note_id, r.read_at, s.name AS reader_name "
+            "FROM nidaan_claim_note_reads r "
+            "JOIN nidaan_claim_notes n ON n.note_id = r.note_id "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id "
+            "WHERE n.claim_id=? AND r.staff_id != n.staff_id ORDER BY r.read_at ASC",
+            (claim_id,))
+        reads: dict[int, list] = {}
+        for rr in await rcur.fetchall():
+            reads.setdefault(rr["note_id"], []).append(
+                {"name": rr["reader_name"], "at": rr["read_at"]})
+        # attachments per note
+        acur = await conn.execute(
+            "SELECT attachment_id, note_id, stored_name, original_name, uploaded_by, uploaded_at "
+            "FROM nidaan_claim_note_attachments WHERE claim_id=? ORDER BY attachment_id ASC",
+            (claim_id,))
+        atts: dict[int, list] = {}
+        for a in await acur.fetchall():
+            atts.setdefault(a["note_id"], []).append(dict(a))
+        # @mentions per note
+        mcur = await conn.execute(
+            "SELECT m.note_id, m.staff_id, s.name AS staff_name "
+            "FROM nidaan_claim_note_mentions m "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = m.staff_id "
+            "WHERE m.claim_id=? ORDER BY m.staff_id", (claim_id,))
+        mentions: dict[int, list] = {}
+        for mm in await mcur.fetchall():
+            mentions.setdefault(mm["note_id"], []).append(
+                {"staff_id": mm["staff_id"], "name": mm["staff_name"]})
+        for n in notes:
+            n["reads"] = reads.get(n["note_id"], [])
+            n["attachments"] = atts.get(n["note_id"], [])
+            n["mentions"] = mentions.get(n["note_id"], [])
+        return notes
+
+
+# ── Claim-note collaboration helpers (1C-g.4c) — parallel to quick-task infra ──
+async def add_claim_note_attachments(*, claim_id: int, note_id: Optional[int],
+                                      files: list[dict], uploaded_by: int) -> int:
+    """files = [{'stored_name':…, 'original_name':…}, …]. Returns rows inserted."""
+    if not files:
+        return 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for f in files:
+            if not f.get("stored_name"):
+                continue
+            await conn.execute(
+                "INSERT INTO nidaan_claim_note_attachments "
+                "(claim_id, note_id, stored_name, original_name, uploaded_by) VALUES (?,?,?,?,?)",
+                (claim_id, note_id, f["stored_name"], f.get("original_name"), uploaded_by))
+        await conn.commit()
+    return len(files)
+
+
+async def delete_claim_note_attachment(attachment_id: int, staff_id: int,
+                                       is_admin: bool) -> Optional[dict]:
+    """Delete a claim-note attachment. Uploader within ATTACHMENT_DELETE_WINDOW_SEC, or an
+    admin any time. Returns the deleted row (for disk cleanup) or None. Raises PermissionError
+    ('not_owner' | 'too_late')."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_claim_note_attachments WHERE attachment_id=?",
+            (attachment_id,))).fetchone()
+        if not row:
+            return None
+        row = dict(row)
+        if not is_admin:
+            if row.get("uploaded_by") != staff_id:
+                raise PermissionError("not_owner")
+            try:
+                up = datetime.fromisoformat(str(row["uploaded_at"]).replace(" ", "T"))
+                age = (datetime.utcnow() - up).total_seconds()
+            except Exception:
+                age = 0
+            if age > ATTACHMENT_DELETE_WINDOW_SEC:
+                raise PermissionError("too_late")
+        await conn.execute(
+            "DELETE FROM nidaan_claim_note_attachments WHERE attachment_id=?", (attachment_id,))
+        await conn.commit()
+        return row
+
+
+async def set_claim_note_mentions(note_id: int, claim_id: int,
+                                  staff_ids: list[int]) -> list[int]:
+    """Record @mentions on a claim note. Returns the deduped staff_ids stored."""
+    ids = [int(s) for s in dict.fromkeys(staff_ids or []) if s]
+    if not ids:
+        return []
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for sid in ids:
+            await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_claim_note_mentions (note_id, claim_id, staff_id) "
+                "VALUES (?,?,?)", (note_id, claim_id, sid))
+        await conn.commit()
+    return ids
+
+
+async def mark_claim_notes_read(claim_id: int, staff_id: int) -> None:
+    """Mark every note on a claim read by staff_id (excluding their own) + record the
+    claim-notes 'seen' timestamp. Called whenever the staffer opens the claim."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO nidaan_claim_note_reads (note_id, staff_id) "
+            "SELECT note_id, ? FROM nidaan_claim_notes WHERE claim_id=? AND staff_id != ?",
+            (staff_id, claim_id, staff_id))
+        await conn.execute(
+            "INSERT INTO nidaan_claim_note_seen (claim_id, staff_id, seen_at) "
+            "VALUES (?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(claim_id, staff_id) DO UPDATE SET seen_at=CURRENT_TIMESTAMP",
+            (claim_id, staff_id))
+        await conn.commit()
+
+
+async def delete_claim_note(note_id: int, staff_id: int, is_admin: bool) -> Optional[dict]:
+    """Delete a claim note. Author within ATTACHMENT_DELETE_WINDOW_SEC, or an admin any time.
+    Direct replies are promoted to top-level (parent_note_id→NULL) so nothing is lost; the
+    note's own attachments/reads/mentions rows are removed. Returns {'attachments':[stored…]}
+    for disk cleanup, or None if not found. Raises PermissionError ('not_owner' | 'too_late')."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT note_id, staff_id, created_at FROM nidaan_claim_notes WHERE note_id=?",
+            (note_id,))).fetchone()
+        if not row:
+            return None
+        row = dict(row)
+        if not is_admin:
+            if row.get("staff_id") != staff_id:
+                raise PermissionError("not_owner")
+            try:
+                cr = datetime.fromisoformat(str(row["created_at"]).replace(" ", "T"))
+                age = (datetime.utcnow() - cr).total_seconds()
+            except Exception:
+                age = 0
+            if age > ATTACHMENT_DELETE_WINDOW_SEC:
+                raise PermissionError("too_late")
+        stored = [r["stored_name"] for r in await (await conn.execute(
+            "SELECT stored_name FROM nidaan_claim_note_attachments WHERE note_id=?",
+            (note_id,))).fetchall()]
+        # promote direct replies so they aren't orphaned/hidden
+        await conn.execute(
+            "UPDATE nidaan_claim_notes SET parent_note_id=NULL WHERE parent_note_id=?", (note_id,))
+        await conn.execute("DELETE FROM nidaan_claim_note_attachments WHERE note_id=?", (note_id,))
+        await conn.execute("DELETE FROM nidaan_claim_note_reads WHERE note_id=?", (note_id,))
+        await conn.execute("DELETE FROM nidaan_claim_note_mentions WHERE note_id=?", (note_id,))
+        await conn.execute("DELETE FROM nidaan_claim_notes WHERE note_id=?", (note_id,))
+        await conn.commit()
+        return {"attachments": stored}
+
+
+async def get_claim_mention_candidates(claim_id: int) -> list[dict]:
+    """Staff who can be @mentioned on a claim: current assignees first, then other active
+    staff. Returns [{staff_id, name, role, is_assignee}]."""
+    assignees = {a["staff_id"] for a in await get_claim_assignees(claim_id)}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT staff_id, name, role FROM nidaan_staff WHERE status='active' ORDER BY name")).fetchall()
+    out = [{"staff_id": r["staff_id"], "name": r["name"], "role": r["role"],
+            "is_assignee": r["staff_id"] in assignees} for r in rows]
+    out.sort(key=lambda x: (not x["is_assignee"], x["name"].lower()))
+    return out
 
 
 # ── Subscriber ⇄ ops messaging (per claim) ───────────────────────────────────

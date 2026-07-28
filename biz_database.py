@@ -1780,6 +1780,70 @@ async def init_db():
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nqta_task ON nidaan_quick_task_attachments(quick_task_id)")
 
+        # ── Claim-note collaboration (1C-g.4c) ───────────────────────────────
+        # Brings the proven quick-task comment features to claim internal notes:
+        # threaded replies, @mentions, multiple attachments, and read-receipts.
+        # ALL ADDITIVE — nidaan_claim_notes keeps its original columns; the new
+        # columns are nullable and the companion tables are isolated (parallel to
+        # the quick-task ones) so the live quick-task path is never touched.
+        for _cn_alt in [
+            "ALTER TABLE nidaan_claim_notes ADD COLUMN parent_note_id INTEGER REFERENCES nidaan_claim_notes(note_id)",
+            "ALTER TABLE nidaan_claim_notes ADD COLUMN note_lang TEXT",
+            "ALTER TABLE nidaan_claim_notes ADD COLUMN note_translation TEXT",
+            "ALTER TABLE nidaan_claim_notes ADD COLUMN source TEXT",
+        ]:
+            try:
+                await conn.execute(_cn_alt)
+            except Exception:
+                pass
+        # Multiple attachments per claim-note (mirrors nidaan_quick_task_attachments).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_note_attachments (
+                attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id      INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                note_id       INTEGER REFERENCES nidaan_claim_notes(note_id),
+                stored_name   TEXT NOT NULL,
+                original_name TEXT,
+                uploaded_by   INTEGER REFERENCES nidaan_staff(staff_id),
+                uploaded_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ncna_note ON nidaan_claim_note_attachments(note_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ncna_claim ON nidaan_claim_note_attachments(claim_id)")
+        # Comment read-receipts (WhatsApp-style ✓ sent / ✓✓ read).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_note_reads (
+                note_id  INTEGER NOT NULL REFERENCES nidaan_claim_notes(note_id),
+                staff_id INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                read_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (note_id, staff_id)
+            )
+        """)
+        # @mention participants — who was tagged on a claim note (drives notifications
+        # and the "you're mentioned" list). Distinct from claim assignees.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_note_mentions (
+                note_id    INTEGER NOT NULL REFERENCES nidaan_claim_notes(note_id),
+                claim_id   INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                staff_id   INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (note_id, staff_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ncnm_staff ON nidaan_claim_note_mentions(staff_id)")
+        # Claim-notes "seen" — when a staffer last opened a claim's notes thread.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_note_seen (
+                claim_id INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                staff_id INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                seen_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, staff_id)
+            )
+        """)
+
         # ── Admin-editable task categories (tags) ────────────────────────────
         # A small, super-admin-managed list of task tags (code + label + colour).
         # Tasks store the short code; the label/colour are resolved from here so a

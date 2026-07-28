@@ -4723,6 +4723,17 @@ increment (blue-green via GitHub Actions; content_guard gates the deploy).
 1. **1C-g.4c — claim-note collaboration** (attachments +delete-1h/admin, @mention→participants+notify,
    reply threads, read receipts). BIG; rewrites the claim-notes surface (same area as the datetime
    regression) → build in small, individually-tested increments; reuse the proven quick-task infra.
+   - **Increment 1 (backend) DONE — smoke-tested, committed local, NOT deployed:**
+     schema (biz_database.py: ALTER nidaan_claim_notes +parent_note_id/note_lang/note_translation/source;
+     new isolated tables nidaan_claim_note_attachments / _reads / _mentions / _seen — parallel to the
+     quick-task tables so the live quick-task path is untouched); helpers (biz_nidaan.py: add_claim_note
+     +parent/source backward-compat, get_claim_notes now returns reads/attachments/mentions, plus
+     add_claim_note_attachments / delete_claim_note_attachment(1h|admin) / set_claim_note_mentions /
+     mark_claim_notes_read / delete_claim_note(1h|admin, promotes replies) / get_claim_mention_candidates).
+     Smoke test (scratchpad/g4c_smoke.py): schema, thread-flatten, attach, mentions, receipts, delete → ALL PASS.
+   - **Increment 2 (NEXT) — endpoints:** extend add-note endpoint (parent_note_id + multipart attachments +
+     mention staff_ids → set_claim_note_mentions + email notify); DELETE claim-note + attachment endpoints;
+     mention-candidates endpoint; mark-read on claim open. Then Increment 3 — drawer UI parity. Deploy ONCE, live-tested.
 2. **1C-g.4d** — claim drawer UI restructure (parity with quick-tasks).
 3. **1C-h** — Superadmin Branch Dashboard (self-contained).
 4. **App Health cockpit (§55)** — scope with owner first, then build (super-admin only, audited).
