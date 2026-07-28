@@ -4805,6 +4805,66 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
 Sequencing: finish g.4c (Increment 2 endpoints → Increment 3 drawer UI) first (in flight), then this
 notifications cluster, then aesthetics. Or interleave if owner prioritizes chat notifications sooner.
 
+## 58. VISITOR FALLBACK · NidaanMitra · TASK-VIEW UX · BRANCH DASHBOARD · EMAIL-FROM (owner, Jul 29)
+
+**A. NidaanMitra + human-like AI — DONE (deployed v9).** Bot renamed NidaanMitra everywhere
+visitor-facing; the word "AI" removed from visitor view. Persona rewritten (biz_ai.py
+_NIDAAN_SUPPORT_PROMPT): warm saathi, NEVER reveals it's automated, draws the visitor out one gentle
+question at a time to build trust, and warmly captures name + mobile/WhatsApp to reconnect. Ops AI
+label → NidaanMitra. (Standing rule saved: memory feedback_localization_tier23.)
+
+**B. Visitor fallback & reconnection mechanics — DESIGN (to build, phased).** Problem: visitor wants a
+human but none available; or leaves/closes browser before/after we reply — did our reply reach them?
+Plan:
+  1. **Capture a channel early.** When escalating (or when interest is shown), NidaanMitra asks for
+     name + mobile/WhatsApp (persona already does this). Persist as a LEAD on the thread (contact on
+     nidaan_support_threads). No contact = we can only reach them if they reopen the chat.
+  2. **Return-to-open-tab:** already works — thread persists via thread_id+thread_key in localStorage;
+     widget polls every 4s, so a staff reply appears when they come back to the open tab.
+  3. **Closed-browser reply → out-of-band nudge:** when staff replies AND the visitor has a contact on
+     file AND hasn't been active (no poll / offline), send a nudge on email + SMS + WhatsApp: "Aapke
+     sawaal ka jawab aa gaya hai — yahan dekhiye: <deep link back to chat>". Deep link reopens the
+     SAME thread (thread_id+key in URL → widget rehydrates). Needs: (a) store last-seen/last-poll on
+     thread; (b) a staff-reply hook that fires the nudge if offline; (c) a signed reopen link.
+  4. **Becomes a lead:** a thread with a captured contact = a lead in the ops Support inbox / leads;
+     branch attribution still applies if they came via a branch code.
+  5. **Nudge cadence:** at most 1 nudge per staff reply, plus a gentle "still there?" follow-up next
+     business day if unanswered — capped, never spammy.
+  Reuse: dispatch() multi-channel (email/SMS/WhatsApp/telegram), on_duty_rep_ids, lead endpoint.
+
+**C. Task-view UX overhaul — DESIGN (to build).** Pain: super/sub-admins have ALL-tasks view buried
+far below → endless scroll on web + mobile to find a task or see what needs them; the Team-Member
+view is also clumsy/scroll-heavy. Plan (mobile-first, Tier II/III-clear):
+  - **Top "My Focus" band (no scroll):** compact cards at the very top — "Pending on me", "Needs
+    attention / overdue", "Awaiting my approval", "Due today". Counts + tap to filter. Role-aware.
+  - **Admins get a personal "My Tasks" tab** (their own items only) as the DEFAULT landing, with a
+    one-tap switch to "All tasks" (org-wide) — so they aren't forced to wade through everything.
+  - **Fast find:** a search/filter bar pinned at top (by title, assignee, status, category) so any
+    task is reachable without scrolling.
+  - **Collapse the long lists** behind tabs/accordions; compact rows; sticky filter header.
+  - Apply the SAME clean pattern to the Team-Member dashboard (de-clutter, prioritise "what's on me").
+  This is a UX restructure of nidaan_ops.html task area (sensitive, high-traffic) → build additively
+  behind the existing data, test the live path, mobile-first.
+
+**D. Branch dashboard (1C-h) — REQUIREMENTS confirmed.** Dedicated branch portal (backend/login exists:
+create_branch_token/verify_branch_token, @nidaanpartner.com email + OTP). Add the DASHBOARD UI:
+  - Track their referred subscribers (attributed accounts) + status.
+  - For direct ₹499 single-review filings: generate a payment link / QR the branch can share, plus
+    one-tap WhatsApp / SMS share to the customer's number.
+  - Login strictly via their own @nidaanpartner.com email + OTP.
+  - **Map @nidaanpartner.com staff/branch emails in the superadmin ops Staff view** so we capture who
+    holds a domain email (screenshot: md@, biaora@, dushyant@, info@ — Google Workspace users).
+
+**E. Email-from info@nidaanpartner.com — arrangement (owner does DNS/Workspace steps; I wire the app).**
+All internal + customer-facing mail must send FROM info@nidaanpartner.com. Current: biz_email.py sends
+via aiosmtplib using SMTP_USER/PASSWORD/SMTP_FROM_EMAIL/NIDAAN_FROM_EMAIL from biz.env — memory says
+SMTP NOT configured yet. Cloudflare Email Routing = INBOUND only (not sending); sending needs Workspace
+SMTP + SPF/DKIM/DMARC. Steps handed to owner separately (see chat). Once mailbox app-password exists,
+I set SMTP_USER/PASSWORD + SMTP_FROM_EMAIL=info@ + NIDAAN_FROM_EMAIL=info@ and restart.
+
+Recommended sequence (my rec): finish g.4c → notif #2 (30-min escalation) + #3 (subscriber dash) →
+visitor-fallback (B) → task-view UX (C) → branch dashboard (D). Email (E) unblocks once owner does DNS.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
