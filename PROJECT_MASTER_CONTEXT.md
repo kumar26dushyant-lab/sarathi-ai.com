@@ -4772,6 +4772,38 @@ test the exact live path, super-admin-gate sensitive controls); mobile-first eve
 doc updated simultaneously. See memories feedback_careful_no_break / feedback_mobile_first /
 feedback_master_doc_living_context.
 
+## 57. CHAT & NOTIFICATIONS OVERHAUL — owner testing feedback (Jul 29, 2026)
+
+Owner tested the live chat and asked for the following. Ground rule reaffirmed: everything
+user-facing must be plainly understandable to Tier II/III users (memory feedback_localization_tier23
+— words over ambiguous icons; e.g. globe → हिंदी/English label).
+
+**DONE (deployed, widget v8):**
+- Chat panel header no longer hidden under the mobile browser bar (100dvh + top gap, full-width).
+- Language control shows words (हिंदी / English / Hinglish) reflecting current lang — not a globe.
+- Ops Customer Support thread labels customer bubbles with the customer's NAME (not "Customer").
+
+**TODO — notifications cluster (next phase, careful/additive):**
+1. **Support agent alerts:** when a customer sends a support message, the handling/assigned ops
+   agents get notified on Telegram + email + ops staff dashboard (bell). Existing base:
+   `on_support_escalated` (biz_nidaan_notifications.py:737) already routes to on-duty reps on
+   bell+push+email+Telegram — extend to fire on new customer messages to a live thread, not only
+   first escalation. (Check: is there a per-thread agent assignment, or use on-duty reps roster?)
+2. **30-min superadmin escalation:** if a support chat has an unanswered customer message for >30 min
+   DURING office hours, escalate to superadmin on ALL channels (Telegram + web dashboard + mobile app
+   + email). Needs a periodic check in the worker (scan threads: last msg = customer, age>30min,
+   in business hours, not already escalated-to-superadmin) → dispatch P0/P1 to super_admins. Idempotent
+   (don't re-fire every tick — mark escalated_at).
+3. **Subscriber dashboard notifications:** on the customer/subscriber dashboard, show a notification
+   for (a) each support-chat reply and (b) each in-claim comment/message reply. Customer-facing bell
+   or badge; reuse the existing customer notification surface if one exists, else add lightly.
+
+**TODO — aesthetics:** polish both the ops-side support modal and the customer-facing chat widget
+(spacing, bubbles, headers, readability) — mobile-first, Tier II/III-clear.
+
+Sequencing: finish g.4c (Increment 2 endpoints → Increment 3 drawer UI) first (in flight), then this
+notifications cluster, then aesthetics. Or interleave if owner prioritizes chat notifications sooner.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
