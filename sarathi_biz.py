@@ -639,11 +639,13 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         _sub = await nidaan.get_active_subscription(_account["account_id"])
         _acct_ctx = {"name": _account.get("owner_name"),
                      "plan": (_sub or {}).get("plan"), "active": bool(_sub)}
+    _prev_status = None
     if body.thread_id and body.thread_key:
         thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
         if not thread:
             raise HTTPException(status_code=403, detail="Invalid conversation")
         tid, tkey = thread["thread_id"], body.thread_key
+        _prev_status = thread.get("status")
         _lang = _lang or (thread.get("lang") or "")
     else:
         started = await nidaan.create_support_thread(
@@ -681,11 +683,24 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     await nidaan.add_support_message(tid, "ai", answer)
     if escalated:
         await nidaan.set_support_status(tid, "escalated")
-        try:  # staff alert wiring lands in the next increment
+        try:
             import biz_nidaan_notifications as _nnot
             if hasattr(_nnot, "on_support_escalated"):
                 import asyncio as _aio
                 _aio.create_task(_nnot.on_support_escalated(tid))
+        except Exception:
+            pass
+    else:
+        # Customer follow-up on a thread a human is already handling (was escalated, or a
+        # staffer has replied) → alert the handling reps so the reply isn't missed. Not an
+        # escalation; skipped for pure-AI threads to avoid noise.
+        try:
+            _human_engaged = (_prev_status == "escalated") or any(
+                h.get("sender_type") == "staff" for h in history)
+            if _human_engaged:
+                import biz_nidaan_notifications as _nnot
+                import asyncio as _aio
+                _aio.create_task(_nnot.on_support_customer_reply(tid))
         except Exception:
             pass
     return {"thread_id": tid, "thread_key": tkey, "reply": answer,

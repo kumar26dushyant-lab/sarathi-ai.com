@@ -772,6 +772,37 @@ async def on_support_escalated(thread_id: int) -> None:
         logger.warning("on_support_escalated failed: %s", e)
 
 
+async def on_support_customer_reply(thread_id: int) -> None:
+    """A customer sent a FOLLOW-UP message on a support chat that a human is already handling
+    (previously escalated, or a staffer has replied). Alert the on-duty reps — bell + email +
+    Telegram — so the reply isn't missed. Lighter than on_support_escalated (no 'needs a human'
+    framing). Fire-and-forget; falls back to super-admins so nothing is dropped."""
+    try:
+        import biz_nidaan as _nid
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            th = await (await conn.execute(
+                "SELECT name, contact FROM nidaan_support_threads WHERE thread_id=?",
+                (thread_id,))).fetchone()
+            last = await (await conn.execute(
+                "SELECT body FROM nidaan_support_messages WHERE thread_id=? AND sender_type='customer' "
+                "ORDER BY msg_id DESC LIMIT 1", (thread_id,))).fetchone()
+        who = ((dict(th).get("name") if th else "") or "A customer").strip()
+        q = ((dict(last).get("body") if last else "") or "").strip()
+        ids = await _nid.on_duty_rep_ids()
+        if not ids:
+            ids = [a["staff_id"] for a in await _super_admin_staff()]
+        if not ids:
+            return
+        subject = f"💬 New reply from {who[:40]} — Ticket #{thread_id}"
+        body = f"{who} replied on their support chat:\n\n\"{q[:300]}\"\n\nOpen the Support inbox in ops to respond."
+        await notify_staff_inapp(ids, subject, body, event_key="support.customer_reply", email=True)
+        for sid in ids:
+            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+    except Exception as e:
+        logger.warning("on_support_customer_reply failed: %s", e)
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
 def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")
