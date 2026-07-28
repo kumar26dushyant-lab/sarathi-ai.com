@@ -4702,6 +4702,47 @@ Notes: this is a SENSITIVE surface (server internals + data export) → build ad
 gate + audit every action, no destructive one-clicks without confirm. Owner said "make it a to-do,
 we can discuss more" → NOT building yet; scope to be agreed first.
 
+## 56. CURRENT STATE & NEXT — orientation snapshot (Jul 28, 2026) — PAUSED for owner testing
+
+Read this first; the sections above are the detailed history. HEAD verified on prod after each
+increment (blue-green via GitHub Actions; content_guard gates the deploy).
+
+**LIVE + verified (this arc):**
+- **Flexible plans/pricing** (super-admin editable, grandfathered) — §48.1.
+- **Mobile-first identity** (email optional, payment-verified) + payment drop-off hardening — §48.2–3.
+- **Ops:** Accounts restructure + Branch column, All-Claims filters (+account/branch) — §48.4/1C-e/f.
+- **Branch profit-share** (ops reconciliation) + **branch portal** (email-OTP) — §48.9.
+- **AI support + lead-gen engine (S1–S5 + guide/support split + anti-hallucination)** — §49.
+- **Content:** single-source config (chat KB + homepage) + retired IRDA/DPDP/Lokpal/Ombudsman
+  everywhere + `content_guard` CI gate — §51/52/2a-b.
+- **Claims workflow 1C-g:** g.1 auto/manual assign (least-loaded), g.2 go/no-go templates,
+  g.4a attachment size/format notes, **g.4b multi-select assignment (grant-only access, verified)**.
+- **Task attachments:** ≤10 files/10 MB, +HEIC accept, delete-within-1h/admin — §53.
+
+**IN PROGRESS / NEXT (unblocked):**
+1. **1C-g.4c — claim-note collaboration** (attachments +delete-1h/admin, @mention→participants+notify,
+   reply threads, read receipts). BIG; rewrites the claim-notes surface (same area as the datetime
+   regression) → build in small, individually-tested increments; reuse the proven quick-task infra.
+2. **1C-g.4d** — claim drawer UI restructure (parity with quick-tasks).
+3. **1C-h** — Superadmin Branch Dashboard (self-contained).
+4. **App Health cockpit (§55)** — scope with owner first, then build (super-admin only, audited).
+
+**BLOCKED (need owner input):**
+- **g.3 + L2 integration** — push accepted claims + poll **claimshield.in**; needs the L2 API
+  contract (push endpoint, status/comments poll, auth). Owner will get it.
+
+**PARKED (owner action):**
+- Google Workspace branch mailboxes (DNS/MX live; create inboxes → set as branch contact_email).
+- Optional: send app mail from info@nidaanpartner.com (create mailbox + app password → 3 env vars).
+- **Mobile-first signup UI** (backend ready; paused for owner device testing).
+- **WhatsApp proxy** — awaiting a dedicated Android phone + iProxy endpoint (2-min gost-wa.service swap).
+- Privacy/terms are SARATHI legal docs — DPDP kept (compliance), do NOT strip.
+
+**GOVERNING RULES (memory):** careful/no-break on the mature codebase (additive, backward-compatible,
+test the exact live path, super-admin-gate sensitive controls); mobile-first every change; keep THIS
+doc updated simultaneously. See memories feedback_careful_no_break / feedback_mobile_first /
+feedback_master_doc_living_context.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*

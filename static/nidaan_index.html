@@ -211,6 +211,20 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .testi-text{font-size:.9rem;color:#374151;line-height:1.75;margin-bottom:1rem;font-style:italic}
 .testi-author{font-size:.82rem;font-weight:700;color:var(--navy)}
 .testi-role{font-size:.78rem;color:var(--slate)}
+/* VIDEO TESTIMONIALS */
+.vt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin-top:2rem}
+.vt-card{background:#0f172a;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(15,23,42,.08)}
+.vt-card video{width:100%;height:auto;display:block;background:#0f172a;max-height:540px}
+.greview-head{display:flex;align-items:center;justify-content:center;gap:.6rem;margin:3rem 0 .25rem;flex-wrap:wrap;text-align:center}
+.greview-badge{display:inline-flex;align-items:center;gap:.45rem;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:.4rem .9rem;font-size:.85rem;font-weight:700;color:var(--navy);box-shadow:0 1px 6px rgba(15,23,42,.06)}
+.greview-badge .stars{color:#fbbf24;letter-spacing:1px}
+.gcard-src{display:inline-flex;align-items:center;gap:.35rem;font-size:.72rem;color:var(--slate);font-weight:600;margin-top:.55rem}
+.gcard-g{display:inline-block;font-weight:800;font-family:'Poppins',sans-serif}
+.gcard-g b:nth-child(1){color:#4285F4}.gcard-g b:nth-child(2){color:#EA4335}.gcard-g b:nth-child(3){color:#FBBC05}.gcard-g b:nth-child(4){color:#4285F4}.gcard-g b:nth-child(5){color:#34A853}.gcard-g b:nth-child(6){color:#EA4335}
+.office-video{max-width:720px;margin:3rem auto 0;text-align:center}
+.office-video video{width:100%;height:auto;border-radius:16px;display:block;background:#0f172a;box-shadow:0 6px 24px rgba(15,23,42,.15)}
+.office-cap{font-size:.95rem;font-weight:700;color:var(--navy);margin-top:.9rem}
+.office-sub{font-size:.82rem;color:var(--slate);margin-top:.2rem}
 
 /* PLATFORMS */
 .platforms-grid{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.5rem}
@@ -958,8 +972,8 @@ span.hi-inline{display:none}
           </div>
           <div style="text-align:center;min-width:170px">
             <div style="font-size:3rem;font-weight:800;color:#b45309;font-family:'Poppins',sans-serif;line-height:1">₹499</div>
-            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="en">one-time · no commitment</div>
-            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="hi" style="display:none">एकमुश्त · कोई वचनबद्धता नहीं</div>
+            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="en">one-time</div>
+            <div style="font-size:.78rem;color:#92400e;font-weight:600;margin:.25rem 0 1rem" class="hi" style="display:none">एकमुश्त</div>
             <button class="plan-cta" style="background:#f59e0b;color:#1c1917;font-weight:700" onclick="window.location='/nidaan/start#get-reviewed'">
               <span class="en">Get Reviewed Now →</span><span class="hi" style="display:none">समीक्षा करवाएं →</span>
             </button>
@@ -1056,38 +1070,73 @@ span.hi-inline{display:none}
 <!-- ══════════ TESTIMONIALS ══════════ -->
 <section class="section" id="testimonials">
   <div class="section-inner">
-    <div class="tag en">What Advisors Say</div>
-    <div class="tag hi" style="display:none">सलाहकार क्या कहते हैं</div>
-    <h2 class="section-title en">Peace of mind. Every single time.</h2>
-    <h2 class="section-title hi" style="display:none">मन की शांति। हर बार।</h2>
+    <div class="tag en">Real Stories</div>
+    <div class="tag hi" style="display:none">असली कहानियाँ</div>
+    <h2 class="section-title en">Real claims. Real people. Real results.</h2>
+    <h2 class="section-title hi" style="display:none">असली क्लेम। असली लोग। असली नतीजे।</h2>
+    <p style="text-align:center;color:var(--slate);font-size:.9rem;max-width:640px;margin:.6rem auto 0" class="en">Policyholders and advisors, in their own words. Tap any video to play.</p>
+    <p style="text-align:center;color:var(--slate);font-size:.9rem;max-width:640px;margin:.6rem auto 0;display:none" class="hi">बीमाधारक और सलाहकार, अपने ही शब्दों में। चलाने के लिए किसी भी वीडियो पर टैप करें।</p>
+
+    <!-- Customer video testimonials (lazy: only posters load until tapped) -->
+    <div class="vt-grid">
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t1.jpg"><source src="/uploads/photos/Testimonies/web/t1.mp4" type="video/mp4"></video></div>
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t2.jpg"><source src="/uploads/photos/Testimonies/web/t2.mp4" type="video/mp4"></video></div>
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t3.jpg"><source src="/uploads/photos/Testimonies/web/t3.mp4" type="video/mp4"></video></div>
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t4.jpg"><source src="/uploads/photos/Testimonies/web/t4.mp4" type="video/mp4"></video></div>
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t5.jpg"><source src="/uploads/photos/Testimonies/web/t5.mp4" type="video/mp4"></video></div>
+      <div class="vt-card"><video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/t6.jpg"><source src="/uploads/photos/Testimonies/web/t6.mp4" type="video/mp4"></video></div>
+    </div>
+
+    <!-- Google reviews (verbatim, public) -->
+    <div class="greview-head">
+      <span class="greview-badge"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> <span class="stars">★★★★★</span> <span class="en">Reviews</span><span class="hi" style="display:none">समीक्षाएँ</span></span>
+    </div>
     <div class="testi-grid">
       <div class="testi-card">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text en">"My client's ₹4.8L mediclaim was rejected for 'non-disclosure'. Nidaan's team had it resolved at the competent authority level. My client cried with relief. I've never felt more proud as an advisor."</p>
-        <p class="testi-text hi" style="display:none">"मेरे क्लाइंट का ₹4.8L मेडिक्लेम 'non-disclosure' के आधार पर रिजेक्ट हुआ था। Nidaan की टीम ने सक्षम प्राधिकरण स्तर पर हल कर दिया। क्लाइंट की आंखों में आंसू थे। मुझे सलाहकार होने पर गर्व हुआ।"</p>
-        <div class="testi-author en">Rajesh Sharma</div>
-        <div class="testi-author hi" style="display:none">राजेश शर्मा</div>
-        <div class="testi-role en">LIC Advisor, Indore</div>
-        <div class="testi-role hi" style="display:none">LIC एडवाइजर, इंदौर</div>
+        <p class="testi-text">"I am extremely happy with the service provided during my car insurance claim by Nidaan legal consultants. Specially consultant Mr Ashwin Kaushal and Mr Abhishek Solanki were courteous, supportive, and guided me through every step of the process. The claim was handled quickly and transparently, with no unnecessary delays. Truly excellent customer service."</p>
+        <div class="testi-author">Nakul Pal</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
       </div>
       <div class="testi-card">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text en">"Three clients, three claims, all resolved within 6 months. The SMS updates kept everyone informed — I didn't have to chase anything. Gold plan is worth every rupee."</p>
-        <p class="testi-text hi" style="display:none">"तीन क्लाइंट, तीन क्लेम, सभी 6 महीने के भीतर हल। SMS अपडेट ने सबको जानकारी रखी — मुझे कुछ पीछा नहीं करना पड़ा। Gold प्लान हर रुपए के लायक है।"</p>
-        <div class="testi-author en">Priya Malhotra</div>
-        <div class="testi-author hi" style="display:none">प्रिया मल्होत्रा</div>
-        <div class="testi-role en">HDFC Life Advisor, Bhopal</div>
-        <div class="testi-role hi" style="display:none">HDFC Life एडवाइजर, भोपाल</div>
+        <p class="testi-text">"I am Ganesh Yadav. I received my claim amount of ₹11.50 lakh with the help of Mr Ashwin Kaushal sir & the Nidaan team. Thank you so much for your help. Thank you so much Nidaan team."</p>
+        <div class="testi-author">Ganesh Yadav</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★☆</div>
+        <p class="testi-text">"I had a dispute — my insurance company had rejected my claim of ₹2.20 lakh. Then I contacted Nidaan claims experts. They processed my claim legally and I got my claim amount. Thanks Nidaan family and Ashwin sir, Abhishek sir and the whole team 🙏"</p>
+        <div class="testi-author">Ankit Bagdare</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
       </div>
       <div class="testi-card">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text en">"I used to dread client calls about rejected claims. Now I just say 'I'll connect you with our legal team' and it's done. Nidaan changed how I handle the hardest part of this job."</p>
-        <p class="testi-text hi" style="display:none">"पहले रिजेक्ट क्लेम के फोन से डर लगता था। अब बस कहता हूं 'हमारी कानूनी टीम से जोड़ता हूं' और हो जाता है। Nidaan ने इस काम का सबसे मुश्किल हिस्सा बदल दिया।"</p>
-        <div class="testi-author en">Suresh Patel</div>
-        <div class="testi-author hi" style="display:none">सुरेश पटेल</div>
-        <div class="testi-role en">Star Health Advisor, Raipur</div>
-        <div class="testi-role hi" style="display:none">Star Health एडवाइजर, रायपुर</div>
+        <p class="testi-text">"मैं निदान को बहुत बहुत धन्यवाद देता हूँ। निदान की मदद से मुझे मेरा बीमा क्लेम का पैसा मिल गया है। निदान ने मुझे बहुत ही अच्छे से सेवा प्रदान की है, और मुझे किसी भी प्रकार की परेशानी का सामना नहीं करना पड़ा।"</p>
+        <div class="testi-author">Gulab Bherwe</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
       </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">"क्लेम्स निदान का बहुत-बहुत धन्यवाद, क्योंकि उनकी वजह से आज हमें हमारे डूबते हुए पैसे वापस मिले। हम अपने क्लेम के पैसों की आशा ही खो चुके थे। क्लेम्स निदान ज़रूरतमंदों की सेवा के लिए बहुत अच्छा काम कर रहा है। सभी से आग्रह करूँगा कि अपनी हर समस्या के लिए इनसे संपर्क करें।"</p>
+        <div class="testi-author">Devendra Singh Yadav</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">"Nidaan — The Legal Consultants LLP के माध्यम से आपका किसी भी प्रकार का रिजेक्ट किया हुआ क्लेम प्राप्त किया जा सकता है, वह भी बहुत आसान तरीके से। LIC और हेल्थ इंश्योरेंस का एडवाइज़र होते हुए मैंने भी इस प्लेटफॉर्म से तीन क्लेम रजिस्टर्ड किए हैं।"</p>
+        <div class="testi-author">Sudhir Kochatta</div>
+        <div class="gcard-src"><span class="gcard-g"><b>G</b><b>o</b><b>o</b><b>g</b><b>l</b><b>e</b></span> · verified review</div>
+      </div>
+    </div>
+
+    <!-- Head office -->
+    <div class="office-video">
+      <video preload="none" playsinline controls poster="/uploads/photos/Testimonies/web/office.jpg"><source src="/uploads/photos/Testimonies/web/office.mp4" type="video/mp4"></video>
+      <div class="office-cap en">Inside Nidaan Head Office</div>
+      <div class="office-cap hi" style="display:none">निदान हेड ऑफिस के अंदर</div>
+      <div class="office-sub en">A real team, a real office, working on real claims every day.</div>
+      <div class="office-sub hi" style="display:none">एक असली टीम, एक असली दफ्तर, हर दिन असली क्लेम पर काम करते हुए।</div>
     </div>
   </div>
 </section>
@@ -1244,8 +1293,8 @@ span.hi-inline{display:none}
       <p class="hi" style="display:none">भारत सरकार के कॉर्पोरेट कार्य मंत्रालय (MCA) के तहत पंजीकृत।<br>सेवा क्षेत्र: <span data-nc="jurisdictions" data-lang="hi">मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब</span></p>
       <p style="margin-top:.75rem">
         📞 +91-98272 84804 · 98260 11116 · 95844 68804<br>
-        📧 <a href="mailto:nidaanhelp@gmail.com">nidaanhelp@gmail.com</a><br>
-        🌐 <a href="https://www.NidaanPartner.com" target="_blank" rel="noopener">www.NidaanPartner.com</a>
+        📧 <a href="mailto:info@nidaanpartner.com">info@nidaanpartner.com</a> · <a href="mailto:md@nidaanlegalindia.com">md@nidaanlegalindia.com</a><br>
+        🌐 <a href="https://www.nidaanpartner.com" target="_blank" rel="noopener">www.nidaanpartner.com</a>
       </p>
       <p style="margin-top:.5rem;font-size:.78rem">
         <a href="https://instagram.com/nidaantheclaimsexpert" target="_blank" rel="noopener">Instagram</a> ·

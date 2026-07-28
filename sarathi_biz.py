@@ -6805,7 +6805,7 @@ async def nidaan_vcard():
             f"FN:{name}\r\n"
             "ORG:NidaanPartner.com\r\n"
             f"TEL;TYPE=CELL,WORK,VOICE:{phone}\r\n"
-            "EMAIL:nidaanhelp@gmail.com\r\n"
+            "EMAIL:info@nidaanpartner.com\r\n"
             "URL:https://nidaanpartner.com\r\n"
             "END:VCARD\r\n")
     payload = "".join(vcards)
