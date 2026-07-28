@@ -283,6 +283,9 @@ span.hi-inline{display:none}
 .sticky-cta .sc-sub{font-size:.75rem;color:rgba(255,255,255,.7);font-weight:400}
 .sticky-cta a{background:var(--cyan);color:#fff;padding:.55rem 1.3rem;border-radius:8px;font-weight:700;font-size:.88rem;white-space:nowrap}
 @media(max-width:480px){.sticky-cta .sc-sub{display:none}}
+/* Chat FAB (injected by the support widget) lifts above the sticky CTA bar when it's shown,
+   so the 💬 button never sits on top of the bottom bar (esp. on mobile). */
+.sticky-cta.visible ~ .nsw-btn{bottom:calc(76px + env(safe-area-inset-bottom,0px)) !important;transition:bottom .25s}
 
 /* ═══════════════════════════════════════════════
    MOBILE RESPONSIVE — 768px and below
@@ -1562,6 +1565,6 @@ else _initScrollNav();
   }catch(e){}
 })();
 </script>
-<script src="/static/nidaan_support_widget.js?v=6" defer></script>
+<script src="/static/nidaan_support_widget.js?v=7" defer></script>
 </body>
 </html>
