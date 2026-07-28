@@ -45,6 +45,9 @@
     hi: ["🛡️ मेरा रिजेक्ट क्लेम जांचें", "💳 प्लान्स और कीमत", "🙋 इंसान से बात करें"],
     hinglish: ["🛡️ Mera rejected claim check karein", "💳 Plans aur pricing", "🙋 Insaan se baat karein"]
   };
+  // Header language control shows the CURRENT language in words (clear for every user) — not a globe.
+  var LANGLABEL = { en: 'English', hi: 'हिंदी', hinglish: 'Hinglish' };
+  function updateLangLabel(){ var e2=document.getElementById('nswLangLabel'); if(e2) e2.textContent = LANGLABEL[lang] || 'भाषा'; }
 
   var css = ''
     + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:26px;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}'
@@ -74,14 +77,15 @@
     + '.nsw-in textarea:focus{outline:none;border-color:#22d3ee}'
     + '.nsw-in button{background:#06b6d4;border:none;border-radius:10px;color:#fff;padding:0 1rem;font-weight:700;cursor:pointer;font-size:1.1rem}'
     + '.nsw-in button:disabled{opacity:.5;cursor:default}'
-    + '.nsw-langbtn{position:absolute;top:.6rem;right:2.7rem;display:flex;align-items:center;gap:.18rem;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.45);color:#fff;font-size:.9rem;line-height:1;cursor:pointer;opacity:1;border-radius:20px;padding:.28rem .5rem}'
+    + '.nsw-langbtn{position:absolute;top:.6rem;right:2.7rem;display:flex;align-items:center;gap:.2rem;white-space:nowrap;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:.8rem;font-weight:700;line-height:1;cursor:pointer;opacity:1;border-radius:16px;padding:.32rem .6rem}'
     + '.nsw-langbtn:active{background:rgba(255,255,255,.32)}'
     + '.nsw-langbtn .cx{font-size:.62rem;opacity:.9}'
     + '.nsw-langmenu{position:absolute;top:2.5rem;right:.6rem;background:#0f1e3a;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:.3rem;display:none;flex-direction:column;gap:.15rem;z-index:6;box-shadow:0 6px 18px rgba(0,0,0,.4)}'
     + '.nsw-langmenu.open{display:flex}'
     + '.nsw-langmenu button{background:none;border:none;color:#e2e8f0;text-align:left;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;white-space:nowrap}'
     + '.nsw-langmenu button:active{background:rgba(6,182,212,.25)}'
-    + '@media(max-width:480px){.nsw-panel{right:8px;bottom:78px;height:calc(100vh - 96px)}}';
+    + '@media(max-width:480px){.nsw-panel{left:8px;right:8px;width:auto;max-width:none;bottom:78px;'
+    +   'height:calc(100vh - 138px);height:calc(100dvh - 138px)}}';
   var style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
 
   var btn = document.createElement('button');
@@ -93,7 +97,7 @@
   panel.innerHTML =
     '<div class="nsw-hdr"><h4>Chat with Nidaan Partner</h4>'
     + '<p>AI assistant · human team Mon–Fri, 10am–6pm IST</p>'
-    + '<button class="nsw-langbtn" id="nswLangBtn" title="Change language" aria-label="Change language">🌐<span class="cx">▾</span></button>'
+    + '<button class="nsw-langbtn" id="nswLangBtn" title="भाषा बदलें / Change language" aria-label="Change language"><span id="nswLangLabel">भाषा</span><span class="cx">▾</span></button>'
     + '<button class="nsw-x" aria-label="Close">×</button>'
     + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
     + '<div class="nsw-msgs" id="nswMsgs"></div>'
@@ -137,6 +141,7 @@
   }
   function chooseLang(l){
     lang = l; try{ localStorage.setItem(LKEY, l); }catch(e){}
+    updateLangLabel();
     var lp=document.getElementById('nswLang'); if(lp) lp.remove();
     inBox.style.display=''; showGreeting(); startPoll();
     setTimeout(function(){ input.focus(); }, 80);
@@ -240,6 +245,7 @@
 
   // ── Language: always-available switcher (header 🌐) + intent detection ──
   var langBtn = panel.querySelector('#nswLangBtn'), langMenu = panel.querySelector('#nswLangMenu');
+  updateLangLabel();   // reflect stored language on load
   langBtn.addEventListener('click', function(e){ e.stopPropagation(); langMenu.classList.toggle('open'); });
   document.addEventListener('click', function(){ langMenu.classList.remove('open'); });
   Array.prototype.forEach.call(langMenu.querySelectorAll('button'), function(b){
@@ -258,7 +264,7 @@
   function switchLang(l, announce){
     if(!GREET[l]) l = 'en';
     lang = l; try{ localStorage.setItem(LKEY, l); }catch(e){}
-    langMenu.classList.remove('open');
+    langMenu.classList.remove('open'); updateLangLabel();
     if(announce && panel.classList.contains('open')){ if(!greeted){ greeted = true; startPoll(); } bubble(LANGCONF[l] || LANGCONF.en, 'ai'); }
   }
   // Detect a short "please use language X" / "change language" request (not a real question).
