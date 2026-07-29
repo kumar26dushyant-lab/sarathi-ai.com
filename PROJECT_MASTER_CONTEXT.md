@@ -4847,7 +4847,17 @@ next-business-day gentle follow-up if still unanswered (capped). Original design
      business day if unanswered — capped, never spammy.
   Reuse: dispatch() multi-channel (email/SMS/WhatsApp/telegram), on_duty_rep_ids, lead endpoint.
 
-**C. Task-view UX overhaul — DESIGN (to build).** Pain: super/sub-admins have ALL-tasks view buried
+**C. Task-view UX overhaul — Increment 1 DONE (deployed + verified Jul 29).** Reordered the ops Tasks
+panel so MY tasks (Pending with me / Assigned by me / Involved) render FIRST, above the org-wide counts
+strip + leave tiles (no scrolling to find your own work). Added a compact '🎯 My Focus' band at the very
+top: Pending on me / Overdue / Due today / Involved, computed client-side from the already-fetched lists
+(no new API calls), mobile-first. Additive + reorder only (load fns target the same IDs). ALSO fixed:
+the customer dashboard notification bell dropdown was clipped by nav overflow:hidden → now moved to
+<body>, position:fixed under the bell (z-index 9999). REMAINING increments: admin default landing on
+'My Tasks' with one-tap switch to All-org; collapse/paginate long registry; apply the same clean
+pattern to the plain Team-Member dashboard. Original design below:
+
+**C(design). Task-view UX overhaul.** Pain: super/sub-admins have ALL-tasks view buried
 far below → endless scroll on web + mobile to find a task or see what needs them; the Team-Member
 view is also clumsy/scroll-heavy. Plan (mobile-first, Tier II/III-clear):
   - **Top "My Focus" band (no scroll):** compact cards at the very top — "Pending on me", "Needs
