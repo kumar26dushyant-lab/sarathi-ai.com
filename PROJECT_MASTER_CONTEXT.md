@@ -4871,6 +4871,14 @@ SMTP NOT configured yet. Cloudflare Email Routing = INBOUND only (not sending); 
 SMTP + SPF/DKIM/DMARC. Steps handed to owner separately (see chat). Once mailbox app-password exists,
 I set SMTP_USER/PASSWORD + SMTP_FROM_EMAIL=info@ + NIDAAN_FROM_EMAIL=info@ and restart.
 
+**F. Customer-facing Claim # + Chat ID — DONE (deployed + verified Jul 29).** Customers now see the
+IDENTICAL identifiers our team uses, for transparency + easy lookup when they contact support.
+Claim number = zero-padded claim_id (ops fmtClaimNum replicated on the customer dashboard: Claim #
+column in the claims list, 'Claim No.' row + padded drawer title, notif bell). Chat ID = raw
+thread_id shown in the widget header ('Chat ID: #<id>', bilingual, widget v11). Notifications now pad
+the claim number via biz_nidaan_notifications._cn() so emails + Telegram quote the same number (chat
+IDs were already raw thread_id everywhere).
+
 Recommended sequence (my rec): finish g.4c → notif #2 (30-min escalation) + #3 (subscriber dash) →
 visitor-fallback (B) → task-view UX (C) → branch dashboard (D). Email (E) unblocks once owner does DNS.
 
