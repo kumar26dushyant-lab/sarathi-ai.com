@@ -4893,12 +4893,15 @@ CURRENT ENTANGLEMENT (the seam):
   nginx (host-routed), static, worker loops.
 
 PHASES (each independently valuable, safe, reversible):
-- **Phase 1 — Email/credential separation (small, high value; delivers the email ask).** biz_email
-  already picks the FROM by platform; make the SENDING IDENTITY per-platform so each domain signs its
-  own mail (DKIM-aligned, no "on behalf of"): (a) two SMTP accounts — NIDAAN_SMTP_USER=info@nidaanpartner.com
-  (+ the app password) for Nidaan, keep Sarathi on its existing account/info@sarathi-ai.com; route by
-  from-domain; OR (b) Resend API with BOTH domains verified (cleanest — per-domain DKIM, one code path).
-  Additive; Sarathi config untouched; test both before/after.
+- **Phase 1 — Email/credential separation — DONE (deployed + live-tested Jul 29).** biz_email now has
+  a dedicated Nidaan SMTP account: added NIDAAN_SMTP_HOST/PORT/USER/PASSWORD; @nidaanpartner.com senders
+  authenticate via info@nidaanpartner.com (Workspace app password) → From=auth=Nidaan domain (DKIM
+  aligned). STRICTLY ADDITIVE — only @nidaanpartner.com senders enter the branch; Sarathi keeps
+  SMTP_USER=nidaanpartner@gmail.com + From=info@sarathi-ai.com, path untouched. biz.env updated on
+  server (backup made: biz.env.bak.*), NIDAAN_FROM_EMAIL=info@nidaanpartner.com. Rolling restart
+  (web@1→web@2→worker, zero downtime; both /health 200; log '✅ Nidaan email account ready'). Live test:
+  Nidaan send True (from info@nidaanpartner.com), Sarathi send True (from info@sarathi-ai.com). Routing
+  smoke-tested too. NOTE: app password is in /opt/sarathi/biz.env (600) — owner may regenerate anytime.
 - **Phase 2 — Code modularization (refactor-only, behavior-preserving).** Split sarathi_biz.py routes
   into FastAPI APIRouters (sarathi_routes / nidaan_routes / shared_core), mounted by host. One process
   still, but a Nidaan change stops editing the same file as Sarathi. Huge drop in "change one, risk the
