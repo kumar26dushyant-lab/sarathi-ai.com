@@ -803,6 +803,70 @@ async def on_support_customer_reply(thread_id: int) -> None:
         logger.warning("on_support_customer_reply failed: %s", e)
 
 
+async def run_support_sla_escalation(minutes: int = 30) -> int:
+    """Worker sweep: support threads escalated to a human but with NO staff reply for > `minutes`
+    DURING business hours → escalate to super-admins on all channels (dashboard bell + web push +
+    email + Telegram). Idempotent via nidaan_support_threads.sa_escalated_at (cleared when a staffer
+    finally replies, so a later unanswered message can escalate again). Returns count escalated."""
+    try:
+        import biz_nidaan as _nid
+        if not await _nid.is_within_business_hours():
+            return 0
+        from datetime import datetime as _dt, timedelta as _td
+        cutoff = (_dt.utcnow() - _td(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await conn.execute(
+                """SELECT t.thread_id, t.name, t.contact,
+                          (SELECT MAX(m.created_at) FROM nidaan_support_messages m
+                             WHERE m.thread_id=t.thread_id AND m.sender_type='customer') AS last_cust,
+                          (SELECT MAX(m.created_at) FROM nidaan_support_messages m
+                             WHERE m.thread_id=t.thread_id AND m.sender_type='staff') AS last_staff
+                   FROM nidaan_support_threads t
+                   WHERE t.status='escalated' AND t.sa_escalated_at IS NULL""")).fetchall()]
+        due = []
+        for r in rows:
+            lc = r.get("last_cust")
+            if not lc:
+                continue                      # no customer message yet
+            ls = r.get("last_staff")
+            if ls and str(ls) >= str(lc):
+                continue                      # a staffer already answered the latest customer msg
+            if str(lc) > cutoff:
+                continue                      # latest customer msg not yet `minutes` old
+            due.append(r)
+        if not due:
+            return 0
+        sa_ids = [a["staff_id"] for a in await _super_admin_staff()]
+        if not sa_ids:
+            return 0
+        n = 0
+        for r in due:
+            tid = r["thread_id"]
+            who = (r.get("name") or "A customer").strip()
+            contact = (r.get("contact") or "").strip()
+            cline = f"\nContact: {contact}" if contact else "\n(no contact captured — reply in the chat)"
+            subject = f"⏰ Support SLA breach — Ticket #{tid} unanswered {minutes}+ min"
+            body = (f"{who}'s support chat has had NO human reply for over {minutes} minutes during "
+                    f"office hours.{cline}\n\nPlease step in or reassign. Open the Support inbox in ops.")
+            await notify_staff_inapp(sa_ids, subject, body,
+                                     event_key="support.sla_escalation", email=True)
+            for sid in sa_ids:
+                await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute(
+                    "UPDATE nidaan_support_threads SET sa_escalated_at=CURRENT_TIMESTAMP WHERE thread_id=?",
+                    (tid,))
+                await conn.commit()
+            n += 1
+        if n:
+            logger.info("⏰ Support SLA escalation: %d thread(s) escalated to super-admins", n)
+        return n
+    except Exception as e:
+        logger.warning("run_support_sla_escalation failed: %s", e)
+        return 0
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
 def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")

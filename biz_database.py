@@ -1844,6 +1844,14 @@ async def init_db():
             )
         """)
 
+        # Support-thread SLA escalation idempotency (notif cluster #2): once an unanswered
+        # thread has been escalated to super-admins, don't re-fire every tick. Cleared when a
+        # staffer finally replies (so a later unanswered message can escalate again).
+        try:
+            await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN sa_escalated_at TIMESTAMP")
+        except Exception:
+            pass
+
         # ── Admin-editable task categories (tags) ────────────────────────────
         # A small, super-admin-managed list of task tags (code + label + colour).
         # Tasks store the short code; the label/colour are resolved from here so a

@@ -4106,6 +4106,8 @@ async def ops_support_reply(thread_id: int, body: OpsSupportReplyReq, request: R
     # so it's no longer flagged as waiting; 'closed' is explicit via the close action).
     if meta.get("status") == "escalated":
         await nidaan.set_support_status(thread_id, "ai")
+    # Clear the SLA super-admin-escalation flag so a later unanswered message can escalate afresh.
+    await nidaan.clear_support_sa_escalation(thread_id)
     return {"ok": True}
 
 
@@ -20238,6 +20240,21 @@ async def main():
                     logger.error("Branch unpaid sweep error: %s", e)
                 await asyncio.sleep(12 * 3600)  # twice daily
         asyncio.create_task(branch_unpaid_loop())
+
+        # Step 6g2: Support SLA — escalate to super-admins any human-requested support chat left
+        # unanswered > 30 min during office hours (dashboard + push + email + Telegram). Idempotent
+        # via nidaan_support_threads.sa_escalated_at. Worker-only singleton, every 5 min.
+        async def support_sla_loop():
+            await asyncio.sleep(180)  # let startup settle
+            while True:
+                try:
+                    await nnot.run_support_sla_escalation(30)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Support SLA escalation error: %s", e)
+                await asyncio.sleep(300)  # every 5 min
+        asyncio.create_task(support_sla_loop())
 
         # Step 6h: WhatsApp line watchdog — self-monitoring / auto-restart /
         # escalate-to-super-admin / recovery. Worker-only singleton, every 4 min.

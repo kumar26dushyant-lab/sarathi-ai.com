@@ -1632,6 +1632,15 @@ async def set_support_status(thread_id: int, status: str) -> None:
         await conn.commit()
 
 
+async def clear_support_sa_escalation(thread_id: int) -> None:
+    """A staffer replied → clear the super-admin escalation flag so a later unanswered message
+    can escalate again (notif cluster #2 idempotency)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET sa_escalated_at=NULL WHERE thread_id=?", (thread_id,))
+        await conn.commit()
+
+
 async def list_support_threads_ops(status: Optional[str] = None, limit: int = 150) -> list[dict]:
     """Ops support inbox: all threads (escalated first, newest activity first) with a preview."""
     where, params = "", []
