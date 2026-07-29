@@ -548,6 +548,7 @@
     <table id="claimsTable">
       <thead>
         <tr>
+          <th class="en">Claim #</th><th class="hi">क्लेम #</th>
           <th class="en">Client</th><th class="hi">ग्राहक</th>
           <th class="en">Type</th><th class="hi">प्रकार</th>
           <th class="en">Insurer</th><th class="hi">बीमाकर्ता</th>
@@ -1038,6 +1039,9 @@ function stageLabel(stage){
 function stageHtml(stage){
   return `<span class="status-pill s-${(stage||'intake').replace(/\W/g,'')}">${stageLabel(stage)}</span>`;
 }
+// Same claim-number format as the ops/superadmin portal (zero-padded to 3) so the customer and
+// our team always quote the IDENTICAL number when resolving queries.
+function fmtClaimNum(id){ if (id == null || id === '') return '—'; return String(id).padStart(3, '0'); }
 
 // ── Notification bell — unread ops replies on the subscriber's claims ─────────
 let _notifData = { claim_unread_total: 0, claims: {} };
@@ -1067,7 +1071,7 @@ function toggleNotif(ev) {
   }
   html += ids.map(id => {
     const n = claims[id];
-    const label = isEn ? `Claim #${id} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${id} — ${n} नया जवाब`;
+    const label = isEn ? `Claim #${fmtClaimNum(id)} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${fmtClaimNum(id)} — ${n} नया जवाब`;
     return `<button onclick="openNotifClaim(${id})" style="${rowStyle}">📋 ${label}</button>`;
   }).join('');
   if (!html) html = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
@@ -1369,6 +1373,7 @@ async function loadDashboard() {
   }
   tbody.innerHTML = claims.map(c => `
     <tr style="cursor:pointer" onclick="openClaimDrawer(${c.claim_id})">
+      <td style="white-space:nowrap;font-weight:800;color:#22d3ee">#${fmtClaimNum(c.claim_id)}</td>
       <td>${esc(c.insured_name)}<br><small style="color:rgba(255,255,255,.4)">${esc(c.insured_phone)}</small></td>
       <td style="text-transform:capitalize">${esc(c.claim_type)}</td>
       <td>${esc(c.insurer_name||'—')}</td>
@@ -1594,7 +1599,7 @@ const STATUS_LABELS_FULL = {
 };
 
 async function openClaimDrawer(claim_id) {
-  document.getElementById('drawerTitle').textContent = `Claim #${claim_id}`;
+  document.getElementById('drawerTitle').textContent = `Claim #${fmtClaimNum(claim_id)}`;
   document.getElementById('drawerBody').innerHTML = '<div style="text-align:center;padding:3rem;color:rgba(255,255,255,.3)">Loading…</div>';
   document.getElementById('claimDrawer').classList.add('open');
   const res = await api(`/nidaan/api/claims/${claim_id}`);
@@ -1603,6 +1608,7 @@ async function openClaimDrawer(claim_id) {
   const isHi = document.body.classList.contains('hi');
 
   const fields = [
+    ['Claim No.', `#${fmtClaimNum(claim_id)}`],
     ['Client', esc(c.insured_name)],
     ['Phone', esc(c.insured_phone)],
     ['Type', (c.claim_type||'').replace(/_/g,' ')],
@@ -2612,6 +2618,6 @@ if ('serviceWorker' in navigator) {
 <script>window.NIDAAN_APP_ID='sub';window.NIDAAN_APP_NAME='Nidaan Partner';</script>
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
-<script src="/static/nidaan_support_widget.js?v=10" defer></script>
+<script src="/static/nidaan_support_widget.js?v=11" defer></script>
 </body>
 </html>

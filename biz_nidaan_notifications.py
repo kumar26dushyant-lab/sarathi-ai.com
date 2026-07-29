@@ -64,6 +64,15 @@ RECIPIENT_SUBSCRIBER = "subscriber"
 RECIPIENT_STAFF      = "staff"
 
 
+def _cn(claim_id) -> str:
+    """Claim number formatted exactly like the ops + customer UI (zero-padded to 3 digits) so every
+    surface — dashboards, emails, Telegram — quotes the IDENTICAL number."""
+    try:
+        return str(int(claim_id)).zfill(3)
+    except Exception:
+        return str(claim_id)
+
+
 # IST is UTC+5:30 — used for quiet-hours calc.
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -1448,9 +1457,9 @@ async def on_claim_filed(claim_id: int, account_id: int):
             recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
             recipient_phone=a.get("phone") or "",
             recipient_email=a.get("email") or "",
-            subject=f"New claim #{claim_id} — {claim.get('insured_name','')}",
+            subject=f"New claim #{_cn(claim_id)} — {claim.get('insured_name','')}",
             body=(f"🆕 New claim filed.\n\n"
-                  f"Case: #{claim_id} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
+                  f"Case: #{_cn(claim_id)} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
                   f"Open: /admin?account={account_id}"),
             claim_id=claim_id, account_id=account_id)
@@ -1508,7 +1517,7 @@ async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, p
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     if from_type == "subscriber":
         subj = f"💬 Message — {claim.get('owner_name') or claim.get('account_email','')}"
-        body = (f"Re: #{claim_id} {claim.get('insured_name','')}\n"
+        body = (f"Re: #{_cn(claim_id)} {claim.get('insured_name','')}\n"
                 f"\"{(preview or '')[:140]}\"\n\nOpen: /admin?account={account_id}")
         for sid in admins:
             await _record_notification(
@@ -1606,7 +1615,7 @@ async def on_quick_task_assigned(quick_task: dict):
     def _common_lines():
         lines = []
         if quick_task.get("claim_id"):
-            lines.append(f"Linked: claim #{quick_task['claim_id']} "
+            lines.append(f"Linked: claim #{_cn(quick_task['claim_id'])} "
                          f"({quick_task.get('insured_name','')})")
         if quick_task.get("due_date"):
             lines.append(f"Due: {quick_task['due_date']}")
@@ -1879,7 +1888,7 @@ async def on_quick_task_request(quick_task: dict):
     subject = f"[Nidaan] Request from {frm}: {title}"
     body = ("🙋 New request from " + frm + "\n"
             f"📌 {title}\n"
-            + (f"Linked: claim #{quick_task['claim_id']}\n" if quick_task.get('claim_id') else "")
+            + (f"Linked: claim #{_cn(quick_task['claim_id'])}\n" if quick_task.get('claim_id') else "")
             + f"Pick up: {link}")
     # EMAIL each admin; WHATSAPP only to the connected official line(s).
     for a in await _active_admins():
@@ -2107,9 +2116,9 @@ async def on_document_received(claim_id: int, doc_id: int, source: str = "dashbo
             recipient_type=RECIPIENT_STAFF, recipient_id=a["sid"],
             recipient_phone=a.get("phone") or "",
             recipient_email=a.get("email") or "",
-            subject=f"New document on case #{claim_id} ({source})",
+            subject=f"New document on case #{_cn(claim_id)} ({source})",
             body=(f"📎 Document received\n\n"
-                  f"Case: #{claim_id}\n"
+                  f"Case: #{_cn(claim_id)}\n"
                   f"File: {doc.get('original_filename','(unnamed)')}\n"
                   f"Source: {source}\n\n"
                   f"Open: /nidaan/ops"),
@@ -2242,7 +2251,7 @@ async def on_lead_filed(claim_id: int, account_id: int):
     _now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     _asubj = f"📝 New ₹499 lead — {claim.get('insured_name','')}"
     _abody = (f"New ₹499 review lead (payment pending).\n"
-              f"Case: #{claim_id} {claim.get('insured_name','')} ({ctype})\n"
+              f"Case: #{_cn(claim_id)} {claim.get('insured_name','')} ({ctype})\n"
               f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n"
               f"Documents pending: {len(pending)}\n\n"
               f"Open: /admin?account={account_id}")

@@ -62,6 +62,16 @@
     var t=document.getElementById('nswHdrTitle'); if(t) t.textContent = HDRTITLE[L] || HDRTITLE.en;
     var s=document.getElementById('nswHdrSub'); if(s) s.textContent = HDRSUB[L] || HDRSUB.en;
     var inp=document.getElementById('nswInput'); if(inp) inp.setAttribute('placeholder', PLACEHOLD[L] || PLACEHOLD.en);
+    setChatId();
+  }
+  // Show the Chat ID (same number our team sees) once a conversation exists — for transparency
+  // and so an agent can look it up. Bilingual label.
+  var CHATIDLBL = { en: 'Chat ID: #', hi: 'चैट ID: #', hinglish: 'Chat ID: #' };
+  function setChatId(){
+    var e = document.getElementById('nswChatId');
+    if(!e) return;
+    if(thread && thread.id){ e.textContent = (CHATIDLBL[lang] || CHATIDLBL.en) + thread.id; e.style.display=''; }
+    else { e.style.display='none'; }
   }
 
   var css = ''
@@ -112,6 +122,7 @@
   panel.innerHTML =
     '<div class="nsw-hdr"><h4 id="nswHdrTitle">Chat with NidaanMitra</h4>'
     + '<p id="nswHdrSub">Nidaan Partner · team online Mon–Fri, 10am–6pm IST</p>'
+    + '<div id="nswChatId" style="font-size:.68rem;opacity:.92;margin-top:.15rem;display:none"></div>'
     + '<button class="nsw-langbtn" id="nswLangBtn" title="भाषा बदलें / Change language" aria-label="Change language"><span id="nswLangLabel">भाषा</span><span class="cx">▾</span></button>'
     + '<button class="nsw-x" aria-label="Close">×</button>'
     + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
@@ -216,7 +227,7 @@
       var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       var d=await r.json().catch(function(){return {};});
       if(!r.ok){ errEl.textContent=d.detail||'Could not submit. Please try again later.'; btn.disabled=false; return; }
-      if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key}; localStorage.setItem(TKEY, JSON.stringify(thread)); }
+      if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key}; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
       try{ localStorage.setItem(LEADKEY, String(d.ticket)); }catch(e){}
       var lf=document.getElementById('nswLeadForm'); if(lf) lf.remove();
       inBox.style.display='';
@@ -330,7 +341,7 @@
       typing.remove();
       var d = await r.json().catch(function(){ return {}; });
       if(!r.ok){ bubble(d.detail||'Sorry, something went wrong. Please try again.', 'ai'); busy=false; sendBtn.disabled=false; return; }
-      if(d.thread_id && d.thread_key){ thread={ id:d.thread_id, key:d.thread_key }; localStorage.setItem(TKEY, JSON.stringify(thread)); }
+      if(d.thread_id && d.thread_key){ thread={ id:d.thread_id, key:d.thread_key }; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
       optimistic.remove();                 // replace optimistic bubble with server truth
       busy=false;                          // allow sync to run
       await syncMessages();                // pulls the stored customer msg + AI reply (with ids)
