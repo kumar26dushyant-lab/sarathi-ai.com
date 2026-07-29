@@ -1858,6 +1858,12 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN sub_last_seen_msg_id INTEGER DEFAULT 0")
         except Exception:
             pass
+        # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a
+        # left-the-chat visitor is emailed a reopen link at most once per reply.
+        try:
+            await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN last_nudge_msg_id INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
         # ── Admin-editable task categories (tags) ────────────────────────────
         # A small, super-admin-managed list of task tags (code + label + colour).

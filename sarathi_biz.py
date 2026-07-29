@@ -4122,13 +4122,19 @@ async def ops_support_reply(thread_id: int, body: OpsSupportReplyReq, request: R
     meta = await nidaan.get_support_thread_meta(thread_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Thread not found")
-    await nidaan.add_support_message(thread_id, "staff", body.message.strip())
+    _staff_msg_id = await nidaan.add_support_message(thread_id, "staff", body.message.strip())
     # A staff reply takes the thread out of the escalation queue (mark handled = 'ai'
     # so it's no longer flagged as waiting; 'closed' is explicit via the close action).
     if meta.get("status") == "escalated":
         await nidaan.set_support_status(thread_id, "ai")
     # Clear the SLA super-admin-escalation flag so a later unanswered message can escalate afresh.
     await nidaan.clear_support_sa_escalation(thread_id)
+    # Visitor-fallback: if the visitor has left the chat, email them a reopen link (delayed, idempotent).
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_support_reply_nudge(thread_id, _staff_msg_id))
+    except Exception:
+        pass
     return {"ok": True}
 
 

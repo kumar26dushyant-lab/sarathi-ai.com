@@ -1632,6 +1632,25 @@ async def set_support_status(thread_id: int, status: str) -> None:
         await conn.commit()
 
 
+async def get_support_thread_for_nudge(thread_id: int) -> Optional[dict]:
+    """Internal (no thread_key) — fields needed to decide + send a visitor-fallback nudge."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT thread_id, thread_key, account_id, name, contact, lang, "
+            "sub_last_seen_msg_id, last_nudge_msg_id FROM nidaan_support_threads WHERE thread_id=?",
+            (thread_id,))).fetchone()
+        return dict(row) if row else None
+
+
+async def set_support_nudged(thread_id: int, msg_id: int) -> None:
+    """Record that we've emailed the visitor a reopen nudge for staff message `msg_id`."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET last_nudge_msg_id=? WHERE thread_id=?", (msg_id, thread_id))
+        await conn.commit()
+
+
 async def clear_support_sa_escalation(thread_id: int) -> None:
     """A staffer replied → clear the super-admin escalation flag so a later unanswered message
     can escalate again (notif cluster #2 idempotency)."""

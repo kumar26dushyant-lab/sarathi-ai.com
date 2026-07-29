@@ -350,4 +350,17 @@
     }catch(e){ typing.remove(); bubble('Network issue — please try again.', 'ai'); }
     busy=false; sendBtn.disabled=false; if(input.offsetParent) input.focus();
   }
+
+  // Deep-link reopen: an email nudge links to /?nchat=<id>&k=<key> → reopen the SAME conversation.
+  try{
+    var _q = new URLSearchParams(location.search);
+    var _nc = _q.get('nchat'), _nk = _q.get('k');
+    if(_nc && _nk && /^\d+$/.test(_nc)){
+      thread = { id: parseInt(_nc, 10), key: _nk };
+      try{ localStorage.setItem(TKEY, JSON.stringify(thread)); }catch(e){}
+      // strip the key from the address bar / history
+      try{ _q.delete('nchat'); _q.delete('k'); history.replaceState(null, '', location.pathname + (_q.toString()?('?'+_q.toString()):'') + location.hash); }catch(e){}
+      setTimeout(function(){ openPanel(); }, 500);
+    }
+  }catch(e){}
 })();

@@ -876,6 +876,63 @@ async def run_support_sla_escalation(minutes: int = 30) -> int:
         return 0
 
 
+SUPPORT_NUDGE_DELAY_SEC = 120
+
+async def on_support_reply_nudge(thread_id: int, staff_msg_id: int) -> None:
+    """A human replied to a support chat. After a short wait, if the visitor STILL hasn't fetched that
+    reply (they left the chat) and we have an email for them, email a link to reopen the SAME
+    conversation — so we don't lose the lead. Idempotent per reply (last_nudge_msg_id). Email-only for
+    now; a mobile-only visitor gets a WhatsApp/SMS nudge once those channels are live."""
+    try:
+        import asyncio as _aio
+        import biz_nidaan as _nid
+        import urllib.parse as _up
+        await _aio.sleep(SUPPORT_NUDGE_DELAY_SEC)
+        th = await _nid.get_support_thread_for_nudge(thread_id)
+        if not th:
+            return
+        if int(th.get("sub_last_seen_msg_id") or 0) >= int(staff_msg_id):
+            return   # visitor already saw the reply (still active) → no nudge
+        if int(th.get("last_nudge_msg_id") or 0) >= int(staff_msg_id):
+            return   # already nudged for this reply
+        # Resolve an email — logged-in account first, else the contact if it looks like an email.
+        email = ""
+        acct_id = th.get("account_id")
+        if acct_id:
+            acct = await _nid.get_account_by_id(acct_id)
+            email = ((acct or {}).get("email") or "").strip()
+        if not email:
+            c = (th.get("contact") or "").strip()
+            if "@" in c and "." in c.split("@")[-1]:
+                email = c
+        if not email:
+            return   # no email channel (mobile-only → future WhatsApp/SMS nudge)
+        lang = (th.get("lang") or "en")
+        name = (th.get("name") or "").strip()
+        reopen = (f"{NIDAAN_BASE_URL}/nidaan/dashboard" if acct_id
+                  else f"{NIDAAN_BASE_URL}/?nchat={thread_id}&k={_up.quote(th.get('thread_key') or '')}")
+        subj = {"hi": "Nidaan Partner से आपके सवाल का जवाब आया है 💬",
+                "hinglish": "Nidaan Partner se aapke sawaal ka jawab aa gaya hai 💬",
+                "en": "You have a reply from Nidaan Partner 💬"}.get(lang, "You have a reply from Nidaan Partner 💬")
+        greet = f"Namaste{(' ' + name) if name else ''},"
+        line = {"hi": "हमारी टीम ने आपकी चैट का जवाब दिया है। नीचे क्लिक करके अपनी बातचीत फिर से खोलें:",
+                "hinglish": "Hamari team ne aapki chat ka jawab diya hai. Neeche click karke apni baat-cheet dobara kholein:",
+                "en": "Our team has replied to your chat. Click below to reopen your conversation:"}.get(
+                lang, "Our team has replied to your chat. Click below to reopen your conversation:")
+        btn = {"hi": "बातचीत खोलें", "hinglish": "Chat kholein", "en": "Open my chat"}.get(lang, "Open my chat")
+        html = (f"<p>{greet}</p><p>{line}</p>"
+                f'<p><a href="{reopen}" style="background:#06b6d4;color:#fff;padding:.6rem 1.2rem;'
+                f'border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">{btn} →</a></p>'
+                f'<p style="font-size:.8rem;color:#64748b">Chat ID: #{thread_id}</p>')
+        ok, _err = await _send_email(to_email=email, subject=subj, html_body=html,
+                                     text_body=f"{greet}\n{line}\n{reopen}\nChat ID: #{thread_id}")
+        if ok:
+            await _nid.set_support_nudged(thread_id, staff_msg_id)
+            logger.info("💬 Support reply nudge → %s (thread #%d)", email, thread_id)
+    except Exception as e:
+        logger.warning("on_support_reply_nudge failed: %s", e)
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
 def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")
