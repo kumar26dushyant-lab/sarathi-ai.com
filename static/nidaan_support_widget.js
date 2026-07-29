@@ -47,14 +47,29 @@
   };
   // Header language control shows the CURRENT language in words (clear for every user) — not a globe.
   var LANGLABEL = { en: 'English', hi: 'हिंदी', hinglish: 'Hinglish' };
-  function updateLangLabel(){ var e2=document.getElementById('nswLangLabel'); if(e2) e2.textContent = LANGLABEL[lang] || 'भाषा'; }
+  // GROUND RULE: every visible string converts with the selected language — header, subtitle,
+  // placeholder, chips, greeting, lead form. (chips/greeting/lead already have per-lang maps.)
+  var HDRTITLE = { en: 'Chat with NidaanMitra', hi: 'NidaanMitra से बात करें', hinglish: 'NidaanMitra se baat karein' };
+  var HDRSUB = {
+    en: 'Nidaan Partner · team online Mon–Fri, 10am–6pm IST',
+    hi: 'Nidaan Partner · टीम सोम–शुक्र, सुबह 10 – शाम 6 बजे',
+    hinglish: 'Nidaan Partner · team Mon–Fri, subah 10 – shaam 6 baje'
+  };
+  var PLACEHOLD = { en: 'Type your question…', hi: 'अपना सवाल यहाँ लिखें…', hinglish: 'Apna sawaal yahan likhein…' };
+  function updateLangLabel(){
+    var L = lang || 'en';
+    var e2=document.getElementById('nswLangLabel'); if(e2) e2.textContent = LANGLABEL[lang] || 'भाषा';
+    var t=document.getElementById('nswHdrTitle'); if(t) t.textContent = HDRTITLE[L] || HDRTITLE.en;
+    var s=document.getElementById('nswHdrSub'); if(s) s.textContent = HDRSUB[L] || HDRSUB.en;
+    var inp=document.getElementById('nswInput'); if(inp) inp.setAttribute('placeholder', PLACEHOLD[L] || PLACEHOLD.en);
+  }
 
   var css = ''
     + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:26px;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}'
     + '.nsw-btn:active{transform:scale(.92)}'
     + '.nsw-panel{position:fixed;right:18px;bottom:86px;z-index:99999;width:360px;max-width:calc(100vw - 24px);height:540px;max-height:calc(100vh - 110px);background:#0a1628;border:1px solid rgba(255,255,255,.12);border-radius:16px;display:none;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}'
     + '.nsw-panel.open{display:flex}'
-    + '.nsw-hdr{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;padding:.85rem 1rem;position:relative}'
+    + '.nsw-hdr{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;padding:.85rem 8rem .85rem 1rem;position:relative}'
     + '.nsw-hdr h4{margin:0;font-size:1rem;font-weight:800}.nsw-hdr p{margin:.15rem 0 0;font-size:.72rem;opacity:.9}'
     + '.nsw-x{position:absolute;top:.7rem;right:.8rem;background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1}'
     + '.nsw-msgs{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.6rem;background:#0a1628}'
@@ -95,8 +110,8 @@
   var panel = document.createElement('div');
   panel.className = 'nsw-panel';
   panel.innerHTML =
-    '<div class="nsw-hdr"><h4>Chat with NidaanMitra</h4>'
-    + '<p>Nidaan Partner · team online Mon–Fri, 10am–6pm IST</p>'
+    '<div class="nsw-hdr"><h4 id="nswHdrTitle">Chat with NidaanMitra</h4>'
+    + '<p id="nswHdrSub">Nidaan Partner · team online Mon–Fri, 10am–6pm IST</p>'
     + '<button class="nsw-langbtn" id="nswLangBtn" title="भाषा बदलें / Change language" aria-label="Change language"><span id="nswLangLabel">भाषा</span><span class="cx">▾</span></button>'
     + '<button class="nsw-x" aria-label="Close">×</button>'
     + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
