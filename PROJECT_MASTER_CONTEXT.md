@@ -4855,7 +4855,14 @@ top: Pending on me / Overdue / Due today / Involved, computed client-side from t
 the customer dashboard notification bell dropdown was clipped by nav overflow:hidden → now moved to
 <body>, position:fixed under the bell (z-index 9999). REMAINING increments: admin default landing on
 'My Tasks' with one-tap switch to All-org; collapse/paginate long registry; apply the same clean
-pattern to the plain Team-Member dashboard. Original design below:
+pattern to the plain Team-Member dashboard.
+**Increment 2 DONE (deployed + verified Jul 30):** Task Registry caps to the top 8 (smart-sorted) rows
+with a 'Show all N tasks ▾' toggle (pure display, no re-fetch — rest rendered hidden, revealed on tap);
+search + chips + filters stay visible → board stays short. All task-view changes render for BOTH admins
+and team-members (shared loadTasks/loadMyQuickTasksWidget/loadTaskRegistry) → team-member view
+decluttered too. Task-view overhaul substantially COMPLETE. Optional later polish: an explicit admin
+'My Tasks ⇄ All-org' segmented toggle (today: My Focus + my-tasks already render first, and the
+registry has a 'Me' assignee filter). Original design below:
 
 **C(design). Task-view UX overhaul.** Pain: super/sub-admins have ALL-tasks view buried
 far below → endless scroll on web + mobile to find a task or see what needs them; the Team-Member
