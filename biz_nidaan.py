@@ -5107,6 +5107,19 @@ async def count_unread_messages_for_subscriber(account_id: int) -> int:
         return row[0] if row else 0
 
 
+async def unread_messages_by_claim(account_id: int) -> dict:
+    """Per-claim count of unread ops→subscriber replies for a subscriber → {claim_id: count}.
+    Powers the dashboard notification bell (which claim got a reply)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        rows = await (await conn.execute(
+            """SELECT m.claim_id, COUNT(*) AS n FROM nidaan_messages m
+               JOIN nidaan_claims c ON c.claim_id = m.claim_id
+               WHERE c.account_id=? AND m.sender_type='staff'
+                 AND m.read_by_subscriber_at IS NULL
+               GROUP BY m.claim_id""", (account_id,))).fetchall()
+        return {int(r[0]): int(r[1]) for r in rows}
+
+
 # =============================================================================
 #  OPS: FOLLOW-UPS
 # =============================================================================

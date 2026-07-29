@@ -2438,6 +2438,20 @@ async def nidaan_claim_message_send(claim_id: int, body: _NidaanMsgReq, request:
     return {"ok": True}
 
 
+@app.get("/nidaan/api/my/notifications")
+async def nidaan_my_notifications(request: Request):
+    """Subscriber dashboard bell: unread ops replies on their claims (per-claim + total). The
+    subscriber's read state is marked when they open a claim's message thread (mark_messages_read).
+    Chat-reply notifications land in a later increment (support read-tracking)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(401, "Unauthorized")
+    per_claim = await nidaan.unread_messages_by_claim(payload["sub"])
+    return {"claim_unread_total": sum(per_claim.values()), "claims": per_claim}
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/messages")
 async def ops_claim_messages(claim_id: int, request: Request):
     """Ops: message thread with the subscriber for a claim."""

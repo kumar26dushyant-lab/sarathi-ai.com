@@ -327,6 +327,10 @@
     <span>Nidaan Partner</span>
   </a>
   <div class="nav-right">
+    <div id="notifWrap" style="position:relative">
+      <button id="notifBell" class="btn-sm btn-ghost" title="Notifications" aria-label="Notifications" style="position:relative;font-size:1.05rem" onclick="toggleNotif(event)">🔔<span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:.6rem;font-weight:800;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px;text-align:center"></span></button>
+      <div id="notifMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#0f1e3a;border:1px solid rgba(255,255,255,.14);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:200;overflow:hidden"></div>
+    </div>
     <span class="plan-badge" id="planBadge">—</span>
     <div class="lang-toggle">
       <button class="lang-btn active" onclick="setLang('en')">EN</button>
@@ -1035,6 +1039,43 @@ function stageHtml(stage){
   return `<span class="status-pill s-${(stage||'intake').replace(/\W/g,'')}">${stageLabel(stage)}</span>`;
 }
 
+// ── Notification bell — unread ops replies on the subscriber's claims ─────────
+let _notifData = { claim_unread_total: 0, claims: {} };
+async function loadNotif() {
+  try {
+    const r = await api('/nidaan/api/my/notifications');
+    if (!r || !r.ok) return;
+    _notifData = await r.json();
+    const t = _notifData.claim_unread_total || 0;
+    const b = document.getElementById('notifBadge');
+    if (b) { b.textContent = t > 9 ? '9+' : String(t); b.style.display = t > 0 ? '' : 'none'; }
+  } catch (e) {}
+}
+function toggleNotif(ev) {
+  ev.stopPropagation();
+  const m = document.getElementById('notifMenu');
+  if (!m) return;
+  const isEn = document.body.classList.contains('en');
+  const claims = _notifData.claims || {};
+  const ids = Object.keys(claims);
+  if (!ids.length) {
+    m.innerHTML = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
+  } else {
+    m.innerHTML = ids.map(id => {
+      const n = claims[id];
+      const label = isEn ? `Claim #${id} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${id} — ${n} नया जवाब`;
+      return `<button onclick="openNotifClaim(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.07);color:#e2e8f0;padding:.7rem 1rem;cursor:pointer;font-size:.85rem">💬 ${label}</button>`;
+    }).join('');
+  }
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+function openNotifClaim(id) {
+  const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none';
+  try { openClaimDrawer(id); } catch (e) {}
+  setTimeout(loadNotif, 1500);  // refresh badge after the thread is opened (marks read)
+}
+document.addEventListener('click', () => { const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none'; });
+
 // ── Load dashboard data ───────────────────────────────────────────────────────
 async function loadDashboard() {
   const [meRes, claimsRes] = await Promise.all([api('/nidaan/api/me'), api('/nidaan/api/claims')]);
@@ -1042,6 +1083,8 @@ async function loadDashboard() {
 
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
+  loadNotif();
+  if (!window._notifTimer) window._notifTimer = setInterval(loadNotif, 30000);
   if (me.status === 'deletion_pending') { try { _showDeletionPending(''); } catch (e) {} }
   const claimsData = claimsRes ? await claimsRes.json() : { claims: [] };
 
