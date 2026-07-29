@@ -4790,11 +4790,13 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
    bell+email+Telegram (falls back to super-admins). Wired in the support-message endpoint
    (sarathi_biz.py ~682, else-branch; captures `_prev_status`). Skipped for pure-AI threads (no noise).
    Note: no per-thread agent assignment exists — uses the on-duty reps roster.
-2. **30-min superadmin escalation:** if a support chat has an unanswered customer message for >30 min
-   DURING office hours, escalate to superadmin on ALL channels (Telegram + web dashboard + mobile app
-   + email). Needs a periodic check in the worker (scan threads: last msg = customer, age>30min,
-   in business hours, not already escalated-to-superadmin) → dispatch P0/P1 to super_admins. Idempotent
-   (don't re-fire every tick — mark escalated_at).
+2. **30-min superadmin escalation — DONE (deployed + smoke-verified).** Worker sweep
+   `run_support_sla_escalation(30)` (biz_nidaan_notifications.py) runs every 5 min (worker-only
+   singleton support_sla_loop in sarathi_biz.py ~20240): threads status='escalated' with NO staff
+   reply for >30 min DURING business hours → super-admins on dashboard bell + web push + email +
+   Telegram. Idempotent via nidaan_support_threads.sa_escalated_at (additive col), cleared on staff
+   reply (ops_support_reply + biz_nidaan.clear_support_sa_escalation). Smoke test: selection,
+   idempotency, re-escalation-after-reply → ALL PASS. Prod: column present, fns importable, endpoint 200.
 3. **Subscriber dashboard notifications:** on the customer/subscriber dashboard, show a notification
    for (a) each support-chat reply and (b) each in-claim comment/message reply. Customer-facing bell
    or badge; reuse the existing customer notification surface if one exists, else add lightly.
