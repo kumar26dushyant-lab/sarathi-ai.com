@@ -329,7 +329,7 @@
   <div class="nav-right">
     <div id="notifWrap" style="position:relative">
       <button id="notifBell" class="btn-sm btn-ghost" title="Notifications" aria-label="Notifications" style="position:relative;font-size:1.05rem" onclick="toggleNotif(event)">🔔<span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:.6rem;font-weight:800;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px;text-align:center"></span></button>
-      <div id="notifMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#0f1e3a;border:1px solid rgba(255,255,255,.14);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:200;overflow:hidden"></div>
+      <div id="notifMenu" style="display:none;position:fixed;right:12px;top:60px;background:#0f1e3a;border:1px solid rgba(255,255,255,.14);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:9999;overflow:hidden"></div>
     </div>
     <span class="plan-badge" id="planBadge">—</span>
     <div class="lang-toggle">
@@ -1076,7 +1076,19 @@ function toggleNotif(ev) {
   }).join('');
   if (!html) html = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
   m.innerHTML = html;
-  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  // Move the menu out of the nav (which is overflow:hidden) and pin it to the viewport under the
+  // bell, so it never gets clipped by the nav or hidden behind the dashboard panel.
+  if (m.parentElement !== document.body) document.body.appendChild(m);
+  const willOpen = (m.style.display === 'none' || !m.style.display);
+  if (willOpen) {
+    const bell = document.getElementById('notifBell');
+    const r = bell.getBoundingClientRect();
+    m.style.position = 'fixed';
+    m.style.top = (r.bottom + 6) + 'px';
+    m.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    m.style.left = 'auto';
+  }
+  m.style.display = willOpen ? 'block' : 'none';
 }
 function openNotifClaim(id) {
   const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none';
