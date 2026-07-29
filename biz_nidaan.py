@@ -5120,6 +5120,33 @@ async def unread_messages_by_claim(account_id: int) -> dict:
         return {int(r[0]): int(r[1]) for r in rows}
 
 
+async def mark_support_seen_by_subscriber(thread_id: int) -> None:
+    """The logged-in customer's widget fetched this thread → mark all current messages seen
+    (advance sub_last_seen_msg_id to the latest). Harmless for anonymous/guide threads."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """UPDATE nidaan_support_threads
+               SET sub_last_seen_msg_id = COALESCE(
+                   (SELECT MAX(msg_id) FROM nidaan_support_messages WHERE thread_id=?),
+                   sub_last_seen_msg_id)
+               WHERE thread_id=?""", (thread_id, thread_id))
+        await conn.commit()
+
+
+async def unread_support_by_thread(account_id: int) -> dict:
+    """Per-thread count of UNSEEN staff replies for a logged-in subscriber → {thread_id: count}.
+    Powers the dashboard chat-reply bell. Only human (staff) replies count; open/ongoing threads."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        rows = await (await conn.execute(
+            """SELECT t.thread_id, COUNT(*) AS n
+               FROM nidaan_support_messages m
+               JOIN nidaan_support_threads t ON t.thread_id = m.thread_id
+               WHERE t.account_id=? AND t.status!='closed'
+                 AND m.sender_type='staff' AND m.msg_id > COALESCE(t.sub_last_seen_msg_id, 0)
+               GROUP BY t.thread_id""", (account_id,))).fetchall()
+        return {int(r[0]): int(r[1]) for r in rows}
+
+
 # =============================================================================
 #  OPS: FOLLOW-UPS
 # =============================================================================

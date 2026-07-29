@@ -717,8 +717,13 @@ async def nidaan_support_thread(thread_id: int, thread_key: str, request: Reques
     thread = await nidaan.get_support_thread(thread_id, thread_key)
     if not thread:
         raise HTTPException(status_code=403, detail="Invalid conversation")
-    return {"thread_id": thread_id, "status": thread.get("status"),
-            "messages": await nidaan.get_support_messages(thread_id, after_id=max(0, after_id))}
+    msgs = await nidaan.get_support_messages(thread_id, after_id=max(0, after_id))
+    # Customer viewed the thread → mark its messages seen (clears the dashboard chat-reply bell).
+    try:
+        await nidaan.mark_support_seen_by_subscriber(thread_id)
+    except Exception:
+        pass
+    return {"thread_id": thread_id, "status": thread.get("status"), "messages": msgs}
 
 
 @app.get("/nidaan/api/support/status")
@@ -2449,7 +2454,9 @@ async def nidaan_my_notifications(request: Request):
     if not payload:
         raise HTTPException(401, "Unauthorized")
     per_claim = await nidaan.unread_messages_by_claim(payload["sub"])
-    return {"claim_unread_total": sum(per_claim.values()), "claims": per_claim}
+    per_chat = await nidaan.unread_support_by_thread(payload["sub"])
+    return {"claim_unread_total": sum(per_claim.values()), "claims": per_claim,
+            "chat_unread_total": sum(per_chat.values()), "chats": per_chat}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/messages")

@@ -1046,7 +1046,7 @@ async function loadNotif() {
     const r = await api('/nidaan/api/my/notifications');
     if (!r || !r.ok) return;
     _notifData = await r.json();
-    const t = _notifData.claim_unread_total || 0;
+    const t = (_notifData.claim_unread_total || 0) + (_notifData.chat_unread_total || 0);
     const b = document.getElementById('notifBadge');
     if (b) { b.textContent = t > 9 ? '9+' : String(t); b.style.display = t > 0 ? '' : 'none'; }
   } catch (e) {}
@@ -1058,21 +1058,31 @@ function toggleNotif(ev) {
   const isEn = document.body.classList.contains('en');
   const claims = _notifData.claims || {};
   const ids = Object.keys(claims);
-  if (!ids.length) {
-    m.innerHTML = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
-  } else {
-    m.innerHTML = ids.map(id => {
-      const n = claims[id];
-      const label = isEn ? `Claim #${id} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${id} — ${n} नया जवाब`;
-      return `<button onclick="openNotifClaim(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.07);color:#e2e8f0;padding:.7rem 1rem;cursor:pointer;font-size:.85rem">💬 ${label}</button>`;
-    }).join('');
+  const rowStyle = 'display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.07);color:#e2e8f0;padding:.7rem 1rem;cursor:pointer;font-size:.85rem';
+  let html = '';
+  const chatT = _notifData.chat_unread_total || 0;
+  if (chatT > 0) {
+    const clabel = isEn ? `${chatT} new repl${chatT > 1 ? 'ies' : 'y'} from our team in chat` : `चैट में हमारी टीम से ${chatT} नया जवाब`;
+    html += `<button onclick="openNotifChat()" style="${rowStyle}">💬 ${clabel}</button>`;
   }
+  html += ids.map(id => {
+    const n = claims[id];
+    const label = isEn ? `Claim #${id} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${id} — ${n} नया जवाब`;
+    return `<button onclick="openNotifClaim(${id})" style="${rowStyle}">📋 ${label}</button>`;
+  }).join('');
+  if (!html) html = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
+  m.innerHTML = html;
   m.style.display = m.style.display === 'none' ? 'block' : 'none';
 }
 function openNotifClaim(id) {
   const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none';
   try { openClaimDrawer(id); } catch (e) {}
   setTimeout(loadNotif, 1500);  // refresh badge after the thread is opened (marks read)
+}
+function openNotifChat() {
+  const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none';
+  const btn = document.querySelector('.nsw-btn'); if (btn) btn.click();  // open the chat widget
+  setTimeout(loadNotif, 2500);  // widget fetch marks the thread seen → badge clears
 }
 document.addEventListener('click', () => { const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none'; });
 

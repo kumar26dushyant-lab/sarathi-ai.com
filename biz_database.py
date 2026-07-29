@@ -1851,6 +1851,13 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN sa_escalated_at TIMESTAMP")
         except Exception:
             pass
+        # Subscriber-side read marker for the dashboard chat-reply bell (notif #3 part 2):
+        # highest support message id the logged-in customer has fetched. Unseen STAFF replies
+        # (msg_id > this) drive the bell. Updated whenever the customer's widget loads the thread.
+        try:
+            await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN sub_last_seen_msg_id INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
         # ── Admin-editable task categories (tags) ────────────────────────────
         # A small, super-admin-managed list of task tags (code + label + colour).
