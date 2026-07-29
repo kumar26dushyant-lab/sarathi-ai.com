@@ -4797,9 +4797,13 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
    Telegram. Idempotent via nidaan_support_threads.sa_escalated_at (additive col), cleared on staff
    reply (ops_support_reply + biz_nidaan.clear_support_sa_escalation). Smoke test: selection,
    idempotency, re-escalation-after-reply → ALL PASS. Prod: column present, fns importable, endpoint 200.
-3. **Subscriber dashboard notifications:** on the customer/subscriber dashboard, show a notification
-   for (a) each support-chat reply and (b) each in-claim comment/message reply. Customer-facing bell
-   or badge; reuse the existing customer notification surface if one exists, else add lightly.
+3. **Subscriber dashboard notifications** — (a) in-claim replies: **DONE (deployed + verified).**
+   No prior subscriber notif surface existed. Added biz_nidaan.unread_messages_by_claim(account_id) +
+   GET /nidaan/api/my/notifications ({claim_unread_total, claims}); dashboard 🔔 bell + badge (EN/HI),
+   polls 30s + on load, dropdown → tap opens claim (mark_messages_read already fires on thread open →
+   badge clears). Reuses existing read-tracking (nidaan_messages.read_by_subscriber_at).
+   (b) support-chat replies: PENDING — needs a per-account/thread last-seen marker (support messages
+   have no read-tracking today); build as increment 2.
 
 **TODO — aesthetics:** polish both the ops-side support modal and the customer-facing chat widget
 (spacing, bubbles, headers, readability) — mobile-first, Tier II/III-clear.
