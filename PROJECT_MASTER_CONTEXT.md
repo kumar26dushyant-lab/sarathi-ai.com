@@ -4802,8 +4802,11 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
    GET /nidaan/api/my/notifications ({claim_unread_total, claims}); dashboard 🔔 bell + badge (EN/HI),
    polls 30s + on load, dropdown → tap opens claim (mark_messages_read already fires on thread open →
    badge clears). Reuses existing read-tracking (nidaan_messages.read_by_subscriber_at).
-   (b) support-chat replies: PENDING — needs a per-account/thread last-seen marker (support messages
-   have no read-tracking today); build as increment 2.
+   (b) support-chat replies: **DONE (deployed + verified).** Added nidaan_support_threads.sub_last_seen_msg_id
+   (additive), biz_nidaan.mark_support_seen_by_subscriber() (customer's thread fetch advances it) +
+   unread_support_by_thread() (unseen STAFF replies on non-closed threads). /nidaan/api/my/notifications
+   now returns chat_unread_total + chats; dashboard bell badge = claim+chat, dropdown 'new replies in
+   chat' row opens the widget (→ marks seen → clears). Smoke-tested + prod-verified. Notif cluster #3 COMPLETE.
 
 **TODO — aesthetics:** polish both the ops-side support modal and the customer-facing chat widget
 (spacing, bubbles, headers, readability) — mobile-first, Tier II/III-clear.
