@@ -1956,6 +1956,7 @@ async function loadTaskRegistry(){
   const d = await r.json();
   const items = d.quick_tasks || [];
   const counts = d.counts || {};
+  const REG_CAP = 8;   // keep the board short — show the top few (smart-sorted), rest behind "Show all"
 
   const chip = (key,label) => {
     const active = _registryState.status===key;
@@ -2001,15 +2002,26 @@ async function loadTaskRegistry(){
           <input type="checkbox" ${_registryState.includeDeleted?'checked':''} onchange="setRegistryDeleted(this.checked)" style="accent-color:#f87171"> show deleted</label>` : ''}
       </div>
       <div style="border-top:1px solid rgba(255,255,255,.07)">
-        ${items.length ? items.map(qt=>_qtRegistryRow(qt,isAdmin)).join('') :
+        ${items.length ? (items.slice(0, REG_CAP).map(qt=>_qtRegistryRow(qt,isAdmin)).join('') +
+            (items.length > REG_CAP
+              ? `<div id="regRest" style="display:none">${items.slice(REG_CAP).map(qt=>_qtRegistryRow(qt,isAdmin)).join('')}</div>`
+                + `<button id="regMoreBtn" onclick="toggleRegistryMore(${items.length})" style="width:100%;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);color:#67e8f9;padding:.5rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:.5rem">Show all ${items.length} tasks ▾</button>`
+              : '')) :
           '<div style="padding:1.5rem;text-align:center;color:rgba(255,255,255,.4);font-size:.85rem">No tasks match these filters.</div>'}
       </div>
-      <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.6rem">Showing ${items.length}${items.length>=200?'+ — refine filters to narrow':''}</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.6rem">Showing ${Math.min(items.length, REG_CAP)} of ${items.length}${items.length>=200?'+ — refine filters to narrow':''}</div>
     </div>`;
 
   if (hadFocus) { const s=document.getElementById('regSearch'); if(s){ s.focus(); try{ const c=(caret==null?s.value.length:caret); s.setSelectionRange(c,c); }catch(e){} } }
 }
 
+function toggleRegistryMore(total){
+  const r = document.getElementById('regRest'), b = document.getElementById('regMoreBtn');
+  if (!r || !b) return;
+  const show = (r.style.display === 'none');
+  r.style.display = show ? '' : 'none';
+  b.textContent = show ? 'Show less ▲' : ('Show all ' + total + ' tasks ▾');
+}
 function _qtRegistryRow(qt, isAdmin){
   const prio = QT_PRIORITY_PILLS[qt.priority] || QT_PRIORITY_PILLS.normal;
   const st = QT_STATUS_PILLS[qt.status] || QT_STATUS_PILLS.open;
