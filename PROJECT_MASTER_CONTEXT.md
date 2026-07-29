@@ -4822,9 +4822,15 @@ _NIDAAN_SUPPORT_PROMPT): warm saathi, NEVER reveals it's automated, draws the vi
 question at a time to build trust, and warmly captures name + mobile/WhatsApp to reconnect. Ops AI
 label → NidaanMitra. (Standing rule saved: memory feedback_localization_tier23.)
 
-**B. Visitor fallback & reconnection mechanics — DESIGN (to build, phased).** Problem: visitor wants a
-human but none available; or leaves/closes browser before/after we reply — did our reply reach them?
-Plan:
+**B. Visitor fallback & reconnection mechanics — Increment 1 DONE (deployed + verified Jul 29).**
+Email nudge: when a human replies (ops_support_reply), after ~2 min we check sub_last_seen_msg_id; if
+the visitor still hasn't fetched that reply AND we have an email (logged-in account, or an email
+contact), on_support_reply_nudge emails a reopen link from info@nidaanpartner.com — idempotent per
+reply (last_nudge_msg_id). Anonymous → homepage /?nchat=<id>&k=<key> (widget v12 parses it, reopens the
+same thread, strips the key from the URL); logged-in → dashboard. Bilingual, includes Chat ID.
+Smoke-tested (away→send, idempotent, seen→skip, mobile-only→skip, logged-in→dashboard) → ALL PASS.
+REMAINING increments: mobile-only visitors → WhatsApp/SMS nudge (needs those channels live, parked);
+next-business-day gentle follow-up if still unanswered (capped). Original design below:
   1. **Capture a channel early.** When escalating (or when interest is shown), NidaanMitra asks for
      name + mobile/WhatsApp (persona already does this). Persist as a LEAD on the thread (contact on
      nidaan_support_threads). No contact = we can only reach them if they reopen the chat.
