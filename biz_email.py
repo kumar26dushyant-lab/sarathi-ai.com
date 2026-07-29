@@ -31,6 +31,13 @@ FROM_EMAIL = ""
 FROM_NOREPLY = ""  # info@sarathi-ai.com — transactional/notifications
 FROM_SUPPORT = ""  # support@sarathi-ai.com — support ticket communications
 NIDAAN_FROM = ""   # noreply@nidaanpartner.com — Nidaan-branded (own-domain, DKIM-aligned)
+# Separate Nidaan sending account (Workspace info@nidaanpartner.com) so Nidaan mail authenticates
+# AS its own domain (SPF/DKIM aligned, inbox). Used ONLY for @nidaanpartner.com senders — Sarathi
+# mail never touches this account. Additive: if unset, Nidaan mail uses the existing shared path.
+NIDAAN_SMTP_HOST = ""
+NIDAAN_SMTP_PORT = 465
+NIDAAN_SMTP_USER = ""
+NIDAAN_SMTP_PASSWORD = ""
 _initialized = False
 
 def _base_url() -> str:
@@ -41,6 +48,7 @@ def _base_url() -> str:
 def init_email():
     """Initialize email configuration from environment."""
     global SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NOREPLY, FROM_SUPPORT, NIDAAN_FROM, _initialized
+    global NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT, NIDAAN_SMTP_USER, NIDAAN_SMTP_PASSWORD
 
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -54,6 +62,14 @@ def init_email():
     # takes effect once that domain is authenticated in Brevo (else Brevo rejects
     # the unverified sender). Falls back to the generic noreply until configured.
     NIDAAN_FROM = os.getenv("NIDAAN_FROM_EMAIL", FROM_NOREPLY)
+    # Dedicated Nidaan sending account (optional). When set, @nidaanpartner.com mail authenticates here.
+    NIDAAN_SMTP_HOST = os.getenv("NIDAAN_SMTP_HOST", SMTP_HOST)
+    NIDAAN_SMTP_PORT = int(os.getenv("NIDAAN_SMTP_PORT", "465"))
+    NIDAAN_SMTP_USER = os.getenv("NIDAAN_SMTP_USER", "")
+    NIDAAN_SMTP_PASSWORD = os.getenv("NIDAAN_SMTP_PASSWORD", "")
+    if NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
+        logger.info("✅ Nidaan email account ready (%s via %s:%d)",
+                    NIDAAN_SMTP_USER, NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT)
 
     if SMTP_USER and SMTP_PASSWORD:
         _initialized = True
@@ -108,8 +124,14 @@ async def send_email(to_email: str, subject: str, html_body: str,
     reply_addr = reply_to or sender_email
     unsubscribe_header = f"<mailto:{sender_email}?subject=Unsubscribe>"
 
-    async def _smtp_send() -> bool:
-        """Send via Gmail SMTP. Returns True on success; never raises."""
+    async def _smtp_send(acct_user: str = "", acct_pass: str = "",
+                         acct_host: str = "", acct_port: int = 0) -> bool:
+        """Send via SMTP using the given account (defaults to the shared SMTP_* account).
+        Returns True on success; never raises."""
+        _user = acct_user or SMTP_USER
+        _pass = acct_pass or SMTP_PASSWORD
+        _host = acct_host or SMTP_HOST
+        _port = int(acct_port or SMTP_PORT)
         try:
             import aiosmtplib
             import uuid
@@ -119,8 +141,8 @@ async def send_email(to_email: str, subject: str, html_body: str,
             msg["Subject"] = subject
             msg["Reply-To"] = reply_to or sender_email
             # Sender header: who actually sent (on behalf of From), for RFC-compliant clients.
-            if SMTP_USER and SMTP_USER != sender_email:
-                msg["Sender"] = f"{sender_name} <{SMTP_USER}>"
+            if _user and _user != sender_email:
+                msg["Sender"] = f"{sender_name} <{_user}>"
             msg["MIME-Version"] = "1.0"
             msg["Message-ID"] = f"<{uuid.uuid4()}@sarathi-ai.com>"
             msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
@@ -129,16 +151,26 @@ async def send_email(to_email: str, subject: str, html_body: str,
             msg.attach(MIMEText(html_body, "html", "utf-8"))
             # Port 465 = implicit TLS; 587/others = STARTTLS. Many cloud hosts block 587
             # outbound, so 465 is the reliable path.
-            _implicit_tls = (int(SMTP_PORT) == 465)
+            _implicit_tls = (_port == 465)
             await aiosmtplib.send(
-                msg, hostname=SMTP_HOST, port=SMTP_PORT,
-                username=SMTP_USER, password=SMTP_PASSWORD,
+                msg, hostname=_host, port=_port,
+                username=_user, password=_pass,
                 use_tls=_implicit_tls, start_tls=(not _implicit_tls), timeout=30)
-            logger.info("📧 SMTP ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+            logger.info("📧 SMTP ✓ '%s' → %s (from %s via %s)", subject, to_email, sender_email, _user)
             return True
         except Exception as e:
             logger.error("📧 SMTP failed: '%s' → %s: %s", subject, to_email, e)
             return False
+
+    # Nidaan mail → send via the dedicated Nidaan Workspace account (info@nidaanpartner.com) when
+    # configured, so From = authenticated user = the Nidaan domain (SPF/DKIM aligned → inbox).
+    # STRICTLY ADDITIVE: only @nidaanpartner.com senders enter here, and only when the Nidaan creds
+    # are set — Sarathi mail never touches this branch, so its path is unchanged. On failure it falls
+    # through to the existing transports as backup.
+    _is_nidaan_sender = (sender_email or "").lower().endswith("@nidaanpartner.com")
+    if _is_nidaan_sender and NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
+        if await _smtp_send(NIDAAN_SMTP_USER, NIDAAN_SMTP_PASSWORD, NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT):
+            return True
 
     # When the sender IS the authenticated Gmail SMTP account (Nidaan's
     # nidaanpartner@gmail.com), send DIRECTLY via Gmail FIRST: SPF/DKIM align so it lands
