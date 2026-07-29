@@ -4867,6 +4867,53 @@ I set SMTP_USER/PASSWORD + SMTP_FROM_EMAIL=info@ + NIDAAN_FROM_EMAIL=info@ and r
 Recommended sequence (my rec): finish g.4c → notif #2 (30-min escalation) + #3 (subscriber dash) →
 visitor-fallback (B) → task-view UX (C) → branch dashboard (D). Email (E) unblocks once owner does DNS.
 
+## 59. APP SEPARATION PLAN — Sarathi-AI ⟂ Nidaan (design; NO changes yet; owner Jul 29)
+
+Owner decision: emails stay separate — Sarathi from info@sarathi-ai.com, Nidaan from
+info@nidaanpartner.com. Owner wants a systematic plan to separate the two apps so each can be
+DEVELOPED + DEPLOYED independently without disturbing any flow in the other. Constraint: additive,
+reversible, zero-downtime, careful/no-break. (Owner gave the Nidaan Workspace app password for
+info@nidaanpartner.com — to be placed in biz.env only when Phase 1 executes; regenerate anytime.)
+
+CURRENT ENTANGLEMENT (the seam):
+- ONE FastAPI app (sarathi_biz.py ~20k lines) serves both; host detection _is_nidaan_host /
+  _is_sarathi_host selects behavior. One process, one blue-green deploy, one worker singleton.
+- ONE SQLite DB: Sarathi tables + nidaan_* tables + CROSS links (product_link tenant↔nidaan;
+  branch attribution accounts↔tenant). biz_platform_bridge.py = the ONLY module touching Sarathi
+  tenants/agents from Nidaan.
+- Shared modules: biz_email (ALREADY branches FROM by platform: NIDAAN_FROM vs FROM_NOREPLY; supports
+  Resend API or Gmail SMTP), biz_ai, biz_database, biz_nidaan_notifications. Shared biz.env (SMTP/JWT),
+  nginx (host-routed), static, worker loops.
+
+PHASES (each independently valuable, safe, reversible):
+- **Phase 1 — Email/credential separation (small, high value; delivers the email ask).** biz_email
+  already picks the FROM by platform; make the SENDING IDENTITY per-platform so each domain signs its
+  own mail (DKIM-aligned, no "on behalf of"): (a) two SMTP accounts — NIDAAN_SMTP_USER=info@nidaanpartner.com
+  (+ the app password) for Nidaan, keep Sarathi on its existing account/info@sarathi-ai.com; route by
+  from-domain; OR (b) Resend API with BOTH domains verified (cleanest — per-domain DKIM, one code path).
+  Additive; Sarathi config untouched; test both before/after.
+- **Phase 2 — Code modularization (refactor-only, behavior-preserving).** Split sarathi_biz.py routes
+  into FastAPI APIRouters (sarathi_routes / nidaan_routes / shared_core), mounted by host. One process
+  still, but a Nidaan change stops editing the same file as Sarathi. Huge drop in "change one, risk the
+  other." Fully testable + reversible.
+- **Phase 3 — Data ownership (clarity first, no physical split).** Document strict table ownership
+  (nidaan_* = Nidaan; rest = Sarathi) + the few BRIDGE tables (product_link, branch attribution),
+  accessed only via biz_platform_bridge. Physical two-DB split only later if needed (thin bridge API;
+  higher risk; defer).
+- **Phase 4 — Independent deploy (the core benefit).** Run TWO app processes on the same server sharing
+  a common package: nidaan-web (e.g. 8003/8004) + sarathi-web (8001/8002); nginx routes by host to the
+  right pair; each gets its own systemd units + own blue-green deploy target + own CI job. A Nidaan
+  deploy then restarts only nidaan-web; Sarathi untouched (and vice-versa). Split worker loops too
+  (nidaan-worker / sarathi-worker). Requires Phase 2 boundaries first.
+- **Phase 5 (optional, later) — Two repos + shared library.** Extract shared modules into a versioned
+  internal package; each app its own repo + pipeline. Full org-level separation; highest effort; only
+  if the business wants distinct codebases.
+
+RECOMMENDED ORDER: 1 (email) → 2 (modularize) → 4 (two processes = independent deploy) → 3 (data doc)
+→ 5 (repos, only if needed). Phases 1–2 are low-risk and unlock most day-to-day benefit; Phase 4
+delivers "deploy separately." NON-NEGOTIABLE: additive + reversible each step; test BOTH apps' live
+paths before/after; never break a flow; zero-downtime; keep this doc updated.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
