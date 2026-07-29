@@ -940,11 +940,12 @@ async function loadTasks() {
     </div>
     <!-- Leave/WFH tiles sit ABOVE the task sections — who's away is context you need
          before you read the board. -->
-    <div id="tasksLeave" style="margin-bottom:1.1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem"></div>
-    <div id="tasksDash" style="margin-bottom:1.1rem"></div>
+    <!-- My tasks FIRST (no scrolling to find what's on you), then the org counts, then leave. -->
     <div id="tasksQuickTop">
       <div id="overviewMyQuickTasks"></div>
     </div>
+    <div id="tasksDash" style="margin-bottom:1.1rem"></div>
+    <div id="tasksLeave" style="margin-bottom:1.1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem"></div>
     <div id="tasksRegistry" style="margin-top:1.25rem"></div>
     <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4);font-size:.85rem">Loading…</div>
@@ -1878,7 +1879,31 @@ async function loadMyQuickTasksWidget(){
       </div>`;
   };
 
-  el.innerHTML =
+  // Compact "My Focus" band — at-a-glance, what needs YOU, no scrolling. Computed from the
+  // already-fetched lists (no extra API calls).
+  const _today = new Date().toISOString().slice(0,10);
+  const _dd = t => (t.due_date ? String(t.due_date).slice(0,10) : '');
+  const _openMine = mine.filter(t => t.status!=='done' && t.status!=='cancelled');
+  const _overdue = _openMine.filter(t => _dd(t) && _dd(t) < _today).length;
+  const _dueToday = _openMine.filter(t => _dd(t) === _today).length;
+  const _involvedOpen = involved.filter(t => t.status!=='done' && t.status!=='cancelled').length;
+  const fcard = (label, val, color) => `
+    <div style="background:${color}14;border:1px solid ${color}3a;border-radius:10px;padding:.55rem .4rem;text-align:center">
+      <div style="font-size:1.5rem;font-weight:800;color:${color};line-height:1">${val}</div>
+      <div style="font-size:.66rem;color:rgba(255,255,255,.6);margin-top:.2rem">${label}</div>
+    </div>`;
+  const focusBand = `
+    <div class="nd-card" style="padding:.85rem 1rem;margin-bottom:.85rem;border-color:rgba(34,211,238,.28)">
+      <div style="font-weight:800;font-size:1rem;margin-bottom:.55rem">🎯 My Focus</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:.5rem">
+        ${fcard('Pending on me', _openMine.length, '#22d3ee')}
+        ${fcard('Overdue', _overdue, '#f87171')}
+        ${fcard('Due today', _dueToday, '#fbbf24')}
+        ${fcard('Involved', _involvedOpen, '#a78bfa')}
+      </div>
+    </div>`;
+
+  el.innerHTML = focusBand +
     section('s1','📥','Pending with me','assigned to you', mine,'Nothing on your plate ✓','#22d3ee') +
     section('s2','📤','Assigned by me','you created / handed over', byMe,'You haven\'t assigned anything yet','#a78bfa') +
     section('s3','🏷️','I\'m involved','tagged into by teammates', involved,'You haven\'t been tagged into any task','#fbbf24');
