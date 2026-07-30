@@ -4719,9 +4719,13 @@ blob download. Verified: 401 unauth; claims/accounts/branches/tasks all 200 with
 2×CPU, memory ≥92% → super-admins on bell+email+Telegram, per-condition 6h cooldown. Smoke: healthy→0,
 disk96%→1, cooldown→0. Live on server.
 
-**Self-serve fixes — STILL AWAITING OWNER allow-list.** A small set of SAFE, reversible, confirm-gated,
-audited actions only (re-run seeds / restart WA watchdog / toggle a known flag / clear a cache) — NO
-arbitrary shell/service control from the web. Owner to pick the exact actions before building.
+**Self-serve fixes — DONE (owner approved all examples, Jul 31, deployed + verified).** POST
+/nidaan/ops/api/health/action (super-admin) with a STRICT allow-list: reseed (idempotent seeds),
+clear_cache (invalidate+re-read content/plans), wa_watchdog (run one run_wa_watchdog_cycle),
+toggle_wa_pause (flip wa_automation_paused; GET /health/flags shows state). Each confirm-gated + audited;
+NO arbitrary shell/service control (verified: 'rm -rf' → 400). UI: '🛠️ Self-serve fixes' buttons.
+Live test: 401 unauth; reseed/clear_cache/wa_watchdog 200; WA-pause flip+restore (prod unchanged);
+bad action 400. **App Health cockpit COMPLETE** (metrics + CSV export + alerts + self-serve).
 
 **App-separation Phase 2 — DECLINED by owner (Jul 31):** no separation; keep the single app as-is to
 avoid any pre-launch risk. (§59 plan stays as reference only; not to be executed.)
