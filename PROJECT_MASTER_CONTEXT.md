@@ -4894,7 +4894,16 @@ view is also clumsy/scroll-heavy. Plan (mobile-first, Tier II/III-clear):
   This is a UX restructure of nidaan_ops.html task area (sensitive, high-traffic) → build additively
   behind the existing data, test the live path, mobile-first.
 
-**D. Branch dashboard (1C-h) — REQUIREMENTS confirmed.** Dedicated branch portal (backend/login exists:
+**D. Branch dashboard (1C-h) — DONE (deployed + verified Jul 30).** Branch portal (nidaan_branch.html)
+now has: referral tracking + earnings (pre-existing) PLUS a 'Refer a customer & earn' card — referral
+link (origin/nidaan/start?ref=<CODE>) + Copy, enter customer mobile → one-tap WhatsApp (wa.me) / SMS
+with a ready Hinglish ₹499-review message, and a QR of the link (lazy qrcodejs from CDN; link/buttons
+still work if blocked). nidaan_start.html reads ?ref=/?branch= → pre-fills regBranch so referrals
+attribute. Super-admin '↪ Enter' impersonation already added (§58-G). Remaining (optional): branch
+'archived' status; @nidaanpartner.com staff-email mapping surfacing in the ops Staff view.
+Original requirements below:
+
+**D(orig). Branch dashboard (1C-h) — REQUIREMENTS.** Dedicated branch portal (backend/login exists:
 create_branch_token/verify_branch_token, @nidaanpartner.com email + OTP). Add the DASHBOARD UI:
   - Track their referred subscribers (attributed accounts) + status.
   - For direct ₹499 single-review filings: generate a payment link / QR the branch can share, plus
