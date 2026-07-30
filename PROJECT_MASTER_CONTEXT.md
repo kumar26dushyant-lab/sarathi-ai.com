@@ -4707,15 +4707,24 @@ metrics the owner named: request latency (p50/p95/avg/max via a timing ring), sy
 CPU → spike coloring), memory %, disk %, DB file size, uptime — /nidaan/ops/api/health + a 🖥️ System row.
 Verified live (load 0.11, DB 9.2MB, mem 5.2%, disk 2%, p95 458ms). Super-admin only, no side effects.
 
-**PROPOSALS AWAITING OWNER SIGN-OFF (sensitive — not built yet):**
-- **CSV export:** super-admin-only GET /nidaan/ops/api/export/{table}.csv for a WHITELIST of safe tables
-  (claims, accounts (masked?), branches, quick_tasks, revenue…) — streamed, row-capped, every export
-  AUDITED. Question for owner: which tables, and mask PII (mobiles/emails) or full?
-- **Self-serve fixes:** a small set of SAFE, reversible, confirm-gated, audited actions only — e.g.
-  re-run seeds (idempotent), restart the WA watchdog, toggle a known flag, clear a cache. NO arbitrary
-  shell / service restarts from the web. Owner to pick the exact allow-list.
-- **Load-spike alerts:** notify super-admins when load/latency/disk crosses a threshold (reuse the
-  worker sweep + dispatch). Low risk; can build once thresholds agreed.
+**CSV export — DONE (owner Jul 31, deployed + verified).** GET /nidaan/ops/api/export/{table}.csv
+(super-admin only) for whitelist: claims / accounts / branches / tasks (nidaan_quick_tasks non-deleted).
+Owner chose FULL details (their own business data). Columns auto-discovered via PRAGMA with sensitive
+ones excluded (password/hash/token/secret/otp/hmac/thread_key) — verified accounts export has NO
+password_hash. Row-capped 100k, every export _ops_audit'd. UI: 'Data Export (CSV)' buttons + exportCSV()
+blob download. Verified: 401 unauth; claims/accounts/branches/tasks all 200 with data, no sensitive cols.
+
+**Load-spike alerts — DONE (Jul 31, deployed + smoke-tested).** run_health_alert_sweep()
+(biz_nidaan_notifications) via worker loop health_alert_loop (every 10 min): disk ≥90%, 1-min load >
+2×CPU, memory ≥92% → super-admins on bell+email+Telegram, per-condition 6h cooldown. Smoke: healthy→0,
+disk96%→1, cooldown→0. Live on server.
+
+**Self-serve fixes — STILL AWAITING OWNER allow-list.** A small set of SAFE, reversible, confirm-gated,
+audited actions only (re-run seeds / restart WA watchdog / toggle a known flag / clear a cache) — NO
+arbitrary shell/service control from the web. Owner to pick the exact actions before building.
+
+**App-separation Phase 2 — DECLINED by owner (Jul 31):** no separation; keep the single app as-is to
+avoid any pre-launch risk. (§59 plan stays as reference only; not to be executed.)
 
 ## 60. AI-DRIVEN "MY FOCUS" — PROPOSAL (owner Jul 30; design to agree)
 
