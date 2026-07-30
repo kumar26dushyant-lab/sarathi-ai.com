@@ -1809,6 +1809,37 @@ async def on_quick_task_mention(quick_task: dict, mentioned_ids: list,
             body=body, task_id=qid)
 
 
+async def on_claim_note_mention(claim: dict, mentioned_ids: list, by_id: int,
+                                by_name: str = "", preview: str = "") -> None:
+    """Someone @mentioned staff on a claim's internal note → alert each newly-tagged person, deep-linked
+    to the claim (dashboard bell + email + WhatsApp/push). Fire-and-forget. Mirrors on_quick_task_mention."""
+    if not claim or not mentioned_ids:
+        return
+    cid = claim.get("claim_id")
+    label = (claim.get("insured_name") or claim.get("claimant_name") or "").strip()
+    by_name = by_name or "Someone"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ph = ",".join("?" * len(mentioned_ids))
+        rows = [dict(x) for x in await (await conn.execute(
+            f"SELECT staff_id, phone, COALESCE(NULLIF(notify_email,''), email) AS email "
+            f"FROM nidaan_staff WHERE staff_id IN ({ph}) AND status='active' AND deleted_at IS NULL",
+            list(mentioned_ids))).fetchall()]
+    ttl = f" ({label})" if label else ""
+    body = (f"🏷️ {by_name} tagged you on claim #{_cn(cid)}{ttl}"
+            + (f":\n\"{preview[:160]}\"" if preview else ".")
+            + f"\n\nYou can now see and work on it.\nOpen: /admin?claim={cid}")
+    for r in rows:
+        if r["staff_id"] == by_id:
+            continue
+        await dispatch(
+            event_key="claim_note.mention", priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
+            recipient_phone=r.get("phone") or "", recipient_email=r.get("email") or "",
+            subject=f"[Nidaan] You were tagged on claim #{_cn(cid)}",
+            body=body, claim_id=cid)
+
+
 async def on_quick_task_comment(quick_task: dict, commenter_id: int, preview: str):
     """A new comment on a task → notify EVERYONE involved (creator + assignee +
     @mentioned participants), minus the commenter and anyone who muted the task:

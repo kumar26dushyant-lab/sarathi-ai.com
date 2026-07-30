@@ -4300,7 +4300,7 @@ async def ops_get_claim(claim_id: int, request: Request):
             (claim_id,),
         )
         claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
-    claim["notes"] = await nidaan.get_claim_notes(claim_id)
+    claim["notes"] = _enrich_note_attachments(await nidaan.get_claim_notes(claim_id))
     claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
     claim["assignees"] = await nidaan.get_claim_assignees(claim_id)
     return claim
@@ -4575,15 +4575,44 @@ async def ops_update_review_status(
 
 class OpsAddNote(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
-    note: str
+    note: str = ""
+    parent_note_id: Optional[int] = None       # threaded reply (flattened one level)
+    mentions: Optional[list[int]] = None        # staff_ids to @mention on this note
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/notes")
 async def ops_add_note(claim_id: int, body: OpsAddNote, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
-    note_id = await nidaan.add_claim_note(claim_id, staff["staff_id"], body.note)
+    note_txt = (body.note or "").strip()
+    if not note_txt:
+        raise HTTPException(status_code=400, detail="Empty note")
+    note_id = await nidaan.add_claim_note(claim_id, staff["staff_id"], note_txt,
+                                          parent_note_id=body.parent_note_id,
+                                          source=_req_source(request))
+    # @mentions → record participants + alert the newly-tagged staff (fire-and-forget).
+    mention_ids = [int(x) for x in (body.mentions or []) if int(x) != staff["staff_id"]]
+    if mention_ids:
+        try:
+            stored = await nidaan.set_claim_note_mentions(note_id, claim_id, mention_ids)
+            import biz_nidaan_notifications as _nnot
+            asyncio.create_task(_nnot.on_claim_note_mention(
+                {"claim_id": claim_id}, stored, staff["staff_id"], staff.get("name", ""), note_txt))
+        except Exception:
+            pass
     return {"note_id": note_id, "claim_id": claim_id}
+
+
+def _enrich_note_attachments(notes: list) -> list:
+    """Add a short-lived signed view URL to each claim-note attachment (files live behind the
+    signed-URL guard). Mutates + returns the list."""
+    for n in notes or []:
+        for a in n.get("attachments", []) or []:
+            try:
+                a["url"] = _nidaan_doc_url(a["stored_name"])
+            except Exception:
+                pass
+    return notes
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/notes")
@@ -4591,7 +4620,111 @@ async def ops_get_notes(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
-    return {"notes": await nidaan.get_claim_notes(claim_id)}
+    return {"notes": _enrich_note_attachments(await nidaan.get_claim_notes(claim_id))}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/mention-candidates")
+async def ops_claim_mention_candidates(claim_id: int, request: Request):
+    """Staff who can be @mentioned on a claim note (assignees first, then other active staff)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"candidates": await nidaan.get_claim_mention_candidates(claim_id)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes/mark-read")
+async def ops_claim_notes_mark_read(claim_id: int, request: Request):
+    """Mark all of this claim's notes read by the current staffer (WhatsApp-style receipts)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    await nidaan.mark_claim_notes_read(claim_id, staff["staff_id"])
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes/{note_id}/attachments")
+async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Request,
+                                     files: Optional[list[UploadFile]] = File(None),
+                                     file: Optional[UploadFile] = File(None)):
+    """Attach one or more files (≤10, ≤10 MB each) to a claim note. Mirrors the quick-task flow."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    _incoming = [f for f in (files or []) if f is not None and (f.filename or "")]
+    if file is not None and (file.filename or ""):
+        _incoming.append(file)
+    if not _incoming:
+        raise HTTPException(400, "No files")
+    if len(_incoming) > 10:
+        raise HTTPException(400, "Up to 10 attachments per note")
+    import uuid as _uuid
+    saved: list[dict] = []
+    for _f in _incoming:
+        content = await _f.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(413, f"Attachment '{_f.filename}' exceeds 10 MB")
+        ext = os.path.splitext(_f.filename)[1][:10]
+        _stored = f"{_uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
+        saved.append({"stored_name": _stored, "original_name": _f.filename})
+    await nidaan.add_claim_note_attachments(claim_id=claim_id, note_id=note_id,
+                                            files=saved, uploaded_by=staff["staff_id"])
+    return {"ok": True, "count": len(saved)}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/notes/attachments/{attachment_id}")
+async def ops_claim_note_attachment_delete(claim_id: int, attachment_id: int, request: Request):
+    """Delete a claim-note attachment — uploader within 1h, or an admin any time. Removes disk + row."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        row = await nidaan.delete_claim_note_attachment(attachment_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own attachment within 1 hour of uploading. "
+                                     "After that, please ask a super-admin to remove it.")
+        raise HTTPException(403, "You can only delete attachments you uploaded.")
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    try:
+        _p = _NIDAAN_DOCS_DIR / row["stored_name"]
+        if _p.exists():
+            _p.unlink()
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.note_attachment_delete", "claim", str(claim_id),
+                     f"attachment={attachment_id}")
+    return {"ok": True}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/notes/{note_id}")
+async def ops_claim_note_delete(claim_id: int, note_id: int, request: Request):
+    """Delete a claim note — author within 1h, or an admin any time. Replies are promoted to top-level;
+    the note's own attachments are removed from disk."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        res = await nidaan.delete_claim_note(note_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own note within 1 hour. "
+                                     "After that, please ask a super-admin.")
+        raise HTTPException(403, "You can only delete your own notes.")
+    if res is None:
+        raise HTTPException(404, "Note not found")
+    for sn in (res.get("attachments") or []):
+        try:
+            _p = _NIDAAN_DOCS_DIR / sn
+            if _p.exists():
+                _p.unlink()
+        except Exception:
+            pass
+    await _ops_audit(request, "claim.note_delete", "claim", str(claim_id), f"note={note_id}")
+    return {"ok": True}
 
 
 # ── Follow-ups ────────────────────────────────────────────────────────────────
