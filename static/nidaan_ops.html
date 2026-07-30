@@ -5148,6 +5148,27 @@ async function loadHealth() {
       <div class="stats-row">${checks||'<div class="stat-card"><div class="sl">No checks</div></div>'}</div>
     </div>
 
+    ${(function(){
+      const sy = d.system||{}, lt = d.latency||{}, load = sy.load||{};
+      const upt = sy.uptime_sec||0;
+      const uptStr = upt>=86400 ? Math.floor(upt/86400)+'d '+Math.floor((upt%86400)/3600)+'h' : Math.floor(upt/3600)+'h '+Math.floor((upt%3600)/60)+'m';
+      const loadColor = (v)=> (sy.cpu_count && v>sy.cpu_count)?'#f87171':(sy.cpu_count && v>sy.cpu_count*0.7)?'#fbbf24':'#4ade80';
+      const pctColor = (p)=> p>=90?'#f87171':p>=75?'#fbbf24':'#4ade80';
+      const latColor = (lt.p95_ms==null)?'#94a3b8':(lt.p95_ms<300?'#4ade80':lt.p95_ms<1000?'#fbbf24':'#f87171');
+      const card = (label,val,sub,color)=>`<div class="stat-card"><div class="sv" style="font-size:1.05rem;color:${color||'#e2e8f0'}">${val}</div><div class="sl">${label}${sub?`<div style="font-size:.66rem;color:rgba(255,255,255,.35)">${sub}</div>`:''}</div></div>`;
+      return `<div style="margin-bottom:1.5rem">
+        <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">🖥️ System</div><div style="font-size:.72rem;color:rgba(255,255,255,.4)">uptime ${uptStr}</div></div>
+        <div class="stats-row">
+          ${card('Latency p95', (lt.count?lt.p95_ms+' ms':'—'), (lt.count?`avg ${lt.avg_ms} · max ${lt.max_ms} · n=${lt.count}`:'no samples yet'), latColor)}
+          ${card('Load 1m', (load.m1!=null?load.m1:'—'), (load.m5!=null?`5m ${load.m5} · 15m ${load.m15} · ${sy.cpu_count||'?'} CPU`:''), loadColor(load.m1||0))}
+          ${card('Memory', (sy.mem?sy.mem.used_pct+'%':'—'), (sy.mem?`of ${sy.mem.total_gb} GB`:''), sy.mem?pctColor(sy.mem.used_pct):'#94a3b8')}
+          ${card('Disk', (sy.disk?sy.disk.used_pct+'%':'—'), (sy.disk?`${sy.disk.free_gb} GB free`:''), sy.disk?pctColor(sy.disk.used_pct):'#94a3b8')}
+          ${card('Database', (sy.db_mb!=null?sy.db_mb+' MB':'—'), 'SQLite file', '#93c5fd')}
+          ${card('DB probe', (d.db_latency_ms!=null?d.db_latency_ms+' ms':'—'), 'health query', latencyColor)}
+        </div>
+      </div>`;
+    })()}
+
     <div style="margin-bottom:1.5rem">
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">📱 WhatsApp Numbers</div><button class="btn-sm btn-ghost" onclick="showPanel('numbers')">Manage →</button></div>
       ${(d.wa_instances && d.wa_instances.length) ? `<div class="stats-row">${d.wa_instances.map(w=>{

@@ -218,6 +218,13 @@ async def _timing_middleware(request: Request, call_next):
     if _ms > 800:
         logger.warning("⏱️ SLOW %.0fms %s %s", _ms, request.method, request.url.path)
     try:
+        _lp = request.url.path
+        if not (_lp.startswith("/static") or _lp.startswith("/uploads") or _lp == "/health"
+                or _lp.endswith("/api/health")):
+            _LATENCY_RING.append(_ms)
+    except Exception:
+        pass
+    try:
         response.headers["X-Response-Time-ms"] = f"{_ms:.0f}"
     except Exception:
         pass
@@ -226,6 +233,46 @@ async def _timing_middleware(request: Request, call_next):
 
 # ── Server Start Time (for uptime) ──────────────────────────────────────────
 SERVER_START_TIME = _time.time()
+
+# ── App-Health read-only metrics: latency ring + system snapshot ─────────────
+from collections import deque as _deque
+_LATENCY_RING = _deque(maxlen=600)   # recent app-request durations (ms)
+
+def _latency_stats() -> dict:
+    vals = list(_LATENCY_RING)
+    if not vals:
+        return {"count": 0}
+    s = sorted(vals); n = len(s)
+    def _pct(p): return s[min(n - 1, int(n * p))]
+    return {"count": n, "avg_ms": round(sum(s) / n), "p50_ms": round(_pct(0.5)),
+            "p95_ms": round(_pct(0.95)), "max_ms": round(s[-1])}
+
+def _system_metrics() -> dict:
+    """Read-only host snapshot for the super-admin App Health panel (no side effects)."""
+    import os as _os, shutil as _shutil
+    m = {}
+    try: m["uptime_sec"] = int(_time.time() - SERVER_START_TIME)
+    except Exception: pass
+    try:
+        la = _os.getloadavg()
+        m["load"] = {"m1": round(la[0], 2), "m5": round(la[1], 2), "m15": round(la[2], 2)}
+        m["cpu_count"] = _os.cpu_count()
+    except Exception: pass
+    try: m["db_mb"] = round(_os.path.getsize(db.DB_PATH) / 1048576, 1)
+    except Exception: pass
+    try:
+        du = _shutil.disk_usage(".")
+        m["disk"] = {"used_pct": round(du.used / du.total * 100, 1), "free_gb": round(du.free / 1073741824, 1)}
+    except Exception: pass
+    try:
+        info = {}
+        with open("/proc/meminfo") as _f:
+            for _line in _f:
+                _k, _v = _line.split(":", 1); info[_k.strip()] = int(_v.strip().split()[0])
+        _t = info.get("MemTotal", 0); _a = info.get("MemAvailable", 0)
+        if _t: m["mem"] = {"used_pct": round((_t - _a) / _t * 100, 1), "total_gb": round(_t / 1048576, 1)}
+    except Exception: pass
+    return m
 
 # ── Security Headers Middleware ──────────────────────────────────────────────
 @app.middleware("http")
@@ -5239,6 +5286,8 @@ async def ops_health(request: Request):
         pass
     health["checks"] = checks
     health["errors_recent"] = len(_ERROR_RING)
+    health["system"] = _system_metrics()
+    health["latency"] = _latency_stats()
     return health
 
 
