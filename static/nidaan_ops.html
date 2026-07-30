@@ -5145,6 +5145,27 @@ async function exportCSV(table){
     ndUI.toast('Exported '+table+' ✓','success');
   } catch(e){ ndUI.toast('Export error','error'); }
 }
+async function healthAction(action, desc){
+  if (!confirm('Run this fix?\n\n• '+desc+'\n\nThis is logged/audited.')) return;
+  const msgEl = document.getElementById('healthActionMsg');
+  if (msgEl){ msgEl.style.color='rgba(255,255,255,.6)'; msgEl.textContent='Working…'; }
+  try {
+    const r = await API('/health/action', {method:'POST', body:JSON.stringify({action})});
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok){ if(msgEl){ msgEl.style.color='#f87171'; msgEl.textContent=d.detail||'Action failed'; } return; }
+    if (msgEl){ msgEl.style.color='#4ade80'; msgEl.textContent='✓ '+(d.message||'Done'); }
+    if (action==='toggle_wa_pause') loadHealthFlags();
+  } catch(e){ if(msgEl){ msgEl.style.color='#f87171'; msgEl.textContent='Action error'; } }
+}
+async function loadHealthFlags(){
+  try {
+    const r = await API('/health/flags');
+    if (!r.ok) return;
+    const d = await r.json();
+    const b = document.getElementById('waPauseBtn');
+    if (b) b.textContent = d.wa_paused ? '▶️ Resume WA automation' : '⏸️ Pause WA automation';
+  } catch(e){}
+}
 async function loadHealth() {
   const el = document.getElementById('panel-health');
   el.innerHTML = '<div class="section-hdr"><div class="section-title">App Health</div><div class="section-sub">Live system diagnostics</div></div><div class="empty"><p>Loading…</p></div>';
@@ -5213,6 +5234,17 @@ async function loadHealth() {
     </div>
 
     <div style="margin-bottom:1.5rem">
+      <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">🛠️ Self-serve fixes</div><div style="font-size:.72rem;color:rgba(255,255,255,.4)">super-admin · reversible · audited</div></div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn-sm btn-ghost" onclick="healthAction('reseed','re-run config seeds (idempotent — existing values are kept)')">🌱 Re-run seeds</button>
+        <button class="btn-sm btn-ghost" onclick="healthAction('clear_cache','refresh the content + plans caches (re-read from DB)')">♻️ Clear cache</button>
+        <button class="btn-sm btn-ghost" onclick="healthAction('wa_watchdog','run one WhatsApp watchdog cycle (check + auto-heal lines)')">📶 WA watchdog</button>
+        <button class="btn-sm btn-ghost" id="waPauseBtn" onclick="healthAction('toggle_wa_pause','toggle WhatsApp automation on/off')">⏸️ WA automation…</button>
+      </div>
+      <div id="healthActionMsg" style="font-size:.78rem;color:rgba(255,255,255,.6);margin-top:.5rem"></div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">📱 WhatsApp Numbers</div><button class="btn-sm btn-ghost" onclick="showPanel('numbers')">Manage →</button></div>
       ${(d.wa_instances && d.wa_instances.length) ? `<div class="stats-row">${d.wa_instances.map(w=>{
           const up = w.state==='open';
@@ -5277,6 +5309,7 @@ async function loadHealth() {
     </div>`;
   loadCCErrors();
   loadCCActivity();
+  loadHealthFlags();
 }
 
 async function loadCCErrors(){

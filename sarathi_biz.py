@@ -5337,6 +5337,63 @@ async def ops_export_csv(table: str, request: Request):
                     headers={"Content-Disposition": f'attachment; filename="{fn}"'})
 
 
+class OpsHealthAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str
+
+
+@app.post("/nidaan/ops/api/health/action")
+async def ops_health_action(body: OpsHealthAction, request: Request):
+    """Super-admin self-serve fixes — a strict allow-list of SAFE, reversible, idempotent actions only.
+    NO arbitrary shell / service control. Every action is audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    action = (body.action or "").strip()
+    result: dict = {}
+    if action == "reseed":
+        # Idempotent — seeds only fill missing defaults; existing config is never overwritten.
+        await nidaan.seed_plans_config()
+        await nidaan.seed_content_config()
+        await nidaan.seed_review_templates()
+        result = {"message": "Config seeds re-run (idempotent — existing values kept)."}
+    elif action == "clear_cache":
+        try: nidaan.invalidate_content_cache()
+        except Exception: pass
+        try: await nidaan.get_content(force=True)
+        except Exception: pass
+        try: await nidaan.get_plans_config(force=True)
+        except Exception: pass
+        result = {"message": "Content + plans caches refreshed (re-read from DB)."}
+    elif action == "wa_watchdog":
+        res = await nnot.run_wa_watchdog_cycle()
+        result = {"message": "WhatsApp watchdog cycle run.", "detail": res}
+    elif action == "toggle_wa_pause":
+        cur = (await ntasks.get_flag("wa_automation_paused", "0")) == "1"
+        newv = "0" if cur else "1"
+        await ntasks.set_flag("wa_automation_paused", newv, by_staff_id=staff["staff_id"],
+                              description="toggled via App Health self-serve")
+        result = {"message": f"WhatsApp automation {'PAUSED' if newv == '1' else 'RESUMED'}.",
+                  "paused": newv == "1"}
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    try:
+        await _ops_audit(request, "health.action", "action", action, str(result.get("message", "")))
+    except Exception:
+        pass
+    logger.warning("HEALTH_ACTION: staff=%d action=%s", staff["staff_id"], action)
+    return {"ok": True, **result}
+
+
+@app.get("/nidaan/ops/api/health/flags")
+async def ops_health_flags(request: Request):
+    """Current state of the toggleable flags shown in App Health (super-admin)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return {"wa_paused": (await ntasks.get_flag("wa_automation_paused", "0")) == "1"}
+
+
 @app.get("/nidaan/ops/api/activity")
 async def ops_activity(request: Request, limit: int = 100, offset: int = 0,
                        action: Optional[str] = None, target_type: Optional[str] = None,
