@@ -4902,6 +4902,23 @@ thread_id shown in the widget header ('Chat ID: #<id>', bilingual, widget v11). 
 the claim number via biz_nidaan_notifications._cn() so emails + Telegram quote the same number (chat
 IDs were already raw thread_id everywhere).
 
+**G. Branch dashboard — superadmin access/impersonation (owner Jul 30, to build; SECURITY-SENSITIVE).**
+Superadmins must be able to ENTER a branch's dashboard (see what the branch sees) + manage them —
+like staff options: **impersonate (enter dashboard), deactivate, archive**, etc. — EXCEPT password
+reset (branches self-serve via email OTP). Approach (mirror the existing staff-impersonation flow):
+in the ops Branches panel add per-branch actions; "Enter dashboard" = superadmin-only endpoint that
+mints a short-lived branch token (verify_branch_token path) and opens the branch portal AS that branch
+(ideally a read/impersonation banner + full AUDIT of every impersonation; super_admin gate only).
+Deactivate/archive = status flags on the branch record (additive). Build as its own careful increment
+(impersonation is sensitive → audit, gate, reversible). Check for an existing staff-impersonation
+helper to reuse.
+
+**AI-driven "My Focus" (owner Jul 30, to discuss + build).** Clickable filtering DONE (§58-C). Next:
+make the band INTELLIGENT — a NidaanMitra-style smart line ("3 tasks need you today — start with #<id>
+(overdue, high-priority)"), auto-prioritised ordering, maybe a one-tap "start my day" that opens the
+top task. Design to agree with owner; likely a small AI summary over the already-fetched my-tasks
+(no heavy calls). Keep it clear/Tier-II-III.
+
 Recommended sequence (my rec): finish g.4c → notif #2 (30-min escalation) + #3 (subscriber dash) →
 visitor-fallback (B) → task-view UX (C) → branch dashboard (D). Email (E) unblocks once owner does DNS.
 
