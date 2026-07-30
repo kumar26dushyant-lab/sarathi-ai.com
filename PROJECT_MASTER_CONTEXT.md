@@ -4902,7 +4902,16 @@ thread_id shown in the widget header ('Chat ID: #<id>', bilingual, widget v11). 
 the claim number via biz_nidaan_notifications._cn() so emails + Telegram quote the same number (chat
 IDs were already raw thread_id everywhere).
 
-**G. Branch dashboard — superadmin access/impersonation (owner Jul 30, to build; SECURITY-SENSITIVE).**
+**G. Branch dashboard — superadmin access/impersonation — DONE (deployed + verified Jul 30).**
+POST /nidaan/ops/api/branches/{code}/impersonate (super_admin only) → get_branch → create_branch_token
+→ logged (BRANCH_IMPERSONATE) + _ops_audit('branch.impersonate'). Ops Branches panel: super-admin-only
+'↪ Enter' button per row → impersonateBranch() stores the minted token in localStorage
+['nidaan_branch_token'] (same origin) + opens /nidaan/branch AS that branch. Deactivate already existed
+(Enable/Disable → set_branch_status). Verified: endpoint 401 unauth, UI live, branch-token round-trip
+(mint+verify) OK. NO password reset (branches self-serve email OTP), per owner. Follow-up: 'archived'
+status + more granular controls if wanted. Original request/design below:
+
+**G(orig). Branch dashboard — superadmin access/impersonation.**
 Superadmins must be able to ENTER a branch's dashboard (see what the branch sees) + manage them —
 like staff options: **impersonate (enter dashboard), deactivate, archive**, etc. — EXCEPT password
 reset (branches self-serve via email OTP). Approach (mirror the existing staff-impersonation flow):
