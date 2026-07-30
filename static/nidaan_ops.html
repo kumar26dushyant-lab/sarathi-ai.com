@@ -1902,6 +1902,21 @@ async function loadMyQuickTasksWidget(){
   const _overdue = _openMine.filter(t => _dd(t) && _dd(t) < _today).length;
   const _dueToday = _openMine.filter(t => _dd(t) === _today).length;
   const _involvedOpen = involved.filter(t => t.status!=='done' && t.status!=='cancelled').length;
+  // ── Deterministic "smart" summary — always computed from the already-fetched tasks (reliable,
+  // instant, never lost). Any future AI phrasing must be ADDITIVE on top of this, not replace it. ──
+  const _prio = {urgent:3, high:2, normal:1, low:0};
+  const _rank = t => { const dd=_dd(t); let s=0; if(dd && dd<_today) s+=1000; else if(dd===_today) s+=500; s+=(_prio[(t.priority||'normal').toLowerCase()]||1)*10; return s; };
+  const _topTask = _openMine.slice().sort((a,b)=> _rank(b)-_rank(a) || String(a.due_date||'9999').localeCompare(String(b.due_date||'9999')))[0];
+  const _sumParts = [];
+  if (_overdue) _sumParts.push(`<b style="color:#f87171">${_overdue} overdue</b>`);
+  if (_dueToday) _sumParts.push(`<b style="color:#fbbf24">${_dueToday} due today</b>`);
+  const _summary = _openMine.length
+    ? (_sumParts.length ? `${_sumParts.join(' · ')} — ${_openMine.length} on you`
+                        : `${_openMine.length} task${_openMine.length>1?'s':''} on you · nothing overdue ✓`)
+    : 'Nothing on your plate right now ✓';
+  const _startBtn = _topTask
+    ? `<button onclick="openQuickTaskDrawer(${_topTask.quick_task_id})" title="Open your most urgent task" style="background:rgba(34,211,238,.18);border:1px solid rgba(34,211,238,.35);color:#67e8f9;padding:.35rem .7rem;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">▶ Start #${_topTask.quick_task_id}${(_dd(_topTask)&&_dd(_topTask)<_today)?' · overdue':(_dd(_topTask)===_today?' · today':'')}</button>`
+    : '';
   const fcard = (label, val, color, onclick) => `
     <div ${onclick?`onclick="${onclick}" title="Tap to see these"`:''} style="background:${color}14;border:1px solid ${color}3a;border-radius:10px;padding:.55rem .4rem;text-align:center;${onclick?'cursor:pointer':''}">
       <div style="font-size:1.5rem;font-weight:800;color:${color};line-height:1">${val}</div>
@@ -1909,13 +1924,18 @@ async function loadMyQuickTasksWidget(){
     </div>`;
   const focusBand = `
     <div class="nd-card" style="padding:.85rem 1rem;margin-bottom:.85rem;border-color:rgba(34,211,238,.28)">
-      <div style="font-weight:800;font-size:1rem;margin-bottom:.55rem">🎯 My Focus <span style="font-size:.68rem;color:rgba(255,255,255,.4);font-weight:500">— tap a number to filter</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
+        <div style="font-weight:800;font-size:1rem">🎯 My Focus</div>
+        ${_startBtn}
+      </div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.8);margin-bottom:.6rem">${_summary}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:.5rem">
         ${fcard('Pending on me', _openMine.length, '#22d3ee', "myFocus('active')")}
         ${fcard('Overdue', _overdue, '#f87171', _overdue?"myFocus('overdue')":'')}
         ${fcard('Due today', _dueToday, '#fbbf24', _dueToday?"myFocus('active')":'')}
         ${fcard('Involved', _involvedOpen, '#a78bfa', _involvedOpen?"myFocusScroll('qtsec-s3')":'')}
       </div>
+      <div style="font-size:.66rem;color:rgba(255,255,255,.35);margin-top:.4rem">tap a number to filter</div>
     </div>`;
 
   el.innerHTML = focusBand +
