@@ -933,6 +933,64 @@ async def on_support_reply_nudge(thread_id: int, staff_msg_id: int) -> None:
         logger.warning("on_support_reply_nudge failed: %s", e)
 
 
+_HEALTH_ALERT_COOLDOWN: dict = {}     # condition -> last-alert epoch (in-memory; resets on restart)
+_HEALTH_ALERT_GAP = 6 * 3600          # don't re-alert the same condition within 6h
+
+async def run_health_alert_sweep() -> int:
+    """Worker sweep: alert super-admins (bell + email + Telegram) when host resources cross safe
+    thresholds — disk ≥90%, 1-min load > 2×CPU, memory ≥92%. READ-ONLY monitoring; per-condition
+    cooldown so it never spams. Returns count of alerts sent."""
+    try:
+        import os as _os, shutil as _shutil, time as _t
+        alerts = []
+        try:
+            _base = "/opt/sarathi" if _os.path.isdir("/opt/sarathi") else "."
+            du = _shutil.disk_usage(_base)
+            pct = du.used / du.total * 100
+            if pct >= 90:
+                alerts.append(("disk", f"Disk {pct:.0f}% full ({du.free/1073741824:.1f} GB free)"))
+        except Exception:
+            pass
+        try:
+            la1 = _os.getloadavg()[0]; cpus = _os.cpu_count() or 1
+            if la1 > cpus * 2:
+                alerts.append(("load", f"High load: {la1:.2f} (1-min) on {cpus} CPU"))
+        except Exception:
+            pass
+        try:
+            info = {}
+            with open("/proc/meminfo") as _f:
+                for _l in _f:
+                    _k, _v = _l.split(":", 1); info[_k.strip()] = int(_v.strip().split()[0])
+            _t0 = info.get("MemTotal", 0); _av = info.get("MemAvailable", 0)
+            if _t0 and (_t0 - _av) / _t0 * 100 >= 92:
+                alerts.append(("mem", f"Memory {((_t0 - _av) / _t0 * 100):.0f}% used"))
+        except Exception:
+            pass
+        if not alerts:
+            return 0
+        now = _t.time()
+        due = [(k, m) for k, m in alerts if now - _HEALTH_ALERT_COOLDOWN.get(k, 0) > _HEALTH_ALERT_GAP]
+        if not due:
+            return 0
+        ids = [s["staff_id"] for s in await _super_admin_staff()]
+        if not ids:
+            return 0
+        subject = "⚠️ Nidaan server health alert"
+        body = ("The server crossed a health threshold:\n\n" + "\n".join("• " + m for _, m in due)
+                + "\n\nOpen ops → App Health to check.")
+        await notify_staff_inapp(ids, subject, body, event_key="health.alert", email=True)
+        for sid in ids:
+            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+        for k, _m in due:
+            _HEALTH_ALERT_COOLDOWN[k] = now
+        logger.warning("⚠️ Health alert sent to super-admins: %s", [k for k, _ in due])
+        return len(due)
+    except Exception as e:
+        logger.warning("run_health_alert_sweep failed: %s", e)
+        return 0
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 def _vapid_private() -> str: return os.environ.get("VAPID_PRIVATE_KEY", "")
 def _vapid_public() -> str:  return os.environ.get("VAPID_PUBLIC_KEY", "")

@@ -20551,6 +20551,20 @@ async def main():
                 await asyncio.sleep(300)  # every 5 min
         asyncio.create_task(support_sla_loop())
 
+        # Step 6g3: Server health alerts — warn super-admins when disk/load/memory cross safe
+        # thresholds (read-only monitoring + notify; per-condition 6h cooldown). Worker-only, every 10 min.
+        async def health_alert_loop():
+            await asyncio.sleep(240)  # let startup settle
+            while True:
+                try:
+                    await nnot.run_health_alert_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Health alert sweep error: %s", e)
+                await asyncio.sleep(600)  # every 10 min
+        asyncio.create_task(health_alert_loop())
+
         # Step 6h: WhatsApp line watchdog — self-monitoring / auto-restart /
         # escalate-to-super-admin / recovery. Worker-only singleton, every 4 min.
         async def wa_watchdog_loop():
