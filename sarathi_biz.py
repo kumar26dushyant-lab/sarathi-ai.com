@@ -5291,6 +5291,52 @@ async def ops_health(request: Request):
     return health
 
 
+# ── App Health: super-admin CSV export (tabular data) ────────────────────────
+# Whitelist ONLY — key is the URL name, value is (table, order-clause). No arbitrary tables/SQL.
+_EXPORT_TABLES = {
+    "claims":   ("nidaan_claims",      "ORDER BY claim_id DESC"),
+    "accounts": ("nidaan_accounts",    "ORDER BY account_id DESC"),
+    "branches": ("nidaan_branches",    "ORDER BY branch_code ASC"),
+    "tasks":    ("nidaan_quick_tasks", "WHERE deleted_at IS NULL ORDER BY quick_task_id DESC"),
+}
+
+
+@app.get("/nidaan/ops/api/export/{table}.csv")
+async def ops_export_csv(table: str, request: Request):
+    """Super-admin CSV export of a whitelisted table (tasks / claims / accounts / branches).
+    Sensitive columns (password/token/secret/otp/hmac/thread_key) are auto-excluded. Audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    spec = _EXPORT_TABLES.get(table)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Unknown export")
+    tbl, order = spec
+    _bad = ("password", "secret", "token", "otp", "hmac", "thread_key", "hash")
+    import csv as _csv, io as _io
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cols = [r[1] for r in await (await conn.execute(f"PRAGMA table_info({tbl})")).fetchall()]
+        safe = [c for c in cols if not any(b in c.lower() for b in _bad)]
+        if not safe:
+            raise HTTPException(status_code=400, detail="No exportable columns")
+        rows = await (await conn.execute(
+            f"SELECT {','.join(safe)} FROM {tbl} {order} LIMIT 100000")).fetchall()
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(safe)
+    for r in rows:
+        w.writerow(["" if r[c] is None else r[c] for c in safe])
+    try:
+        await _ops_audit(request, "data.export", "table", table, f"rows={len(rows)}")
+    except Exception:
+        pass
+    from datetime import datetime as _dt
+    fn = f"nidaan_{table}_{_dt.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
 @app.get("/nidaan/ops/api/activity")
 async def ops_activity(request: Request, limit: int = 100, offset: int = 0,
                        action: Optional[str] = None, target_type: Optional[str] = None,
