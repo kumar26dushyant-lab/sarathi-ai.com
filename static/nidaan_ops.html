@@ -3221,11 +3221,7 @@ async function openClaimDrawer(claimId) {
   const statusOptions = ['intimated','assigned','in_review','in_negotiation','resolved_won','resolved_lost','closed','withdrawn']
     .map(s=>`<option value="${s}" ${c.status===s?'selected':''}>${s.replace(/_/g,' ')}</option>`).join('');
 
-  const notesHtml = (c.notes||[]).map(n=>`
-    <div class="note-item">
-      <div class="note-meta">${esc(n.staff_name)} · ${fmtDate(n.created_at)}</div>
-      <div class="note-text">${esc(n.note)}</div>
-    </div>`).join('') || '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No notes yet</div>';
+  const notesHtml = _renderClaimNotesThread(c.notes||[], c.claim_id);
 
   const fuHtml = (c.followups||[]).map(f=>{
     const isOver = f.status==='overdue';
@@ -3321,13 +3317,20 @@ async function openClaimDrawer(claimId) {
       <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
-    <!-- Notes -->
+    <!-- Notes & discussion -->
     <div class="drawer-section">
-      <h4>Internal Notes</h4>
+      <h4>Internal Notes &amp; Discussion</h4>
       <div id="notesArea_${c.claim_id}">${notesHtml}</div>
-      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
-        <textarea id="noteInput_${c.claim_id}" class="note-input" style="flex:1" placeholder="Add internal note…"></textarea>
-        <button class="btn btn-primary" onclick="addNote(${c.claim_id})">Add</button>
+      <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
+        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… tag teammates below to notify them"></textarea>
+        <div id="claimMentionBox_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.3rem;font-size:.78rem;color:rgba(255,255,255,.5)"></div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input type="file" id="claimNoteFiles_${c.claim_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.txt,.csv,.heic,.heif" style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
+          <button class="btn-sm btn-ghost" type="button" onclick="document.getElementById('claimNoteFiles_${c.claim_id}').click()">📎 Attach</button>
+          <span id="claimNoteFileList_${c.claim_id}" style="font-size:.76rem;color:rgba(255,255,255,.5)"></span>
+          <button class="btn btn-primary" style="margin-left:auto" onclick="addNote(${c.claim_id})">Add note</button>
+        </div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.35)">Up to 10 files · 10&nbsp;MB each. You can delete your own note/attachment within 1&nbsp;hour; admins anytime.</div>
       </div>
     </div>
     <!-- Follow-ups -->
@@ -3380,6 +3383,9 @@ async function openClaimDrawer(claimId) {
   loadClaimReminders(c.claim_id);
   // Load subscriber ⇄ ops message thread
   opsLoadMessages(c.claim_id);
+  // Claim notes: load @mention candidates + mark notes read (drives seen-receipts)
+  loadClaimMentions(c.claim_id);
+  claimNotesMarkRead(c.claim_id);
 
   // Load documents
   try {
@@ -3491,24 +3497,133 @@ async function opsSendMessage(claimId){
   inp.disabled=false; inp.focus();
 }
 
-async function addNote(claimId) {
-  const input = document.getElementById('noteInput_'+claimId);
-  const note = input.value.trim();
-  if (!note) return;
-  const r = await API('/claims/'+claimId+'/notes', {method:'POST', body:JSON.stringify({note})});
-  if (r.ok) {
-    input.value='';
-    // Refresh notes inline
-    const nr = await API('/claims/'+claimId+'/notes');
-    if (nr.ok) {
-      const nd = await nr.json();
-      document.getElementById('notesArea_'+claimId).innerHTML = nd.notes.map(n=>`
-        <div class="note-item">
-          <div class="note-meta">${esc(n.staff_name)} · ${fmtDate(n.created_at)}</div>
-          <div class="note-text">${esc(n.note)}</div>
-        </div>`).join('') || '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No notes yet</div>';
-    }
+// ── Claim notes: threaded discussion (replies, @mentions, attachments, receipts) ──
+let _claimMentionSel = {};   // claimId -> Set(staff_id) currently selected to @mention
+
+function _renderClaimNotesThread(notes, claimId){
+  if (!notes || !notes.length) return '<div style="font-size:.8rem;color:rgba(255,255,255,.3)">No notes yet</div>';
+  const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
+  const roleLabel  = {super_admin:'SA', sub_super_admin:'ADMIN', team_member:'ASSOC'};
+  const byParent = {}, roots = [];
+  notes.forEach(n => { if (n.parent_note_id) (byParent[n.parent_note_id]=byParent[n.parent_note_id]||[]).push(n); else roots.push(n); });
+  const renderNote = (n, isReply) => {
+    const col = roleColors[n.staff_role] || '#94a3b8';
+    const lab = roleLabel[n.staff_role] || 'STAFF';
+    const readers = n.reads || [];
+    const tick = readers.length
+      ? `<span title="Seen by ${esc(readers.map(r=>r.name+' ('+ndUI.timeAgo(r.at)+')').join(', '))}" style="color:#4ade80;font-weight:700">✓✓ Seen</span>`
+      : `<span title="Sent — not seen yet" style="color:rgba(255,255,255,.35);font-weight:700">✓ Sent</span>`;
+    const mentions = (n.mentions||[]).length
+      ? `<div style="margin-top:.15rem;font-size:.72rem;color:#fbbf24">🏷️ ${n.mentions.map(m=>esc(m.name||('#'+m.staff_id))).join(', ')}</div>` : '';
+    const atts = (n.attachments && n.attachments.length)
+      ? `<div style="margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem">${n.attachments.map(a=>`<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:6px;padding:.15rem .45rem"><a href="${esc(a.url||'#')}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.82rem">📎 ${esc(a.original_name||'attachment')}</a>${a.deletable && a.attachment_id ? `<button onclick="claimDeleteAttachment(${claimId},${a.attachment_id})" title="Remove attachment" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.95rem;line-height:1;padding:0">×</button>` : ''}</span>`).join('')}</div>`
+      : '';
+    return `
+      <div style="${isReply?'margin-left:1.25rem;border-left:2px solid '+col+'33;padding-left:.6rem':''};margin-bottom:.6rem">
+        <div style="font-size:.74rem;color:rgba(255,255,255,.55);display:flex;gap:.35rem;align-items:center;flex-wrap:wrap">
+          <span style="color:${col};font-weight:700">[${lab}]</span>
+          <b style="color:rgba(255,255,255,.85)">${esc(n.staff_name||'Staff')}</b> · ${ndUI.timeAgo(n.created_at)} · ${tick}
+          ${n.deletable ? `<button onclick="claimDeleteNote(${claimId},${n.note_id})" title="Delete note" style="background:none;border:none;color:rgba(248,113,113,.7);cursor:pointer;font-size:.78rem;margin-left:auto">🗑</button>` : ''}
+        </div>
+        <div style="font-size:.88rem;margin-top:.15rem;white-space:pre-wrap">${esc(n.note)}</div>
+        ${mentions}${atts}
+        ${!isReply ? `
+          <button onclick="claimToggleReply(${n.note_id})" style="font-size:.72rem;background:transparent;border:none;color:rgba(34,211,238,.85);cursor:pointer;padding:.15rem 0">↩ Reply</button>
+          <div id="claimReplyBox_${n.note_id}" style="display:none;margin-top:.3rem">
+            <input id="claimReplyInput_${n.note_id}" placeholder="Reply…" onkeydown="if(event.key==='Enter')addNote(${claimId},${n.note_id})" style="width:calc(100% - 58px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.4rem .55rem;border-radius:6px;font-size:.82rem">
+            <button onclick="addNote(${claimId},${n.note_id})" style="margin-left:.3rem;background:rgba(34,211,238,.18);border:1px solid rgba(34,211,238,.3);color:#22d3ee;padding:.4rem .65rem;border-radius:6px;font-size:.78rem;cursor:pointer">Send</button>
+          </div>` : ''}
+        ${(byParent[n.note_id]||[]).map(child => renderNote(child, true)).join('')}
+      </div>`;
+  };
+  return roots.map(n => renderNote(n, false)).join('');
+}
+
+async function loadClaimNotes(claimId){
+  const nr = await API('/claims/'+claimId+'/notes');
+  if (!nr.ok) return;
+  const el = document.getElementById('notesArea_'+claimId);
+  if (el) el.innerHTML = _renderClaimNotesThread((await nr.json()).notes||[], claimId);
+}
+
+async function loadClaimMentions(claimId){
+  const box = document.getElementById('claimMentionBox_'+claimId);
+  if (!box) return;
+  _claimMentionSel[claimId] = _claimMentionSel[claimId] || new Set();
+  try {
+    const r = await API('/claims/'+claimId+'/mention-candidates');
+    if (!r.ok){ box.innerHTML=''; return; }
+    const cands = (await r.json()).candidates || [];
+    if (!cands.length){ box.innerHTML='<span style="opacity:.5">No teammates to tag</span>'; return; }
+    box.innerHTML = '<span style="opacity:.55;align-self:center">Tag:</span>' + cands.slice(0,40).map(c=>{
+      const on = _claimMentionSel[claimId].has(c.staff_id);
+      return `<button type="button" id="claimMent_${claimId}_${c.staff_id}" onclick="claimToggleMention(${claimId},${c.staff_id})" style="background:${on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'};border:1px solid ${on?'#fbbf24':'rgba(255,255,255,.14)'};color:${on?'#fde68a':'rgba(255,255,255,.6)'};border-radius:14px;padding:.15rem .5rem;font-size:.75rem;cursor:pointer">${c.is_assignee?'★ ':''}${esc(c.name)}</button>`;
+    }).join('');
+  } catch(e){ box.innerHTML=''; }
+}
+function claimToggleMention(claimId, staffId){
+  _claimMentionSel[claimId] = _claimMentionSel[claimId] || new Set();
+  const on = !_claimMentionSel[claimId].has(staffId);
+  if (on) _claimMentionSel[claimId].add(staffId); else _claimMentionSel[claimId].delete(staffId);
+  const el = document.getElementById('claimMent_'+claimId+'_'+staffId);
+  if (el){ el.style.background = on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'; el.style.borderColor = on?'#fbbf24':'rgba(255,255,255,.14)'; el.style.color = on?'#fde68a':'rgba(255,255,255,.6)'; }
+}
+function claimNoteFilesPicked(claimId){
+  const fi = document.getElementById('claimNoteFiles_'+claimId), fl = document.getElementById('claimNoteFileList_'+claimId);
+  if (!fi || !fl) return;
+  fl.textContent = fi.files.length ? (fi.files.length+' file'+(fi.files.length>1?'s':'')+' selected') : '';
+}
+function claimToggleReply(nid){
+  const box = document.getElementById('claimReplyBox_'+nid);
+  if (!box) return;
+  const show = box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  if (show) setTimeout(()=>{ const i=document.getElementById('claimReplyInput_'+nid); if(i) i.focus(); }, 30);
+}
+async function claimNotesMarkRead(claimId){
+  try { await API('/claims/'+claimId+'/notes/mark-read', {method:'POST', body:JSON.stringify({})}); } catch(e){}
+}
+async function claimDeleteNote(claimId, noteId){
+  if (!confirm('Delete this note? Any replies are kept (promoted to top-level).')) return;
+  const r = await API('/claims/'+claimId+'/notes/'+noteId, {method:'DELETE'});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not delete note'); return; }
+  await loadClaimNotes(claimId);
+}
+async function claimDeleteAttachment(claimId, attId){
+  if (!confirm('Remove this attachment?')) return;
+  const r = await API('/claims/'+claimId+'/notes/attachments/'+attId, {method:'DELETE'});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not remove attachment'); return; }
+  await loadClaimNotes(claimId);
+}
+
+async function addNote(claimId, parentNoteId){
+  const inputEl = parentNoteId ? document.getElementById('claimReplyInput_'+parentNoteId)
+                                : document.getElementById('noteInput_'+claimId);
+  const text = ((inputEl && inputEl.value) || '').trim();
+  const fileInput = parentNoteId ? null : document.getElementById('claimNoteFiles_'+claimId);
+  const files = (fileInput && fileInput.files) ? Array.from(fileInput.files) : [];
+  const mentions = parentNoteId ? [] : Array.from(_claimMentionSel[claimId] || []);
+  if (!text && !files.length) return;
+  const body = { note: text || '📎 attachment' };
+  if (parentNoteId) body.parent_note_id = parentNoteId;
+  if (mentions.length) body.mentions = mentions;
+  const r = await API('/claims/'+claimId+'/notes', {method:'POST', body:JSON.stringify(body)});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not add note'); return; }
+  const nid = (await r.json()).note_id;
+  if (files.length && nid){
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f));
+    // multipart — use fetch + hdrs() so the browser sets the Content-Type boundary
+    try { await fetch('/nidaan/ops/api/claims/'+claimId+'/notes/'+nid+'/attachments', {method:'POST', headers: hdrs(), body: fd}); } catch(e){}
   }
+  if (inputEl) inputEl.value='';
+  if (!parentNoteId){
+    if (fileInput) fileInput.value='';
+    const fl = document.getElementById('claimNoteFileList_'+claimId); if (fl) fl.textContent='';
+    _claimMentionSel[claimId] = new Set();
+    loadClaimMentions(claimId);   // reset the tag chips
+  }
+  await loadClaimNotes(claimId);
 }
 
 async function addFollowup(claimId) {

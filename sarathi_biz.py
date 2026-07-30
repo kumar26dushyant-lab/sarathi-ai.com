@@ -4300,7 +4300,9 @@ async def ops_get_claim(claim_id: int, request: Request):
             (claim_id,),
         )
         claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
-    claim["notes"] = _enrich_note_attachments(await nidaan.get_claim_notes(claim_id))
+    claim["notes"] = _enrich_note_attachments(
+        await nidaan.get_claim_notes(claim_id), staff["staff_id"],
+        staff.get("role") in ("super_admin", "sub_super_admin"))
     claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
     claim["assignees"] = await nidaan.get_claim_assignees(claim_id)
     return claim
@@ -4603,15 +4605,29 @@ async def ops_add_note(claim_id: int, body: OpsAddNote, request: Request):
     return {"note_id": note_id, "claim_id": claim_id}
 
 
-def _enrich_note_attachments(notes: list) -> list:
-    """Add a short-lived signed view URL to each claim-note attachment (files live behind the
-    signed-URL guard). Mutates + returns the list."""
+def _enrich_note_attachments(notes: list, staff_id: Optional[int] = None,
+                             is_admin: bool = False) -> list:
+    """Add a signed view URL to each claim-note attachment (files live behind the signed-URL guard)
+    and a server-authoritative `deletable` flag on notes + attachments (uploader/author within 1h, or
+    admin any time — same rule the DELETE endpoints enforce). Mutates + returns the list."""
+    from datetime import datetime as _dtm
+    _now = _dtm.utcnow()
+    _WIN = 3600
+
+    def _fresh(ts) -> bool:
+        try:
+            return (_now - _dtm.fromisoformat(str(ts).replace(" ", "T"))).total_seconds() <= _WIN
+        except Exception:
+            return False
+
     for n in notes or []:
+        n["deletable"] = bool(is_admin or (staff_id and n.get("staff_id") == staff_id and _fresh(n.get("created_at"))))
         for a in n.get("attachments", []) or []:
             try:
                 a["url"] = _nidaan_doc_url(a["stored_name"])
             except Exception:
                 pass
+            a["deletable"] = bool(is_admin or (staff_id and a.get("uploaded_by") == staff_id and _fresh(a.get("uploaded_at"))))
     return notes
 
 
@@ -4619,8 +4635,10 @@ def _enrich_note_attachments(notes: list) -> list:
 async def ops_get_notes(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "team_member")
-    return {"notes": _enrich_note_attachments(await nidaan.get_claim_notes(claim_id))}
+    staff = _require_staff(request, "team_member")
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    return {"notes": _enrich_note_attachments(await nidaan.get_claim_notes(claim_id),
+                                              staff["staff_id"], is_admin)}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/mention-candidates")
