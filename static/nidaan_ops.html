@@ -3121,13 +3121,21 @@ async function loadBranches() {
       <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:#22d3ee;font-size:.7rem">edit</a>`:''}</td>
       <td style="text-align:right;font-size:.78rem;color:#fbbf24">₹${fmt(b.share||0)}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'#34d399':'#fca5a5'}">${b.status}</span></td>
-      <td><button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
+      <td style="white-space:nowrap">${_role==='super_admin'?`<button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this branch's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">Click an <b style="color:#fca5a5">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this branch's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per branch.</div>`;
+}
+async function impersonateBranch(code){
+  if (!confirm('Enter branch '+code+"'s dashboard as that branch?\nThis is logged/audited — you'll see exactly what the branch sees.")) return;
+  const r = await API('/branches/'+encodeURIComponent(code)+'/impersonate', {method:'POST'});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not enter branch dashboard.'); return; }
+  const d = await r.json();
+  try{ localStorage.setItem('nidaan_branch_token', d.branch_token); }catch(e){}
+  window.open('/nidaan/branch', '_blank');   // opens the branch portal as that branch (same-origin token)
 }
 async function setBranchShare(code, current){
   const v = prompt('Profit-share % for branch '+code+'\n(0–100 — % of subscription revenue from accounts attributed to this branch):', current||0);

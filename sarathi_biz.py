@@ -4829,6 +4829,28 @@ async def ops_impersonate_staff(staff_id: int, request: Request):
             "name": target["name"], "ops_url": "/admins"}
 
 
+@app.post("/nidaan/ops/api/branches/{branch_code}/impersonate")
+async def ops_impersonate_branch(branch_code: str, request: Request):
+    """Super admin: enter a branch's own dashboard (mint a short-lived branch token to view what the
+    branch sees). Audited. Branches self-serve password via email OTP, so no reset here — this is
+    purely 'see inside their dashboard'."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    branch = await nidaan.get_branch(branch_code)
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    token = nidaan.create_branch_token(branch["branch_code"])
+    logger.warning("BRANCH_IMPERSONATE: staff_id=%d entering branch=%s dashboard",
+                   caller["staff_id"], branch["branch_code"])
+    try:
+        await _ops_audit(request, "branch.impersonate", "branch", branch["branch_code"],
+                         "super-admin entered branch dashboard")
+    except Exception:
+        pass
+    return {"branch_token": token, "branch_code": branch["branch_code"], "url": "/nidaan/branch"}
+
+
 # ── Revenue + Refunds: gated to the platform owner only ──────────────────────
 # Other super_admins do NOT see revenue or refund admin. Owner is matched by
 # email (case-insensitive). Configurable later via system flag if needed.
