@@ -98,6 +98,22 @@
 
   <div class="grid" id="statGrid"></div>
 
+  <div class="card" id="shareCard" style="display:none">
+    <div style="font-weight:700;margin-bottom:.4rem;color:#fff">🔗 Refer a customer &amp; earn</div>
+    <div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-bottom:.7rem">Share this link or QR so your customer can get their rejected / underpaid insurance claim reviewed (₹499). Anyone who signs up under your code counts toward your earnings.</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
+      <input id="refLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
+      <button class="btn btn-cyan" onclick="copyRefLink()">📋 Copy</button>
+    </div>
+    <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.35rem">Send directly to your customer:</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <input id="custMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="Customer mobile (10-digit)" style="flex:1;min-width:170px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
+      <button class="btn" style="background:#25D366;color:#053b1e;font-weight:700" onclick="shareWhatsApp()">💬 WhatsApp</button>
+      <button class="btn" style="background:rgba(255,255,255,.12);color:#fff" onclick="shareSMS()">✉️ SMS</button>
+    </div>
+    <div id="qrBox" style="display:flex;flex-direction:column;align-items:center;gap:.4rem;margin-top:1rem"></div>
+  </div>
+
   <div class="card">
     <div style="font-weight:700;margin-bottom:.8rem;color:#fff">Your referrals</div>
     <div id="acctWrap"><div class="empty">Loading…</div></div>
@@ -153,6 +169,53 @@ async function verifyOtp(){
 
 function logout(){ localStorage.removeItem(TOKEN_KEY); location.reload(); }
 
+// ── Refer & share ────────────────────────────────────────────────────────────
+let _refLink = '';
+function renderShareCard(code){
+  _refLink = location.origin + '/nidaan/start?ref=' + encodeURIComponent(code);
+  const el = $('refLink'); if (el) el.value = _refLink;
+  const card = $('shareCard'); if (card) card.style.display = '';
+  renderQR(_refLink);
+}
+function _shareMsg(){
+  return 'Namaste! Nidaan Partner se apne reject ya kam hue insurance claim ka review karwaiye (sirf ₹499). Yahan se shuru karein: ' + _refLink;
+}
+function copyRefLink(){
+  const el = $('refLink'); if(!el) return;
+  el.select();
+  try{ navigator.clipboard.writeText(_refLink); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
+  el.style.borderColor = '#22d3ee';
+  setTimeout(()=>{ el.style.borderColor = 'rgba(255,255,255,.14)'; }, 900);
+}
+function _custNum(){
+  const m = ((($('custMobile')||{}).value)||'').replace(/\D/g,'');
+  if (m.length===10) return '91'+m;
+  if (m.length===12 && m.slice(0,2)==='91') return m;
+  return '';
+}
+function shareWhatsApp(){
+  const num = _custNum();
+  const url = (num ? 'https://wa.me/'+num : 'https://wa.me/') + '?text=' + encodeURIComponent(_shareMsg());
+  window.open(url, '_blank');
+}
+function shareSMS(){
+  const num = _custNum();
+  const body = encodeURIComponent(_shareMsg());
+  window.location.href = (num ? 'sms:+'+num : 'sms:') + '?body=' + body;
+}
+function renderQR(text){
+  const box = $('qrBox'); if(!box) return;
+  box.innerHTML = '<div style="font-size:.75rem;color:rgba(255,255,255,.5)">Or scan to open:</div><div id="qrTarget" style="background:#fff;padding:8px;border-radius:8px"></div>';
+  const target = $('qrTarget');
+  const draw = ()=>{ try{ new QRCode(target, { text:text, width:160, height:160, correctLevel: QRCode.CorrectLevel.M }); }catch(e){} };
+  if (typeof QRCode !== 'undefined'){ draw(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = draw;
+  s.onerror = ()=>{ box.innerHTML = ''; };   // CDN blocked → link + buttons still work
+  document.head.appendChild(s);
+}
+
 function authHeaders(){ return {'Authorization':'Bearer '+localStorage.getItem(TOKEN_KEY)}; }
 
 async function showDashboard(){
@@ -168,6 +231,7 @@ async function showDashboard(){
     const accounts = (await ar.json()).accounts || [];
     $('brTitle').textContent = (me.name || me.branch_code || 'Branch');
     $('brSubtitle').textContent = [me.branch_code, me.city].filter(Boolean).join(' · ');
+    if (me.branch_code) renderShareCard(me.branch_code);
     $('statGrid').innerHTML = `
       <div class="stat"><div class="stat-label">Referrals</div><div class="stat-val">${me.signups||0}</div></div>
       <div class="stat"><div class="stat-label">Paying</div><div class="stat-val">${me.paid||0}</div></div>

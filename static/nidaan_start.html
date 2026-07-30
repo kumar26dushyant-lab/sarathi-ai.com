@@ -374,6 +374,9 @@ function setLang(l){
 <script>
 // ── URL param: ?plan=silver etc. carried through to dashboard for post-signup subscribe prompt
 const _plan = new URLSearchParams(location.search).get('plan') || '';
+// ?ref=<BRANCHCODE> (or ?branch=) from a branch's referral link → pre-fill the branch code at signup
+const _ref = (new URLSearchParams(location.search).get('ref') || new URLSearchParams(location.search).get('branch') || '').trim().toUpperCase();
+if (_ref) { try { const _rb = document.getElementById('regBranch'); if (_rb) _rb.value = _ref; } catch(e){} }
 let _email = '';
 let _funnelMode = false;  // true when arriving via #get-reviewed (free-claim funnel)
 
