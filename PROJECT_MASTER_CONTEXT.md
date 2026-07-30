@@ -4730,6 +4730,13 @@ ALREADY-fetched my-tasks — minimal/no extra AI cost):
   feedback_flexibility_first).
 Build deterministically first (safe, instant, free); layer optional AI phrasing after owner confirms tone.
 
+**STATUS (Jul 31): deterministic smart summary DONE + verified live.** My Focus band now shows a smart
+summary line ('N overdue · M due today — K on you' / 'nothing on your plate ✓') + a '▶ Start #<id>'
+button that opens the most-urgent task (rank: overdue > due-today > priority > earliest due). Computed
+from the already-fetched my-tasks (no extra calls) — reliable + instant. Owner directive: this
+deterministic message is the source of truth and must NEVER be lost; any AI phrasing is strictly an
+ADDITIVE layer on top (optional, to build later). AI phrasing layer NOT built yet (kept safe).
+
 ## 56. CURRENT STATE & NEXT — orientation snapshot (Jul 28, 2026) — PAUSED for owner testing
 
 Read this first; the sections above are the detailed history. HEAD verified on prod after each
