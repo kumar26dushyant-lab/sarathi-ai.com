@@ -4699,8 +4699,36 @@ without a developer. **SUPER-ADMIN ONLY** (no other staff). Requested capabiliti
 - **Data export to CSV** (per-table or a selected set) for the owner.
 - Overall "cockpit" view: everything important at a glance + safe one-click actions.
 Notes: this is a SENSITIVE surface (server internals + data export) → build additively, super-admin
-gate + audit every action, no destructive one-clicks without confirm. Owner said "make it a to-do,
-we can discuss more" → NOT building yet; scope to be agreed first.
+gate + audit every action, no destructive one-clicks without confirm.
+
+**STATUS (Jul 30-31): Increment 1 (read-only metrics) DONE + verified.** The App Health control center
+already had service checks (DB/email/payments/Telegram/WhatsApp/disk/errors). Added the read-only host
+metrics the owner named: request latency (p50/p95/avg/max via a timing ring), system load (1m/5m/15m vs
+CPU → spike coloring), memory %, disk %, DB file size, uptime — /nidaan/ops/api/health + a 🖥️ System row.
+Verified live (load 0.11, DB 9.2MB, mem 5.2%, disk 2%, p95 458ms). Super-admin only, no side effects.
+
+**PROPOSALS AWAITING OWNER SIGN-OFF (sensitive — not built yet):**
+- **CSV export:** super-admin-only GET /nidaan/ops/api/export/{table}.csv for a WHITELIST of safe tables
+  (claims, accounts (masked?), branches, quick_tasks, revenue…) — streamed, row-capped, every export
+  AUDITED. Question for owner: which tables, and mask PII (mobiles/emails) or full?
+- **Self-serve fixes:** a small set of SAFE, reversible, confirm-gated, audited actions only — e.g.
+  re-run seeds (idempotent), restart the WA watchdog, toggle a known flag, clear a cache. NO arbitrary
+  shell / service restarts from the web. Owner to pick the exact allow-list.
+- **Load-spike alerts:** notify super-admins when load/latency/disk crosses a threshold (reuse the
+  worker sweep + dispatch). Low risk; can build once thresholds agreed.
+
+## 60. AI-DRIVEN "MY FOCUS" — PROPOSAL (owner Jul 30; design to agree)
+
+Clickable filtering already shipped (§58-C). Proposed intelligence layer (super/sub/team, over the
+ALREADY-fetched my-tasks — minimal/no extra AI cost):
+- **Smart summary line** at the top of My Focus: e.g. "3 need you today — start with #<id> (overdue,
+  high-priority). 2 waiting on your approval." Deterministic first (rules over the fetched tasks); an
+  optional Gemini one-liner (biz_ai) only if owner wants natural-language phrasing (bilingual, Tier-II/III).
+- **Smart ordering / 'Start my day':** one tap opens the single highest-priority task (overdue > due-today
+  > high-priority > oldest).
+- **Gentle nudges:** if something's overdue/awaiting-approval, a soft banner (not a block — per
+  feedback_flexibility_first).
+Build deterministically first (safe, instant, free); layer optional AI phrasing after owner confirms tone.
 
 ## 56. CURRENT STATE & NEXT — orientation snapshot (Jul 28, 2026) — PAUSED for owner testing
 
