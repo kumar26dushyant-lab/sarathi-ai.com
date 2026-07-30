@@ -4733,7 +4733,14 @@ increment (blue-green via GitHub Actions; content_guard gates the deploy).
      add_claim_note_attachments / delete_claim_note_attachment(1h|admin) / set_claim_note_mentions /
      mark_claim_notes_read / delete_claim_note(1h|admin, promotes replies) / get_claim_mention_candidates).
      Smoke test (scratchpad/g4c_smoke.py): schema, thread-flatten, attach, mentions, receipts, delete → ALL PASS.
-   - **Increment 2 (NEXT) — endpoints (fully scoped, execution-ready; all reuse points confirmed):**
+   - **Increment 2 — endpoints DONE (deployed + LIVE-VERIFIED on prod Jul 30, zero residue).** All wired:
+     ops_add_note (+parent_note_id +mentions → set_claim_note_mentions + on_claim_note_mention notifier),
+     POST notes/{id}/attachments (multipart), DELETE notes/attachments/{id}, DELETE notes/{id},
+     GET mention-candidates, POST notes/mark-read; notes enriched with signed attachment URLs
+     (_enrich_note_attachments in ops_get_notes + ops_get_claim). Live API test (real JWT): add=200,
+     reply-threaded=True, mention_ok=True, candidates=24, mark-read=200, delete=200/200, notes-left=0.
+     NEXT = Increment 3 (drawer UI parity: threads/reply/@mention picker/attach+delete/receipts).
+   - **Increment 2 (original scope, for reference):**
      NON-BREAKING approach (keep the live JSON note path working between increments):
      * Extend `OpsAddNote` (sarathi_biz.py ~4532) + `ops_add_note` (~4537): add optional `parent_note_id:int`,
        `mentions:list[int]`; pass `source=_req_source(request)`; after insert → `set_claim_note_mentions` →
