@@ -4808,8 +4808,10 @@ user-facing must be plainly understandable to Tier II/III users (memory feedback
    now returns chat_unread_total + chats; dashboard bell badge = claim+chat, dropdown 'new replies in
    chat' row opens the widget (→ marks seen → clears). Smoke-tested + prod-verified. Notif cluster #3 COMPLETE.
 
-**TODO — aesthetics:** polish both the ops-side support modal and the customer-facing chat widget
-(spacing, bubbles, headers, readability) — mobile-first, Tier II/III-clear.
+**aesthetics — DONE (deployed + verified Jul 30, widget v13):** Customer widget — animated typing dots
+(was '…'), subtle 'NidaanMitra' label on bot bubbles (matches 'Support agent'), soft bubble shadow +
+gentle fade-in. Ops support modal — rounder bubbles with a tail, color-coded sender labels (staff /
+NidaanMitra / customer), better line-height/spacing/word-break + shadow. Pure visual/CSS, mobile-first.
 
 Sequencing: finish g.4c (Increment 2 endpoints → Increment 3 drawer UI) first (in flight), then this
 notifications cluster, then aesthetics. Or interleave if owner prioritizes chat notifications sooner.
