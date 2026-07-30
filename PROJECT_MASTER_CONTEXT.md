@@ -4739,7 +4739,14 @@ increment (blue-green via GitHub Actions; content_guard gates the deploy).
      GET mention-candidates, POST notes/mark-read; notes enriched with signed attachment URLs
      (_enrich_note_attachments in ops_get_notes + ops_get_claim). Live API test (real JWT): add=200,
      reply-threaded=True, mention_ok=True, candidates=24, mark-read=200, delete=200/200, notes-left=0.
-     NEXT = Increment 3 (drawer UI parity: threads/reply/@mention picker/attach+delete/receipts).
+     Increment 3 (drawer UI) DONE too — see below.
+   - **Increment 3 — claim drawer UI DONE (deployed + verified Jul 30). g.4c COMPLETE.** The claim
+     drawer's Internal Notes is now a full threaded discussion (fixes the owner's "messy claim panel"):
+     _renderClaimNotesThread (mirrors the quick-task renderer) — threaded ↩ replies, @mention tag-chips
+     (from mention-candidates; ★=assignee) → notifies, 📎 attachments (≤10/10MB) with per-file delete ×
+     + signed-URL view, read receipts (✓ Sent / ✓✓ Seen), 🗑 delete note (author 1h / admin via
+     server-authoritative `deletable`), mark-read on drawer open. Add-note flow: JSON note (+mentions
+     +parent) then multipart attachments to the note. Endpoints re-verified 200 after the enrich change.
    - **Increment 2 (original scope, for reference):**
      NON-BREAKING approach (keep the live JSON note path working between increments):
      * Extend `OpsAddNote` (sarathi_biz.py ~4532) + `ops_add_note` (~4537): add optional `parent_note_id:int`,
