@@ -83,13 +83,17 @@
     + '.nsw-hdr h4{margin:0;font-size:1rem;font-weight:800}.nsw-hdr p{margin:.15rem 0 0;font-size:.72rem;opacity:.9}'
     + '.nsw-x{position:absolute;top:.7rem;right:.8rem;background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1}'
     + '.nsw-msgs{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.6rem;background:#0a1628}'
-    + '.nsw-b{max-width:82%;padding:.6rem .8rem;border-radius:14px;font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}'
+    + '.nsw-b{max-width:82%;padding:.6rem .8rem;border-radius:14px;font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18);animation:nswFade .2s ease}'
+    + '@keyframes nswFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}'
     + '.nsw-b.ai{align-self:flex-start;background:rgba(255,255,255,.07);color:#e2e8f0;border-bottom-left-radius:4px}'
     + '.nsw-b.staff{align-self:flex-start;background:rgba(52,211,153,.14);color:#d1fae5;border-bottom-left-radius:4px}'
     + '.nsw-b.me{align-self:flex-end;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border-bottom-right-radius:4px}'
     + '.nsw-tag{font-size:.6rem;opacity:.55;margin-bottom:.15rem}'
     + '.nsw-note{align-self:center;font-size:.72rem;color:#fbbf24;text-align:center;padding:.2rem .5rem}'
-    + '.nsw-typing{align-self:flex-start;color:rgba(255,255,255,.4);font-size:.8rem;font-style:italic}'
+    + '.nsw-typing{align-self:flex-start;background:rgba(255,255,255,.07);border-radius:14px;border-bottom-left-radius:4px;padding:.6rem .8rem;display:flex;gap:5px;align-items:center}'
+    + '.nsw-dot{width:6px;height:6px;border-radius:50%;background:rgba(103,232,249,.8);animation:nswBounce 1.2s infinite ease-in-out}'
+    + '.nsw-dot:nth-child(2){animation-delay:.18s}.nsw-dot:nth-child(3){animation-delay:.36s}'
+    + '@keyframes nswBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}'
     + '.nsw-chips{display:flex;flex-wrap:wrap;gap:.4rem;padding:0 1rem .5rem}'
     + '.nsw-chip{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3);color:#67e8f9;border-radius:16px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer}'
     + '.nsw-chip:active{opacity:.7}'
@@ -149,7 +153,8 @@
   function bubble(text, who){
     var b=document.createElement('div');
     b.className='nsw-b '+(who==='customer'?'me':(who==='staff'?'staff':'ai'));
-    var tag = who==='staff' ? '<div class="nsw-tag">Support agent</div>' : '';
+    var tag = who==='staff' ? '<div class="nsw-tag">Support agent</div>'
+             : (who==='ai' ? '<div class="nsw-tag" style="color:#67e8f9;opacity:.85">NidaanMitra</div>' : '');
     var content = (who==='customer') ? el(text) : linkify(el(text));
     b.innerHTML = tag + content; msgs.appendChild(b); scroll();
   }
@@ -333,7 +338,7 @@
     if(chipsBox.style.display!=='none'){ chipsBox.style.display='none'; chipsBox.innerHTML=''; }
     var optimistic=document.createElement('div'); optimistic.className='nsw-b me'; optimistic.innerHTML=el(text); msgs.appendChild(optimistic); scroll();
     if(preset==null){ input.value=''; input.style.height='auto'; }
-    var typing=document.createElement('div'); typing.className='nsw-typing'; typing.textContent='…'; msgs.appendChild(typing); scroll();
+    var typing=document.createElement('div'); typing.className='nsw-typing'; typing.innerHTML='<span class="nsw-dot"></span><span class="nsw-dot"></span><span class="nsw-dot"></span>'; msgs.appendChild(typing); scroll();
     try{
       var body={ message:text, lang:lang };
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
