@@ -401,16 +401,36 @@ span.hi-inline{display:none}
     <strong style="color:#1e3a8a;font-size:.95em">🎧 2-Minute Walkthrough</strong>
     <span onclick="nwClose()" style="cursor:pointer;color:#9ca3af;font-size:1.3em;line-height:1">×</span>
   </div>
-  <div style="display:flex;gap:6px;margin-bottom:10px">
-    <button onclick="nwSetLang('en')" id="nwLangEn" style="flex:1;padding:6px;border:1px solid #1e3a8a;background:#fff;color:#1e3a8a;border-radius:6px;font-size:.82em;cursor:pointer;font-weight:600">English</button>
-    <button onclick="nwSetLang('hi')" id="nwLangHi" style="flex:1;padding:6px;border:1px solid #1e3a8a;background:#1e3a8a;color:#fff;border-radius:6px;font-size:.82em;cursor:pointer;font-weight:600">हिंदी</button>
+
+  <!-- Step 1: who are you? -->
+  <div id="nwChooser">
+    <div style="font-size:.86em;color:#374151;margin-bottom:10px;font-weight:600"><span class="en">Tell us who you are:</span><span class="hi" style="display:none">बताइए आप कौन हैं:</span></div>
+    <button onclick="nwChoose('advisor')" style="width:100%;padding:11px;margin-bottom:8px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.86em">🧑‍💼 <span class="en">I'm an insurance advisor</span><span class="hi" style="display:none">मैं बीमा सलाहकार हूँ</span></button>
+    <button onclick="nwChoose('policyholder')" style="width:100%;padding:11px;background:#10b981;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.86em">🙋 <span class="en">I'm a policyholder</span><span class="hi" style="display:none">मैं पॉलिसीधारक हूँ</span></button>
   </div>
-  <div id="nwControls" style="display:flex;gap:6px">
-    <button onclick="nwPlay()" style="flex:1;padding:8px;background:#10b981;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">▶ Play</button>
-    <button onclick="nwPause()" style="flex:1;padding:8px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">⏸ Pause</button>
-    <button onclick="nwStop()" style="flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">⏹ Stop</button>
+
+  <!-- Advisor: recorded audio -->
+  <div id="nwAdvisor" style="display:none">
+    <div style="font-size:.8em;color:#6b7280;margin-bottom:8px"><span class="en">For insurance advisors &amp; professionals:</span><span class="hi" style="display:none">बीमा सलाहकारों के लिए:</span></div>
+    <audio id="nwAdvisorAudio" controls preload="none" style="width:100%"><source src="/uploads/photos/walkthrough/for-advisors.mp3" type="audio/mpeg"></audio>
+    <button onclick="nwBack()" style="margin-top:10px;width:100%;padding:7px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;font-size:.8em">← <span class="en">Back</span><span class="hi" style="display:none">वापस</span></button>
   </div>
-  <div id="nwStatus" style="margin-top:10px;font-size:.78em;color:#6b7280;text-align:center">Auto-playing in हिंदी…</div>
+
+  <!-- Policyholder: automated voice (hi/en) -->
+  <div id="nwPolicy" style="display:none">
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button onclick="nwSetLang('en')" id="nwLangEn" style="flex:1;padding:6px;border:1px solid #1e3a8a;background:#fff;color:#1e3a8a;border-radius:6px;font-size:.82em;cursor:pointer;font-weight:600">English</button>
+      <button onclick="nwSetLang('hi')" id="nwLangHi" style="flex:1;padding:6px;border:1px solid #1e3a8a;background:#1e3a8a;color:#fff;border-radius:6px;font-size:.82em;cursor:pointer;font-weight:600">हिंदी</button>
+    </div>
+    <div id="nwControls" style="display:flex;gap:6px">
+      <button onclick="nwPlay()" style="flex:1;padding:8px;background:#10b981;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">▶ Play</button>
+      <button onclick="nwPause()" style="flex:1;padding:8px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">⏸ Pause</button>
+      <button onclick="nwStop()" style="flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.88em">⏹ Stop</button>
+    </div>
+    <div id="nwStatus" style="margin-top:10px;font-size:.78em;color:#6b7280;text-align:center">Tap Play to begin</div>
+    <button onclick="nwBack()" style="margin-top:8px;width:100%;padding:7px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;font-size:.8em">← <span class="en">Back</span><span class="hi" style="display:none">वापस</span></button>
+  </div>
+
   <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:.78em;color:#6b7280;cursor:pointer;padding:6px;background:#fef3c7;border-radius:6px;border:1px solid #fde68a;font-weight:600">
     <input type="checkbox" id="nwHide" onchange="nwHideForever(this.checked)"> 🔕 Don't show this again
   </label>
@@ -419,8 +439,8 @@ span.hi-inline{display:none}
 (function(){
   var nwLang='hi', nwUtter=null, nwOpen=false, nwAutoStarted=false;
   var NW_SCRIPTS = {
-    en: "Namaskar, and a warm welcome to the Nidaan Partner Portal. Nidaan brings some wonderful news for everyone. Whether you are an Insurance Professional who wants the right claim settlement for your clients, or a Direct Policyholder with no dedicated advisor to lean on — Nidaan stands with you. You can now get your rejected or stuck claims resolved, together with Nidaan, at a very small starting processing fee. For Insurance Professionals: your clients' trust in you stays strong, and your business keeps growing. And for Direct Policyholders who don't have an insurance advisor — you get the direct backing of Nidaan Partner's experts, with no hassle at all. And here is something special for Insurance Advisors. When you join Nidaan Partner, you receive the Sarathi-AI Advisor Portal, absolutely free — so you can manage your team and your clients with ease, without any manual data entry. So why wait? Visit NidaanPartner.com today. This is Nidaan's promise — the right claim, true justice, and the satisfaction of every single client. Join Nidaan today. Ashwin Kaushal, Managing Director, Nidaan Group.",
-    hi: "नमस्कार! Nidaan Partner Portal में आपका हार्दिक स्वागत है। Nidaan लाया है आप सभी के लिए एक बहुत बड़ी खुशखबरी। चाहे आप एक Insurance Professional हों, जो अपने ग्राहकों को सही claim settlement दिलाना चाहते हैं — या एक Direct Policyholder, जिनके पास कोई dedicated advisor support नहीं है — Nidaan हर किसी के साथ खड़ा है। अब आप अपने rejected या अटके हुए claims, Nidaan के साथ मिलकर, बहुत ही कम शुरुआती processing fee पर हल करवा सकते हैं। Insurance Professionals के लिए — आपके ग्राहकों का भरोसा हमेशा आप पर बना रहेगा, और आपका business लगातार आगे बढ़ेगा। और Direct Policyholders के लिए, जिनका कोई insurance advisor नहीं है — Nidaan Partner के experts का सीधा साथ, बिना किसी झंझट के। और Insurance Advisors के लिए एक और खास बात! Nidaan Partner से जुड़ने पर आपको मिलता है Sarathi-AI Advisor Portal — बिल्कुल free! इसकी मदद से आप बिना किसी manual data entry के, अपनी team और clients को आसानी से manage कर सकते हैं। तो देर किस बात की? आज ही visit करें NidaanPartner.com पर। यही है Nidaan का वादा — सही claim, सही इंसाफ, और हर एक ग्राहक की संतुष्टि। आज ही जुड़िए Nidaan के साथ। अश्विन कौशल, Managing Director, Nidaan Group।"
+    en: "Namaskar, and a warm welcome to Nidaan Partner. Has your insurance claim been rejected, or paid far less than it should be? You are not alone — and you do not have to fight it by yourself. For a small, one-time fee of just four hundred and ninety-nine rupees, Nidaan's legal experts will carefully review your case and tell you clearly where you stand — whether your claim can be pursued, and the right way forward. No subscription. No commitment. Just honest, expert guidance, and the direct backing of Nidaan Partner's team. So why wait? Visit NidaanPartner dot com today, and get your rejected or stuck claim reviewed. This is Nidaan's promise — the right claim, and true justice for every policyholder. Join Nidaan today.",
+    hi: "नमस्कार! Nidaan Partner में आपका हार्दिक स्वागत है। क्या आपका बीमा claim reject हो गया है, या जितना मिलना चाहिए उससे बहुत कम मिला है? आप अकेले नहीं हैं — और आपको यह लड़ाई अकेले लड़ने की ज़रूरत नहीं है। सिर्फ़ चार सौ निन्यानवे रुपये की एक बार की छोटी सी fee पर, Nidaan के कानूनी विशेषज्ञ आपके मामले की ध्यान से समीक्षा करेंगे, और साफ़-साफ़ बताएंगे कि आपकी स्थिति क्या है — क्या आपका claim आगे बढ़ाया जा सकता है, और आगे का सही रास्ता क्या है। ना कोई subscription, ना कोई commitment। बस ईमानदार, विशेषज्ञ मार्गदर्शन, और Nidaan Partner की टीम का सीधा साथ। तो देर किस बात की? आज ही visit करें NidaanPartner.com पर, और अपने rejected या अटके हुए claim की समीक्षा करवाएँ। यही है Nidaan का वादा — सही claim, और हर पॉलिसीधारक के लिए सच्चा इंसाफ़। आज ही जुड़िए Nidaan के साथ।"
   };
   if(localStorage.getItem('nw_hide')==='1'){
     var b=document.getElementById('nwBtn'); if(b) b.style.display='none';
@@ -442,15 +462,40 @@ span.hi-inline{display:none}
     return females.find(function(v){ return v.lang.toLowerCase().indexOf(langCode==='hi'?'hi-in':'en-in')===0; }) || females[0];
   }
   function nwSetStatus(t){ var s=document.getElementById('nwStatus'); if(s) s.textContent=t; }
+  function nwShowChooser(){
+    var c=document.getElementById('nwChooser'), a=document.getElementById('nwAdvisor'), pv=document.getElementById('nwPolicy');
+    if(c) c.style.display='block';
+    if(a) a.style.display='none';
+    if(pv) pv.style.display='none';
+  }
+  function nwStopAll(){
+    if(window.speechSynthesis) window.speechSynthesis.cancel();
+    var au=document.getElementById('nwAdvisorAudio'); if(au){ try{ au.pause(); }catch(e){} }
+  }
   window.nwToggle=function(){
     var p=document.getElementById('nwPanel');
     nwOpen=!nwOpen; p.style.display=nwOpen?'block':'none';
-    if(nwOpen){ var b=document.getElementById('nwBtn'); if(b) b.classList.remove('nw-pulse'); }
+    if(nwOpen){ var b=document.getElementById('nwBtn'); if(b) b.classList.remove('nw-pulse'); nwShowChooser(); }
+    else nwStopAll();
   };
   window.nwClose=function(){
     document.getElementById('nwPanel').style.display='none'; nwOpen=false;
-    if(window.speechSynthesis) window.speechSynthesis.cancel();
+    nwStopAll();
   };
+  window.nwChoose=function(kind){
+    document.getElementById('nwChooser').style.display='none';
+    if(kind==='advisor'){
+      document.getElementById('nwPolicy').style.display='none';
+      document.getElementById('nwAdvisor').style.display='block';
+      var au=document.getElementById('nwAdvisorAudio'); if(au){ try{ au.play(); }catch(e){} }
+    } else {
+      document.getElementById('nwAdvisor').style.display='none';
+      document.getElementById('nwPolicy').style.display='block';
+      nwSetLang(nwLang||'hi');
+      setTimeout(function(){ try{ nwPlay(); }catch(e){} }, 300);   // auto-start the retail voice
+    }
+  };
+  window.nwBack=function(){ nwStopAll(); nwShowChooser(); };
   window.nwSetLang=function(l){
     nwLang=l;
     document.getElementById('nwLangEn').style.background = l==='en'?'#1e3a8a':'#fff';
@@ -494,16 +539,10 @@ span.hi-inline{display:none}
     if(localStorage.getItem('nw_hide')==='1') return;
     if(localStorage.getItem('nw_played')==='1') return;
     nwAutoStarted = true;
-    nwLang='hi';
+    localStorage.setItem('nw_played','1');
     var p=document.getElementById('nwPanel');
     if(p){ p.style.display='block'; nwOpen=true; }
-    nwSetLang('hi');
-    setTimeout(function(){
-      nwPlay();
-      localStorage.setItem('nw_played','1');
-      var ctrls=document.getElementById('nwControls');
-      if(ctrls){ ctrls.classList.add('nw-highlight'); setTimeout(function(){ ctrls.classList.remove('nw-highlight'); },5000); }
-    },350);
+    nwShowChooser();   // show the popup with the who-are-you chooser (no auto-play — visitor picks first)
   }
   function armNwAutoStart(){
     nwAutoStart();
