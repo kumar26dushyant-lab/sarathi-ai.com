@@ -4730,6 +4730,33 @@ bad action 400. **App Health cockpit COMPLETE** (metrics + CSV export + alerts +
 **App-separation Phase 2 — DECLINED by owner (Jul 31):** no separation; keep the single app as-is to
 avoid any pre-launch risk. (§59 plan stays as reference only; not to be executed.)
 
+## 61. NIDAAN "LISTEN" WALKTHROUGH + SARATHI WHATSAPP/EVOLUTION (owner Jul 31)
+
+**A. Nidaan homepage "Listen" walkthrough — DONE (deployed + verified).** Clicking Listen (or the
+auto-popup) now shows a chooser: 🧑‍💼 advisor → plays the recorded audio (/uploads/photos/walkthrough/
+for-advisors.mp3, deployed to server); 🙋 policyholder → the automated Hindi/English TTS voice with a
+REWRITTEN retail-only script (₹499 one-time review; all advisor/professional/Sarathi-portal lines
+removed). Auto-popup no longer auto-plays — waits for the choice. (nidaan_index.html; content_guard clean.)
+
+**B. Sarathi WhatsApp — DIAGNOSIS + partial fix (Jul 31).** Evolution API ("scan QR → connected") is
+FULLY WORKING: configured in biz.env (server 5.223.64.25:8080), reachable (HTTP 200), integration
+enabled, 7 instances exist (incl. sarathi_t9/t27, currently 'close' = just need re-scan). The Sarathi
+QR-scan connect UI already exists (dashboard.html step 3). The APK "Sarathi Agent" section is ALREADY
+ABSENT from the dashboard HTML (only dead JS functions remain, no HTML elements) — removed the leftover
+apkLoadStatus() call.
+  - **QR-freeze — DONE (deployed):** setup takes ~10s (Evolution delete+create+sleep(8)+connect); impatient
+    users tapped Generate repeatedly → concurrent setups → QR never stabilised. Now a blocking
+    'Generating your QR code…' overlay appears instantly on submit (prevents 2nd setup), auto-hides on QR
+    display / failure, 25s safety net. This likely fixes BOTH the UX and the 'QR not generating' (root
+    cause = concurrent setups). Owner to test.
+  - **TODO — WhatsApp AI-behaviour features (next phase, careful, ban-preventive):** (1) reactive AI reply
+    within ~3 min IF AI knows the answer / policy-related; (2) out-of-scope msg → nudge the SUBSCRIBER's OWN
+    number on WhatsApp (escalate); (3) if admin + lead already chatting manually → AI stays QUIET; (4)
+    per-subscriber AI on/off toggle (connected-but-disabled = no AI); (5) AI active-hours window (date/time;
+    default 24/7); (6) proactive ONLY for renewal/pending/lead-journey nudges (human-style). Investigate the
+    Evolution inbound webhook + existing AI reply logic before building; keep ban-preventive (reactive-first,
+    rate-limited, no bulk).
+
 ## 60. AI-DRIVEN "MY FOCUS" — PROPOSAL (owner Jul 30; design to agree)
 
 Clickable filtering already shipped (§58-C). Proposed intelligence layer (super/sub/team, over the
