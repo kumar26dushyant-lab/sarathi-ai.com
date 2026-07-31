@@ -4749,6 +4749,16 @@ apkLoadStatus() call.
     'Generating your QR code…' overlay appears instantly on submit (prevents 2nd setup), auto-hides on QR
     display / failure, 25s safety net. This likely fixes BOTH the UX and the 'QR not generating' (root
     cause = concurrent setups). Owner to test.
+  - **QR NOT GENERATING — ROOT CAUSE = Evolution server, NOT the Sarathi app (diagnosed Jul 31).**
+    Live diag against 5.223.64.25:8080: instance CREATES fine but NO QR ever produced — connect returns
+    only {"count":N} (no base64/code), instance stuck 'connecting', never 'open'; same WITH and WITHOUT
+    proxy (proxy is OFF — proxy_config False). All 7 instances close/connecting, none open. ⇒ the
+    Evolution/Baileys server cannot complete the WhatsApp handshake — WhatsApp is refusing to issue a
+    QR/pairing code to that datacenter IP (also why pairing code 'never worked'). 'Worked earlier' = before
+    the IP got flagged. FIX is on the Evolution box (owner input needed): (a) restart the Evolution/Baileys
+    service/container; (b) configure a working RESIDENTIAL proxy (WA_PROXY_HOST/PORT/... → the parked iProxy
+    item) so WhatsApp accepts the handshake; (c) if the server IP is banned, rotate it. Sarathi app code +
+    integration are correct — no app change fixes this. Need: who manages 5.223.64.25 + can we access it?
   - **TODO — WhatsApp AI-behaviour features (next phase, careful, ban-preventive):** (1) reactive AI reply
     within ~3 min IF AI knows the answer / policy-related; (2) out-of-scope msg → nudge the SUBSCRIBER's OWN
     number on WhatsApp (escalate); (3) if admin + lead already chatting manually → AI stays QUIET; (4)
