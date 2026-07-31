@@ -2751,6 +2751,16 @@ function exitImpersonation() {
     </div>
 </div>
 
+<!-- Freeze overlay while the QR is generating (prevents impatient multi-taps) -->
+<style>@keyframes waSpin{to{transform:rotate(360deg)}}</style>
+<div id="wa-generating-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:340px">
+    <div style="width:44px;height:44px;border:4px solid #e5e7eb;border-top-color:#25D366;border-radius:50%;animation:waSpin 1s linear infinite;margin:0 auto 16px"></div>
+    <div style="font-weight:800;color:#111827;font-size:1.05em;margin-bottom:6px">Generating your QR code…</div>
+    <div style="color:#6b7280;font-size:.88em">This takes about 10 seconds. Please wait — your QR will appear automatically. Don't tap again.</div>
+  </div>
+</div>
+
 <!-- ═══ WHATSAPP SETUP MODAL (3-step wizard) ═══ -->
 <div class="modal-overlay" id="wa-setup-modal">
     <div class="modal" style="width:640px;max-height:90vh;overflow-y:auto">
@@ -4009,7 +4019,7 @@ function switchTab(tab) {
     else if (tab==='subscription') loadSubscription();
     else if (tab==='profile') loadProfile();
     else if (tab==='support') loadTickets();
-    else if (tab==='whatsapp') { loadWhatsAppStatus(); apkLoadStatus(); }
+    else if (tab==='whatsapp') { loadWhatsAppStatus(); }   // Sarathi Agent APK removed — Evolution scan-QR only
     else if (tab==='drip') { loadDripSequences(); loadDripEnrollments('active');
         if (isOwnerRole && isOwnerRole()) {
             document.getElementById('drip-test-btn').style.display='inline-block';
@@ -8328,12 +8338,13 @@ async function waStepNext() {
         const displayName = document.getElementById('wa-display-name').value.trim();
         const btn = document.getElementById('wa-next-btn');
         btn.disabled = true; btn.textContent = '...';
+        waShowGenerating();   // freeze the screen instantly so impatient taps can't fire a second setup
         try {
             const setupRes = await api('/api/whatsapp/v2/setup', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({sim_type: simType, display_name: displayName})
             });
-            if (!setupRes || !setupRes.ok) { showToast(_dt('wa_setup_failed'),'error'); btn.disabled=false; btn.textContent=_dt('next'); return; }
+            if (!setupRes || !setupRes.ok) { waHideGenerating(); showToast(_dt('wa_setup_failed'),'error'); btn.disabled=false; btn.textContent=_dt('next'); return; }
             const setupData = await setupRes.json();
             await api('/api/whatsapp/v2/acknowledge', {
                 method:'POST', headers:{'Content-Type':'application/json'},
@@ -8354,16 +8365,31 @@ async function waStepNext() {
             // Re-enable ONLY on failure so the user can retry. On success the button
             // stays disabled through the transition to step 3 (where it's hidden), so a
             // double-click can never fire a second setup while the QR is generating.
+            waHideGenerating();
             showToast(_dt('wa_setup_failed'),'error');
             btn.disabled = false; btn.textContent = _dt('next');
         }
     }
 }
 
+let _waGenTimeout = null;
+function waShowGenerating(){
+    const o = document.getElementById('wa-generating-overlay');
+    if (o) o.style.display = 'flex';
+    if (_waGenTimeout) clearTimeout(_waGenTimeout);
+    // Safety net — never freeze forever if the QR fails to arrive.
+    _waGenTimeout = setTimeout(function(){ waHideGenerating(); showToast('QR is taking too long — please try again.','error'); }, 25000);
+}
+function waHideGenerating(){
+    const o = document.getElementById('wa-generating-overlay');
+    if (o) o.style.display = 'none';
+    if (_waGenTimeout){ clearTimeout(_waGenTimeout); _waGenTimeout = null; }
+}
 function waShowQr(b64) {
     const img = document.getElementById('wa-qr-img');
     const loading = document.getElementById('wa-qr-loading');
     if (!b64) return;
+    waHideGenerating();
     const src = b64.startsWith('data:') ? b64 : 'data:image/png;base64,' + b64;
     img.src = src; img.style.display = 'block';
     loading.style.display = 'none';
