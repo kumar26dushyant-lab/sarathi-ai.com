@@ -282,6 +282,29 @@ select.form-input option{background:#1e293b}
   #tasksRegistry #regSearch{flex:1;min-width:140px}
   #tasksRegistry .nd-card{padding:.85rem}
 }
+
+/* ── Mobile topbar: fit any screen, never scroll sideways ────────────────────
+   The whole ops console must behave like a native app — every action reachable
+   without horizontal scroll on any phone. On small screens we compact the top
+   bar to icons + avatar; full labels return on wider screens. */
+@media(max-width:640px){
+  html,body{overflow-x:hidden;max-width:100%}
+  .topbar{gap:.4rem;padding:.55rem .6rem}
+  .topbar-right{gap:.35rem;font-size:.8rem;flex-wrap:wrap;justify-content:flex-end}
+  /* icon-only action buttons (label spans hide, emoji stays) */
+  .topbar-right .bc-label{display:none}
+  #quickTaskBtn,#announceBtn,#broadcastBtn{padding:.4rem .55rem}
+  /* profile shows just the avatar; name + role live in the profile screen */
+  #staffName,#staffRoleBadge{display:none}
+  #profileBtn{padding:.22rem}
+  /* compact logout so it always stays on-screen */
+  .topbar-right .btn-sm{padding:.4rem .6rem;min-height:36px}
+}
+@media(max-width:460px){
+  /* free the last bit of width on the smallest phones */
+  .topbar-brand .brand-text{display:none}
+  .topbar-brand img{height:24px}
+}
 </style>
 </head>
 <body>
@@ -330,7 +353,7 @@ select.form-input option{background:#1e293b}
       </button>
       <div class="topbar-brand">
         <img src="/static/nidaan_logo.png" alt="Nidaan" onerror="this.style.display='none'">
-        Nidaan Partner
+        <span class="brand-text">Nidaan Partner</span>
         <span class="pill">OPS</span>
       </div>
     </div>
@@ -338,7 +361,7 @@ select.form-input option{background:#1e293b}
       <button id="quickTaskBtn" class="btn-sm btn-ghost"
               onclick="openQuickTaskModal()"
               style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.4);color:#22d3ee;font-weight:700;display:none">
-        ✚ Quick Task
+        ✚ <span class="bc-label">Quick Task</span>
       </button>
       <button id="announceBtn" onclick="openAnnounceModal()" title="Announce a feature update to staff by role"
               style="display:none;align-items:center;gap:.35rem;background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.4);color:#7dd3fc;font-weight:700;font-size:.82rem;padding:.4rem .7rem;border-radius:9px;cursor:pointer">
@@ -954,6 +977,7 @@ async function loadTasks() {
   loadMyQuickTasksWidget();
   loadTaskRegistry();
   loadLeaveSection();
+  _applyTaskSearchMode(_registryState.q);  // keep results-at-top if a search is already active
 
   const r = await fetch('/nidaan/ops/api/overview-widgets', { headers: hdrs() });
   if (!r.ok) {
@@ -2096,7 +2120,20 @@ function setRegistryAssignee(a){ _registryState.assignee=a; loadTaskRegistry(); 
 function setRegistryDeleted(v){ _registryState.includeDeleted=v; loadTaskRegistry(); }
 function onRegistrySearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 350); }
 // Top-of-page task search (near the New Task button) — drives the same registry filter.
-function tasksTopSearch(v){ _registryState.q=v; clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 300); }
+function tasksTopSearch(v){ _registryState.q=v; _applyTaskSearchMode(v); clearTimeout(_registrySearchTimer); _registrySearchTimer=setTimeout(()=>loadTaskRegistry(), 300); }
+// While a search is active, collapse the dashboard sections (My Focus, counts, leave,
+// widgets) so the matching tasks — the registry results — sit right under the search box.
+// No more scrolling past everything to find what you searched. Restored when cleared.
+function _applyTaskSearchMode(q){
+  const searching = !!(q && q.trim());
+  const map = {tasksQuickTop:'', tasksDash:'', tasksLeave:'grid', tasksWidgets:'grid'};
+  for (const id in map){
+    const el = document.getElementById(id);
+    if (el) el.style.display = searching ? 'none' : map[id];
+  }
+  const reg = document.getElementById('tasksRegistry');
+  if (reg) reg.style.marginTop = searching ? '.5rem' : '';
+}
 async function qtDeleteRow(qid){
   if(!confirm('Delete this task? It is removed from active lists; its history is preserved.')) return;
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, {method:'DELETE', headers:hdrs()});
