@@ -4759,6 +4759,119 @@ apkLoadStatus() call.
     service/container; (b) configure a working RESIDENTIAL proxy (WA_PROXY_HOST/PORT/... → the parked iProxy
     item) so WhatsApp accepts the handshake; (c) if the server IP is banned, rotate it. Sarathi app code +
     integration are correct — no app change fixes this. Need: who manages 5.223.64.25 + can we access it?
+  - **UPDATE Jul 31 (deep-dived on the Evolution box — I HAVE ssh: `ssh -i ~/.ssh/id_ed25519 root@5.223.64.25`):**
+    runs `atendai/evolution-api:v2.2.3` + redis/pg (docker compose at `/opt/evolution`). Findings:
+    (1) **FIXED** — WA-Web version was STALE: `CONFIG_SESSION_PHONE_VERSION` `2.3000.1035194821` → updated to
+    current `2.3000.1043857760` in docker-compose.yml + internal.env (backups `.wabak.*`), recreated container
+    (running, version confirmed applied). (2) Old instances carry a STALE per-instance webhook =
+    `http://127.0.0.1:8090` (dead — from when the app ran on the same box) → their events (incl. QR) go nowhere,
+    flooding logs with ECONNREFUSED. Fresh instances use the correct sarathi-ai.com webhook (verified reachable
+    → HTTP 401 = needs token, so delivery path works). (3) **STILL BROKEN after the version fix** — a FRESH
+    instance still won't emit a QR (stuck 'connecting', zero QRCODE in logs); Baileys isn't completing the
+    WhatsApp handshake at all. ⇒ remaining fix is a BIGGER infra decision (owner call, do NOT do blind
+    pre-launch): (a) **upgrade Evolution from v2.2.3 → latest** (its bundled Baileys is too old for current
+    WhatsApp — most likely fix; but major-version = DB-migration risk to the whole WA server incl. Nidaan
+    numbers); (b) add a **residential proxy** (parked iProxy) via `WA_PROXY_*` so WhatsApp accepts the
+    datacenter-IP handshake; (c) I can clean up the stale 127.0.0.1:8090 webhooks on old instances anytime.
+  - **★ ROOT CAUSE CONFIRMED Jul 31 — LOST RESIDENTIAL-PROXY BINDING (not version, not app):** the box
+    already runs a working residential proxy — `gost-wa.service` (SOCKS5 `127.0.0.1:1080` → upstream
+    `http://res.proxy-seller.io:10000`, creds embedded), exit IP `117.254.111.158` (residential, verified).
+    But the `Proxy` table in Evolution's postgres is EMPTY for all 7 instances → every instance connects to
+    WhatsApp from the raw Hetzner datacenter IP → WhatsApp refuses to issue a QR → stuck 'connecting' forever
+    (same for pairing code). **PROVEN:** inserting a Proxy row (host=res.proxy-seller.io port=10000 proto=http
+    user/pass from gost) directly in the DB + restarting the instance → QR base64 (len 10694) generated on the
+    FIRST connect attempt, log 'Proxy enabled: res.proxy-seller.io'. ⇒ the fix is re-binding the proxy, NOT an
+    upgrade. **BUT v2.2.3's proxy API is broken:** nested `proxy` in /instance/create = silently ignored;
+    flat `proxyHost` in create = hangs (HTTP 000); `/proxy/set/{inst}` = hangs (HTTP 000). Only a DIRECT DB
+    write applies the proxy on v2.2.3. So options: (a) low-risk — apply proxy via DB (works today, no upgrade)
+    e.g. a postgres AFTER-INSERT trigger on "Instance" that auto-adds the Proxy row, so the app's existing
+    delete→create→connect flow just works; (b) upgrade Evolution so the app's clean proxy code (create payload
+    / proxy-set) works as designed (user approved, but major-version risk on shared DB). App code is fine:
+    biz_whatsapp_evolution.create_instance already embeds `payload["proxy"]=proxy_config()` from biz.env
+    WA_PROXY_* (currently UNSET) — v2.2.3 just ignores it. Verified proxy creds live in gost unit
+    /etc/systemd/system/gost-wa.service. NOTE: also to do — remove Nidaan official WA instances (Telegram-only
+    now, user 31 Jul); keep Sarathi-only.
+  - **★★ HARD WALL FOUND Jul 31 (exhaustive) — v2.2.3 CANNOT apply a proxy to a RUNTIME-created
+    instance:** tested every path against a fresh instance — nested `proxy` in create = ignored; flat
+    `proxyHost` in create = hang(000); `/proxy/set` = hang(000, not stored); `/instance/restart` after a
+    DB-inserted/trigger Proxy row = does NOT reload proxy ("Proxy enabled" never logs); `logout`+`connect` =
+    does NOT reload either. The ONLY path that loads the proxy into a live socket is a FULL CONTAINER RESTART
+    (instances loaded from DB at boot log "Proxy enabled" — confirmed for sarathi_t9/t27/goluq after a
+    `docker compose restart`). The residential proxy is ALIVE (gost socks5 127.0.0.1:1080 → res.proxy-seller.io,
+    exit IP 117.254.111.158, verified via curl). The 2 early isolated QR successes (proxy_test, diag_dec)
+    coincided with container-load timing; they do NOT reproduce for the real subscriber flow (runtime create
+    → restart → connect). ⇒ the low-risk trigger fix ALONE is insufficient for live use. Current box state:
+    ALL instances deleted (clean slate — Sarathi ones were dead/needed re-scan anyway), Nidaan removed, DB
+    backed up (/opt/evolution/evolution-db-backup-*.sql.gz), trigger `trg_auto_bind_wa_proxy` still installed
+    (MUST DROP before any upgrade — it could fail inserts if the new schema differs). ⇒ RIGHT fix now =
+    UPGRADE Evolution (user's original choice) — and it's now LOW risk because there's nothing live to lose
+    (clean slate + DB backup + rollback). Alt = transparent network proxy (redsocks/iptables → gost) so all
+    container :443 egress uses residential without any Evolution proxy config (sidesteps the bug; but infra
+    surgery). App changes made locally but NOT deployed: set_instance_proxy→restart (revisit post-upgrade —
+    newer /proxy/set may work), sarathi_biz connect loop range 5→9, dashboard QR-freeze 25s→55s + "~30s" copy.
+  - **PARKED Jul 31 (user: "move on", don't over-spend on WA):** Evolution UPGRADED v2.2.3 →
+    `evoapicloud/evolution-api:v2.3.7` (image switched in /opt/evolution/docker-compose.yml; Prisma
+    migrations applied cleanly; container healthy). Box is a CLEAN SLATE (no live instances; Nidaan removed;
+    proxy trigger DROPPED; DB backup at /opt/evolution/evolution-db-backup-20260731-091717.sql.gz; compose
+    backups .preupgrade.* / .wabak.*). Whether v2.3.7 fixes the runtime-proxy→QR was left UNVERIFIED (a final
+    background test was mid-run when we parked). Local app changes made but NOT committed/deployed (live app
+    still runs old code): biz_whatsapp_evolution.set_instance_proxy→restart (revisit — on v2.3.7 the ORIGINAL
+    /proxy/set may work again, in which case revert to /proxy/set + set biz.env WA_PROXY_*), sarathi_biz.py
+    connect-loop range 5→9, dashboard.html QR-freeze 25s→55s + "~30s" copy. **PLAN B (user-preferred if WA
+    still flaky): mobile phone as server/proxy** — a real phone on mobile-data (real device + carrier IP) is
+    the most ban-resistant path (≈ the APK-Bridge biz_wa_agent.py). **To resume:** (1) run one test — create
+    instance on v2.3.7 with proxy (nested-create OR /proxy/set) → does QR generate through res.proxy-seller.io?
+    (2) if yes: wire app proxy (biz.env WA_PROXY_HOST=res.proxy-seller.io PORT=10000 PROTOCOL=http USER/PASS
+    from gost unit) + deploy + verify; (3) if no: `docker compose` rollback image to atendai v2.2.3 + restore
+    DB backup, then build phone-as-proxy. Proxy creds live in /etc/systemd/system/gost-wa.service (gost
+    socks5 127.0.0.1:1080 → res.proxy-seller.io:10000).
+  - **★ VERDICT Jul 31 — v2.3.7 did NOT fix it; PIVOT to phone-as-proxy (per user):** on the upgraded
+    v2.3.7, `/proxy/set` STILL HANGS (HTTP 000 after 25s), and proxy-write/create ops hang while API GETs
+    are instant (fetchInstances http=200 in 0.03s, box healthy: load ~2.2, 2.9GB free). So the proxy-apply
+    hang persists across versions. Likely reason: Evolution synchronously tries to reach the proxy's DIRECT
+    endpoint `res.proxy-seller.io:10000`, which is NOT directly reachable from the box (curl direct = http=000)
+    — only gost's local tunnel works (socks5 127.0.0.1:1080 → upstream, exit 117.254.111.158, verified). The 2
+    early QR successes were flukes/timing. **CONCLUSION: stop chasing Evolution+proxy (user: don't over-spend).
+    Pivot to PLAN B = mobile phone as server/proxy** (real device + carrier IP; ≈ APK-Bridge biz_wa_agent.py)
+    — most ban-resistant + sidesteps all datacenter-IP/proxy issues. **State left:** Evolution on v2.3.7
+    (healthy, kept as baseline — NOT rolled back; clean migration), box clean (only 1 harmless dead test
+    instance v37q), live app UNCHANGED (my local app edits never deployed → no regression; WA connect for
+    subscribers is still non-functional, same as before this session — no worse). **Possible future micro-avenue
+    (if ever revisiting Evolution):** point the instance proxy at gost via the docker bridge (host-gateway:1080
+    socks5) instead of the direct upstream, since gost works where direct fails — but needs bridge/UFW wiring;
+    NOT pursued per user. **Undeployed local edits to reconcile later:** biz_whatsapp_evolution.set_instance_proxy
+    →restart, sarathi_biz connect-loop range 5→9, dashboard QR-freeze 25s→55s+"~30s" copy (either deploy as
+    minor UX hardening or revert when the phone-as-proxy design lands).
+  - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
+    the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
+    auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
+    conv logging), Android app `apk/` (~650 lines Kotlin: WANotificationService reads WA notifications +
+    replies via RemoteInput, foreground keep-alive, boot auto-start, CRMWebSocketClient), tables
+    wa_agent_devices/pending/conversations, endpoints /api/wa-agent/{connect,status,disconnect,settings,
+    conversations} + WS /ws/agent, and dashboard APK UI JS (currently HIDDEN — re-enable). Recommend Model A
+    (phone runs real WhatsApp, app relays notifications — max ban-resistance, no Baileys/proxy) over Model B
+    (phone-as-network-proxy for Evolution — rejected). Gaps: proactive-nudge scheduler (G1), escalate-to-own-
+    number (G2), recent-human-reply suppression (G3), dashboard re-enable+active-hours picker (G4), signed
+    APK build+distribute (G5), reconnect/heartbeat (G6). Phased P0-P5 (P0=assess real device state first).
+    4 open questions for founder. NOTHING built yet — awaiting founder review of the design.
+  - **★★ DECISION Aug 1 2026 — GO OFFICIAL: Meta WhatsApp Cloud API (not unofficial).** Founder chose the
+    sustainable/proven path: dedicated business numbers via the official Cloud API, fully self-serve inside
+    sarathi-ai.com. Confirmed target = **Tech-Provider + Embedded Signup** (like Wati/AiSensy/Interakt): a
+    Team+ subscriber (e.g. "Delight Financial") clicks "Connect WhatsApp" in their dashboard → Meta popup →
+    connects their own number under their own brand → AI runs on their number. **Huge tailwind: the Cloud API
+    is ALREADY BUILT in the app** — `biz_whatsapp.py` (graph.facebook.com/v21.0, multi-tenant send), per-tenant
+    `wa_phone_id`/`wa_access_token`/`wa_verify_token` columns, `/webhook` GET+POST (verify+receive), and
+    `/api/onboarding/whatsapp` (validates creds vs Meta + stores per-tenant) — but the onboarding endpoint is
+    currently DISABLED (`return _WA_DISABLED_RESPONSE`). Full guide: `WHATSAPP_CLOUD_API_SETUP.md`. Gates:
+    Meta Business Verification (SUBMITTED Aug 2026), App Review for whatsapp_business_messaging+management
+    (Advanced Access — main extra gate, ~1 wk), Embedded Signup build (token exchange; per-tenant storage
+    already exists). Per-subscriber realities: connected number becomes API-only, display name Meta-reviewed,
+    plan-gated Team+. **SEQUENCE: Phase 0 = prove the pipe on ONE number (founder's own, Meta test number OK
+    pre-verification) — founder to fetch 3 values from Meta console (Phone-Number-ID, permanent System-User
+    token, App-Secret); then I wire biz.env + re-enable + set webhook https://sarathi-ai.com/webhook + test.
+    Phase 1 = onboard a real subscriber number manually. Phase 2 = build Embedded Signup self-serve.** This
+    SUPERSEDES the Evolution + APK-bridge paths (both parked as non-sustainable). Webhook route already exists
+    at sarathi_biz.py:20341(GET)/20347(POST).
   - **TODO — WhatsApp AI-behaviour features (next phase, careful, ban-preventive):** (1) reactive AI reply
     within ~3 min IF AI knows the answer / policy-related; (2) out-of-scope msg → nudge the SUBSCRIBER's OWN
     number on WhatsApp (escalate); (3) if admin + lead already chatting manually → AI stays QUIET; (4)
