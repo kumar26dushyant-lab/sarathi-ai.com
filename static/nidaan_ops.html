@@ -3503,10 +3503,13 @@ async function openClaimDrawer(claimId) {
     <div class="drawer-section">
       <h4>💬 Messages with subscriber</h4>
       <div id="opsMsgThread_${c.claim_id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">Loading…</div>
-      <div style="display:flex;gap:.5rem">
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="file" id="opsMsgFile_${c.claim_id}" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="opsMsgFilePicked(${c.claim_id})">
+        <button class="btn-sm btn-ghost" type="button" title="Attach a file" onclick="document.getElementById('opsMsgFile_${c.claim_id}').click()">📎</button>
         <input id="opsMsgInput_${c.claim_id}" type="text" autocomplete="off" placeholder="Reply to the subscriber…" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff" onkeydown="if(event.key==='Enter')opsSendMessage(${c.claim_id})">
         <button class="btn btn-primary" onclick="opsSendMessage(${c.claim_id})">Send</button>
       </div>
+      <div id="opsMsgFileName_${c.claim_id}" style="font-size:.74rem;color:#22d3ee;margin-top:.25rem"></div>
     </div>
     <!-- Follow-ups -->
     <div class="drawer-section">
@@ -3681,18 +3684,34 @@ async function opsLoadMessages(claimId){
       const staff = m.sender_type==='staff';
       const who = staff ? (m.staff_name||'You') : 'Subscriber';
       const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
+      const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
       return `<div style="align-self:${staff?'flex-end':'flex-start'};max-width:82%;background:${staff?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${staff?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
         <div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">${esc(who)} · ${t}</div>
-        <div style="white-space:pre-wrap">${esc(m.content)}</div></div>`;
+        ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
     }).join('') : '<div style="color:rgba(255,255,255,.35);text-align:center;padding:.5rem">No messages yet</div>';
     el.scrollTop = el.scrollHeight;
   } catch(e){ el.innerHTML=''; }
 }
+function opsMsgFilePicked(claimId){
+  const f = document.getElementById('opsMsgFile_'+claimId);
+  const lbl = document.getElementById('opsMsgFileName_'+claimId);
+  if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
+}
 async function opsSendMessage(claimId){
   const inp = document.getElementById('opsMsgInput_'+claimId); if(!inp) return;
-  const content = (inp.value||'').trim(); if(!content) return;
-  inp.value=''; inp.disabled=true;
-  try { await API('/claims/'+claimId+'/messages', {method:'POST', body:JSON.stringify({content})}); await opsLoadMessages(claimId); } catch(e){}
+  const fileEl = document.getElementById('opsMsgFile_'+claimId);
+  const content = (inp.value||'').trim();
+  const file = fileEl && fileEl.files && fileEl.files[0];
+  if(!content && !file) return;
+  inp.disabled=true;
+  const fd = new FormData();
+  fd.append('content', content);
+  if(file) fd.append('file', file);
+  try {
+    const r = await fetch('/nidaan/ops/api/claims/'+claimId+'/messages', {method:'POST', headers: hdrs(), body: fd});
+    if(r.ok){ inp.value=''; if(fileEl) fileEl.value=''; opsMsgFilePicked(claimId); await opsLoadMessages(claimId); }
+    else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Failed to send'),'error'); }
+  } catch(e){}
   inp.disabled=false; inp.focus();
 }
 

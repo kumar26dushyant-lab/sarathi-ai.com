@@ -5116,9 +5116,13 @@ async def list_claim_messages(claim_id: int, limit: int = 200) -> list[dict]:
         rows = await (await conn.execute(
             """SELECT m.message_id, m.sender_type, m.sender_staff_id, m.content,
                       m.created_at, m.read_by_subscriber_at, m.read_by_staff_at,
+                      m.attachment_doc_id,
+                      d.original_name AS attachment_name, d.stored_name AS attachment_stored,
+                      d.mime_type AS attachment_mime,
                       s.name AS staff_name
                FROM nidaan_messages m
                LEFT JOIN nidaan_staff s ON s.staff_id = m.sender_staff_id
+               LEFT JOIN nidaan_claim_documents d ON d.doc_id = m.attachment_doc_id
                WHERE m.claim_id=? ORDER BY m.message_id ASC LIMIT ?""",
             (claim_id, limit))).fetchall()
         return [dict(r) for r in rows]
@@ -5127,15 +5131,18 @@ async def list_claim_messages(claim_id: int, limit: int = 200) -> list[dict]:
 async def add_claim_message(claim_id: int, sender_type: str, content: str,
                             subscriber_id: Optional[int] = None,
                             staff_id: Optional[int] = None,
-                            source_channel: str = "dashboard") -> int:
-    """Append a message to a claim thread. sender_type is 'subscriber' or 'staff'."""
+                            source_channel: str = "dashboard",
+                            attachment_doc_id: Optional[int] = None) -> int:
+    """Append a message to a claim thread. sender_type is 'subscriber' or 'staff'.
+    attachment_doc_id links a nidaan_claim_documents row (optional file share)."""
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             """INSERT INTO nidaan_messages
                  (claim_id, sender_type, sender_subscriber_id, sender_staff_id,
-                  content, source_channel)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (claim_id, sender_type, subscriber_id, staff_id, content.strip(), source_channel))
+                  content, source_channel, attachment_doc_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, sender_type, subscriber_id, staff_id,
+             (content or "").strip(), source_channel, attachment_doc_id))
         await conn.commit()
         return cur.lastrowid
 

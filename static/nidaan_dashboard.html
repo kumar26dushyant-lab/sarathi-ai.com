@@ -1698,10 +1698,13 @@ async function openClaimDrawer(claim_id) {
     <div class="drawer-section">
       <h4>${isHi ? '💬 हमारी टीम से बात करें' : '💬 Message our team'}</h4>
       <div id="msgThread" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">${isHi ? 'लोड हो रहा है…' : 'Loading…'}</div>
-      <div style="display:flex;gap:.5rem">
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="file" id="msgFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="msgFilePicked()">
+        <button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>
         <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff;font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
         <button onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
       </div>
+      <div id="msgFileName" style="font-size:.74rem;color:#22d3ee;margin-top:.25rem"></div>
     </div>`;
 
   // Load existing documents
@@ -1727,9 +1730,10 @@ function _renderClaimMsg(m){
   const isHi = document.body.classList.contains('hi');
   const who = mine ? (isHi ? 'आप' : 'You') : (m.staff_name || 'Nidaan');
   const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
+  const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
   return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:82%;background:${mine?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${mine?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
     <div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">${esc(who)} · ${t}</div>
-    <div style="white-space:pre-wrap">${esc(m.content)}</div></div>`;
+    ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
 }
 async function loadClaimMessages(claim_id){
   const el = document.getElementById('msgThread'); if(!el) return;
@@ -1743,13 +1747,26 @@ async function loadClaimMessages(claim_id){
     el.scrollTop = el.scrollHeight;
   } catch(e){ el.innerHTML=''; }
 }
+function msgFilePicked(){
+  const f = document.getElementById('msgFile');
+  const lbl = document.getElementById('msgFileName');
+  if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
+}
 async function sendClaimMessage(claim_id){
   const inp = document.getElementById('msgInput'); if(!inp) return;
-  const content = (inp.value||'').trim(); if(!content) return;
-  inp.value=''; inp.disabled=true;
+  const fileEl = document.getElementById('msgFile');
+  const content = (inp.value||'').trim();
+  const file = fileEl && fileEl.files && fileEl.files[0];
+  if(!content && !file) return;
+  inp.disabled=true;
+  const fd = new FormData();
+  fd.append('content', content);
+  if(file) fd.append('file', file);
   try {
-    await api(`/nidaan/api/claims/${claim_id}/messages`, {method:'POST', body: JSON.stringify({content})});
-    await loadClaimMessages(claim_id);
+    const r = await fetch(`/nidaan/api/claims/${claim_id}/messages`, {method:'POST', headers:{'Authorization':'Bearer '+token}, body: fd});
+    if(r && r.ok){ inp.value=''; if(fileEl) fileEl.value=''; msgFilePicked(); await loadClaimMessages(claim_id); }
+    else if(r && r.status===401){ doLogout(); }
+    else { const d = r ? await r.json().catch(()=>({})) : {}; alert((d && d.detail) || 'Failed to send'); }
   } catch(e){}
   inp.disabled=false; inp.focus();
 }
