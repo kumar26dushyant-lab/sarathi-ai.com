@@ -844,6 +844,10 @@ function showPanel(id, fromHistory) {
 //  OVERVIEW — single dashboard with 5 actionable widgets.
 //  Task Pipeline · Pending Reviews · Follow-ups Due · Overdue Claims · Refunds
 // ═══════════════════════════════════════════════════════════════
+function scrollToOverviewClaims(){
+  const el = document.getElementById('overviewClaimsWidget');
+  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
 async function loadOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = `
@@ -851,8 +855,8 @@ async function loadOverview() {
       <div><div class="section-title">Overview</div>
       <div class="section-sub">Welcome back, ${esc(_staffName)} · what needs your attention</div></div>
     </div>
-    <div class="stats-row" id="overviewStats">
-      <div class="stat-card"><div class="sv">…</div><div class="sl">Loading</div></div>
+    <div id="overviewStats" style="margin-bottom:.85rem">
+      <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4)">Loading…</div>
     </div>
     <div id="overviewWidgets" style="margin-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>
     <div id="overviewClaimsWidget" style="margin-top:1.25rem"></div>
@@ -869,16 +873,23 @@ async function loadOverview() {
   const totals = d.totals || {};
   const isOwner = ((_staffEmail||'').toLowerCase() === NIDAAN_OWNER_EMAIL.toLowerCase());
 
-  // Top stat strip — kept small and actionable.
+  // Top stats as a "My Focus"-style tile card (matches the Tasks panel look).
+  const ovTile = (label, val, color, onclick) => `
+    <div ${onclick?`onclick="${onclick}" title="Tap to open"`:''} style="background:${color}14;border:1px solid ${color}3a;border-radius:10px;padding:.55rem .4rem;text-align:center;${onclick?'cursor:pointer':''}">
+      <div style="font-size:1.5rem;font-weight:800;color:${color};line-height:1">${val}</div>
+      <div style="font-size:.66rem;color:rgba(255,255,255,.6);margin-top:.2rem">${label}</div>
+    </div>`;
   document.getElementById('overviewStats').innerHTML = `
-    <div class="stat-card"><div class="sv">${totals.total_claims||0}</div><div class="sl">Total Claims</div></div>
-    <div class="stat-card warn"><div class="sv">${totals.open_claims||0}</div><div class="sl">Open Claims</div></div>
-    <div class="stat-card"><div class="sv">${totals.active_subscriptions||0}</div><div class="sl">Active Subs</div></div>
-    ${isOwner && d.refunds_needs_action ? `
-      <div class="stat-card" style="border-color:#fbbf24;cursor:pointer" onclick="showPanel('revenue')">
-        <div class="sv" style="color:#fbbf24">${d.refunds_needs_action}</div>
-        <div class="sl">Refunds Need Action →</div>
-      </div>` : ''}`;
+    <div class="nd-card" style="padding:.85rem 1rem;border-color:rgba(34,211,238,.28)">
+      <div style="font-weight:800;font-size:1rem;margin-bottom:.5rem">🎯 At a glance</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:.5rem">
+        ${ovTile('Total claims', totals.total_claims||0, '#22d3ee', 'scrollToOverviewClaims()')}
+        ${ovTile('Open claims', totals.open_claims||0, '#fbbf24', 'scrollToOverviewClaims()')}
+        ${ovTile('Active subs', totals.active_subscriptions||0, '#a78bfa', '')}
+        ${isOwner && d.refunds_needs_action ? ovTile('Refunds', d.refunds_needs_action, '#f87171', "showPanel('revenue')") : ''}
+      </div>
+      <div style="font-size:.66rem;color:rgba(255,255,255,.35);margin-top:.4rem">tap a number to open</div>
+    </div>`;
 
   // First widget grid — works for every role. (Task widgets live in the Tasks panel.)
   document.getElementById('overviewWidgets').innerHTML = `
