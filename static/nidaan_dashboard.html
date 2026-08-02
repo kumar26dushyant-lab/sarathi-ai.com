@@ -898,7 +898,7 @@
         <div class="field">
           <label class="en">Client Phone *</label>
           <label class="hi">ग्राहक फोन *</label>
-          <input type="tel" id="insuredPhone" placeholder="9876543210" required>
+          <input type="tel" id="insuredPhone" placeholder="9876543210" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
         </div>
       </div>
       <div class="row2">
@@ -929,15 +929,19 @@
         </div>
       </div>
       <div class="field">
-        <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
-        <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
-        <input type="text" id="claimBranchCode" maxlength="12" autocomplete="off"
-               placeholder="e.g. MUM-01 — code given by your Nidaan branch" oninput="this.value=this.value.toUpperCase()">
-        <p class="en" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">If a Nidaan branch referred you, pick their code — otherwise leave it blank.</p>
-        <p class="hi" style="font-size:.72rem;color:rgba(255,255,255,.45);margin:.25rem 0 0">अगर किसी Nidaan ब्रांच ने आपको भेजा है तो उनका कोड चुनें — वरना खाली छोड़ें।</p>
+        <label class="en">Claim Rejection Letter <span style="color:#f87171">*</span></label>
+        <label class="hi">क्लेम अस्वीकृति पत्र <span style="color:#f87171">*</span></label>
+        <div style="margin-top:.35rem;background:rgba(248,113,113,.05);border:2px dashed rgba(248,113,113,.35);border-radius:8px;padding:.85rem">
+          <label class="doc-upload-btn" for="claimRejectionLetter" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(248,113,113,.16);border:1px solid rgba(248,113,113,.4);border-radius:6px;cursor:pointer;font-size:.9rem;color:#fca5a5;font-weight:700">
+            📄 <span class="en">Attach rejection letter</span><span class="hi">अस्वीकृति पत्र संलग्न करें</span>
+          </label>
+          <input type="file" id="claimRejectionLetter" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="showRejectionLetterName()">
+          <div id="claimRejectionLetterName" style="margin-top:.5rem;font-size:.82rem;text-align:center"></div>
+          <p style="opacity:.5;font-size:.73rem;margin:.4rem 0 0;text-align:center"><span class="en">The insurer's rejection / repudiation letter — required to raise a claim.</span><span class="hi">बीमाकर्ता का अस्वीकृति पत्र — क्लेम दर्ज करने के लिए आवश्यक।</span><br>PDF · JPG · PNG · DOC · max 10 MB</p>
+        </div>
       </div>
       <div class="field">
-        <label class="en">Supporting Documents <span style="opacity:.5;font-weight:400">(optional)</span></label>
+        <label class="en">Other Supporting Documents <span style="opacity:.5;font-weight:400">(optional)</span></label>
         <label class="hi">सहायक दस्तावेज़ <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
         <div style="margin-top:.35rem;background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
           <label class="doc-upload-btn" for="claimDocs" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.45);border-radius:6px;cursor:pointer;font-size:.9rem;color:#93c5fd;font-weight:700">
@@ -1457,8 +1461,19 @@ function esc(s) {
 }
 
 // ── New claim modal ───────────────────────────────────────────────────────────
-function openModal()  { document.getElementById('claimModal').classList.add('open'); }
+function openModal()  {
+  document.getElementById('claimModal').classList.add('open');
+  // Fix: re-enable the submit button + clear status so a second claim can be
+  // raised without refreshing the page (button stayed disabled after success).
+  const _b = document.getElementById('claimSubmitBtn'); if (_b) _b.disabled = false;
+  const _m = document.getElementById('claimMsg'); if (_m) { _m.className = 'msg'; _m.textContent = ''; }
+}
 function closeModal() { document.getElementById('claimModal').classList.remove('open'); document.getElementById('claimMsg').className = 'msg'; }
+function showRejectionLetterName() {
+  const f = document.getElementById('claimRejectionLetter').files[0];
+  const el = document.getElementById('claimRejectionLetterName');
+  if (el) el.innerHTML = f ? `📄 ${f.name} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span>` : '';
+}
 
 function showClaimDocList() {
   const files = document.getElementById('claimDocs').files;
@@ -1486,14 +1501,19 @@ async function submitClaim(e) {
   const msg = document.getElementById('claimMsg');
   btn.disabled = true;
   msg.className = 'msg';
-  // Branch code is optional, but if given it must be a real active branch.
-  const _bc = (document.getElementById('claimBranchCode')?.value || '').trim().toUpperCase();
-  if (_bc && window._nidaanBranchSet && !window._nidaanBranchSet.has(_bc)) {
-    const isHi = document.body.classList.contains('hi');
+  const isHi = document.body.classList.contains('hi');
+  // Mobile must be exactly 10 digits.
+  const _phone = (document.getElementById('insuredPhone').value || '').replace(/[^0-9]/g,'');
+  if (_phone.length !== 10) {
     msg.className = 'msg err';
-    msg.textContent = isHi
-      ? `ब्रांच कोड '${_bc}' मान्य नहीं है — सूची से चुनें या खाली छोड़ें।`
-      : `Branch code '${_bc}' isn't a valid branch — pick from the list or leave it blank.`;
+    msg.textContent = isHi ? 'कृपया 10 अंकों का सही मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.';
+    btn.disabled = false; return;
+  }
+  // Rejection letter is mandatory to raise a claim.
+  const _rejFile = document.getElementById('claimRejectionLetter')?.files?.[0];
+  if (!_rejFile) {
+    msg.className = 'msg err';
+    msg.textContent = isHi ? 'क्लेम अस्वीकृति पत्र संलग्न करना आवश्यक है।' : 'Please attach the claim rejection letter — it is required.';
     btn.disabled = false; return;
   }
   try {
@@ -1507,32 +1527,33 @@ async function submitClaim(e) {
         policy_no: document.getElementById('policyNo').value.trim(),
         disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,
         notes_from_agent: document.getElementById('notes').value.trim(),
-        branch_code: (document.getElementById('claimBranchCode')?.value || '').trim().toUpperCase(),
         policy_inception_date: (document.getElementById('policyInception')?.value || '') || null,
         tpa_name: (document.getElementById('tpaName')?.value || '').trim()
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, 'Submission failed'));
-    // Upload any selected documents
-    const claimFiles = document.getElementById('claimDocs').files;
-    if (claimFiles.length > 0 && data.claim_id) {
-      try {
+    // Upload the rejection letter (required) + any other selected documents.
+    // Two calls so the mandatory letter always lands even if the extras exceed the
+    // per-upload cap.
+    if (data.claim_id) {
+      const _upload = async (files) => {
+        if (!files || !files.length) return;
         const fd = new FormData();
-        for (const f of claimFiles) fd.append('files', f);
+        for (const f of files) fd.append('files', f);
         await fetch(`/nidaan/api/claims/${data.claim_id}/documents/upload`, {
-          method: 'POST',
-          headers: {'Authorization': 'Bearer ' + token},
-          body: fd
-        });
-      } catch(_) { /* non-fatal */ }
+          method: 'POST', headers: {'Authorization': 'Bearer ' + token}, body: fd });
+      };
+      try { await _upload([_rejFile]); } catch(_) { /* non-fatal */ }
+      try { await _upload(Array.from(document.getElementById('claimDocs').files)); } catch(_) { /* non-fatal */ }
     }
     msg.className = 'msg ok';
-    const isHi = document.body.classList.contains('hi');
     msg.textContent = isHi ? `क्लेम #${data.claim_id} सफलतापूर्वक दर्ज हुआ!` : `Claim #${data.claim_id} submitted successfully!`;
     document.getElementById('claimForm').reset();
     const _io = document.getElementById('insurerOther'); if (_io) _io.style.display = 'none';
     const _in = document.getElementById('insurerName'); if (_in) _in.value = '';
+    const _rn = document.getElementById('claimRejectionLetterName'); if (_rn) _rn.textContent = '';
+    btn.disabled = false;   // fix: re-enable so another claim can be raised without refresh
     setTimeout(() => { closeModal(); loadDashboard(); }, 1500);
   } catch(err) {
     msg.className = 'msg err';
