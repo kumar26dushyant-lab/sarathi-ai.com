@@ -4887,6 +4887,20 @@ apkLoadStatus() call.
     Platinum; FIX grayed-submit-needs-refresh bug on raise-another-claim) → Phase D (item 8 only: reassign for
     ALL staff, audited — gates at sarathi_biz.py:5832 quick-task, :6452 task, + claim assign gate
     _require_staff sub_super_admin at ops_assign_claim) → Phase E (ClaimShield, blocked on externals).
+  - **★ DONE (Aug 2 2026): items 1-8 ALL SHIPPED & verified live.** Overview claims stats restyled to the
+    "My Focus" tile look. C1: claim form 10-digit mobile + MANDATORY rejection-letter upload + branch code
+    removed from the form (safe — ops attribution is account-level; per-claim branch_code was write-only) +
+    grayed-submit bug fixed (re-enable on success + openModal). C2: pre-Razorpay confirm-and-capture step
+    (POST /nidaan/api/subscribe/precapture saves name/mobile[req]/email/branch to the ACCOUNT, then the
+    UNCHANGED doSubscribe/Razorpay runs; subscription plans only) — verified (bad phone 400, good 200,
+    account updated). D (item 8): task + claim reassignment opened to ALL staff, fully audited — removed
+    admin gates on quick-task reassign, task reassign (ops_task_assign), claim assign (ops_assign_claim now
+    _require_staff base), + frontend (task-registry reassign, claim-drawer canAssign=true, leave-section
+    reassign) — verified (team_member reassigned a claim → 200, was 403). **ONLY item 9 (ClaimShield) remains,
+    BLOCKED on founder:** API key part-2 (out-of-band, into biz.env) + ClaimShield's answers on HTTPS endpoint
+    (currently http://), full status vocabulary, webhook/callback, extra create fields (insurer/policy/type/
+    rejection-letter/our-claim-ref), idempotency. See WHATSAPP_CLOUD_API_SETUP.md is unrelated;
+    ClaimShield contract lives in this §. When ready: build biz_claimshield.py client + 2-way sync (L1↔L2).
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
