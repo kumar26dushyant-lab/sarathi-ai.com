@@ -4839,9 +4839,17 @@ apkLoadStatus() call.
     subscribers is still non-functional, same as before this session — no worse). **Possible future micro-avenue
     (if ever revisiting Evolution):** point the instance proxy at gost via the docker bridge (host-gateway:1080
     socks5) instead of the direct upstream, since gost works where direct fails — but needs bridge/UFW wiring;
-    NOT pursued per user. **Undeployed local edits to reconcile later:** biz_whatsapp_evolution.set_instance_proxy
-    →restart, sarathi_biz connect-loop range 5→9, dashboard QR-freeze 25s→55s+"~30s" copy (either deploy as
-    minor UX hardening or revert when the phone-as-proxy design lands).
+    NOT pursued per user. **Parked local edits (set_instance_proxy→restart, sarathi_biz connect-loop range 5→9,
+    dashboard QR-freeze 25s→55s) were REVERTED Aug 2 2026** — we pivoted to the official Meta Cloud API, so the
+    Evolution path is abandoned and the working tree is clean (nothing Evolution left uncommitted).
+
+  - **★ NIDAAN OPS — LEAVE HISTORY report ADDED Aug 2 2026 (deployed).** New super-admin-only nav item
+    "🌴 Leave History" (`panel-leavehistory`) in nidaan_ops.html. Backend: `biz_nidaan.list_leave_history()`
+    (date-range overlap + staff/status/kind filters) + `GET /nidaan/ops/api/leave/history` (super_admin only;
+    returns rows with computed `days` [half=0.5] + per-staff APPROVED-day totals). UI: date presets
+    (week/month/last-month/3mo/year) + custom From–To, staff/type(Leave|WFH)/status filters, per-staff totals
+    cards, detailed table, and client-side CSV export (14 cols, Excel-safe BOM). Purely additive — existing
+    leave apply/approve/tiles flow untouched.
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
