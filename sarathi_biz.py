@@ -3567,6 +3567,50 @@ async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
     return {"status": "updated"}
 
 
+class _PreCaptureReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: str = Field("", max_length=120)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=200)
+    branch_code: str = Field("", max_length=20)
+
+
+@app.post("/nidaan/api/subscribe/precapture")
+async def nidaan_subscribe_precapture(body: _PreCaptureReq, request: Request):
+    """Save Name + Mobile (mandatory) and Email/Branch (optional) to the ACCOUNT
+    right before Razorpay opens. Keeps ops branch attribution aligned (branch lives
+    on the account). Does NOT touch the payment flow itself."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account: raise HTTPException(404, "Account not found")
+    name = (body.owner_name or "").strip()
+    phone = "".join(ch for ch in (body.phone or "") if ch.isdigit())
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if len(phone) != 10:
+        raise HTTPException(400, "A valid 10-digit mobile number is required")
+    await nidaan.update_account_profile(account["account_id"], owner_name=name, phone=phone)
+    bc = (body.branch_code or "").strip().upper()
+    if bc:
+        try:
+            await nidaan.set_account_branch(account["account_id"], bc)
+        except Exception:
+            pass
+    em = (body.email or "").strip()
+    if em:  # best-effort; only fill when empty so we never clobber / clash on unique email
+        try:
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                await _c.execute(
+                    "UPDATE nidaan_accounts SET email=? WHERE account_id=? AND (email IS NULL OR email='')",
+                    (em, account["account_id"]))
+                await _c.commit()
+        except Exception:
+            pass
+    return {"ok": True}
+
+
 # ── Nidaan: Change password ────────────────────────────────────────────────────
 
 class NidaanChangePasswordReq(BaseModel):

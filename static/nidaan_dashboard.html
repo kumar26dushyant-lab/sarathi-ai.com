@@ -840,9 +840,46 @@
       <button type="button" class="btn btn-cancel" onclick="closeSubscribeModal()">
         <span class="en">Cancel</span><span class="hi">रद्द करें</span>
       </button>
-      <button type="button" class="btn btn-primary" id="subBtn" onclick="doSubscribe()" disabled>
+      <button type="button" class="btn btn-primary" id="subBtn" onclick="openPrePayCapture()" disabled>
         <span class="en">Subscribe →</span><span class="hi">सब्सक्राइब करें →</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Pre-payment capture (before Razorpay) — confirm name/mobile + optional email/branch -->
+<div class="modal-bg" id="prePayModal">
+  <div class="modal" style="max-width:440px">
+    <h2 class="en">Confirm your details</h2>
+    <h2 class="hi">अपनी जानकारी की पुष्टि करें</h2>
+    <p style="font-size:.85rem;color:rgba(255,255,255,.6);margin:-.4rem 0 .6rem">
+      <span class="en">We'll use these for your subscription &amp; receipts.</span>
+      <span class="hi">इनका उपयोग आपकी सदस्यता और रसीद के लिए होगा।</span>
+    </p>
+    <div class="field">
+      <label class="en">Your Name <span style="color:#f87171">*</span></label>
+      <label class="hi">आपका नाम <span style="color:#f87171">*</span></label>
+      <input type="text" id="ppName" placeholder="Full name" required>
+    </div>
+    <div class="field">
+      <label class="en">Mobile Number <span style="color:#f87171">*</span></label>
+      <label class="hi">मोबाइल नंबर <span style="color:#f87171">*</span></label>
+      <input type="tel" id="ppPhone" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="9876543210" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" required>
+    </div>
+    <div class="field">
+      <label class="en">Email <span style="opacity:.5;font-weight:400">(optional)</span></label>
+      <label class="hi">ईमेल <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
+      <input type="email" id="ppEmail" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
+      <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
+      <input type="text" id="ppBranch" maxlength="12" autocomplete="off" placeholder="e.g. MUM-01" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="msg" id="ppMsg"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" onclick="closePrePay()"><span class="en">Back</span><span class="hi">वापस</span></button>
+      <button type="button" class="btn btn-primary" id="ppBtn" onclick="prePayContinue()"><span class="en">Continue to Payment →</span><span class="hi">भुगतान जारी रखें →</span></button>
     </div>
   </div>
 </div>
@@ -1960,6 +1997,40 @@ function selectPlan(plan) {
   document.getElementById('subBtn').disabled = false;
 }
 
+// Pre-payment capture: confirm name/mobile (required) + email/branch (optional),
+// save to the account, THEN open Razorpay via the unchanged doSubscribe().
+function openPrePayCapture(){
+  if (!_selectedPlan) return;
+  const g = id => document.getElementById(id);
+  if (g('ppName'))   g('ppName').value   = _meCache ? (_meCache.owner_name || '') : '';
+  if (g('ppPhone'))  g('ppPhone').value  = (_meCache && _meCache.phone) ? String(_meCache.phone).replace(/[^0-9]/g,'').slice(-10) : '';
+  if (g('ppEmail'))  g('ppEmail').value  = _meCache ? (_meCache.email || '') : '';
+  if (g('ppBranch')) g('ppBranch').value = _meCache ? (_meCache.branch_code || '') : '';
+  const m = g('ppMsg'); if (m) { m.className = 'msg'; m.textContent = ''; }
+  const b = g('ppBtn'); if (b) b.disabled = false;
+  g('prePayModal').classList.add('open');
+}
+function closePrePay(){ document.getElementById('prePayModal').classList.remove('open'); }
+async function prePayContinue(){
+  const isHi = document.body.classList.contains('hi');
+  const btn = document.getElementById('ppBtn');
+  const msg = document.getElementById('ppMsg');
+  const name   = (document.getElementById('ppName').value || '').trim();
+  const phone  = (document.getElementById('ppPhone').value || '').replace(/[^0-9]/g,'');
+  const email  = (document.getElementById('ppEmail').value || '').trim();
+  const branch = (document.getElementById('ppBranch').value || '').trim().toUpperCase();
+  if (!name) { msg.className='msg err'; msg.textContent = isHi ? 'कृपया अपना नाम दर्ज करें।' : 'Please enter your name.'; return; }
+  if (phone.length !== 10) { msg.className='msg err'; msg.textContent = isHi ? 'कृपया 10 अंकों का सही मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.'; return; }
+  btn.disabled = true; msg.className='msg';
+  try {
+    const r = await api('/nidaan/api/subscribe/precapture', {method:'POST', body: JSON.stringify({owner_name:name, phone, email, branch_code:branch})});
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(_extractErr(d, 'Could not save your details'));
+    if (_meCache) { _meCache.owner_name = name; _meCache.phone = phone; if (email) _meCache.email = email; _meCache.branch_code = branch; }
+    closePrePay();
+    doSubscribe();   // unchanged payment path — opens Razorpay with the confirmed details
+  } catch(e) { msg.className='msg err'; msg.textContent = e.message; btn.disabled = false; }
+}
 async function doSubscribe() {
   if (!_selectedPlan) return;
   // All subscription plans are RECURRING (auto-renew) — quarterly or yearly.
