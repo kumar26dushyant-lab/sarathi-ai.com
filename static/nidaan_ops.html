@@ -1276,7 +1276,7 @@ async function loadLeaveSection(){
             <div style="font-size:.76rem;color:rgba(255,255,255,.55)">until ${esc(s.end_date)} · ${s.open_tasks} open task${s.open_tasks==1?'':'s'}${s.cover_name?` · 🤝 ${esc(s.cover_name)}`:''}</div>
             ${s.handover_notes?`<div style="font-size:.74rem;color:#c4b5fd;margin-top:.2rem;background:rgba(167,139,250,.08);padding:.3rem .45rem;border-radius:5px">📋 ${esc(s.handover_notes)}</div>`:''}
           </div>
-          ${(isAdmin && s.open_tasks>0) ? `<button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700;flex-shrink:0" onclick="leaveShowTasks(${s.staff_id},'${esc(s.staff_name||'').replace(/'/g,'')}')">⇄ Reassign</button>` : ''}
+          ${(s.open_tasks>0) ? `<button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700;flex-shrink:0" onclick="leaveShowTasks(${s.staff_id},'${esc(s.staff_name||'').replace(/'/g,'')}')">⇄ Reassign</button>` : ''}
         </div>`).join('') : '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.5rem 0">No one is on leave today ✓</div>'}
       <div id="leaveTasksBox" style="margin-top:.5rem"></div>
     </div>`;
@@ -2393,15 +2393,14 @@ async function openQuickTaskDrawer(qid){
     </div>`;
   }
 
-  // Manage block: reassign + delete (admin) and history (anyone who can view).
+  // Manage block: reassign is open to ALL staff (audited); edit/merge stay admin.
   const manageActions = `
     <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:1rem;padding:.6rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px">
-      ${isAdmin ? `
-        <span style="font-size:.78rem;color:rgba(255,255,255,.5)">Reassign:</span>
-        <select id="qtReassignSel" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.35rem .5rem;border-radius:6px;font-size:.82rem">
-          ${assignees.map(a=>`<option value="${a.staff_id}" ${a.staff_id===qt.assigned_to_staff_id?'selected':''}>${esc(a.name)} · ${esc((a.role||'').replace(/_/g,' '))}</option>`).join('')}
-        </select>
-        <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="qtReassign(${qt.quick_task_id})">⇄ Reassign</button>` : ''}
+      <span style="font-size:.78rem;color:rgba(255,255,255,.5)">Reassign:</span>
+      <select id="qtReassignSel" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.35rem .5rem;border-radius:6px;font-size:.82rem">
+        ${assignees.map(a=>`<option value="${a.staff_id}" ${a.staff_id===qt.assigned_to_staff_id?'selected':''}>${esc(a.name)} · ${esc((a.role||'').replace(/_/g,' '))}</option>`).join('')}
+      </select>
+      <button class="btn-sm" style="background:#a78bfa;color:#0a1628;font-weight:700" onclick="qtReassign(${qt.quick_task_id})">⇄ Reassign</button>
       ${(isCreator || _role==='super_admin') ? `<button class="btn-sm btn-ghost" style="color:#7dd3fc" onclick="qtOpenEdit(${qt.quick_task_id})">✏️ Edit</button>` : ''}
       <button class="btn-sm btn-ghost" onclick="qtShowHistory(${qt.quick_task_id})">📜 History</button>
       ${isAdmin ? `<button class="btn-sm btn-ghost" style="color:#c4b5fd" onclick="openMergeModal(${qt.quick_task_id})">⧉ Merge</button>` : ''}
@@ -3430,7 +3429,7 @@ async function openClaimDrawer(claimId) {
   if (!r.ok) { document.getElementById('drawerBody').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
   const c = await r.json();
 
-  const canAssign = _role==='super_admin'||_role==='sub_super_admin';
+  const canAssign = true;  // claim (re)assignment open to ALL staff (audited); was admin/SA only
   const canStatus = _role!=='team_member' || c.assigned_to_staff_id===_staffId;
 
   const statusOptions = ['intimated','assigned','in_review','in_negotiation','resolved_won','resolved_lost','closed','withdrawn']

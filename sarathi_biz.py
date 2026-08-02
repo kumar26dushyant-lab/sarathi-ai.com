@@ -4478,7 +4478,7 @@ class OpsClaimAssign(BaseModel):
 async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    caller = _require_staff(request)  # claim (re)assignment open to all staff — audited via _ops_audit below
     # Assignee list from staff_ids (preferred) or the legacy single staff_id. staff_ids[0] = PRIMARY.
     ids, seen = [], set()
     for s in ((body.staff_ids or []) + ([body.staff_id] if body.staff_id else [])):
@@ -5959,8 +5959,8 @@ async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Re
         raise HTTPException(403, "Only the task creator or a super admin can edit task details")
     if body.status is not None and not (is_assignee or is_admin):
         raise HTTPException(403)
-    if body.assigned_to_staff_id is not None and not is_admin:
-        raise HTTPException(403, "Only admin or SA can reassign")
+    # Reassignment is open to ALL staff (every change is written to the immutable
+    # task history via reassign_quick_task → changed_by). Previously admin/SA only.
     if _wants_edit:
         # Content edit (typo/mistake fix) — every field change is written to the
         # immutable task history. Deliberately does NOT notify (avoids noise).
@@ -6579,8 +6579,7 @@ async def ops_task_update(task_id: int, body: _TaskUpdateReq, request: Request):
 async def ops_task_assign(task_id: int, body: _TaskAssignReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
-    if _staff_role(staff) not in ntasks.ROLES_ADMIN_OR_ABOVE:
-        raise HTTPException(403, "Only Admin or Super Admin can reassign")
+    # Reassignment is open to ALL staff (audited by ntasks.reassign_task via by_staff_id).
     out = await ntasks.reassign_task(
         task_id=task_id, new_assignee_staff_id=body.assigned_to_staff_id,
         by_staff_id=staff["staff_id"])
