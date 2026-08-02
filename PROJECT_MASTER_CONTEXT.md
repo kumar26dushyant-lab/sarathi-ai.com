@@ -4872,6 +4872,21 @@ apkLoadStatus() call.
     🔴 HTTPS (endpoint is http:// — API key + patient PII over plaintext = insecure), full status vocabulary,
     webhook/callback (vs poll), extra create fields (insurer/policy/type/rejection-letter/our-claim-ref),
     idempotency. API key part-1 received (store in biz.env, NOT chat); part-2 to come out-of-band.
+  - **PROGRESS (Aug 2 2026): Phases A + B ALL SHIPPED & verified live.** A=email readable + FROM
+    info@nidaanpartner.com + copy nidaanpartner@gmail.com + assign-notif on email/dashboard/telegram
+    (on_claim_assigned). B1=claim drawer reordered + task/reminder widgets consolidated. B2=file attachments
+    on subscriber↔ops claim messages (nidaan_messages.attachment_doc_id + save_claim_document + signed URL;
+    endpoints now multipart; both UIs have 📎). B3=INVOLVED staff + MUTE (new nidaan_claim_watchers table +
+    add/list/mute helpers in biz_nidaan; @mention in a claim note persists a watcher; watchers notified on
+    messages/notes via biz_nidaan_notifications.notify_claim_watchers [dashboard+telegram, skips actor,
+    per-message email omitted]; endpoints GET /claims/{id}/watchers + POST /claims/{id}/mute; drawer '👥
+    Involved' section + Mute-me toggle). **Item 3 (claims dashboard) DROPPED — already covered by the Overview
+    panel** (role-scoped: All/My Active Claims + stat strip + widgets), building a 2nd = duplication. **REMAINING:
+    Phase C (items 6,7: claim intake 10-digit mobile + MANDATORY rejection-letter attach; drop branch code from
+    claim form; capture Name+Mobile[mandatory 10-digit]/Email+Branch[optional] BEFORE Razorpay Silver/Gold/
+    Platinum; FIX grayed-submit-needs-refresh bug on raise-another-claim) → Phase D (item 8 only: reassign for
+    ALL staff, audited — gates at sarathi_biz.py:5832 quick-task, :6452 task, + claim assign gate
+    _require_staff sub_super_admin at ops_assign_claim) → Phase E (ClaimShield, blocked on externals).
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
