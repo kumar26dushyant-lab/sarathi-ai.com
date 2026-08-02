@@ -1640,7 +1640,37 @@ async def on_claim_assigned(claim_id: int, staff_ids: list, assigned_by_id: int 
             pass
 
 
-async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, preview: str):
+async def notify_claim_watchers(claim_id: int, subject: str, body: str,
+                                exclude_ids=None):
+    """Ping every non-muted 'involved' watcher of a claim on the dashboard bell
+    (auto-mirrored to Telegram), excluding the given staff_ids (actor + anyone
+    already alerted). This is how involved staff stay in the loop on claim activity
+    until they mute. (Assignment + status also email; per-message email is
+    intentionally omitted to avoid inbox spam — the mute toggle is the control.)"""
+    excl = set(int(x) for x in (exclude_ids or []) if x)
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            rows = await (await conn.execute(
+                "SELECT staff_id FROM nidaan_claim_watchers WHERE claim_id=? AND muted=0",
+                (claim_id,))).fetchall()
+    except Exception:
+        return
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    for r in rows:
+        if r[0] in excl:
+            continue
+        try:
+            await _record_notification(
+                event_key="claim.watch", priority=PRIORITY_P2,
+                recipient_type=RECIPIENT_STAFF, recipient_id=r[0],
+                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
+                status="sent", sent_at=now, claim_id=claim_id)
+        except Exception:
+            pass
+
+
+async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, preview: str,
+                               actor_staff_id: int = 0):
     """A new message in a claim thread → notify the OTHER party. subscriber→ops
     pings SA/Admin bells (deep-linked to the account); staff→subscriber reaches the
     subscriber (dashboard + WhatsApp/email if opted in)."""
@@ -1681,6 +1711,15 @@ async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, p
             body=(f"Our team replied on your claim ({claim.get('insured_name','')}):\n\n"
                   f"\"{(preview or '')[:200]}\"\n\nOpen your dashboard to view & reply."),
             claim_id=claim_id)
+    # Keep 'involved' watchers in the loop on any message (dashboard + Telegram), minus the actor.
+    try:
+        await notify_claim_watchers(
+            claim_id,
+            f"💬 Activity on claim #{_cn(claim_id)} — {claim.get('insured_name','')}",
+            f"New message on claim #{_cn(claim_id)}:\n\"{(preview or '')[:140]}\"\n\nOpen: /admin?claim={claim_id}",
+            exclude_ids=[actor_staff_id] if actor_staff_id else [])
+    except Exception:
+        pass
 
 
 async def on_task_assigned(task_id: int):

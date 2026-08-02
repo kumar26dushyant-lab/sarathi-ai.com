@@ -5147,6 +5147,64 @@ async def add_claim_message(claim_id: int, sender_type: str, content: str,
         return cur.lastrowid
 
 
+# ── Claim collaboration: "involved" watchers + mute (mirrors task watchers) ──
+async def add_claim_watchers(claim_id: int, staff_ids: list, added_by: int,
+                             relation: str = "mentioned") -> list:
+    """Add staff as watchers ("involved") of a claim. Returns the staff_ids NEWLY
+    added (existing watchers skipped) so callers notify only the freshly-tagged."""
+    newly = []
+    if not staff_ids:
+        return newly
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for sid in staff_ids:
+            if not sid:
+                continue
+            cur = await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_claim_watchers "
+                "(claim_id, staff_id, relation, added_by_staff_id) VALUES (?,?,?,?)",
+                (claim_id, int(sid), relation, added_by))
+            if cur.rowcount:
+                newly.append(int(sid))
+        await conn.commit()
+    return newly
+
+
+async def list_claim_watchers(claim_id: int) -> list:
+    """Involved staff on a claim with name/role + mute state."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT w.staff_id, w.relation, w.muted, w.added_by_staff_id, w.added_at, "
+            "       s.name, s.role "
+            "FROM nidaan_claim_watchers w "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = w.staff_id "
+            "WHERE w.claim_id = ? ORDER BY w.added_at ASC", (claim_id,))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def set_claim_watch_mute(claim_id: int, staff_id: int, muted: bool) -> bool:
+    """Mute/unmute a claim for one staffer. Creates a watcher row (relation='owner')
+    if they weren't already involved — so an assignee can mute too."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_claim_watchers (claim_id, staff_id, relation, muted, added_by_staff_id) "
+            "VALUES (?,?,'owner',?,?) "
+            "ON CONFLICT(claim_id, staff_id) DO UPDATE SET muted=excluded.muted",
+            (claim_id, staff_id, 1 if muted else 0, staff_id))
+        await conn.commit()
+    return True
+
+
+async def get_claim_watcher_ids(claim_id: int, exclude_staff_id: int = 0) -> list:
+    """Non-muted watcher staff_ids for a claim (for notification fan-out), minus the actor."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        rows = await (await conn.execute(
+            "SELECT staff_id FROM nidaan_claim_watchers "
+            "WHERE claim_id=? AND muted=0 AND staff_id<>?",
+            (claim_id, exclude_staff_id or 0))).fetchall()
+        return [r[0] for r in rows]
+
+
 async def mark_messages_read(claim_id: int, by: str) -> None:
     """Mark the claim's messages read by 'subscriber' or 'staff'."""
     col = "read_by_subscriber_at" if by == "subscriber" else "read_by_staff_at"

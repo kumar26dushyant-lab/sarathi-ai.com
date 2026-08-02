@@ -2573,7 +2573,8 @@ async def ops_claim_message_send(claim_id: int, request: Request,
     try:
         import biz_nidaan_notifications as _nnot
         preview = content or "📎 sent an attachment"
-        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "staff", preview))
+        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "staff", preview,
+                                                       actor_staff_id=staff["staff_id"]))
     except Exception:
         pass
     try:
@@ -2581,6 +2582,32 @@ async def ops_claim_message_send(claim_id: int, request: Request,
     except Exception:
         pass
     return {"ok": True}
+
+
+# ── Claim "involved" watchers + mute (mirrors the task watcher/mute model) ────
+@app.get("/nidaan/ops/api/claims/{claim_id}/watchers")
+async def ops_claim_watchers(claim_id: int, request: Request):
+    """List the 'involved' staff on a claim + whether the caller has muted it."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    watchers = await nidaan.list_claim_watchers(claim_id)
+    me_muted = any(w["staff_id"] == staff["staff_id"] and w.get("muted") for w in watchers)
+    return {"watchers": watchers, "me_muted": me_muted, "me": staff["staff_id"]}
+
+
+class _ClaimMuteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    muted: bool = True
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/mute")
+async def ops_claim_mute(claim_id: int, body: _ClaimMuteReq, request: Request):
+    """Mute/unmute a claim's activity notifications for the current staffer. They keep
+    full access — this only silences their own bell/Telegram pings for this claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nidaan.set_claim_watch_mute(claim_id, staff["staff_id"], body.muted)
+    return {"ok": True, "muted": body.muted}
 
 
 @app.get("/nidaan/api/review/{purchase_id}/documents")
@@ -4686,16 +4713,29 @@ async def ops_add_note(claim_id: int, body: OpsAddNote, request: Request):
     note_id = await nidaan.add_claim_note(claim_id, staff["staff_id"], note_txt,
                                           parent_note_id=body.parent_note_id,
                                           source=_req_source(request))
-    # @mentions → record participants + alert the newly-tagged staff (fire-and-forget).
+    # @mentions → record participants + persist them as 'involved' watchers + alert
+    # the newly-tagged staff (fire-and-forget).
     mention_ids = [int(x) for x in (body.mentions or []) if int(x) != staff["staff_id"]]
     if mention_ids:
         try:
             stored = await nidaan.set_claim_note_mentions(note_id, claim_id, mention_ids)
+            await nidaan.add_claim_watchers(claim_id, mention_ids, staff["staff_id"])
             import biz_nidaan_notifications as _nnot
             asyncio.create_task(_nnot.on_claim_note_mention(
                 {"claim_id": claim_id}, stored, staff["staff_id"], staff.get("name", ""), note_txt))
         except Exception:
             pass
+    # Keep already-involved watchers in the loop on the new note (minus author + those
+    # just @mentioned, who are alerted above), on dashboard + Telegram.
+    try:
+        import biz_nidaan_notifications as _nnot2
+        _wsubj = f"📝 New note on claim #{claim_id}"
+        _wbody = (f"{staff.get('name','A teammate')} added a note on claim #{claim_id}:\n"
+                  f"\"{note_txt[:140]}\"\n\nOpen: /admin?claim={claim_id}")
+        asyncio.create_task(_nnot2.notify_claim_watchers(
+            claim_id, _wsubj, _wbody, exclude_ids=[staff["staff_id"]] + mention_ids))
+    except Exception:
+        pass
     return {"note_id": note_id, "claim_id": claim_id}
 
 

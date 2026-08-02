@@ -3494,6 +3494,15 @@ async function openClaimDrawer(claimId) {
         <div style="font-size:.7rem;color:rgba(255,255,255,.35)">Up to 10 files · 10&nbsp;MB each. You can delete your own note/attachment within 1&nbsp;hour; admins anytime.</div>
       </div>
     </div>
+    <!-- Involved (watchers) -->
+    <div class="drawer-section">
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <span>👥 Involved</span>
+        <button class="btn-sm btn-ghost" id="claimMuteBtn_${c.claim_id}" onclick="toggleClaimMute(${c.claim_id})" title="Mute/unmute your notifications for this claim">🔔 Mute me</button>
+      </h4>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">@mention a teammate in a note to involve them. Involved staff are notified of activity on this claim (bell + Telegram) until they mute.</div>
+      <div id="claimWatchersArea_${c.claim_id}" style="font-size:.85rem;color:rgba(255,255,255,.4)">Loading…</div>
+    </div>
     <!-- Documents -->
     <div class="drawer-section">
       <h4>Documents</h4>
@@ -3585,6 +3594,8 @@ async function openClaimDrawer(claimId) {
   loadClaimReminders(c.claim_id);
   // Load subscriber ⇄ ops message thread
   opsLoadMessages(c.claim_id);
+  // Load "involved" watchers + my mute state
+  loadClaimWatchers(c.claim_id);
   // Claim notes: load @mention candidates + mark notes read (drives seen-receipts)
   loadClaimMentions(c.claim_id);
   claimNotesMarkRead(c.claim_id);
@@ -3696,6 +3707,30 @@ function opsMsgFilePicked(claimId){
   const f = document.getElementById('opsMsgFile_'+claimId);
   const lbl = document.getElementById('opsMsgFileName_'+claimId);
   if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
+}
+async function loadClaimWatchers(claimId){
+  const el = document.getElementById('claimWatchersArea_'+claimId); if(!el) return;
+  try {
+    const r = await API('/claims/'+claimId+'/watchers');
+    if(!r.ok){ el.textContent=''; return; }
+    const d = await r.json();
+    const ws = d.watchers || [];
+    el.innerHTML = ws.length ? ws.map(w=>`<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;border-bottom:1px solid rgba(255,255,255,.05)">
+        <span style="flex:1">${esc(w.name||('#'+w.staff_id))} <span style="font-size:.7rem;color:rgba(255,255,255,.4)">${esc((w.role||'').replace(/_/g,' '))}</span></span>
+        ${w.muted?'<span style="font-size:.68rem;color:#fbbf24">🔕 muted</span>':''}
+      </div>`).join('') : '<span style="color:rgba(255,255,255,.35)">No one involved yet — @mention a teammate in a note to involve them.</span>';
+    const btn = document.getElementById('claimMuteBtn_'+claimId);
+    if(btn){ btn.textContent = d.me_muted ? '🔕 Unmute me' : '🔔 Mute me'; btn.dataset.muted = d.me_muted ? '1' : '0'; }
+  } catch(e){ el.textContent=''; }
+}
+async function toggleClaimMute(claimId){
+  const btn = document.getElementById('claimMuteBtn_'+claimId);
+  const willMute = !(btn && btn.dataset.muted === '1');
+  try {
+    const r = await API('/claims/'+claimId+'/mute', {method:'POST', body: JSON.stringify({muted: willMute})});
+    if(r.ok){ ndUI.toast(willMute ? "Muted — no pings for this claim" : "Unmuted", 'success'); loadClaimWatchers(claimId); }
+    else { ndUI.toast('Failed to update', 'error'); }
+  } catch(e){}
 }
 async function opsSendMessage(claimId){
   const inp = document.getElementById('opsMsgInput_'+claimId); if(!inp) return;

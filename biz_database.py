@@ -2270,6 +2270,26 @@ async def init_db():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nmsg_claim ON nidaan_messages(claim_id, created_at DESC)")
 
+        # nidaan_claim_watchers: "involved" staff on a claim (mirrors the task
+        # watcher model). Added by @mention in a claim note (or explicit involve);
+        # each can mute their own notifications once their part is done.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_watchers (
+                watcher_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id          INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                staff_id          INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                relation          TEXT NOT NULL DEFAULT 'mentioned',   -- mentioned | owner
+                muted             INTEGER NOT NULL DEFAULT 0,
+                added_by_staff_id INTEGER REFERENCES nidaan_staff(staff_id),
+                added_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(claim_id, staff_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ncw_claim ON nidaan_claim_watchers(claim_id)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ncw_staff ON nidaan_claim_watchers(staff_id)")
+
         # ── nidaan_documents: subscriber-uploaded docs per claim (Phase 4
         # also accepts via WhatsApp + email later in Phase 5).
         await conn.execute("""
