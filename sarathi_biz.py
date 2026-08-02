@@ -6127,6 +6127,47 @@ async def ops_leave_cancel(leave_id: int, request: Request):
     return {"ok": True}
 
 
+@app.get("/nidaan/ops/api/leave/history")
+async def ops_leave_history(request: Request, date_from: str = "", date_to: str = "",
+                            staff_id: int = 0, status: str = "", kind: str = ""):
+    """Leave/WFH history report for super admins: filtered rows + per-staff totals.
+
+    Filters (all optional): date_from/date_to (YYYY-MM-DD, matches any request whose
+    leave period overlaps the window), staff_id, status, kind ('leave'|'wfh').
+    Per-staff totals count APPROVED days only (i.e. leave actually taken)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    rows = await nidaan.list_leave_history(
+        date_from=date_from or None, date_to=date_to or None,
+        staff_id=staff_id or None, status=status or None, kind=kind or None)
+
+    from datetime import date as _date
+    def _row_days(r) -> float:
+        if (r.get("leave_type") or "full_day") == "half_day":
+            return 0.5
+        try:
+            sd = _date.fromisoformat(r["start_date"]); ed = _date.fromisoformat(r["end_date"])
+            return float(max(1, (ed - sd).days + 1))
+        except Exception:
+            return 0.0
+
+    totals: dict = {}
+    for r in rows:
+        r["days"] = _row_days(r)
+        k = (r.get("request_kind") or "leave")
+        t = totals.setdefault(r["staff_id"], {
+            "staff_id": r["staff_id"], "staff_name": r.get("staff_name"),
+            "staff_role": r.get("staff_role"),
+            "leave_days": 0.0, "wfh_days": 0.0})
+        if r.get("status") == "approved":  # totals reflect leave actually taken
+            if k == "wfh": t["wfh_days"] += r["days"]
+            else:          t["leave_days"] += r["days"]
+    totals_list = sorted(totals.values(),
+                         key=lambda x: (-(x["leave_days"] + x["wfh_days"]),
+                                        (x["staff_name"] or "")))
+    return {"rows": rows, "totals": totals_list, "count": len(rows)}
+
+
 # ── Ops permission settings (P5) ──────────────────────────────────────────────
 class _OpsSettingReq(BaseModel):
     model_config = ConfigDict(extra="forbid")

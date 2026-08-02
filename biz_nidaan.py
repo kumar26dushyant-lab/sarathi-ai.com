@@ -3263,6 +3263,41 @@ async def list_leave_requests(*, staff_id: Optional[int] = None,
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def list_leave_history(*, date_from: Optional[str] = None,
+                              date_to: Optional[str] = None,
+                              staff_id: Optional[int] = None,
+                              status: Optional[str] = None,
+                              kind: Optional[str] = None,
+                              limit: int = 5000) -> list[dict]:
+    """Leave/WFH history for the super-admin report. A record matches the date
+    window when its leave period OVERLAPS [date_from, date_to] (inclusive):
+    start_date <= date_to AND end_date >= date_from. All filters are optional."""
+    where, params = [], []
+    if date_to:
+        where.append("l.start_date <= ?"); params.append(date_to)
+    if date_from:
+        where.append("l.end_date >= ?"); params.append(date_from)
+    if staff_id is not None:
+        where.append("l.staff_id = ?"); params.append(staff_id)
+    if status:
+        where.append("l.status = ?"); params.append(status)
+    if kind:
+        where.append("COALESCE(l.request_kind,'leave') = ?"); params.append(kind)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            "SELECT l.*, s.name AS staff_name, s.role AS staff_role, "
+            "       d.name AS decided_by_name "
+            "FROM nidaan_leave_requests l "
+            "LEFT JOIN nidaan_staff s ON s.staff_id = l.staff_id "
+            "LEFT JOIN nidaan_staff d ON d.staff_id = l.decided_by_staff_id "
+            + clause +
+            " ORDER BY l.start_date DESC, l.leave_id DESC LIMIT ?",
+            params + [limit])
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def decide_leave_request(leave_id: int, decision: str, decided_by: int,
                                 note: str = "") -> bool:
     """decision: 'approved' | 'rejected'."""

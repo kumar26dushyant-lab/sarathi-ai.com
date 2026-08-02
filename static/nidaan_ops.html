@@ -409,6 +409,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-plans" class="panel" style="display:none"></div>
       <div id="panel-content" class="panel" style="display:none"></div>
       <div id="panel-health" class="panel" style="display:none"></div>
+      <div id="panel-leavehistory" class="panel" style="display:none"></div>
     </main>
   </div>
 </div>
@@ -525,7 +526,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','support','claims','accounts','branches','staff','settings','numbers','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','overview','support','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -776,6 +777,7 @@ function buildSidebar() {
     {id:'branches',   label:'🏢 Branches',     minRank:1},
     null,
     {id:'staff',      label:'👤 Staff',         minRank:2},
+    {id:'leavehistory', label:'🌴 Leave History', minRank:2},
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
     {id:'numbers',    label:'📞 Official Numbers', minRank:2},
     {id:'telegram',   label:'✈️ Telegram Bot',     minRank:0},
@@ -833,6 +835,7 @@ function showPanel(id, fromHistory) {
     plans: loadPlansConfig,
     content: loadContentConfig,
     health: loadHealth,
+    leavehistory: loadLeaveHistory,
   };
   if (loaders[id]) loaders[id]();
 }
@@ -1064,6 +1067,150 @@ function _leaveWhen(l){
     return `${esc(l.start_date)} · <span style="color:#fbbf24">½ day (${per})</span>${t}`;
   }
   return ((l.start_date===l.end_date) ? esc(l.start_date) : `${esc(l.start_date)} → ${esc(l.end_date)}`) + t;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LEAVE HISTORY — super-admin report: date/staff/status filters,
+//  per-staff totals, detailed table, client-side CSV export.
+// ═══════════════════════════════════════════════════════════════
+let _lhState = { from:'', to:'', staff_id:'', status:'', kind:'', rows:[], totals:[] };
+function _lhISO(d){ const z=new Date(d.getTime()-d.getTimezoneOffset()*60000); return z.toISOString().slice(0,10); }
+function _lhSetRange(preset){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dt=now.getDate(), day=now.getDay();
+  let from, to;
+  if(preset==='thisweek'){ const mon=new Date(now); mon.setDate(dt-(day===0?6:day-1)); from=_lhISO(mon); const sun=new Date(mon); sun.setDate(mon.getDate()+6); to=_lhISO(sun); }
+  else if(preset==='thismonth'){ from=_lhISO(new Date(y,m,1)); to=_lhISO(new Date(y,m+1,0)); }
+  else if(preset==='lastmonth'){ from=_lhISO(new Date(y,m-1,1)); to=_lhISO(new Date(y,m,0)); }
+  else if(preset==='last3'){ from=_lhISO(new Date(y,m-2,1)); to=_lhISO(new Date(y,m+1,0)); }
+  else if(preset==='thisyear'){ from=_lhISO(new Date(y,0,1)); to=_lhISO(new Date(y,11,31)); }
+  _lhState.from=from; _lhState.to=to;
+  const fi=document.getElementById('lhFrom'), ti=document.getElementById('lhTo');
+  if(fi)fi.value=from; if(ti)ti.value=to;
+  const st=document.getElementById('lhStaff'); if(st)_lhState.staff_id=st.value;
+  const kd=document.getElementById('lhKind'); if(kd)_lhState.kind=kd.value;
+  const ss=document.getElementById('lhStatus'); if(ss)_lhState.status=ss.value;
+  _lhFetch();
+}
+function _lhApply(){
+  _lhState.from=document.getElementById('lhFrom').value;
+  _lhState.to=document.getElementById('lhTo').value;
+  _lhState.staff_id=document.getElementById('lhStaff').value;
+  _lhState.kind=document.getElementById('lhKind').value;
+  _lhState.status=document.getElementById('lhStatus').value;
+  _lhFetch();
+}
+async function loadLeaveHistory(){
+  const el = document.getElementById('panel-leavehistory');
+  if(!el) return;
+  if(!_lhState.from || !_lhState.to){
+    const now=new Date(), y=now.getFullYear(), m=now.getMonth();
+    _lhState.from=_lhISO(new Date(y,m,1)); _lhState.to=_lhISO(new Date(y,m+1,0));  // default: this month
+  }
+  let staffOpts = '<option value="">All staff</option>';
+  try{ const sr=await fetch('/nidaan/ops/api/staff',{headers:hdrs()});
+       if(sr.ok){ const sd=await sr.json(); staffOpts += (sd.staff||[]).map(s=>`<option value="${s.staff_id}" ${String(_lhState.staff_id)===String(s.staff_id)?'selected':''}>${esc(s.name)}</option>`).join(''); } }catch(e){}
+  const inp='background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;font-size:.85rem';
+  const pb=(k,l)=>`<button class="btn-sm btn-ghost" onclick="_lhSetRange('${k}')">${l}</button>`;
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div><div class="section-title">🌴 Leave History</div>
+      <div class="section-sub">Leave &amp; WFH records — filter by date range, staff &amp; status, then download CSV</div></div>
+      <button class="btn-primary" onclick="_lhDownloadCSV()">⬇ Download CSV</button>
+    </div>
+    <div class="nd-card" style="padding:1rem;margin-bottom:1rem">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
+        ${pb('thisweek','This week')}${pb('thismonth','This month')}${pb('lastmonth','Last month')}${pb('last3','Last 3 months')}${pb('thisyear','This year')}
+      </div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end">
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55)">From<br><input type="date" id="lhFrom" value="${_lhState.from}" style="${inp}"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55)">To<br><input type="date" id="lhTo" value="${_lhState.to}" style="${inp}"></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55)">Staff<br><select id="lhStaff" style="${inp}">${staffOpts}</select></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55)">Type<br><select id="lhKind" style="${inp}">
+          <option value="">Leave + WFH</option><option value="leave">Leave only</option><option value="wfh">WFH only</option></select></label>
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55)">Status<br><select id="lhStatus" style="${inp}">
+          <option value="">All statuses</option><option value="approved">Approved</option><option value="pending">Pending</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select></label>
+        <button class="btn-primary" onclick="_lhApply()">Apply</button>
+      </div>
+    </div>
+    <div id="lhResults"><div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4)">Loading…</div></div>`;
+  const kd=document.getElementById('lhKind'); if(kd)kd.value=_lhState.kind||'';
+  const ss=document.getElementById('lhStatus'); if(ss)ss.value=_lhState.status||'';
+  _lhFetch();
+}
+async function _lhFetch(){
+  const box=document.getElementById('lhResults'); if(!box) return;
+  box.innerHTML='<div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4)">Loading…</div>';
+  const p=new URLSearchParams();
+  if(_lhState.from)p.set('date_from',_lhState.from);
+  if(_lhState.to)p.set('date_to',_lhState.to);
+  if(_lhState.staff_id)p.set('staff_id',_lhState.staff_id);
+  if(_lhState.status)p.set('status',_lhState.status);
+  if(_lhState.kind)p.set('kind',_lhState.kind);
+  let r; try{ r=await fetch('/nidaan/ops/api/leave/history?'+p.toString(),{headers:hdrs()}); }
+  catch(e){ box.innerHTML='<div class="nd-card" style="padding:1rem;color:#f87171">Network error</div>'; return; }
+  if(!r.ok){ box.innerHTML=`<div class="nd-card" style="padding:1rem;color:#f87171">Failed to load (${r.status})</div>`; return; }
+  const d=await r.json();
+  _lhState.rows=d.rows||[]; _lhState.totals=d.totals||[];
+  _lhRender();
+}
+function _lhKindLabel(r){ return (r.request_kind==='wfh')?'🏠 WFH':'🌴 Leave'; }
+function _lhTypeLabel(r){ return (r.leave_type==='half_day')?('½ '+(r.half_period==='second_half'?'PM':'AM')):'Full'; }
+function _lhRender(){
+  const box=document.getElementById('lhResults'); if(!box) return;
+  const rows=_lhState.rows||[], totals=_lhState.totals||[];
+  if(!rows.length){ box.innerHTML='<div class="nd-card" style="padding:1.5rem;text-align:center;color:rgba(255,255,255,.45)">No leave / WFH records for this filter.</div>'; return; }
+  const pill=(s)=>{ const p=(LEAVE_PILL[s]||LEAVE_PILL.pending); return `<span class="task-pill" style="background:${p.c}22;color:${p.c};border:1px solid ${p.c}44">${p.t}</span>`; };
+  const totalsHtml = totals.length ? `
+    <div class="nd-card" style="padding:1rem;margin-bottom:1rem">
+      <div style="font-weight:700;margin-bottom:.6rem">📊 Per-staff totals <span style="font-weight:500;font-size:.76rem;color:rgba(255,255,255,.45)">— approved days in this range</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem">
+        ${totals.map(t=>`<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.6rem .75rem">
+          <div style="font-weight:600;font-size:.88rem">${esc(t.staff_name||'')}</div>
+          <div style="font-size:.8rem;color:rgba(255,255,255,.65);margin-top:.2rem">🌴 ${t.leave_days} leave · 🏠 ${t.wfh_days} WFH</div>
+        </div>`).join('')}
+      </div>
+    </div>` : '';
+  const tRows = rows.map(r=>`<tr style="border-bottom:1px solid rgba(255,255,255,.06)">
+    <td style="padding:.5rem">${esc(r.staff_name||'')}<div style="font-size:.72rem;color:rgba(255,255,255,.4)">${esc((r.staff_role||'').replace(/_/g,' '))}</div></td>
+    <td style="padding:.5rem">${_lhKindLabel(r)}</td>
+    <td style="padding:.5rem">${_lhTypeLabel(r)}</td>
+    <td style="padding:.5rem">${esc(r.start_date)}${r.end_date!==r.start_date?` → ${esc(r.end_date)}`:''}</td>
+    <td style="padding:.5rem;text-align:center">${r.days}</td>
+    <td style="padding:.5rem">${pill(r.status)}</td>
+    <td style="padding:.5rem;max-width:220px">${esc(r.reason||'')}</td>
+    <td style="padding:.5rem">${esc(r.decided_by_name||'—')}</td>
+    <td style="padding:.5rem;font-size:.75rem;color:rgba(255,255,255,.5)">${r.created_at?esc(String(r.created_at).slice(0,10)):''}</td>
+  </tr>`).join('');
+  box.innerHTML = totalsHtml + `
+    <div class="nd-card" style="padding:1rem">
+      <div style="font-weight:700;margin-bottom:.6rem">📋 Records <span style="font-weight:500;font-size:.8rem;color:rgba(255,255,255,.45)">(${rows.length})</span></div>
+      <div class="table-wrap" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.83rem;min-width:780px">
+          <thead><tr style="text-align:left;color:rgba(255,255,255,.5);border-bottom:1px solid rgba(255,255,255,.14)">
+            <th style="padding:.5rem">Staff</th><th style="padding:.5rem">Type</th><th style="padding:.5rem">Day</th><th style="padding:.5rem">Dates</th><th style="padding:.5rem">Days</th><th style="padding:.5rem">Status</th><th style="padding:.5rem">Reason</th><th style="padding:.5rem">Approved by</th><th style="padding:.5rem">Applied</th>
+          </tr></thead>
+          <tbody>${tRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+function _lhDownloadCSV(){
+  const rows=_lhState.rows||[];
+  if(!rows.length){ ndUI.toast('Nothing to export for this filter','error'); return; }
+  const hdr=['Staff','Role','Type','Full/Half','Half period','Start date','End date','Days','Status','Reason','Applied on','Approved by','Decided on','Decision note'];
+  const q=(v)=>{ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[hdr.join(',')];
+  rows.forEach(r=>lines.push([
+    r.staff_name, (r.staff_role||'').replace(/_/g,' '), (r.request_kind==='wfh'?'WFH':'Leave'),
+    (r.leave_type==='half_day'?'Half':'Full'), r.half_period||'', r.start_date, r.end_date, r.days,
+    r.status, r.reason||'', r.created_at?String(r.created_at).slice(0,16):'', r.decided_by_name||'',
+    r.decided_at?String(r.decided_at).slice(0,16):'', r.decision_note||''
+  ].map(q).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='leave-history_'+(_lhState.from||'all')+'_to_'+(_lhState.to||'all')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 async function loadLeaveSection(){
