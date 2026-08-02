@@ -4850,6 +4850,28 @@ apkLoadStatus() call.
     (week/month/last-month/3mo/year) + custom From–To, staff/type(Leave|WFH)/status filters, per-staff totals
     cards, detailed table, and client-side CSV export (14 cols, Excel-safe BOM). Purely additive — existing
     leave apply/approve/tiles flow untouched.
+
+  - **★ NIDAAN CLAIMS IMPROVEMENTS — 9-item plan (Aug 2 2026, phased; discussed + decisions locked).**
+    Decisions: (2) claim emails FROM info@nidaanpartner.com + copy to nidaanpartner@gmail.com, keep individual
+    admins' emails; (1) email template = clean LIGHT card made dark-mode-safe (fixes Gmail dark-mode inversion
+    that washed out dark text — root cause: `_wrap_nidaan_template` light card + inline dark text, Gmail darkens
+    card only); (5) claim panel = consolidate the two task widgets (🗂️Tasks +Add Task / 📌Reminders +Quick Task)
+    into ONE; (8) reassignment (tasks+claims) open to ALL staff, fully audited. **PHASES:** A=notifications+email
+    (items 1,2 + audit that assigned+involved staff get email+WhatsApp+dashboard on filed/assigned/status/note);
+    B=claim panel reorg (item 4: Info→Advisor→Assign→Internal notes→Documents→Messages-with-subscriber[+attach]
+    →Follow-up→Deliver assessment→Status history) + consolidate task widgets (5); C=claim intake+payment (item 6:
+    mobile 10-digit + MANDATORY rejection-letter attach; item 7: drop branch code from claim form, capture
+    Name+Mobile[mandatory,10-digit]/Email+Branch[optional] BEFORE Razorpay for Silver/Gold/Platinum, + FIX the
+    grayed-submit-needs-refresh bug on raise-another-claim); D=claims dashboard role-based stats (item 3) +
+    reassign-for-all (8); E=ClaimShield integration (item 9). **Known code:** email in biz_email.py
+    (send_nidaan_new_claim_admin_email MISSING from_name="Nidaan Partner" → wrong Sarathi sender; wrapper
+    _wrap_nidaan_template line ~279); claim notifs via biz_nidaan_notifications.on_claim_filed dispatch();
+    claim drawer static/nidaan_ops.html openClaimDrawer():3413; reassign gates sarathi_biz.py:5832(quick-task)
+    +:6452(task) "admin/SA only"; claims list loadClaims():3202. **Item 9 ClaimShield API assessment:** basic
+    create(partnercreatecase→caseReferenceNumber)+status(partnercasestatus) is enough to START, but ASK them for:
+    🔴 HTTPS (endpoint is http:// — API key + patient PII over plaintext = insecure), full status vocabulary,
+    webhook/callback (vs poll), extra create fields (insurer/policy/type/rejection-letter/our-claim-ref),
+    idempotency. API key part-1 received (store in biz.env, NOT chat); part-2 to come out-of-band.
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,

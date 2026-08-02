@@ -517,47 +517,57 @@ async def send_nidaan_new_claim_admin_email(
     notes_section = ""
     if notes and notes.strip():
         notes_section = f"""
-<div class="highlight">
-  <strong>Agent notes:</strong><br>{notes.strip()}
+<div style="background:rgba(34,211,238,0.08);border-left:4px solid #22d3ee;padding:16px 20px;border-radius:0 8px 8px 0;margin:20px 0;color:#e2e8f0;font-size:14px">
+  <strong style="color:#22d3ee">Agent notes:</strong><br>{notes.strip()}
 </div>"""
+    # Colours below are tuned for the DARK Nidaan email card: dim labels (#94a3b8),
+    # bright values (#e2e8f0), subtle row dividers, cyan accent for the amount.
     content = f"""
 <h2>New Claim Submitted — #{claim_id}</h2>
 <p>A new claim has been submitted on <strong>Nidaan Partner</strong> and requires assignment.</p>
 <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
-  <tr style="border-bottom:1px solid #e2e8f0">
-    <td style="padding:8px 0;color:#64748b;width:140px">Claim #</td>
-    <td style="padding:8px 0;font-weight:700;color:#1e293b">#{claim_id}</td>
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+    <td style="padding:8px 0;color:#94a3b8;width:140px">Claim #</td>
+    <td style="padding:8px 0;font-weight:700;color:#e2e8f0">#{claim_id}</td>
   </tr>
-  <tr style="border-bottom:1px solid #e2e8f0">
-    <td style="padding:8px 0;color:#64748b">Advisor</td>
-    <td style="padding:8px 0;color:#1e293b">{advisor_name} &lt;{advisor_email}&gt;</td>
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+    <td style="padding:8px 0;color:#94a3b8">Advisor</td>
+    <td style="padding:8px 0;color:#e2e8f0">{advisor_name} &lt;{advisor_email}&gt;</td>
   </tr>
-  <tr style="border-bottom:1px solid #e2e8f0">
-    <td style="padding:8px 0;color:#64748b">Client</td>
-    <td style="padding:8px 0;color:#1e293b">{insured_name}</td>
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+    <td style="padding:8px 0;color:#94a3b8">Client</td>
+    <td style="padding:8px 0;color:#e2e8f0">{insured_name}</td>
   </tr>
-  <tr style="border-bottom:1px solid #e2e8f0">
-    <td style="padding:8px 0;color:#64748b">Type</td>
-    <td style="padding:8px 0;color:#1e293b;text-transform:capitalize">{claim_type.replace('_',' ')}</td>
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+    <td style="padding:8px 0;color:#94a3b8">Type</td>
+    <td style="padding:8px 0;color:#e2e8f0;text-transform:capitalize">{claim_type.replace('_',' ')}</td>
   </tr>
-  <tr style="border-bottom:1px solid #e2e8f0">
-    <td style="padding:8px 0;color:#64748b">Insurer</td>
-    <td style="padding:8px 0;color:#1e293b">{insurer_name or '—'}</td>
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+    <td style="padding:8px 0;color:#94a3b8">Insurer</td>
+    <td style="padding:8px 0;color:#e2e8f0">{insurer_name or '—'}</td>
   </tr>
   <tr>
-    <td style="padding:8px 0;color:#64748b">Disputed Amt</td>
-    <td style="padding:8px 0;font-weight:700;color:#1a56db">{amt_str}</td>
+    <td style="padding:8px 0;color:#94a3b8">Disputed Amt</td>
+    <td style="padding:8px 0;font-weight:700;color:#22d3ee">{amt_str}</td>
   </tr>
 </table>
 {notes_section}
 <p style="text-align:center;margin-top:24px">
-  <a href="https://nidaanpartner.com/nidaan/admin" class="btn">Open Admin Panel</a>
+  <a href="https://nidaanpartner.com/nidaan/admin" style="display:inline-block;padding:13px 30px;background:linear-gradient(135deg,#0e7490,#06b6d4);color:#fff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Open Admin Panel →</a>
 </p>"""
-    return await send_email(
-        admin_email,
-        f"New Claim #{claim_id} — {insured_name} | Nidaan Partner",
-        _wrap_nidaan_template("New Claim", content),
-    )
+    subject = f"New Claim #{claim_id} — {insured_name} | Nidaan Partner"
+    html = _wrap_nidaan_template("New Claim", content)
+    # Item 2: send FROM the Nidaan sender (info@nidaanpartner.com) — from_name
+    # starting with "Nidaan" selects NIDAAN_FROM in send_email().
+    ok = await send_email(admin_email, subject, html, from_name="Nidaan Partner")
+    # Copy to the shared Nidaan mailbox, consistent with other Nidaan flows.
+    copy_to = os.getenv("NIDAAN_ADMIN_COPY", "nidaanpartner@gmail.com")
+    if copy_to and copy_to.lower() != (admin_email or "").lower():
+        try:
+            await send_email(copy_to, subject, html, from_name="Nidaan Partner")
+        except Exception:
+            pass
+    return ok
 
 
 async def send_nidaan_claim_status_email(

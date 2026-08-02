@@ -4400,6 +4400,10 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
                 except Exception:
                     pass
         _ae3.ensure_future(_notify_all())
+        # Dashboard bell + Telegram mirror for each assignee (email is sent above),
+        # so assignees are notified on all three channels.
+        import biz_nidaan_notifications as _nnot_asg
+        _ae3.ensure_future(_nnot_asg.on_claim_assigned(claim_id, ids, caller["staff_id"]))
     except Exception:
         pass
     await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to {len(ids)} staff: {ids}")

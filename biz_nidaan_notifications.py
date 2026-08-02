@@ -1610,6 +1610,36 @@ async def on_subscriber_signup(account_id: int):
             status="sent", sent_at=now, account_id=account_id)
 
 
+async def on_claim_assigned(claim_id: int, staff_ids: list, assigned_by_id: int = 0):
+    """Notify each assignee that a claim was assigned to them, on the dashboard bell
+    (auto-mirrored to Telegram). Email is sent separately by the assign endpoint, so
+    together assignees get all three channels: email + dashboard + Telegram."""
+    if not staff_ids:
+        return
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT claim_id, insured_name, claim_type FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+    if not c:
+        return
+    c = dict(c)
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    subj = f"Claim #{_cn(claim_id)} assigned to you — {c.get('insured_name','')}"
+    body = (f"You've been assigned to claim #{_cn(claim_id)} "
+            f"({c.get('insured_name','')} · {(c.get('claim_type','') or '').replace('_',' ')}).\n\n"
+            f"Open: /admin?claim={claim_id}")
+    for sid in staff_ids:
+        try:
+            await _record_notification(
+                event_key="claim.assigned", priority=PRIORITY_P1,
+                recipient_type=RECIPIENT_STAFF, recipient_id=int(sid),
+                channel=CHANNEL_DASHBOARD, subject=subj, body=body,
+                status="sent", sent_at=now, claim_id=claim_id)
+        except Exception:
+            pass
+
+
 async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, preview: str):
     """A new message in a claim thread → notify the OTHER party. subscriber→ops
     pings SA/Admin bells (deep-linked to the account); staff→subscriber reaches the
