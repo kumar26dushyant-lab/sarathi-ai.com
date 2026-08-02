@@ -3471,22 +3471,64 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
       <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.advisor_phone||'—')}</span></div>
     </div>
-    <!-- Tasks (workflow tasks for THIS claim) -->
+    ${canAssign?`<div class="drawer-section">
+      <h4>Assign To Staff</h4>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Select one or more. The first selected is the primary handler; all assignees can work the claim &amp; are notified.</div>
+      <div id="assignBox_${c.claim_id}" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem;margin-bottom:.5rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.5rem"><span style="color:rgba(255,255,255,.4);font-size:.8rem">Loading staff…</span></div>
+      <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
+      <div class="msg" id="assignMsg_${c.claim_id}"></div>
+    </div>`:''}
+    <!-- Notes & discussion -->
     <div class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
-        <span>🗂️ Tasks</span>
-        ${(_role==='super_admin'||_role==='sub_super_admin')?
-          `<button class="btn-sm btn-ghost" onclick="openCreateTaskModalForClaim(${c.claim_id})">+ Add Task</button>`:''}
-      </h4>
-      <div id="claimTasksArea_${c.claim_id}">Loading…</div>
+      <h4>Internal Notes &amp; Discussion</h4>
+      <div id="notesArea_${c.claim_id}">${notesHtml}</div>
+      <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
+        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… tag teammates below to notify them"></textarea>
+        <div id="claimMentionBox_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.3rem;font-size:.78rem;color:rgba(255,255,255,.5)"></div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input type="file" id="claimNoteFiles_${c.claim_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.txt,.csv,.heic,.heif" style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
+          <button class="btn-sm btn-ghost" type="button" onclick="document.getElementById('claimNoteFiles_${c.claim_id}').click()">📎 Attach</button>
+          <span id="claimNoteFileList_${c.claim_id}" style="font-size:.76rem;color:rgba(255,255,255,.5)"></span>
+          <button class="btn btn-primary" style="margin-left:auto" onclick="addNote(${c.claim_id})">Add note</button>
+        </div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.35)">Up to 10 files · 10&nbsp;MB each. You can delete your own note/attachment within 1&nbsp;hour; admins anytime.</div>
+      </div>
     </div>
-    <!-- Reminders (Quick Tasks linked to this claim) -->
+    <!-- Documents -->
     <div class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
-        <span>📌 Reminders</span>
+      <h4>Documents</h4>
+      <div id="opsClaimDocs_${c.claim_id}" style="font-size:.84rem;color:rgba(255,255,255,.4)">Loading documents…</div>
+    </div>
+    <!-- Messages with subscriber -->
+    <div class="drawer-section">
+      <h4>💬 Messages with subscriber</h4>
+      <div id="opsMsgThread_${c.claim_id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">Loading…</div>
+      <div style="display:flex;gap:.5rem">
+        <input id="opsMsgInput_${c.claim_id}" type="text" autocomplete="off" placeholder="Reply to the subscriber…" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff" onkeydown="if(event.key==='Enter')opsSendMessage(${c.claim_id})">
+        <button class="btn btn-primary" onclick="opsSendMessage(${c.claim_id})">Send</button>
+      </div>
+    </div>
+    <!-- Follow-ups -->
+    <div class="drawer-section">
+      <h4>Follow-ups</h4>
+      <div id="fuArea_${c.claim_id}">${fuHtml}</div>
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input type="date" id="fuDate_${c.claim_id}" class="form-input" style="flex:1;min-width:130px" min="${new Date().toISOString().slice(0,10)}">
+        <input id="fuNote_${c.claim_id}" class="form-input" style="flex:2;min-width:120px" placeholder="Note">
+        <button class="btn btn-success" onclick="addFollowup(${c.claim_id})">Schedule</button>
+      </div>
+    </div>
+    <!-- Tasks & reminders for this claim (consolidated: workflow tasks + quick-task reminders) -->
+    <div class="drawer-section">
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <span>🗂️ Tasks &amp; reminders</span>
         ${(_role==='super_admin'||_role==='sub_super_admin')?
-          `<button class="btn-sm btn-ghost" onclick="openQuickTaskModal(${c.claim_id})">+ Quick Task</button>`:''}
+          `<span style="display:flex;gap:.4rem">
+             <button class="btn-sm btn-ghost" onclick="openCreateTaskModalForClaim(${c.claim_id})">+ Task</button>
+             <button class="btn-sm btn-ghost" onclick="openQuickTaskModal(${c.claim_id})">+ Reminder</button>
+           </span>`:''}
       </h4>
+      <div id="claimTasksArea_${c.claim_id}" style="margin-bottom:.6rem">Loading…</div>
       <div id="claimRemindersArea_${c.claim_id}">Loading…</div>
     </div>
     <!-- Actions -->
@@ -3514,57 +3556,10 @@ async function openClaimDrawer(claimId) {
       </div>
       <div class="msg" id="rvMsg_${c.claim_id}"></div>
     </div>`:''}
-    ${canAssign?`<div class="drawer-section">
-      <h4>Assign To Staff</h4>
-      <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Select one or more. The first selected is the primary handler; all assignees can work the claim &amp; are notified.</div>
-      <div id="assignBox_${c.claim_id}" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem;margin-bottom:.5rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.5rem"><span style="color:rgba(255,255,255,.4);font-size:.8rem">Loading staff…</span></div>
-      <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
-      <div class="msg" id="assignMsg_${c.claim_id}"></div>
-    </div>`:''}
-    <!-- Notes & discussion -->
-    <div class="drawer-section">
-      <h4>Internal Notes &amp; Discussion</h4>
-      <div id="notesArea_${c.claim_id}">${notesHtml}</div>
-      <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
-        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… tag teammates below to notify them"></textarea>
-        <div id="claimMentionBox_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.3rem;font-size:.78rem;color:rgba(255,255,255,.5)"></div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-          <input type="file" id="claimNoteFiles_${c.claim_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.txt,.csv,.heic,.heif" style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
-          <button class="btn-sm btn-ghost" type="button" onclick="document.getElementById('claimNoteFiles_${c.claim_id}').click()">📎 Attach</button>
-          <span id="claimNoteFileList_${c.claim_id}" style="font-size:.76rem;color:rgba(255,255,255,.5)"></span>
-          <button class="btn btn-primary" style="margin-left:auto" onclick="addNote(${c.claim_id})">Add note</button>
-        </div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.35)">Up to 10 files · 10&nbsp;MB each. You can delete your own note/attachment within 1&nbsp;hour; admins anytime.</div>
-      </div>
-    </div>
-    <!-- Follow-ups -->
-    <div class="drawer-section">
-      <h4>Follow-ups</h4>
-      <div id="fuArea_${c.claim_id}">${fuHtml}</div>
-      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <input type="date" id="fuDate_${c.claim_id}" class="form-input" style="flex:1;min-width:130px" min="${new Date().toISOString().slice(0,10)}">
-        <input id="fuNote_${c.claim_id}" class="form-input" style="flex:2;min-width:120px" placeholder="Note">
-        <button class="btn btn-success" onclick="addFollowup(${c.claim_id})">Schedule</button>
-      </div>
-    </div>
-    <!-- Documents -->
-    <div class="drawer-section">
-      <h4>Documents</h4>
-      <div id="opsClaimDocs_${c.claim_id}" style="font-size:.84rem;color:rgba(255,255,255,.4)">Loading documents…</div>
-    </div>
     <!-- Status Timeline -->
     <div class="drawer-section">
       <h4>Status History</h4>
       <div class="tl">${tlHtml}</div>
-    </div>
-    <!-- Messages with subscriber -->
-    <div class="drawer-section">
-      <h4>💬 Messages with subscriber</h4>
-      <div id="opsMsgThread_${c.claim_id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">Loading…</div>
-      <div style="display:flex;gap:.5rem">
-        <input id="opsMsgInput_${c.claim_id}" type="text" autocomplete="off" placeholder="Reply to the subscriber…" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff" onkeydown="if(event.key==='Enter')opsSendMessage(${c.claim_id})">
-        <button class="btn btn-primary" onclick="opsSendMessage(${c.claim_id})">Send</button>
-      </div>
     </div>`;
 
   // Load staff into the multi-select assign box (current assignees pre-checked)
