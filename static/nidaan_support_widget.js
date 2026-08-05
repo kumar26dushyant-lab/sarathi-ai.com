@@ -45,6 +45,31 @@
     hi: ["🛡️ मेरा रिजेक्ट क्लेम जांचें", "💳 प्लान्स और कीमत", "🙋 इंसान से बात करें"],
     hinglish: ["🛡️ Mera rejected claim check karein", "💳 Plans aur pricing", "🙋 Insaan se baat karein"]
   };
+  // Advisor-facing variants (shown when the visitor chose the advisor view on the homepage).
+  var GREET_ADV = {
+    en: "Namaste! 🙏 I'm NidaanMitra, from the Nidaan Partner team. If you advise clients on insurance, we win their rejected & underpaid claims for you — so you sell more, retain more, and stay the trusted face. Tell me about your practice, or ask me anything.",
+    hi: "नमस्ते! 🙏 मैं NidaanMitra हूँ, Nidaan Partner टीम से। अगर आप ग्राहकों को बीमा सलाह देते हैं, तो हम उनके रिजेक्ट और कम भुगतान वाले क्लेम जिता देते हैं — ताकि आप ज़्यादा बेचें, ग्राहक बनाए रखें और भरोसेमंद चेहरा बने रहें। अपने काम के बारे में बताइए, या कुछ भी पूछिए।",
+    hinglish: "Namaste! 🙏 Main NidaanMitra hoon, Nidaan Partner team se. Agar aap clients ko insurance advise karte hain, to hum unke rejected aur kam settle claims jita dete hain — taaki aap zyada bechein, clients retain karein aur trusted chehra banein. Apne kaam ke baare mein bataiye, ya kuch bhi poochhiye."
+  };
+  var CHIPS_ADV = {
+    en: ["🛡️ How it works for advisors", "💳 Plans & pricing", "🙋 Talk to a human"],
+    hi: ["🛡️ एडवाइज़र के लिए यह कैसे काम करता है", "💳 प्लान्स और कीमत", "🙋 इंसान से बात करें"],
+    hinglish: ["🛡️ Advisors ke liye ye kaise kaam karta hai", "💳 Plans aur pricing", "🙋 Insaan se baat karein"]
+  };
+  function nswAudience(){ try{ return localStorage.getItem('nidaanAudience'); }catch(e){ return null; } }
+  // Proactive greeter text — a short, warm invite shown by the chat button (audience-aware, bilingual).
+  var TEASER = {
+    policyholder: {
+      en: "👋 Namaste! Claim <b>rejected or underpaid</b>? Tell me in one line — I'll show you what to do.",
+      hi: "👋 नमस्ते! क्लेम <b>रिजेक्ट या कम भुगतान</b> हुआ? एक लाइन में बताइए — मैं आगे का रास्ता दिखाती हूँ।",
+      hinglish: "👋 Namaste! Claim <b>reject ya kam settle</b> hua? Ek line mein bataiye — main aage ka raasta dikhati hoon."
+    },
+    advisor: {
+      en: "👋 Namaste! Want Nidaan to <b>win your clients' claims</b> while you focus on selling? Tap to see how.",
+      hi: "👋 नमस्ते! चाहते हैं Nidaan आपके <b>ग्राहकों के क्लेम जिताए</b> जबकि आप बिक्री पर ध्यान दें? देखने के लिए टैप करें।",
+      hinglish: "👋 Namaste! Chahte hain Nidaan aapke <b>clients ke claims jitaye</b> jab aap selling par focus karein? Dekhne ke liye tap karein."
+    }
+  };
   // Header language control shows the CURRENT language in words (clear for every user) — not a globe.
   var LANGLABEL = { en: 'English', hi: 'हिंदी', hinglish: 'Hinglish' };
   // GROUND RULE: every visible string converts with the selected language — header, subtitle,
@@ -183,13 +208,15 @@
   async function showGreeting(){
     if(greeted) return; greeted = true;
     await fetchStatus();
-    bubble(GREET[lang]||GREET.en, 'ai');
+    var _G = nswAudience()==='advisor' ? GREET_ADV : GREET;
+    bubble(_G[lang]||_G.en, 'ai');
     if(!supportOpen) bubble(OFFLINE[lang]||OFFLINE.en, 'ai');
     renderChips();
   }
   function leadDoneTicket(){ try{ return localStorage.getItem(LEADKEY); }catch(e){ return null; } }
   function renderChips(){
-    var chipList = (CHIPS[lang]||CHIPS.en).map(function(t){ return {label:t, action:'send'}; });
+    var _C = nswAudience()==='advisor' ? CHIPS_ADV : CHIPS;
+    var chipList = (_C[lang]||_C.en).map(function(t){ return {label:t, action:'send'}; });
     if(!supportOpen && !leadDoneTicket()) chipList.push({label:(LEADCHIP[lang]||LEADCHIP.en), action:'lead'});
     chipsBox.style.display='flex'; chipsBox.innerHTML='';
     chipList.forEach(function(c){
@@ -269,7 +296,7 @@
   function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
 
   var openedOnce=false;
-  function openPanel(){ panel.classList.add('open'); if(!openedOnce){ openedOnce=true; loadHistory(); } else startPoll(); setTimeout(function(){ if(input.offsetParent) input.focus(); },100); }
+  function openPanel(){ removeTeaser(); panel.classList.add('open'); if(!openedOnce){ openedOnce=true; loadHistory(); } else startPoll(); setTimeout(function(){ if(input.offsetParent) input.focus(); },100); }
   function closePanel(){ panel.classList.remove('open'); stopPoll(); }
   btn.addEventListener('click', function(){ panel.classList.contains('open')?closePanel():openPanel(); });
   panel.querySelector('.nsw-x').addEventListener('click', closePanel);
@@ -355,6 +382,37 @@
     }catch(e){ typing.remove(); bubble('Network issue — please try again.', 'ai'); }
     busy=false; sendBtn.disabled=false; if(input.offsetParent) input.focus();
   }
+
+  // ── Proactive greeter (Phase 1): a warm, one-time invite by the chat button. Mobile-first —
+  // a small teaser bubble, never a screen-hijacking auto-open. Audience-aware; shows once per
+  // visit; respects a dismiss forever. Tapping it opens the chat (NidaanMitra takes over).
+  var TEASER_DISMISS = 'nsw_teaser_dismissed';
+  function removeTeaser(){ var t=document.getElementById('nswTeaser'); if(t&&t.parentNode) t.parentNode.removeChild(t); }
+  function maybeShowTeaser(){
+    try{
+      if(wmode==='support') return;                            // logged-in dashboard — don't proactively greet a customer
+      if(thread) return;                                       // mid-conversation — don't interrupt
+      if(panel.classList.contains('open')) return;             // already chatting
+      if(document.getElementById('nswTeaser')) return;         // already showing
+      if(sessionStorage.getItem('nsw_teaser_shown')) return;   // once per visit
+      if(localStorage.getItem(TEASER_DISMISS)) return;         // visitor closed it before — respect it
+      var aud = nswAudience()==='advisor' ? 'advisor' : 'policyholder';
+      var L = lang || 'en';
+      var t=document.createElement('div'); t.id='nswTeaser'; t.setAttribute('role','button'); t.setAttribute('aria-label','Open chat');
+      t.style.cssText='position:fixed;right:18px;bottom:86px;z-index:99997;max-width:min(300px,calc(100vw - 36px));background:#0a1628;border:1px solid rgba(6,182,212,.5);border-radius:14px 14px 4px 14px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:12px 32px 12px 14px;color:#e6f6ff;font:600 .86rem/1.42 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;cursor:pointer;opacity:0;transform:translateY(8px);transition:opacity .35s ease,transform .35s ease';
+      t.innerHTML='<button id="nswTeaserX" aria-label="Dismiss" style="position:absolute;top:5px;right:7px;background:none;border:none;color:rgba(255,255,255,.5);font-size:17px;line-height:1;cursor:pointer;padding:2px">×</button>'+(TEASER[aud][L]||TEASER[aud].en);
+      document.body.appendChild(t);
+      try{ sessionStorage.setItem('nsw_teaser_shown','1'); }catch(e){}
+      requestAnimationFrame(function(){ t.style.opacity='1'; t.style.transform='translateY(0)'; });
+      t.addEventListener('click', function(e){
+        if(e.target && e.target.id==='nswTeaserX'){ e.stopPropagation(); try{ localStorage.setItem(TEASER_DISMISS,'1'); }catch(_){}; removeTeaser(); return; }
+        removeTeaser(); openPanel();
+      });
+      // Auto-retire after a while so it never lingers or nags.
+      setTimeout(function(){ var e2=document.getElementById('nswTeaser'); if(e2){ e2.style.opacity='0'; e2.style.transform='translateY(8px)'; setTimeout(removeTeaser,400); } }, 16000);
+    }catch(e){}
+  }
+  setTimeout(maybeShowTeaser, 5000);
 
   // Deep-link reopen: an email nudge links to /?nchat=<id>&k=<key> → reopen the SAME conversation.
   try{
