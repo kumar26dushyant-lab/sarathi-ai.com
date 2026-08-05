@@ -521,6 +521,20 @@ def _nidaan_bearer(request: Request) -> Optional[dict]:
     return None
 
 
+# ── Nidaan Razorpay credentials (SEPARATE account from Sarathi) ──────────────
+# Nidaan money settles to its own bank via its own Razorpay account. These helpers
+# return the Nidaan-specific keys, FALLING BACK to the shared RAZORPAY_* keys until
+# NIDAAN_RAZORPAY_* are set in biz.env — so this is a zero-change staged rollout:
+# Nidaan flips to its own account the moment those keys are added. Sarathi payments
+# (biz_payments.py + Sarathi endpoints) always use RAZORPAY_* and are unaffected.
+def _nidaan_rzp_id() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+def _nidaan_rzp_secret() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
+def _nidaan_rzp_webhook_secret() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_WEBHOOK_SECRET") or os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+
 async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict]:
     """Resolve the Nidaan account from a verified token payload. Prefers the account_id
     (`sub`) so accounts WITHOUT an email still resolve; falls back to the token email for
@@ -1654,8 +1668,8 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
         raise HTTPException(status_code=400, detail=f"Claim is already '{claim['payment_status']}'")
     # NOTE: no document gate — customers can pay ₹499 anytime; docs are optional.
     import httpx as _httpx2, time as _time2
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     receipt = f"nc_{claim_id}_{int(_time2.time())}"[:40]
@@ -1690,7 +1704,7 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
@@ -2112,8 +2126,8 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
     if purchase["status"] != "pending_payment":
         raise HTTPException(status_code=400, detail=f"Purchase is already '{purchase['status']}'")
     import httpx as _httpx2, time as _time2
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
@@ -2144,7 +2158,7 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
         raise HTTPException(status_code=401, detail="Unauthorized")
     if body.purchase_id != purchase_id:
         raise HTTPException(status_code=400, detail="purchase_id mismatch")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     # Verify Razorpay HMAC signature
@@ -2671,8 +2685,8 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     import httpx as _httpx, time as _time
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     receipt = f"nidaan_review_{int(_time.time())}"[:40]
@@ -2712,8 +2726,8 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
     import hmac as _hmac_mod, hashlib as _hs, asyncio as _asyncio
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     # Verify Razorpay signature
@@ -2889,8 +2903,8 @@ async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     result = await nidaan.create_nidaan_razorpay_order(
@@ -3002,8 +3016,8 @@ async def nidaan_razorpay_webhook(request: Request):
     # Razorpay webhooks are signed with the per-webhook secret (Dashboard →
     # Webhooks → Secret), NOT the API key secret. Try the dedicated webhook
     # secret first, fall back to API key secret for legacy setups.
-    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
-    api_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+    webhook_secret = _nidaan_rzp_webhook_secret().strip()
+    api_secret = _nidaan_rzp_secret().strip()
     _ua = request.headers.get("User-Agent", "")
     _ip = request.client.host if request.client else ""
     if not sig:
@@ -3159,8 +3173,8 @@ async def nidaan_subscribe_check(order_id: str, request: Request):
     if not order_id or len(order_id) > 60:
         raise HTTPException(status_code=400, detail="Invalid order_id")
 
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
     if not rzp_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
 
@@ -3224,8 +3238,8 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
     if not rzp_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
 
@@ -3294,8 +3308,8 @@ async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request)
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     result = await nidaan.create_nidaan_recurring_subscription(
@@ -3337,7 +3351,7 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_secret = _nidaan_rzp_secret()
     if not rzp_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     result = await nidaan.verify_nidaan_subscription_and_activate(
@@ -3461,8 +3475,8 @@ async def nidaan_subscribe_cancel(request: Request):
     refund_info["eligible"] = eligible
     refund_info["reason"] = reason
     if eligible:
-        rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-        rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+        rzp_key_id = _nidaan_rzp_id()
+        rzp_secret = _nidaan_rzp_secret()
         order_id = sub_full.get("razorpay_subscription_id", "") or ""
         payment_id = sub_full.get("razorpay_payment_id", "") or ""
         # Legacy rows: payment_id missing — resolve via order_id
@@ -5241,8 +5255,8 @@ async def ops_refund_retry(refund_id: int, request: Request):
         raise HTTPException(status_code=409,
                             detail=f"cannot_retry_status_{refund['status']}")
 
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
     if not rzp_secret:
         raise HTTPException(status_code=503, detail="razorpay_not_configured")
 
@@ -5298,8 +5312,8 @@ async def ops_refund_manual(body: _ManualRefundReq, request: Request):
     if amount_rupees > int(sub.get("amount_paid", 0)):
         raise HTTPException(status_code=400, detail="amount_exceeds_payment")
 
-    rzp_key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    rzp_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
     order_id = sub.get("razorpay_subscription_id", "") or ""
     payment_id = sub.get("razorpay_payment_id", "") or ""
     if not payment_id and order_id and rzp_secret:

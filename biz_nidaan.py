@@ -3967,7 +3967,9 @@ async def request_account_deletion(account_id: int) -> dict:
     if rzp_sub.startswith("sub_"):
         try:
             import httpx
-            kid = os.getenv("RAZORPAY_KEY_ID", ""); ksec = os.getenv("RAZORPAY_KEY_SECRET", "")
+            # Nidaan's own Razorpay account (falls back to shared keys until configured)
+            kid = os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+            ksec = os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
             if kid and ksec:
                 async with httpx.AsyncClient() as c:
                     await c.post(f"https://api.razorpay.com/v1/subscriptions/{rzp_sub}/cancel",
