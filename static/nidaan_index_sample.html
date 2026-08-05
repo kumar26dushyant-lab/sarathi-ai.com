@@ -395,6 +395,7 @@ span.hi-inline{display:none}
 .eg-go{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#1e3a8a,#06b6d4);color:#fff;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.92rem;border:none;cursor:pointer}
 .eg-listen{display:inline-flex;align-items:center;gap:6px;background:transparent;color:#7dd3fc;border:1px solid rgba(125,211,252,.5);padding:10px 14px;border-radius:10px;font-weight:600;font-size:.86rem;cursor:pointer}
 .nav-switch{display:inline-flex;align-items:center;gap:5px;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.4);color:var(--cyan-light,#67e8f9);padding:.35rem .7rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer}
+@keyframes egGiftGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}50%{box-shadow:0 0 22px 2px rgba(16,185,129,.45)}}
 /* audience visibility — a body class shows only the matching sections */
 body.aud-advisor .only-ph{display:none !important}
 body.aud-policyholder .only-adv{display:none !important}
@@ -422,8 +423,10 @@ body.aud-policyholder .only-adv{display:none !important}
           <button class="eg-go" onclick="event.stopPropagation();egChoose('advisor')"><span class="en">Continue as Advisor</span><span class="hi" style="display:none">एडवाइज़र के रूप में आगे बढ़ें</span> →</button>
           <button class="eg-listen" onclick="event.stopPropagation();egListen('advisor')">🎧 <span class="en">Listen</span><span class="hi" style="display:none">सुनें</span></button>
         </div>
-        <a href="https://sarathi-ai.com" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:block;margin-top:14px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.42);color:#6ee7b7;border-radius:10px;padding:11px 14px;text-decoration:none;font-size:.84rem;font-weight:600;line-height:1.45">
-          🎙️ <span class="en"><strong>Free — Sarathi-AI.com</strong>, India's voice-first CRM. Run your whole business from your phone ↗</span><span class="hi" style="display:none"><strong>मुफ़्त — Sarathi-AI.com</strong>, भारत का वॉइस-फर्स्ट CRM। अपना पूरा बिज़नेस सिर्फ़ फ़ोन से चलाएँ ↗</span>
+        <a href="https://sarathi-ai.com" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:10px;margin-top:14px;background:linear-gradient(135deg,rgba(16,185,129,.2),rgba(6,182,212,.2));border:1px solid rgba(16,185,129,.55);color:#a7f3d0;border-radius:12px;padding:12px 15px;text-decoration:none;font-size:.86rem;font-weight:700;line-height:1.4;animation:egGiftGlow 2.2s ease-in-out infinite">
+          <span style="font-size:1.45rem">🎁</span>
+          <span style="flex:1"><span class="en">A free gift for advisors like you — tap to see what</span><span class="hi" style="display:none">आप जैसे एडवाइज़र के लिए एक मुफ़्त तोहफ़ा — देखने के लिए टैप करें</span></span>
+          <span style="font-size:1.15rem">→</span>
         </a>
       </div>
       <div class="eg-card" onclick="egChoose('policyholder')">
@@ -670,8 +673,8 @@ body.aud-policyholder .only-adv{display:none !important}
         <button class="lang-btn" onclick="setLang('hi')">हिं</button>
       </div>
       <a href="https://sarathi-ai.com" id="navCrmBtn" class="nav-crm">Sarathi-AI CRM ↗</a>
-      <a href="/nidaan/start" class="nav-cta en">Login</a>
-      <a href="/nidaan/start" class="nav-cta hi" style="display:none">लॉगिन</a>
+      <a href="/nidaan/start" class="nav-cta en" title="Already subscribed or a ₹499 review customer? Log in here.">Member Login</a>
+      <a href="/nidaan/start" class="nav-cta hi" style="display:none" title="पहले से सब्सक्राइब्ड या ₹499 रिव्यू ग्राहक? यहाँ लॉगिन करें।">सदस्य लॉगिन</a>
     </div>
   </div>
 </nav>
