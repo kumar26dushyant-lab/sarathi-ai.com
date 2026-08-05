@@ -1179,6 +1179,43 @@ async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def branch_l2_pricing() -> dict:
+    """Current Level-2 charging config for branch-raised claims (super-admin editable).
+    fee = rupees; policy: 'l2_only'|'all_claims' both charge at the GO step, 'free' never charges."""
+    fee = int((await get_ops_setting("branch_l2_fee", "499") or "499") or 0)
+    policy = (await get_ops_setting("branch_charge_policy", "l2_only") or "l2_only")
+    return {"fee": fee, "policy": policy, "charge_required": policy != "free" and fee > 0}
+
+
+async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: str) -> bool:
+    """Record a branch's Level-2 fee payment (or a free advance) and queue the claim for
+    the legal team. Guarded to the owning branch + a GO ('can_fight') review; idempotent."""
+    code = (branch_code or "").strip().upper()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT review_outcome, l2_payment_status FROM nidaan_claims "
+            "WHERE claim_id=? AND origin='branch' AND UPPER(branch_code)=?",
+            (claim_id, code))).fetchone()
+        if not row:
+            return False
+        if row["review_outcome"] != "can_fight":
+            return False
+        if row["l2_payment_status"] == "paid":
+            return True  # idempotent — already queued
+        await conn.execute(
+            "UPDATE nidaan_claims SET l2_payment_status='paid', l2_fee_paid=?, "
+            "l2_payment_id=?, l2_paid_at=CURRENT_TIMESTAMP, last_status_at=CURRENT_TIMESTAMP "
+            "WHERE claim_id=?", (int(fee or 0), (payment_id or "")[:80], claim_id))
+        note = (f"Branch L2 fee Rs.{int(fee)} paid — queued for legal" if fee
+                else "Branch sent to Level-2 (no charge) — queued for legal")
+        await conn.execute(
+            "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
+            "VALUES (?, 'l2_queued', ?, 'branch', 0)", (claim_id, note))
+        await conn.commit()
+    return True
+
+
 async def submit_claim(
     account_id: int,
     user_id: Optional[int],

@@ -4947,6 +4947,23 @@ apkLoadStatus() call.
     claim-raise) → NEW capability. Decision point: nidaan_claims.review_outcome can_fight(GO)|no_scope(NOGO).
     SUB-PHASES: 3.1 config+super-admin UI (safe) → 3.2 branch claim-raise (branch dashboard) → 3.3 payment gate
     (Razorpay). Payment end-to-end test needs Item 1 flip (Nidaan keys).
+  - **★ ITEM 3 COMPLETE — 3.3 SHIPPED Aug 6 2026 (commit pending push).** Branch L2 payment gate live:
+    `biz_nidaan.branch_l2_pricing()` (reads branch_l2_fee/branch_charge_policy) + `mark_l2_paid()` (idempotent,
+    guards origin='branch'+can_fight, sets l2_payment_status='paid'/l2_fee_paid/l2_payment_id/l2_paid_at, logs
+    'l2_queued' — claim.status untouched, non-breaking). Endpoints (branch-bearer + host gated, scoped to owning
+    branch): POST /nidaan/branch/api/claims/{id}/l2-pay (Razorpay order via _nidaan_rzp_* → new account),
+    /l2-pay-verify (HMAC compare_digest, then mark_l2_paid + on_branch_l2_paid), /l2-advance (free-policy, no
+    charge). GET /nidaan/branch/api/claims now also returns `l2` pricing. Branch UI (nidaan_branch.html): per-
+    claim button — "Pay ₹{fee} → send to Level-2" (can_fight + charge_required) OR "Send to Level-2 (free)"
+    (free policy) OR "Queued for legal ✓" (paid) OR "Reviewed: no scope"; Razorpay checkout loaded on demand.
+    Notification on_branch_l2_paid → SA/Admin dashboard+email+Telegram. ClaimShield handoff still item 9.
+  - **★ HOMEPAGE walkthrough per-version fix SHIPPED Aug 6 2026 (live+verified).** Voice walkthrough now jumps
+    straight to the visitor's OWN version (advisor recorded audio OR policyholder HI/EN TTS) via saved
+    `nidaanAudience` (nwShowSmart) instead of re-showing the both-options chooser; chooser only when no version
+    picked. Applied to nidaan_index.html + _sample.html.
+  - **★ RAZORPAY webhook: founder set Live webhook (9 events, enabled) Aug 6 2026.** STILL NEEDED: the webhook
+    SECRET string (app verifies via NIDAAN_RAZORPAY_WEBHOOK_SECRET → sarathi_biz.py ~L3099-3124; falls back to
+    API secret which WON'T match a custom webhook secret). Founder to provide → add to biz.env (600) + reload.
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,

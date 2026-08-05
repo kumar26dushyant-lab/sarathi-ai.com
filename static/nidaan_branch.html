@@ -290,13 +290,25 @@ async function loadBranchClaims(){
   try{
     const r = await fetch('/nidaan/branch/api/claims',{headers:authHeaders()});
     if(r.status===401){ logout(); return; }
-    const claims = (await r.json()).claims || [];
+    const data = await r.json();
+    const claims = data.claims || [];
+    const l2cfg = data.l2 || {fee:0, charge_required:false};
     if(!claims.length){ $('bcClaimsWrap').innerHTML = '<div class="empty">No claims raised yet. Use the form above to submit your customer\'s rejected claim.</div>'; return; }
     const rows = claims.map(c=>{
       let l2 = '<span style="color:rgba(255,255,255,.35)">Under review</span>';
-      if(c.review_outcome==='can_fight'){ l2='<span class="pill" style="background:#065f46;color:#6ee7b7">Eligible — Level-2</span>'; }
-      else if(c.review_outcome==='no_scope'){ l2='<span class="pill" style="background:#7c2d12;color:#fdba74">No scope</span>'; }
-      if(c.l2_payment_status==='paid'){ l2='<span class="pill paid">Level-2 paid ✓</span>'; }
+      const btnStyle = 'padding:.4rem .7rem;font-size:.78rem;margin-top:.35rem';
+      if(c.l2_payment_status==='paid'){
+        l2='<span class="pill paid">Queued for legal ✓</span>';
+      } else if(c.review_outcome==='can_fight'){
+        const badge='<div class="pill" style="background:#065f46;color:#6ee7b7">Reviewed: can be challenged</div>';
+        if(l2cfg.charge_required){
+          l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${l2cfg.fee} → send to Level-2</button>`;
+        } else {
+          l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Advance(${c.claim_id})">Send to Level-2 (free)</button>`;
+        }
+      } else if(c.review_outcome==='no_scope'){
+        l2='<span class="pill" style="background:#7c2d12;color:#fdba74">Reviewed: no scope</span>';
+      }
       return `<tr>
         <td>${esc(c.insured_name)}<br><span style="font-size:.76rem;color:rgba(255,255,255,.4)">${esc(c.insured_phone)}</span></td>
         <td>${esc((c.claim_type||'').replace(/_/g,' '))}</td>
@@ -339,6 +351,55 @@ async function raiseBranchClaim(){
     loadBranchClaims();
   }catch(e){ setMsg(e.message,false); }
   btn.disabled=false;
+}
+
+// ── Level-2 payment gate (Item 3.3) ──────────────────────────────────────────
+function loadRzp(){
+  return new Promise((resolve,reject)=>{
+    if(window.Razorpay) return resolve();
+    const s=document.createElement('script');
+    s.src='https://checkout.razorpay.com/v1/checkout.js';
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error('Could not load the payment gateway. Check your connection and try again.'));
+    document.head.appendChild(s);
+  });
+}
+async function l2Pay(claimId){
+  try{
+    await loadRzp();
+    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-pay',{method:'POST',headers:authHeaders()});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Could not start the payment');
+    const rzp=new Razorpay({
+      key:d.razorpay_key_id, amount:d.amount, currency:d.currency||'INR',
+      name:'Nidaan Partner', description:'Level-2 fee — Claim #'+claimId,
+      order_id:d.order_id, theme:{color:'#06b6d4'},
+      handler:async function(resp){
+        try{
+          const v=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-pay-verify',{method:'POST',
+            headers:{...authHeaders(),'Content-Type':'application/json'},
+            body:JSON.stringify({razorpay_order_id:resp.razorpay_order_id,
+              razorpay_payment_id:resp.razorpay_payment_id,razorpay_signature:resp.razorpay_signature})});
+          const vd=await v.json().catch(()=>({}));
+          if(!v.ok) throw new Error(vd.detail||'Payment verification failed');
+          alert('Payment received ✓ — Claim #'+claimId+' is now queued for the legal team.');
+          loadBranchClaims();
+        }catch(e){ alert(e.message); }
+      }
+    });
+    rzp.on('payment.failed',function(){ alert('Payment failed or was cancelled. Please try again.'); });
+    rzp.open();
+  }catch(e){ alert(e.message); }
+}
+async function l2Advance(claimId){
+  if(!confirm('Send Claim #'+claimId+' to the legal team (Level-2)? No charge applies.')) return;
+  try{
+    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-advance',{method:'POST',headers:authHeaders()});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Could not send to Level-2');
+    alert('Claim #'+claimId+' is queued for the legal team ✓');
+    loadBranchClaims();
+  }catch(e){ alert(e.message); }
 }
 
 // Auto-enter dashboard if already signed in

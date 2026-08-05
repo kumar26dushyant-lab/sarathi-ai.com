@@ -1580,6 +1580,39 @@ async def on_claim_filed(claim_id: int, account_id: int):
             claim_id=claim_id, account_id=account_id)
 
 
+async def on_branch_l2_paid(claim_id: int, branch_code: str):
+    """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
+    — alert SA/Admin that the case is queued for the legal team."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT claim_id, insured_name, claim_type, disputed_amount, l2_fee_paid "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not row:
+            return
+        c = dict(row)
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    if not ids:
+        return
+    fee = int(c.get("l2_fee_paid") or 0)
+    subj = f"⚖️ Level-2 queued — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"Branch {branch_code} moved a claim to Level-2 — queued for the legal team.\n\n"
+            f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
+            f"Level-2 fee: {('Rs.'+str(fee)) if fee else 'no charge (free policy)'}\n\n"
+            f"Open: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="claim.l2_queued", email=True)
+    except Exception as e:
+        logger.warning("on_branch_l2_paid inapp failed: %s", e)
+    for sid in ids:
+        try:
+            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
+        except Exception:
+            pass
+
+
 async def on_subscriber_signup(account_id: int):
     """A new subscriber account was created — alert SA/Sub-admin on their bell
     (dashboard + push), deep-linked straight to the account. Dashboard-only so we

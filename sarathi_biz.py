@@ -704,7 +704,8 @@ async def nidaan_branch_list_claims(request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     code = _branch_bearer(request)
     if not code: raise HTTPException(401, "Unauthorized")
-    return {"claims": await nidaan.list_branch_claims(code)}
+    return {"claims": await nidaan.list_branch_claims(code),
+            "l2": await nidaan.branch_l2_pricing()}
 
 
 @app.post("/nidaan/branch/api/claims/{claim_id}/documents/upload")
@@ -740,6 +741,110 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
             file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
         saved.append({"doc_id": doc_id, "original_name": f.filename})
     return {"uploaded": saved, "count": len(saved)}
+
+
+# ── Branch Level-2 payment gate (Item 3.3) ───────────────────────────────────
+# When a branch-raised claim is reviewed as GO ('can_fight'), the branch pays the
+# configured, super-admin-editable fee (branch_l2_fee) via the Nidaan Razorpay to
+# push it to the legal team. Policy 'free' skips the charge (l2-advance instead).
+async def _branch_claim_row(claim_id: int, code: str):
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        return await (await _c.execute(
+            "SELECT review_outcome, l2_payment_status FROM nidaan_claims "
+            "WHERE claim_id=? AND origin='branch' AND UPPER(branch_code)=?",
+            (claim_id, code.upper()))).fetchone()
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-pay")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_pay(claim_id: int, request: Request):
+    """Create a Razorpay order for the branch's Level-2 fee on a reviewed-GO claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_pricing()
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured — use Send to Level-2 instead")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    rzp_key_id = _nidaan_rzp_id(); rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(503, "Payments not configured")
+    import httpx as _httpx3, time as _time3
+    receipt = f"l2_{claim_id}_{int(_time3.time())}"[:40]
+    async with _httpx3.AsyncClient() as _cl:
+        _r = await _cl.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": fee * 100, "currency": "INR", "receipt": receipt,
+                  "notes": {"product": "nidaan_branch_l2", "claim_id": str(claim_id),
+                            "branch": code}},
+            timeout=20.0)
+        result = _r.json()
+    if "id" not in result:
+        raise HTTPException(502, result.get("error", {}).get("description", "Order creation failed"))
+    return {"order_id": result["id"], "amount": fee * 100, "currency": "INR",
+            "razorpay_key_id": rzp_key_id, "fee": fee}
+
+
+class _BranchL2VerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-pay-verify")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, request: Request):
+    """Verify the branch's Level-2 payment and queue the claim for the legal team."""
+    import hmac as _hm, hashlib as _hs
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    secret = _nidaan_rzp_secret()
+    if not secret: raise HTTPException(503, "Payments not configured")
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(secret.encode(), _msg, _hs.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(400, "Invalid payment signature")
+    pricing = await nidaan.branch_l2_pricing()
+    ok = await nidaan.mark_l2_paid(claim_id, code, int(pricing["fee"]), body.razorpay_payment_id)
+    if not ok:
+        raise HTTPException(400, "Could not record the Level-2 payment for this claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "paid", "claim_id": claim_id}
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-advance")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_advance(claim_id: int, request: Request):
+    """Free-policy path: queue a reviewed-GO branch claim for legal with no charge."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_pricing()
+    if pricing["charge_required"]:
+        raise HTTPException(400, "A Level-2 fee applies — please pay to proceed")
+    ok = await nidaan.mark_l2_paid(claim_id, code, 0, "free")
+    if not ok:
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "queued", "claim_id": claim_id}
 
 
 # ── Customer support chat (public; AI first-line + human handoff) ─────────────
