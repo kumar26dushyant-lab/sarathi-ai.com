@@ -658,6 +658,90 @@ async def nidaan_branch_accounts(request: Request):
     return {"accounts": await nidaan.get_branch_attributed_accounts(code)}
 
 
+# ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
+class _BranchClaimReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    insured_name: str = Field(..., min_length=1, max_length=120)
+    insured_phone: str = Field(..., max_length=15)
+    claim_type: str = Field(..., max_length=40)
+    insurer_name: str = Field("", max_length=120)
+    policy_no: str = Field("", max_length=80)
+    disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+    notes: str = Field("", max_length=2000)
+
+
+@app.post("/nidaan/branch/api/claims")
+async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
+    """A branch raises a claim FOR a customer. Attaches to the branch's house account,
+    origin='branch', free at intake — the L2 fee (if any) is charged later per policy."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    phone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit())
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit customer mobile number")
+    house_account = await nidaan.get_or_create_branch_house_account(code)
+    claim_id, msg = await nidaan.submit_claim(
+        account_id=house_account, user_id=None,
+        claim_type=(body.claim_type or "").strip(), insured_name=body.insured_name.strip(),
+        insured_phone=phone, insurer_name=(body.insurer_name or "").strip(),
+        policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
+        notes_from_agent=(body.notes or "").strip(), branch_code=code,
+        payment_status="unpaid_lead", skip_eligibility=True, origin="branch")
+    if not claim_id:
+        raise HTTPException(400, msg or "Could not raise claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_claim_filed(claim_id, house_account))
+    except Exception:
+        pass
+    return {"claim_id": claim_id, "status": "intimated"}
+
+
+@app.get("/nidaan/branch/api/claims")
+async def nidaan_branch_list_claims(request: Request):
+    """List the claims this branch has raised (with review + L2-payment state)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    return {"claims": await nidaan.list_branch_claims(code)}
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
+                                         files: list[UploadFile] = File(...)):
+    """Branch uploads documents (e.g. the rejection letter) for one of ITS claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=? AND origin='branch' "
+            "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    if len(files) > 5: raise HTTPException(400, "Maximum 5 files per upload")
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    return {"uploaded": saved, "count": len(saved)}
+
+
 # ── Customer support chat (public; AI first-line + human handoff) ─────────────
 class NidaanSupportMsgReq(BaseModel):
     model_config = ConfigDict(extra="forbid")

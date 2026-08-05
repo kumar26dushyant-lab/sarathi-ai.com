@@ -1210,6 +1210,14 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN policy_inception_date DATE",
             "ALTER TABLE nidaan_claims ADD COLUMN tpa_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN branch_code TEXT DEFAULT ''",  # affiliate branch, per-claim (survives branch edits)
+            # Origin of the claim: '' / 'subscriber' = normal, 'branch' = raised by a
+            # branch on behalf of a customer (Item 3). Drives the branch L2 payment gate.
+            "ALTER TABLE nidaan_claims ADD COLUMN origin TEXT DEFAULT ''",
+            # Branch L2 billing (Item 3.3): payment state for a branch-raised claim.
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_payment_status TEXT DEFAULT ''",  # '' | 'due' | 'paid' | 'waived'
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_fee_paid INTEGER DEFAULT 0",     # rupees actually paid
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_payment_id TEXT DEFAULT ''",     # razorpay payment id
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_paid_at TIMESTAMP",
             # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
             "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
             # DPDP retention for unpaid leads: we keep their documents only while the

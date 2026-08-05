@@ -1143,6 +1143,42 @@ async def _increment_quota(account_id: int, conn: aiosqlite.Connection):
 #  CLAIM OPERATIONS
 # =============================================================================
 
+async def get_or_create_branch_house_account(branch_code: str) -> int:
+    """One lightweight 'house' account per branch — branch-raised claims (on behalf of a
+    customer) attach here so they reuse the whole existing claim pipeline. Synthetic
+    email/phone; branch_code is left BLANK on the account so house accounts never inflate
+    affiliate signup/earnings stats (the CLAIM itself carries branch_code + origin='branch')."""
+    code = (branch_code or "").strip().upper()
+    house_email = f"branch.{code.lower()}@house.nidaanpartner.internal"
+    house_phone = f"HOUSE-{code}"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT account_id FROM nidaan_accounts WHERE email=?", (house_email,))).fetchone()
+        if row:
+            return row[0]
+        import secrets as _secrets
+        pw = _hash_password(_secrets.token_hex(16))
+        cur = await conn.execute(
+            "INSERT INTO nidaan_accounts (owner_name, email, phone, password_hash, firm_name, branch_code) "
+            "VALUES (?,?,?,?,?,?)",
+            (f"Branch {code} — house account", house_email, house_phone, pw, "", ""))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
+    """Claims a branch has raised (origin='branch'), newest first, with review + L2 state."""
+    code = (branch_code or "").strip().upper()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT claim_id, insured_name, insured_phone, claim_type, insurer_name, "
+            "       disputed_amount, status, review_outcome, l2_payment_status, l2_fee_paid, created_at "
+            "FROM nidaan_claims WHERE origin='branch' AND UPPER(branch_code)=? "
+            "ORDER BY claim_id DESC LIMIT ?", (code, limit))).fetchall()
+        return [dict(r) for r in rows]
+
+
 async def submit_claim(
     account_id: int,
     user_id: Optional[int],
@@ -1163,6 +1199,7 @@ async def submit_claim(
     branch_code: str = "",
     payment_status: str = "subscription",
     skip_eligibility: bool = False,
+    origin: str = "",
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -1191,15 +1228,15 @@ async def submit_claim(
                (account_id, user_id, claim_type, insured_name, insured_phone,
                 insured_email, insurer_name, policy_no, disputed_amount,
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
-                notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
              type_specific_json, notes_from_agent,
              (intermediary_code or "").strip(), (intermediary_name or "").strip(),
              (branch_code or "").strip().upper(),
-             payment_status),
+             payment_status, (origin or "").strip()),
         )
         claim_id = cur.lastrowid
         await conn.execute(
