@@ -400,8 +400,10 @@ span.hi-inline{display:none}
 body.aud-advisor .only-ph{display:none !important}
 body.aud-policyholder .only-adv{display:none !important}
 /* wrong-page? one-tap audience switch strip (always visible; corrects mis-landed visitors) */
-.aud-switch-strip{display:flex;justify-content:center;background:#0a1430;padding:2px 12px 10px}
-.aud-switch{display:inline-flex;align-items:center;gap:9px;max-width:760px;width:100%;justify-content:center;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.5);color:#cdeffb;border-radius:10px;padding:9px 14px;font-size:.85rem;font-weight:600;cursor:pointer;text-align:center;line-height:1.35}
+.aud-switch-strip{display:none;justify-content:center;background:#0a1430;padding:2px 12px 10px}
+body.aud-advisor .aud-switch-strip,body.aud-policyholder .aud-switch-strip{display:flex}
+.aud-switch{display:none;align-items:center;gap:9px;max-width:760px;width:100%;justify-content:center;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.5);color:#cdeffb;border-radius:10px;padding:9px 14px;font-size:.85rem;font-weight:600;cursor:pointer;text-align:center;line-height:1.35}
+body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{display:inline-flex}
 .aud-switch:hover{background:rgba(6,182,212,.24)}
 .aud-switch b{color:#fff}
 .aud-switch .aud-switch-arrow{font-weight:800}
@@ -687,7 +689,7 @@ body.aud-policyholder .only-adv{display:none !important}
       <a href="#for-advisors" class="hi only-adv" style="display:none">एडवाइज़र</a>
       <a href="#faq" class="en">FAQ</a>
       <a href="#faq" class="hi" style="display:none">सवाल-जवाब</a>
-      <button class="nav-switch" onclick="egReopen()" title="Switch between the advisor and policyholder pages">⇄ <span class="en">Advisor / Policyholder</span><span class="hi" style="display:none">एडवाइज़र / पॉलिसीधारक</span></button>
+      <button class="nav-switch" onclick="egReopen()" title="Switch between the advisor and policyholder pages">⇄ <span class="en">Switch</span><span class="hi" style="display:none">बदलें</span></button>
       <div class="lang-toggle">
         <button class="lang-btn active" onclick="setLang('en')">EN</button>
         <button class="lang-btn" onclick="setLang('hi')">हिं</button>
@@ -1573,7 +1575,11 @@ body.aud-policyholder .only-adv{display:none !important}
 <script>
 // ── Language switch ──
 function setLang(l) {
-  document.body.className = l;
+  // Preserve the audience class — overwriting body.className wholesale used to wipe
+  // aud-advisor/aud-policyholder, dropping the page into the broken neutral state.
+  var _aud = document.body.classList.contains('aud-advisor') ? 'aud-advisor'
+           : (document.body.classList.contains('aud-policyholder') ? 'aud-policyholder' : '');
+  document.body.className = (l + (_aud ? ' ' + _aud : '')).trim();
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l === 'hi' ? 'हिं' : 'EN')));
   // Show links matching current language; CSS handles mobile layout
