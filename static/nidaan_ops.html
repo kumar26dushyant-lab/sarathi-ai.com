@@ -6416,11 +6416,34 @@ async function loadWorkflowSettings(){
   const cats = catRes.ok ? ((await catRes.json()).categories || []) : [];
   await _loadOpsSettings(true);
   const _permMinRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
+  const _brFee = ((_opsSettingsCache||{}).settings||{}).branch_l2_fee || '499';
+  const _brPolicy = ((_opsSettingsCache||{}).settings||{}).branch_charge_policy || 'l2_only';
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
       <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:.3rem">⚙️ Workflow Settings</h1>
       <div style="color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.25rem">Configure statuses, SLA defaults, and system-wide toggles.</div>
+
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">💳 Branch Billing — Level-2</h2>
+      <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.5);margin-bottom:.8rem">What a branch pays to move a claim to Level-2 legal. Fully configurable — change the amount or when to charge any time.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Level-2 fee (₹)</label>
+            <input id="brFeeInput" type="number" min="0" max="100000" value="${esc(_brFee)}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:130px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">When to charge a branch</label>
+            <select id="brPolicySel" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px">
+              <option value="l2_only" ${_brPolicy==='l2_only'?'selected':''}>Only when a claim is GO-to-Level-2</option>
+              <option value="all_claims" ${_brPolicy==='all_claims'?'selected':''}>On every branch claim</option>
+              <option value="free" ${_brPolicy==='free'?'selected':''}>Never charge (free)</option>
+            </select>
+          </div>
+          <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveBranchBilling()">Save</button>
+        </div>
+        <div id="brBillingMsg" style="font-size:.8rem;margin-top:.55rem"></div>
+      </div>
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🚦 System Toggles</h2>
       <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
@@ -7215,6 +7238,19 @@ async function saveFlag(key, value){
   });
   if (r.ok) ndUI.toast('Saved','success');
   else ndUI.toast('Failed','error');
+}
+
+async function saveBranchBilling(){
+  const fee = parseInt(document.getElementById('brFeeInput').value)||0;
+  const policy = document.getElementById('brPolicySel').value;
+  const msg = document.getElementById('brBillingMsg');
+  if (fee < 0 || fee > 100000){ if(msg){msg.style.color='#f87171';msg.textContent='Enter a fee between 0 and 100000';} return; }
+  const r = await fetch('/nidaan/ops/api/branch-billing', {
+    method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({branch_l2_fee: fee, branch_charge_policy: policy})
+  });
+  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Branch billing updated','success'); }
+  else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
 }
 
 // ─── Refunds (super_admin only) ─────────────────────────────────────────────

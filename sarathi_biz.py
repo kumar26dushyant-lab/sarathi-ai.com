@@ -6342,6 +6342,25 @@ async def ops_settings_update(body: _OpsSettingReq, request: Request):
     return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
 
 
+class _BranchBillingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_l2_fee: int = Field(ge=0, le=100000)          # in ₹
+    branch_charge_policy: str = Field(pattern=r"^(l2_only|all_claims|free)$")
+
+
+@app.put("/nidaan/ops/api/branch-billing")
+async def ops_branch_billing_update(body: _BranchBillingReq, request: Request):
+    """Update branch Level-2 billing config (super_admin only): fee amount + charge
+    policy. Config-driven so the amount / when-to-charge can change any time."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("branch_l2_fee", str(int(body.branch_l2_fee)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("branch_charge_policy", body.branch_charge_policy, updated_by=staff["staff_id"])
+    await _ops_audit(request, "branch_billing.update", "settings", 0,
+                     f"fee=Rs.{body.branch_l2_fee} policy={body.branch_charge_policy}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
 @app.get("/nidaan/ops/api/claim-search")
 async def ops_claims_search(request: Request, q: str = ""):
     """Claim picker for the Quick Task panel.

@@ -4929,6 +4929,24 @@ apkLoadStatus() call.
     9 ClaimShield [L2 = ClaimShield, blocked] — but the PAYMENT GATE + config + status can be built now,
     decoupled from the ClaimShield API call. SEQUENCE: item 1 (Razorpay split) first → item 3 (branch pay,
     needs new Razorpay) → item 2 (homepage, independent, can parallel). All privacy/security guardrails.
+  - **★ PROGRESS Aug 5 2026:** **Item 1 SHIPPED (staged)** — Nidaan payment flows read NIDAAN_RAZORPAY_KEY_ID/
+    SECRET/WEBHOOK_SECRET via `_nidaan_rzp_id()/_secret()/_webhook_secret()` (sarathi_biz.py) + biz_nidaan
+    account-deletion, falling back to shared RAZORPAY_* until Nidaan keys added (27 reads range-scoped
+    L1657-5302). FLIP-TIME: when founder adds NIDAAN_RAZORPAY_* to biz.env → clear cached/DB Nidaan plan IDs
+    (_nidaan_plan_ids + nidaan_plans.razorpay_plan_id) so plans re-seed in the new account → test sub + ₹499
+    in test mode → live keys. **Item 2 SHIPPED (LIVE)** — dual-experience homepage: entry gate (advisor vs
+    policyholder, remembered in localStorage, ⇄ Change in nav) in nidaan_index.html (+ /preview sample kept in
+    sync). Audience toggle body.aud-advisor/.aud-policyholder + .only-adv/.only-ph. Advisor: advisor hero +
+    problem + how-it-works + For-Advisors + Plans + bundle + Sarathi-AI.com link on the gate card. Policyholder:
+    ₹499 hero + shared (solution/about/stats/trust/testimonials/faq/CTA). Voice = reuse nwPanel walkthrough via
+    Listen. Full HI/EN, mobile top-aligns+scrolls. All flows/links intact (verified). **Item 3 DESIGN LOCKED:**
+    branch raises claim ON BEHALF OF a customer (branch=handler/payer, claim=customer's); pay PER-CLAIM at the
+    GO-to-L2 gate via Nidaan Razorpay (immediate); post-pay status = "L2 — payment received, queued for legal"
+    (ClaimShield handoff wired later, item 9). Config via ops-settings (get/set_ops_setting): branch_l2_fee
+    (₹499), branch_charge_policy (l2_only|all_claims|free). Branches today = affiliates/referrers only (no
+    claim-raise) → NEW capability. Decision point: nidaan_claims.review_outcome can_fight(GO)|no_scope(NOGO).
+    SUB-PHASES: 3.1 config+super-admin UI (safe) → 3.2 branch claim-raise (branch dashboard) → 3.3 payment gate
+    (Razorpay). Payment end-to-end test needs Item 1 flip (Nidaan keys).
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,

@@ -4359,6 +4359,12 @@ OPS_SETTING_DEFAULTS = {
     # Minimum role permitted to create a DIRECT assignment. Lower roles can
     # still raise an upward "request". Default 'team_member' = everyone creates.
     "task_create_min_role": "team_member",
+    # ── Branch billing (Item 3) — super-admin editable, NOT hardcoded ──────
+    # Fee (in ₹) a branch pays to move a claim to Level-2 legal.
+    "branch_l2_fee": "499",
+    # When to charge a branch: 'l2_only' (only when a claim is GO-to-L2),
+    # 'all_claims' (every branch claim), or 'free' (never charge).
+    "branch_charge_policy": "l2_only",
 }
 
 
