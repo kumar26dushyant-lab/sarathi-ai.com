@@ -385,7 +385,7 @@ span.hi-inline{display:none}
 .eg-title{color:#fff;font-size:1.7rem;font-weight:800;line-height:1.25;margin:0 0 6px}
 .eg-sub{color:rgba(255,255,255,.78);font-size:1rem;margin:0 0 26px}
 .eg-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-@media(max-width:720px){.eg-cards{grid-template-columns:1fr}.eg-title{font-size:1.35rem}}
+@media(max-width:720px){.eg-cards{grid-template-columns:1fr}.eg-title{font-size:1.35rem}.eg-sub{font-size:.92rem}#entryGate{align-items:flex-start;padding:22px 16px 28px}.eg-card{padding:20px 18px}}
 .eg-card{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.16);border-radius:18px;padding:26px 22px;text-align:left;transition:transform .15s,border-color .15s,background .15s;cursor:pointer}
 .eg-card:hover{transform:translateY(-4px);border-color:rgba(6,182,212,.7);background:rgba(6,182,212,.1)}
 .eg-ico{font-size:2.2rem;margin-bottom:10px}
@@ -422,6 +422,9 @@ body.aud-policyholder .only-adv{display:none !important}
           <button class="eg-go" onclick="event.stopPropagation();egChoose('advisor')"><span class="en">Continue as Advisor</span><span class="hi" style="display:none">एडवाइज़र के रूप में आगे बढ़ें</span> →</button>
           <button class="eg-listen" onclick="event.stopPropagation();egListen('advisor')">🎧 <span class="en">Listen</span><span class="hi" style="display:none">सुनें</span></button>
         </div>
+        <a href="https://sarathi-ai.com" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:block;margin-top:14px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.42);color:#6ee7b7;border-radius:10px;padding:11px 14px;text-decoration:none;font-size:.84rem;font-weight:600;line-height:1.45">
+          🎙️ <span class="en"><strong>Free — Sarathi-AI.com</strong>, India's voice-first CRM. Run your whole business from your phone ↗</span><span class="hi" style="display:none"><strong>मुफ़्त — Sarathi-AI.com</strong>, भारत का वॉइस-फर्स्ट CRM। अपना पूरा बिज़नेस सिर्फ़ फ़ोन से चलाएँ ↗</span>
+        </a>
       </div>
       <div class="eg-card" onclick="egChoose('policyholder')">
         <div class="eg-ico">🙋</div>

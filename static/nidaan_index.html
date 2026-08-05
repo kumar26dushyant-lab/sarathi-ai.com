@@ -377,6 +377,27 @@ span.hi-inline{display:none}
   .plan-card{padding:1.4rem 1.1rem}
   .plan-price{font-size:1.8rem}
 }
+/* ── Entry gate + audience view toggle ─────────────────────────────── */
+#entryGate{position:fixed;inset:0;z-index:100000;background:linear-gradient(160deg,#0a1f44 0%,#0e2a63 45%,#0b3b52 100%);display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto}
+#entryGate.hide{display:none}
+.eg-wrap{max-width:900px;width:100%;text-align:center}
+.eg-logo{max-width:120px;margin:0 auto 14px;display:block;border-radius:14px}
+.eg-title{color:#fff;font-size:1.7rem;font-weight:800;line-height:1.25;margin:0 0 6px}
+.eg-sub{color:rgba(255,255,255,.78);font-size:1rem;margin:0 0 26px}
+.eg-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:720px){.eg-cards{grid-template-columns:1fr}.eg-title{font-size:1.35rem}.eg-sub{font-size:.92rem}#entryGate{align-items:flex-start;padding:22px 16px 28px}.eg-card{padding:20px 18px}}
+.eg-card{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.16);border-radius:18px;padding:26px 22px;text-align:left;transition:transform .15s,border-color .15s,background .15s;cursor:pointer}
+.eg-card:hover{transform:translateY(-4px);border-color:rgba(6,182,212,.7);background:rgba(6,182,212,.1)}
+.eg-ico{font-size:2.2rem;margin-bottom:10px}
+.eg-card h3{color:#fff;font-size:1.12rem;font-weight:800;margin:0 0 8px}
+.eg-card p{color:rgba(255,255,255,.74);font-size:.9rem;line-height:1.5;margin:0 0 16px}
+.eg-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.eg-go{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#1e3a8a,#06b6d4);color:#fff;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.92rem;border:none;cursor:pointer}
+.eg-listen{display:inline-flex;align-items:center;gap:6px;background:transparent;color:#7dd3fc;border:1px solid rgba(125,211,252,.5);padding:10px 14px;border-radius:10px;font-weight:600;font-size:.86rem;cursor:pointer}
+.nav-switch{display:inline-flex;align-items:center;gap:5px;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.4);color:var(--cyan-light,#67e8f9);padding:.35rem .7rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer}
+/* audience visibility — a body class shows only the matching sections */
+body.aud-advisor .only-ph{display:none !important}
+body.aud-policyholder .only-adv{display:none !important}
 </style>
 <link rel="manifest" href="/static/nidaan.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -385,6 +406,69 @@ span.hi-inline{display:none}
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 </head>
 <body class="en">
+
+<!-- ═══ ENTRY GATE — advisor vs policyholder ═══ -->
+<div id="entryGate">
+  <div class="eg-wrap">
+    <img src="/static/nidaan_logo.png" class="eg-logo" alt="Nidaan" onerror="this.style.display='none'">
+    <h2 class="eg-title"><span class="en">Welcome to Nidaan Partner</span><span class="hi" style="display:none">Nidaan Partner में आपका स्वागत है</span></h2>
+    <p class="eg-sub"><span class="en">Tell us who you are — we'll take you to the right place.</span><span class="hi" style="display:none">बताइए आप कौन हैं — हम आपको सही जगह ले जाएँगे।</span></p>
+    <div class="eg-cards">
+      <div class="eg-card" onclick="egChoose('advisor')">
+        <div class="eg-ico">🧑‍💼</div>
+        <h3><span class="en">Insurance Advisor / Consultant</span><span class="hi" style="display:none">बीमा एडवाइज़र / सलाहकार</span></h3>
+        <p><span class="en">Looking for a claims solution for your customers? Win them their claims, keep them happy, and focus on selling — Nidaan handles the claim fight.</span><span class="hi" style="display:none">अपने ग्राहकों के लिए क्लेम समाधान चाहिए? उनके क्लेम जिताएँ, उन्हें खुश रखें और बिक्री पर ध्यान दें — क्लेम की लड़ाई Nidaan संभालेगा।</span></p>
+        <div class="eg-actions">
+          <button class="eg-go" onclick="event.stopPropagation();egChoose('advisor')"><span class="en">Continue as Advisor</span><span class="hi" style="display:none">एडवाइज़र के रूप में आगे बढ़ें</span> →</button>
+          <button class="eg-listen" onclick="event.stopPropagation();egListen('advisor')">🎧 <span class="en">Listen</span><span class="hi" style="display:none">सुनें</span></button>
+        </div>
+        <a href="https://sarathi-ai.com" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:block;margin-top:14px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.42);color:#6ee7b7;border-radius:10px;padding:11px 14px;text-decoration:none;font-size:.84rem;font-weight:600;line-height:1.45">
+          🎙️ <span class="en"><strong>Free — Sarathi-AI.com</strong>, India's voice-first CRM. Run your whole business from your phone ↗</span><span class="hi" style="display:none"><strong>मुफ़्त — Sarathi-AI.com</strong>, भारत का वॉइस-फर्स्ट CRM। अपना पूरा बिज़नेस सिर्फ़ फ़ोन से चलाएँ ↗</span>
+        </a>
+      </div>
+      <div class="eg-card" onclick="egChoose('policyholder')">
+        <div class="eg-ico">🙋</div>
+        <h3><span class="en">Policy Holder</span><span class="hi" style="display:none">पॉलिसीधारक</span></h3>
+        <p><span class="en">Claim rejected or underpaid? Get it reviewed by Nidaan's expert team — just a few steps from your phone, and we take care of the rest.</span><span class="hi" style="display:none">क्लेम रिजेक्ट या कम भुगतान हुआ? Nidaan की विशेषज्ञ टीम से रिव्यू कराएँ — फ़ोन से बस कुछ ही कदम, बाकी हम संभालते हैं।</span></p>
+        <div class="eg-actions">
+          <button class="eg-go" onclick="event.stopPropagation();egChoose('policyholder')"><span class="en">Continue as Policy Holder</span><span class="hi" style="display:none">पॉलिसीधारक के रूप में आगे बढ़ें</span> →</button>
+          <button class="eg-listen" onclick="event.stopPropagation();egListen('policyholder')">🎧 <span class="en">Listen</span><span class="hi" style="display:none">सुनें</span></button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:18px">
+      <button class="lang-btn" onclick="setLang('en')" style="color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-weight:600">EN</button>
+      <button class="lang-btn" onclick="setLang('hi')" style="color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-weight:600">हिं</button>
+    </div>
+  </div>
+</div>
+<script>
+  function egApply(kind){
+    document.body.classList.remove('aud-advisor','aud-policyholder');
+    document.body.classList.add(kind==='advisor'?'aud-advisor':'aud-policyholder');
+  }
+  function egChoose(kind){
+    try{ localStorage.setItem('nidaanAudience', kind); }catch(e){}
+    egApply(kind);
+    var g=document.getElementById('entryGate'); if(g) g.classList.add('hide');
+    window.scrollTo(0,0);
+  }
+  function egListen(kind){
+    // Reuse the existing voice walkthrough (advisor audio / policyholder Hindi-English TTS),
+    // raised above the gate so it plays on top.
+    var panel=document.getElementById('nwPanel');
+    if(panel){ panel.style.zIndex='100001'; panel.style.display='block'; }
+    try{ if(window.nwChoose) nwChoose(kind); }catch(e){}
+  }
+  function egReopen(){ var g=document.getElementById('entryGate'); if(g) g.classList.remove('hide'); window.scrollTo(0,0); }
+  (function(){
+    var saved=null; try{ saved=localStorage.getItem('nidaanAudience'); }catch(e){}
+    if(saved==='advisor'||saved==='policyholder'){
+      egApply(saved);
+      var g=document.getElementById('entryGate'); if(g) g.classList.add('hide');
+    }
+  })();
+</script>
 
 <!-- ═══ NIDAAN VOICE WALKTHROUGH WIDGET ═══ -->
 <style>
@@ -570,16 +654,17 @@ span.hi-inline{display:none}
       </div>
     </a>
     <div class="nav-links">
-      <a href="#how-it-works" class="en">How It Works</a>
-      <a href="#how-it-works" class="hi" style="display:none">कैसे काम करता है</a>
-      <a href="#plans" class="en">Plans</a>
-      <a href="#plans" class="hi" style="display:none">प्लान</a>
+      <a href="#how-it-works" class="en only-adv">How It Works</a>
+      <a href="#how-it-works" class="hi only-adv" style="display:none">कैसे काम करता है</a>
+      <a href="#plans" class="en only-adv">Plans</a>
+      <a href="#plans" class="hi only-adv" style="display:none">प्लान</a>
       <a href="/nidaan/about" class="en">About Us</a>
       <a href="/nidaan/about" class="hi" style="display:none">हमारे बारे में</a>
-      <a href="#for-advisors" class="en">For Advisors</a>
-      <a href="#for-advisors" class="hi" style="display:none">एडवाइज़र</a>
+      <a href="#for-advisors" class="en only-adv">For Advisors</a>
+      <a href="#for-advisors" class="hi only-adv" style="display:none">एडवाइज़र</a>
       <a href="#faq" class="en">FAQ</a>
       <a href="#faq" class="hi" style="display:none">सवाल-जवाब</a>
+      <button class="nav-switch" onclick="egReopen()" title="Change advisor / policyholder">⇄ <span class="en">Change</span><span class="hi" style="display:none">बदलें</span></button>
       <div class="lang-toggle">
         <button class="lang-btn active" onclick="setLang('en')">EN</button>
         <button class="lang-btn" onclick="setLang('hi')">हिं</button>
@@ -594,14 +679,13 @@ span.hi-inline{display:none}
 <!-- ══════════ COMPACT TOP RIBBON — quick price chips above hero ══════════ -->
 <div class="paths-strip">
   <div class="paths-strip-inner">
-    <a href="/nidaan/start#get-reviewed" class="path-chip path-chip-499">
+    <a href="/nidaan/start#get-reviewed" class="path-chip path-chip-499 only-ph">
       ⚡ <span class="en">Get your stuck claim reviewed</span><span class="hi" style="display:none">अपना अटका क्लेम रिव्यू कराएँ</span>
       <span class="divider">·</span>
       <span class="price"><span class="en">Free to start</span><span class="hi" style="display:none">मुफ़्त शुरुआत</span></span>
       <span class="arrow">→</span>
     </a>
-    <span class="paths-strip-sep"><span class="en">or</span><span class="hi" style="display:none">या</span></span>
-    <a href="#plans" class="path-chip path-chip-sub">
+    <a href="#plans" class="path-chip path-chip-sub only-adv">
       🛡 <span class="en">Multi-claim plans</span><span class="hi" style="display:none">मल्टी-क्लेम प्लान</span>
       <span class="divider">·</span>
       <span class="price"><span class="en">For insurance professionals</span><span class="hi" style="display:none">बीमा प्रोफेशनल्स के लिए</span></span>
@@ -610,8 +694,8 @@ span.hi-inline{display:none}
   </div>
 </div>
 
-<!-- ══════════ HERO ══════════ -->
-<section class="hero">
+<!-- ══════════ HERO — POLICYHOLDER ══════════ -->
+<section class="hero only-ph">
   <div class="hero-inner">
     <div class="hero-text-col">
       <div class="hero-fomo-strip"><span class="pulse"></span>
@@ -638,6 +722,42 @@ span.hi-inline{display:none}
         <span class="ht-item">🏆 <strong>95%+</strong> <span class="en">success rate</span><span class="hi" style="display:none">सफलता दर</span></span>
         <span class="ht-item">🤝 <strong>5,000+</strong> <span class="en">policyholders helped</span><span class="hi" style="display:none">पॉलिसीधारकों की मदद</span></span>
         <span class="ht-item">⏱️ <span class="en">Reviewed in <strong>48–72 hrs</strong></span><span class="hi" style="display:none"><strong>48–72 घंटे</strong> में समीक्षा</span></span>
+      </div>
+    </div>
+    <div class="hero-logo-col">
+      <img src="/static/nidaan_logo.png" alt="Nidaan — The Legal Consultants LLP" class="hero-brand-logo" onerror="this.style.display='none'">
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ HERO — ADVISOR ══════════ -->
+<section class="hero only-adv">
+  <div class="hero-inner">
+    <div class="hero-text-col">
+      <div class="hero-fomo-strip"><span class="pulse"></span>
+        <span class="en">Your competitors already offer claim support. Do you?</span>
+        <span class="hi" style="display:none">आपके प्रतिस्पर्धी पहले से क्लेम सपोर्ट देते हैं। क्या आप देते हैं?</span>
+      </div>
+      <h1>
+        <span class="en">Sell more. Retain more.<br><span class="accent">Let Nidaan win your clients' claims.</span></span>
+        <span class="hi" style="display:none">ज़्यादा बेचें। ज़्यादा टिकाएँ।<br><span class="accent">क्लाइंट के क्लेम Nidaan से जितवाएँ।</span></span>
+      </h1>
+      <p class="subline">
+        <span class="en">Stop losing sleep over clients' rejected and underpaid claims. Hand them to Nidaan's legal team — <strong>you stay the trusted face, we do the heavy lifting.</strong> Advisors who offer expert claim support see <strong>more referrals, higher renewals, and natural cross-sell</strong> — because a client whose claim you helped win never forgets it.</span>
+        <span class="hi" style="display:none">क्लाइंट के रिजेक्ट और कम भुगतान वाले क्लेम की चिंता छोड़िए। उन्हें Nidaan की कानूनी टीम को सौंपिए — <strong>भरोसेमंद चेहरा आप रहें, मेहनत हम करें।</strong> जो एडवाइज़र विशेषज्ञ क्लेम सपोर्ट देते हैं उन्हें <strong>ज़्यादा रेफ़रल, ज़्यादा रिन्यूअल और स्वाभाविक क्रॉस-सेल</strong> मिलता है — क्योंकि जिस क्लाइंट का क्लेम आपने जितवाया वो कभी नहीं भूलता।</span>
+      </p>
+      <p class="tagline">
+        <span class="en">You focus on selling. Nidaan handles the claim fight.</span>
+        <span class="hi" style="display:none">आप बिक्री पर ध्यान दें। क्लेम की लड़ाई Nidaan संभाले।</span>
+      </p>
+      <div class="hero-ctas">
+        <a href="#plans" class="btn-primary">🛡️ <span class="en">See advisor plans</span><span class="hi" style="display:none">एडवाइज़र प्लान देखें</span> →</a>
+        <a href="#for-advisors" class="btn-outline">▶ <span class="en">Why partner with Nidaan</span><span class="hi" style="display:none">Nidaan से क्यों जुड़ें</span></a>
+      </div>
+      <div class="hero-trust-row">
+        <span class="ht-item">🏆 <strong>95%+</strong> <span class="en">success rate</span><span class="hi" style="display:none">सफलता दर</span></span>
+        <span class="ht-item">🤝 <span class="en">You stay the <strong>trusted face</strong></span><span class="hi" style="display:none">भरोसेमंद चेहरा <strong>आप</strong></span></span>
+        <span class="ht-item">⚖️ <span class="en">Lawyers, doctors &amp; ex-insurance experts</span><span class="hi" style="display:none">वकील, डॉक्टर और पूर्व-बीमा विशेषज्ञ</span></span>
       </div>
     </div>
     <div class="hero-logo-col">
@@ -678,7 +798,7 @@ span.hi-inline{display:none}
 </div>
 
 <!-- ══════════ PROBLEM ══════════ -->
-<section class="section problem">
+<section class="section problem only-adv">
   <div class="section-inner" style="text-align:center">
     <div class="tag en">The Problem</div>
     <div class="tag hi" style="display:none">समस्या</div>
@@ -784,7 +904,7 @@ span.hi-inline{display:none}
 </section>
 
 <!-- ══════════ HOW IT WORKS ══════════ -->
-<section class="section hiw" id="how-it-works">
+<section class="section hiw only-adv" id="how-it-works">
   <div class="section-inner">
     <div class="tag" style="background:rgba(6,182,212,.2);color:var(--cyan-light)" class="en">How It Works</div>
     <div class="tag" style="background:rgba(6,182,212,.2);color:var(--cyan-light);display:none" class="hi">कैसे काम करता है</div>
@@ -857,7 +977,7 @@ span.hi-inline{display:none}
 </section>
 
 <!-- ══════════ FOR ADVISORS & CONSULTANTS ══════════ -->
-<section class="section" id="for-advisors" style="background:linear-gradient(135deg,#0f1f5c 0%,#1e3a8a 55%,#164e63 100%);color:#fff;position:relative;overflow:hidden">
+<section class="section only-adv" id="for-advisors" style="background:linear-gradient(135deg,#0f1f5c 0%,#1e3a8a 55%,#164e63 100%);color:#fff;position:relative;overflow:hidden">
   <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 75% 20%,rgba(6,182,212,.18) 0%,transparent 60%);pointer-events:none"></div>
   <div class="section-inner" style="position:relative">
     <div style="display:inline-flex;align-items:center;gap:.45rem;background:rgba(6,182,212,.16);border:1px solid rgba(6,182,212,.4);color:#67e8f9;padding:.35rem .9rem;border-radius:20px;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:1rem">
@@ -903,7 +1023,7 @@ span.hi-inline{display:none}
 </section>
 
 <!-- ══════════ PLANS ══════════ -->
-<section class="section" id="plans">
+<section class="section only-adv" id="plans">
   <div class="section-inner">
     <div class="tag en">Pricing Plans</div>
     <div class="tag hi" style="display:none">मूल्य योजनाएं</div>
@@ -1028,7 +1148,7 @@ span.hi-inline{display:none}
 </section>
 
 <!-- ══════════ SARATHI BUNDLE ══════════ -->
-<section class="section bundle-section">
+<section class="section bundle-section only-adv">
   <div class="section-inner">
     <div class="bundle-inner">
       <div class="bundle-text">
