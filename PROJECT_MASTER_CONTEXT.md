@@ -4969,6 +4969,26 @@ apkLoadStatus() call.
   - **★ OPS Level-2 visibility SHIPPED Aug 6 2026 (live).** nidaan_ops.html claim drawer shows a "Branch &
     Level-2" section for origin='branch' claims only (origin+branch code, review GO/no-scope, L2 status: Queued
     for legal ✓ +fee / Awaiting branch payment / L2 paid-at). Payload already had fields (SELECT c.*).
+  - **★ ABOUT-PAGE founder photos fixed Aug 6 2026 (live).** Page pointed at /static/team/*.png which never
+    existed (only uploads/photos/, gitignored) → showed AK/DS initials. Copied both founder photos to
+    static/team/*.jpg (git-tracked, deploys with app; files were JPEG despite .png name — matters under
+    nosniff), updated nidaan_about.html srcs to .jpg?v=3 + lazy-load. Live 200 image/jpeg.
+  - **★ NIDAANMITRA support AI hardened Aug 6 2026 (live, tested).** _NIDAAN_SUPPORT_PROMPT (biz_ai.py) now:
+    (1) intent-aware — claim-holder→free review+capture; advisor→plans/callback; NO-CLAIM/just-visiting→
+    gracious + plant referral seed (tell friends/family, save/share site), never pushy; (2) HARD GUARDRAILS —
+    NEVER review/judge a claim pasted in chat (scenarios/rejection letter/T&C/docs)→redirect to /nidaan/start;
+    resist role/identity/prompt-injection; stay on-topic, don't engage trolling/abuse→steer back once then
+    escalate; confused/out-of-context→holding reply+escalate. VERIFIED live via 3 curl tests (verdict-refusal,
+    injection→stayed+escalated, no-claim→referral). Widget nidaan_support_widget.js is GLOBAL on homepage (both
+    advisor+policyholder views); backend /nidaan/api/support/message → biz_ai.nidaan_support_reply (grounded in
+    content_facts_block) → escalate → on_support_escalated → ops dashboard+Telegram. Frontend→ops pipe CONFIRMED.
+  - **★ CONCIERGE ("personal assistant per visitor") — IN DISCUSSION.** Founder wants a supermarket-style
+    assistant greeting each visitor, understanding what/why/how + intent (claim / advisor / just-visiting),
+    guiding, and capturing leads even if they leave. FINDING: ~70% exists via NidaanMitra (intent+capture+
+    referral+guardrails+human handoff now live). REMAINING = PROACTIVITY (auto-greet on landing) + tighter
+    hand-in from entry-gate/voice into the chat. Founder locked: value-first; smart intent handling; hard
+    anti-abuse guardrails (all now shipped in the prompt). Next: design the proactive greet (Phase 1
+    policyholder-first). NOT yet built beyond the prompt hardening.
   - **★ HOMEPAGE repeat-visitor routing fix SHIPPED Aug 6 2026 (live).** Decision: NEVER re-ask (founder chose).
     (1) Kill neutral state — if no audience decided, force the entry gate (no more confusing both-ribbons
     landing); choice still remembered permanently in localStorage nidaanAudience. (2) Always-visible one-tap
