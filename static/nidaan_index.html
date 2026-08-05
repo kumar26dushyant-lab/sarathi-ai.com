@@ -562,24 +562,33 @@ body.aud-policyholder .only-adv{display:none !important}
   window.nwToggle=function(){
     var p=document.getElementById('nwPanel');
     nwOpen=!nwOpen; p.style.display=nwOpen?'block':'none';
-    if(nwOpen){ var b=document.getElementById('nwBtn'); if(b) b.classList.remove('nw-pulse'); nwShowChooser(); }
+    if(nwOpen){ var b=document.getElementById('nwBtn'); if(b) b.classList.remove('nw-pulse'); nwShowSmart(false); }
     else nwStopAll();
   };
   window.nwClose=function(){
     document.getElementById('nwPanel').style.display='none'; nwOpen=false;
     nwStopAll();
   };
-  window.nwChoose=function(kind){
+  function nwAud(){ try{ return localStorage.getItem('nidaanAudience'); }catch(e){ return null; } }
+  // Show the walkthrough that matches the visitor's chosen version (advisor OR policyholder).
+  // Falls back to the who-are-you chooser only when no version has been selected yet.
+  function nwShowSmart(autoplay){
+    var a=nwAud();
+    if(a==='advisor'||a==='policyholder') nwChoose(a, autoplay);
+    else nwShowChooser();
+  }
+  window.nwChoose=function(kind, autoplay){
+    if(autoplay===undefined) autoplay=true;
     document.getElementById('nwChooser').style.display='none';
     if(kind==='advisor'){
       document.getElementById('nwPolicy').style.display='none';
       document.getElementById('nwAdvisor').style.display='block';
-      var au=document.getElementById('nwAdvisorAudio'); if(au){ try{ au.play(); }catch(e){} }
+      if(autoplay){ var au=document.getElementById('nwAdvisorAudio'); if(au){ try{ au.play(); }catch(e){} } }
     } else {
       document.getElementById('nwAdvisor').style.display='none';
       document.getElementById('nwPolicy').style.display='block';
       nwSetLang(nwLang||'hi');
-      setTimeout(function(){ try{ nwPlay(); }catch(e){} }, 300);   // auto-start the retail voice
+      if(autoplay) setTimeout(function(){ try{ nwPlay(); }catch(e){} }, 300);   // auto-start the retail voice
     }
   };
   window.nwBack=function(){ nwStopAll(); nwShowChooser(); };
@@ -629,7 +638,7 @@ body.aud-policyholder .only-adv{display:none !important}
     localStorage.setItem('nw_played','1');
     var p=document.getElementById('nwPanel');
     if(p){ p.style.display='block'; nwOpen=true; }
-    nwShowChooser();   // show the popup with the who-are-you chooser (no auto-play — visitor picks first)
+    nwShowSmart(false);   // show the visitor's own version (advisor/policyholder) — or the chooser if none picked yet; no forced autoplay
   }
   function armNwAutoStart(){
     nwAutoStart();
