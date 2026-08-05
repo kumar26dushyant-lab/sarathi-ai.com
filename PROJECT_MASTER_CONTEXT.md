@@ -4901,6 +4901,34 @@ apkLoadStatus() call.
     (currently http://), full status vocabulary, webhook/callback, extra create fields (insurer/policy/type/
     rejection-letter/our-claim-ref), idempotency. See WHATSAPP_CLOUD_API_SETUP.md is unrelated;
     ClaimShield contract lives in this §. When ready: build biz_claimshield.py client + 2-way sync (L1↔L2).
+  - **★★ NEW 3-ITEM BATCH (Aug 5 2026, phased, discuss-first, careful):**
+    **(1) Razorpay SEPARATION — Nidaan gets its OWN Razorpay account (Sarathi keeps existing).** FOUNDER has
+    OPENED the new Nidaan Razorpay account. FINDING: both products currently SHARE one account/keys —
+    `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` in biz.env, read by biz_payments.py (Sarathi) AND
+    biz_nidaan.py + sarathi_biz.py Nidaan paths (₹499 review sarathi_biz.py:1657; Nidaan subs
+    biz_nidaan.ensure_nidaan_plans/create_nidaan_subscription; webhook biz_payments.py:460
+    RAZORPAY_WEBHOOK_SECRET). PLAN: add NIDAAN_RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET; point ONLY Nidaan paths
+    at them; Sarathi unchanged; re-seed Nidaan plans in new acct; webhook verify both secrets/route. CAVEAT:
+    existing Nidaan auto-renew mandates stay on the shared acct until they lapse; new Nidaan subs → new acct/
+    bank. Money path = careful/staged/test-mode first. (One Razorpay acct settles to ONE bank — can't split
+    by product on one login; hence a separate acct. Razorpay Route rejected as overkill.)
+    **(2) HOMEPAGE ENTRY GATE + dual experiences (nidaan_index.html).** On landing, an impressive entry gate:
+    "Insurance Advisor/Consultant?" vs "Policy Holder?" → routes to a DEDICATED experience. ADVISOR page =
+    subscription model only (REMOVE all ₹499 one-time-review content), advisor-benefit framing (happy customers,
+    focus on sales not claims-support), advisor voice walkthrough. POLICYHOLDER page = ₹499 one-time review,
+    FOMO for rejected/underpaid claims, "3-5 steps from your phone, Nidaan handles the rest." Both: voice
+    concierge (HI/EN, text+voice), a small switch back to the gate/home. GROUND RULES apply: mobile-first,
+    Tier-II/III clarity, TOTAL language conversion, content_guard clean, excellent/impressive design. NOTE:
+    an advisor/policyholder chooser ALREADY exists inside the "Listen 2 minutes" walkthrough (nwPanel: advisor
+    audio /uploads/photos/walkthrough/for-advisors.mp3 + policyholder retail TTS) — reuse/evolve, don't
+    duplicate. Open Qs: gate on every visit vs remember choice; autoplay vs click-to-play voice; SEO/direct-nav.
+    **(3) BRANCH claim → LEVEL-2 payment, CONFIGURABLE.** Branches (super-admin-managed, own dashboard) raise
+    claims → Nidaan reviews → if GO-for-L2-legal, branch pays a fee (default ₹499) via the NEW Nidaan Razorpay
+    to move the claim to L2; NO-GO = no charge. Must be CONFIG-DRIVEN (super-admin editable): fee amount +
+    charge-policy (L2-only | all-claims | free), NOT hardcoded. Depends on (1) [new Razorpay] + relates to item
+    9 ClaimShield [L2 = ClaimShield, blocked] — but the PAYMENT GATE + config + status can be built now,
+    decoupled from the ClaimShield API call. SEQUENCE: item 1 (Razorpay split) first → item 3 (branch pay,
+    needs new Razorpay) → item 2 (homepage, independent, can parallel). All privacy/security guardrails.
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
