@@ -4961,9 +4961,22 @@ apkLoadStatus() call.
     straight to the visitor's OWN version (advisor recorded audio OR policyholder HI/EN TTS) via saved
     `nidaanAudience` (nwShowSmart) instead of re-showing the both-options chooser; chooser only when no version
     picked. Applied to nidaan_index.html + _sample.html.
-  - **★ RAZORPAY webhook: founder set Live webhook (9 events, enabled) Aug 6 2026.** STILL NEEDED: the webhook
-    SECRET string (app verifies via NIDAAN_RAZORPAY_WEBHOOK_SECRET → sarathi_biz.py ~L3099-3124; falls back to
-    API secret which WON'T match a custom webhook secret). Founder to provide → add to biz.env (600) + reload.
+  - **★ RAZORPAY webhook SECRET wired Aug 6 2026 (DONE).** NIDAAN_RAZORPAY_WEBHOOK_SECRET added to server
+    biz.env (600), confirmed loaded in process, verified renewals will pass signature. ⚠️ LESSON LOGGED
+    (memory infra_bizenv_ownership): the mv-from-root-tmp write left biz.env root:root → app (User=sarathi)
+    got PermissionError → both sites 502 ~2 min; fixed via chown sarathi:sarathi + restart. ALWAYS chown+health-
+    curl after biz.env edits.
+  - **★ OPS Level-2 visibility SHIPPED Aug 6 2026 (live).** nidaan_ops.html claim drawer shows a "Branch &
+    Level-2" section for origin='branch' claims only (origin+branch code, review GO/no-scope, L2 status: Queued
+    for legal ✓ +fee / Awaiting branch payment / L2 paid-at). Payload already had fields (SELECT c.*).
+  - **★ HOMEPAGE repeat-visitor routing fix SHIPPED Aug 6 2026 (live).** Decision: NEVER re-ask (founder chose).
+    (1) Kill neutral state — if no audience decided, force the entry gate (no more confusing both-ribbons
+    landing); choice still remembered permanently in localStorage nidaanAudience. (2) Always-visible one-tap
+    "wrong page?" switch strip (.aud-switch, plain EN/HI) on each version — advisor page → switch to
+    policyholder, policyholder page → switch to advisor (calls egChoose). (3) Nav "Change" → "Advisor /
+    Policyholder". NO short timeout (rejected — nags committed users, doesn't stop mis-clicks). Both
+    nidaan_index.html + _sample.html. Note: ONE page, body.aud-advisor/.aud-policyholder + .only-adv/.only-ph
+    (no duplicate pages); neutral = no body class = both ribbons.
   - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
