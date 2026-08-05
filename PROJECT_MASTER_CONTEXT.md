@@ -4982,7 +4982,7 @@ apkLoadStatus() call.
     injection→stayed+escalated, no-claim→referral). Widget nidaan_support_widget.js is GLOBAL on homepage (both
     advisor+policyholder views); backend /nidaan/api/support/message → biz_ai.nidaan_support_reply (grounded in
     content_facts_block) → escalate → on_support_escalated → ops dashboard+Telegram. Frontend→ops pipe CONFIRMED.
-  - **★ CONCIERGE ("personal assistant per visitor") — IN DISCUSSION.** Founder wants a supermarket-style
+  - **★ CONCIERGE Phase 1 SHIPPED Aug 6 2026 (live, ?v=15).** Proactive greeter in nidaan_support_widget.js: Founder wants a supermarket-style
     assistant greeting each visitor, understanding what/why/how + intent (claim / advisor / just-visiting),
     guiding, and capturing leads even if they leave. FINDING: ~70% exists via NidaanMitra (intent+capture+
     referral+guardrails+human handoff now live). REMAINING = PROACTIVITY (auto-greet on landing) + tighter
