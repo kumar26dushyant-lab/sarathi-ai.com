@@ -4357,6 +4357,14 @@ function showAddLeadModal() {
 }
 
 let _cachedLeads = [];
+// Open a lead from anywhere (e.g. a task's "👁️ Lead" button) — switch to the Leads
+// tab, then open that lead's edit view. (Previously referenced but never defined.)
+function openLeadDetail(id) {
+    try { switchTab('leads'); } catch (e) {}
+    setTimeout(function () { try { editLead(id); } catch (e) {} }, 80);
+}
+window.openLeadDetail = openLeadDetail;
+
 async function editLead(id) {
     STATE._selectedLeadId = id;  // track for drip enrol
     // Find lead from cached page or re-fetch
@@ -6236,7 +6244,14 @@ async function _processVoiceQuery(text) {
                     body: JSON.stringify({ text, mode: 'execute', data: { intent: d.intent, ...d.data }, context: _voiceContext }),
                     headers: { 'X-Lang': _dlang }
                 });
-                const exD = await exRes.json();
+                let exD = {};
+                try { exD = await exRes.json(); } catch(_) { exD = {}; }
+                if (!exRes || !exRes.ok) {
+                    document.getElementById('voice-response').textContent = exD.message || (_dlang==='hi' ? 'सर्वर त्रुटि — कृपया थोड़ी देर बाद फिर कोशिश करें।' : 'Server error — please try again in a moment.');
+                    document.getElementById('voice-response').style.display = 'block';
+                    document.getElementById('voice-status').textContent = '⚠️';
+                    return;
+                }
                 document.getElementById('voice-response').textContent = exD.message || 'Done';
                 document.getElementById('voice-response').style.display = 'block';
                 document.getElementById('voice-status').textContent = '🤖 AI';

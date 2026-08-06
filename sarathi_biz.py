@@ -18323,6 +18323,12 @@ async def api_ai_voice_action(request: Request,
             }
 
         elif intent == "pipeline_summary":
+            pipeline = await db.get_pipeline_summary(agent_id)
+            stage_labels = {
+                "prospect": "🆕 Prospect", "contacted": "📞 Contacted", "pitched": "🎯 Pitched",
+                "proposal_sent": "📄 Proposal Sent", "negotiation": "🤝 Negotiation",
+                "closed_won": "✅ Won", "closed_lost": "❌ Lost",
+            }
             hi_labels = {
                 "prospect": "🆕 प्रॉस्पेक्ट", "contacted": "📞 संपर्क किया", "pitched": "🎯 पिच किया",
                 "proposal_sent": "📄 प्रपोज़ल भेजा", "negotiation": "🤝 बातचीत",
