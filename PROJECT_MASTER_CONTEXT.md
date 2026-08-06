@@ -4969,6 +4969,19 @@ apkLoadStatus() call.
   - **★ OPS Level-2 visibility SHIPPED Aug 6 2026 (live).** nidaan_ops.html claim drawer shows a "Branch &
     Level-2" section for origin='branch' claims only (origin+branch code, review GO/no-scope, L2 status: Queued
     for legal ✓ +fee / Awaiting branch payment / L2 paid-at). Payload already had fields (SELECT c.*).
+  - **★ PAYMENT FOOLPROOFING SHIPPED Aug 6 2026 (live).** ROOT CAUSE FOUND: webhook payment.captured only
+    reconciled subscription orders (product='nidaan'); it IGNORED ₹499 claim orders (product='nidaan_claim_499')
+    and branch_l2 → a captured payment with a lost client callback (UPI race/low internet) left the claim
+    'unpaid_lead' forever (money in bank, review never started). Proven by founder's test claim #25: captured
+    11:51 IST but DB paid_at 13:53 IST (~2h gap). FIX: (1) shared idempotent `_finalize_paid_claim()` (atomic
+    UPDATE..WHERE payment_status!='paid' guard) used by /pay-verify + webhook + recovery; (2) webhook now
+    reconciles nidaan_claim_499 (finalize) + nidaan_branch_l2 (mark_l2_paid+notify) server-side; (3) GET
+    /nidaan/api/claims/{id}/pay-status (DB-first, else queries Razorpay bound order → finalize) — client
+    recovery/poll; (4) dashboard payClaim: on dismiss/verify-fail/payment.failed → poll pay-status + show
+    reassuring 'Confirming your payment…' overlay (never 'failed' to a paying customer); (5) POST
+    /nidaan/ops/api/payments/reconcile (super_admin, dry_run default) sweeps recent Razorpay orders to catch
+    stragglers. Dry-run scan Aug 6: NO stuck payments (both paid claim orders already unlocked). Gap now
+    seconds not hours. TODO optional: ops UI button to trigger reconcile.
   - **★ ABOUT-PAGE founder photos fixed Aug 6 2026 (live).** Page pointed at /static/team/*.png which never
     existed (only uploads/photos/, gitignored) → showed AK/DS initials. Copied both founder photos to
     static/team/*.jpg (git-tracked, deploys with app; files were JPEG despite .png name — matters under
