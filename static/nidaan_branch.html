@@ -108,13 +108,13 @@
   </div>
 
   <div class="card" id="shareCard" style="display:none">
-    <div style="font-weight:700;margin-bottom:.4rem;color:#fff">🔗 Refer &amp; earn</div>
-    <div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-bottom:.7rem">Share this link or QR. Anyone who signs up under your branch code is tracked to you — and <b style="color:#6ee7b7">you earn commission when a referral takes a paid subscription plan</b>. (One-time ₹499 claim reviews are a service for customers, not commissionable.)</div>
+    <div style="font-weight:700;margin-bottom:.4rem;color:#fff">🔗 Refer advisors &amp; earn</div>
+    <div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-bottom:.7rem">Share this link or QR with insurance advisors in your area. When an advisor subscribes under your branch code, they're tracked to your branch — you'll see their status here and <b style="color:#6ee7b7">earn commission on their subscription</b>.</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
       <input id="refLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
       <button class="btn btn-cyan" onclick="copyRefLink()">📋 Copy</button>
     </div>
-    <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.35rem">Send directly to your customer:</div>
+    <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.35rem">Send directly to an advisor:</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
       <input id="custMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="Customer mobile (10-digit)" style="flex:1;min-width:170px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
       <button class="btn" style="background:#25D366;color:#053b1e;font-weight:700" onclick="shareWhatsApp()">💬 WhatsApp</button>
@@ -218,7 +218,7 @@ function renderShareCard(code){
   renderQR(_refLink);
 }
 function _shareMsg(){
-  return 'Namaste! Nidaan Partner se apne reject ya kam hue insurance claim ka review karwaiye (sirf ₹499). Yahan se shuru karein: ' + _refLink;
+  return 'Namaste! Nidaan Partner ke saath judiye — apne clients ke reject/underpaid insurance claims ka expert review aur Level-2 legal support offer karein, aur zyada sell + retain karein. Subscribe yahan se: ' + _refLink;
 }
 function copyRefLink(){
   const el = $('refLink'); if(!el) return;
