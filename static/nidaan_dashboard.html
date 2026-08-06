@@ -2434,6 +2434,60 @@ async function uploadChecklistDoc(claimId, docKey, inputEl) {
   }
 }
 
+// ── ₹499 claim payment: success + robust recovery (UPI race / low internet) ──
+function _claimPaidOverlay(){
+  if (document.getElementById('claimPaidOv')) return;
+  const isHi = document.body.classList.contains('hi');
+  const ov = document.createElement('div'); ov.id = 'claimPaidOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.92);display:flex;align-items:center;justify-content:center;padding:1.5rem';
+  ov.innerHTML = `<div style="max-width:440px;text-align:center;background:linear-gradient(135deg,#065f46,#0f766e);border:1px solid #10b981;border-radius:16px;padding:2rem 1.6rem">
+    <div style="font-size:2.6rem">✅</div>
+    <div style="font-size:1.2rem;font-weight:800;color:#fff;margin:.4rem 0">${isHi ? 'भुगतान सफल!' : 'Payment confirmed!'}</div>
+    <div style="font-size:.95rem;color:rgba(255,255,255,.9);line-height:1.6">${isHi ? 'आपका केस अब समीक्षा में है। हम आपकी रिपोर्ट 24–48 कार्य-घंटों में साझा करेंगे — यहाँ डैशबोर्ड पर और WhatsApp पर।' : "Your case is now under review. We'll share your report within 24–48 business hours — here on your dashboard and on WhatsApp."}</div>
+  </div>`;
+  document.body.appendChild(ov);
+  setTimeout(() => location.reload(), 3500);
+}
+// Poll our server (which the Razorpay webhook + recovery reconcile) — resolves 'paid'
+// even when the client callback was lost. Returns true if confirmed paid.
+async function _pollClaimPaid(claimId, orderId, opts){
+  opts = opts || {};
+  const attempts = opts.attempts || 6, delay = opts.delay || 5000;
+  for (let i = 0; i < attempts; i++){
+    try {
+      const r = await api('/nidaan/api/claims/' + claimId + '/pay-status' + (orderId ? ('?order_id=' + encodeURIComponent(orderId)) : ''));
+      const d = r ? await r.json() : {};
+      if (r && r.ok && d.status === 'paid'){ _claimPaidOverlay(); return true; }
+    } catch(e) {}
+    if (i < attempts - 1) await new Promise(res => setTimeout(res, delay));
+  }
+  return false;
+}
+// Reassuring "confirming…" state — shown instead of a scary "failed" when money may
+// have been debited. Never tells a paying customer their payment failed.
+function _claimConfirmingOverlay(claimId, orderId){
+  if (document.getElementById('claimPaidOv') || document.getElementById('claimPendOv')) return;
+  const isHi = document.body.classList.contains('hi');
+  const ov = document.createElement('div'); ov.id = 'claimPendOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.92);display:flex;align-items:center;justify-content:center;padding:1.5rem';
+  ov.innerHTML = `<div style="max-width:460px;text-align:center;background:linear-gradient(135deg,#1e3a5f,#0f766e);border:1px solid #38bdf8;border-radius:16px;padding:2rem 1.6rem">
+    <div style="font-size:2.4rem">⏳</div>
+    <div style="font-size:1.15rem;font-weight:800;color:#fff;margin:.4rem 0">${isHi ? 'भुगतान की पुष्टि हो रही है…' : 'Confirming your payment…'}</div>
+    <div style="font-size:.92rem;color:rgba(255,255,255,.9);line-height:1.6">${isHi ? 'अगर आपके खाते से कोई राशि कटी है, तो चिंता न करें — आपकी समीक्षा कुछ ही मिनटों में अपने-आप शुरू हो जाएगी और हम आपको यहाँ व WhatsApp पर सूचित करेंगे। अगर पैसे नहीं कटे, तो दोबारा कोशिश करें।' : "If any amount was debited, don't worry — your review will unlock automatically within a few minutes, and we'll notify you here and on WhatsApp. If nothing was debited, you can simply try again."}</div>
+    <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1.2rem;flex-wrap:wrap">
+      <button id="claimPendCheck" style="padding:.6rem 1.1rem;background:#0891b2;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">${isHi ? 'अभी जांचें' : 'Check now'}</button>
+      <button id="claimPendClose" style="padding:.6rem 1.1rem;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;font-weight:700;cursor:pointer">${isHi ? 'बंद करें' : 'Close'}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('claimPendClose').onclick = () => ov.remove();
+  document.getElementById('claimPendCheck').onclick = async function(){
+    this.disabled = true; this.textContent = isHi ? 'जांच रहे हैं…' : 'Checking…';
+    const ok = await _pollClaimPaid(claimId, orderId, { attempts: 2, delay: 3000 });
+    if (ok) ov.remove(); else { this.disabled = false; this.textContent = isHi ? 'फिर से जांचें' : 'Check again'; }
+  };
+}
+
 async function payClaim(claimId) {
   const btn = document.getElementById('lcPayBtn');
   if (btn) { btn.disabled = true; }
@@ -2441,10 +2495,11 @@ async function payClaim(claimId) {
     const r = await api('/nidaan/api/claims/' + claimId + '/pay', { method: 'POST' });
     if (!r || !r.ok) { const e = r ? await r.json() : {}; alert(_extractErr(e, 'Could not start payment')); if (btn) btn.disabled = false; return; }
     const data = await r.json();
+    const orderId = data.order_id;
     const options = {
       key: data.razorpay_key_id, amount: data.amount, currency: data.currency,
       name: 'Nidaan Partner', description: '₹499 Claim Review', image: '/static/nidaan_logo.png',
-      order_id: data.order_id,
+      order_id: orderId,
       prefill: { name: _meCache ? _meCache.owner_name : '', email: _meCache ? _meCache.email : '', contact: _meCache ? _meCache.phone : '' },
       theme: { color: '#0891b2' },
       handler: async function(response) {
@@ -2453,25 +2508,21 @@ async function payClaim(claimId) {
             method: 'POST',
             body: JSON.stringify({ razorpay_order_id: response.razorpay_order_id, razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature }) });
           const vd = vr ? await vr.json() : {};
-          if (vr && vr.ok && vd.status === 'paid') {
-            const isHi = document.body.classList.contains('hi');
-            const ov = document.createElement('div');
-            ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.92);display:flex;align-items:center;justify-content:center;padding:1.5rem';
-            ov.innerHTML = `<div style="max-width:440px;text-align:center;background:linear-gradient(135deg,#065f46,#0f766e);border:1px solid #10b981;border-radius:16px;padding:2rem 1.6rem">
-              <div style="font-size:2.6rem">✅</div>
-              <div style="font-size:1.2rem;font-weight:800;color:#fff;margin:.4rem 0">${isHi ? 'भुगतान सफल!' : 'Payment confirmed!'}</div>
-              <div style="font-size:.95rem;color:rgba(255,255,255,.9);line-height:1.6">${isHi ? 'आपका केस अब समीक्षा में है। हम आपकी रिपोर्ट 24–48 कार्य-घंटों में साझा करेंगे — यहाँ डैशबोर्ड पर और WhatsApp पर।' : "Your case is now under review. We'll share your report within 24–48 business hours — here on your dashboard and on WhatsApp."}</div>
-            </div>`;
-            document.body.appendChild(ov);
-            setTimeout(() => location.reload(), 3500);
-          }
-          else { alert('Payment received but verification failed. Contact support with Payment ID: ' + response.razorpay_payment_id); }
-        } catch(err) { alert('Verification error. Contact support with Payment ID: ' + response.razorpay_payment_id); }
+          if (vr && vr.ok && vd.status === 'paid') { _claimPaidOverlay(); }
+          else if (!(await _pollClaimPaid(claimId, orderId, { attempts: 4, delay: 4000 }))) _claimConfirmingOverlay(claimId, orderId);
+        } catch(err) {
+          if (!(await _pollClaimPaid(claimId, orderId, { attempts: 4, delay: 4000 }))) _claimConfirmingOverlay(claimId, orderId);
+        }
       },
-      modal: { ondismiss: function(){ if (btn) btn.disabled = false; } },
+      // User closed the sheet (e.g. after an ambiguous UPI screen) — quietly check if the
+      // money actually went through before just re-enabling the button.
+      modal: { ondismiss: function(){ _pollClaimPaid(claimId, orderId, { attempts: 3, delay: 3000 }).then(ok => { if (!ok && btn) btn.disabled = false; }); } },
     };
     const rzp = new Razorpay(options);
-    rzp.on('payment.failed', function(resp){ alert('Payment failed: ' + (resp.error ? resp.error.description : '')); if (btn) btn.disabled = false; });
+    // UPI can report 'failed' yet still capture — verify with our server before saying failed.
+    rzp.on('payment.failed', function(){
+      _pollClaimPaid(claimId, orderId, { attempts: 4, delay: 4000 }).then(ok => { if (!ok) { if (btn) btn.disabled = false; _claimConfirmingOverlay(claimId, orderId); } });
+    });
     rzp.open();
   } catch(e) { alert('Error: ' + e.message); if (btn) btn.disabled = false; }
 }

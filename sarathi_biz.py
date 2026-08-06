@@ -1834,6 +1834,75 @@ async def nidaan_api_doc_checklist_for_type(request: Request, claim_type: str = 
             "trust_line": _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])}
 
 
+async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
+                               source: str = "system") -> dict:
+    """Idempotently mark a ₹499 claim PAID, start the review (initial task), fire the
+    funnel-paid notifications, and set the 48-business-hour SLA. Shared by the client
+    verify (/pay-verify), the Razorpay webhook, and the recovery poll — so a CAPTURED
+    payment ALWAYS unlocks the review even when the client callback is lost (UPI race,
+    low internet, app switch). Safe to call repeatedly: no-ops if already paid.
+    Returns {finalized, already, account_id, sla_due?}."""
+    import asyncio as _aio
+    from datetime import datetime as _dt
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        claim = await (await _conn.execute(
+            "SELECT * FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not claim:
+            return {"finalized": False, "already": False, "not_found": True}
+        claim = dict(claim)
+        if claim.get("payment_status") == "paid":
+            return {"finalized": False, "already": True, "account_id": claim.get("account_id")}
+        # Flip only if still not paid (atomic guard against a concurrent verify+webhook race).
+        cur = await _conn.execute(
+            "UPDATE nidaan_claims SET payment_status='paid', paid_at=CURRENT_TIMESTAMP, "
+            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=? AND payment_status!='paid'",
+            (claim_id,))
+        if cur.rowcount == 0:
+            # Someone else won the race and marked it paid — treat as already-done.
+            await _conn.commit()
+            return {"finalized": False, "already": True, "account_id": claim.get("account_id")}
+        await _conn.execute(
+            "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
+            "VALUES (?, 'intimated', ?, 'system', 0)",
+            (claim_id, f"₹499 paid — review unlocked (via {source})"))
+        await _conn.commit()
+    account_id = claim.get("account_id")
+    sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
+    try:
+        _flag = await ntasks.get_flag("auto_create_initial_task", "1")
+        if ntasks._flag_truthy(_flag):
+            _tid = await ntasks.create_task(
+                claim_id=claim_id,
+                title=f"PAID ₹499 — review {claim.get('insured_name')}'s {claim.get('claim_type')} claim",
+                description=(claim.get("notes_from_agent") or "")[:400],
+                status_slug="initial_review", priority="high", created_by_staff_id=None)
+            try:
+                import biz_nidaan_notifications as _nnot
+                _aio.create_task(_nnot.on_task_assigned(_tid))
+            except Exception:
+                pass
+    except Exception as _te:
+        logger.warning("finalize paid-claim task create failed for %s: %s", claim_id, _te)
+    try:
+        import biz_nidaan_notifications as _nnot
+        _aio.create_task(_nnot.on_funnel_paid(claim_id, account_id, sla_due.isoformat()))
+    except Exception:
+        pass
+    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if _admin_email:
+        _aio.create_task(email_svc.send_email(
+            to_email=_admin_email,
+            subject=f"[Nidaan] ₹499 PAID — claim #{claim_id} — assign + begin review",
+            html_body=(f"<p><b>PAID claim #{claim_id}</b> — {claim.get('insured_name')} · "
+                       f"{claim.get('claim_type')} · disputed ₹{claim.get('disputed_amount') or 'N/A'}</p>"
+                       f"<p>Payment: {razorpay_payment_id or 'n/a'} (via {source}). SLA (48 business hrs) "
+                       f"due ~{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>"),
+            from_name="Nidaan Partner"))
+    return {"finalized": True, "already": False, "account_id": account_id,
+            "sla_due": sla_due.isoformat()}
+
+
 @app.post("/nidaan/api/claims/{claim_id}/pay")
 @limiter.limit("10/minute")
 async def nidaan_claim_pay(claim_id: int, request: Request):
@@ -1900,67 +1969,74 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
     _expected = _hm.new(rzp_key_secret.encode(), _msg, _hs2.sha256).hexdigest()
     if not _hm.compare_digest(_expected, body.razorpay_signature):
         raise HTTPException(status_code=400, detail="Invalid payment signature")
-    # Flip status atomically; guard against double-processing.
+    # Ownership check — the JWT holder must own this claim before we finalize.
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
         _conn.row_factory = __import__("aiosqlite").Row
-        _cur = await _conn.execute(
-            "SELECT * FROM nidaan_claims WHERE claim_id=? AND account_id=?",
-            (claim_id, payload["sub"]))
-        claim = await _cur.fetchone()
-        if not claim:
-            raise HTTPException(status_code=404, detail="Claim not found")
-        if claim["payment_status"] == "paid":
-            return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
-        await _conn.execute(
-            "UPDATE nidaan_claims SET payment_status='paid', paid_at=CURRENT_TIMESTAMP, "
-            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=?", (claim_id,))
-        await _conn.execute(
-            "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
-            "VALUES (?, 'intimated', '₹499 paid — review unlocked', 'system', ?)",
-            (claim_id, payload["sub"]))
-        await _conn.commit()
-    # Compute 48-business-hour SLA deadline.
-    from datetime import datetime as _dt
-    sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
-    # START the review now (was deferred while unpaid): initial task + notify.
-    try:
-        _flag = await ntasks.get_flag("auto_create_initial_task", "1")
-        if ntasks._flag_truthy(_flag):
-            _tid = await ntasks.create_task(
-                claim_id=claim_id,
-                title=f"PAID ₹499 — review {claim['insured_name']}'s {claim['claim_type']} claim",
-                description=(claim["notes_from_agent"] or "")[:400],
-                status_slug="initial_review", priority="high",
-                created_by_staff_id=None)
-            try:
-                import biz_nidaan_notifications as _nnot
-                _asyncio_cpv.create_task(_nnot.on_task_assigned(_tid))
-            except Exception:
-                pass
-    except Exception as _te:
-        logger.warning("paid-claim task create failed for %s: %s", claim_id, _te)
-    try:
-        import biz_nidaan_notifications as _nnot
-        # Funnel-accurate confirmation (review started, 48 business-hr SLA, here +
-        # WhatsApp) — mirrors the dashboard. Admins are alerted via the ops email
-        # + the task-assignment notification below, so no generic claim.filed here.
-        _asyncio_cpv.create_task(_nnot.on_funnel_paid(claim_id, payload["sub"], sla_due.isoformat()))
-    except Exception:
-        pass
-    # Email ops: a PAID case to assign now.
-    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
-    if _admin_email:
-        _asyncio_cpv.create_task(email_svc.send_email(
-            to_email=_admin_email,
-            subject=f"[Nidaan] ₹499 PAID — claim #{claim_id} — assign + begin review",
-            html_body=(f"<p><b>PAID claim #{claim_id}</b> — {claim['insured_name']} · "
-                       f"{claim['claim_type']} · disputed ₹{claim['disputed_amount'] or 'N/A'}</p>"
-                       f"<p>Payment: {body.razorpay_payment_id}. SLA (48 business hrs) due ~"
-                       f"{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>"),
-            from_name="Nidaan Partner"))
+        claim = await (await _conn.execute(
+            "SELECT payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))).fetchone()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim["payment_status"] == "paid":
+        return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
+    # Shared finalizer — same path the webhook + recovery poll use (idempotent).
+    res = await _finalize_paid_claim(claim_id, body.razorpay_payment_id, source="client")
     return {"status": "paid", "claim_id": claim_id,
-            "sla_due_utc": sla_due.isoformat(),
+            "sla_due_utc": res.get("sla_due"),
             "message": "Payment confirmed. Your case is now under review — we'll share your report within 24–48 business hours, here and on WhatsApp."}
+
+
+@app.get("/nidaan/api/claims/{claim_id}/pay-status")
+@limiter.limit("30/minute")
+async def nidaan_claim_pay_status(claim_id: int, request: Request, order_id: str = ""):
+    """Recovery / poll for the ₹499 claim payment. The dashboard calls this after an
+    ambiguous checkout close (UPI race, low internet) to learn whether the money actually
+    went through — so a paid customer is NEVER left stranded.
+      1) If our DB already shows 'paid' (webhook or client verify) → paid.
+      2) Else, if order_id is given, ask Razorpay if THAT order (bound to this claim via
+         notes) is paid; if so, finalize idempotently. Returns {status: paid|pending}."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        row = await (await _c.execute(
+            "SELECT payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if row["payment_status"] == "paid":
+        return {"status": "paid", "claim_id": claim_id}
+    # Not reflected yet — reconcile straight from Razorpay if we have the order.
+    if order_id and len(order_id) <= 60:
+        rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+        if rzp_id and rzp_secret:
+            import httpx as _hx
+            try:
+                async with _hx.AsyncClient() as _cl:
+                    _r = await _cl.get(f"https://api.razorpay.com/v1/orders/{order_id}",
+                                       auth=(rzp_id, rzp_secret), timeout=15.0)
+                    _order = _r.json() or {}
+                _notes = _order.get("notes", {}) or {}
+                # Bind: the order must be THIS claim's ₹499 order, and fully paid (captured).
+                if _notes.get("claim_id") == str(claim_id) and _order.get("status") == "paid":
+                    _pid = ""
+                    try:
+                        async with _hx.AsyncClient() as _cl2:
+                            _rp = await _cl2.get(f"https://api.razorpay.com/v1/orders/{order_id}/payments",
+                                                 auth=(rzp_id, rzp_secret), timeout=15.0)
+                            for _p in ((_rp.json() or {}).get("items", []) or []):
+                                if _p.get("status") == "captured":
+                                    _pid = _p.get("id", ""); break
+                    except Exception:
+                        pass
+                    await _finalize_paid_claim(claim_id, _pid, source="recovery")
+                    return {"status": "paid", "claim_id": claim_id}
+            except Exception as _e:
+                logger.warning("claim pay-status reconcile failed claim=%s: %s", claim_id, _e)
+    return {"status": "pending", "claim_id": claim_id}
 
 
 @app.get("/nidaan/pay/{claim_id}", response_class=HTMLResponse)
@@ -3274,6 +3350,46 @@ async def nidaan_razorpay_webhook(request: Request):
     if event == "payment.captured":
         payment_entity = payload.get("payment", {}).get("entity", {})
         notes = payment_entity.get("notes", {})
+        product = notes.get("product", "")
+        payment_id_evt = payment_entity.get("id", "")
+        # ── ₹499 claim review — SERVER-SIDE SAFETY NET ──────────────────────────
+        # If the client callback was lost (UPI race / low internet), the money is
+        # captured but /pay-verify never ran. This unlocks the review regardless.
+        if product == "nidaan_claim_499":
+            try:
+                _cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                _cid = 0
+            if _cid:
+                _res = await _finalize_paid_claim(_cid, payment_id_evt, source="webhook")
+                logger.info("Nidaan webhook payment.captured claim_499: claim=%s finalized=%s already=%s",
+                            _cid, _res.get("finalized"), _res.get("already"))
+            else:
+                logger.warning("Nidaan webhook claim_499 missing claim_id: %s", notes)
+            return {"status": "ok", "event": event, "product": product}
+        # ── Branch Level-2 fee — reconcile branch payment server-side ───────────
+        if product == "nidaan_branch_l2":
+            try:
+                _cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                _cid = 0
+            _branch = notes.get("branch", "")
+            if _cid and _branch:
+                try:
+                    _pricing = await nidaan.branch_l2_pricing()
+                    _ok = await nidaan.mark_l2_paid(_cid, _branch, int(_pricing["fee"]), payment_id_evt)
+                    if _ok:
+                        try:
+                            import biz_nidaan_notifications as _nnot_l2
+                            _asyncio.create_task(_nnot_l2.on_branch_l2_paid(_cid, _branch))
+                        except Exception:
+                            pass
+                    logger.info("Nidaan webhook payment.captured branch_l2: claim=%s branch=%s ok=%s",
+                                _cid, _branch, _ok)
+                except Exception as _l2e:
+                    logger.error("Nidaan webhook branch_l2 reconcile failed claim=%s: %s", _cid, _l2e)
+            return {"status": "ok", "event": event, "product": product}
+        # ── Subscription one-time order (quarterly/annual) — existing behavior ──
         if notes.get("product") != "nidaan":
             return {"status": "ignored", "reason": "not_nidaan"}
         account_id_str = notes.get("nidaan_account_id", "")
