@@ -3460,6 +3460,92 @@ async def nidaan_razorpay_webhook(request: Request):
     return {"status": "ok", "event": event}
 
 
+# ── Nidaan: payment reconciliation sweep (super-admin safety net) ─────────────
+@app.post("/nidaan/ops/api/payments/reconcile")
+@limiter.limit("6/minute")
+async def nidaan_payments_reconcile(request: Request, hours: int = 168, dry_run: bool = True):
+    """Sweep recent Razorpay orders and reconcile any ₹499-claim / branch-L2 payment that
+    was captured but never reflected in our DB (e.g. a captured payment whose webhook was
+    missed because the old handler ignored it, or a lost client callback). Super-admin only.
+    dry_run=true (default) only REPORTS mismatches; dry_run=false actually finalizes them."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    import httpx as _hx, time as _t
+    frm = int(_t.time()) - max(1, min(int(hours), 720)) * 3600
+    orders = []
+    skip = 0
+    async with _hx.AsyncClient() as _cl:
+        while True:
+            r = await _cl.get("https://api.razorpay.com/v1/orders", auth=(rzp_id, rzp_secret),
+                              params={"count": 100, "skip": skip, "from": frm}, timeout=25.0)
+            js = r.json() or {}
+            items = js.get("items", []) or []
+            orders.extend(items)
+            if len(items) < 100:
+                break
+            skip += 100
+            if skip >= 1000:
+                break
+    report = {"dry_run": dry_run, "hours": hours, "scanned": len(orders),
+              "claim_unlock": [], "claim_ok": [], "l2_unlock": [], "unpaid_skipped": 0}
+    for o in orders:
+        if o.get("status") != "paid":
+            report["unpaid_skipped"] += 1
+            continue
+        notes = o.get("notes", {}) or {}
+        prod = notes.get("product", "")
+        oid = o.get("id", "")
+        if prod == "nidaan_claim_499":
+            try:
+                cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                cid = 0
+            if not cid:
+                continue
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                _c.row_factory = __import__("aiosqlite").Row
+                row = await (await _c.execute(
+                    "SELECT payment_status FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone()
+            st = row["payment_status"] if row else "missing"
+            if st == "paid":
+                report["claim_ok"].append({"claim_id": cid, "order": oid})
+            else:
+                if not dry_run:
+                    res = await _finalize_paid_claim(cid, "", source="reconcile")
+                    report["claim_unlock"].append({"claim_id": cid, "order": oid, "was": st,
+                                                    "finalized": res.get("finalized")})
+                else:
+                    report["claim_unlock"].append({"claim_id": cid, "order": oid, "was": st})
+        elif prod == "nidaan_branch_l2":
+            try:
+                cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                cid = 0
+            branch = notes.get("branch", "")
+            if not (cid and branch):
+                continue
+            if not dry_run:
+                pricing = await nidaan.branch_l2_pricing()
+                ok = await nidaan.mark_l2_paid(cid, branch, int(pricing["fee"]), "")
+                if ok:
+                    try:
+                        import biz_nidaan_notifications as _nnot_r
+                        asyncio.create_task(_nnot_r.on_branch_l2_paid(cid, branch))
+                    except Exception:
+                        pass
+                report["l2_unlock"].append({"claim_id": cid, "branch": branch, "order": oid, "ok": ok})
+            else:
+                report["l2_unlock"].append({"claim_id": cid, "branch": branch, "order": oid})
+    logger.info("Payment reconcile by staff=%s dry_run=%s: %s claim_unlock, %s l2_unlock (scanned %s)",
+                staff.get("staff_id"), dry_run, len(report["claim_unlock"]),
+                len(report["l2_unlock"]), report["scanned"])
+    return report
+
+
 # ── Nidaan: Check order payment status (recovery endpoint) ────────────────────
 
 @app.get("/nidaan/api/subscribe/check")
