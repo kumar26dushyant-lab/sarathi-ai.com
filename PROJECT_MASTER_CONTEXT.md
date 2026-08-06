@@ -4969,6 +4969,19 @@ apkLoadStatus() call.
   - **★ OPS Level-2 visibility SHIPPED Aug 6 2026 (live).** nidaan_ops.html claim drawer shows a "Branch &
     Level-2" section for origin='branch' claims only (origin+branch code, review GO/no-scope, L2 status: Queued
     for legal ✓ +fee / Awaiting branch payment / L2 paid-at). Payload already had fields (SELECT c.*).
+  - **★ PAYMENT LINKS SHIPPED Aug 6 2026 (live) — Razorpay Payment Links.** Table nidaan_payment_links.
+    PHASE 1 (branch): L2 gate now has "Pay ₹499 now" OR "🔗 Share payment link" → POST
+    /nidaan/branch/api/claims/{id}/l2-payment-link (3-day link bound to claim) → branch shares Copy/WhatsApp →
+    customer pays → auto-queues L2. PHASE 2 (super-admin): Ops→Workflow Settings→🔗 Payment Links generator
+    (purpose review499|subscription|custom + customer name/mobile/email + expiry) → POST/GET
+    /nidaan/ops/api/payment-links (super_admin) → link+Copy+WhatsApp + live list. AUTO-GRANT on webhook
+    `payment_link.paid` → _reconcile_admin_payment_link: create/find account by mobile
+    (get_account_id_by_phone/create_account_by_admin) then review499→grant_admin_review_credit (paid ₹499
+    per_claim), subscription→activate_from_order_payment (plink_id as order ref), custom→account only.
+    REVENUE: get_revenue_stats adds total_custom_link_revenue (review499/subscription already counted via
+    per_claim/subscription rows — no double count). ⚠ REQUIRES founder to add `payment_link.paid` (+ optionally
+    payment_link.expired) event to the Razorpay webhook, else links don't auto-confirm. Live payment→grant flow
+    NOT yet end-to-end tested (needs the webhook event + a real payment).
   - **★ PAYMENT FOOLPROOFING SHIPPED Aug 6 2026 (live).** ROOT CAUSE FOUND: webhook payment.captured only
     reconciled subscription orders (product='nidaan'); it IGNORED ₹499 claim orders (product='nidaan_claim_499')
     and branch_l2 → a captured payment with a lost client callback (UPI race/low internet) left the claim
