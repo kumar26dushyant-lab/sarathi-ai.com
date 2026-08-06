@@ -935,7 +935,7 @@ async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
             logger.error("admin link account create failed: %s", e)
     if acct_id:
         try:
-            await nidaan.mark_payment_link_paid(plink_id, pay_id, account_id=acct_id)
+            await nidaan.set_payment_link_account(plink_id, acct_id)
         except Exception:
             pass
         try:

@@ -1286,6 +1286,15 @@ async def mark_payment_link_paid(plink_id: str, razorpay_payment_id: str = "",
         return cur.rowcount > 0
 
 
+async def set_payment_link_account(plink_id: str, account_id: int) -> None:
+    """Link a payment-link row to the payer's account (safe to call after it's already paid)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_payment_links SET account_id=? WHERE plink_id=? AND (account_id IS NULL OR account_id='')",
+            (account_id, plink_id))
+        await conn.commit()
+
+
 async def list_payment_links(limit: int = 100, created_by_type: str = "",
                              created_by_id: str = "") -> list[dict]:
     q = "SELECT * FROM nidaan_payment_links"
