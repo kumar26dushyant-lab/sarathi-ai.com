@@ -6460,6 +6460,51 @@ async function loadWorkflowSettings(){
         <div id="brBillingMsg" style="font-size:.8rem;margin-top:.55rem"></div>
       </div>
 
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🔗 Payment Links</h2>
+      <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.5);margin-bottom:.8rem">Generate a payment link + QR to send a customer on WhatsApp. On payment their account is created by mobile, the entitlement is granted automatically, and it shows in Revenue.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.8rem;align-items:end">
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Purpose</label>
+            <select id="plPurpose" onchange="plPurposeChange()" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px">
+              <option value="review499">₹499 claim review</option>
+              <option value="subscription">Subscription plan</option>
+              <option value="custom">Custom amount</option>
+            </select>
+          </div>
+          <div id="plPlanWrap" style="display:none">
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Plan</label>
+            <select id="plPlan" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px">
+              <option value="silver">Silver</option><option value="gold">Gold</option><option value="platinum">Platinum</option>
+              <option value="silver_annual">Silver (annual)</option><option value="gold_annual">Gold (annual)</option><option value="platinum_annual">Platinum (annual)</option>
+            </select>
+          </div>
+          <div id="plAmountWrap" style="display:none">
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Amount (₹)</label>
+            <input id="plAmount" type="number" min="1" max="1000000" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:120px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Customer name</label>
+            <input id="plName" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:150px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Mobile (10-digit)</label>
+            <input id="plPhone" type="tel" inputmode="numeric" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:140px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Email (optional)</label>
+            <input id="plEmail" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:160px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Valid (days)</label>
+            <input id="plExpiry" type="number" min="1" max="30" value="3" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:80px">
+          </div>
+          <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="genPaymentLink()">Generate link</button>
+        </div>
+        <div id="plMsg" style="font-size:.8rem;margin-top:.55rem"></div>
+        <div id="plList" style="margin-top:1rem;overflow-x:auto"></div>
+      </div>
+
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🚦 System Toggles</h2>
       <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
         ${flags.map(f=>{
@@ -6531,6 +6576,78 @@ async function loadWorkflowSettings(){
     </div>`;
   panel.innerHTML = html;
   renderTaskCatManager(cats);
+  try { plPurposeChange(); loadPaymentLinks(); } catch(e){}
+}
+
+// ── Payment Links (super-admin generator) ────────────────────────────────────
+function plPurposeChange(){
+  const p = (document.getElementById('plPurpose')||{}).value;
+  const planWrap = document.getElementById('plPlanWrap');
+  const amtWrap = document.getElementById('plAmountWrap');
+  if (planWrap) planWrap.style.display = (p==='subscription') ? '' : 'none';
+  if (amtWrap)  amtWrap.style.display  = (p==='subscription' || p==='custom') ? '' : 'none';
+}
+async function genPaymentLink(){
+  const g = id => document.getElementById(id);
+  const msg = g('plMsg');
+  const setMsg = (t,ok)=>{ if(msg){ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'rgba(255,255,255,.6)'); } };
+  const purpose = g('plPurpose').value;
+  const name = (g('plName').value||'').trim();
+  const phone = (g('plPhone').value||'').replace(/[^0-9]/g,'');
+  if(!name){ setMsg('Enter the customer name.',false); return; }
+  if(phone.length!==10){ setMsg('Enter a valid 10-digit mobile.',false); return; }
+  const body = { purpose, customer_name:name, customer_phone:phone,
+                 customer_email:(g('plEmail').value||'').trim(),
+                 expiry_days: parseInt(g('plExpiry').value)||3, amount:0, plan:'' };
+  if(purpose==='subscription'){ body.plan=g('plPlan').value; body.amount=parseInt(g('plAmount').value)||0; if(body.amount<=0){ setMsg('Enter the subscription amount.',false); return; } }
+  else if(purpose==='custom'){ body.amount=parseInt(g('plAmount').value)||0; if(body.amount<=0){ setMsg('Enter an amount.',false); return; } }
+  setMsg('Generating…');
+  try{
+    const r = await fetch('/nidaan/ops/api/payment-links',{method:'POST',headers:{...hdrs(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Could not create link');
+    setMsg('Link ready ✓ (₹'+d.amount+')',true);
+    ['plName','plPhone','plEmail','plAmount'].forEach(i=>{ if(g(i)) g(i).value=''; });
+    _plShareOverlay(d.short_url, d.amount, name, phone);
+    loadPaymentLinks();
+  }catch(e){ setMsg(e.message,false); }
+}
+function _plShareOverlay(url, amount, name, phone){
+  const wa='https://wa.me/'+(phone?('91'+phone):'')+'?text='+encodeURIComponent('Namaste'+(name?(' '+name):'')+'! Nidaan Partner — kripya ₹'+amount+' ka payment yahan karein: '+url);
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
+  ov.innerHTML='<div style="max-width:430px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
+    +'<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.5rem">🔗 Payment link ready — ₹'+amount+'</div>'
+    +'<div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.8rem">Send this to the customer. On payment their account is created + entitlement granted automatically.</div>'
+    +'<input readonly value="'+esc(url)+'" onclick="this.select()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.8rem;margin-bottom:.7rem">'
+    +'<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
+    +'<button id="plCopyBtn" class="nd-btn nd-btn-sm nd-btn-primary" style="flex:1">📋 Copy</button>'
+    +'<a href="'+esc(wa)+'" target="_blank" rel="noopener" class="nd-btn nd-btn-sm" style="flex:1;background:#25D366;color:#053b1e;font-weight:700;text-align:center;text-decoration:none">💬 WhatsApp</a>'
+    +'<button id="plCloseBtn" class="nd-btn nd-btn-sm nd-btn-ghost">Close</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  document.getElementById('plCloseBtn').onclick=()=>ov.remove();
+  document.getElementById('plCopyBtn').onclick=()=>{ try{navigator.clipboard.writeText(url);}catch(e){} document.getElementById('plCopyBtn').textContent='✓ Copied'; };
+}
+async function loadPaymentLinks(){
+  const box = document.getElementById('plList'); if(!box) return;
+  try{
+    const r = await fetch('/nidaan/ops/api/payment-links',{headers:hdrs()});
+    if(!r.ok){ box.innerHTML=''; return; }
+    const links = (await r.json()).links || [];
+    if(!links.length){ box.innerHTML='<div style="font-size:.8rem;color:rgba(255,255,255,.35)">No payment links generated yet.</div>'; return; }
+    const badge = s => { const c = s==='paid'?'#065f46;color:#6ee7b7':(s==='expired'||s==='cancelled'?'#7c2d12;color:#fdba74':'#334155;color:#cbd5e1'); return '<span style="background:'+c+';padding:.1rem .5rem;border-radius:10px;font-size:.72rem;font-weight:700">'+esc(s)+'</span>'; };
+    const rows = links.map(l=>`<tr>
+      <td style="padding:.4rem .5rem">${esc(l.customer_name||'—')}<br><span style="font-size:.72rem;color:rgba(255,255,255,.4)">${esc(l.customer_phone||'')}</span></td>
+      <td style="padding:.4rem .5rem">${esc(l.purpose)}${l.plan?(' · '+esc(l.plan)):''}</td>
+      <td style="padding:.4rem .5rem">₹${Math.round((l.amount_paise||0)/100)}</td>
+      <td style="padding:.4rem .5rem">${badge(l.status||'created')}</td>
+      <td style="padding:.4rem .5rem;font-size:.72rem;color:rgba(255,255,255,.4)">${l.created_at?fmtDate(l.created_at):''}</td>
+      <td style="padding:.4rem .5rem">${l.short_url&&l.status!=='paid'?('<button class="nd-btn nd-btn-sm nd-btn-ghost" onclick="navigator.clipboard.writeText(\''+esc(l.short_url)+'\');this.textContent=\'✓\'">📋</button>'):''}</td>
+    </tr>`).join('');
+    box.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr style="color:rgba(255,255,255,.5);text-align:left">'
+      +'<th style="padding:.4rem .5rem">Customer</th><th style="padding:.4rem .5rem">Purpose</th><th style="padding:.4rem .5rem">Amount</th><th style="padding:.4rem .5rem">Status</th><th style="padding:.4rem .5rem">Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }catch(e){ box.innerHTML=''; }
 }
 
 // ── Task-category manager (renders inside Workflow Settings) ──────────────────

@@ -914,28 +914,44 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
 
 
 async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
-    """On a super-admin payment link being paid: create/find the payer's account by mobile,
-    attach it to the link, and alert ops to grant the entitlement + verify revenue.
-    (Phase 2 will auto-grant the review/subscription entitlement per purpose.)"""
+    """On a super-admin payment link being paid: create/find the payer's account by mobile and
+    AUTO-GRANT the entitlement (₹499 review credit / subscription plan), then alert ops.
+    Custom-amount links are account-only. All of these show in ops revenue."""
     phone = "".join(ch for ch in (rec.get("customer_phone") or "") if ch.isdigit())[-10:]
     name = rec.get("customer_name") or "Customer"
     email = rec.get("customer_email") or ""
+    purpose = rec.get("purpose")
+    amount_paise = int(rec.get("amount_paise") or 0)
+    plan = rec.get("plan") or ""
+    plink_id = rec.get("plink_id", "")
     acct_id = rec.get("account_id")
+    granted = "account only"
     if not acct_id and len(phone) == 10:
         try:
-            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
-                _c.row_factory = __import__("aiosqlite").Row
-                row = await (await _c.execute(
-                    "SELECT account_id FROM nidaan_accounts WHERE phone=?", (phone,))).fetchone()
-            acct_id = row["account_id"] if row else await nidaan.create_account_by_admin(
-                owner_name=name, email=email, phone=phone)
+            acct_id = await nidaan.get_account_id_by_phone(phone)
+            if not acct_id:
+                acct_id = await nidaan.create_account_by_admin(owner_name=name, email=email, phone=phone)
         except Exception as e:
             logger.error("admin link account create failed: %s", e)
     if acct_id:
         try:
-            await nidaan.mark_payment_link_paid(rec.get("plink_id", ""), pay_id, account_id=acct_id)
+            await nidaan.mark_payment_link_paid(plink_id, pay_id, account_id=acct_id)
         except Exception:
             pass
+        try:
+            if purpose == "review499":
+                await nidaan.grant_admin_review_credit(acct_id, name, phone, email,
+                                                       (amount_paise // 100) or 499, plink_id)
+                granted = "₹499 review credit"
+            elif purpose == "subscription" and plan:
+                await nidaan.activate_from_order_payment(plink_id, acct_id, plan, amount_paise,
+                                                         razorpay_payment_id=pay_id)
+                granted = f"{plan} subscription activated"
+        except Exception as e:
+            logger.error("admin link auto-grant failed plink=%s: %s", plink_id, e)
+            granted = "⚠ GRANT FAILED — grant manually"
+    else:
+        granted = "⚠ no account (grant manually)"
     try:
         import biz_nidaan_notifications as _n
         async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
@@ -944,14 +960,74 @@ async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
                 "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
                 "AND status='active' AND deleted_at IS NULL")).fetchall()]
         if ids:
-            amt = int(rec.get("amount_paise", 0)) // 100
             await _n.notify_staff_inapp(
-                ids, f"💰 Payment link paid — {rec.get('purpose')} ₹{amt}",
-                f"{name} ({phone or '—'}) paid a {rec.get('purpose')} payment link. "
-                f"Account #{acct_id or '—'} created/linked. Grant entitlement + verify revenue.\n\nOpen: /nidaan/ops",
+                ids, f"💰 Payment link paid — {purpose} ₹{amount_paise // 100}",
+                f"{name} ({phone or '—'}) paid a {purpose} payment link. Account #{acct_id or '—'}; "
+                f"granted: {granted}. Shows in revenue.\n\nOpen: /nidaan/ops",
                 event_key="payment.link_paid", email=True)
     except Exception as e:
         logger.warning("admin link ops notify failed: %s", e)
+
+
+class _AdminPayLinkReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    purpose: str = Field(..., pattern=r"^(review499|subscription|custom)$")
+    amount: int = Field(0, ge=0, le=1000000)          # rupees; forced to 499 for review499
+    plan: str = Field("", max_length=40)               # required for subscription
+    customer_name: str = Field(..., min_length=1, max_length=120)
+    customer_phone: str = Field(..., max_length=15)
+    customer_email: str = Field("", max_length=120)
+    expiry_days: int = Field(3, ge=1, le=30)
+
+
+@app.post("/nidaan/ops/api/payment-links")
+@limiter.limit("20/minute")
+async def nidaan_ops_create_payment_link(body: _AdminPayLinkReq, request: Request):
+    """Super-admin: generate a shareable Razorpay payment link for a specific customer.
+    On payment the webhook creates the account by mobile and auto-grants the entitlement."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    phone = "".join(ch for ch in body.customer_phone if ch.isdigit())[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit customer mobile")
+    purpose = body.purpose
+    if purpose == "review499":
+        amount = 499
+        desc = "Nidaan — ₹499 claim review"
+    elif purpose == "subscription":
+        if body.plan not in ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual"):
+            raise HTTPException(400, "Select a valid subscription plan")
+        amount = int(body.amount)
+        if amount <= 0:
+            raise HTTPException(400, "Enter the subscription amount")
+        desc = f"Nidaan — {body.plan} subscription"
+    else:  # custom
+        amount = int(body.amount)
+        if amount <= 0:
+            raise HTTPException(400, "Enter an amount")
+        desc = "Nidaan Partner — payment"
+    import time as _t
+    expire_by = int(_t.time()) + body.expiry_days * 24 * 3600
+    notes = {"product": "nidaan_plink", "purpose": purpose, "phone": phone}
+    if purpose == "subscription":
+        notes["plan"] = body.plan
+    data = await _create_rzp_payment_link(
+        amount * 100, desc, customer_name=body.customer_name, customer_phone=phone,
+        customer_email=body.customer_email, notes=notes, expire_by=expire_by)
+    await nidaan.record_payment_link(
+        data["id"], data.get("short_url", ""), purpose, amount * 100,
+        plan=(body.plan or None), customer_name=body.customer_name, customer_phone=phone,
+        customer_email=body.customer_email, created_by_type="staff", created_by_id=staff["staff_id"],
+        description=desc, expire_by=expire_by)
+    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "amount": amount}
+
+
+@app.get("/nidaan/ops/api/payment-links")
+async def nidaan_ops_list_payment_links(request: Request):
+    """Super-admin: list generated payment links with live status (created/paid/expired)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    return {"links": await nidaan.list_payment_links(limit=100, created_by_type="staff")}
 
 
 # ── Customer support chat (public; AI first-line + human handoff) ─────────────

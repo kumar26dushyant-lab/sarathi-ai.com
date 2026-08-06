@@ -906,6 +906,33 @@ async def create_review_signup(
     }
 
 
+async def grant_admin_review_credit(account_id: int, name: str, phone: str,
+                                    email: str = "", amount: int = 499, ref: str = "") -> int:
+    """Create a PAID ₹499 review credit for an account (used by super-admin payment links).
+    Shows in the account's per-claim purchases and counts toward d2c revenue. Returns purchase_id."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """INSERT INTO nidaan_per_claim_purchase
+               (advisor_name, advisor_phone, advisor_email, insured_name, insured_phone,
+                insurer_name, claim_type, disputed_amount, brief_description, amount_paid,
+                status, account_id, razorpay_order_id, intermediary_code, intermediary_name)
+               VALUES (?, ?, ?, ?, ?, '', '', NULL, 'Paid via payment link', ?, 'paid', ?, ?, '', '')""",
+            (name, phone, email, name, phone, int(amount), account_id, ref))
+        await conn.commit()
+        return cur.lastrowid
+
+
+async def get_account_id_by_phone(phone: str) -> Optional[int]:
+    ph = "".join(ch for ch in (phone or "") if ch.isdigit())[-10:]
+    if len(ph) != 10:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT account_id FROM nidaan_accounts WHERE phone=? ORDER BY account_id LIMIT 1",
+            (ph,))).fetchone()
+        return row[0] if row else None
+
+
 async def create_account_google(
     owner_name: str,
     email: str,
@@ -5520,16 +5547,27 @@ async def get_revenue_stats() -> dict:
         )
         total_d2c = (await cur.fetchone())[0]
 
+        # Custom-amount payment links (super-admin generated; not tied to a sub/per-claim row).
+        # review499 links create a per_claim_purchase (in d2c above) and subscription links
+        # create a subscription row (in total_sub above), so ONLY 'custom' is added here — no
+        # double counting.
+        cur = await conn.execute(
+            "SELECT COALESCE(SUM(amount_paise),0) FROM nidaan_payment_links "
+            "WHERE status='paid' AND purpose='custom'"
+        )
+        total_custom_link = (await cur.fetchone())[0] // 100
+
         # Active vs churned
         cur = await conn.execute(
             "SELECT status, COUNT(*) as cnt FROM nidaan_subscriptions GROUP BY status"
         )
         sub_by_status = {r["status"]: r["cnt"] for r in await cur.fetchall()}
 
-        total_all = total_sub + total_d2c
+        total_all = total_sub + total_d2c + total_custom_link
         return {
             "total_subscription_revenue": total_sub,
             "total_d2c_revenue": total_d2c,
+            "total_custom_link_revenue": total_custom_link,
             "total_revenue": total_all,
             "by_plan": by_plan,
             "monthly_trend": monthly,
