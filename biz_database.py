@@ -1094,6 +1094,31 @@ async def init_db():
                 reviewed_at           TIMESTAMP
             );
 
+            -- Razorpay Payment Links (branch L2 share-links + super-admin generated links)
+            CREATE TABLE IF NOT EXISTS nidaan_payment_links (
+                plink_id             TEXT PRIMARY KEY,     -- Razorpay payment_link id (plink_...)
+                short_url            TEXT,
+                purpose              TEXT NOT NULL,        -- 'l2' | 'review499' | 'subscription' | 'custom'
+                amount_paise         INTEGER NOT NULL,
+                claim_id             INTEGER,              -- for L2 links
+                plan                 TEXT,                 -- for subscription links
+                account_id           INTEGER,              -- resolved on payment (or pre-known)
+                branch_code          TEXT,                 -- for branch-created L2 links
+                customer_name        TEXT,
+                customer_phone       TEXT,
+                customer_email       TEXT,
+                status               TEXT DEFAULT 'created', -- created | paid | expired | cancelled
+                razorpay_payment_id  TEXT,
+                created_by_type      TEXT,                 -- 'branch' | 'staff'
+                created_by_id        TEXT,                 -- staff_id or branch_code
+                description          TEXT,
+                expire_by            INTEGER,              -- epoch seconds
+                created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                paid_at              TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_plink_status ON nidaan_payment_links(status);
+            CREATE INDEX IF NOT EXISTS idx_plink_claim  ON nidaan_payment_links(claim_id);
+
             -- Rolling 30-day quota cache per account
             CREATE TABLE IF NOT EXISTS nidaan_plan_quota (
                 account_id              INTEGER PRIMARY KEY

@@ -1216,6 +1216,66 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
     return True
 
 
+# ── Razorpay Payment Links (branch L2 share-links + super-admin generated) ────
+async def record_payment_link(plink_id: str, short_url: str, purpose: str, amount_paise: int, *,
+                              claim_id: Optional[int] = None, plan: Optional[str] = None,
+                              account_id: Optional[int] = None, branch_code: Optional[str] = None,
+                              customer_name: str = "", customer_phone: str = "",
+                              customer_email: str = "", created_by_type: str = "",
+                              created_by_id: str = "", description: str = "",
+                              expire_by: Optional[int] = None) -> None:
+    """Persist a generated Razorpay payment link so we can reconcile its webhook + show status."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT OR REPLACE INTO nidaan_payment_links
+               (plink_id, short_url, purpose, amount_paise, claim_id, plan, account_id,
+                branch_code, customer_name, customer_phone, customer_email, status,
+                created_by_type, created_by_id, description, expire_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?, 'created', ?,?,?,?)""",
+            (plink_id, short_url, purpose, int(amount_paise), claim_id, plan, account_id,
+             ((branch_code or "").upper() or None), customer_name, customer_phone, customer_email,
+             created_by_type, str(created_by_id), description, expire_by))
+        await conn.commit()
+
+
+async def get_payment_link(plink_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_payment_links WHERE plink_id=?", (plink_id,))).fetchone()
+        return dict(row) if row else None
+
+
+async def mark_payment_link_paid(plink_id: str, razorpay_payment_id: str = "",
+                                 account_id: Optional[int] = None) -> bool:
+    """Flip a link to 'paid' (idempotent). Returns True only if THIS call did the flip."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_payment_links SET status='paid', razorpay_payment_id=?, "
+            "paid_at=CURRENT_TIMESTAMP, account_id=COALESCE(?, account_id) "
+            "WHERE plink_id=? AND status!='paid'",
+            (razorpay_payment_id or "", account_id, plink_id))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def list_payment_links(limit: int = 100, created_by_type: str = "",
+                             created_by_id: str = "") -> list[dict]:
+    q = "SELECT * FROM nidaan_payment_links"
+    conds, params = [], []
+    if created_by_type:
+        conds.append("created_by_type=?"); params.append(created_by_type)
+    if created_by_id:
+        conds.append("created_by_id=?"); params.append(str(created_by_id))
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY created_at DESC LIMIT ?"; params.append(int(limit))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(q, params)).fetchall()
+        return [dict(r) for r in rows]
+
+
 async def submit_claim(
     account_id: int,
     user_id: Optional[int],

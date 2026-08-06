@@ -847,6 +847,113 @@ async def nidaan_branch_l2_advance(claim_id: int, request: Request):
     return {"status": "queued", "claim_id": claim_id}
 
 
+# ── Razorpay Payment Links (shareable link + QR; branch L2 + super-admin) ─────
+async def _create_rzp_payment_link(amount_paise: int, description: str, *,
+                                   customer_name: str = "", customer_phone: str = "",
+                                   customer_email: str = "", notes: dict = None,
+                                   expire_by: int = None, reminder: bool = True) -> dict:
+    """Create a Razorpay Payment Link (hosted page + short_url; SMS/reminders handled by
+    Razorpay). Returns the Razorpay response dict (id, short_url, …)."""
+    rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    ph = "".join(ch for ch in (customer_phone or "") if ch.isdigit())[-10:]
+    payload = {
+        "amount": int(amount_paise), "currency": "INR",
+        "description": (description or "Nidaan Partner")[:255],
+        "notify": {"sms": bool(len(ph) == 10), "email": bool(customer_email)},
+        "reminder_enable": bool(reminder),
+        "notes": notes or {},
+    }
+    cust = {}
+    if customer_name: cust["name"] = customer_name[:120]
+    if len(ph) == 10: cust["contact"] = "+91" + ph
+    if customer_email: cust["email"] = customer_email[:120]
+    if cust: payload["customer"] = cust
+    if expire_by: payload["expire_by"] = int(expire_by)
+    import httpx as _hx
+    async with _hx.AsyncClient() as _cl:
+        r = await _cl.post("https://api.razorpay.com/v1/payment_links",
+                           auth=(rzp_id, rzp_secret), json=payload, timeout=25.0)
+        data = r.json()
+    if "id" not in data:
+        raise HTTPException(status_code=502,
+                            detail=(data.get("error", {}) or {}).get("description", "Could not create payment link"))
+    return data
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-payment-link")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
+    """Generate a shareable payment link for the branch's L2 fee, bound to this claim — so the
+    branch can send it to their walk-in customer to pay (instead of paying it themselves)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_pricing()
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    import time as _t
+    expire_by = int(_t.time()) + 3 * 24 * 3600   # 3-day validity
+    data = await _create_rzp_payment_link(
+        fee * 100, f"Nidaan Level-2 fee — Claim #{claim_id}",
+        notes={"product": "nidaan_plink", "purpose": "l2", "claim_id": str(claim_id), "branch": code},
+        expire_by=expire_by)
+    await nidaan.record_payment_link(
+        data["id"], data.get("short_url", ""), "l2", fee * 100,
+        claim_id=claim_id, branch_code=code, created_by_type="branch", created_by_id=code,
+        description=f"L2 fee claim #{claim_id}", expire_by=expire_by)
+    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "fee": fee}
+
+
+async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
+    """On a super-admin payment link being paid: create/find the payer's account by mobile,
+    attach it to the link, and alert ops to grant the entitlement + verify revenue.
+    (Phase 2 will auto-grant the review/subscription entitlement per purpose.)"""
+    phone = "".join(ch for ch in (rec.get("customer_phone") or "") if ch.isdigit())[-10:]
+    name = rec.get("customer_name") or "Customer"
+    email = rec.get("customer_email") or ""
+    acct_id = rec.get("account_id")
+    if not acct_id and len(phone) == 10:
+        try:
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                _c.row_factory = __import__("aiosqlite").Row
+                row = await (await _c.execute(
+                    "SELECT account_id FROM nidaan_accounts WHERE phone=?", (phone,))).fetchone()
+            acct_id = row["account_id"] if row else await nidaan.create_account_by_admin(
+                owner_name=name, email=email, phone=phone)
+        except Exception as e:
+            logger.error("admin link account create failed: %s", e)
+    if acct_id:
+        try:
+            await nidaan.mark_payment_link_paid(rec.get("plink_id", ""), pay_id, account_id=acct_id)
+        except Exception:
+            pass
+    try:
+        import biz_nidaan_notifications as _n
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            ids = [r["staff_id"] for r in await (await _c.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+                "AND status='active' AND deleted_at IS NULL")).fetchall()]
+        if ids:
+            amt = int(rec.get("amount_paise", 0)) // 100
+            await _n.notify_staff_inapp(
+                ids, f"💰 Payment link paid — {rec.get('purpose')} ₹{amt}",
+                f"{name} ({phone or '—'}) paid a {rec.get('purpose')} payment link. "
+                f"Account #{acct_id or '—'} created/linked. Grant entitlement + verify revenue.\n\nOpen: /nidaan/ops",
+                event_key="payment.link_paid", email=True)
+    except Exception as e:
+        logger.warning("admin link ops notify failed: %s", e)
+
+
 # ── Customer support chat (public; AI first-line + human handoff) ─────────────
 class NidaanSupportMsgReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -3345,6 +3452,43 @@ async def nidaan_razorpay_webhook(request: Request):
             logger.info("Nidaan refund webhook unmatched: rzp_refund=%s payment=%s",
                         rzp_refund_id, rzp_payment_id)
         return {"status": "ok", "event": event}
+
+    # ── Payment Link paid (branch L2 share-link / super-admin generated link) ───
+    if event == "payment_link.paid":
+        pl = payload.get("payment_link", {}).get("entity", {})
+        pay = payload.get("payment", {}).get("entity", {})
+        plink_id = pl.get("id", "")
+        pay_id = pay.get("id", "")
+        rec = await nidaan.get_payment_link(plink_id)
+        if not rec:
+            logger.info("payment_link.paid unknown plink=%s", plink_id)
+            return {"status": "ignored", "reason": "unknown_link"}
+        first = await nidaan.mark_payment_link_paid(plink_id, pay_id)
+        if not first:
+            return {"status": "ok", "already": True}
+        purpose = rec.get("purpose")
+        if purpose == "l2":
+            _cid = rec.get("claim_id"); _branch = rec.get("branch_code")
+            if _cid and _branch:
+                try:
+                    _pricing = await nidaan.branch_l2_pricing()
+                    _ok = await nidaan.mark_l2_paid(int(_cid), _branch, int(_pricing["fee"]), pay_id)
+                    if _ok:
+                        try:
+                            import biz_nidaan_notifications as _nl2
+                            _asyncio.create_task(_nl2.on_branch_l2_paid(int(_cid), _branch))
+                        except Exception:
+                            pass
+                except Exception as _e:
+                    logger.error("payment_link.paid l2 reconcile failed plink=%s: %s", plink_id, _e)
+        else:
+            # review499 / subscription / custom — super-admin links (reconciled below).
+            try:
+                await _reconcile_admin_payment_link(rec, pay_id)
+            except Exception as _e:
+                logger.error("payment_link.paid admin reconcile failed plink=%s: %s", plink_id, _e)
+        logger.info("payment_link.paid reconciled plink=%s purpose=%s", plink_id, purpose)
+        return {"status": "ok", "event": event, "purpose": purpose}
 
     # ── Order payment.captured (one-time order flow for quarterly/annual plans) ─
     if event == "payment.captured":

@@ -327,7 +327,9 @@ async function loadBranchClaims(){
       } else if(c.review_outcome==='can_fight'){
         const badge='<div class="pill" style="background:#065f46;color:#6ee7b7">Reviewed: can be challenged</div>';
         if(l2cfg.charge_required){
-          l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${l2cfg.fee} → send to Level-2</button>`;
+          l2=badge
+            +`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${l2cfg.fee} now</button>`
+            +`<button class="btn" style="${btnStyle};background:rgba(255,255,255,.12);color:#fff;margin-left:.3rem" onclick="l2ShareLink(${c.claim_id})">🔗 Share payment link</button>`;
         } else {
           l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Advance(${c.claim_id})">Send to Level-2 (free)</button>`;
         }
@@ -423,6 +425,30 @@ async function l2Advance(claimId){
     const d=await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.detail||'Could not send to Level-2');
     alert('Claim #'+claimId+' is queued for the legal team ✓');
+    loadBranchClaims();
+  }catch(e){ alert(e.message); }
+}
+async function l2ShareLink(claimId){
+  try{
+    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-payment-link',{method:'POST',headers:authHeaders()});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Could not create payment link');
+    const url=d.short_url;
+    const wa='https://wa.me/?text='+encodeURIComponent('Namaste! Apne insurance claim ka Level-2 legal process shuru karne ke liye ₹'+d.fee+' yahan pay karein (Nidaan Partner): '+url);
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
+    ov.innerHTML='<div style="max-width:420px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
+      +'<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.5rem">🔗 Payment link ready — Claim #'+claimId+'</div>'
+      +'<div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.8rem">Share this with your customer to pay the ₹'+d.fee+' Level-2 fee. Valid 3 days. The claim moves to Level-2 automatically once paid.</div>'
+      +'<input id="plUrl" readonly value="'+esc(url)+'" onclick="this.select()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.8rem;margin-bottom:.7rem">'
+      +'<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
+      +'<button id="plCopy" class="btn btn-cyan" style="flex:1">📋 Copy</button>'
+      +'<a href="'+esc(wa)+'" target="_blank" rel="noopener" class="btn" style="flex:1;background:#25D366;color:#053b1e;font-weight:700;text-align:center;text-decoration:none;line-height:1.9">💬 WhatsApp</a>'
+      +'<button id="plClose" class="btn" style="background:rgba(255,255,255,.12);color:#fff">Close</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('plClose').onclick=()=>ov.remove();
+    document.getElementById('plCopy').onclick=()=>{ try{navigator.clipboard.writeText(url);}catch(e){} document.getElementById('plCopy').textContent='✓ Copied'; };
     loadBranchClaims();
   }catch(e){ alert(e.message); }
 }
