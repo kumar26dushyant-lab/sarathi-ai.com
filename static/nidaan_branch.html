@@ -53,6 +53,8 @@
   .hidden{display:none!important}
   .row-between{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
   .logout{background:none;border:none;color:#94a3b8;font-size:.82rem;cursor:pointer;text-decoration:underline}
+  /* dark dropdown — native <option> popups default to white; force dark so text is readable */
+  select option{background:#0f2038;color:#fff}
 </style>
 </head>
 <body>
@@ -98,9 +100,16 @@
 
   <div class="grid" id="statGrid"></div>
 
+  <!-- Branch profile -->
+  <div class="card" id="profileCard" style="display:none">
+    <div style="font-weight:700;margin-bottom:.7rem;color:#fff">🏢 Branch profile</div>
+    <div id="profileGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem"></div>
+    <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.8rem">To update your branch name, email, or share rate, please contact the head office.</div>
+  </div>
+
   <div class="card" id="shareCard" style="display:none">
-    <div style="font-weight:700;margin-bottom:.4rem;color:#fff">🔗 Refer a customer &amp; earn</div>
-    <div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-bottom:.7rem">Share this link or QR so your customer can get their rejected / underpaid insurance claim reviewed (₹499). Anyone who signs up under your code counts toward your earnings.</div>
+    <div style="font-weight:700;margin-bottom:.4rem;color:#fff">🔗 Refer &amp; earn</div>
+    <div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-bottom:.7rem">Share this link or QR. Anyone who signs up under your branch code is tracked to you — and <b style="color:#6ee7b7">you earn commission when a referral takes a paid subscription plan</b>. (One-time ₹499 claim reviews are a service for customers, not commissionable.)</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
       <input id="refLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
       <button class="btn btn-cyan" onclick="copyRefLink()">📋 Copy</button>
@@ -262,6 +271,22 @@ async function showDashboard(){
     const accounts = (await ar.json()).accounts || [];
     $('brTitle').textContent = (me.name || me.branch_code || 'Branch');
     $('brSubtitle').textContent = [me.branch_code, me.city].filter(Boolean).join(' · ');
+    // Branch profile card
+    const pf = $('profileGrid');
+    if (pf) {
+      const pItem = (label, val) => `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .7rem">
+        <div style="font-size:.72rem;color:rgba(255,255,255,.45);margin-bottom:.2rem">${label}</div>
+        <div style="font-size:.9rem;color:#fff;font-weight:600;word-break:break-word">${val}</div></div>`;
+      pf.innerHTML =
+        pItem('Branch name', esc(me.name || '—')) +
+        pItem('Branch code', esc(me.branch_code || '—')) +
+        pItem('City', esc(me.city || '—')) +
+        pItem('Contact email', esc(me.contact_email || '—')) +
+        pItem('Your share rate', (me.share_pct != null ? (me.share_pct + '%') : '—')) +
+        pItem('Status', (me.status === 'active' ? '✅ Active' : esc(me.status || '—'))) +
+        pItem('Member since', me.created_at ? fmtDate(me.created_at) : '—');
+      $('profileCard').style.display = '';
+    }
     if (me.branch_code) renderShareCard(me.branch_code);
     $('statGrid').innerHTML = `
       <div class="stat"><div class="stat-label">Referrals</div><div class="stat-val">${me.signups||0}</div></div>
