@@ -4982,6 +4982,22 @@ apkLoadStatus() call.
     review_fee_low/high/threshold in ops-settings, review_fee_for(), charge points claim /pay + review pay flows
     + create_review_signup, nidaan_claims.review_fee_paid col, ops drawer "credited toward legal" on GO,
     super-admin "💵 Review Fee" editor PUT /nidaan/ops/api/review-fee, public /nidaan/api/review-fee-config).
+    SCALING (Aug 8): SQLite WAL already active on live DB (journal_mode=wal, synchronous=NORMAL, busy_timeout
+    5000 in init_db) → concurrent readers don't block writer; solid for launch+growth. Postgres = PLANNED
+    staged migration LATER (abstraction→test on copy→cutover+rollback), only when monitoring shows limits —
+    NOT now (real dialect/data-migration risk; my earlier "no rewrite" was oversimplified). GST DECISIONS
+    (Aug 8): not yet GST-registered (applied) → build GST-READY, super-admin on/off + manual override, else
+    automated STATE-WISE calc (CGST+SGST intra vs IGST inter, 18%); pricing = GST-EXCLUSIVE (add on top, e.g.
+    ₹499+18%); collect customer STATE at payment (in our forms); show base+GST breakup everywhere + GST-
+    compliant receipt; Razorpay does NOT compute output GST (gateway only). Build GST right AFTER #3.
+    ★ GST SHIPPED + ENABLED LIVE Aug 8 2026 (gst_enabled=1, rate 18, exclusive). charge_with_gst()+record_gst()
+    +nidaan_gst_ledger. Applied at ALL charge points: review (claim /pay + both review pays), subscribe one-time
+    order, recurring autopay (GST-VERSIONED plan tag _gst18 → existing mandates grandfathered), branch L2 (pay+
+    link), admin/branch payment links. Dashboard pay gate shows base+GST + "incl. ₹X GST". Panel: Ops→Workflow
+    Settings→🧾 GST + PUT /nidaan/ops/api/gst + public /nidaan/api/gst-config. FAST-FOLLOWS: customer STATE capture
+    (home_state blank→flat GST + store state for CGST/SGST vs IGST later), formal GST tax-invoice/receipt, per-
+    recurring-CYCLE ledger (records initial only for now). COMPLIANCE: not yet GST-registered (applied) — collect
+    now + remit later per founder; on/off toggle pauses instantly.
     STILL TO BUILD (directions locked): #3 rename Overview→"Claims Dashboard" + operational widget + BIG
     consolidated-acknowledgement notifications (concerned = assignees+watchers+super-admins per my rec); #5
     staff-as-branch dual-role — auto referral code for EVERY staff, commission superadmin-adjustable for BOTH
