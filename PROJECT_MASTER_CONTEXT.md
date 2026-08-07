@@ -4977,10 +4977,16 @@ apkLoadStatus() call.
     COALESCE(NULLIF(c.branch_code,''),a.branch_code) in SELECT + branch filter; ops list shows "🏢 Branch <code>
     — raised on behalf". NOTE: auto-deploy LAGGED for commit 5ed4bb9 → had to `git reset --hard origin/master`
     + rolling-restart manually on server (watch future pushes; see [[infra_bizenv_ownership]] deploy pattern).
-    PLANNED/PHASED (discuss before big ones): Nidaan #3 rename Overview→"Claims Dashboard" + operational widget
-    + BIG acknowledgeable notifications (non-irritating); #4 tiered ₹499 review fee (>₹10L→₹2000, config-driven,
-    adjusted if GO); #5 staff-as-branch dual-role + gamified "Your NidaanPartner Business" referral dashboard
-    (staff + branches), common referrer identifier for superadmin; #6 uppercase name normalization on all forms.
+    ALSO SHIPPED Aug 8: #6 uppercase name normalization (data-layer _capname in create_account/submit_claim/
+    create_review_signup/record_payment_link + as-you-type on inputs); #4 tiered review fee (config-driven
+    review_fee_low/high/threshold in ops-settings, review_fee_for(), charge points claim /pay + review pay flows
+    + create_review_signup, nidaan_claims.review_fee_paid col, ops drawer "credited toward legal" on GO,
+    super-admin "💵 Review Fee" editor PUT /nidaan/ops/api/review-fee, public /nidaan/api/review-fee-config).
+    STILL TO BUILD (directions locked): #3 rename Overview→"Claims Dashboard" + operational widget + BIG
+    consolidated-acknowledgement notifications (concerned = assignees+watchers+super-admins per my rec); #5
+    staff-as-branch dual-role — auto referral code for EVERY staff, commission superadmin-adjustable for BOTH
+    staff+branches, branch dashboard must show share AMOUNT (not just %), gamified "Your NidaanPartner Business"
+    dashboard for staff+branches (psychological/motivational, nudge when stuck).
     Sarathi: Phase B QA audit (read-only) → C trial 15→7d → D subscription cockpit (Sarathi HAS a super-admin
     cockpit — confirmed by founder). Rule reaffirmed: QA audit must be read-only/non-breaking.
   - **★ PAYMENT LINKS SHIPPED Aug 6 2026 (live) — Razorpay Payment Links.** Table nidaan_payment_links.
