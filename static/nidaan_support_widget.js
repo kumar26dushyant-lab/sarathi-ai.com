@@ -298,8 +298,45 @@
   var openedOnce=false;
   function openPanel(){ removeTeaser(); panel.classList.add('open'); if(!openedOnce){ openedOnce=true; loadHistory(); } else startPoll(); setTimeout(function(){ if(input.offsetParent) input.focus(); },100); }
   function closePanel(){ panel.classList.remove('open'); stopPoll(); }
-  btn.addEventListener('click', function(){ panel.classList.contains('open')?closePanel():openPanel(); });
+  var _suppressClick = false;
+  btn.addEventListener('click', function(){
+    if(_suppressClick){ _suppressClick=false; return; }   // it was a drag, not a tap
+    panel.classList.contains('open')?closePanel():openPanel();
+  });
   panel.querySelector('.nsw-x').addEventListener('click', closePanel);
+
+  // ── Draggable FAB — users can move the chat button anywhere (e.g. off a Send
+  // button). Position persists; tap still opens the chat (drag is distinguished). ──
+  (function(){
+    var KEY='nsw_btn_pos';
+    function clamp(x,y){ return [Math.max(6, Math.min(x, window.innerWidth-64)), Math.max(6, Math.min(y, window.innerHeight-64))]; }
+    function applyPos(x,y){ var c=clamp(x,y); btn.style.left=c[0]+'px'; btn.style.top=c[1]+'px'; btn.style.right='auto'; btn.style.bottom='auto'; }
+    try{ var p=JSON.parse(localStorage.getItem(KEY)||'null'); if(p&&typeof p.x==='number') applyPos(p.x,p.y); }catch(e){}
+    var dragging=false, moved=false, sx=0, sy=0, ox=0, oy=0;
+    btn.style.touchAction='none';
+    btn.addEventListener('pointerdown', function(e){
+      dragging=true; moved=false; sx=e.clientX; sy=e.clientY;
+      var r=btn.getBoundingClientRect(); ox=r.left; oy=r.top;
+      try{ btn.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    btn.addEventListener('pointermove', function(e){
+      if(!dragging) return;
+      var dx=e.clientX-sx, dy=e.clientY-sy;
+      if(!moved && (Math.abs(dx)>5 || Math.abs(dy)>5)) moved=true;
+      if(moved){ applyPos(ox+dx, oy+dy); e.preventDefault(); }
+    });
+    btn.addEventListener('pointerup', function(){
+      if(!dragging) return; dragging=false;
+      if(moved){
+        _suppressClick=true;   // don't open the chat when finishing a drag
+        var r=btn.getBoundingClientRect();
+        try{ localStorage.setItem(KEY, JSON.stringify({x:r.left, y:r.top})); }catch(_){}
+      }
+    });
+    window.addEventListener('resize', function(){
+      try{ var p=JSON.parse(localStorage.getItem(KEY)||'null'); if(p&&typeof p.x==='number') applyPos(p.x,p.y); }catch(e){}
+    });
+  })();
 
   // ── Language: always-available switcher (header 🌐) + intent detection ──
   var langBtn = panel.querySelector('#nswLangBtn'), langMenu = panel.querySelector('#nswLangMenu');

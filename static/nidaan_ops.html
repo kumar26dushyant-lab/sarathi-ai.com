@@ -3760,12 +3760,15 @@ async function toggleClaimMute(claimId){
     else { ndUI.toast('Failed to update', 'error'); }
   } catch(e){}
 }
+let _opsMsgSending = {};
 async function opsSendMessage(claimId){
+  if(_opsMsgSending[claimId]) return;   // ignore rapid double-taps — send exactly once
   const inp = document.getElementById('opsMsgInput_'+claimId); if(!inp) return;
   const fileEl = document.getElementById('opsMsgFile_'+claimId);
   const content = (inp.value||'').trim();
   const file = fileEl && fileEl.files && fileEl.files[0];
   if(!content && !file) return;
+  _opsMsgSending[claimId] = true;
   inp.disabled=true;
   const fd = new FormData();
   fd.append('content', content);
@@ -3775,7 +3778,7 @@ async function opsSendMessage(claimId){
     if(r.ok){ inp.value=''; if(fileEl) fileEl.value=''; opsMsgFilePicked(claimId); await opsLoadMessages(claimId); }
     else { const d=await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Failed to send'),'error'); }
   } catch(e){}
-  inp.disabled=false; inp.focus();
+  finally { _opsMsgSending[claimId]=false; inp.disabled=false; inp.focus(); }
 }
 
 // ── Claim notes: threaded discussion (replies, @mentions, attachments, receipts) ──
@@ -5885,14 +5888,35 @@ async function refreshPushRow(){
   if (!lbl || !btn) return;
   if (!_pushSupported()){ lbl.textContent='📲 Push not supported on this browser'; btn.style.display='none'; return; }
   if (Notification.permission === 'denied'){
-    lbl.textContent='🔕 Push blocked — enable in browser settings'; btn.style.display='none'; return;
+    lbl.textContent='🔕 Notifications are blocked for this site';
+    btn.style.display=''; btn.textContent='How to enable'; btn.style.background='rgba(255,255,255,.08)';
+    return;
   }
   const sub = await _currentPushSub();
   if (sub){ lbl.textContent='🔔 Push alerts ON for this device'; btn.textContent='Turn off'; btn.style.background='rgba(255,255,255,.08)'; }
   else { lbl.textContent='📲 Get task & broadcast alerts on this phone'; btn.textContent='Enable'; btn.style.background='linear-gradient(135deg,#7c3aed,#22d3ee)'; }
 }
+function _showPushHelp(){
+  if(document.getElementById('pushHelpModal')) return;
+  const isChrome = /Chrome|Chromium|Edg/i.test(navigator.userAgent);
+  const steps = isChrome
+    ? ['Tap the <b>lock 🔒 / tune ⚙️</b> icon on the left of the address bar','Open <b>Site settings</b> (or <b>Permissions</b>)','Set <b>Notifications</b> to <b>Allow</b>','Reload this page, then tap <b>Enable</b>']
+    : ['Open your browser\'s <b>site settings</b> for this page','Find <b>Notifications</b> / <b>Permissions</b>','Set it to <b>Allow</b>','Reload this page, then tap <b>Enable</b>'];
+  const ov=document.createElement('div'); ov.id='pushHelpModal';
+  ov.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(2,12,27,.82);display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML='<div style="max-width:420px;width:100%;background:#0f2038;border:1px solid rgba(124,58,237,.5);border-radius:16px;overflow:hidden">'
+    +'<div style="padding:1rem 1.2rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;font-weight:800">🔔 Turn on notifications</div>'
+    +'<div style="padding:1.1rem 1.2rem;color:rgba(255,255,255,.85);font-size:.9rem;line-height:1.6">'
+    +'<div style="margin-bottom:.7rem;color:rgba(255,255,255,.6)">Your browser has blocked notifications for this site. For security, only you can re-enable them — it takes a few seconds:</div>'
+    +'<ol style="margin:0;padding-left:1.2rem">'+steps.map(s=>'<li style="margin-bottom:.4rem">'+s+'</li>').join('')+'</ol>'
+    +'</div>'
+    +'<div style="padding:.8rem 1.2rem;border-top:1px solid rgba(255,255,255,.08);text-align:right"><button class="nd-btn nd-btn-sm nd-btn-primary" onclick="document.getElementById(\'pushHelpModal\').remove()">Got it</button></div>'
+    +'</div>';
+  document.body.appendChild(ov);
+}
 async function togglePush(){
   if (!_pushSupported()){ ndUI.toast('Push not supported here','error'); return; }
+  if (Notification.permission === 'denied'){ _showPushHelp(); return; }   // can't override a block — guide instead
   const existing = await _currentPushSub();
   if (existing){
     try {

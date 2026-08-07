@@ -1760,7 +1760,7 @@ async function openClaimDrawer(claim_id) {
         <input type="file" id="msgFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="msgFilePicked()">
         <button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>
         <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff;font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
-        <button onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
+        <button id="msgSendBtn" onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
       </div>
       <div id="msgFileName" style="font-size:.74rem;color:#22d3ee;margin-top:.25rem"></div>
     </div>`;
@@ -1810,13 +1810,17 @@ function msgFilePicked(){
   const lbl = document.getElementById('msgFileName');
   if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
 }
+let _claimMsgSending = false;
 async function sendClaimMessage(claim_id){
+  if(_claimMsgSending) return;   // ignore rapid double-taps — send exactly once
   const inp = document.getElementById('msgInput'); if(!inp) return;
   const fileEl = document.getElementById('msgFile');
+  const btn = document.getElementById('msgSendBtn');
   const content = (inp.value||'').trim();
   const file = fileEl && fileEl.files && fileEl.files[0];
   if(!content && !file) return;
-  inp.disabled=true;
+  _claimMsgSending = true;
+  inp.disabled=true; if(btn){ btn.disabled=true; btn.style.opacity='.6'; btn.style.cursor='not-allowed'; }
   const fd = new FormData();
   fd.append('content', content);
   if(file) fd.append('file', file);
@@ -1826,7 +1830,7 @@ async function sendClaimMessage(claim_id){
     else if(r && r.status===401){ doLogout(); }
     else { const d = r ? await r.json().catch(()=>({})) : {}; alert((d && d.detail) || 'Failed to send'); }
   } catch(e){}
-  inp.disabled=false; inp.focus();
+  finally { _claimMsgSending=false; inp.disabled=false; if(btn){ btn.disabled=false; btn.style.opacity=''; btn.style.cursor='pointer'; } inp.focus(); }
 }
 
 function previewDrawerDocs() {
@@ -2807,6 +2811,6 @@ if ('serviceWorker' in navigator) {
 <script>window.NIDAAN_APP_ID='sub';window.NIDAAN_APP_NAME='Nidaan Partner';</script>
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
-<script src="/static/nidaan_support_widget.js?v=15" defer></script>
+<script src="/static/nidaan_support_widget.js?v=16" defer></script>
 </body>
 </html>
