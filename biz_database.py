@@ -2249,6 +2249,16 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_notifications ADD COLUMN read_at TIMESTAMP")
         except Exception:
             pass
+        # Item #3: acknowledgement (a stronger "I saw it" than read) for important claim
+        # updates — drives the consolidated must-acknowledge popup on the ops dashboard.
+        for _ack_sql in (
+            "ALTER TABLE nidaan_notifications ADD COLUMN require_ack INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_notifications ADD COLUMN ack_at TIMESTAMP",
+        ):
+            try:
+                await conn.execute(_ack_sql)
+            except Exception:
+                pass
         # Broadcasts (canonical feed) + emoji reactions.
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS nidaan_broadcasts (

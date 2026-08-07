@@ -7762,6 +7762,53 @@ async def ops_notifications_read(request: Request):
     return {"ok": True}
 
 
+@app.get("/nidaan/ops/api/notifications/pending-ack")
+async def ops_notifications_pending_ack(request: Request):
+    """Item #3: the current staffer's must-acknowledge updates (require_ack, not yet
+    acknowledged) — powers the consolidated 'Updates for you' popup. Newest first."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        rows = [dict(r) for r in await (await _c.execute(
+            "SELECT notif_id, event_key, claim_id, subject, body, created_at "
+            "FROM nidaan_notifications "
+            "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
+            "AND require_ack=1 AND ack_at IS NULL "
+            "ORDER BY created_at DESC LIMIT 40", (staff["staff_id"],))).fetchall()]
+    return {"pending": rows, "count": len(rows)}
+
+
+class _AckReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    notif_ids: Optional[list[int]] = Field(None, max_length=200)
+    all: bool = False
+
+
+@app.post("/nidaan/ops/api/notifications/ack")
+async def ops_notifications_ack(body: _AckReq, request: Request):
+    """Item #3: acknowledge must-ack updates for the current staffer (per-item or all).
+    Records ack_at so we know they actually saw it, and clears it from the popup."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    sid = staff["staff_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        if body.all or not body.notif_ids:
+            await _c.execute(
+                "UPDATE nidaan_notifications SET ack_at=CURRENT_TIMESTAMP "
+                "WHERE recipient_type='staff' AND recipient_id=? AND require_ack=1 AND ack_at IS NULL",
+                (sid,))
+        else:
+            _ids = [int(i) for i in body.notif_ids][:200]
+            _ph = ",".join("?" * len(_ids))
+            await _c.execute(
+                f"UPDATE nidaan_notifications SET ack_at=CURRENT_TIMESTAMP "
+                f"WHERE recipient_type='staff' AND recipient_id=? AND require_ack=1 AND ack_at IS NULL "
+                f"AND notif_id IN ({_ph})", [sid] + _ids)
+        await _c.commit()
+    return {"ok": True}
+
+
 # ── Web Push (PWA push notifications) ────────────────────────────────────────
 @app.get("/nidaan/ops/api/push/vapid-key")
 async def ops_push_vapid_key(request: Request):

@@ -382,9 +382,12 @@ async def _wd_probe(slot: int) -> Optional[bool]:
 
 
 async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
-                             event_key: str = "ops.notice", email: bool = True) -> int:
+                             event_key: str = "ops.notice", email: bool = True,
+                             require_ack: bool = False, claim_id=None) -> int:
     """Dashboard bell + web push (+ optional email) to specific staff. Never WhatsApp —
-    used for notices that must land regardless of messaging-channel state."""
+    used for notices that must land regardless of messaging-channel state.
+    require_ack=True (Item #3) marks it as a must-acknowledge update → surfaces in the
+    consolidated 'Updates for you' popup until the recipient explicitly acknowledges."""
     if not staff_ids:
         return 0
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -402,7 +405,7 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                 event_key=event_key, priority=PRIORITY_P2,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
-                status="sent", sent_at=ts)
+                status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id)
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
@@ -694,8 +697,8 @@ async def _record_notification(**kw) -> int:
             INSERT INTO nidaan_notifications
               (event_key, priority, claim_id, task_id, recipient_type, recipient_id,
                recipient_phone, recipient_email, channel, subject, body,
-               status, instance_slot, wa_message_id, error, sent_at, deferred_until)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               status, instance_slot, wa_message_id, error, sent_at, deferred_until, require_ack)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (kw.get("event_key"), kw.get("priority", "P1"),
               kw.get("claim_id"), kw.get("task_id"),
               kw.get("recipient_type"), kw.get("recipient_id"),
@@ -703,7 +706,8 @@ async def _record_notification(**kw) -> int:
               kw.get("channel"), kw.get("subject"), kw.get("body"),
               kw.get("status", "queued"),
               kw.get("instance_slot"), kw.get("wa_message_id"),
-              kw.get("error"), kw.get("sent_at"), kw.get("deferred_until")))
+              kw.get("error"), kw.get("sent_at"), kw.get("deferred_until"),
+              1 if kw.get("require_ack") else 0))
         await conn.commit()
         notif_id = cur.lastrowid
     # Web Push + Telegram mirror: only for a real staff dashboard notification.
@@ -1697,7 +1701,8 @@ async def notify_claim_watchers(claim_id: int, subject: str, body: str,
                 event_key="claim.watch", priority=PRIORITY_P2,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r[0],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
-                status="sent", sent_at=now, claim_id=claim_id)
+                status="sent", sent_at=now, claim_id=claim_id,
+                require_ack=True)   # Item #3: involved staff must acknowledge claim activity
         except Exception:
             pass
 
