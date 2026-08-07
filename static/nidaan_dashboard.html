@@ -2413,13 +2413,16 @@ async function renderLeadChecklist(claimId) {
     gate.style.display = 'block';
     document.getElementById('lcDisputed').textContent = d.disputed_amount ? '₹' + Number(d.disputed_amount).toLocaleString('en-IN') : '—';
     document.getElementById('lcPayBtn').onclick = function(){ payClaim(claimId); };
-    // Item #4: show the correct tiered review fee for this claim's disputed amount.
-    _getReviewFeeCfg().then(function(_cfg){
+    // Item #4 + GST: show the tiered review fee (+ GST when enabled) for this claim.
+    Promise.all([_getReviewFeeCfg(), _getGstCfg()]).then(function(res){
+      const _cfg=res[0], _gst=res[1]||{};
       const _fee = _feeForAmount(d.disputed_amount, _cfg);
-      const _feeEl = document.getElementById('lcFeeAmt'); if(_feeEl) _feeEl.textContent = '₹' + _fee;
+      let _total = _fee, _gstAmt = 0;
+      if(_gst.enabled){ _gstAmt = Math.round(_fee * (Number(_gst.rate)||0)) / 100; _total = Math.round((_fee + _gstAmt) * 100) / 100; }
+      const _feeEl = document.getElementById('lcFeeAmt'); if(_feeEl) _feeEl.innerHTML = '₹' + _total + (_gst.enabled?('<div style="font-size:.6rem;color:rgba(255,255,255,.55);font-weight:600">incl. ₹'+_gstAmt.toFixed(2)+' GST ('+_gst.rate+'%)</div>'):'');
       const _btn = document.getElementById('lcPayBtn');
       if(_btn){ const _en=_btn.querySelector('.en'), _hi=_btn.querySelector('.hi');
-        if(_en) _en.textContent='Pay ₹'+_fee+' & Get My Report'; if(_hi) _hi.textContent='₹'+_fee+' दें और मेरी रिपोर्ट पाएं'; }
+        if(_en) _en.textContent='Pay ₹'+_total+' & Get My Report'; if(_hi) _hi.textContent='₹'+_total+' दें और मेरी रिपोर्ट पाएं'; }
     });
   } else {
     gate.style.display = 'none';
@@ -2454,6 +2457,13 @@ async function _getReviewFeeCfg(){
   return _reviewFeeCfg || {low:499, high:2000, threshold:1000000};
 }
 function _feeForAmount(amt, cfg){ cfg = cfg || {low:499, high:2000, threshold:1000000}; return (Number(amt)||0) > cfg.threshold ? cfg.high : cfg.low; }
+// GST config (cached) — pay gate shows base + GST when enabled.
+let _gstCfg = null;
+async function _getGstCfg(){
+  if(_gstCfg) return _gstCfg;
+  try{ const r = await fetch('/nidaan/api/gst-config'); if(r && r.ok) _gstCfg = await r.json(); }catch(e){}
+  return _gstCfg || {enabled:false, rate:18};
+}
 
 // ── ₹499 claim payment: success + robust recovery (UPI race / low internet) ──
 function _claimPaidOverlay(){

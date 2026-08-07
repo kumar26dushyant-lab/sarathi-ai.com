@@ -2062,6 +2062,12 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
             (claim_id, f"Review fee ₹{_fee} paid — review unlocked (via {source})"))
         await _conn.commit()
     account_id = claim.get("account_id")
+    # GST: record the tax collected (no-op when GST is off). Base = the review fee.
+    try:
+        await nidaan.record_gst(razorpay_payment_id, "review499", _fee,
+                                customer_state="", claim_id=claim_id, account_id=account_id)
+    except Exception as _ge:
+        logger.warning("record_gst failed for claim %s: %s", claim_id, _ge)
     sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
     try:
         _flag = await ntasks.get_flag("auto_create_initial_task", "1")
@@ -2121,7 +2127,8 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
     # NOTE: no document gate — customers can pay the review fee anytime; docs are optional.
     # Item #4: tiered review fee — high tier when the disputed amount exceeds the threshold.
     _fee = await nidaan.review_fee_for(claim["disputed_amount"])
-    _amt_paise = _fee * 100
+    _g = await nidaan.charge_with_gst(_fee)   # GST: adds tax on top when enabled (else base)
+    _amt_paise = _g["total_paise"]
     import httpx as _httpx2, time as _time2
     rzp_key_id = _nidaan_rzp_id()
     rzp_key_secret = _nidaan_rzp_secret()
@@ -2138,7 +2145,8 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
         result = _r.json()
     if "id" not in result:
         raise HTTPException(status_code=502, detail=result.get("error", {}).get("description", "Order creation failed"))
-    return {"order_id": result["id"], "amount": _amt_paise, "fee": _fee, "currency": "INR", "razorpay_key_id": rzp_key_id}
+    return {"order_id": result["id"], "amount": _amt_paise, "fee": _fee,
+            "gst": _g["breakup"], "currency": "INR", "razorpay_key_id": rzp_key_id}
 
 
 class NidaanClaimPayVerifyReq(BaseModel):

@@ -4575,6 +4575,45 @@ async def gst_config() -> dict:
     return {"enabled": enabled, "rate": rate, "home_state": home_state}
 
 
+async def charge_with_gst(base_rupees: float, customer_state: str = "") -> dict:
+    """Compute what to actually charge for a base fee, applying GST-exclusive on top when
+    GST is enabled. Returns {total_paise, base, gst, total, breakup|None, enabled, rate}.
+    When GST is off, total == base (fully backward-compatible)."""
+    cfg = await gst_config()
+    base = round(float(base_rupees or 0), 2)
+    if not cfg["enabled"]:
+        return {"total_paise": int(round(base * 100)), "base": base, "gst": 0.0,
+                "total": base, "breakup": None, "enabled": False, "rate": 0.0}
+    bk = gst_breakup(base, cfg["rate"], cfg["home_state"], customer_state)
+    return {"total_paise": int(round(bk["total"] * 100)), "base": bk["base"], "gst": bk["gst"],
+            "total": bk["total"], "breakup": bk, "enabled": True, "rate": cfg["rate"]}
+
+
+async def record_gst(razorpay_payment_id: str, purpose: str, base_rupees: float,
+                     customer_state: str = "", claim_id=None, account_id=None) -> None:
+    """Write a GST ledger row for a paid transaction (idempotent per payment_id).
+    Recomputes the breakup from current config so it matches what was charged."""
+    cfg = await gst_config()
+    if not cfg["enabled"]:
+        return
+    bk = gst_breakup(base_rupees, cfg["rate"], cfg["home_state"], customer_state)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        if razorpay_payment_id:
+            ex = await (await conn.execute(
+                "SELECT 1 FROM nidaan_gst_ledger WHERE razorpay_payment_id=?",
+                (razorpay_payment_id,))).fetchone()
+            if ex:
+                return
+        await conn.execute(
+            """INSERT INTO nidaan_gst_ledger
+               (razorpay_payment_id, purpose, claim_id, account_id, base_amount, gst_amount,
+                total_amount, cgst, sgst, igst, gst_rate, customer_state)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (razorpay_payment_id or "", purpose, claim_id, account_id, bk["base"], bk["gst"],
+             bk["total"], bk["cgst"], bk["sgst"], bk["igst"], bk["rate"], customer_state or ""))
+        await conn.commit()
+
+
 def gst_breakup(base_rupees: float, rate: float, home_state: str = "", customer_state: str = "") -> dict:
     """GST-exclusive breakup: base + GST = total. If home_state is set and matches the
     customer's state → CGST+SGST (half each); else IGST. Amounts in ₹ (2-dp)."""

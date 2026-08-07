@@ -1119,6 +1119,26 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_plink_status ON nidaan_payment_links(status);
             CREATE INDEX IF NOT EXISTS idx_plink_claim  ON nidaan_payment_links(claim_id);
 
+            -- GST ledger: one row per GST-charged payment (any product), for accounting +
+            -- state-wise reconciliation (CGST/SGST intra vs IGST inter). Amounts in ₹.
+            CREATE TABLE IF NOT EXISTS nidaan_gst_ledger (
+                gst_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                razorpay_payment_id TEXT,
+                purpose           TEXT,                 -- review499 | subscription | branch_l2 | plink | ...
+                claim_id          INTEGER,
+                account_id        INTEGER,
+                base_amount       REAL NOT NULL,        -- pre-GST base
+                gst_amount        REAL NOT NULL,
+                total_amount      REAL NOT NULL,
+                cgst              REAL DEFAULT 0,
+                sgst              REAL DEFAULT 0,
+                igst              REAL DEFAULT 0,
+                gst_rate          REAL,
+                customer_state    TEXT,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_gst_created ON nidaan_gst_ledger(created_at);
+
             -- Rolling 30-day quota cache per account
             CREATE TABLE IF NOT EXISTS nidaan_plan_quota (
                 account_id              INTEGER PRIMARY KEY
