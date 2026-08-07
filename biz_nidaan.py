@@ -1250,6 +1250,11 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
             "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
             "VALUES (?, 'l2_queued', ?, 'branch', 0)", (claim_id, note))
         await conn.commit()
+    if fee:
+        try:
+            await record_gst(payment_id, "branch_l2", int(fee), claim_id=claim_id)
+        except Exception as _ge:
+            logger.warning("record_gst (branch_l2) failed: %s", _ge)
     return True
 
 
@@ -3778,6 +3783,10 @@ async def create_nidaan_razorpay_order(
     else:
         amount_paise = int(info["amount_paise"])
         amount_display = info["display"]
+    # GST (exclusive): add tax on top when enabled. base_paise kept for the ledger.
+    _base_paise = amount_paise
+    _g = await charge_with_gst(amount_paise / 100)
+    amount_paise = _g["total_paise"]
     try:
         import time
         receipt = f"nidaan_{account_id}_{plan}_{int(time.time())}"
@@ -3906,6 +3915,15 @@ async def activate_from_order_payment(
     if PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
         await _provision_sarathi_bundle(nidaan_account_id, plan, period_days)
 
+    # GST ledger: record the tax collected on this subscription (no-op when GST off).
+    try:
+        _cfg = await get_plan_cfg(plan)
+        _base = (int(_cfg["price_paise"]) / 100) if (_cfg and _cfg.get("price_paise")) \
+            else (NIDAAN_RAZORPAY_PLANS.get(plan, {}).get("amount_paise", 0) / 100)
+        await record_gst(razorpay_payment_id, "subscription", _base, account_id=nidaan_account_id)
+    except Exception as _ge:
+        logger.warning("record_gst (subscription) failed: %s", _ge)
+
     return True
 
 
@@ -3942,9 +3960,15 @@ async def create_nidaan_recurring_subscription(
     if not info:
         return {"error": f"Unknown plan: {plan}"}
 
+    # GST-versioned plan: when GST is on, use a DISTINCT Razorpay plan at the GST-inclusive
+    # amount (tag suffixed _gst<rate>) so existing non-GST autopay mandates are grandfathered.
+    _gcfg = await gst_config()
+    _amt_paise = (await charge_with_gst(info["amount_paise"] / 100))["total_paise"]
+    _gsuf = ("_gst" + str(int(_gcfg["rate"]))) if _gcfg["enabled"] else ""
     # Ensure Razorpay plan exists for this plan key (matched by the versioned tag).
-    tag = info.get("tag", plan)
-    razorpay_plan_id = _nidaan_plan_ids.get(plan)
+    tag = info.get("tag", plan) + _gsuf
+    _cache_key = plan + _gsuf
+    razorpay_plan_id = _nidaan_plan_ids.get(_cache_key)
     if not razorpay_plan_id:
         try:
             async with httpx.AsyncClient() as client:
@@ -3956,7 +3980,7 @@ async def create_nidaan_recurring_subscription(
                     _n = p.get("notes")
                     if isinstance(_n, dict) and _n.get("nidaan_plan") == tag:
                         razorpay_plan_id = p["id"]
-                        _nidaan_plan_ids[plan] = razorpay_plan_id
+                        _nidaan_plan_ids[_cache_key] = razorpay_plan_id
                         break
         except Exception as e:
             logger.warning("Nidaan plan lookup failed for %s: %s", plan, e)
@@ -3972,10 +3996,10 @@ async def create_nidaan_recurring_subscription(
                         "period": info["period"],
                         "interval": info["interval"],
                         "item": {
-                            "name": f"Nidaan {plan.title()} Plan",
-                            "amount": info["amount_paise"],
+                            "name": f"Nidaan {plan.title()} Plan" + (" (incl. GST)" if _gsuf else ""),
+                            "amount": _amt_paise,
                             "currency": "INR",
-                            "description": info["display"],
+                            "description": info["display"] + (f" + {int(_gcfg['rate'])}% GST" if _gsuf else ""),
                         },
                         "notes": {"nidaan_plan": tag, "product": "nidaan"},
                     },
@@ -3984,7 +4008,7 @@ async def create_nidaan_recurring_subscription(
                 res = r.json()
                 if "id" in res:
                     razorpay_plan_id = res["id"]
-                    _nidaan_plan_ids[plan] = razorpay_plan_id
+                    _nidaan_plan_ids[_cache_key] = razorpay_plan_id
                 else:
                     return {"error": res.get("error", {}).get("description", "Failed to create plan")}
         except Exception as e:
@@ -4020,7 +4044,7 @@ async def create_nidaan_recurring_subscription(
             return {
                 "subscription_id": result["id"],
                 "plan": plan,
-                "amount_display": info["display"],
+                "amount_display": (f"₹{_amt_paise // 100:,} (incl. {int(_gcfg['rate'])}% GST)" if _gsuf else info["display"]),
                 "razorpay_key_id": rzp_key_id,
             }
     except Exception as e:
@@ -4112,6 +4136,15 @@ async def activate_from_razorpay_webhook(
 
     if PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
         await _provision_sarathi_bundle(nidaan_account_id, plan, period_days)
+
+    # GST ledger: record tax for this recurring charge (base from plan config; no-op if off).
+    try:
+        _cfg = await get_plan_cfg(plan)
+        _base = (int(_cfg["price_paise"]) / 100) if (_cfg and _cfg.get("price_paise")) \
+            else (NIDAAN_RAZORPAY_PLANS.get(plan, {}).get("amount_paise", 0) / 100)
+        await record_gst(razorpay_sub_id, "subscription_recurring", _base, account_id=nidaan_account_id)
+    except Exception as _ge:
+        logger.warning("record_gst (recurring) failed: %s", _ge)
 
     return True
 

@@ -776,20 +776,21 @@ async def nidaan_branch_l2_pay(claim_id: int, request: Request):
     rzp_key_id = _nidaan_rzp_id(); rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(503, "Payments not configured")
+    _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]   # + GST when enabled
     import httpx as _httpx3, time as _time3
     receipt = f"l2_{claim_id}_{int(_time3.time())}"[:40]
     async with _httpx3.AsyncClient() as _cl:
         _r = await _cl.post(
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
-            json={"amount": fee * 100, "currency": "INR", "receipt": receipt,
+            json={"amount": _l2_paise, "currency": "INR", "receipt": receipt,
                   "notes": {"product": "nidaan_branch_l2", "claim_id": str(claim_id),
                             "branch": code}},
             timeout=20.0)
         result = _r.json()
     if "id" not in result:
         raise HTTPException(502, result.get("error", {}).get("description", "Order creation failed"))
-    return {"order_id": result["id"], "amount": fee * 100, "currency": "INR",
+    return {"order_id": result["id"], "amount": _l2_paise, "currency": "INR",
             "razorpay_key_id": rzp_key_id, "fee": fee}
 
 
@@ -903,7 +904,7 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
     import time as _t
     expire_by = int(_t.time()) + 3 * 24 * 3600   # 3-day validity
     data = await _create_rzp_payment_link(
-        fee * 100, f"Nidaan Level-2 fee — Claim #{claim_id}",
+        (await nidaan.charge_with_gst(fee))["total_paise"], f"Nidaan Level-2 fee — Claim #{claim_id}",
         notes={"product": "nidaan_plink", "purpose": "l2", "claim_id": str(claim_id), "branch": code},
         expire_by=expire_by)
     await nidaan.record_payment_link(
@@ -1012,7 +1013,7 @@ async def nidaan_ops_create_payment_link(body: _AdminPayLinkReq, request: Reques
     if purpose == "subscription":
         notes["plan"] = body.plan
     data = await _create_rzp_payment_link(
-        amount * 100, desc, customer_name=body.customer_name, customer_phone=phone,
+        (await nidaan.charge_with_gst(amount))["total_paise"], desc, customer_name=body.customer_name, customer_phone=phone,
         customer_email=body.customer_email, notes=notes, expire_by=expire_by)
     await nidaan.record_payment_link(
         data["id"], data.get("short_url", ""), purpose, amount * 100,
@@ -2601,7 +2602,8 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     # Item #4: tiered review fee — the purchase already stores the correct amount_paid.
-    _amt_paise = int(purchase["amount_paid"] or 499) * 100
+    _base_fee = int(purchase["amount_paid"] or 499)
+    _amt_paise = (await nidaan.charge_with_gst(_base_fee))["total_paise"]   # + GST when enabled
     receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
     async with _httpx2.AsyncClient() as _client2:
         _r = await _client2.post(
@@ -3162,7 +3164,7 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
     _fee = await nidaan.review_fee_for(body.disputed_amount)   # Item #4: tiered review fee
-    _amt_paise = _fee * 100
+    _amt_paise = (await nidaan.charge_with_gst(_fee))["total_paise"]   # + GST when enabled
     receipt = f"nidaan_review_{int(_time.time())}"[:40]
     async with _httpx.AsyncClient() as client:
         r = await client.post(
