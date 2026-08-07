@@ -4969,6 +4969,20 @@ apkLoadStatus() call.
   - **★ OPS Level-2 visibility SHIPPED Aug 6 2026 (live).** nidaan_ops.html claim drawer shows a "Branch &
     Level-2" section for origin='branch' claims only (origin+branch code, review GO/no-scope, L2 status: Queued
     for legal ✓ +fee / Awaiting branch payment / L2 paid-at). Payload already had fields (SELECT c.*).
+  - **★ SARATHI QA + NIDAAN OPS batch (Aug 7-8 2026).** SHIPPED: (a) Sarathi Phase A live fixes —
+    /api/ai/voice-action pipeline_summary execute 500 (undefined `pipeline`/`stage_labels`) fixed; dashboard
+    openLeadDetail() defined (was called by task "👁️ Lead" btn, never defined); voice execute path now handles
+    non-JSON/500 gracefully. (b) Nidaan #1/#2 — branch-raised claims now appear + identifiable in ops all-claims:
+    get_claims_ops was `SELECT c.*, a.branch_code` (blank house-account code clobbered claim's) → fixed to
+    COALESCE(NULLIF(c.branch_code,''),a.branch_code) in SELECT + branch filter; ops list shows "🏢 Branch <code>
+    — raised on behalf". NOTE: auto-deploy LAGGED for commit 5ed4bb9 → had to `git reset --hard origin/master`
+    + rolling-restart manually on server (watch future pushes; see [[infra_bizenv_ownership]] deploy pattern).
+    PLANNED/PHASED (discuss before big ones): Nidaan #3 rename Overview→"Claims Dashboard" + operational widget
+    + BIG acknowledgeable notifications (non-irritating); #4 tiered ₹499 review fee (>₹10L→₹2000, config-driven,
+    adjusted if GO); #5 staff-as-branch dual-role + gamified "Your NidaanPartner Business" referral dashboard
+    (staff + branches), common referrer identifier for superadmin; #6 uppercase name normalization on all forms.
+    Sarathi: Phase B QA audit (read-only) → C trial 15→7d → D subscription cockpit (Sarathi HAS a super-admin
+    cockpit — confirmed by founder). Rule reaffirmed: QA audit must be read-only/non-breaking.
   - **★ PAYMENT LINKS SHIPPED Aug 6 2026 (live) — Razorpay Payment Links.** Table nidaan_payment_links.
     PHASE 1 (branch): L2 gate now has "Pay ₹499 now" OR "🔗 Share payment link" → POST
     /nidaan/branch/api/claims/{id}/l2-payment-link (3-day link bound to claim) → branch shares Copy/WhatsApp →
