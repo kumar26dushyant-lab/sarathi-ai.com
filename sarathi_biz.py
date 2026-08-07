@@ -6985,6 +6985,35 @@ class _ReviewFeeReq(BaseModel):
     review_fee_threshold: int = Field(ge=0, le=1000000000)
 
 
+class _GstReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    gst_enabled: bool
+    gst_rate: float = Field(ge=0, le=100)
+    gst_home_state: str = Field("", max_length=60)
+
+
+@app.put("/nidaan/ops/api/gst")
+async def ops_gst_update(body: _GstReq, request: Request):
+    """Update GST config (super_admin only): master on/off, rate %, and our registered
+    home state (drives CGST/SGST vs IGST). GST is exclusive (added on top). Item: GST."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("gst_enabled", "1" if body.gst_enabled else "0", updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("gst_rate", str(body.gst_rate), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("gst_home_state", body.gst_home_state.strip(), updated_by=staff["staff_id"])
+    await _ops_audit(request, "gst.update", "settings", 0,
+                     f"enabled={body.gst_enabled} rate={body.gst_rate} home={body.gst_home_state}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
+@app.get("/nidaan/api/gst-config")
+async def nidaan_gst_config(request: Request):
+    """Public: GST config so pay UIs can show the base + GST breakup (or nothing when off)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.gst_config()
+
+
 @app.put("/nidaan/ops/api/review-fee")
 async def ops_review_fee_update(body: _ReviewFeeReq, request: Request):
     """Update the tiered review-fee config (super_admin only): standard fee, high-tier

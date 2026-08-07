@@ -4554,7 +4554,41 @@ OPS_SETTING_DEFAULTS = {
     "review_fee_low": "499",
     "review_fee_high": "2000",
     "review_fee_threshold": "1000000",   # ₹10 lakh
+    # ── GST — super-admin editable; OFF until registration lands ────────────
+    # gst_enabled: "0"|"1" master switch. gst_rate: % added on top (exclusive).
+    # gst_home_state: our registered state — when set, intra-state = CGST+SGST,
+    # else IGST; blank = collect flat GST + store customer state for later split.
+    "gst_enabled": "0",
+    "gst_rate": "18",
+    "gst_home_state": "",
 }
+
+
+async def gst_config() -> dict:
+    """Current GST config (super-admin editable). enabled=False → no GST anywhere."""
+    enabled = (await get_ops_setting("gst_enabled", "0") or "0") == "1"
+    try:
+        rate = float(await get_ops_setting("gst_rate", "18") or "18")
+    except (TypeError, ValueError):
+        rate = 18.0
+    home_state = (await get_ops_setting("gst_home_state", "") or "").strip()
+    return {"enabled": enabled, "rate": rate, "home_state": home_state}
+
+
+def gst_breakup(base_rupees: float, rate: float, home_state: str = "", customer_state: str = "") -> dict:
+    """GST-exclusive breakup: base + GST = total. If home_state is set and matches the
+    customer's state → CGST+SGST (half each); else IGST. Amounts in ₹ (2-dp)."""
+    base = round(float(base_rupees or 0), 2)
+    gst = round(base * float(rate or 0) / 100.0, 2)
+    total = round(base + gst, 2)
+    intra = bool(home_state) and bool(customer_state) and \
+        home_state.strip().lower() == customer_state.strip().lower()
+    if intra:
+        cgst = round(gst / 2, 2); sgst = round(gst - cgst, 2); igst = 0.0
+    else:
+        cgst = 0.0; sgst = 0.0; igst = gst
+    return {"base": base, "gst": gst, "total": total,
+            "cgst": cgst, "sgst": sgst, "igst": igst, "rate": float(rate or 0)}
 
 
 async def review_fee_config() -> dict:

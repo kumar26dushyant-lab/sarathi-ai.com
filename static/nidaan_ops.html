@@ -6519,6 +6519,9 @@ async function loadWorkflowSettings(){
   const _rfLow = ((_opsSettingsCache||{}).settings||{}).review_fee_low || '499';
   const _rfHigh = ((_opsSettingsCache||{}).settings||{}).review_fee_high || '2000';
   const _rfThresh = ((_opsSettingsCache||{}).settings||{}).review_fee_threshold || '1000000';
+  const _gstOn = (((_opsSettingsCache||{}).settings||{}).gst_enabled || '0') === '1';
+  const _gstRate = ((_opsSettingsCache||{}).settings||{}).gst_rate || '18';
+  const _gstState = ((_opsSettingsCache||{}).settings||{}).gst_home_state || '';
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
@@ -6565,6 +6568,30 @@ async function loadWorkflowSettings(){
           <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveReviewFee()">Save</button>
         </div>
         <div id="rfMsg" style="font-size:.8rem;margin-top:.55rem"></div>
+      </div>
+
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🧾 GST</h2>
+      <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.5);margin-bottom:.8rem">GST is added on top of every fee (exclusive) when enabled. Keep OFF until your GST registration is active. Home state drives CGST+SGST (same state) vs IGST (other state); leave blank to collect flat GST + store the customer's state for later.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Charge GST</label>
+            <select id="gstEnabled" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px">
+              <option value="0" ${_gstOn?'':'selected'}>OFF</option>
+              <option value="1" ${_gstOn?'selected':''}>ON</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">GST rate (%)</label>
+            <input id="gstRate" type="number" min="0" max="100" step="0.1" value="${esc(_gstRate)}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:100px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Our registered state (optional)</label>
+            <input id="gstState" type="text" value="${esc(_gstState)}" placeholder="e.g. Madhya Pradesh" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:180px">
+          </div>
+          <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveGst()">Save</button>
+        </div>
+        <div id="gstMsg" style="font-size:.8rem;margin-top:.55rem"></div>
       </div>
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🔗 Payment Links</h2>
@@ -7503,6 +7530,21 @@ async function saveReviewFee(){
     body: JSON.stringify({review_fee_low: low, review_fee_high: high, review_fee_threshold: thr})
   });
   if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Review fee updated','success'); }
+  else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
+}
+
+async function saveGst(){
+  const enabled = document.getElementById('gstEnabled').value === '1';
+  const rate = parseFloat(document.getElementById('gstRate').value)||0;
+  const state = (document.getElementById('gstState').value||'').trim();
+  const msg = document.getElementById('gstMsg');
+  if (rate < 0 || rate > 100){ if(msg){msg.style.color='#f87171';msg.textContent='Rate must be 0–100';} return; }
+  if (enabled && !confirm('Turn GST ON? It will be added on top of every fee immediately. Only enable once your GST registration is active.')) return;
+  const r = await fetch('/nidaan/ops/api/gst', {
+    method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({gst_enabled: enabled, gst_rate: rate, gst_home_state: state})
+  });
+  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('GST settings updated','success'); }
   else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
 }
 
