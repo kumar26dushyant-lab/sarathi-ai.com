@@ -522,6 +522,13 @@ def normalize_phone(phone: str) -> str:
     return digits if len(digits) == 10 and digits[0] in "6789" else ""
 
 
+def _capname(s: str) -> str:
+    """Normalize a person's name to UPPERCASE (trimmed, single-spaced) so names are stored
+    consistently in caps across every form (claim / signup / ₹499 review / subscription).
+    Blank stays blank. Applies to person names only — never email / policy / notes."""
+    return " ".join((s or "").split()).upper()
+
+
 async def create_account(
     owner_name: str,
     phone: str,
@@ -534,6 +541,7 @@ async def create_account(
     unique. Email is OPTIONAL (stored NULL when blank; unique only when present). Returns
     account_id, or None on a duplicate mobile or email. branch_code attributes the sale to
     an affiliate city branch (validated by the caller; stored as-is)."""
+    owner_name = _capname(owner_name)   # #6: store names in caps
     pw_hash = _hash_password(password)
     em = (email or "").lower().strip() or None       # NULL when blank → email-less accounts don't collide
     ph = normalize_phone(phone) or (phone or "").strip()
@@ -866,6 +874,7 @@ async def create_review_signup(
     intermediary_code / intermediary_name: as printed on the policy. Recommended
     for legal correspondence; collected at intake per IRDAI guidelines."""
     import secrets as _sec
+    name = _capname(name)   # #6: store names in caps
     email = email.strip().lower()
     account = await get_account_by_email(email)
     is_new = False
@@ -1252,6 +1261,7 @@ async def record_payment_link(plink_id: str, short_url: str, purpose: str, amoun
                               created_by_id: str = "", description: str = "",
                               expire_by: Optional[int] = None) -> None:
     """Persist a generated Razorpay payment link so we can reconcile its webhook + show status."""
+    customer_name = _capname(customer_name)   # #6: store names in caps
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             """INSERT OR REPLACE INTO nidaan_payment_links
@@ -1354,6 +1364,7 @@ async def submit_claim(
         if not allowed:
             return None, reason
 
+    insured_name = _capname(insured_name)   # #6: store names in caps
     type_specific_json = json.dumps(type_specific or {})
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
