@@ -770,7 +770,7 @@ function buildSidebar() {
   const myRank = roleRank[_role] ?? 0;
   const items = [
     {id:'tasks',      label:'✅ Tasks',         minRank:0},
-    {id:'overview',   label:'📊 Overview',     minRank:0},
+    {id:'overview',   label:'📊 Claims Dashboard', minRank:0},
     {id:'support',    label:'💬 Support',      minRank:0},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
@@ -852,7 +852,7 @@ async function loadOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Overview</div>
+      <div><div class="section-title">Claims Dashboard</div>
       <div class="section-sub">Welcome back, ${esc(_staffName)} · what needs your attention</div></div>
     </div>
     <div id="overviewStats" style="margin-bottom:.85rem">
