@@ -4863,7 +4863,9 @@ async def get_claims_ops(
             conditions.append("c.claim_type=?")
             params.append(claim_type)
         if branch:
-            conditions.append("UPPER(a.branch_code)=?")
+            # Branch-raised claims carry branch_code on the CLAIM (house account's is blank),
+            # so match the claim's code first, then fall back to the account's.
+            conditions.append("UPPER(COALESCE(NULLIF(c.branch_code,''), a.branch_code))=?")
             params.append(branch.strip().upper())
         if plan:
             conditions.append("sub.plan=?")
@@ -4884,7 +4886,7 @@ async def get_claims_ops(
         cur = await conn.execute(
             f"""SELECT c.*,
                     a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
-                    a.branch_code,
+                    COALESCE(NULLIF(c.branch_code,''), a.branch_code) AS branch_code,
                     sub.plan AS account_plan,
                     s.name AS assigned_staff_name,
                     (SELECT COUNT(*) FROM nidaan_followups f

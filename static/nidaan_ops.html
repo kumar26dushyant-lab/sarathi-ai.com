@@ -3283,10 +3283,12 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td>${payPill(c.payment_status)}</td>
-      <td>${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.firm_name||'')}</span></td>
+      <td>${c.origin==='branch'
+            ? `🏢 <span style="color:#a78bfa;font-weight:700">Branch ${esc(c.branch_code||'')}</span><br><span style="font-size:.72rem;color:rgba(255,255,255,.4)">raised on behalf</span>`
+            : `${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.firm_name||'')}</span>`}</td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
       <td style="text-align:center">${(c.pending_tasks||0)>0?`<span style="background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;padding:.1rem .45rem;font-size:.72rem;font-weight:700">${c.pending_tasks}</span>`:'<span style="color:rgba(255,255,255,.25)">0</span>'}</td>
-      <td>${c.branch_code?`<span style="font-size:.7rem;color:#a78bfa;font-weight:700">${esc(c.branch_code)}</span>`:'<span style="color:rgba(255,255,255,.25)">—</span>'}</td>
+      <td>${c.branch_code?`<span style="font-size:.7rem;color:#a78bfa;font-weight:700">${c.origin==='branch'?'🏢 ':''}${esc(c.branch_code)}</span>`:'<span style="color:rgba(255,255,255,.25)">—</span>'}</td>
       <td style="font-size:.72rem;color:rgba(255,255,255,.35)">${fmtDate(c.created_at)}</td>
     </tr>`).join('');
 
