@@ -1950,6 +1950,15 @@ async def nidaan_api_claims(request: Request, status: Optional[str] = None, limi
     return {"claims": claims, "count": len(claims)}
 
 
+@app.get("/nidaan/api/review-fee-config")
+async def nidaan_review_fee_config(request: Request):
+    """Public: tiered review-fee config so the pay UI shows the correct amount
+    (₹low ≤ threshold, ₹high above) based on the claim's disputed amount."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.review_fee_config()
+
+
 @app.get("/nidaan/api/claims/{claim_id}")
 async def nidaan_api_claim_detail(claim_id: int, request: Request):
     payload = _nidaan_bearer(request)
@@ -2036,11 +2045,13 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
         claim = dict(claim)
         if claim.get("payment_status") == "paid":
             return {"finalized": False, "already": True, "account_id": claim.get("account_id")}
+        # Item #4: record the tiered review fee actually paid (adjusted toward legal if GO).
+        _fee = await nidaan.review_fee_for(claim.get("disputed_amount"))
         # Flip only if still not paid (atomic guard against a concurrent verify+webhook race).
         cur = await _conn.execute(
-            "UPDATE nidaan_claims SET payment_status='paid', paid_at=CURRENT_TIMESTAMP, "
+            "UPDATE nidaan_claims SET payment_status='paid', review_fee_paid=?, paid_at=CURRENT_TIMESTAMP, "
             "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=? AND payment_status!='paid'",
-            (claim_id,))
+            (_fee, claim_id))
         if cur.rowcount == 0:
             # Someone else won the race and marked it paid — treat as already-done.
             await _conn.commit()
@@ -2048,7 +2059,7 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
         await _conn.execute(
             "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
             "VALUES (?, 'intimated', ?, 'system', 0)",
-            (claim_id, f"₹499 paid — review unlocked (via {source})"))
+            (claim_id, f"Review fee ₹{_fee} paid — review unlocked (via {source})"))
         await _conn.commit()
     account_id = claim.get("account_id")
     sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
@@ -2100,14 +2111,17 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
         _conn.row_factory = __import__("aiosqlite").Row
         _cur = await _conn.execute(
-            "SELECT claim_type, payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            "SELECT claim_type, payment_status, disputed_amount FROM nidaan_claims WHERE claim_id=? AND account_id=?",
             (claim_id, payload["sub"]))
         claim = await _cur.fetchone()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim["payment_status"] != "unpaid_lead":
         raise HTTPException(status_code=400, detail=f"Claim is already '{claim['payment_status']}'")
-    # NOTE: no document gate — customers can pay ₹499 anytime; docs are optional.
+    # NOTE: no document gate — customers can pay the review fee anytime; docs are optional.
+    # Item #4: tiered review fee — high tier when the disputed amount exceeds the threshold.
+    _fee = await nidaan.review_fee_for(claim["disputed_amount"])
+    _amt_paise = _fee * 100
     import httpx as _httpx2, time as _time2
     rzp_key_id = _nidaan_rzp_id()
     rzp_key_secret = _nidaan_rzp_secret()
@@ -2118,13 +2132,13 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
         _r = await _client2.post(
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
-            json={"amount": 49900, "currency": "INR", "receipt": receipt,
+            json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
                   "notes": {"product": "nidaan_claim_499", "claim_id": str(claim_id)}},
             timeout=20.0)
         result = _r.json()
     if "id" not in result:
         raise HTTPException(status_code=502, detail=result.get("error", {}).get("description", "Order creation failed"))
-    return {"order_id": result["id"], "amount": 49900, "currency": "INR", "razorpay_key_id": rzp_key_id}
+    return {"order_id": result["id"], "amount": _amt_paise, "fee": _fee, "currency": "INR", "razorpay_key_id": rzp_key_id}
 
 
 class NidaanClaimPayVerifyReq(BaseModel):
@@ -2578,12 +2592,14 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
     rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
+    # Item #4: tiered review fee — the purchase already stores the correct amount_paid.
+    _amt_paise = int(purchase["amount_paid"] or 499) * 100
     receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
     async with _httpx2.AsyncClient() as _client2:
         _r = await _client2.post(
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
-            json={"amount": 49900, "currency": "INR", "receipt": receipt,
+            json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
                   "notes": {"product": "nidaan_review_999", "purchase_id": str(purchase_id)}},
             timeout=20.0,
         )
@@ -2591,7 +2607,7 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
     if "id" not in result:
         err = result.get("error", {}).get("description", "Order creation failed")
         raise HTTPException(status_code=502, detail=err)
-    return {"order_id": result["id"], "amount": 49900, "currency": "INR", "razorpay_key_id": rzp_key_id}
+    return {"order_id": result["id"], "amount": _amt_paise, "currency": "INR", "razorpay_key_id": rzp_key_id}
 
 
 @app.post("/nidaan/api/review/{purchase_id}/pay-verify")
@@ -3137,13 +3153,15 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
     rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
+    _fee = await nidaan.review_fee_for(body.disputed_amount)   # Item #4: tiered review fee
+    _amt_paise = _fee * 100
     receipt = f"nidaan_review_{int(_time.time())}"[:40]
     async with _httpx.AsyncClient() as client:
         r = await client.post(
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
             json={
-                "amount": 49900,   # ₹499 in paise
+                "amount": _amt_paise,
                 "currency": "INR",
                 "receipt": receipt,
                 "notes": {
@@ -3161,7 +3179,8 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
         raise HTTPException(status_code=502, detail=err)
     return {
         "order_id": result["id"],
-        "amount": 49900,
+        "amount": _amt_paise,
+        "fee": _fee,
         "currency": "INR",
         "razorpay_key_id": rzp_key_id,
     }
@@ -6957,6 +6976,27 @@ class _BranchBillingReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     branch_l2_fee: int = Field(ge=0, le=100000)          # in ₹
     branch_charge_policy: str = Field(pattern=r"^(l2_only|all_claims|free)$")
+
+
+class _ReviewFeeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_fee_low: int = Field(ge=0, le=1000000)
+    review_fee_high: int = Field(ge=0, le=1000000)
+    review_fee_threshold: int = Field(ge=0, le=1000000000)
+
+
+@app.put("/nidaan/ops/api/review-fee")
+async def ops_review_fee_update(body: _ReviewFeeReq, request: Request):
+    """Update the tiered review-fee config (super_admin only): standard fee, high-tier
+    fee, and the disputed-amount threshold. Config-driven — change any time (Item #4)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("review_fee_low", str(int(body.review_fee_low)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("review_fee_high", str(int(body.review_fee_high)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("review_fee_threshold", str(int(body.review_fee_threshold)), updated_by=staff["staff_id"])
+    await _ops_audit(request, "review_fee.update", "settings", 0,
+                     f"low=Rs.{body.review_fee_low} high=Rs.{body.review_fee_high} threshold=Rs.{body.review_fee_threshold}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
 
 
 @app.put("/nidaan/ops/api/branch-billing")

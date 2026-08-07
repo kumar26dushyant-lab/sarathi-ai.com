@@ -3474,6 +3474,7 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
       <div class="kv"><span class="kv-label">Disputed Amt</span><span class="kv-val">₹${fmt(c.disputed_amount||0)}</span></div>
       <div class="kv"><span class="kv-label">Submitted</span><span class="kv-val">${fmtDate(c.created_at)}</span></div>
+      ${(c.review_fee_paid||0)>0?`<div class="kv"><span class="kv-label">Review fee paid</span><span class="kv-val">₹${fmt(c.review_fee_paid)}${c.review_outcome==='can_fight'?' <span style="color:#6ee7b7;font-size:.72rem">— credited toward legal</span>':''}</span></div>`:''}
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
     <div class="drawer-section">
@@ -6435,6 +6436,9 @@ async function loadWorkflowSettings(){
   const _permMinRole = ((_opsSettingsCache||{}).settings||{}).task_create_min_role || 'team_member';
   const _brFee = ((_opsSettingsCache||{}).settings||{}).branch_l2_fee || '499';
   const _brPolicy = ((_opsSettingsCache||{}).settings||{}).branch_charge_policy || 'l2_only';
+  const _rfLow = ((_opsSettingsCache||{}).settings||{}).review_fee_low || '499';
+  const _rfHigh = ((_opsSettingsCache||{}).settings||{}).review_fee_high || '2000';
+  const _rfThresh = ((_opsSettingsCache||{}).settings||{}).review_fee_threshold || '1000000';
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
@@ -6460,6 +6464,27 @@ async function loadWorkflowSettings(){
           <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveBranchBilling()">Save</button>
         </div>
         <div id="brBillingMsg" style="font-size:.8rem;margin-top:.55rem"></div>
+      </div>
+
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">💵 Review Fee (tiered)</h2>
+      <div class="card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:rgba(255,255,255,.5);margin-bottom:.8rem">What a customer pays to get a claim reviewed. Disputes above the threshold pay the higher fee. The paid fee is recorded on the claim and credited toward legal if the review is GO.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Standard fee (₹)</label>
+            <input id="rfLow" type="number" min="0" max="1000000" value="${esc(_rfLow)}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:120px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Above threshold (₹)</label>
+            <input id="rfHigh" type="number" min="0" max="1000000" value="${esc(_rfHigh)}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:120px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:rgba(255,255,255,.55);display:block;margin-bottom:.25rem">Threshold: dispute above (₹)</label>
+            <input id="rfThresh" type="number" min="0" value="${esc(_rfThresh)}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;width:150px">
+          </div>
+          <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveReviewFee()">Save</button>
+        </div>
+        <div id="rfMsg" style="font-size:.8rem;margin-top:.55rem"></div>
       </div>
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🔗 Payment Links</h2>
@@ -7384,6 +7409,20 @@ async function saveBranchBilling(){
     body: JSON.stringify({branch_l2_fee: fee, branch_charge_policy: policy})
   });
   if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Branch billing updated','success'); }
+  else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
+}
+
+async function saveReviewFee(){
+  const low = parseInt(document.getElementById('rfLow').value)||0;
+  const high = parseInt(document.getElementById('rfHigh').value)||0;
+  const thr = parseInt(document.getElementById('rfThresh').value)||0;
+  const msg = document.getElementById('rfMsg');
+  if (low < 0 || high < 0 || thr < 0){ if(msg){msg.style.color='#f87171';msg.textContent='Enter valid non-negative amounts';} return; }
+  const r = await fetch('/nidaan/ops/api/review-fee', {
+    method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
+    body: JSON.stringify({review_fee_low: low, review_fee_high: high, review_fee_threshold: thr})
+  });
+  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Review fee updated','success'); }
   else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
 }
 

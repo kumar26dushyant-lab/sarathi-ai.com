@@ -891,6 +891,7 @@ async def create_review_signup(
             password=temp_password,
             firm_name="",
         )
+    _fee = await review_fee_for(disputed_amount)   # Item #4: tiered review fee
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             """INSERT INTO nidaan_per_claim_purchase
@@ -899,10 +900,10 @@ async def create_review_signup(
                 claim_type, disputed_amount, brief_description,
                 amount_paid, status, account_id,
                 intermediary_code, intermediary_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 499, 'pending_payment', ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?)""",
             (name.strip(), phone.strip(), email,
              name.strip(), phone.strip(), insurer_name.strip(),
-             claim_type, disputed_amount, notes.strip(), account_id,
+             claim_type, disputed_amount, notes.strip(), _fee, account_id,
              (intermediary_code or "").strip(), (intermediary_name or "").strip()),
         )
         await conn.commit()
@@ -4546,7 +4547,33 @@ OPS_SETTING_DEFAULTS = {
     # When to charge a branch: 'l2_only' (only when a claim is GO-to-L2),
     # 'all_claims' (every branch claim), or 'free' (never charge).
     "branch_charge_policy": "l2_only",
+    # ── Tiered review fee (Item #4) — super-admin editable ──────────────────
+    # Review fee is `review_fee_low` for disputes ≤ `review_fee_threshold`, else
+    # `review_fee_high`. The paid fee is recorded on the claim and adjusted toward
+    # legal fees if the review outcome is GO. All in ₹.
+    "review_fee_low": "499",
+    "review_fee_high": "2000",
+    "review_fee_threshold": "1000000",   # ₹10 lakh
 }
+
+
+async def review_fee_config() -> dict:
+    """Current tiered review-fee config (super-admin editable)."""
+    low = int((await get_ops_setting("review_fee_low", "499") or "499") or 499)
+    high = int((await get_ops_setting("review_fee_high", "2000") or "2000") or 2000)
+    threshold = int((await get_ops_setting("review_fee_threshold", "1000000") or "1000000") or 1000000)
+    return {"low": low, "high": high, "threshold": threshold}
+
+
+async def review_fee_for(disputed_amount: Optional[int]) -> int:
+    """Review fee (₹) for a claim: high tier when disputed amount exceeds the threshold,
+    else the low tier. Blank/unknown disputed amount → low tier."""
+    cfg = await review_fee_config()
+    try:
+        amt = int(disputed_amount or 0)
+    except (TypeError, ValueError):
+        amt = 0
+    return cfg["high"] if amt > cfg["threshold"] else cfg["low"]
 
 
 async def get_ops_setting(key: str, default: Optional[str] = None) -> Optional[str]:

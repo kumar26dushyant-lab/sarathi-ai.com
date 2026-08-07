@@ -392,7 +392,7 @@
       <div style="display:flex;align-items:center;justify-content:center;gap:1.5rem;flex-wrap:wrap;margin:1.1rem 0 .4rem">
         <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your disputed claim</span><span class="hi">आपका विवादित क्लेम</span></div><div id="lcDisputed" style="font-size:1.8rem;font-weight:800;color:#fff;font-family:'Poppins',sans-serif"></div></div>
         <div style="font-size:1.6rem;color:rgba(255,255,255,.5)">vs</div>
-        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your review</span><span class="hi">आपकी समीक्षा</span></div><div style="font-size:1.8rem;font-weight:800;color:#fcd34d;font-family:'Poppins',sans-serif">₹499</div></div>
+        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your review</span><span class="hi">आपकी समीक्षा</span></div><div id="lcFeeAmt" style="font-size:1.8rem;font-weight:800;color:#fcd34d;font-family:'Poppins',sans-serif">₹499</div></div>
       </div>
       <div style="font-size:.85rem;color:#fcd34d;font-weight:600;margin-bottom:1rem"><span class="en">Don't leave your money on the table.</span><span class="hi">अपना पैसा यूँ ही मत छोड़िए।</span></div>
       <button id="lcPayBtn" style="background:#fcd34d;color:#1c1917;border:none;border-radius:10px;padding:.85rem 2rem;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 6px 18px rgba(252,211,77,.3)">
@@ -2409,6 +2409,14 @@ async function renderLeadChecklist(claimId) {
     gate.style.display = 'block';
     document.getElementById('lcDisputed').textContent = d.disputed_amount ? '₹' + Number(d.disputed_amount).toLocaleString('en-IN') : '—';
     document.getElementById('lcPayBtn').onclick = function(){ payClaim(claimId); };
+    // Item #4: show the correct tiered review fee for this claim's disputed amount.
+    _getReviewFeeCfg().then(function(_cfg){
+      const _fee = _feeForAmount(d.disputed_amount, _cfg);
+      const _feeEl = document.getElementById('lcFeeAmt'); if(_feeEl) _feeEl.textContent = '₹' + _fee;
+      const _btn = document.getElementById('lcPayBtn');
+      if(_btn){ const _en=_btn.querySelector('.en'), _hi=_btn.querySelector('.hi');
+        if(_en) _en.textContent='Pay ₹'+_fee+' & Get My Report'; if(_hi) _hi.textContent='₹'+_fee+' दें और मेरी रिपोर्ट पाएं'; }
+    });
   } else {
     gate.style.display = 'none';
   }
@@ -2433,6 +2441,15 @@ async function uploadChecklistDoc(claimId, docKey, inputEl) {
     if (btn) { btn.disabled = false; btn.textContent = 'Upload'; }
   }
 }
+
+// Item #4: tiered review-fee config (cached) so the pay gate shows the right amount.
+let _reviewFeeCfg = null;
+async function _getReviewFeeCfg(){
+  if(_reviewFeeCfg) return _reviewFeeCfg;
+  try{ const r = await fetch('/nidaan/api/review-fee-config'); if(r && r.ok) _reviewFeeCfg = await r.json(); }catch(e){}
+  return _reviewFeeCfg || {low:499, high:2000, threshold:1000000};
+}
+function _feeForAmount(amt, cfg){ cfg = cfg || {low:499, high:2000, threshold:1000000}; return (Number(amt)||0) > cfg.threshold ? cfg.high : cfg.low; }
 
 // ── ₹499 claim payment: success + robust recovery (UPI race / low internet) ──
 function _claimPaidOverlay(){

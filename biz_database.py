@@ -1245,6 +1245,9 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN l2_paid_at TIMESTAMP",
             # When the ₹499 was paid for a free-lead claim — starts the 48-business-hour SLA.
             "ALTER TABLE nidaan_claims ADD COLUMN paid_at TIMESTAMP",
+            # Tiered review fee (Item #4): rupees actually paid for the review (₹499 or ₹2000),
+            # recorded so it can be adjusted toward legal fees when the outcome is GO.
+            "ALTER TABLE nidaan_claims ADD COLUMN review_fee_paid INTEGER DEFAULT 0",
             # DPDP retention for unpaid leads: we keep their documents only while the
             # lead is live, then securely delete them after a grace window — with a
             # trust-building heads-up FIRST. These track that lifecycle.
