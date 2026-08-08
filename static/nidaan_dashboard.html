@@ -2035,6 +2035,32 @@ async function prePayContinue(){
     doSubscribe();   // unchanged payment path — opens Razorpay with the confirmed details
   } catch(e) { msg.className='msg err'; msg.textContent = e.message; btn.disabled = false; }
 }
+// GST breakup confirm popup — shown BEFORE Razorpay (which displays only the total).
+// Resolves true (proceed) / false (cancel). No popup when GST is off.
+function _gstConfirm(gst, planLabel){
+  return new Promise(function(resolve){
+    if(!gst || !gst.enabled){ resolve(true); return; }
+    const isHi = document.body.classList.contains('hi');
+    const inr = n => (Number(n)||0).toLocaleString('en-IN');
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
+    ov.innerHTML='<div style="max-width:400px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
+      +'<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.8rem">'+(isHi?'भुगतान सारांश':'Payment summary')+(planLabel?(' — '+planLabel):'')+'</div>'
+      +'<div style="font-size:.92rem;color:#cbd5e1;line-height:2">'
+      +'<div style="display:flex;justify-content:space-between"><span>'+(isHi?'राशि':'Amount')+'</span><span>₹'+inr(gst.base)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between"><span>GST ('+gst.rate+'%)</span><span>₹'+inr(gst.gst)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.15);margin-top:.4rem;padding-top:.4rem;font-weight:800;color:#fff"><span>'+(isHi?'कुल देय':'Total payable')+'</span><span>₹'+inr(gst.total)+'</span></div>'
+      +'</div>'
+      +'<div style="font-size:.75rem;color:rgba(255,255,255,.45);margin-top:.7rem">'+(isHi?'Razorpay केवल कुल राशि दिखाएगा।':'Razorpay will show only the total amount.')+'</div>'
+      +'<div style="display:flex;gap:.5rem;margin-top:1.1rem">'
+      +'<button id="gstcxCancel" style="flex:1;padding:.65rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-weight:700;cursor:pointer">'+(isHi?'रद्द करें':'Cancel')+'</button>'
+      +'<button id="gstcxProceed" style="flex:2;padding:.65rem;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer">'+(isHi?'आगे बढ़ें → भुगतान':'Proceed to pay →')+'</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('gstcxCancel').onclick=function(){ ov.remove(); resolve(false); };
+    document.getElementById('gstcxProceed').onclick=function(){ ov.remove(); resolve(true); };
+  });
+}
 async function doSubscribe() {
   if (!_selectedPlan) return;
   // All subscription plans are RECURRING (auto-renew) — quarterly or yearly.
@@ -2106,6 +2132,7 @@ async function doSubscribe() {
           }
         },
       });
+      if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
       rzpSub.open();
     } else {
       // ── One-time Order flow (existing, also used for annual plans) ─────────
@@ -2187,6 +2214,7 @@ async function doSubscribe() {
           }
         },
       };
+      if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
       closeSubscribeModal();
       const rzp = new Razorpay(opts);
       rzp.open();

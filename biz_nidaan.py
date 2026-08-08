@@ -3818,6 +3818,10 @@ async def create_nidaan_razorpay_order(
                 "amount": amount_paise,
                 "plan": plan,
                 "amount_display": amount_display,
+                "gst": {"enabled": _g["enabled"], "rate": _g["rate"],
+                        "base": _base_paise // 100,
+                        "gst": (amount_paise - _base_paise) // 100,
+                        "total": amount_paise // 100},
                 "razorpay_key_id": rzp_key_id,
             }
     except Exception as e:
@@ -4046,6 +4050,10 @@ async def create_nidaan_recurring_subscription(
                 "plan": plan,
                 "amount_display": (f"₹{_amt_paise // 100:,} (incl. {int(_gcfg['rate'])}% GST)" if _gsuf else info["display"]),
                 "razorpay_key_id": rzp_key_id,
+                "gst": {"enabled": _gcfg["enabled"], "rate": _gcfg["rate"],
+                        "base": info["amount_paise"] // 100,
+                        "gst": (_amt_paise - info["amount_paise"]) // 100,
+                        "total": _amt_paise // 100},
             }
     except Exception as e:
         logger.error("Nidaan Razorpay subscription error: %s", e)
