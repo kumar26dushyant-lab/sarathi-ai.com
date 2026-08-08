@@ -338,7 +338,7 @@ body{{margin:0;padding:0;background:#060f1e;font-family:'Segoe UI',Tahoma,Geneva
 {content}
 </div>
 <div class="footer">
-  <p>Nidaan Partner — by Sarathi-AI Business Technologies</p>
+  <p>NidaanPartner.com — Developed by GoLuQ.com Digital Consultant</p>
   <p><a href="mailto:support@nidaanpartner.com">support@nidaanpartner.com</a> &bull; <a href="https://nidaanpartner.com">nidaanpartner.com</a></p>
   <p style="margin-top:8px;font-size:11px;color:#334155">This is an automated notification. Do not reply to this email.</p>
 </div>
