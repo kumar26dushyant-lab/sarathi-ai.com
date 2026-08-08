@@ -4998,6 +4998,19 @@ apkLoadStatus() call.
     (home_state blank→flat GST + store state for CGST/SGST vs IGST later), formal GST tax-invoice/receipt, per-
     recurring-CYCLE ledger (records initial only for now). COMPLIANCE: not yet GST-registered (applied) — collect
     now + remit later per founder; on/off toggle pauses instantly.
+    ★ 9-ITEM BATCH SHIPPED Aug 8 2026 (all live): #1 Razorpay Instant Settlement = GUIDANCE (founder enables in
+    Razorpay dashboard). #2 GoLuQ credit added everywhere (Sarathi pages/emails footers, Nidaan site+email
+    footer, Dushyant profile 'Founder GoLuQ.com Digital Consultant'); legal entity 'Sarathi-AI Business
+    Technologies' KEPT for copyright/Terms-Privacy-operator/email-sender (founder chose). #3 payment-failure
+    alerts: webhook payment.failed + subscription.halted → on_payment_failed() → all super-admins via must-ack
+    red popup + email + Telegram + push (every failure type). #4 Recent Comments moved to top of Claims
+    Dashboard. #5 prominent top search on Claims Dashboard. #6 advisor commission disclaimer = PERSISTENT
+    bottom-of-dashboard note for SUBSCRIBERS (15% of Nidaan's 15%, ₹2L→₹1.5L→₹22,500→₹3,375 example; NOT in
+    drawer — corrected). #7 L2 Claims nav (review_delivered+can_fight) + Archived nav (no_scope) via
+    review_outcome filter on get_claims_ops; on_moved_to_l2() alerts SA+admins+assignees all channels. #8
+    hero copy dropped 'Free'. #9 glowing eye-catching CTA chip ('your money is your right'). ALSO: policyholder
+    'How it works' button pointed to only-adv #how-it-works (hidden) → fixed to #solution. GST pre-Razorpay
+    breakup popup (Amount+GST=Total) on subscribe (recurring+one-time) since Razorpay shows only total.
     STILL TO BUILD (directions locked): #3 rename Overview→"Claims Dashboard" + operational widget + BIG
     consolidated-acknowledgement notifications (concerned = assignees+watchers+super-admins per my rec); #5
     staff-as-branch dual-role — auto referral code for EVERY staff, commission superadmin-adjustable for BOTH
