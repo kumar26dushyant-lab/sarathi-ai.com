@@ -5436,5 +5436,48 @@ paths before/after; never break a flow; zero-downtime; keep this doc updated.
 
 ---
 
+## 62. STAFF-AS-BRANCH — personal referral business (owner Aug 8; SHIPPED, live 210504a)
+
+Owner ask: "yes go ahead for staff-as-branch, make it carefully… run well with all
+calculations/counts… no other feature/flow/wiring should get disturbed."
+
+DESIGN (zero-disruption): every staffer is now also a referrer. Attribution reuses the
+EXISTING shared slot `nidaan_accounts.branch_code`. Staff codes are formatted `SP-XXXXXX`
+(alphabet excludes I/O/0/1 for Tier II/III legibility) and are checked unique across BOTH
+`nidaan_staff.referral_code` AND `nidaan_branches.branch_code`. Because branch reconciliation
+(`list_branches`) only counts codes that JOIN a real `nidaan_branches` row, a staff code in
+that slot is invisible to branch stats — and vice-versa. No branch/claims/attribution flow
+was modified.
+
+BACKEND (biz_database / biz_nidaan / sarathi_biz):
+- `nidaan_staff` += `referral_code`, `commission_pct REAL DEFAULT 0` (idempotent ALTERs).
+- `ensure_staff_referral_codes()` backfills all staff → run at startup + inside create_staff
+  (both fresh + reclaimed paths). Verified live: 25/25 active staff have unique codes.
+- `get_staff_business(id)` / `list_staff_business()` mirror list_branches: signups, paid,
+  attributed revenue, claims, commission = revenue × commission_pct (RUPEES).
+- `set_staff_commission(id, pct)` (0–100).
+- Endpoints: GET `/nidaan/ops/api/my-business` (own — any staff), GET `/nidaan/ops/api/staff-business`
+  (super-admin reconciliation), PATCH `/nidaan/ops/api/staff/{id}/commission` (super_admin, audited).
+
+FRONTEND (nidaan_ops.html): new "🚀 My Business" nav (minRank 0 → every staffer) + gamified
+panel: personal code, shareable link (`/nidaan?ref=CODE`), copy-code/copy-link/WhatsApp-share,
+stat tiles (signups · paid · claims · revenue · commission), stage-based motivational nudge.
+Super-admins additionally get a "Team referral commissions" table with inline editable comm %.
+Rendered in the staffer's OWN saved language (telegram_lang) via JS ternaries — the ops portal
+has no live UI language toggle and no .en/.hi CSS, so dual spans were NOT used. Branch payout ₹
+amount was already displayed in the ops branches table (share_pct → ₹ payout column).
+
+COMMISSION SEMANTICS: reconciliation figure, not auto-paid; % set by super-admin (default 0).
+
+NOT YET (future phases if owner wants): staff RAISING claims directly like a branch house
+account; per-cycle recurring commission accrual; auto-payout. Current build = attribution +
+visibility + commission config + gamified dashboard.
+
+Also this session: fixed #6 commission disclaimer not switching to Hindi on the subscriber
+dashboard (its `.hi` blocks had inline `display:none`, which the `.body.hi/.body.en` CSS
+toggle cannot override; removed inline styles → live 6648921).
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
