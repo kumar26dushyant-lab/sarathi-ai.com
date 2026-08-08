@@ -3532,6 +3532,25 @@ async def nidaan_razorpay_webhook(request: Request):
     event = data.get("event", "")
     payload = data.get("payload", {})
 
+    # ── #3(ii): Payment FAILED — alert every super-admin on ALL channels ─────────
+    if event == "payment.failed":
+        _pe = payload.get("payment", {}).get("entity", {})
+        _notes = _pe.get("notes", {}) or {}
+        _prod = _notes.get("product", "") or _notes.get("purpose", "")
+        _kind = {"nidaan": "Subscription", "nidaan_claim_499": "₹499/₹2000 review",
+                 "nidaan_review_999": "Review", "nidaan_review": "Review",
+                 "nidaan_branch_l2": "Branch Level-2", "nidaan_plink": "Payment link"}.get(_prod, _prod or "Payment")
+        _amt = int(_pe.get("amount", 0) or 0) // 100
+        _reason = (_pe.get("error_description") or _pe.get("error_reason") or "").strip()
+        _contact = (_pe.get("contact") or _pe.get("email") or "").strip()
+        _detail = f"Method: {_pe.get('method','')}  ·  Payment: {_pe.get('id','')}"
+        try:
+            import biz_nidaan_notifications as _nf
+            _asyncio.create_task(_nf.on_payment_failed(_kind, _amt, _detail, _reason, _contact))
+        except Exception as _fe:
+            logger.warning("payment.failed alert dispatch failed: %s", _fe)
+        return {"status": "ok", "event": event}
+
     # ── Refund events (refund.processed / refund.failed) ─────────────────────────
     if event in ("refund.processed", "refund.failed", "refund.created"):
         refund_entity = payload.get("refund", {}).get("entity", {})
@@ -3706,6 +3725,16 @@ async def nidaan_razorpay_webhook(request: Request):
             await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
         except Exception as bwe:
             logger.error("Bundle teardown on webhook failed: %s", bwe)
+        # #3(ii): a HALTED subscription = recurring failed after retries — alert super-admins.
+        if event == "subscription.halted":
+            try:
+                import biz_nidaan_notifications as _nf2
+                _asyncio.create_task(_nf2.on_payment_failed(
+                    f"Recurring subscription HALTED ({plan})", 0,
+                    f"Account #{account_id} · sub {rzp_sub_id} — autopay stopped after failed retries.",
+                    reason="Recurring charge failed (retries exhausted)"))
+            except Exception:
+                pass
     return {"status": "ok", "event": event}
 
 

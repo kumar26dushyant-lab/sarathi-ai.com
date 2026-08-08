@@ -1584,6 +1584,34 @@ async def on_claim_filed(claim_id: int, account_id: int):
             claim_id=claim_id, account_id=account_id)
 
 
+async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
+                            reason: str = "", contact: str = ""):
+    """A payment attempt FAILED (new/recurring subscription, ₹499/₹2000 review, L2, or a
+    payment link). Alert EVERY super-admin on ALL channels — dashboard (must-acknowledge,
+    top-priority popup) + email + Telegram + push — so it's never missed. (notify_staff_inapp
+    with require_ack drives the red 'Updates for you' popup and mirrors to Telegram/push.)"""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    if not ids:
+        return
+    subj = f"🔴 Payment FAILED — {kind}" + (f" ₹{amount_rupees}" if amount_rupees else "")
+    body = ("A payment attempt FAILED — please review.\n\n"
+            f"Type: {kind}\n"
+            + (f"Amount: ₹{amount_rupees}\n" if amount_rupees else "")
+            + (f"Customer: {contact}\n" if contact else "")
+            + (f"Reason: {reason}\n" if reason else "")
+            + (detail + "\n" if detail else "")
+            + "\nOpen: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="payment.failed",
+                                 email=True, require_ack=True)
+    except Exception as e:
+        logger.warning("on_payment_failed alert failed: %s", e)
+
+
 async def on_branch_l2_paid(claim_id: int, branch_code: str):
     """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
     — alert SA/Admin that the case is queued for the legal team."""
