@@ -4864,7 +4864,8 @@ async def ops_my_business(request: Request):
     if not biz:
         raise HTTPException(status_code=404)
     base = str(request.base_url).rstrip("/")
-    biz["referral_link"] = (f"{base}/nidaan?ref={biz['referral_code']}"
+    # Same entry path branches use (/nidaan/start reads ?ref= and carries it into signup).
+    biz["referral_link"] = (f"{base}/nidaan/start?ref={biz['referral_code']}"
                             if biz.get("referral_code") else "")
     return biz
 
