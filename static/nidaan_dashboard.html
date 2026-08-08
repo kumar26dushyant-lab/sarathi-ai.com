@@ -1020,6 +1020,13 @@
   </div>
 </div>
 
+<!-- #6: persistent commission disclaimer at the bottom — shown for SUBSCRIBERS (advisors) only -->
+<div id="subCommissionDisclaimer" style="display:none;max-width:900px;margin:1.5rem auto 2.5rem;padding:1rem 1.2rem;background:rgba(34,211,238,.05);border:1px dashed rgba(34,211,238,.3);border-radius:12px;color:rgba(255,255,255,.72);font-size:.82rem;line-height:1.75">
+  <div style="font-weight:800;color:#22d3ee;margin-bottom:.4rem">💰 <span class="en">Advisor reward — how it works</span><span class="hi" style="display:none">एडवाइज़र इनाम — यह कैसे काम करता है</span></div>
+  <div class="en">For every claim marked <b>fightable</b>, you earn a reward — paid once the insurance company actually pays your client. Your reward is <b>15% of Nidaan's fee</b>, and Nidaan's fee is <b>15% of the amount recovered</b>.<br><br><b>Simple example:</b> stuck claim ₹2,00,000 → insurer finally pays ₹1,50,000 → Nidaan fee (15%) = ₹22,500 → <b>your reward (15% of that) = ₹3,375</b>. No win, no fee — you're paid only after the case is won and your client has received the money.</div>
+  <div class="hi" style="display:none">हर <b>लड़ने लायक</b> क्लेम पर आपको इनाम मिलता है — जो तब मिलता है जब बीमा कंपनी सचमुच आपके ग्राहक को भुगतान कर देती है। आपका इनाम <b>Nidaan की फ़ीस का 15%</b> है, और Nidaan की फ़ीस <b>वसूली गई राशि का 15%</b> है।<br><br><b>आसान उदाहरण:</b> अटका क्लेम ₹2,00,000 → कंपनी आख़िर में देती है ₹1,50,000 → Nidaan फ़ीस (15%) = ₹22,500 → <b>आपका इनाम (उसका 15%) = ₹3,375</b>। जीत नहीं तो फ़ीस नहीं — पैसा तभी मिलता है जब केस जीता जाए और ग्राहक को भुगतान मिल जाए।</div>
+</div>
+
 <script>
 const TOKEN_KEY = 'nidaan_token';
 
@@ -1150,6 +1157,9 @@ async function loadDashboard() {
 
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
+  // #6: show the persistent commission disclaimer only for subscribers (advisors).
+  const _scd = document.getElementById('subCommissionDisclaimer');
+  if (_scd) _scd.style.display = me.subscription ? 'block' : 'none';
   loadNotif();
   if (!window._notifTimer) window._notifTimer = setInterval(loadNotif, 30000);
   if (me.status === 'deletion_pending') { try { _showDeletionPending(''); } catch (e) {} }
@@ -1720,15 +1730,6 @@ async function openClaimDrawer(claim_id) {
               : 'No strong basis to challenge this claim — it appears to have been settled fairly.');
     const col = canFight ? '#34d399' : '#fbbf24';
     const bg = canFight ? 'rgba(16,185,129,.10)' : 'rgba(251,191,36,.08)';
-    // #6: advisor commission disclaimer — only for advisor (subscriber) accounts, only on can_fight.
-    const isAdvisor = !!(_meCache && _meCache.subscription);
-    const commissionNote = (canFight && isAdvisor) ? `
-      <div style="background:rgba(34,211,238,.06);border:1px dashed rgba(34,211,238,.35);border-radius:8px;padding:.75rem .9rem;margin-top:.6rem;font-size:.82rem;color:rgba(255,255,255,.8);line-height:1.7">
-        <div style="font-weight:800;color:#22d3ee;margin-bottom:.3rem">💰 ${isHi ? 'आप क्या कमाते हैं' : 'What you earn'}</div>
-        ${isHi
-          ? 'जब Nidaan आपके ग्राहक का क्लेम जिताता है और कंपनी ग्राहक को पैसा देती है, तब आपको इनाम मिलता है।<br><br><b>आसान उदाहरण:</b><br>• अटका क्लेम: ₹2,00,000<br>• कंपनी आख़िर में देती है: ₹1,50,000<br>• Nidaan फ़ीस (उसका 15%): ₹22,500<br>• <b>आपका इनाम (Nidaan फ़ीस का 15%): ₹3,375</b><br><br>पैसा तभी मिलता है जब केस जीता जाए और ग्राहक को भुगतान मिल जाए। जीत नहीं, तो फ़ीस नहीं।'
-          : 'When Nidaan wins the claim you referred and the company pays your client, you earn a reward.<br><br><b>Simple example:</b><br>• The stuck claim: ₹2,00,000<br>• Company finally pays: ₹1,50,000<br>• Nidaan fee (15% of that): ₹22,500<br>• <b>Your reward (15% of the Nidaan fee): ₹3,375</b><br><br>You are paid only after the case is won and your client receives the money. No win, no fee.'}
-      </div>` : '';
     reviewSection = `
     <div class="drawer-section">
       <h4>${isHi ? 'कानूनी समीक्षा ✅' : 'Legal Assessment ✅'}</h4>
@@ -1736,7 +1737,6 @@ async function openClaimDrawer(claim_id) {
         <div style="font-weight:700;color:${col};font-size:.9rem;line-height:1.5">${banner}</div>
       </div>
       <div style="font-size:.86rem;color:rgba(255,255,255,.82);line-height:1.6;white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
-      ${commissionNote}
     </div>`;
   }
 
