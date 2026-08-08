@@ -855,10 +855,18 @@ async function loadOverview() {
       <div><div class="section-title">Claims Dashboard</div>
       <div class="section-sub">Welcome back, ${esc(_staffName)} · what needs your attention</div></div>
     </div>
+    <!-- #5: prominent top search -->
+    <div style="margin:.15rem 0 1rem">
+      <input id="ovTopSearch" placeholder="🔍 Search claims — name, phone, policy, insurer, claim #…"
+             oninput="renderActiveClaimsWidget(((document.getElementById('ovClaimStatus')||{}).value)||'', this.value)"
+             style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border:1px solid rgba(34,211,238,.35);color:#fff;padding:.7rem .9rem;border-radius:10px;font-size:.95rem">
+    </div>
     <div id="overviewStats" style="margin-bottom:.85rem">
       <div class="nd-card" style="padding:1rem;color:rgba(255,255,255,.4)">Loading…</div>
     </div>
     <div id="overviewWidgets" style="margin-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>
+    <!-- #4: Recent Comments ABOVE the claims list -->
+    <div id="overviewRecentComments" style="margin-top:1.25rem"></div>
     <div id="overviewClaimsWidget" style="margin-top:1.25rem"></div>
     <div id="overviewAdminWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem"></div>`;
 
@@ -925,11 +933,12 @@ async function loadOverview() {
     </div>`;
   renderActiveClaimsWidget('', '');
 
-  // Admin-only bottom widget grid: recent comments + escalations + analytics.
-  // (Quick Tasks + Workload moved to the dedicated Tasks panel.)
+  // #4: Recent Comments now sits ABOVE the claims list (its own full-width row).
   if (isAdmin) {
+    const _rc = document.getElementById('overviewRecentComments');
+    if (_rc) _rc.innerHTML = _widgetRecentComments(d.recent_comments || []);
+    // Bottom widget grid: escalations + analytics. (Quick Tasks + Workload live in Tasks.)
     document.getElementById('overviewAdminWidgets').innerHTML = `
-      ${_widgetRecentComments(d.recent_comments || [])}
       <div id="overviewEscalations">${_widgetEscalationsLoading()}</div>
       <div id="overviewAnalytics">${_widgetAnalyticsLoading()}</div>
     `;

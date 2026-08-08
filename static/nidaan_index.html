@@ -396,6 +396,9 @@ span.hi-inline{display:none}
 .eg-listen{display:inline-flex;align-items:center;gap:6px;background:transparent;color:#7dd3fc;border:1px solid rgba(125,211,252,.5);padding:10px 14px;border-radius:10px;font-weight:600;font-size:.86rem;cursor:pointer}
 .nav-switch{display:inline-flex;align-items:center;gap:5px;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.4);color:var(--cyan-light,#67e8f9);padding:.35rem .7rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer}
 @keyframes egGiftGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}50%{box-shadow:0 0 22px 2px rgba(16,185,129,.45)}}
+/* #9: eye-catching glowing policyholder CTA chip */
+@keyframes phCtaGlow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35),0 4px 14px rgba(245,158,11,.25);transform:scale(1)}50%{box-shadow:0 0 24px 5px rgba(245,158,11,.75),0 6px 20px rgba(245,158,11,.45);transform:scale(1.015)}}
+.path-chip.ph-cta-glow{animation:phCtaGlow 1.8s ease-in-out infinite;font-weight:800;white-space:normal;text-align:center;line-height:1.4}
 /* audience visibility — a body class shows only the matching sections */
 body.aud-advisor .only-ph{display:none !important}
 body.aud-policyholder .only-adv{display:none !important}
@@ -704,10 +707,8 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
 <!-- ══════════ COMPACT TOP RIBBON — quick price chips above hero ══════════ -->
 <div class="paths-strip">
   <div class="paths-strip-inner">
-    <a href="/nidaan/start#get-reviewed" class="path-chip path-chip-499 only-ph">
-      ⚡ <span class="en">Get your stuck claim reviewed</span><span class="hi" style="display:none">अपना अटका क्लेम रिव्यू कराएँ</span>
-      <span class="divider">·</span>
-      <span class="price"><span class="en">Free to start</span><span class="hi" style="display:none">मुफ़्त शुरुआत</span></span>
+    <a href="/nidaan/start#get-reviewed" class="path-chip path-chip-499 only-ph ph-cta-glow">
+      ⚡ <span class="en">Review/process your stuck insurance claim in just a few steps — start now, your money is your right</span><span class="hi" style="display:none">अपना अटका बीमा क्लेम कुछ ही चरणों में रिव्यू/प्रोसेस करें — अभी शुरू करें, आपका पैसा आपका हक़ है</span>
       <span class="arrow">→</span>
     </a>
     <a href="#plans" class="path-chip path-chip-sub only-adv">
@@ -758,7 +759,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
         <span class="hi" style="display:none">पता लगाना मुफ़्त। वापस पाने को संभवतः लाखों।<br>असली ग़लती सिर्फ़ एक है — कोशिश न करना।</span>
       </p>
       <div class="hero-ctas">
-        <a href="/nidaan/start#get-reviewed" class="btn-primary">🛡️ <span class="en">Review your stuck insurance claim — Free</span><span class="hi" style="display:none">अपना अटका बीमा क्लेम रिव्यू कराएँ — मुफ़्त</span> →</a>
+        <a href="/nidaan/start#get-reviewed" class="btn-primary">🛡️ <span class="en">Review/process your stuck insurance claim in just a few steps</span><span class="hi" style="display:none">अपना अटका बीमा क्लेम कुछ ही चरणों में रिव्यू/प्रोसेस कराएँ</span> →</a>
         <a href="#how-it-works" class="btn-outline">▶ <span class="en">How it works</span><span class="hi" style="display:none">कैसे काम करता है</span></a>
       </div>
       <div class="hero-trust-row">
