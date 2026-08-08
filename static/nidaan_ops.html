@@ -3449,7 +3449,7 @@ let _mbLang = 'en';
 function _mbHi(){ return _mbLang === 'hi'; }
 async function loadMyBusiness() {
   const el = document.getElementById('panel-mybiz');
-  const prof = await loadMyProfile();
+  const prof = await _loadMyProfile();
   _mbLang = (prof && prof.telegram_lang === 'hi') ? 'hi' : 'en';
   const hi = _mbHi();
   el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>${hi?'लोड हो रहा है…':'Loading…'}</p></div>`;
