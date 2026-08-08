@@ -398,6 +398,8 @@ select.form-input option{background:#1e293b}
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
+      <div id="panel-l2claims" class="panel" style="display:none"></div>
+      <div id="panel-archived" class="panel" style="display:none"></div>
       <div id="panel-accounts" class="panel" style="display:none"></div>
       <div id="panel-branches" class="panel" style="display:none"></div>
       <div id="panel-staff" class="panel" style="display:none"></div>
@@ -773,6 +775,8 @@ function buildSidebar() {
     {id:'overview',   label:'📊 Claims Dashboard', minRank:0},
     {id:'support',    label:'💬 Support',      minRank:0},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
+    {id:'l2claims',   label:'⚖️ L2 Claims',    minRank:1},
+    {id:'archived',   label:'🗄️ Archived',     minRank:1},
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
     {id:'branches',   label:'🏢 Branches',     minRank:1},
     null,
@@ -824,6 +828,8 @@ function showPanel(id, fromHistory) {
     tasks: loadTasks,
     support: loadSupport,
     claims: loadClaims,
+    l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
+    archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
     accounts: loadAccounts,
     branches: loadBranches,
     staff: loadStaff,
@@ -3218,6 +3224,38 @@ function applyClaimFilters(){
   loadClaims(_cfVal('claimStatusFilter'), _cfVal('claimSearch'),
              _cfVal('claimBranchFilter'), _cfVal('claimPlanFilter'), _cfVal('claimAssignFilter'));
 }
+// #7: L2 (can_fight) + Archived (no_scope) claim lists — review-delivered outcomes.
+let _outcomeCache = {};
+async function loadOutcomeClaims(key, outcome, title, sub){
+  const el = document.getElementById('panel-'+key);
+  el.innerHTML = `<div class="section-hdr"><div><div class="section-title">${title}</div><div class="section-sub">${sub}</div></div></div>
+    <div class="filter-bar"><input id="oc_${key}_s" placeholder="🔍 Search name / phone / policy / claim #…" oninput="_renderOutcome('${key}')" style="flex:1;min-width:180px"></div>
+    <div id="oc_${key}_wrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+  const r = await API('/claims?review_outcome='+outcome+'&limit=300');
+  if(!r || !r.ok){ document.getElementById('oc_'+key+'_wrap').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
+  _outcomeCache[key] = (await r.json()).claims || [];
+  _renderOutcome(key);
+}
+function _renderOutcome(key){
+  const wrap = document.getElementById('oc_'+key+'_wrap'); if(!wrap) return;
+  const q = (((document.getElementById('oc_'+key+'_s')||{}).value)||'').toLowerCase();
+  let rows = _outcomeCache[key] || [];
+  if(q) rows = rows.filter(c => ((c.insured_name||'')+' '+(c.insured_phone||'')+' '+(c.policy_no||'')+' '+(c.insurer_name||'')+' '+c.claim_id).toLowerCase().includes(q));
+  if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims here yet</p></div>'; return; }
+  const isL2 = key==='l2claims';
+  wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
+    + (isL2?'<th>L2 fee</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
+    + rows.map(c=>`<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
+        <td><strong>#${fmtClaimNum(c.claim_id)}</strong></td>
+        <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.insured_phone||'')}</span></td>
+        <td>${esc(c.claim_type||'—')}</td>
+        <td>₹${fmt(c.disputed_amount||0)}</td>`
+        + (isL2?`<td>${c.l2_payment_status==='paid'?'<span style="color:#6ee7b7;font-weight:700">Paid ✓</span>':'<span style="color:#fcd34d">Due</span>'}</td>`:'')
+        + `<td>${c.origin==='branch'?('🏢 Branch '+esc(c.branch_code||'')):esc(c.owner_name||'—')}</td>
+        <td style="font-size:.72rem;color:rgba(255,255,255,.4)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
+      </tr>`).join('') + '</tbody></table></div>';
+}
+
 async function loadClaims(statusFilter='', search='', branch='', plan='', assigned='') {
   const el = document.getElementById('panel-claims');
   const branchOpts = await _getClaimBranchOpts();

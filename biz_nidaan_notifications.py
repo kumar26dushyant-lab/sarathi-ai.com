@@ -1584,6 +1584,44 @@ async def on_claim_filed(claim_id: int, account_id: int):
             claim_id=claim_id, account_id=account_id)
 
 
+async def on_moved_to_l2(claim_id: int):
+    """#7: a claim's review was delivered as GO (can_fight) → it moves into the L2 section.
+    Alert super-admins + sub-admins + everyone assigned to the claim, on all channels
+    (must-acknowledge popup + email + Telegram + push)."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT insured_name, claim_type, disputed_amount FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+        if not c:
+            return
+        c = dict(c)
+        ids = {r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()}
+        # + all assignees of this claim
+        for r in await (await conn.execute(
+                "SELECT staff_id FROM nidaan_claim_assignees WHERE claim_id=?", (claim_id,))).fetchall():
+            ids.add(r["staff_id"])
+        prim = await (await conn.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if prim and prim["assigned_to_staff_id"]:
+            ids.add(prim["assigned_to_staff_id"])
+    ids = [i for i in ids if i]
+    if not ids:
+        return
+    subj = f"⚖️ Moved to Level-2 — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"A reviewed claim is GO for Level-2 (legal).\n\n"
+            f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
+            + (f"Disputed: ₹{c['disputed_amount']:,}\n" if c.get('disputed_amount') else "")
+            + "\nIt now appears in the L2 Claims section. Open: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="claim.l2_moved",
+                                 email=True, require_ack=True, claim_id=claim_id)
+    except Exception as e:
+        logger.warning("on_moved_to_l2 alert failed: %s", e)
+
+
 async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
                             reason: str = "", contact: str = ""):
     """A payment attempt FAILED (new/recurring subscription, ₹499/₹2000 review, L2, or a

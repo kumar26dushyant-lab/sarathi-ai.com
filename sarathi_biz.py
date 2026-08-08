@@ -5082,6 +5082,7 @@ async def ops_list_claims(
     branch: Optional[str] = None,
     plan: Optional[str] = None,
     account_id: Optional[int] = None,
+    review_outcome: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ):
@@ -5094,6 +5095,7 @@ async def ops_list_claims(
         claim_type=claim_type, search=search,
         payment_status=payment_status,
         branch=branch, plan=plan, account_id=account_id,
+        review_outcome=review_outcome,
         limit=limit, offset=offset,
     )
     # Pipeline counters (global, independent of the active filter) so the ops UI
@@ -5368,6 +5370,9 @@ async def ops_deliver_review(claim_id: int, body: OpsDeliverReviewReq, request: 
     try:
         import biz_nidaan_notifications as _nnot
         asyncio.create_task(_nnot.on_report_ready(claim_id))
+        # #7: a GO outcome moves the claim into the L2 section → alert SA/admins/assignees.
+        if body.outcome == "can_fight":
+            asyncio.create_task(_nnot.on_moved_to_l2(claim_id))
     except Exception as _e:
         logger.warning("on_report_ready dispatch failed for claim %s: %s", claim_id, _e)
     return {"claim_id": claim_id, "status": "review_delivered", "outcome": body.outcome}

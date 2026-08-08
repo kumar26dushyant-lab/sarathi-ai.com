@@ -4984,6 +4984,7 @@ async def get_claims_ops(
     branch: Optional[str] = None,
     plan: Optional[str] = None,
     account_id: Optional[int] = None,
+    review_outcome: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -5008,6 +5009,10 @@ async def get_claims_ops(
         if status:
             conditions.append("c.status=?")
             params.append(status)
+        if review_outcome:
+            # #7: L2 section = review delivered with a GO outcome; Archived = no_scope.
+            conditions.append("c.review_outcome=? AND c.status='review_delivered'")
+            params.append(review_outcome)
         if payment_status:
             conditions.append("c.payment_status=?")
             params.append(payment_status)
