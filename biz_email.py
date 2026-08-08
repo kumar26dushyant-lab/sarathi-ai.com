@@ -304,6 +304,7 @@ body{{margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,Geneva
 </div>
 <div class="footer">
   <p>Sarathi-AI Business Technologies</p>
+  <p style="font-size:11px;color:#94a3b8">Developed by GoLuQ.com Digital Consultant</p>
   <p><a href="mailto:support@sarathi-ai.com" style="color:#64748b">support@sarathi-ai.com</a> &bull; <a href="https://sarathi-ai.com" style="color:#64748b">sarathi-ai.com</a></p>
   <p style="margin-top:8px;font-size:11px;color:#94a3b8">This is an automated notification from Sarathi-AI. Please do not reply to this email.<br>If you need help, contact us at support@sarathi-ai.com</p>
 </div>
