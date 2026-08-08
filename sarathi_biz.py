@@ -4852,6 +4852,50 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
     return {"ok": True}
 
 
+# ── Staff-as-branch: personal referral business ───────────────────────────────
+@app.get("/nidaan/ops/api/my-business")
+async def ops_my_business(request: Request):
+    """The signed-in staffer's own referral business — code, shareable link, signups,
+    subscribers, attributed revenue, commission earned, claims. Any staffer sees their own."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    biz = await nidaan.get_staff_business(staff["staff_id"])
+    if not biz:
+        raise HTTPException(status_code=404)
+    base = str(request.base_url).rstrip("/")
+    biz["referral_link"] = (f"{base}/nidaan?ref={biz['referral_code']}"
+                            if biz.get("referral_code") else "")
+    return biz
+
+
+@app.get("/nidaan/ops/api/staff-business")
+async def ops_staff_business(request: Request):
+    """Super-admin reconciliation: every staffer's referral business + commission owed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"staff": await nidaan.list_staff_business()}
+
+
+class OpsStaffCommission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    commission_pct: float = Field(..., ge=0, le=100)
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}/commission")
+async def ops_set_staff_commission(staff_id: int, body: OpsStaffCommission, request: Request):
+    """Super-admin: set a staffer's referral commission % (money config → super_admin only)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.set_staff_commission(staff_id, body.commission_pct):
+        raise HTTPException(status_code=404, detail="Staffer not found")
+    await _ops_audit(request, "staff.commission", "staff", str(staff_id),
+                     f"commission_pct={body.commission_pct}")
+    return {"ok": True}
+
+
 # ── Plans & billing config (SUPER-ADMIN only — sensitive) ─────────────────────
 @app.get("/nidaan/api/content")
 @limiter.limit("60/minute")
@@ -21384,6 +21428,13 @@ async def main():
         await nidaan.ensure_claim_documents_table()
     except Exception as _nde:
         logger.error("Nidaan claim docs table init failed: %s", _nde, exc_info=True)
+    # Staff-as-branch: backfill a personal referral code for every staffer.
+    try:
+        _n_ref = await nidaan.ensure_staff_referral_codes()
+        if _n_ref:
+            logger.info("Assigned %d staff referral code(s)", _n_ref)
+    except Exception as _sre:
+        logger.error("Staff referral-code backfill failed: %s", _sre, exc_info=True)
     logger.info("✅ Database ready (sarathi_biz.db)")
 
     # Step 1b: Initialize authentication

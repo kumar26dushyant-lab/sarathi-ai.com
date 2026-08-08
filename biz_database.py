@@ -2152,6 +2152,15 @@ async def init_db():
             # Profile photo (stored filename in the nidaan-docs dir; shown on task cards,
             # @mentions, and the staffer's own profile).
             "ALTER TABLE nidaan_staff ADD COLUMN profile_pic TEXT",
+            # Staff-as-branch: every staffer gets a personal referral code (auto-generated,
+            # backfilled by ensure_staff_referral_codes). It lives in the SAME slot as branch
+            # codes (nidaan_accounts.branch_code) but is formatted distinctly ("SP-XXXXXX") so
+            # it never collides with a branch code — branch reconciliation only counts codes
+            # that JOIN a real nidaan_branches row, so staff referrals never disturb branch stats.
+            "ALTER TABLE nidaan_staff ADD COLUMN referral_code TEXT",
+            # Commission % of attributed subscription revenue paid to this staffer
+            # (super-admin adjustable, mirrors branches.share_pct). Default 0.
+            "ALTER TABLE nidaan_staff ADD COLUMN commission_pct REAL DEFAULT 0",
         ]:
             try:
                 await conn.execute(_tg)

@@ -395,6 +395,7 @@ select.form-input option{background:#1e293b}
     <!-- Main content -->
     <main class="main">
       <div id="panel-overview" class="panel"></div>
+      <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
@@ -780,6 +781,8 @@ function buildSidebar() {
     {id:'accounts',   label:'👥 Accounts',     minRank:1},
     {id:'branches',   label:'🏢 Branches',     minRank:1},
     null,
+    {id:'mybiz',      label:'🚀 My Business',  minRank:0},
+    null,
     {id:'staff',      label:'👤 Staff',         minRank:2},
     {id:'leavehistory', label:'🌴 Leave History', minRank:2},
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
@@ -832,6 +835,7 @@ function showPanel(id, fromHistory) {
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
     accounts: loadAccounts,
     branches: loadBranches,
+    mybiz: loadMyBusiness,
     staff: loadStaff,
     settings: loadWorkflowSettings,
     numbers: loadOfficialNumbers,
@@ -3432,6 +3436,145 @@ async function editBranchEmail(code, current) {
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update email.'); return; }
   loadBranches();
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  MY BUSINESS — every staffer's personal referral business.
+//  Gamified: their code + shareable link, live counts, commission
+//  earned, and motivational nudges. Super-admins also get a team
+//  reconciliation table with editable commission %.
+// ═══════════════════════════════════════════════════════════════
+// The ops portal has no live UI language toggle, so we render My Business in the
+// staffer's OWN saved language preference (telegram_lang) — cached in _mbLang.
+let _mbLang = 'en';
+function _mbHi(){ return _mbLang === 'hi'; }
+async function loadMyBusiness() {
+  const el = document.getElementById('panel-mybiz');
+  const prof = await loadMyProfile();
+  _mbLang = (prof && prof.telegram_lang === 'hi') ? 'hi' : 'en';
+  const hi = _mbHi();
+  el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>${hi?'लोड हो रहा है…':'Loading…'}</p></div>`;
+  const r = await API('/my-business');
+  if (!r.ok) { el.innerHTML = `<div class="empty"><div class="ei">🚀</div><p>${hi?'आपका बिज़नेस डैशबोर्ड अभी उपलब्ध नहीं है।':'Your business dashboard is not available yet.'}</p></div>`; return; }
+  const b = await r.json();
+  const code = b.referral_code || '';
+  const link = b.referral_link || '';
+  const signups = b.signups||0, paid = b.paid||0, revenue = b.revenue||0,
+        commission = b.commission||0, claims = b.claims||0, pct = b.commission_pct||0;
+  // Motivational nudge based on where they are.
+  let nudge;
+  if (signups===0) nudge = hi ? 'शुरुआत करें — अपना लिंक 5 लोगों को भेजें जिन्हें बीमा क्लेम में मदद चाहिए। हर सफल सब्सक्रिप्शन पर आपको कमीशन मिलता है।'
+                              : 'Get started — share your link with 5 people who have a stuck insurance claim. You earn commission on every subscription.';
+  else if (paid===0) nudge = hi ? `बढ़िया! ${signups} लोग जुड़ चुके हैं। अब उन्हें सब्सक्राइब करने में मदद करें — आपका पहला कमीशन बस एक कदम दूर है।`
+                                : `Great start! ${signups} people joined via your link. Help them subscribe — your first commission is one step away.`;
+  else nudge = hi ? `शानदार! ${paid} सब्सक्राइबर और ₹${fmt(commission)} कमीशन। लिंक शेयर करते रहें — आपका बिज़नेस बढ़ रहा है। 🚀`
+                  : `Excellent! ${paid} subscribers and ₹${fmt(commission)} earned. Keep sharing — your business is growing. 🚀`;
+
+  const tile = (label, value, color) => `
+    <div style="flex:1;min-width:140px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:1rem 1.1rem">
+      <div style="font-size:1.7rem;font-weight:800;color:${color}">${value}</div>
+      <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-top:.15rem">${label}</div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="section-hdr">
+      <div>
+        <div class="section-title">🚀 ${hi?'आपका NidaanPartner बिज़नेस':'Your NidaanPartner Business'}</div>
+        <div class="section-sub">${hi?'आपके द्वारा लाया गया हर क्लेम और हर रेफ़र किया गया एडवाइज़र आपकी कमाई बढ़ाता है। अपना निजी लिंक शेयर करें — उससे आने वाली सब्सक्रिप्शन पर आपको कमीशन मिलता है।':'Every claim you bring and every advisor you refer grows your earnings. Share your personal link — you earn a commission on the subscriptions that come from it.'}</div>
+      </div>
+    </div>
+
+    <!-- Referral code + shareable link -->
+    <div style="background:linear-gradient(135deg,rgba(6,182,212,.14),rgba(139,92,246,.14));border:1px solid rgba(34,211,238,.3);border-radius:16px;padding:1.2rem;margin-bottom:1rem">
+      <div style="font-size:.78rem;color:rgba(255,255,255,.6);margin-bottom:.35rem">${hi?'आपका निजी रेफ़रल कोड':'Your personal referral code'}</div>
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+        <div style="font-size:1.9rem;font-weight:800;letter-spacing:2px;color:#22d3ee">${esc(code||'—')}</div>
+        ${code?`<button class="btn-sm btn-ghost" onclick="mbCopy('${esc(code)}',this)" style="color:#7dd3fc">${hi?'कोड कॉपी करें':'Copy code'}</button>`:''}
+      </div>
+      ${link?`
+      <div style="margin-top:.8rem;font-size:.78rem;color:rgba(255,255,255,.6);margin-bottom:.3rem">${hi?'आपका शेयर करने लायक लिंक':'Your shareable link'}</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input id="mbLink" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25)">
+        <button class="btn btn-primary" onclick="mbCopy('${esc(link)}',this)">${hi?'लिंक कॉपी करें':'Copy link'}</button>
+        <button class="btn-sm btn-ghost" onclick="mbShare('${esc(link)}')" style="color:#34d399">${hi?'WhatsApp पर भेजें':'Share on WhatsApp'}</button>
+      </div>`:''}
+    </div>
+
+    <!-- Stat tiles -->
+    <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem">
+      ${tile(hi?'जुड़े लोग (साइनअप)':'People joined (signups)', fmt(signups), '#f1f5f9')}
+      ${tile(hi?'सब्सक्राइबर (भुगतान)':'Subscribers (paid)', fmt(paid), '#34d399')}
+      ${tile(hi?'दर्ज क्लेम':'Claims filed', fmt(claims), '#a78bfa')}
+      ${tile(hi?'आपके द्वारा लाया राजस्व':'Revenue you brought', '₹'+fmt(revenue), '#7dd3fc')}
+      ${tile(hi?`आपका कमीशन (${pct}%)`:`Your commission (${pct}%)`, '₹'+fmt(commission), '#fbbf24')}
+    </div>
+
+    <!-- Nudge -->
+    <div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.28);border-radius:14px;padding:1rem 1.15rem;margin-bottom:1rem;font-size:.9rem;color:#fde68a">💡 ${esc(nudge)}</div>
+
+    <div style="font-size:.74rem;color:rgba(255,255,255,.4);margin-bottom:1.4rem">
+      ${hi?`<b>आपका कमीशन कैसे बनता है:</b> आपके कोड से जुड़े लोगों की सब्सक्रिप्शन राशि का ${pct}%। यह हिसाब का आंकड़ा है — अपने-आप भुगतान नहीं होता। कमीशन % सुपर-एडमिन तय करते हैं।`:`<b>How your commission works:</b> ${pct}% of the subscription revenue from people who joined using your code. This is a reconciliation figure — not auto-paid. Commission % is set by the super-admin.`}
+    </div>
+
+    <div id="mbTeamWrap"></div>`;
+
+  // Super-admin: team reconciliation + commission editor.
+  if (_role === 'super_admin' || _role === 'sub_super_admin') {
+    mbLoadTeam();
+  }
+}
+
+function mbCopy(text, btn){
+  const done = ()=>{ if(btn){ const o=btn.innerHTML; btn.innerHTML = _mbHi()?'✓ कॉपी हुआ':'✓ Copied'; setTimeout(()=>btn.innerHTML=o,1500);} };
+  if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(()=>{ mbCopyFallback(text); done(); }); }
+  else { mbCopyFallback(text); done(); }
+}
+function mbCopyFallback(text){ try{ const t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }catch(e){} }
+function mbShare(link){
+  const hi = _mbHi();
+  const msg = hi ? `NidaanPartner से अपना अटका बीमा क्लेम हल कराएं। यहाँ शुरू करें: ${link}`
+                 : `Resolve your stuck insurance claim with NidaanPartner. Start here: ${link}`;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
+}
+
+async function mbLoadTeam(){
+  const wrap = document.getElementById('mbTeamWrap');
+  if (!wrap) return;
+  const hi = _mbHi();
+  const r = await API('/staff-business');
+  if (!r.ok){ wrap.innerHTML=''; return; }
+  const d = await r.json();
+  const list = (d.staff||[]).filter(s=>s.referral_code);
+  if (!list.length){ wrap.innerHTML=''; return; }
+  const canEdit = (_role === 'super_admin');
+  const rows = list.map(s=>`<tr>
+    <td>${esc(s.name||'—')}</td>
+    <td><strong style="color:#22d3ee">${esc(s.referral_code)}</strong></td>
+    <td style="text-align:center">${fmt(s.signups||0)}</td>
+    <td style="text-align:center;color:#34d399">${fmt(s.paid||0)}</td>
+    <td style="text-align:center;color:#a78bfa">${fmt(s.claims||0)}</td>
+    <td style="text-align:right;font-size:.78rem">₹${fmt(s.revenue||0)}</td>
+    <td style="text-align:center;font-size:.78rem">${(s.commission_pct||0)}%${canEdit?` <a href="#" onclick="mbSetCommission(${s.staff_id},${s.commission_pct||0});return false" style="color:#22d3ee;font-size:.7rem">${hi?'बदलें':'edit'}</a>`:''}</td>
+    <td style="text-align:right;font-size:.78rem;color:#fbbf24">₹${fmt(s.commission||0)}</td>
+  </tr>`).join('');
+  wrap.innerHTML = `
+    <div class="section-hdr" style="margin-top:.5rem"><div><div class="section-title" style="font-size:1rem">👥 ${hi?'टीम रेफ़रल कमीशन':'Team referral commissions'}</div><div class="section-sub">${hi?'हर स्टाफ का रेफ़रल बिज़नेस और देय कमीशन। कमीशन % सुपर-एडमिन बदल सकते हैं।':"Every staffer's referral business and commission owed. Super-admins can set the commission %."}</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>${hi?'नाम':'Name'}</th><th>${hi?'कोड':'Code'}</th><th>${hi?'साइनअप':'Signups'}</th><th>${hi?'भुगतान':'Paid'}</th><th>${hi?'क्लेम':'Claims'}</th><th>${hi?'राजस्व':'Revenue'}</th><th>${hi?'कमीशन %':'Comm %'}</th><th>${hi?'देय':'Payout'}</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">${hi?'देय = राजस्व × कमीशन % (हिसाब का आंकड़ा — अपने-आप भुगतान नहीं होता)।':'Payout = Revenue × Commission % (a reconciliation figure — not auto-paid).'}</div>`;
+}
+
+async function mbSetCommission(staffId, current){
+  const hi = _mbHi();
+  const v = prompt(hi?`कमीशन % (0–100):`:`Commission % (0–100):`, current||0);
+  if (v===null) return;
+  const pct = parseFloat(v);
+  if (isNaN(pct) || pct<0 || pct>100){ alert(hi?'0 से 100 के बीच संख्या डालें।':'Enter a number between 0 and 100.'); return; }
+  const r = await API('/staff/'+staffId+'/commission', {method:'PATCH', body: JSON.stringify({commission_pct: pct})});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update commission.'); return; }
+  mbLoadTeam();
+}
+
 async function showBranchUnpaid(code) {
   const wrap = document.getElementById('branchLeadsWrap');
   wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading unpaid leads…</p></div>';

@@ -604,6 +604,138 @@ async def list_branches(include_disabled: bool = True) -> list[dict]:
     return rows
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Staff-as-branch: every staffer is also a referrer with a personal code + commission.
+# Their code lives in the SAME nidaan_accounts.branch_code slot as branch codes but is
+# formatted "SP-XXXXXX" so it never collides with a branch code. Branch reconciliation
+# (list_branches) only counts codes that JOIN a real nidaan_branches row, so staff
+# referrals are invisible to branch stats and vice-versa — zero cross-contamination.
+# ─────────────────────────────────────────────────────────────────────────────
+import secrets as _secrets
+
+_STAFF_REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I,O,0,1 (Tier II/III legibility)
+
+
+def _gen_staff_ref_code() -> str:
+    return "SP-" + "".join(_secrets.choice(_STAFF_REF_ALPHABET) for _ in range(6))
+
+
+async def ensure_staff_referral_codes() -> int:
+    """Backfill a unique personal referral code for every staffer missing one.
+    Idempotent — safe to call at startup and after create_staff. Returns count assigned.
+    Uniqueness is checked against BOTH staff codes and branch codes so a staff code can
+    never shadow a branch code in the shared branch_code attribution slot."""
+    assigned = 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        # Existing codes (both namespaces) to guarantee global uniqueness.
+        taken = set()
+        for tbl, col in (("nidaan_staff", "referral_code"), ("nidaan_branches", "branch_code")):
+            try:
+                cur = await conn.execute(
+                    f"SELECT {col} AS c FROM {tbl} WHERE {col} IS NOT NULL AND {col}<>''")
+                for r in await cur.fetchall():
+                    taken.add((r["c"] or "").upper())
+            except Exception:
+                pass
+        cur = await conn.execute(
+            "SELECT staff_id FROM nidaan_staff "
+            "WHERE (referral_code IS NULL OR referral_code='') "
+            "  AND COALESCE(deleted_at,'')=''")
+        need = [r["staff_id"] for r in await cur.fetchall()]
+        for sid in need:
+            code = _gen_staff_ref_code()
+            while code.upper() in taken:
+                code = _gen_staff_ref_code()
+            taken.add(code.upper())
+            await conn.execute(
+                "UPDATE nidaan_staff SET referral_code=? WHERE staff_id=?", (code, sid))
+            assigned += 1
+        if assigned:
+            await conn.commit()
+    return assigned
+
+
+async def _staff_business_row(conn, r: dict) -> dict:
+    """Given a staff row (with referral_code, commission_pct), attach live business
+    stats computed off the shared branch_code attribution slot. RUPEES throughout."""
+    code = (r.get("referral_code") or "").strip().upper()
+    out = {
+        "staff_id": r.get("staff_id"),
+        "name": r.get("name", ""),
+        "role": r.get("role", ""),
+        "referral_code": r.get("referral_code") or "",
+        "commission_pct": float(r.get("commission_pct") or 0),
+        "signups": 0, "paid": 0, "unpaid": 0, "revenue": 0,
+        "commission": 0, "claims": 0,
+    }
+    if not code:
+        return out
+    signups = (await (await conn.execute(
+        "SELECT COUNT(*) FROM nidaan_accounts a WHERE UPPER(a.branch_code)=?",
+        (code,))).fetchone())[0]
+    paid = (await (await conn.execute(
+        f"SELECT COUNT(*) FROM nidaan_accounts a "
+        f"WHERE UPPER(a.branch_code)=? AND {_BRANCH_PAID_EXISTS}",
+        (code,))).fetchone())[0]
+    revenue = (await (await conn.execute(
+        "SELECT COALESCE(SUM(su.amount_paid),0) FROM nidaan_subscriptions su "
+        "JOIN nidaan_accounts a2 ON a2.account_id=su.account_id "
+        "WHERE UPPER(a2.branch_code)=?", (code,))).fetchone())[0]
+    claims = (await (await conn.execute(
+        "SELECT COUNT(*) FROM nidaan_claims c "
+        "JOIN nidaan_accounts a3 ON a3.account_id=c.account_id "
+        "WHERE UPPER(a3.branch_code)=?", (code,))).fetchone())[0]
+    pct = float(r.get("commission_pct") or 0)
+    out.update({
+        "signups": int(signups or 0),
+        "paid": int(paid or 0),
+        "unpaid": max(0, int(signups or 0) - int(paid or 0)),
+        "revenue": int(revenue or 0),
+        "commission": round(int(revenue or 0) * pct / 100),
+        "claims": int(claims or 0),
+    })
+    return out
+
+
+async def get_staff_business(staff_id: int) -> Optional[dict]:
+    """One staffer's own referral business (for the 'Your Business' dashboard tab)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT staff_id, name, role, referral_code, commission_pct "
+            "FROM nidaan_staff WHERE staff_id=?", (staff_id,))).fetchone()
+        if not r:
+            return None
+        return await _staff_business_row(conn, dict(r))
+
+
+async def list_staff_business(include_deleted: bool = False) -> list[dict]:
+    """All staffers with their referral business stats (super-admin reconciliation)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        where = "" if include_deleted else "WHERE COALESCE(deleted_at,'')=''"
+        cur = await conn.execute(
+            f"SELECT staff_id, name, role, referral_code, commission_pct "
+            f"FROM nidaan_staff {where} ORDER BY name")
+        rows = [dict(r) for r in await cur.fetchall()]
+        return [await _staff_business_row(conn, r) for r in rows]
+
+
+async def set_staff_commission(staff_id: int, pct: float) -> bool:
+    """Super-admin: set a staffer's commission % (0–100). Mirrors update_branch(share_pct)."""
+    try:
+        pct = float(pct)
+    except (TypeError, ValueError):
+        return False
+    pct = max(0.0, min(100.0, pct))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_staff SET commission_pct=? WHERE staff_id=?", (pct, staff_id))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 async def get_branch_unpaid_leads(branch_code: str) -> list[dict]:
     """Attributed accounts for a branch that haven't paid anything yet
     (with their pending ₹499 review, if they started one)."""
@@ -4790,6 +4922,7 @@ async def create_staff(
             existing = await (await conn.execute(
                 "SELECT staff_id, deleted_at FROM nidaan_staff WHERE email=?",
                 (email,))).fetchone()
+            reclaimed_id = None
             if existing is not None:
                 if existing["deleted_at"] is None:
                     return None  # active account already uses this Login ID
@@ -4801,14 +4934,18 @@ async def create_staff(
                     "created_at=CURRENT_TIMESTAMP WHERE staff_id=?",
                     (name, pw_hash, role, phone, notify_email, created_by, sid))
                 await conn.commit()
-                return sid
-            cur = await conn.execute(
-                """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, notify_email, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (name, email, pw_hash, role, phone, notify_email, created_by),
-            )
-            await conn.commit()
-            return cur.lastrowid
+                reclaimed_id = sid
+            else:
+                cur = await conn.execute(
+                    """INSERT INTO nidaan_staff (name, email, password_hash, role, phone, notify_email, created_by)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (name, email, pw_hash, role, phone, notify_email, created_by),
+                )
+                await conn.commit()
+                reclaimed_id = cur.lastrowid
+        # Assign this staffer's personal referral code (own connection, after commit).
+        await ensure_staff_referral_codes()
+        return reclaimed_id
     except aiosqlite.IntegrityError:
         return None
 
@@ -4849,7 +4986,8 @@ async def get_staff_by_id(staff_id: int) -> Optional[dict]:
         cur = await conn.execute(
             "SELECT staff_id,name,email,role,status,created_at,last_login_at,"
             "       phone,notify_email,saved_official_numbers_at,"
-            "       comms_onboarded_at,telegram_chat_id,telegram_lang,profile_pic "
+            "       comms_onboarded_at,telegram_chat_id,telegram_lang,profile_pic,"
+            "       referral_code,commission_pct "
             "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
         )
         row = await cur.fetchone()
