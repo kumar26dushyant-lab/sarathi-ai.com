@@ -5531,6 +5531,22 @@ GET /nidaan/api/offices (public), GET /nidaan/ops/api/offices (staff read), PUT 
 audited). Homepage renders the grid from the config (static cards kept as fallback if fetch
 fails; language follows body.hi/.en CSS). Editor lives in ops → Content panel ("🏢 Our Offices").
 
+## 65. SARATHI TRIAL: Phase B audit + Phase C 14→7 (owner Aug 9; SHIPPED, live 6fbc755)
+
+PHASE B (read-only audit) findings: base trial was actually 14 days (not 15), referral bonus 21
+(=14+7), hardcoded in 8 backend sites + ~20 copy strings across 13 static pages, with NO central
+constant. Enforcement (db.check_subscription_active) reads trial_ends_at dynamically → no change
+needed there; renewal reminders are paid-plan (unrelated). SA cockpit already extensive (~45
+/api/sa/ endpoints) → Phase D is enhancement not greenfield.
+
+PHASE C (change): introduced SINGLE SOURCE OF TRUTH in biz_database.py — TRIAL_DAYS=7,
+REFERRAL_TRIAL_DAYS=14 (base + 7 bonus). All start/reset sites now reference them (create_tenant,
+create_tenant_with_owner, both signup referral paths @ ~9506/13029, sa_activate @10308,
+sa_change_plan @10379, flow-doc strings). Frontend: every "14-day free trial" (EN+HI) across
+index/about/admin/dashboard/demo/features/getting-started/help/partner/superadmin/telegram-guide/
+terms/index_v2/v3/v4 → 7-day. Extend-trial DEFAULTS (sa_extend Query(14), admin_extend Query(7))
+left as separate operational knobs (not trial length). Future trial-length change = edit 2 constants.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
