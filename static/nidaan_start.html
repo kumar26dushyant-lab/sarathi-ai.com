@@ -759,6 +759,8 @@ async function doRegister() {
   const btn = document.getElementById('registerBtn');
   btn.disabled = true; btn.textContent = L('Creating account…','खाता बन रहा है…');
 
+  var _atr = (window.NidaanTrack ? NidaanTrack.attr() : {});
+  var _bc = (document.getElementById('regBranch')?.value || '').trim().toUpperCase() || (_atr.ref || '');
   try {
     const res = await fetch('/nidaan/api/signup', {
       method: 'POST',
@@ -768,7 +770,9 @@ async function doRegister() {
         password: pwd, firm_name: firm,
         email_otp: _regVerifiedOtp,
         plan: _plan || 'free',
-        branch_code: (document.getElementById('regBranch')?.value || '').trim().toUpperCase()
+        branch_code: _bc,
+        utm_source: _atr.utm_source || '', utm_medium: _atr.utm_medium || '',
+        utm_campaign: _atr.utm_campaign || ''
       })
     });
     const data = await res.json();
@@ -787,6 +791,7 @@ async function doRegister() {
       }
       throw new Error(_extractErr(data, L('Registration failed','रजिस्ट्रेशन विफल')));
     }
+    try { if (window.NidaanTrack) NidaanTrack.completeFlow(); } catch(e){}
     _loginSuccess(data);
   } catch(e) {
     showMsg('msg2b','err', e.message);
@@ -1325,5 +1330,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/nidaan-sw.js', {scope: '/'}).catch(function(){});
 }
 </script>
+<script src="/static/nidaan_track.js?v=1"></script>
 </body>
 </html>

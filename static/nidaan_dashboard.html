@@ -2108,8 +2108,9 @@ async function doSubscribe() {
           contact: _meCache ? _meCache.phone : '',
           name: _meCache ? _meCache.owner_name : '',
         },
-        modal: { backdropclose: false, escape: false, ondismiss: function() { btn.disabled = false; } },
+        modal: { backdropclose: false, escape: false, ondismiss: function() { btn.disabled = false; try { if (window.NidaanTrack) NidaanTrack.abandon(); } catch(e){} } },
         handler: async function(response) {
+          try { if (window.NidaanTrack) NidaanTrack.completeFlow(); } catch(e){}
           msg.className = 'msg ok';
           msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment received! Activating your plan…';
           btn.disabled = true;
@@ -2143,6 +2144,7 @@ async function doSubscribe() {
         },
       });
       if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
+      try { if (window.NidaanTrack) NidaanTrack.startFlow('pay', 'subscription'); } catch(e){}
       rzpSub.open();
     } else {
       // ── One-time Order flow (existing, also used for annual plans) ─────────
@@ -2860,5 +2862,6 @@ if ('serviceWorker' in navigator) {
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
 <script src="/static/nidaan_support_widget.js?v=16" defer></script>
+<script src="/static/nidaan_track.js?v=1"></script>
 </body>
 </html>
