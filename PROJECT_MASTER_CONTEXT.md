@@ -5520,6 +5520,17 @@ records (signed-up/paid) and failures are complete. Marketing/UTM only populates
 URLs carry utm_* params. Future: per-cycle recurring revenue window (vs cohort); review/L2 pay
 abandonment beacons; campaign-code registry.
 
+## 64. OUR OFFICES — super-admin editable (owner Aug 9; SHIPPED, live df86a75)
+
+Owner: make the homepage "Our Offices" addresses add/edit/delete-able from super-admin,
+reflecting on both advisor & policyholder views. (The site is ONE page — nidaan_index.html —
+with audience CSS toggles; the offices section has no only-adv/only-ph class, so one source
+covers both views.) Stored as a JSON list in the ops-settings KV (get_offices/set_offices;
+DEFAULT_OFFICES fallback until first edit; city bilingual + single-line address). Endpoints:
+GET /nidaan/api/offices (public), GET /nidaan/ops/api/offices (staff read), PUT (super_admin,
+audited). Homepage renders the grid from the config (static cards kept as fallback if fetch
+fails; language follows body.hi/.en CSS). Editor lives in ops → Content panel ("🏢 Our Offices").
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
