@@ -873,6 +873,22 @@ async def is_valid_branch(code: str) -> bool:
     return bool(b and b.get("status") == "active")
 
 
+async def is_valid_ref_code(code: str) -> bool:
+    """True if the code is a valid ACTIVE branch OR an existing STAFF referral code.
+    Referral attribution (branch_code slot) accepts both since staff-as-branch shipped —
+    without this, a staff shareable link (SP-XXXXXX) is rejected at signup."""
+    code = (code or "").strip().upper()
+    if not code:
+        return False
+    if await is_valid_branch(code):
+        return True
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT 1 FROM nidaan_staff WHERE UPPER(referral_code)=? "
+            "AND COALESCE(deleted_at,'')='' LIMIT 1", (code,))).fetchone()
+        return bool(row)
+
+
 async def set_account_branch(account_id: int, code: str) -> bool:
     """Attribute an account to a branch (used when the code is supplied on the
     claim form rather than at signup). Caller should ensure the code is valid."""
@@ -1148,24 +1164,37 @@ async def create_account_google(
     email: str,
     plan: str = "silver",
     firm_name: str = "",
+    branch_code: str = "",
+    utm_source: str = "",
+    utm_medium: str = "",
+    utm_campaign: str = "",
 ) -> Optional[int]:
     """Create a Nidaan account via Google Sign-In (no password).
     Stores an unguessable pw_hash so password login is permanently disabled for these accounts.
-    Returns account_id or None on duplicate email."""
+    Returns account_id or None on duplicate email. Carries referral/marketing attribution."""
     pw_hash = "google$" + secrets.token_hex(32)
+    code = (branch_code or "").strip().upper()
+    channel, _rc = await resolve_channel(code, utm_source)
+    us, um, uc = (utm_source or "").strip(), (utm_medium or "").strip(), (utm_campaign or "").strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
                 """INSERT INTO nidaan_accounts
-                   (owner_name, email, phone, password_hash, firm_name)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (owner_name, email.lower().strip(), "", pw_hash, firm_name),
+                   (owner_name, email, phone, password_hash, firm_name, branch_code,
+                    source_channel, utm_source, utm_medium, utm_campaign)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (owner_name, email.lower().strip(), "", pw_hash, firm_name, code,
+                 channel, us, um, uc),
             )
             await conn.commit()
-            return cur.lastrowid
+            new_id = cur.lastrowid
     except aiosqlite.IntegrityError:
         logger.warning("nidaan create_account_google: duplicate email %s", email)
         return None
+    await record_event("signup_completed", channel=channel, ref_code=code,
+                       utm_source=us, utm_medium=um, utm_campaign=uc,
+                       account_id=new_id, contact=email.lower().strip())
+    return new_id
 
 
 async def authenticate_account(identifier: str, password: str) -> Optional[dict]:

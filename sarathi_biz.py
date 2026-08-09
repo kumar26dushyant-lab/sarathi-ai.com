@@ -1283,7 +1283,10 @@ class NidaanSignupReq(BaseModel):
     email_otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
     firm_name: str = ""
     plan: str = "silver"
-    branch_code: str = ""   # optional affiliate branch attribution (validated strictly if given)
+    branch_code: str = ""   # optional affiliate branch OR staff referral code (validated if given)
+    utm_source: str = ""    # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
 
 
 class NidaanMobileSignupReq(BaseModel):
@@ -1295,7 +1298,10 @@ class NidaanMobileSignupReq(BaseModel):
     email_otp: str = ""              # required only when email is given
     firm_name: str = ""
     plan: str = "silver"
-    branch_code: str = ""            # affiliate branch — locked at signup for profit-share
+    branch_code: str = ""            # affiliate branch OR staff referral code — locked at signup
+    utm_source: str = ""             # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
 
 
 class NidaanLoginReq(BaseModel):
@@ -1339,6 +1345,10 @@ class NidaanGoogleReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     credential: str = Field(..., min_length=10)
     plan: str = "free"  # only used during signup
+    branch_code: str = ""   # optional affiliate branch OR staff referral code (signup only)
+    utm_source: str = ""    # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
 
 
 class NidaanCheckEmailReq(BaseModel):
@@ -1476,6 +1486,45 @@ async def _run_branch_unpaid_sweep() -> int:
     return sent
 
 
+class NidaanTrackReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_type: str                  # whitelisted below
+    session_id: str = ""
+    ref: str = ""                    # staff/branch/campaign code from the URL
+    utm_source: str = ""
+    utm_medium: str = ""
+    utm_campaign: str = ""
+    purpose: str = ""                # review499 | subscription | ... (for pay_opened)
+    contact: str = ""                # best-effort phone/email seen mid-attempt
+
+
+# Public funnel/abandonment beacons. Only these anonymous top-of-funnel events are accepted;
+# money/outcome events are recorded server-side (webhook/signup) and can't be spoofed here.
+_TRACK_ALLOWED = {"signup_started", "review_started", "pay_opened", "abandoned", "page_lead"}
+
+
+@app.post("/nidaan/api/track")
+@limiter.limit("40/minute")
+async def nidaan_api_track(body: NidaanTrackReq, request: Request):
+    """Lightweight analytics beacon from the public pages (fire-and-forget). Records
+    top-of-funnel + abandonment events so the dashboard can show real drop-off by channel.
+    Never errors the client — always returns ok."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    et = (body.event_type or "").strip()
+    if et not in _TRACK_ALLOWED:
+        return {"ok": False}   # ignore unknown/spoofed event types silently
+    try:
+        await nidaan.record_event(
+            et, ref_code=(body.ref or ""), utm_source=body.utm_source or "",
+            utm_medium=body.utm_medium or "", utm_campaign=body.utm_campaign or "",
+            purpose=(body.purpose or ""), status="attempt",
+            session_id=(body.session_id or ""), contact=(body.contact or ""))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @app.post("/nidaan/api/signup")
 @limiter.limit("5/minute")
 async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
@@ -1490,10 +1539,11 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    # Affiliate branch attribution — optional, but if given must match an active branch.
+    # Referral attribution — optional. Accepts an active branch OR a staff referral code
+    # (staff-as-branch). Invalid non-blank codes are rejected to keep attribution clean.
     branch_code = (body.branch_code or "").strip().upper()
-    if branch_code and not await nidaan.is_valid_branch(branch_code):
-        raise HTTPException(status_code=400, detail="Invalid or inactive branch code. Leave blank if you don't have one.")
+    if branch_code and not await nidaan.is_valid_ref_code(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive referral code. Leave blank if you don't have one.")
     account_id = await nidaan.create_account(
         owner_name=body.owner_name.strip(),
         email=email,
@@ -1501,6 +1551,9 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         password=body.password,
         firm_name=body.firm_name.strip(),
         branch_code=branch_code,
+        utm_source=getattr(body, "utm_source", "") or "",
+        utm_medium=getattr(body, "utm_medium", "") or "",
+        utm_campaign=getattr(body, "utm_campaign", "") or "",
     )
     if account_id is None:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -1513,8 +1566,9 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         pass
     # Affiliate branch alert: a lead just signed up under this branch code — tell
     # the branch immediately (they're unpaid until the ₹499 / subscription clears,
-    # so the branch knows not to service them offline before payment).
-    if branch_code:
+    # so the branch knows not to service them offline before payment). Only for REAL
+    # branches — a staff referral code lands in the same slot but has no branch inbox.
+    if branch_code and await nidaan.is_valid_branch(branch_code):
         _asyncio.create_task(_notify_branch_signup(
             branch_code, body.owner_name.strip(), email, body.phone.strip()))
     _asyncio.create_task(email_svc.send_email(
@@ -1560,10 +1614,11 @@ async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request
             raise HTTPException(status_code=400, detail="Invalid email address")
         if not auth.verify_email_otp(email, body.email_otp):
             raise HTTPException(status_code=401, detail="Invalid or expired email code. Please request a new OTP, or leave email blank.")
-    # Affiliate branch attribution — optional, validated strictly if given, locked at signup.
+    # Referral attribution — optional. Accepts an active branch OR a staff referral code
+    # (staff-as-branch). Invalid non-blank codes are rejected to keep attribution clean.
     branch_code = (body.branch_code or "").strip().upper()
-    if branch_code and not await nidaan.is_valid_branch(branch_code):
-        raise HTTPException(status_code=400, detail="Invalid or inactive branch code. Leave blank if you don't have one.")
+    if branch_code and not await nidaan.is_valid_ref_code(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive referral code. Leave blank if you don't have one.")
     # Dedup before insert for clean messages (one mobile = one account).
     if await nidaan.get_account_by_phone(ph):
         raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
@@ -1573,6 +1628,8 @@ async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request
     account_id = await nidaan.create_account(
         owner_name=name, phone=ph, password=body.password, email=email,
         firm_name=body.firm_name.strip(), branch_code=branch_code,
+        utm_source=body.utm_source or "", utm_medium=body.utm_medium or "",
+        utm_campaign=body.utm_campaign or "",
     )
     if account_id is None:
         # Lost the unique-mobile race → the account now exists; tell them to log in.
@@ -1584,7 +1641,7 @@ async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request
         _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
     except Exception:
         pass
-    if branch_code:
+    if branch_code and await nidaan.is_valid_branch(branch_code):
         _asyncio.create_task(_notify_branch_signup(branch_code, name, email, ph))
     if email:  # welcome email only when we actually have one
         _asyncio.create_task(email_svc.send_email(
@@ -1866,10 +1923,16 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
         plan = sub["plan"] if sub else ""
         token = nidaan.create_nidaan_token(existing["account_id"], existing["email"], plan)
         return {"access_token": token, "account_id": existing["account_id"], "plan": plan, "existing": True}
+    _gbc = (req.branch_code or "").strip().upper()
+    if _gbc and not await nidaan.is_valid_ref_code(_gbc):
+        _gbc = ""   # silently drop a bad code on Google signup rather than block sign-in
     account_id = await nidaan.create_account_google(
         owner_name=name or email.split("@")[0],
         email=email,
         plan=req.plan,
+        branch_code=_gbc,
+        utm_source=req.utm_source or "", utm_medium=req.utm_medium or "",
+        utm_campaign=req.utm_campaign or "",
     )
     if account_id is None:
         return JSONResponse({"detail": "Email already registered"}, status_code=409)
@@ -2324,12 +2387,12 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         _pay_status, _skip_elig = "paid", False
     else:
         _pay_status, _skip_elig = "unpaid_lead", True
-    # Optional branch code — validate against the LIVE active-branch list if given
-    # (branches can be added/edited/removed in ops, so we never hardcode a pattern).
+    # Optional referral code — accepts an active branch OR a staff referral code (staff-as-branch),
+    # validated against the LIVE list (branches/staff can change in ops, so no hardcoded pattern).
     _bc = (body.branch_code or "").strip().upper()
-    if _bc and not await nidaan.is_valid_branch(_bc):
+    if _bc and not await nidaan.is_valid_ref_code(_bc):
         raise HTTPException(status_code=400,
-            detail=f"Branch code '{_bc}' is not a valid or active branch — please pick from the list, or leave it blank.")
+            detail=f"Referral code '{_bc}' is not valid or active — please leave it blank if you don't have one.")
     claim_id, reason = await nidaan.submit_claim(
         account_id=payload["sub"],
         user_id=None,
