@@ -1139,6 +1139,36 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_gst_created ON nidaan_gst_ledger(created_at);
 
+            -- Business-analytics event log. Every meaningful attempt/outcome is appended here so
+            -- the super-admin analytics dashboard can segment signups / one-time / subscribers /
+            -- failures / abandonment BY CHANNEL in real time. Append-only; never mutated in place.
+            -- event_type examples: signup_started, signup_completed, review_started, pay_opened,
+            --   payment_success, payment_failed, subscription_started, subscription_failed.
+            -- channel: direct | staff | branch | campaign | marketing  (derived at capture time).
+            CREATE TABLE IF NOT EXISTS nidaan_events (
+                event_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type      TEXT NOT NULL,
+                channel         TEXT DEFAULT 'direct',    -- direct|staff|branch|campaign|marketing
+                ref_code        TEXT DEFAULT '',          -- staff/branch/campaign code if any (UPPER)
+                utm_source      TEXT DEFAULT '',
+                utm_medium      TEXT DEFAULT '',
+                utm_campaign    TEXT DEFAULT '',
+                account_id      INTEGER,                  -- linked if known
+                claim_id        INTEGER,
+                amount_paise    INTEGER,                  -- for payment events
+                purpose         TEXT DEFAULT '',          -- review499|subscription|branch_l2|custom|...
+                status          TEXT DEFAULT '',          -- ok|failed|abandoned|...
+                reason          TEXT DEFAULT '',          -- failure/decline reason if any
+                session_id      TEXT DEFAULT '',          -- anon browser session (dedupe funnel steps)
+                contact         TEXT DEFAULT '',          -- phone/email seen at attempt (best-effort)
+                meta            TEXT DEFAULT '',          -- small JSON blob for extra detail
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nevents_created ON nidaan_events(created_at);
+            CREATE INDEX IF NOT EXISTS idx_nevents_type    ON nidaan_events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_nevents_channel ON nidaan_events(channel);
+            CREATE INDEX IF NOT EXISTS idx_nevents_session ON nidaan_events(session_id);
+
             -- Rolling 30-day quota cache per account
             CREATE TABLE IF NOT EXISTS nidaan_plan_quota (
                 account_id              INTEGER PRIMARY KEY
@@ -1293,6 +1323,13 @@ async def init_db():
             # Branch fallback: timestamp the one-time 'attributed lead still unpaid'
             # reminder was sent to the branch, so the sweep doesn't re-notify.
             "ALTER TABLE nidaan_accounts ADD COLUMN branch_unpaid_reminded_at TIMESTAMP",
+            # Business-analytics attribution (Aug 2026): channel + marketing source captured at
+            # signup so the analytics dashboard can segment by acquisition. branch_code already
+            # holds the staff/branch/campaign ref code; these add the marketing dimension.
+            "ALTER TABLE nidaan_accounts ADD COLUMN source_channel TEXT DEFAULT ''",  # direct|staff|branch|campaign|marketing
+            "ALTER TABLE nidaan_accounts ADD COLUMN utm_source TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_accounts ADD COLUMN utm_medium TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_accounts ADD COLUMN utm_campaign TEXT DEFAULT ''",
         ]
         for m in nidaan_migrations:
             try:

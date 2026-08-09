@@ -3549,6 +3549,17 @@ async def nidaan_razorpay_webhook(request: Request):
             _asyncio.create_task(_nf.on_payment_failed(_kind, _amt, _detail, _reason, _contact))
         except Exception as _fe:
             logger.warning("payment.failed alert dispatch failed: %s", _fe)
+        # Persist for the analytics dashboard (failures-by-channel + trend). Best-effort.
+        try:
+            _purpose = {"nidaan": "subscription", "nidaan_claim_499": "review499",
+                        "nidaan_review_999": "review499", "nidaan_review": "review499",
+                        "nidaan_branch_l2": "branch_l2", "nidaan_plink": "custom"}.get(_prod, _prod or "")
+            _asyncio.create_task(nidaan.record_event(
+                "payment_failed", ref_code=(_notes.get("ref", "") or ""),
+                amount_paise=int(_pe.get("amount", 0) or 0), purpose=_purpose, status="failed",
+                reason=_reason, contact=_contact, meta=_pe.get("id", "")))
+        except Exception as _ve:
+            logger.warning("record_event(payment_failed) dispatch failed: %s", _ve)
         return {"status": "ok", "event": event}
 
     # ── Refund events (refund.processed / refund.failed) ─────────────────────────
@@ -3733,6 +3744,14 @@ async def nidaan_razorpay_webhook(request: Request):
                     f"Recurring subscription HALTED ({plan})", 0,
                     f"Account #{account_id} · sub {rzp_sub_id} — autopay stopped after failed retries.",
                     reason="Recurring charge failed (retries exhausted)"))
+            except Exception:
+                pass
+            # Persist for analytics (recurring failure).
+            try:
+                _asyncio.create_task(nidaan.record_event(
+                    "subscription_failed", account_id=account_id, purpose="subscription",
+                    status="failed", reason="Recurring charge failed (retries exhausted)",
+                    meta=rzp_sub_id or ""))
             except Exception:
                 pass
     return {"status": "ok", "event": event}

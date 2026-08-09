@@ -536,29 +536,41 @@ async def create_account(
     email: str = "",
     firm_name: str = "",
     branch_code: str = "",
+    utm_source: str = "",
+    utm_medium: str = "",
+    utm_campaign: str = "",
 ) -> Optional[int]:
     """Create a new Nidaan account. Mobile (phone) is the PRIMARY identity — required and
     unique. Email is OPTIONAL (stored NULL when blank; unique only when present). Returns
     account_id, or None on a duplicate mobile or email. branch_code attributes the sale to
-    an affiliate city branch (validated by the caller; stored as-is)."""
+    an affiliate city branch OR a staff referral code (validated by the caller; stored as-is).
+    utm_* capture the marketing acquisition source for the analytics dashboard (all optional)."""
     owner_name = _capname(owner_name)   # #6: store names in caps
     pw_hash = _hash_password(password)
     em = (email or "").lower().strip() or None       # NULL when blank → email-less accounts don't collide
     ph = normalize_phone(phone) or (phone or "").strip()
+    code = (branch_code or "").strip().upper()
+    channel, _rc = await resolve_channel(code, utm_source)   # direct|staff|branch|campaign|marketing
+    us, um, uc = (utm_source or "").strip(), (utm_medium or "").strip(), (utm_campaign or "").strip()
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             cur = await conn.execute(
                 """INSERT INTO nidaan_accounts
-                   (owner_name, email, phone, password_hash, firm_name, branch_code)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (owner_name, em, ph, pw_hash, firm_name,
-                 (branch_code or "").strip().upper()),
+                   (owner_name, email, phone, password_hash, firm_name, branch_code,
+                    source_channel, utm_source, utm_medium, utm_campaign)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (owner_name, em, ph, pw_hash, firm_name, code, channel, us, um, uc),
             )
             await conn.commit()
-            return cur.lastrowid
+            new_id = cur.lastrowid
     except aiosqlite.IntegrityError as e:
         logger.warning("nidaan create_account: duplicate mobile/email (%s)", e)
         return None
+    # Analytics: signup completed (channel-attributed). Best-effort, never blocks signup.
+    await record_event("signup_completed", channel=channel, ref_code=code,
+                       utm_source=us, utm_medium=um, utm_campaign=uc,
+                       account_id=new_id, contact=ph or em or "")
+    return new_id
 
 
 # ── Affiliate branches (offline city vendors selling subscriptions) ──────────
@@ -734,6 +746,62 @@ async def set_staff_commission(staff_id: int, pct: float) -> bool:
             "UPDATE nidaan_staff SET commission_pct=? WHERE staff_id=?", (pct, staff_id))
         await conn.commit()
         return cur.rowcount > 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Business-analytics event spine. Every meaningful attempt/outcome is appended to
+# nidaan_events so the super-admin dashboard can segment acquisition BY CHANNEL.
+# resolve_channel() maps a raw ref code / utm to one of: direct|staff|branch|campaign|marketing.
+# ─────────────────────────────────────────────────────────────────────────────
+async def resolve_channel(ref_code: str = "", utm_source: str = "") -> tuple[str, str]:
+    """Classify an acquisition. Returns (channel, normalized_ref_code).
+    A ref code that matches a staff referral_code → 'staff'; a real branch → 'branch';
+    any other non-empty code → 'campaign'; no code but a utm_source → 'marketing'; else 'direct'."""
+    code = (ref_code or "").strip().upper()
+    if code:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            s = await (await conn.execute(
+                "SELECT 1 FROM nidaan_staff WHERE UPPER(referral_code)=? LIMIT 1", (code,))).fetchone()
+            if s:
+                return "staff", code
+            b = await (await conn.execute(
+                "SELECT 1 FROM nidaan_branches WHERE UPPER(branch_code)=? LIMIT 1", (code,))).fetchone()
+            if b:
+                return "branch", code
+        return "campaign", code
+    if (utm_source or "").strip():
+        return "marketing", ""
+    return "direct", ""
+
+
+async def record_event(event_type: str, *, channel: str = "", ref_code: str = "",
+                       utm_source: str = "", utm_medium: str = "", utm_campaign: str = "",
+                       account_id: Optional[int] = None, claim_id: Optional[int] = None,
+                       amount_paise: Optional[int] = None, purpose: str = "", status: str = "",
+                       reason: str = "", session_id: str = "", contact: str = "",
+                       meta: str = "") -> None:
+    """Append one analytics event (best-effort — never raises into the caller). If channel is
+    blank it is derived from ref_code/utm_source via resolve_channel()."""
+    try:
+        if not channel:
+            channel, ref_code = await resolve_channel(ref_code, utm_source)
+        else:
+            ref_code = (ref_code or "").strip().upper()
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                """INSERT INTO nidaan_events
+                   (event_type, channel, ref_code, utm_source, utm_medium, utm_campaign,
+                    account_id, claim_id, amount_paise, purpose, status, reason,
+                    session_id, contact, meta)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (event_type, channel or "direct", ref_code or "",
+                 (utm_source or "").strip(), (utm_medium or "").strip(), (utm_campaign or "").strip(),
+                 account_id, claim_id, amount_paise, purpose or "", status or "", reason or "",
+                 (session_id or "").strip(), (contact or "").strip(), meta or ""))
+            await conn.commit()
+    except Exception as _ee:
+        logger.warning("record_event(%s) failed: %s", event_type, _ee)
 
 
 async def get_branch_unpaid_leads(branch_code: str) -> list[dict]:
