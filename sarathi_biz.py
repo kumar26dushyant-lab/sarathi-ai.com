@@ -4961,6 +4961,16 @@ async def ops_staff_business(request: Request):
     return {"staff": await nidaan.list_staff_business()}
 
 
+@app.get("/nidaan/ops/api/analytics")
+async def ops_business_analytics(request: Request, days: int = 30):
+    """Business Analytics: real-time acquisition by channel + funnel + failures. Super-admin
+    only (revenue-sensitive, mirrors the Revenue panel's gating)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return await nidaan.get_business_analytics(days=days)
+
+
 class OpsStaffCommission(BaseModel):
     model_config = ConfigDict(extra="forbid")
     commission_pct: float = Field(..., ge=0, le=100)

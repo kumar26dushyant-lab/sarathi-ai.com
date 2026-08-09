@@ -748,6 +748,146 @@ async def set_staff_commission(staff_id: int, pct: float) -> bool:
         return cur.rowcount > 0
 
 
+# Channel classification usable in SQL for BOTH new accounts (source_channel set at signup)
+# and legacy accounts (derived from the branch_code slot). Keeps the analytics consistent
+# across the migration boundary. `a` must be the nidaan_accounts alias.
+_CHANNEL_CASE = (
+    "CASE "
+    "  WHEN COALESCE(a.source_channel,'')<>'' THEN a.source_channel "
+    "  WHEN COALESCE(a.branch_code,'')='' THEN 'direct' "
+    "  WHEN EXISTS(SELECT 1 FROM nidaan_staff s WHERE UPPER(s.referral_code)=UPPER(a.branch_code)) THEN 'staff' "
+    "  WHEN EXISTS(SELECT 1 FROM nidaan_branches b WHERE b.branch_code=UPPER(a.branch_code)) THEN 'branch' "
+    "  ELSE 'campaign' END"
+)
+_CHANNELS = ["direct", "staff", "branch", "campaign", "marketing"]
+
+
+async def get_business_analytics(days: int = 30) -> dict:
+    """Real-time acquisition analytics for the super-admin dashboard, segmented by channel.
+    Acquisition metrics (signups/subscribers/one-time/revenue) are COHORT-based — accounts
+    created in the window. Failures + abandonment come from the event log (event time).
+    Amounts in RUPEES."""
+    days = max(1, min(int(days or 30), 365))
+    since = f"-{days} days"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+
+        # ── Acquisition by channel (cohort: accounts created in window) ──────────
+        cur = await conn.execute(
+            f"""SELECT {_CHANNEL_CASE} AS channel,
+                       COUNT(*) AS signups,
+                       SUM(CASE WHEN EXISTS(SELECT 1 FROM nidaan_subscriptions su
+                                            WHERE su.account_id=a.account_id AND su.status='active')
+                                THEN 1 ELSE 0 END) AS subscribers,
+                       SUM(CASE WHEN EXISTS(SELECT 1 FROM nidaan_per_claim_purchase p
+                                            WHERE p.account_id=a.account_id
+                                              AND p.status NOT IN ('pending_payment','cancelled','failed','refunded'))
+                                THEN 1 ELSE 0 END) AS onetime
+                FROM nidaan_accounts a
+                WHERE a.created_at >= datetime('now', ?)
+                  AND COALESCE(a.deleted_at,'')=''
+                GROUP BY channel""",
+            (since,))
+        chan = {c: {"channel": c, "signups": 0, "subscribers": 0, "onetime": 0,
+                    "revenue": 0, "abandoned": 0, "payment_failed": 0} for c in _CHANNELS}
+        for r in await cur.fetchall():
+            c = r["channel"] or "direct"
+            chan.setdefault(c, {"channel": c, "signups": 0, "subscribers": 0, "onetime": 0,
+                                "revenue": 0, "abandoned": 0, "payment_failed": 0})
+            chan[c]["signups"] = int(r["signups"] or 0)
+            chan[c]["subscribers"] = int(r["subscribers"] or 0)
+            chan[c]["onetime"] = int(r["onetime"] or 0)
+
+        # ── Revenue by channel (cohort accounts' subscription + per-claim payments) ──
+        cur = await conn.execute(
+            f"""SELECT {_CHANNEL_CASE} AS channel,
+                       COALESCE((SELECT SUM(su.amount_paid) FROM nidaan_subscriptions su
+                                 WHERE su.account_id=a.account_id),0)
+                     + COALESCE((SELECT SUM(p.amount_paid) FROM nidaan_per_claim_purchase p
+                                 WHERE p.account_id=a.account_id
+                                   AND p.status NOT IN ('pending_payment','cancelled','failed','refunded')),0) AS rev
+                FROM nidaan_accounts a
+                WHERE a.created_at >= datetime('now', ?)
+                  AND COALESCE(a.deleted_at,'')=''
+                GROUP BY channel""",
+            (since,))
+        for r in await cur.fetchall():
+            c = r["channel"] or "direct"
+            if c in chan:
+                chan[c]["revenue"] = int(r["rev"] or 0)
+
+        # ── Abandonment by channel (event log) ──────────────────────────────────
+        cur = await conn.execute(
+            """SELECT channel, COUNT(*) AS n FROM nidaan_events
+               WHERE event_type='abandoned' AND created_at >= datetime('now', ?)
+               GROUP BY channel""", (since,))
+        for r in await cur.fetchall():
+            c = r["channel"] or "direct"
+            if c in chan:
+                chan[c]["abandoned"] = int(r["n"] or 0)
+
+        # ── Payment failures (event log; channel usually unknown at webhook time) ──
+        cur = await conn.execute(
+            """SELECT channel, COUNT(*) AS n FROM nidaan_events
+               WHERE event_type IN ('payment_failed','subscription_failed')
+                 AND created_at >= datetime('now', ?) GROUP BY channel""", (since,))
+        total_failed = 0
+        for r in await cur.fetchall():
+            c = r["channel"] or "direct"
+            total_failed += int(r["n"] or 0)
+            if c in chan:
+                chan[c]["payment_failed"] = int(r["n"] or 0)
+
+        # ── Abandoned one-time reviews (authoritative: stuck pending_payment in window) ──
+        stuck_reviews = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_per_claim_purchase "
+            "WHERE status='pending_payment' AND created_at >= datetime('now', ?)",
+            (since,))).fetchone())[0]
+
+        # ── Funnel (window): signup_started(events) → signups(accounts) → pay_opened(events) → paid ──
+        def _evt_count(et):
+            return conn.execute(
+                "SELECT COUNT(*) FROM nidaan_events WHERE event_type=? AND created_at >= datetime('now', ?)",
+                (et, since))
+        signup_started = (await (await _evt_count("signup_started")).fetchone())[0]
+        pay_opened     = (await (await _evt_count("pay_opened")).fetchone())[0]
+        signups_total  = sum(chan[c]["signups"] for c in chan)
+        subs_total     = sum(chan[c]["subscribers"] for c in chan)
+        onetime_total  = sum(chan[c]["onetime"] for c in chan)
+        revenue_total  = sum(chan[c]["revenue"] for c in chan)
+        abandoned_total= sum(chan[c]["abandoned"] for c in chan)
+        paid_total     = subs_total + onetime_total
+
+        # ── Recent failures (for the follow-up stream) ──────────────────────────
+        cur = await conn.execute(
+            """SELECT created_at, event_type, purpose, amount_paise, reason, contact
+               FROM nidaan_events
+               WHERE event_type IN ('payment_failed','subscription_failed')
+               ORDER BY event_id DESC LIMIT 25""")
+        recent_failures = [{
+            "at": r["created_at"], "type": r["event_type"], "purpose": r["purpose"] or "",
+            "amount": int((r["amount_paise"] or 0)) // 100, "reason": r["reason"] or "",
+            "contact": r["contact"] or ""
+        } for r in await cur.fetchall()]
+
+    return {
+        "range_days": days,
+        "totals": {
+            "signups": signups_total, "subscribers": subs_total, "onetime": onetime_total,
+            "revenue": revenue_total, "payment_failed": total_failed,
+            "abandoned": abandoned_total, "stuck_reviews": int(stuck_reviews or 0),
+        },
+        "by_channel": [chan[c] for c in _CHANNELS if c in chan],
+        "funnel": {
+            "signup_started": int(signup_started or 0),
+            "signups": signups_total,
+            "pay_opened": int(pay_opened or 0),
+            "paid": paid_total,
+        },
+        "recent_failures": recent_failures,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Business-analytics event spine. Every meaningful attempt/outcome is appended to
 # nidaan_events so the super-admin dashboard can segment acquisition BY CHANNEL.

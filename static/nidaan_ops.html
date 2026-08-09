@@ -408,6 +408,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-numbers" class="panel" style="display:none"></div>
       <div id="panel-telegram" class="panel" style="display:none"></div>
       <div id="panel-guide" class="panel" style="display:none"></div>
+      <div id="panel-analytics" class="panel" style="display:none"></div>
       <div id="panel-revenue" class="panel" style="display:none"></div>
       <div id="panel-plans" class="panel" style="display:none"></div>
       <div id="panel-content" class="panel" style="display:none"></div>
@@ -790,6 +791,7 @@ function buildSidebar() {
     {id:'telegram',   label:'✈️ Telegram Bot',     minRank:0},
     {id:'guide',      label:'📖 How to use',       minRank:0},
     null,
+    {id:'analytics',  label:'📊 Business Analytics', minRank:2},
     {id:'revenue',    label:'💰 Revenue',       minRank:2, ownerOnly:true},
     {id:'plans',      label:'💳 Plans & Billing', minRank:2},
     {id:'content',    label:'📝 Content',       minRank:2},
@@ -841,6 +843,7 @@ function showPanel(id, fromHistory) {
     numbers: loadOfficialNumbers,
     telegram: loadTelegramPanel,
     guide: loadGuidePanel,
+    analytics: loadAnalytics,
     revenue: loadRevenue,
     plans: loadPlansConfig,
     content: loadContentConfig,
@@ -5182,6 +5185,100 @@ async function reactivateStaff(staffId) {
 // ═══════════════════════════════════════════════════════════════
 //  REVENUE
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  BUSINESS ANALYTICS — acquisition by channel + funnel + failures (super-admin).
+// ═══════════════════════════════════════════════════════════════
+let _anDays = 30;
+async function loadAnalytics() {
+  const el = document.getElementById('panel-analytics');
+  el.innerHTML = `<div class="section-hdr"><div><div class="section-title">📊 Business Analytics</div><div class="section-sub">Where subscribers, one-time reviews & signups come from — by channel, in real time · Confidential</div></div></div>
+    <div id="anRangeBar" style="display:flex;gap:.4rem;margin-bottom:.9rem;flex-wrap:wrap"></div>
+    <div id="anBody"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+  const bar = document.getElementById('anRangeBar');
+  bar.innerHTML = [[7,'7 days'],[30,'30 days'],[90,'90 days'],[365,'1 year']].map(([d,lbl])=>
+    `<button class="btn ${_anDays===d?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="_anDays=${d};loadAnalytics()">${lbl}</button>`).join('');
+  const r = await API('/analytics?days='+_anDays);
+  if (!r.ok) { document.getElementById('anBody').innerHTML='<div class="empty"><p>Failed to load analytics.</p></div>'; return; }
+  const d = await r.json();
+  const t = d.totals||{};
+  const CH = {direct:'🌐 Direct / Organic', staff:'👤 Staff referral', branch:'🏢 Branch', campaign:'🏷️ Campaign code', marketing:'📣 Marketing (UTM)'};
+
+  const card = (label, value, color, sub) => `
+    <div style="flex:1;min-width:150px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:1rem 1.1rem">
+      <div style="font-size:1.6rem;font-weight:800;color:${color}">${value}</div>
+      <div style="font-size:.76rem;color:rgba(255,255,255,.55);margin-top:.15rem">${label}</div>
+      ${sub?`<div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.1rem">${sub}</div>`:''}
+    </div>`;
+
+  // Funnel with drop-off
+  const f = d.funnel||{};
+  const fstep = (label, val, prev) => {
+    const pct = (prev && prev>0) ? Math.round(val/prev*100) : null;
+    return `<div style="flex:1;min-width:120px;text-align:center;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);border-radius:12px;padding:.7rem .4rem">
+      <div style="font-size:1.35rem;font-weight:800;color:#22d3ee">${fmt(val)}</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.6)">${label}</div>
+      ${pct!==null?`<div style="font-size:.66rem;color:${pct>=50?'#34d399':'#fbbf24'};margin-top:.15rem">${pct}% of prev</div>`:''}
+    </div>`;
+  };
+
+  const chRows = (d.by_channel||[]).map(c=>`<tr>
+    <td>${CH[c.channel]||esc(c.channel)}</td>
+    <td style="text-align:center">${fmt(c.signups)}</td>
+    <td style="text-align:center;color:#34d399">${fmt(c.subscribers)}</td>
+    <td style="text-align:center;color:#a78bfa">${fmt(c.onetime)}</td>
+    <td style="text-align:right;font-size:.8rem">₹${fmt(c.revenue)}</td>
+    <td style="text-align:center;color:${c.abandoned>0?'#fbbf24':'rgba(255,255,255,.3)'}">${fmt(c.abandoned)}</td>
+    <td style="text-align:center;color:${c.payment_failed>0?'#fca5a5':'rgba(255,255,255,.3)'}">${fmt(c.payment_failed)}</td>
+  </tr>`).join('');
+
+  const failRows = (d.recent_failures||[]).map(fr=>{
+    const c = (fr.contact||'').trim();
+    const digits = c.replace(/\D/g,'');
+    const wa = digits.length>=10 ? `<a href="https://wa.me/91${digits.slice(-10)}" target="_blank" style="color:#34d399">WhatsApp</a>` : '';
+    const call = digits.length>=10 ? `<a href="tel:${digits.slice(-10)}" style="color:#7dd3fc">Call</a>` : '';
+    return `<tr>
+      <td style="font-size:.72rem;white-space:nowrap">${esc((fr.at||'').replace('T',' ').slice(0,16))}</td>
+      <td>${esc(fr.purpose||fr.type||'—')}</td>
+      <td style="text-align:right">${fr.amount?('₹'+fmt(fr.amount)):'—'}</td>
+      <td style="font-size:.74rem;color:#fca5a5">${esc(fr.reason||'—')}</td>
+      <td style="font-size:.74rem">${esc(c||'—')}</td>
+      <td style="white-space:nowrap;font-size:.74rem">${[wa,call].filter(Boolean).join(' · ')||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('anBody').innerHTML = `
+    <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem">
+      ${card('Signups', fmt(t.signups||0), '#f1f5f9')}
+      ${card('Subscribers', fmt(t.subscribers||0), '#34d399')}
+      ${card('One-time reviews', fmt(t.onetime||0), '#a78bfa')}
+      ${card('Revenue', '₹'+fmt(t.revenue||0), '#7dd3fc')}
+      ${card('Payment failures', fmt(t.payment_failed||0), '#fca5a5')}
+      ${card('Abandoned at pay', fmt(t.abandoned||0), '#fbbf24', (t.stuck_reviews||0)+' unpaid reviews')}
+    </div>
+
+    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:1rem;margin-bottom:1.1rem">
+      <div style="font-size:.85rem;font-weight:700;color:rgba(255,255,255,.7);margin-bottom:.6rem">Conversion funnel (last ${d.range_days} days)</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:stretch">
+        ${fstep('Signup started', f.signup_started||0, null)}
+        ${fstep('Signed up', f.signups||0, f.signup_started||0)}
+        ${fstep('Opened payment', f.pay_opened||0, f.signups||0)}
+        ${fstep('Paid', f.paid||0, f.pay_opened||0)}
+      </div>
+      <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.5rem">“Signup started” &amp; “Opened payment” come from live page beacons; “Signed up” &amp; “Paid” are confirmed records. Beacons accumulate from now on.</div>
+    </div>
+
+    <div class="table-wrap" style="margin-bottom:1.2rem"><table>
+      <thead><tr><th>Channel</th><th>Signups</th><th>Subscribers</th><th>One-time</th><th>Revenue</th><th>Abandoned</th><th>Failed</th></tr></thead>
+      <tbody>${chRows||'<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,.4)">No data in this range yet.</td></tr>'}</tbody>
+    </table></div>
+
+    <div class="section-hdr" style="margin-top:.4rem"><div><div class="section-title" style="font-size:1rem">⚠️ Recent payment failures — follow up</div><div class="section-sub">Reach out and help them complete payment. (All-time recent, newest first.)</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>When</th><th>For</th><th>Amount</th><th>Reason</th><th>Contact</th><th>Action</th></tr></thead>
+      <tbody>${failRows||'<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,.4)">No payment failures recorded. 🎉</td></tr>'}</tbody>
+    </table></div>`;
+}
+
 async function loadRevenue() {
   const el = document.getElementById('panel-revenue');
   el.innerHTML = '<div class="section-hdr"><div class="section-title">Revenue Dashboard</div><div class="section-sub">All time • Confidential</div></div><div class="empty"><p>Loading…</p></div>';
