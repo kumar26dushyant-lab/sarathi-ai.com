@@ -9503,7 +9503,7 @@ async def api_google_signup(req: GoogleSignUpRequest, request: Request):
                     referred_name=name)
                 await db.update_tenant(tenant_id, referral_code=ref_code)
                 from datetime import datetime, timedelta
-                extended_trial = (datetime.now() + timedelta(days=21)).isoformat()
+                extended_trial = (datetime.now() + timedelta(days=db.REFERRAL_TRIAL_DAYS)).isoformat()
                 await db.update_tenant(tenant_id, trial_ends_at=extended_trial)
                 referral_bonus = True
                 logger.info("🤝 Referral tracked: %s → tenant %d via Google signup", ref_code, tenant_id)
@@ -9526,7 +9526,7 @@ async def api_google_signup(req: GoogleSignUpRequest, request: Request):
         "firm_name": firm_name,
         "owner_name": name,
         "plan": req.plan,
-        "trial_days": 21 if referral_bonus else 14,
+        "trial_days": db.REFERRAL_TRIAL_DAYS if referral_bonus else db.TRIAL_DAYS,
         "email": email,
         "referral_bonus": referral_bonus,
         "needs_onboarding": True,
@@ -10305,11 +10305,11 @@ async def sa_activate(tenant_id: int, plan: str = Query("individual"), sa=Depend
     pf = db.PLAN_FEATURES.get(plan, db.PLAN_FEATURES.get('individual', {}))
     if plan == 'trial':
         from datetime import datetime, timedelta
-        trial_end = datetime.now() + timedelta(days=14)
+        trial_end = datetime.now() + timedelta(days=db.TRIAL_DAYS)
         await db.update_tenant(tenant_id, is_active=1, subscription_status='trial',
                                plan='trial', max_agents=pf.get('max_agents', 1),
                                trial_ends_at=trial_end.strftime('%Y-%m-%d %H:%M:%S'))
-        await db.add_audit_log(tenant_id, None, "sa_activate", f"Reset to trial (14 days)")
+        await db.add_audit_log(tenant_id, None, "sa_activate", f"Reset to trial ({db.TRIAL_DAYS} days)")
         logger.info("🔧 SA reset tenant %d to trial", tenant_id)
     else:
         await db.update_tenant(tenant_id, is_active=1, subscription_status='paid',
@@ -10376,7 +10376,7 @@ async def sa_change_plan(tenant_id: int, plan: str = Query(...), sa=Depends(auth
     old_plan = tenant.get('plan', 'trial')
     if plan == 'trial':
         from datetime import datetime, timedelta
-        trial_end = datetime.now() + timedelta(days=14)
+        trial_end = datetime.now() + timedelta(days=db.TRIAL_DAYS)
         await db.update_tenant(tenant_id, plan='trial', subscription_status='trial',
                                max_agents=pf.get('max_agents', 1),
                                trial_ends_at=trial_end.strftime('%Y-%m-%d %H:%M:%S'))
@@ -10971,7 +10971,7 @@ async def sa_system_status(sa=Depends(auth.require_superadmin)):
                 "Chooses Firm or Individual signup",
                 "Fills form (name, email, phone optional, firm details)",
                 "Email OTP verification",
-                "Account created (14-day trial)",
+                f"Account created ({db.TRIAL_DAYS}-day trial)",
                 "Login via Email OTP or Google Sign-In",
                 "Bot token collection via Telegram",
                 "Bot activated → CRM ready to use",
@@ -10995,7 +10995,7 @@ async def sa_system_status(sa=Depends(auth.require_superadmin)):
         {
             "name": "Payment & Subscription",
             "steps": [
-                "Trial expires after 14 days",
+                f"Trial expires after {db.TRIAL_DAYS} days",
                 "User selects plan (Solo ₹199 / Team ₹799 / Enterprise ₹1999)",
                 "Razorpay checkout initiated",
                 "Payment webhook received & verified",
@@ -12680,7 +12680,7 @@ NOT_REGISTERED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta 
 .btn-teal:hover{background:#0d9488;color:#fff}</style></head>
 <body><div class="card"><div style="font-size:3em;margin-bottom:16px">👋</div>
 <h1>Welcome to Sarathi-AI</h1>
-<p>Start your <strong>14-day free trial</strong> to access calculators, dashboard, reports, and all CRM features.<br>No credit card needed.</p>
+<p>Start your <strong>7-day free trial</strong> to access calculators, dashboard, reports, and all CRM features.<br>No credit card needed.</p>
 <a href="/#pricing" class="btn btn-blue">🚀 Start Free Trial</a>
 <a href="/?login=1" class="btn btn-teal">Already registered? Log In</a>
 </div></body></html>"""
@@ -12835,7 +12835,7 @@ async def llms_txt():
         "- **Founded:** April 2026\n"
         "- **Headquarters:** Indore, Madhya Pradesh, India\n"
         "- **Hosting:** Oracle Cloud, Mumbai region (India)\n"
-        "- **Pricing:** \u20b9199/month (INR), 14-day free trial, no card required\n\n"
+        "- **Pricing:** \u20b9199/month (INR), 7-day free trial, no card required\n\n"
         "## What it does\n\n"
         "Sarathi-AI is an AI CRM that Indian insurance advisors operate by voice (Hindi or "
         "English) through WhatsApp, Telegram or web. Core features:\n\n"
@@ -13024,13 +13024,13 @@ async def api_signup(req: SignupRequest, request: Request):
                         referred_phone=phone or email,
                         referred_name=req.owner_name)
                     await db.update_tenant(tenant_id, referral_code=ref_code)
-                    # Referee bonus: extend trial from 14 to 21 days
+                    # Referee bonus: extend the base trial by the referral bonus.
                     from datetime import datetime, timedelta
-                    extended_trial = (datetime.now() + timedelta(days=21)).isoformat()
+                    extended_trial = (datetime.now() + timedelta(days=db.REFERRAL_TRIAL_DAYS)).isoformat()
                     await db.update_tenant(tenant_id, trial_ends_at=extended_trial)
                     referral_bonus = True
-                    logger.info("🤝 Referral tracked: %s → tenant %d via %s (+7d trial bonus)",
-                                ref_code, tenant_id, ref_aff['name'])
+                    logger.info("🤝 Referral tracked: %s → tenant %d via %s (+%dd trial bonus)",
+                                ref_code, tenant_id, ref_aff['name'], db.REFERRAL_TRIAL_DAYS - db.TRIAL_DAYS)
 
     logger.info("🆕 New signup: %s (%s) → tenant_id=%d, plan=%s",
                 req.owner_name, req.firm_name, tenant_id, req.plan)
@@ -13060,7 +13060,7 @@ async def api_signup(req: SignupRequest, request: Request):
         "firm_name": req.firm_name,
         "owner_name": req.owner_name,
         "plan": req.plan,
-        "trial_days": 21 if referral_bonus else 14,
+        "trial_days": db.REFERRAL_TRIAL_DAYS if referral_bonus else db.TRIAL_DAYS,
         "deep_link": f"https://t.me/SarathiBizBot?start=web_{tenant_id}_{sig}",
         "email": email,
         "referral_bonus": referral_bonus,

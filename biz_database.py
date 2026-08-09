@@ -21,6 +21,13 @@ logger = logging.getLogger("sarathi.db")
 
 DB_PATH = "sarathi_biz.db"
 
+# ── Trial length — SINGLE SOURCE OF TRUTH. Every place that starts/resets a trial
+# must use these, so the length can be changed in exactly one spot. TRIAL_DAYS is the
+# base new-tenant trial; REFERRAL_TRIAL_DAYS applies when a referral bonus is granted
+# at signup (base + a 7-day bonus). (Changed 14→7 / 21→14 in Aug 2026, Phase C.)
+TRIAL_DAYS = 7
+REFERRAL_TRIAL_DAYS = 14
+
 
 @asynccontextmanager
 async def _get_db():
@@ -2678,7 +2685,7 @@ async def create_tenant(firm_name: str, owner_name: str, phone: str,
                         signup_channel: str = "web") -> int:
     """Create a new tenant (firm). Returns tenant_id."""
     async with aiosqlite.connect(DB_PATH) as conn:
-        trial_end = (datetime.now() + timedelta(days=14)).isoformat()
+        trial_end = (datetime.now() + timedelta(days=TRIAL_DAYS)).isoformat()
         cursor = await conn.execute(
             """INSERT INTO tenants
                (firm_name, owner_name, phone, email, owner_telegram_id,
@@ -2702,7 +2709,7 @@ async def create_tenant_with_owner(firm_name: str, owner_name: str, phone: str,
     When the owner later does /start on Telegram, the bot matches by phone
     and links the telegram_id to this existing agent."""
     async with aiosqlite.connect(DB_PATH) as conn:
-        trial_end = (datetime.now() + timedelta(days=14)).isoformat()
+        trial_end = (datetime.now() + timedelta(days=TRIAL_DAYS)).isoformat()
         # B6: stamp lifetime_trial_used=1 at creation. Even if they later
         # upgrade to paid or cancel, the lifetime trial has been consumed —
         # they can't get a fresh trial by re-registering with a variant email.
