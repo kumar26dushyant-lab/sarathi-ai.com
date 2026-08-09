@@ -5484,8 +5484,10 @@ async function loadContentConfig(){
   el.innerHTML = `<div class="section-hdr"><div><div class="section-title">Content — canonical facts</div>
     <div class="section-sub">Edit a business fact once here; the website homepage AND the chat assistant both read from it. Change → applies everywhere.</div></div>
     <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadContentConfig()">🔄 Refresh</button></div>
+    <div id="officesEditor" style="margin-bottom:1.6rem"></div>
     <div id="contentWrap"><div class="empty"><p>Loading…</p></div></div>
     <div id="reviewTplSection" style="margin-top:1.4rem"></div>`;
+  loadOfficesEditor();
   loadReviewTemplates();
   const r = await API('/content');
   if(!r.ok){ document.getElementById('contentWrap').innerHTML='<div class="empty"><p>Failed to load (super-admin only).</p></div>'; return; }
@@ -5509,6 +5511,61 @@ async function saveContent(key){
   const r=await API('/content/'+encodeURIComponent(key),{method:'PATCH', body:JSON.stringify({value_en,value_hi})});
   if(r.ok){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — live on site + chat'; setTimeout(()=>{msg.textContent='';},2600); }
   else{ const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+}
+
+// ── Our Offices editor (super-admin) — add/edit/delete; reflects on the homepage
+//    for both advisor & policyholder views. ────────────────────────────────────
+async function loadOfficesEditor(){
+  const wrap = document.getElementById('officesEditor');
+  if(!wrap) return;
+  const canEdit = (_role==='super_admin');
+  const r = await API('/offices');
+  const offices = r.ok ? ((await r.json()).offices || []) : [];
+  wrap.innerHTML = `
+    <div class="section-hdr" style="margin-bottom:.6rem"><div>
+      <div class="section-title" style="font-size:1rem">🏢 Our Offices</div>
+      <div class="section-sub">Add, edit or remove office addresses. Changes show on the homepage for both advisor &amp; policyholder views.</div>
+    </div>${canEdit?`<button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="officeAddRow()">+ Add office</button>`:''}</div>
+    <div id="officeRows"></div>
+    ${canEdit?`<div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;margin-top:.4rem"><span id="officeMsg" style="font-size:.8rem"></span><button class="btn btn-primary" style="font-size:.85rem" onclick="saveOffices()">💾 Save offices</button></div>`:''}`;
+  window._officesData = offices.length ? offices : [{city_en:'',city_hi:'',addr:''}];
+  if(!canEdit && !offices.length) window._officesData = [];
+  renderOfficeRows(canEdit);
+}
+function renderOfficeRows(canEdit){
+  const box = document.getElementById('officeRows'); if(!box) return;
+  const rows = window._officesData||[];
+  if(!rows.length){ box.innerHTML='<div class="empty" style="padding:1rem"><p>No offices. Click “+ Add office”.</p></div>'; return; }
+  box.innerHTML = rows.map((o,i)=>`
+    <div class="ccfg-card" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.85rem 1rem;margin-bottom:.7rem">
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:160px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block">Office name (English)</label>
+          <input class="form-input" data-oi="${i}" data-of="city_en" value="${esc(o.city_en||'')}" ${canEdit?'':'disabled'} placeholder="Indore — Office 2"></div>
+        <div style="flex:1;min-width:160px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block">Office name (हिंदी)</label>
+          <input class="form-input" data-oi="${i}" data-of="city_hi" value="${esc(o.city_hi||'')}" ${canEdit?'':'disabled'} placeholder="इंदौर — कार्यालय 2"></div>
+        ${canEdit?`<button class="btn-sm btn-ghost" style="color:#fca5a5" onclick="officeDelRow(${i})">🗑 Remove</button>`:''}
+      </div>
+      <div style="margin-top:.5rem"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block">Full address</label>
+        <input class="form-input" data-oi="${i}" data-of="addr" value="${esc(o.addr||'')}" ${canEdit?'':'disabled'} placeholder="509, Girnar Plaza, MIG Square, Atal Dwar, Indore – 452010" style="width:100%"></div>
+    </div>`).join('');
+}
+function _officeSync(){
+  document.querySelectorAll('#officeRows [data-oi]').forEach(inp=>{
+    const i=+inp.dataset.oi, f=inp.dataset.of;
+    if(window._officesData[i]) window._officesData[i][f]=inp.value;
+  });
+}
+function officeAddRow(){ _officeSync(); (window._officesData=window._officesData||[]).push({city_en:'',city_hi:'',addr:''}); renderOfficeRows(true); }
+function officeDelRow(i){ _officeSync(); window._officesData.splice(i,1); renderOfficeRows(true); }
+async function saveOffices(){
+  _officeSync();
+  const msg=document.getElementById('officeMsg');
+  const offices=(window._officesData||[]).map(o=>({city_en:(o.city_en||'').trim(),city_hi:(o.city_hi||'').trim(),addr:(o.addr||'').trim()}))
+    .filter(o=>o.city_en||o.addr);
+  if(msg){ msg.style.color='#94a3b8'; msg.textContent='Saving…'; }
+  const r=await API('/offices',{method:'PUT', body:JSON.stringify({offices})});
+  if(r.ok){ if(msg){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — live on the homepage'; setTimeout(()=>{msg.textContent='';},2800);} const d=await r.json(); window._officesData=d.offices.length?d.offices:[{city_en:'',city_hi:'',addr:''}]; renderOfficeRows(true); }
+  else{ const d=await r.json().catch(()=>({})); if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); } }
 }
 
 // ── Customer support inbox ────────────────────────────────────────────────────

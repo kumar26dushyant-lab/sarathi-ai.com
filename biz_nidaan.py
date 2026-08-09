@@ -5088,6 +5088,53 @@ async def set_ops_setting(key: str, value: str, updated_by: Optional[int] = None
         await conn.commit()
 
 
+# ── Our Offices (super-admin editable; shown on the homepage for BOTH advisor &
+# policyholder views). Stored as a JSON list in the ops-settings KV. city is bilingual,
+# addr is a single line (street addresses aren't translated). ──────────────────
+DEFAULT_OFFICES = [
+    {"city_en": "Indore — Registered Office", "city_hi": "इंदौर — पंजीकृत कार्यालय",
+     "addr": "79-A, Dravid Nagar, Ranjit Hanuman Mandir Road, Indore – 452009"},
+    {"city_en": "Indore — Office 2", "city_hi": "इंदौर — कार्यालय 2",
+     "addr": "509, Girnar Plaza, MIG Square, Atal Dwar, Indore – 452010"},
+    {"city_en": "Indore — Office 3 (Vijay Nagar)", "city_hi": "इंदौर — कार्यालय 3 (विजय नगर)",
+     "addr": "401, Sanskar Apartment, Apollo Hospital Road, Scheme No. 54, Indore – 452010"},
+    {"city_en": "Bhopal", "city_hi": "भोपाल",
+     "addr": "244, BDA Complex – 7 No. Stop, Near SBI Bank, Shivaji Nagar, Bhopal – 462016"},
+]
+
+
+def _clean_office(o: dict) -> Optional[dict]:
+    if not isinstance(o, dict):
+        return None
+    ce = (o.get("city_en") or "").strip()
+    addr = (o.get("addr") or "").strip()
+    if not ce and not addr:
+        return None
+    return {"city_en": ce[:120], "city_hi": (o.get("city_hi") or "").strip()[:120],
+            "addr": addr[:300]}
+
+
+async def get_offices() -> list[dict]:
+    """The current office list — the saved custom list, or DEFAULT_OFFICES if never edited.
+    An explicit empty saved list is respected (returns [])."""
+    raw = await get_ops_setting("offices_json", "")
+    if raw:
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return [c for c in (_clean_office(o) for o in data) if c]
+        except Exception:
+            pass
+    return list(DEFAULT_OFFICES)
+
+
+async def set_offices(offices: list, updated_by: Optional[int] = None) -> list[dict]:
+    """Replace the whole office list (add/edit/delete via one save). Returns the cleaned list."""
+    clean = [c for c in (_clean_office(o) for o in (offices or [])) if c]
+    await set_ops_setting("offices_json", json.dumps(clean, ensure_ascii=False), updated_by)
+    return clean
+
+
 def _staff_jwt_secret() -> str:
     base = os.environ.get("JWT_SECRET", "change-me-in-production")
     return base + _STAFF_JWT_SUFFIX

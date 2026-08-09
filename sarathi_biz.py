@@ -5028,6 +5028,48 @@ async def ops_content_set(content_key: str, body: OpsContentUpdate, request: Req
     return {"ok": True, "content": updated}
 
 
+# ── Our Offices (super-admin editable; shown on homepage for both audiences) ──
+@app.get("/nidaan/api/offices")
+@limiter.limit("60/minute")
+async def nidaan_public_offices(request: Request):
+    """Public office list — the homepage renders these (advisor + policyholder views)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"offices": await nidaan.get_offices()}
+
+
+@app.get("/nidaan/ops/api/offices")
+async def ops_offices_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")   # any staff can view; only SA can save
+    return {"offices": await nidaan.get_offices()}
+
+
+class OpsOffice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    city_en: str = Field("", max_length=120)
+    city_hi: str = Field("", max_length=120)
+    addr: str = Field("", max_length=300)
+
+
+class OpsOfficesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    offices: list[OpsOffice] = Field(default_factory=list, max_length=50)
+
+
+@app.put("/nidaan/ops/api/offices")
+async def ops_offices_set(body: OpsOfficesUpdate, request: Request):
+    """Replace the whole office list (add/edit/delete via one save). Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    saved = await nidaan.set_offices([o.model_dump() for o in body.offices],
+                                     updated_by=staff.get("staff_id"))
+    await _ops_audit(request, "offices.update", "content", "offices", f"{len(saved)} office(s)")
+    return {"ok": True, "offices": saved}
+
+
 @app.get("/nidaan/ops/api/plans-config")
 async def ops_plans_config(request: Request):
     if not _is_nidaan_host(request):

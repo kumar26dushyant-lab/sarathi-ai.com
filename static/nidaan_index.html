@@ -1467,7 +1467,8 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
   <div class="section-inner">
     <h2 class="section-title en">Our Offices</h2>
     <h2 class="section-title hi" style="display:none">हमारे कार्यालय</h2>
-    <div class="offices-grid">
+    <!-- Cards below are the fallback; renderOffices() replaces them from the super-admin config. -->
+    <div class="offices-grid" id="officesGrid">
       <div class="office-card">
         <div class="office-city en">Indore — Registered Office</div>
         <div class="office-city hi" style="display:none">इंदौर — पंजीकृत कार्यालय</div>
@@ -1776,6 +1777,28 @@ else _initScrollNav();
 })();
 </script>
 <script src="/static/nidaan_support_widget.js?v=16" defer></script>
+<script>
+/* Our Offices — rendered from the super-admin config (/nidaan/api/offices) so addresses
+ * can be added/edited/removed in ops and reflect on BOTH audience views. The static cards
+ * in the HTML remain as a fallback if this fetch fails. Language follows the body.hi/.en CSS. */
+(function () {
+  function _e(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function render(list){
+    var grid = document.getElementById('officesGrid');
+    if (!grid || !list || !list.length) return;
+    grid.innerHTML = list.map(function(o){
+      var ce = _e(o.city_en || ''), ch = _e(o.city_hi || o.city_en || ''), ad = _e(o.addr || '');
+      return '<div class="office-card">'
+        + '<div class="office-city en">' + ce + '</div>'
+        + '<div class="office-city hi" style="display:none">' + ch + '</div>'
+        + '<div class="office-addr">' + ad + '</div></div>';
+    }).join('');
+  }
+  fetch('/nidaan/api/offices').then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){ if (d && d.offices) render(d.offices); })
+    .catch(function(){ /* keep static fallback */ });
+})();
+</script>
 <script src="/static/nidaan_track.js?v=1"></script>
 </body>
 </html>
