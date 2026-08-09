@@ -5475,7 +5475,50 @@ visibility + commission config + gamified dashboard.
 
 Also this session: fixed #6 commission disclaimer not switching to Hindi on the subscriber
 dashboard (its `.hi` blocks had inline `display:none`, which the `.body.hi/.body.en` CSS
-toggle cannot override; removed inline styles → live 6648921).
+toggle cannot override; removed inline styles → live 6648921). Fixed My Business tab blank
+(called loadMyProfile vs _loadMyProfile → 7671d6c) and staff shareable link 404 (used
+/nidaan?ref= not /nidaan/start?ref= → 350468b).
+
+## 63. BUSINESS ANALYTICS — channel attribution + funnel + failures (owner Aug 8-9; SHIPPED, live 9f2e007)
+
+Owner ask: track every acquisition CHANNEL (subscribers / one-time reviews / signups) +
+"missed, failed, payment failed" with as much per-attempt detail as possible; super-admin
+full control over shared/referred accounts. Design agreed via AskUserQuestion:
+Internal+marketing(UTM) channels · Failures+abandonment depth · dedicated dashboard.
+
+Super-admin control over referred accounts ALREADY existed (referred accounts are normal
+nidaan_accounts → ops Accounts panel: create/edit/bulk-delete + segments + branch search).
+
+PHASE 1 (data spine, 5739e05): nidaan_events append-only log (event_type, channel, ref_code,
+utm_*, account_id, claim_id, amount_paise, purpose, status, reason, session_id, contact, meta
++ indexes). nidaan_accounts += source_channel/utm_source/utm_medium/utm_campaign.
+resolve_channel(ref,utm)→direct|staff|branch|campaign|marketing; record_event() (best-effort).
+Webhook payment.failed + subscription.halted now PERSIST events (payment_failed/
+subscription_failed) on top of the existing alerts.
+
+PHASE 2 (instrumentation, 99b154f) — includes a CRITICAL fix: staff-as-branch shareable links
+were being REJECTED at signup because every signup path validated the code via is_valid_branch
+(branches only). Added is_valid_ref_code (active branch OR staff referral_code) and switched
+email/mobile/claim/Google signup validation to it; branch-signup alert now only fires for real
+branches. All signup endpoints accept + store utm_*; create_account* fire signup_completed.
+New POST /nidaan/api/track (public, rate-limited, whitelisted top-of-funnel beacons only).
+static/nidaan_track.js (first-touch ref+UTM capture 90d, anon session id, sendBeacon funnel/
+abandonment) on landing/start/dashboard; signup carries attribution; subscription pay fires
+pay_opened/completeFlow/abandoned. Abandoned one-time reviews are authoritative via
+per_claim_purchase.pending_payment (no beacon needed).
+
+PHASE 3 (dashboard, 9f2e007): get_business_analytics(days) — a SQL channel-CASE classifies
+BOTH new (source_channel) and legacy (derived from branch_code) accounts, so history is
+included (verified live: 22 direct + 1 branch). Metrics: signups/subscribers/one-time/revenue
+(cohort by signup date), abandonment + failures (event time), stuck reviews, funnel
+(signup_started→signups→pay_opened→paid), recent-failures stream. GET /nidaan/ops/api/analytics
+(super_admin only). New "📊 Business Analytics" ops nav + panel: date range (7/30/90/365),
+cards, funnel with drop-off %, by-channel table, payment-failure follow-up (WhatsApp/Call).
+
+NOTE: funnel beacon steps (signup_started/pay_opened) accumulate from Aug 9 onward; confirmed
+records (signed-up/paid) and failures are complete. Marketing/UTM only populates when landing
+URLs carry utm_* params. Future: per-cycle recurring revenue window (vs cohort); review/L2 pay
+abandonment beacons; campaign-code registry.
 
 ---
 
