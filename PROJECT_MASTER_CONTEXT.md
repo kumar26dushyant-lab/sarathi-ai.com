@@ -5583,9 +5583,17 @@ SHIPPED so far:
   installed PWA never accidental-exits; normal browser Back stays normal). Wired into
   nidaan_dashboard, dashboard.html (sarathi), nidaan_branch. Ops left as-is (own tab-history).
 
+- **Phase 6 (714ca24) Branch chatbot + Support filter:** support threads accept channel
+  'branch'/'staff' (create_support_thread whitelist); NidaanSupportMsgReq.channel; widget reads
+  window.NSW_CHANNEL + NSW_NAME and sends them. Branch dashboard loads the widget with
+  channel='branch', name 'Branch <code>'. Ops Support: per-row channel badge + channel filter
+  (All/Web/Branch/Staff, client-side) + channel tag in conversation header.
+- **Phase 7 (714ca24) Chat timestamps:** fmtDateTime (stored UTC → IST date+time). Ops thread
+  list 'Updated' shows date+time; each message bubble (ops + customer widget) shows a per-message
+  date+time tag.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
-back-hardening; full responsive audit — needs real-device verification); Phase 6 branch chatbot +
-Support filter; Phase 7 richer chat timestamps (date+time + per-message tag).
+back-hardening; full responsive audit — needs real-device verification).
 
 ---
 
