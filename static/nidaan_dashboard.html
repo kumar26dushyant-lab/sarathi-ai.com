@@ -2022,7 +2022,13 @@ function openPrePayCapture(){
   if (g('ppName'))   g('ppName').value   = _meCache ? (_meCache.owner_name || '') : '';
   if (g('ppPhone'))  g('ppPhone').value  = (_meCache && _meCache.phone) ? String(_meCache.phone).replace(/[^0-9]/g,'').slice(-10) : '';
   if (g('ppEmail'))  g('ppEmail').value  = _meCache ? (_meCache.email || '') : '';
-  if (g('ppBranch')) g('ppBranch').value = _meCache ? (_meCache.branch_code || '') : '';
+  if (g('ppBranch')) {
+    const _bc = _meCache ? (_meCache.branch_code || '') : '';
+    g('ppBranch').value = _bc;
+    // First-touch lock: once a referral code is attributed, it can't be changed.
+    if (_bc) { g('ppBranch').readOnly = true; g('ppBranch').style.opacity = '.7'; g('ppBranch').title = 'Referral code is locked once set.'; }
+    else { g('ppBranch').readOnly = false; g('ppBranch').style.opacity = ''; }
+  }
   const m = g('ppMsg'); if (m) { m.className = 'msg'; m.textContent = ''; }
   const b = g('ppBtn'); if (b) b.disabled = false;
   g('prePayModal').classList.add('open');

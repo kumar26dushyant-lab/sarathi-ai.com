@@ -1079,12 +1079,17 @@ async def is_valid_ref_code(code: str) -> bool:
 
 
 async def set_account_branch(account_id: int, code: str) -> bool:
-    """Attribute an account to a branch (used when the code is supplied on the
-    claim form rather than at signup). Caller should ensure the code is valid."""
+    """Attribute an account to a branch/staff referral code — FIRST-TOUCH ONLY. Once an account
+    has a referral code, it is LOCKED and can never be changed (prevents a subscriber or a later
+    link from re-crediting a different referrer). Only fills a blank code."""
     code = (code or "").strip().upper()
+    if not code:
+        return False
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "UPDATE nidaan_accounts SET branch_code=? WHERE account_id=?", (code, account_id))
+            "UPDATE nidaan_accounts SET branch_code=? "
+            "WHERE account_id=? AND COALESCE(NULLIF(branch_code,''),'')=''",
+            (code, account_id))
         await conn.commit()
         return cur.rowcount > 0
 
@@ -1645,6 +1650,8 @@ async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
     from datetime import datetime as _dt, timedelta as _td
     code = (branch_code or "").strip().upper()
     cutoff = _dt.now() - _td(days=NO_SCOPE_ARCHIVE_DAYS)
+    # Charge policy is global; the per-claim AMOUNT is the homepage tier (by disputed amount).
+    _charge = (await get_ops_setting("branch_charge_policy", "l2_only") or "l2_only") != "free"
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
@@ -1661,6 +1668,8 @@ async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
                 dt = _parse_ts(d.get("review_delivered_at"))
                 archived = bool(dt and dt < cutoff)
             d["archived"] = archived
+            # Per-claim tiered L2 fee (₹499 / ₹2000 by disputed amount) — what they'd pay at GO.
+            d["l2_fee"] = (await review_fee_for(d.get("disputed_amount"))) if _charge else 0
             out.append(d)
         return out
 
@@ -1671,6 +1680,23 @@ async def branch_l2_pricing() -> dict:
     fee = int((await get_ops_setting("branch_l2_fee", "499") or "499") or 0)
     policy = (await get_ops_setting("branch_charge_policy", "l2_only") or "l2_only")
     return {"fee": fee, "policy": policy, "charge_required": policy != "free" and fee > 0}
+
+
+async def branch_l2_fee_for_claim(claim_id: int) -> dict:
+    """SINGLE SOURCE OF TRUTH for a branch/staff retail claim's Level-2 fee. The amount is the
+    SAME tiered review fee as the homepage — review_fee_for(disputed_amount): ₹499, or ₹2000 when
+    the disputed amount exceeds the threshold — collected only at the GO (can_fight) step. Whether
+    we charge at all is the super-admin policy ('free' never charges). Amount in RUPEES.
+    Every branch/staff L2 pay/link/verify/webhook path MUST use this so the fee is identical."""
+    policy = (await get_ops_setting("branch_charge_policy", "l2_only") or "l2_only")
+    if policy == "free":
+        return {"fee": 0, "policy": policy, "charge_required": False}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT disputed_amount FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    disputed = row[0] if row else None
+    fee = await review_fee_for(disputed)   # tiered ₹499 / ₹2000 (>threshold)
+    return {"fee": int(fee), "policy": policy, "charge_required": int(fee) > 0}
 
 
 async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: str) -> bool:

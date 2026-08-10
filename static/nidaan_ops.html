@@ -3661,9 +3661,10 @@ function mbRenderClaims(){
     const bs='padding:.35rem .6rem;font-size:.76rem;margin-top:.3rem';
     if(c.l2_payment_status==='paid'){ l2=`<span style="color:#34d399;font-weight:700">${hi?'लीगल के लिए भेजा ✓':'Queued for legal ✓'}</span>`; }
     else if(c.review_outcome==='can_fight'){
-      const badge=`<div style="color:#6ee7b7;font-weight:600;margin-bottom:.15rem">${hi?'समीक्षा: लड़ा जा सकता है':'Reviewed: can be challenged'}</div>`;
+      const _f = (c.l2_fee!=null? c.l2_fee : l2cfg.fee);
+      const badge=`<div style="color:#6ee7b7;font-weight:600;margin-bottom:.15rem">${hi?'🎉 समीक्षा: लड़ा जा सकता है — Level-2 भेजने के लिए ₹'+_f+' + GST दें':'🎉 Reviewed: can be challenged — pay ₹'+_f+' + GST to move it to Level-2'}</div>`;
       if(l2cfg.charge_required){ l2=badge
-        +`<button class="btn btn-primary" style="${bs}" onclick="mbL2Pay(${c.claim_id})">${hi?'₹'+l2cfg.fee+' भुगतान करें':'Pay ₹'+l2cfg.fee+' now'}</button>`
+        +`<button class="btn btn-primary" style="${bs}" onclick="mbL2Pay(${c.claim_id})">${hi?'₹'+_f+' + GST भुगतान करें':'Pay ₹'+_f+' + GST now'}</button>`
         +`<button class="btn-sm btn-ghost" style="${bs};margin-left:.3rem;color:#7dd3fc" onclick="mbL2Link(${c.claim_id})">🔗 ${hi?'लिंक भेजें':'Share link'}</button>`; }
       else { l2=badge+`<button class="btn btn-primary" style="${bs}" onclick="mbL2Advance(${c.claim_id})">${hi?'Level-2 भेजें (मुफ़्त)':'Send to Level-2 (free)'}</button>`; }
     }

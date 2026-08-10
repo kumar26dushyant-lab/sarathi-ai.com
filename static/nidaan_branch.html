@@ -345,8 +345,10 @@ function renderBranchClaims(){
       } else if(c.review_outcome==='can_fight'){
         const badge='<div class="pill" style="background:#065f46;color:#6ee7b7">Reviewed: can be challenged</div>';
         if(l2cfg.charge_required){
+          const _f = (c.l2_fee!=null? c.l2_fee : l2cfg.fee);
           l2=badge
-            +`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${l2cfg.fee} now</button>`
+            +`<div style="font-size:.78rem;color:#6ee7b7;margin:.15rem 0 .3rem">🎉 Great — this claim can be fought! Pay ₹${_f} + GST to move it to Level-2 legal action.</div>`
+            +`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${_f} + GST now</button>`
             +`<button class="btn" style="${btnStyle};background:rgba(255,255,255,.12);color:#fff;margin-left:.3rem" onclick="l2ShareLink(${c.claim_id})">🔗 Share payment link</button>`;
         } else {
           l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Advance(${c.claim_id})">Send to Level-2 (free)</button>`;
