@@ -3401,13 +3401,16 @@ async function loadBranches() {
   const el = document.getElementById('panel-branches');
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches. The code a subscriber enters at signup attributes the sale here; a branch email gets alerted when an attributed lead signs up and if they stay unpaid.</div></div>
+      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches. The code a subscriber enters at signup attributes the sale here. <b style="color:#7dd3fc">A branch logs into its own dashboard with its email</b> (below) via a one-time code — so setting the email is what gives a branch login access + alerts.</div></div>
+    </div>
+    <div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem;font-size:.82rem;color:#bae6fd">
+      🏢 <b>Branch login:</b> branches sign in at <b>nidaanpartner.com/nidaan/branch</b> using their registered email → they get a 6-digit code by email → done (no password). Use <b>🔗 Login link</b> on any branch below to copy ready-to-send instructions. A branch with no email <b>cannot log in</b> until you add one.
     </div>
     <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
       <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Branch code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:130px"></div>
       <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:140px"></div>
       <div><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Name</label><input id="brName" placeholder="Pune Branch" style="max-width:160px"></div>
-      <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Alert email</label><input id="brEmail" type="email" placeholder="branch@example.com" style="width:100%"></div>
+      <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.2rem">Login &amp; alert email</label><input id="brEmail" type="email" placeholder="branch@example.com" style="width:100%"></div>
       <button class="btn btn-primary" onclick="createBranch()">+ Create code</button>
     </div>
     <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>
@@ -3424,7 +3427,7 @@ async function loadBranches() {
       <td><strong style="color:#a78bfa">${esc(b.branch_code)}</strong></td>
       <td>${esc(b.city)}</td>
       <td>${esc(b.name||'—')}</td>
-      <td style="font-size:.74rem">${email?esc(email):'<span style="color:rgba(255,255,255,.3)">— none —</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:#22d3ee;font-size:.7rem">edit</a></td>
+      <td style="font-size:.74rem">${email?esc(email):'<span style="color:#fca5a5" title="This branch cannot log in until you add an email">⚠ no login email</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:#22d3ee;font-size:.7rem">${email?'edit':'add'}</a>${email?` · <a href="#" onclick="branchLoginInfo('${esc(b.branch_code)}','${esc(email)}');return false" style="color:#7dd3fc;font-size:.7rem">🔗 login link</a>`:''}</td>
       <td style="text-align:center">${b.signups||0}</td>
       <td style="text-align:center;color:#34d399">${b.paid||0}</td>
       <td style="text-align:center">${unpaid>0?`<a href="#" onclick="showBranchUnpaid('${esc(b.branch_code)}');return false" style="background:rgba(220,38,38,.25);color:#fca5a5;border-radius:10px;padding:.1rem .5rem;font-weight:700;text-decoration:none">${unpaid}</a>`:'<span style="color:rgba(255,255,255,.25)">0</span>'}</td>
@@ -3436,7 +3439,7 @@ async function loadBranches() {
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Login / alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.5rem">Click an <b style="color:#fca5a5">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this branch's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per branch.</div>`;
 }
@@ -3474,11 +3477,27 @@ async function toggleBranch(code, status) {
   loadBranches();
 }
 async function editBranchEmail(code, current) {
-  const email = prompt('Alert email for branch '+code+' (blank to clear):', current||'');
+  const email = prompt('Login & alert email for branch '+code+'\n(this is the email the branch uses to log in — blank to clear):', current||'');
   if (email===null) return;
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({contact_email: email.trim()})});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update email.'); return; }
   loadBranches();
+}
+// Copy ready-to-send login instructions for a branch (URL + their login email + steps).
+function branchLoginInfo(code, email){
+  const url = location.origin + '/nidaan/branch';
+  const text =
+`Your Nidaan Partner branch dashboard login (${code}):
+
+1. Open: ${url}
+2. Enter your branch email: ${email}
+3. Tap "Send login code" — a 6-digit code arrives in your email.
+4. Enter the code to sign in. No password needed.
+
+You'll see your referrals, subscribers, earnings, and can raise claims.`;
+  const done = ()=> ndUI.toast('Login instructions copied — paste to the branch (WhatsApp/email).','success');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(()=>alert(text));
+  else alert(text);
 }
 
 // ═══════════════════════════════════════════════════════════════
