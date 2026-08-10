@@ -5601,6 +5601,15 @@ SHIPPED so far:
   nidaan_claim_note_reads (no new table). NOTE: dot is driven by unread NOTES; if owner later
   wants status-changes to also trigger it, extend has_new to compare last_status_at vs a seen ts.
 
+- **Auto-pay robustness (ead2e55):** AUDIT found both apps use Razorpay Subscriptions (Razorpay
+  manages mandate + retries + 24hr pre-debit). Gap: Nidaan lacked subscription.pending (Sarathi had
+  it). FIXED: Nidaan webhook now handles subscription.pending (first failure → customer recovery
+  email + analytics log) and, on subscription.halted, ALSO emails the customer a re-activate link
+  (was SA-only). New biz_email.send_nidaan_autopay_recovery_email (pending|halted). FOUNDER CONFIG
+  still required in BOTH Razorpay dashboards (separate accounts): enable subscription.* +
+  payment.failed webhook events; turn Smart Retries ON; prefer UPI Autopay for small plans. Out of
+  our scope: bank declines / insufficient funds / mandate not approved.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
