@@ -5547,6 +5547,12 @@ index/about/admin/dashboard/demo/features/getting-started/help/partner/superadmi
 terms/index_v2/v3/v4 → 7-day. Extend-trial DEFAULTS (sa_extend Query(14), admin_extend Query(7))
 left as separate operational knobs (not trial length). Future trial-length change = edit 2 constants.
 
+PHASE D (5489c0b) subscription cockpit: the Sarathi SA cockpit was already comprehensive (tenants
+by status, MRR, plan mix, signup trends, funnel, revenue, refunds, bulk ops, impersonation,
+Telegram web login). Gap = renewal/churn-risk visibility → added sa_dashboard KPIs
+trials_expiring_7d + subs_expiring_7d and two clickable KPI tiles that deep-link to Tenants
+pre-filtered (trial/paid). Pairs with the auto-pay recovery work.
+
 ## 66. STAFF-AS-BRANCH v2 + REFERRAL + L2 FLOW (owner Aug 9-10; 7-phase batch, discuss-first)
 
 Owner batch (staff claim-raising, branch L2 flow, referral robustness, easy login, mobile UX)
