@@ -5625,6 +5625,22 @@ SHIPPED so far:
   sign-in steps. FOUNDER ACTION: set an email for the 6 branches lacking one (IND-HO, PUN-01,
   MUM-01, CHD-01, HYD-01, RPR-01), then send each its login link.
 
+- **Payment integrity (8c5d332, 8a2e1cf):** verify endpoints marked paid on Razorpay SIGNATURE
+  alone (= authorized, NOT captured) → a pending/UPI payment could show paid. FIX: all Nidaan
+  pay-verify paths now confirm status=='captured' (_nidaan_payment_captured) before finalizing;
+  webhook payment.captured is the backstop (added nidaan_review_999 handler; claim_499 + branch_l2
+  already had one); payment_capture:1 on all orders. Investigated the reported GAURAV #037 case:
+  the payment WAS genuinely captured (₹588.82 UPI) — dashboard was correct; the confusing
+  'payment pending' Telegram was the CREATION-time 'New ₹499 lead (payment pending)' ops alert
+  (biz_nidaan_notifications:2571), accurate at creation, then paid seconds later (a separate
+  'PAID ₹499' alert also fires). Added a super-admin '🔄 Reconcile payments' button (runs the
+  existing /payments/reconcile sweep dry-run → confirm → apply).
+- **PENDING DISCUSSION — multi-claim for ₹499 customers:** today a non-subscriber gets ONE claim
+  reviewed for ₹499; the dashboard 'new claim' button is subscribe-gated, so they can't raise a
+  2nd paid claim. Data model (nidaan_per_claim_purchase per claim + claim /pay flow) already
+  supports multiple. Plan: let a ₹499 customer raise additional claims, ₹499+GST pay-per-claim,
+  from their one dashboard. Owner wants to discuss before build.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
