@@ -875,6 +875,7 @@
       <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
       <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
       <input type="text" id="ppBranch" maxlength="12" autocomplete="off" placeholder="e.g. MUM-01" oninput="this.value=this.value.toUpperCase()">
+      <div id="ppRefBy" style="display:none;margin-top:.35rem;font-size:.8rem;color:#6ee7b7"></div>
     </div>
     <div class="msg" id="ppMsg"></div>
     <div class="modal-footer">
@@ -2026,8 +2027,15 @@ function openPrePayCapture(){
     const _bc = _meCache ? (_meCache.branch_code || '') : '';
     g('ppBranch').value = _bc;
     // First-touch lock: once a referral code is attributed, it can't be changed.
-    if (_bc) { g('ppBranch').readOnly = true; g('ppBranch').style.opacity = '.7'; g('ppBranch').title = 'Referral code is locked once set.'; }
-    else { g('ppBranch').readOnly = false; g('ppBranch').style.opacity = ''; }
+    if (_bc) {
+      g('ppBranch').readOnly = true; g('ppBranch').style.opacity = '.7'; g('ppBranch').title = 'Referral code is locked once set.';
+      // Show WHO referred them (name), read-only, via the public ref-info resolver.
+      const _rb = g('ppRefBy');
+      if (_rb) { _rb.style.display='none';
+        fetch('/nidaan/api/ref-info?code='+encodeURIComponent(_bc)).then(r=>r.ok?r.json():null).then(d=>{
+          if(d && d.valid){ _rb.textContent = 'Referred by: '+d.name; _rb.style.display='block'; }
+        }).catch(()=>{}); }
+    } else { g('ppBranch').readOnly = false; g('ppBranch').style.opacity = ''; }
   }
   const m = g('ppMsg'); if (m) { m.className = 'msg'; m.textContent = ''; }
   const b = g('ppBtn'); if (b) b.disabled = false;
