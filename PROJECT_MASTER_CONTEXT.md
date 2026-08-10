@@ -5635,11 +5635,13 @@ SHIPPED so far:
   (biz_nidaan_notifications:2571), accurate at creation, then paid seconds later (a separate
   'PAID ₹499' alert also fires). Added a super-admin '🔄 Reconcile payments' button (runs the
   existing /payments/reconcile sweep dry-run → confirm → apply).
-- **PENDING DISCUSSION — multi-claim for ₹499 customers:** today a non-subscriber gets ONE claim
-  reviewed for ₹499; the dashboard 'new claim' button is subscribe-gated, so they can't raise a
-  2nd paid claim. Data model (nidaan_per_claim_purchase per claim + claim /pay flow) already
-  supports multiple. Plan: let a ₹499 customer raise additional claims, ₹499+GST pay-per-claim,
-  from their one dashboard. Owner wants to discuss before build.
+- **Multi-claim for ₹499 customers (bc1c9ba):** owner confirmed unlimited / free-submit→pay-to-start /
+  same tier. Backend already made every non-subscriber claim unpaid_lead (get_per_claim_status has
+  no 'paid' shortcut) + the claims list already renders a per-claim Pay button + capture-hardened
+  pay. Only blocker was the 'Balance Exhausted' dashboard state, which dead-ended the user (locked
+  section + link to /nidaan/start). FIXED: that state now enables newClaimBtn + clears the lock +
+  'raise another claim — ₹499+GST per claim'. Net: one customer can raise unlimited claims, tiered
+  ₹499/₹2000+GST each, from their own dashboard (submit → per-claim Pay → review).
 
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
