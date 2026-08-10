@@ -535,6 +535,29 @@ def _nidaan_rzp_webhook_secret() -> str:
     return os.getenv("NIDAAN_RAZORPAY_WEBHOOK_SECRET") or os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
 
+async def _nidaan_payment_captured(payment_id: str) -> bool:
+    """Authoritative payment check: a valid Razorpay SIGNATURE only proves the payment was
+    created/authorized — NOT that money was actually collected. A UPI/pending payment can carry
+    a valid signature yet never capture. So before we mark anything paid on a dashboard, confirm
+    the payment status is 'captured' straight from Razorpay. Fail-CLOSED (return False on any
+    doubt) — the webhook (payment.captured) + recovery poll will finalize a genuine late capture."""
+    pid = (payment_id or "").strip()
+    if not pid or len(pid) > 60:
+        return False
+    rzp_id, rzp_secret = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        return False
+    import httpx as _hxc
+    try:
+        async with _hxc.AsyncClient() as _cl:
+            r = await _cl.get(f"https://api.razorpay.com/v1/payments/{pid}",
+                              auth=(rzp_id, rzp_secret), timeout=15.0)
+        return (r.json() or {}).get("status") == "captured"
+    except Exception as _e:
+        logger.warning("payment capture-check failed for %s: %s", pid, _e)
+        return False
+
+
 async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict]:
     """Resolve the Nidaan account from a verified token payload. Prefers the account_id
     (`sub`) so accounts WITHOUT an email still resolve; falls back to the token email for
@@ -784,6 +807,7 @@ async def nidaan_branch_l2_pay(claim_id: int, request: Request):
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
             json={"amount": _l2_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,
                   "notes": {"product": "nidaan_branch_l2", "claim_id": str(claim_id),
                             "branch": code}},
             timeout=20.0)
@@ -815,6 +839,11 @@ async def nidaan_branch_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, r
     _expected = _hm.new(secret.encode(), _msg, _hs.sha256).hexdigest()
     if not _hm.compare_digest(_expected, body.razorpay_signature):
         raise HTTPException(400, "Invalid payment signature")
+    # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
+    # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     pricing = await nidaan.branch_l2_pricing()
     ok = await nidaan.mark_l2_paid(claim_id, code, int(pricing["fee"]), body.razorpay_payment_id)
     if not ok:
@@ -2206,6 +2235,7 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
             json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,   # auto-capture authorized payments (no stuck 'authorized')
                   "notes": {"product": "nidaan_claim_499", "claim_id": str(claim_id)}},
             timeout=20.0)
         result = _r.json()
@@ -2250,6 +2280,12 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim["payment_status"] == "paid":
         return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
+    # Confirm the money was actually CAPTURED (not just authorized/pending) before we flip the
+    # claim to paid — otherwise a pending/failed payment would wrongly hit the dashboard as paid.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. "
+                           "You don't need to pay again; your dashboard will update automatically."}
     # Shared finalizer — same path the webhook + recovery poll use (idempotent).
     res = await _finalize_paid_claim(claim_id, body.razorpay_payment_id, source="client")
     return {"status": "paid", "claim_id": claim_id,
@@ -2675,6 +2711,7 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
             "https://api.razorpay.com/v1/orders",
             auth=(rzp_key_id, rzp_key_secret),
             json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,
                   "notes": {"product": "nidaan_review_999", "purchase_id": str(purchase_id)}},
             timeout=20.0,
         )
@@ -2716,6 +2753,11 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
             raise HTTPException(status_code=404, detail="Purchase not found")
         if purchase["status"] != "pending_payment":
             return {"status": purchase["status"], "message": "Already processed"}
+    # Confirm the payment was actually CAPTURED before marking paid (signature ≠ captured).
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "purchase_id": purchase_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
         await _conn.execute(
             "UPDATE nidaan_per_claim_purchase SET status='paid', reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=?",
             (purchase_id,),
@@ -3239,6 +3281,7 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
                 "amount": _amt_paise,
                 "currency": "INR",
                 "receipt": receipt,
+                "payment_capture": 1,
                 "notes": {
                     "product": "nidaan_review",
                     "advisor_email": body.advisor_email[:100],
@@ -3277,6 +3320,10 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
     expected = _hmac_mod.new(rzp_key_secret.encode(), msg, _hs.sha256).hexdigest()
     if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Never create a paid review on an uncaptured (pending/authorized) payment.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending",
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     # Find or create Nidaan account → gives this advisor dashboard access.
     # Mobile is the primary identity: match by email first (if given), then by mobile,
     # so a repeat customer using a different/blank email still reuses their account.
@@ -3710,6 +3757,25 @@ async def nidaan_razorpay_webhook(request: Request):
                             _cid, _res.get("finalized"), _res.get("already"))
             else:
                 logger.warning("Nidaan webhook claim_499 missing claim_id: %s", notes)
+            return {"status": "ok", "event": event, "product": product}
+        # ── ₹499/₹2000 review purchase — server-side safety net (client verify now
+        # requires capture; this finalizes a genuine LATE capture the client missed). ──
+        if product == "nidaan_review_999":
+            try:
+                _pid_purchase = int(notes.get("purchase_id", "0") or 0)
+            except (ValueError, TypeError):
+                _pid_purchase = 0
+            if _pid_purchase:
+                try:
+                    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                        await _c.execute(
+                            "UPDATE nidaan_per_claim_purchase SET status='paid', "
+                            "reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=? AND status='pending_payment'",
+                            (_pid_purchase,))
+                        await _c.commit()
+                    logger.info("Nidaan webhook payment.captured review_999: purchase=%s finalized", _pid_purchase)
+                except Exception as _rpe:
+                    logger.error("Nidaan webhook review_999 finalize failed purchase=%s: %s", _pid_purchase, _rpe)
             return {"status": "ok", "event": event, "product": product}
         # ── Branch Level-2 fee — reconcile branch payment server-side ───────────
         if product == "nidaan_branch_l2":
@@ -5179,6 +5245,11 @@ async def ops_my_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, request:
     _expected = _hm.new(secret.encode(), _msg, _hs.sha256).hexdigest()
     if not _hm.compare_digest(_expected, body.razorpay_signature):
         raise HTTPException(400, "Invalid payment signature")
+    # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
+    # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     pricing = await nidaan.branch_l2_pricing()
     ok = await nidaan.mark_l2_paid(claim_id, code, int(pricing["fee"]), body.razorpay_payment_id)
     if not ok:

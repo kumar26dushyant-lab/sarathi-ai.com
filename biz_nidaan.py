@@ -4257,6 +4257,7 @@ async def create_nidaan_razorpay_order(
                     "amount": amount_paise,
                     "currency": "INR",
                     "receipt": receipt[:40],   # Razorpay receipt max 40 chars
+                    "payment_capture": 1,      # auto-capture authorized payments
                     "notes": {
                         "nidaan_account_id": str(account_id),
                         "nidaan_plan": plan,
