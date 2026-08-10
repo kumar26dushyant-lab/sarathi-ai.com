@@ -5616,6 +5616,15 @@ SHIPPED so far:
   payment.failed webhook events; turn Smart Retries ON; prefer UPI Autopay for small plans. Out of
   our scope: bank declines / insufficient funds / mandate not approved.
 
+- **Branch self-login (53752c9):** the email-OTP branch login was ALREADY built (nidaan_branch.html
+  loginView + /nidaan/branch/api/request-otp + verify-otp → create_branch_token; get_branch_by_email
+  active-only). Root cause it felt missing: 6/9 branches had NO contact_email → couldn't receive the
+  OTP, and there was no login link to hand them. FIX (ops Branches panel, no backend change):
+  relabel 'Login & alert email' + how-to banner (nidaanpartner.com/nidaan/branch), '⚠ no login email'
+  flag + 'add' for branches missing it, and '🔗 login link' per branch that copies ready-to-send
+  sign-in steps. FOUNDER ACTION: set an email for the 6 branches lacking one (IND-HO, PUN-01,
+  MUM-01, CHD-01, HYD-01, RPR-01), then send each its login link.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
