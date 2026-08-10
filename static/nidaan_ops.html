@@ -945,9 +945,9 @@ async function loadOverview() {
     <div class="nd-card" style="padding:.85rem 1rem;border-color:rgba(34,211,238,.28)">
       <div style="font-weight:800;font-size:1rem;margin-bottom:.5rem">🎯 At a glance</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:.5rem">
-        ${ovTile('Total claims', totals.total_claims||0, '#22d3ee', 'scrollToOverviewClaims()')}
-        ${ovTile('Open claims', totals.open_claims||0, '#fbbf24', 'scrollToOverviewClaims()')}
-        ${ovTile('Active subs', totals.active_subscriptions||0, '#a78bfa', '')}
+        ${ovTile(isAdmin?'Total claims':'My claims', totals.total_claims||0, '#22d3ee', 'scrollToOverviewClaims()')}
+        ${ovTile(isAdmin?'Open claims':'My open claims', totals.open_claims||0, '#fbbf24', 'scrollToOverviewClaims()')}
+        ${isAdmin ? ovTile('Active subs', totals.active_subscriptions||0, '#a78bfa', '') : ''}
         ${isOwner && d.refunds_needs_action ? ovTile('Refunds', d.refunds_needs_action, '#f87171', "showPanel('revenue')") : ''}
       </div>
       <div style="font-size:.66rem;color:rgba(255,255,255,.35);margin-top:.4rem">tap a number to open</div>
@@ -3189,7 +3189,7 @@ async function renderActiveClaimsWidget(statusFilter, search) {
   }
   const rows = claims.map(c => `
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
-      <td><strong>#${fmtClaimNum(c.claim_id)}</strong></td>
+      <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
       <td>${esc(c.insured_name||'—')}</td>
       <td>${esc(c.claim_type||'—')}</td>
       <td>${esc(c.insurer_name||'—')}</td>
@@ -3294,7 +3294,7 @@ function _renderOutcome(key){
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
     + (isL2?'<th>L2 fee</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>`<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
-        <td><strong>#${fmtClaimNum(c.claim_id)}</strong></td>
+        <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
         <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.insured_phone||'')}</span></td>
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
@@ -3371,7 +3371,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   };
   const rows = d.claims.map(c=>`
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
-      <td><strong>#${fmtClaimNum(c.claim_id)}</strong></td>
+      <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
       <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:rgba(255,255,255,.3)">${esc(c.insured_phone)}</span></td>
       <td>${esc(c.claim_type||'—')}</td>
       <td>${esc(c.insurer_name||'—')}</td>

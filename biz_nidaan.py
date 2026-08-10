@@ -2744,18 +2744,28 @@ async def get_overview_widgets(staff_id: int, staff_role: str,
         # left by a deleted account must not inflate the count.
         _live = ("EXISTS(SELECT 1 FROM nidaan_accounts a "
                  "WHERE a.account_id=nidaan_claims.account_id)")
+        # Scope claim metrics by role: a team_member sees ONLY their assigned/involved claims
+        # (same rule as get_claims_ops), never the whole office's numbers.
+        if is_admin:
+            _cscope, _csp = _live, []
+        else:
+            _cscope = (_live + " AND (nidaan_claims.assigned_to_staff_id=? OR EXISTS("
+                       "SELECT 1 FROM nidaan_claim_assignees ca "
+                       "WHERE ca.claim_id=nidaan_claims.claim_id AND ca.staff_id=?))")
+            _csp = [staff_id, staff_id]
         total_claims = (await (await conn.execute(
-            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_live}")).fetchone())[0]
+            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_cscope}", _csp)).fetchone())[0]
         open_claims = (await (await conn.execute(
-            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_live} AND status NOT IN "
-            "('resolved_won','resolved_lost','closed','withdrawn')")).fetchone())[0]
+            f"SELECT COUNT(*) FROM nidaan_claims WHERE {_cscope} AND status NOT IN "
+            "('resolved_won','resolved_lost','closed','withdrawn')", _csp)).fetchone())[0]
+        # Active subscriptions is an office-wide business metric → admins only.
         active_subs = (await (await conn.execute(
-            "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active'")).fetchone())[0]
+            "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active'")).fetchone())[0] if is_admin else 0
 
-        # 7. Claims by status (everyone — small dataset, useful for all roles).
+        # 7. Claims by status — scoped to the viewer's claims (all for admins).
         cur = await conn.execute(
-            f"SELECT status, COUNT(*) AS cnt FROM nidaan_claims WHERE {_live} "
-            "GROUP BY status ORDER BY cnt DESC")
+            f"SELECT status, COUNT(*) AS cnt FROM nidaan_claims WHERE {_cscope} "
+            "GROUP BY status ORDER BY cnt DESC", _csp)
         claims_by_status = [dict(r) for r in await cur.fetchall()]
 
         # 8-10 are admin-only views: top accounts, workload, recent comments.
@@ -5549,7 +5559,11 @@ async def get_claims_ops(
                     sub.plan AS account_plan,
                     s.name AS assigned_staff_name,
                     (SELECT COUNT(*) FROM nidaan_followups f
-                     WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks
+                     WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks,
+                    (SELECT COUNT(*) FROM nidaan_claim_notes cn
+                     WHERE cn.claim_id = c.claim_id AND cn.staff_id != ?
+                       AND NOT EXISTS(SELECT 1 FROM nidaan_claim_note_reads r
+                                      WHERE r.note_id = cn.note_id AND r.staff_id = ?)) AS unseen_notes
                FROM nidaan_claims c
                JOIN nidaan_accounts a ON a.account_id = c.account_id
                LEFT JOIN nidaan_subscriptions sub ON sub.account_id = a.account_id AND sub.status = 'active'
@@ -5557,7 +5571,7 @@ async def get_claims_ops(
                {where}
                ORDER BY (c.payment_status='unpaid_lead') ASC, c.created_at DESC
                LIMIT ? OFFSET ?""",
-            params + [limit, offset],
+            [staff_id, staff_id] + params + [limit, offset],
         )
         return [dict(r) for r in await cur.fetchall()]
 
