@@ -5038,6 +5038,16 @@ async def nidaan_public_offices(request: Request):
     return {"offices": await nidaan.get_offices()}
 
 
+@app.get("/nidaan/api/ref-info")
+@limiter.limit("60/minute")
+async def nidaan_ref_info(request: Request, code: str = ""):
+    """Public: resolve a referral code → {valid, type, name} so the signup page can show
+    'Referred by ___' and lock the code (bulletproofs staff/branch attribution)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.resolve_ref_info(code)
+
+
 @app.get("/nidaan/ops/api/offices")
 async def ops_offices_get(request: Request):
     if not _is_nidaan_host(request):

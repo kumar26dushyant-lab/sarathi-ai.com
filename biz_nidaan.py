@@ -915,6 +915,32 @@ async def resolve_channel(ref_code: str = "", utm_source: str = "") -> tuple[str
     return "direct", ""
 
 
+async def resolve_ref_info(code: str) -> dict:
+    """Public-safe resolver for a referral code → {valid, type, name}. Used by the signup
+    page to show 'Referred by ___' and lock the code so attribution can't be lost. Codes are
+    random (staff) or short branch codes; only a friendly name is returned, nothing sensitive."""
+    code = (code or "").strip().upper()
+    out = {"valid": False, "type": "", "name": "", "code": code}
+    if not code:
+        return out
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        b = await (await conn.execute(
+            "SELECT name, city FROM nidaan_branches WHERE UPPER(branch_code)=? AND status='active'",
+            (code,))).fetchone()
+        if b:
+            out.update(valid=True, type="branch",
+                       name=(b["name"] or b["city"] or "Branch"))
+            return out
+        s = await (await conn.execute(
+            "SELECT name FROM nidaan_staff WHERE UPPER(referral_code)=? "
+            "AND COALESCE(deleted_at,'')='' AND status='active'", (code,))).fetchone()
+        if s:
+            out.update(valid=True, type="staff", name=(s["name"] or "NidaanPartner advisor"))
+            return out
+    return out
+
+
 async def record_event(event_type: str, *, channel: str = "", ref_code: str = "",
                        utm_source: str = "", utm_medium: str = "", utm_campaign: str = "",
                        account_id: Optional[int] = None, claim_id: Optional[int] = None,
