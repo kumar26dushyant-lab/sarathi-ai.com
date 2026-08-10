@@ -10244,6 +10244,20 @@ async def sa_dashboard(sa=Depends(auth.require_superadmin)):
             "SELECT COUNT(*) FROM tenants WHERE founding_discount=1")
         founding_count = (await cur.fetchone())[0]
 
+        # ── Renewal / churn-risk (subscription cockpit) ──
+        # Trials ending within 7 days (convert-or-churn window).
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM tenants WHERE subscription_status='trial' AND is_active=1 "
+            "AND trial_ends_at IS NOT NULL "
+            "AND date(trial_ends_at) BETWEEN date('now') AND date('now','+7 days')")
+        trials_expiring_7d = (await cur.fetchone())[0]
+        # Paid subscriptions renewing within 7 days (auto-pay watch).
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM tenants WHERE subscription_status IN ('paid','active') AND is_active=1 "
+            "AND subscription_expires_at IS NOT NULL "
+            "AND date(subscription_expires_at) BETWEEN date('now') AND date('now','+7 days')")
+        subs_expiring_7d = (await cur.fetchone())[0]
+
     return {
         "kpis": {
             "total_tenants": total, "active": active, "trials": trials,
@@ -10253,6 +10267,8 @@ async def sa_dashboard(sa=Depends(auth.require_superadmin)):
             "total_agents": total_agents, "active_agents": active_agents,
             "total_leads": total_leads, "total_policies": total_policies,
             "founding_customers": founding_count,
+            "trials_expiring_7d": trials_expiring_7d,
+            "subs_expiring_7d": subs_expiring_7d,
         },
         "plans": plans,
         "signup_trend": signup_trend,

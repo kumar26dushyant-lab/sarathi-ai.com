@@ -243,6 +243,8 @@ z-index:999;opacity:0;transition:.3s;pointer-events:none;max-width:90%;text-alig
 <div class="kpi amber"><div class="kpi-val" id="kPaid">—</div><div class="kpi-label">Paid</div></div>
 <div class="kpi red"><div class="kpi-val" id="kExpired">—</div><div class="kpi-label">Expired</div></div>
 <div class="kpi indigo"><div class="kpi-val" id="kMRR">—</div><div class="kpi-label">MRR ₹</div></div>
+<div class="kpi amber" style="cursor:pointer" onclick="setTenantFilterKey('trial')" title="Trials ending within 7 days — reach out to convert them"><div class="kpi-val" id="kTrialsExp">—</div><div class="kpi-label">Trials ending ≤7d</div></div>
+<div class="kpi red" style="cursor:pointer" onclick="setTenantFilterKey('paid')" title="Paid subscriptions renewing within 7 days — watch auto-pay"><div class="kpi-val" id="kSubsExp">—</div><div class="kpi-label">Renewals ≤7d</div></div>
 </div>
 
 <!-- Signup Trend -->
@@ -596,6 +598,8 @@ async function loadDashboard(){
     $('kTotal').textContent=k.total_tenants;$('kActive').textContent=k.active;
     $('kTrials').textContent=k.trials;$('kPaid').textContent=k.paid;
     $('kExpired').textContent=k.expired;$('kMRR').textContent=fmtK(k.mrr);
+    { const te=$('kTrialsExp'); if(te) te.textContent=(k.trials_expiring_7d!=null?k.trials_expiring_7d:'—');
+      const se=$('kSubsExp'); if(se) se.textContent=(k.subs_expiring_7d!=null?k.subs_expiring_7d:'—'); }
     $('signupChips').innerHTML=`<div class="stat-chip">Today <b>${k.signups_today}</b></div><div class="stat-chip">7d <b>${k.signups_7d}</b></div><div class="stat-chip">30d <b>${k.signups_30d}</b></div><div class="stat-chip">Agents <b>${k.total_agents}</b></div><div class="stat-chip">Leads <b>${k.total_leads}</b></div><div class="stat-chip" style="color:#f59e0b">🏆 Founding <b>${k.founding_customers||0}/500</b></div>`;
     const trend=d.signup_trend||[];
     if(trend.length){const mx=Math.max(...trend.map(t=>t.count),1);$('signupChart').innerHTML=trend.map(t=>`<div class="chart-bar" style="height:${Math.max(t.count/mx*100,4)}%" title="${t.day}: ${t.count}"></div>`).join('')}
@@ -645,6 +649,7 @@ function renderTenants(){
 
 function filterTenants(){renderTenants()}
 function setTenantFilter(el){document.querySelectorAll('#tenantTabs .tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_tenantFilter=el.dataset.filter;renderTenants()}
+function setTenantFilterKey(key){ showPanel('tenants'); const pill=document.querySelector('#tenantTabs .tab-pill[data-filter="'+key+'"]'); if(pill) setTenantFilter(pill); if(!_tenants.length) loadTenants(); }
 
 /* ── Tenant Detail ────────────────────────────────────────────── */
 async function openTenant(id){
