@@ -5592,6 +5592,15 @@ SHIPPED so far:
   list 'Updated' shows date+time; each message bubble (ops + customer widget) shows a per-message
   date+time tag.
 
+- **Ops fixes (2b349a3):** (1) team-member Claims Dashboard was showing OFFICE-WIDE counts —
+  get_overview_widgets now scopes total/open claims + claims-by-status to the viewer's
+  assigned/involved claims (same rule as get_claims_ops); 'Active subs' admin-only; tiles relabel
+  'My claims'. (2) Green unseen-update dot on claims (mirrors Tasks): get_claims_ops returns
+  unseen_notes (unread claim notes by others for the viewer); all claim lists show a blinking
+  .unseen-dot until opened; drawer's existing notes/mark-read clears it. Reuses
+  nidaan_claim_note_reads (no new table). NOTE: dot is driven by unread NOTES; if owner later
+  wants status-changes to also trigger it, extend has_new to compare last_status_at vs a seen ts.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
