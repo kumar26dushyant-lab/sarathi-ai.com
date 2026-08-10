@@ -1319,18 +1319,21 @@ async function loadDashboard() {
       claimCard.style.pointerEvents = '';
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
     } else {
-      // Balance exhausted — all reviews used
+      // Prior reviews used — but a ₹499 customer can raise ANOTHER claim anytime, paid
+      // per claim (₹499 + GST each). Never dead-end them; let them add a new claim here.
       _isSubscribed = false;
-      banner.className = 'sub-banner sub-expired';
+      banner.className = 'sub-banner sub-active';
       banner.innerHTML = `
         <div class="sub-banner-text">
-          <strong>Review Balance Exhausted</strong>
-          <span>${used} review${used>1?'s':''} used · <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Pay ₹499 for another review</a></span>
+          <strong class="en">Need another claim reviewed?</strong><strong class="hi">एक और क्लेम की समीक्षा चाहिए?</strong>
+          <span class="en">${used} review${used>1?'s':''} used · raise another claim below — you pay ₹499 + GST per claim. <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
+          <span class="hi">${used} समीक्षा हो चुकी · नीचे नया क्लेम दर्ज करें — प्रति क्लेम ₹499 + GST। <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
         </div>`;
-      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.add('locked-tab'));
-      lockOverlay.style.display = 'flex';
-      claimCard.style.minHeight = '220px';
-      claimCard.classList.add('locked-section');
+      document.getElementById('newClaimBtn').disabled = false;
+      document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
+      lockOverlay.style.display = 'none';
+      claimCard.classList.remove('locked-section');
+      claimCard.style.pointerEvents = '';
     }
 
     // Show per-claim history items (all states, not just completed-with-findings)
