@@ -339,6 +339,12 @@ select.form-input option{background:#1e293b}
         </div>
       </div>
       <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign In</button>
+      <div style="display:flex;align-items:center;gap:.6rem;margin:1rem 0 .8rem;color:rgba(255,255,255,.35);font-size:.78rem">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>OR<div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
+      </div>
+      <button class="btn" style="width:100%;background:#229ED9;color:#fff;font-weight:700" onclick="tgLogin()">✈️ Login via Telegram</button>
+      <p style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.5rem;text-align:center">Forgot your password? If your Telegram is linked, tap above — no password needed.</p>
+      <div id="tgLoginBox" style="display:none;margin-top:.8rem;padding:.8rem;background:rgba(34,158,217,.1);border:1px solid rgba(34,158,217,.35);border-radius:10px;font-size:.82rem;color:#bae6fd;text-align:center"></div>
     </div>
   </div>
 </div>
@@ -482,11 +488,46 @@ async function doLogin() {
     msg.className='msg err'; msg.textContent = _extractErr(d, 'Login failed'); return;
   }
   const data = await r.json();
+  _applyLogin(data);
+}
+
+function _applyLogin(data){
   _token = data.token; _role = data.role;
   _staffId = data.staff_id; _staffName = data.name; _staffEmail = data.email || '';
-
   localStorage.setItem('nidaan_ops_token', _token);
   bootApp();
+}
+
+// ── Telegram one-tap login ────────────────────────────────────────────────────
+let _tgPoll = null;
+async function tgLogin(){
+  const box = document.getElementById('tgLoginBox');
+  const msg = document.getElementById('loginMsg'); if(msg){ msg.className='msg'; msg.textContent=''; }
+  if(_tgPoll){ clearInterval(_tgPoll); _tgPoll=null; }
+  box.style.display='block';
+  box.innerHTML = 'Starting Telegram login…';
+  let start;
+  try{
+    const r = await fetch('/nidaan/ops/api/tg-login/start', {method:'POST'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); box.innerHTML = '⚠️ '+_extractErr(d,'Telegram login unavailable'); return; }
+    start = await r.json();
+  }catch(e){ box.innerHTML = '⚠️ Could not reach the server. Check your connection.'; return; }
+  // Open the bot so the staffer can approve with one tap.
+  try{ window.open(start.deep_link, '_blank'); }catch(e){}
+  box.innerHTML = 'Opening Telegram… tap <b>Start</b> / <b>Login</b> in the bot, then come back here.'
+    + '<br><a href="'+start.deep_link+'" target="_blank" style="color:#7dd3fc">Open @NidaanOpsBot</a>'
+    + '<div style="margin-top:.4rem;color:rgba(255,255,255,.5)">Waiting for confirmation…</div>';
+  let waited = 0;
+  _tgPoll = setInterval(async ()=>{
+    waited += 2;
+    if(waited > 300){ clearInterval(_tgPoll); _tgPoll=null; box.innerHTML='⌛ Login timed out. Tap “Login via Telegram” to try again.'; return; }
+    try{
+      const s = await fetch('/nidaan/ops/api/tg-login/status?nonce='+encodeURIComponent(start.nonce));
+      if(!s.ok) return;
+      const d = await s.json();
+      if(d.status === 'ok'){ clearInterval(_tgPoll); _tgPoll=null; box.innerHTML='✅ Logged in!'; _applyLogin(d); }
+    }catch(e){ /* keep polling */ }
+  }, 2000);
 }
 
 function doLogout() {
@@ -5118,6 +5159,7 @@ async function loadStaff() {
       ? `<button class="btn-icon" style="color:#4ade80" onclick="restoreStaff(${s.staff_id})" title="Restore as inactive">♻️ Restore</button>`
       : `
         <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
+        ${_role==='super_admin'?`<button class="btn-icon" style="color:${s.telegram_access?'#60a5fa':'rgba(255,255,255,.3)'}" onclick="toggleStaffTg(${s.staff_id},${s.telegram_access?1:0})" title="${s.telegram_access?'Telegram enabled — click to disable (password-only)':'Telegram disabled — click to enable'}">${s.telegram_access?'✈️':'✈︎̶'}</button>`:''}
         ${_role==='super_admin'?`<button class="btn-icon" style="color:#fbbf24" onclick="resetStaffPassword(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')" title="Reset password (one click)">🔑↻</button>`:''}
         ${isSuper
           ? '<span class="btn-icon" style="opacity:.3;cursor:not-allowed" title="Super admins are protected">🔒</span>'
@@ -5313,6 +5355,14 @@ async function deactivateStaff(staffId) {
 
 async function reactivateStaff(staffId) {
   await API('/staff/'+staffId,{method:'PATCH',body:JSON.stringify({status:'active'})});
+  loadStaff();
+}
+
+async function toggleStaffTg(staffId, currentlyAllowed){
+  const enable = !currentlyAllowed;
+  if(!enable && !confirm('Disable Telegram for this staffer? They will be password-only and any linked Telegram devices will be unlinked. (Use this for third-party staff.)')) return;
+  const r = await API('/staff/'+staffId+'/telegram-access',{method:'PATCH',body:JSON.stringify({allowed:enable})});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update Telegram access.'); return; }
   loadStaff();
 }
 

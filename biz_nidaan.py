@@ -740,6 +740,23 @@ async def list_staff_business(include_deleted: bool = False) -> list[dict]:
         return [await _staff_business_row(conn, r) for r in rows]
 
 
+async def set_staff_telegram_access(staff_id: int, allowed: bool) -> bool:
+    """Super-admin: allow/deny a staffer's Telegram (link + one-tap login). Deny → password-only
+    (for third-party staff). Existing linked devices are unlinked on deny for a clean cut-off."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_staff SET telegram_access=? WHERE staff_id=?",
+            (1 if allowed else 0, staff_id))
+        if not allowed:
+            # Revoke existing links so denial takes effect immediately.
+            await conn.execute("DELETE FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,))
+            await conn.execute(
+                "UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
+                "telegram_linked_at=NULL WHERE staff_id=?", (staff_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 async def set_staff_commission(staff_id: int, pct: float) -> bool:
     """Super-admin: set a staffer's commission % (0–100). Mirrors update_branch(share_pct)."""
     try:
@@ -5334,7 +5351,7 @@ async def get_staff_by_id(staff_id: int) -> Optional[dict]:
             "SELECT staff_id,name,email,role,status,created_at,last_login_at,"
             "       phone,notify_email,saved_official_numbers_at,"
             "       comms_onboarded_at,telegram_chat_id,telegram_lang,profile_pic,"
-            "       referral_code,commission_pct "
+            "       referral_code,commission_pct,COALESCE(telegram_access,1) AS telegram_access "
             "FROM nidaan_staff WHERE staff_id=?", (staff_id,)
         )
         row = await cur.fetchone()
@@ -5359,7 +5376,7 @@ async def list_staff(include_inactive: bool = False) -> list[dict]:
     """Active roster (or active+inactive). Soft-deleted staff are never here —
     see list_deleted_staff() for the archive."""
     cols = ("staff_id,name,email,role,status,phone,notify_email,"
-            "created_at,last_login_at")
+            "created_at,last_login_at,COALESCE(telegram_access,1) AS telegram_access")
     where = "deleted_at IS NULL" + ("" if include_inactive else " AND status='active'")
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

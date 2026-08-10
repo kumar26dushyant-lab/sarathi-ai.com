@@ -1176,6 +1176,17 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_nevents_channel ON nidaan_events(channel);
             CREATE INDEX IF NOT EXISTS idx_nevents_session ON nidaan_events(session_id);
 
+            -- Telegram one-tap login: a short-lived, single-use nonce. The login page creates
+            -- one (pending), the staffer opens the bot deep link which authorizes it (binds
+            -- staff_id), then the page polls, mints the session, and the row is consumed.
+            CREATE TABLE IF NOT EXISTS nidaan_tg_login (
+                nonce       TEXT PRIMARY KEY,
+                staff_id    INTEGER,
+                status      TEXT DEFAULT 'pending',   -- pending | authorized | consumed
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_tglogin_created ON nidaan_tg_login(created_at);
+
             -- Rolling 30-day quota cache per account
             CREATE TABLE IF NOT EXISTS nidaan_plan_quota (
                 account_id              INTEGER PRIMARY KEY
@@ -2205,6 +2216,10 @@ async def init_db():
             # Commission % of attributed subscription revenue paid to this staffer
             # (super-admin adjustable, mirrors branches.share_pct). Default 0.
             "ALTER TABLE nidaan_staff ADD COLUMN commission_pct REAL DEFAULT 0",
+            # Telegram access (super-admin controlled). 1 = may link Telegram + use one-tap
+            # login; 0 = password-only (used for third-party staff who shouldn't get Telegram).
+            # Default 1 so existing internal staff keep working.
+            "ALTER TABLE nidaan_staff ADD COLUMN telegram_access INTEGER DEFAULT 1",
         ]:
             try:
                 await conn.execute(_tg)

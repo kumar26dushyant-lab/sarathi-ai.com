@@ -4631,6 +4631,41 @@ async def ops_login(body: OpsLoginReq, request: Request):
             "email": staff.get("email", "")}
 
 
+# ── Telegram one-tap login (password-free for linked, telegram-enabled staff) ──
+@app.post("/nidaan/ops/api/tg-login/start")
+@limiter.limit("10/minute")
+async def ops_tg_login_start(request: Request):
+    """Create a short-lived login nonce + the bot deep link. The staffer opens it in the
+    already-linked @NidaanOpsBot, which authorizes the nonce; the login page then polls status."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    cfg = await tg.get_config()
+    bot_user = (cfg or {}).get("bot_username") or ""
+    if not bot_user:
+        raise HTTPException(status_code=503, detail="Telegram login is not available right now")
+    nonce = await tg.create_tg_login_nonce()
+    return {"nonce": nonce,
+            "deep_link": f"https://t.me/{bot_user.lstrip('@')}?start=weblogin_{nonce}"}
+
+
+@app.get("/nidaan/ops/api/tg-login/status")
+@limiter.limit("60/minute")
+async def ops_tg_login_status(request: Request, nonce: str = ""):
+    """Poll a login nonce. Returns {status:'pending'} until the staffer authorizes in Telegram,
+    then {status:'ok', token, ...} once — the nonce is single-use and consumed here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff_id = await tg.consume_tg_login(nonce)
+    if not staff_id:
+        return {"status": "pending"}
+    rec = await nidaan.get_staff_by_id(staff_id)
+    if not rec or rec.get("status") != "active":
+        raise HTTPException(status_code=403, detail="Account not active")
+    token = nidaan.create_staff_token(rec["staff_id"], rec["role"], rec["name"])
+    return {"status": "ok", "token": token, "staff_id": rec["staff_id"],
+            "role": rec["role"], "name": rec["name"], "email": rec.get("email", "")}
+
+
 @app.get("/nidaan/ops/api/me")
 async def ops_me(request: Request):
     if not _is_nidaan_host(request):
@@ -4986,6 +5021,24 @@ async def ops_set_staff_commission(staff_id: int, body: OpsStaffCommission, requ
         raise HTTPException(status_code=404, detail="Staffer not found")
     await _ops_audit(request, "staff.commission", "staff", str(staff_id),
                      f"commission_pct={body.commission_pct}")
+    return {"ok": True}
+
+
+class OpsStaffTgAccess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allowed: bool
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}/telegram-access")
+async def ops_set_staff_tg_access(staff_id: int, body: OpsStaffTgAccess, request: Request):
+    """Super-admin: allow/deny a staffer's Telegram (link + one-tap login). Deny = password-only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.set_staff_telegram_access(staff_id, body.allowed):
+        raise HTTPException(status_code=404, detail="Staffer not found")
+    await _ops_audit(request, "staff.telegram_access", "staff", str(staff_id),
+                     f"allowed={body.allowed}")
     return {"ok": True}
 
 

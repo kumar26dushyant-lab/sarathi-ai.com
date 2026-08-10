@@ -312,6 +312,69 @@ async def issue_link_code(staff_id: int, force: bool = False) -> str:
         return code
 
 
+# ── Telegram one-tap web login ────────────────────────────────────────────────
+TG_LOGIN_TTL_MIN = 5   # a login nonce is valid for this long
+
+
+async def create_tg_login_nonce() -> str:
+    """Create a short-lived pending login nonce. The ops login page opens the bot deep link
+    t.me/<bot>?start=weblogin_<nonce>; a linked staffer authorizes it; the page then polls."""
+    nonce = secrets.token_urlsafe(18)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute("INSERT INTO nidaan_tg_login (nonce, status) VALUES (?, 'pending')",
+                           (nonce,))
+        await conn.commit()
+    return nonce
+
+
+async def _staff_tg_allowed(staff_id: int) -> bool:
+    """True if this staffer may use Telegram (link + one-tap login). Super-admin can turn it
+    off for third-party staff → they become password-only. Default (NULL) = allowed."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT COALESCE(telegram_access,1) FROM nidaan_staff "
+            "WHERE staff_id=? AND status='active' AND deleted_at IS NULL", (staff_id,))).fetchone()
+        return bool(row and int(row[0]) == 1)
+
+
+async def authorize_tg_login(nonce: str, staff_id: int) -> bool:
+    """Bot side: a linked, telegram-enabled staffer opened the deep link → authorize the nonce."""
+    nonce = (nonce or "").strip()
+    if not nonce:
+        return False
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_tg_login SET staff_id=?, status='authorized' "
+            "WHERE nonce=? AND status='pending' "
+            "AND created_at >= datetime('now', ?)",
+            (staff_id, nonce, f"-{TG_LOGIN_TTL_MIN} minutes"))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def consume_tg_login(nonce: str) -> Optional[int]:
+    """Login page side: if the nonce is authorized + fresh, return staff_id and consume it
+    (single-use). Returns None while still pending, or if expired/unknown/already used."""
+    nonce = (nonce or "").strip()
+    if not nonce:
+        return None
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT staff_id FROM nidaan_tg_login "
+            "WHERE nonce=? AND status='authorized' "
+            "AND created_at >= datetime('now', ?)",
+            (nonce, f"-{TG_LOGIN_TTL_MIN} minutes"))).fetchone()
+        if not row:
+            return None
+        await conn.execute("UPDATE nidaan_tg_login SET status='consumed' WHERE nonce=?", (nonce,))
+        await conn.commit()
+        # Opportunistic cleanup of stale rows so the table stays tiny.
+        await conn.execute("DELETE FROM nidaan_tg_login WHERE created_at < datetime('now','-1 day')")
+        await conn.commit()
+        return int(row["staff_id"]) if row["staff_id"] is not None else None
+
+
 async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict]:
     """Consume a valid, unexpired connect code and bind this Telegram chat to the staffer
     it was issued to. Returns None if the code is unknown/expired. Single-use."""
@@ -324,7 +387,7 @@ async def _link_by_code(code: str, chat_id: str, username: str) -> Optional[dict
             "SELECT staff_id, name FROM nidaan_staff "
             "WHERE telegram_link_code=? AND telegram_link_code_at IS NOT NULL "
             "AND telegram_link_code_at >= datetime('now', ?) "
-            "AND status='active' AND deleted_at IS NULL",
+            "AND status='active' AND deleted_at IS NULL AND COALESCE(telegram_access,1)=1",
             (code, f"-{LINK_CODE_TTL_MIN} minutes"))).fetchone()
         if not row:
             return None
@@ -378,7 +441,7 @@ async def _link_by_phone(phone: str, chat_id: str, username: str) -> Optional[di
         conn.row_factory = aiosqlite.Row
         staff = [dict(r) for r in await (await conn.execute(
             "SELECT staff_id, name, phone FROM nidaan_staff "
-            "WHERE status='active' AND deleted_at IS NULL")).fetchall()]
+            "WHERE status='active' AND deleted_at IS NULL AND COALESCE(telegram_access,1)=1")).fetchall()]
         match = next((s for s in staff
                       if _digits(s.get("phone"))[-10:] == d10 and len(_digits(s.get("phone"))) >= 10), None)
         if not match:
@@ -961,6 +1024,25 @@ async def handle_update(update: dict) -> None:
         if text.startswith("/start"):
             parts = text.split(maxsplit=1)
             code = parts[1].strip() if len(parts) > 1 else ""
+            # One-tap web login: t.me/<bot>?start=weblogin_<nonce>. Only a LINKED, telegram-
+            # enabled staffer can authorize — a stranger's Telegram can't log in as staff.
+            if code.startswith("weblogin_"):
+                nonce = code[len("weblogin_"):]
+                if not staff:
+                    await send_message(str(chat_id), T("en", "connect_howto")); return
+                if not await _staff_tg_allowed(staff["staff_id"]):
+                    await send_message(str(chat_id),
+                        "⚠️ Telegram login isn't enabled for your account. Please sign in with "
+                        "your password, or ask a super-admin to enable Telegram access."); return
+                ok = await authorize_tg_login(nonce, staff["staff_id"])
+                if ok:
+                    await send_message(str(chat_id),
+                        "✅ Logged in — return to your browser tab, it will open your dashboard.")
+                else:
+                    await send_message(str(chat_id),
+                        "⚠️ That login link expired or was already used. Tap “Login via Telegram” "
+                        "again in the browser to get a fresh one.")
+                return
             if not staff and code:
                 linked = await _link_by_code(code, str(chat_id), username)
                 if linked:
