@@ -502,6 +502,50 @@ async def send_nidaan_subscription_email(
     )
 
 
+async def send_nidaan_autopay_recovery_email(
+    to_email: str,
+    owner_name: str,
+    plan: str = "",
+    kind: str = "pending",   # 'pending' (mid-retry) | 'halted' (autopay stopped)
+    recovery_url: str = "https://nidaanpartner.com/nidaan/dashboard",
+) -> bool:
+    """Tell a subscriber their auto-pay needs attention, with a one-tap recovery link — so a
+    failed/pending recurring charge can be fixed by the customer during (or after) Razorpay's
+    retry window instead of silently lapsing."""
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    if kind == "halted":
+        title = "Action needed — your subscription auto-pay stopped"
+        head = "⚠️ Your subscription auto-pay has stopped"
+        body = ("<p>We tried to renew your <strong>Nidaan Partner</strong> subscription a few times, "
+                "but the auto-pay didn't go through (often insufficient balance, an expired card, or "
+                "a bank mandate that needs re-approval).</p>"
+                "<p>To keep your plan active, please re-subscribe in one tap:</p>")
+        cta = "Re-activate my plan →"
+    else:
+        title = "Your subscription payment is pending"
+        head = "⏳ Your subscription payment is pending"
+        body = ("<p>Your latest <strong>Nidaan Partner</strong> auto-pay is awaiting authorization "
+                "(UPI mandate / bank approval). It usually clears within a few minutes.</p>"
+                "<p>If it doesn't go through, you can authorize or update your payment method here:</p>")
+        cta = "Authorize / update payment →"
+    content = f"""
+<h2>{head}</h2>
+<p>{greeting}</p>
+{body}
+<p style="text-align:center;margin:1.5rem 0">
+  <a href="{recovery_url}"
+     style="display:inline-block;background:#06b6d4;color:#fff;padding:.75rem 2rem;
+            border-radius:8px;font-weight:700;text-decoration:none">{cta}</a>
+</p>
+<p style="color:#475569;font-size:.82rem">Already sorted? You can ignore this message. Need help?
+Reply to this email or use the chat on your dashboard.</p>"""
+    return await send_email(
+        to_email, f"Nidaan Partner — {title}",
+        _wrap_nidaan_template("Auto-pay needs attention", content),
+        from_name="Nidaan Partner",
+    )
+
+
 async def send_nidaan_new_claim_admin_email(
     admin_email: str,
     claim_id: int,

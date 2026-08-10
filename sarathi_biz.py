@@ -3819,6 +3819,32 @@ async def nidaan_razorpay_webhook(request: Request):
                     meta=rzp_sub_id or ""))
             except Exception:
                 pass
+            # Customer recovery: email them a one-tap re-activate link (mirrors Sarathi).
+            try:
+                _acc = await nidaan.get_account_by_id(account_id)
+                if _acc and _acc.get("email"):
+                    _asyncio.create_task(email_svc.send_nidaan_autopay_recovery_email(
+                        _acc["email"], _acc.get("owner_name", ""), plan, kind="halted"))
+            except Exception:
+                pass
+    elif event == "subscription.pending":
+        # First-failure / mandate-pending (BEFORE retries are exhausted) — nudge the customer to
+        # authorize/retry now, and log it. This is the early-warning Nidaan was missing (Sarathi has it).
+        logger.info("Nidaan subscription pending: account=%d rzp=%s", account_id, rzp_sub_id)
+        try:
+            _acc = await nidaan.get_account_by_id(account_id)
+            if _acc and _acc.get("email"):
+                _asyncio.create_task(email_svc.send_nidaan_autopay_recovery_email(
+                    _acc["email"], _acc.get("owner_name", ""), plan, kind="pending"))
+        except Exception:
+            pass
+        try:
+            _asyncio.create_task(nidaan.record_event(
+                "subscription_pending", account_id=account_id, purpose="subscription",
+                status="pending", reason="Recurring charge pending / awaiting authorization",
+                meta=rzp_sub_id or ""))
+        except Exception:
+            pass
     return {"status": "ok", "event": event}
 
 
