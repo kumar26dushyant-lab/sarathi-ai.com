@@ -679,7 +679,7 @@ async def _staff_business_row(conn, r: dict) -> dict:
         "referral_code": r.get("referral_code") or "",
         "commission_pct": float(r.get("commission_pct") or 0),
         "signups": 0, "paid": 0, "unpaid": 0, "revenue": 0,
-        "commission": 0, "claims": 0,
+        "commission": 0, "claims": 0, "claims_raised": 0,
     }
     if not code:
         return out
@@ -694,10 +694,15 @@ async def _staff_business_row(conn, r: dict) -> dict:
         "SELECT COALESCE(SUM(su.amount_paid),0) FROM nidaan_subscriptions su "
         "JOIN nidaan_accounts a2 ON a2.account_id=su.account_id "
         "WHERE UPPER(a2.branch_code)=?", (code,))).fetchone())[0]
+    # Claims from REFERRED customers (their own accounts carry this staff's code).
     claims = (await (await conn.execute(
         "SELECT COUNT(*) FROM nidaan_claims c "
         "JOIN nidaan_accounts a3 ON a3.account_id=c.account_id "
         "WHERE UPPER(a3.branch_code)=?", (code,))).fetchone())[0]
+    # Claims the staffer RAISED themselves (branch-style, on the house account).
+    claims_raised = (await (await conn.execute(
+        "SELECT COUNT(*) FROM nidaan_claims c "
+        "WHERE c.origin='branch' AND UPPER(c.branch_code)=?", (code,))).fetchone())[0]
     pct = float(r.get("commission_pct") or 0)
     out.update({
         "signups": int(signups or 0),
@@ -706,6 +711,7 @@ async def _staff_business_row(conn, r: dict) -> dict:
         "revenue": int(revenue or 0),
         "commission": round(int(revenue or 0) * pct / 100),
         "claims": int(claims or 0),
+        "claims_raised": int(claims_raised or 0),
     })
     return out
 

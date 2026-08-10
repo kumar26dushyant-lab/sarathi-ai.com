@@ -3518,12 +3518,131 @@ async function loadMyBusiness() {
       ${hi?`<b>आपका कमीशन कैसे बनता है:</b> आपके कोड से जुड़े लोगों की सब्सक्रिप्शन राशि का ${pct}%। यह हिसाब का आंकड़ा है — अपने-आप भुगतान नहीं होता। कमीशन % सुपर-एडमिन तय करते हैं।`:`<b>How your commission works:</b> ${pct}% of the subscription revenue from people who joined using your code. This is a reconciliation figure — not auto-paid. Commission % is set by the super-admin.`}
     </div>
 
-    <div id="mbTeamWrap"></div>`;
+    <!-- Claim desk: raise claims like a branch, from this same login -->
+    <div class="section-hdr" style="margin-top:.4rem"><div>
+      <div class="section-title" style="font-size:1rem">📝 ${hi?'ग्राहक के लिए क्लेम दर्ज करें':'Raise a claim for a customer'}</div>
+      <div class="section-sub">${hi?'खारिज या कम भुगतान वाला क्लेम यहाँ जमा करें — कोई शुल्क नहीं। समीक्षा के बाद अगर यह लड़ने लायक (Level-2) है, तभी शुल्क देना होगा।':'Submit a rejected/underpaid claim here — free. Only if the review says it can go to Level-2 do you pay the fee.'}</div>
+    </div></div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem;margin-bottom:1rem">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem">
+        <input id="mbcName" placeholder="${hi?'ग्राहक का पूरा नाम':'Customer full name'}" style="text-transform:uppercase">
+        <input id="mbcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="${hi?'ग्राहक मोबाइल (10 अंक)':'Customer mobile (10-digit)'}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+        <select id="mbcType"><option value="">${hi?'क्लेम प्रकार…':'Claim type…'}</option><option value="health">${hi?'स्वास्थ्य':'Health'}</option><option value="life">${hi?'जीवन':'Life'}</option><option value="motor">${hi?'मोटर':'Motor'}</option><option value="general">${hi?'सामान्य / अन्य':'General / Other'}</option></select>
+        <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurer name (optional)'}">
+        <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
+        <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
+      </div>
+      <textarea id="mbcNotes" placeholder="${hi?'संक्षिप्त पृष्ठभूमि / अस्वीकृति का कारण…':'Brief background / reason for rejection…'}" style="width:100%;margin-top:.55rem;min-height:56px;resize:vertical"></textarea>
+      <div style="font-size:.74rem;color:rgba(255,255,255,.4);margin-top:.4rem">${hi?'सुझाव: क्लेम दर्ज करने के बाद क्लेम में अस्वीकृति पत्र संलग्न करें (Claims Dashboard से)।':'Tip: after raising, attach the rejection letter to the claim from the Claims Dashboard.'}</div>
+      <div id="mbcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
+      <button class="btn btn-primary" id="mbcSubmit" style="margin-top:.6rem" onclick="mbRaiseClaim()">${hi?'क्लेम जमा करें →':'Submit claim →'}</button>
+    </div>
+    <div style="font-weight:700;margin:.2rem 0 .5rem;color:#fff">${hi?'आपके दर्ज किए क्लेम':'Your raised claims'}</div>
+    <div id="mbClaimsWrap"><div class="empty"><p>${hi?'लोड हो रहा है…':'Loading…'}</p></div></div>
 
+    <div id="mbTeamWrap" style="margin-top:1.4rem"></div>`;
+
+  mbLoadClaims();
   // Super-admin: team reconciliation + commission editor.
   if (_role === 'super_admin' || _role === 'sub_super_admin') {
     mbLoadTeam();
   }
+}
+
+async function mbRaiseClaim(){
+  const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
+  const g=id=>document.getElementById(id);
+  const name=(g('mbcName').value||'').trim();
+  const phone=(g('mbcPhone').value||'').replace(/[^0-9]/g,'');
+  const type=(g('mbcType').value||'').trim();
+  if(!name){ msg.style.color='#f87171'; msg.textContent=hi?'ग्राहक का नाम आवश्यक है।':'Customer name is required.'; return; }
+  if(phone.length!==10){ msg.style.color='#f87171'; msg.textContent=hi?'मान्य 10-अंकों का मोबाइल दर्ज करें।':'Enter a valid 10-digit mobile.'; return; }
+  if(!type){ msg.style.color='#f87171'; msg.textContent=hi?'क्लेम प्रकार चुनें।':'Choose a claim type.'; return; }
+  const btn=g('mbcSubmit'); btn.disabled=true; const ob=btn.textContent; btn.textContent=hi?'जमा हो रहा है…':'Submitting…';
+  msg.style.color='#94a3b8'; msg.textContent=hi?'जमा हो रहा है…':'Submitting…';
+  const body={insured_name:name, insured_phone:phone, claim_type:type,
+    insurer_name:(g('mbcInsurer').value||'').trim(), policy_no:(g('mbcPolicy').value||'').trim(),
+    disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
+    notes:(g('mbcNotes').value||'').trim()};
+  const r=await API('/my-claims',{method:'POST', body:JSON.stringify(body)});
+  btn.disabled=false; btn.textContent=ob;
+  if(r.ok){ msg.style.color='#4ade80'; msg.textContent=hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.';
+    ['mbcName','mbcPhone','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
+    mbLoadClaims(); setTimeout(()=>{msg.textContent='';},3500); }
+  else{ const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+}
+
+async function mbLoadClaims(){
+  const wrap=document.getElementById('mbClaimsWrap'); if(!wrap) return;
+  const hi=_mbHi();
+  const r=await API('/my-claims');
+  if(!r.ok){ wrap.innerHTML=`<div class="empty"><p>${hi?'क्लेम लोड नहीं हो सके।':'Could not load claims.'}</p></div>`; return; }
+  const d=await r.json(); const claims=d.claims||[]; window._mbL2=d.l2||{};
+  if(!claims.length){ wrap.innerHTML=`<div class="empty"><div class="ei">📋</div><p>${hi?'अभी कोई क्लेम नहीं। ऊपर फ़ॉर्म से दर्ज करें।':'No claims yet — use the form above.'}</p></div>`; return; }
+  const l2cfg=window._mbL2||{};
+  const rows=claims.map(c=>{
+    let l2=`<span style="color:rgba(255,255,255,.35)">${hi?'समीक्षाधीन':'Under review'}</span>`;
+    const bs='padding:.35rem .6rem;font-size:.76rem;margin-top:.3rem';
+    if(c.l2_payment_status==='paid'){ l2=`<span style="color:#34d399;font-weight:700">${hi?'लीगल के लिए भेजा ✓':'Queued for legal ✓'}</span>`; }
+    else if(c.review_outcome==='can_fight'){
+      const badge=`<div style="color:#6ee7b7;font-weight:600;margin-bottom:.15rem">${hi?'समीक्षा: लड़ा जा सकता है':'Reviewed: can be challenged'}</div>`;
+      if(l2cfg.charge_required){ l2=badge
+        +`<button class="btn btn-primary" style="${bs}" onclick="mbL2Pay(${c.claim_id})">${hi?'₹'+l2cfg.fee+' भुगतान करें':'Pay ₹'+l2cfg.fee+' now'}</button>`
+        +`<button class="btn-sm btn-ghost" style="${bs};margin-left:.3rem;color:#7dd3fc" onclick="mbL2Link(${c.claim_id})">🔗 ${hi?'लिंक भेजें':'Share link'}</button>`; }
+      else { l2=badge+`<button class="btn btn-primary" style="${bs}" onclick="mbL2Advance(${c.claim_id})">${hi?'Level-2 भेजें (मुफ़्त)':'Send to Level-2 (free)'}</button>`; }
+    }
+    else if(c.review_outcome==='no_scope'){ l2=`<span style="color:#fdba74">${hi?'समीक्षा: कोई गुंजाइश नहीं':'Reviewed: no scope'}</span>`; }
+    return `<tr>
+      <td>${esc(c.insured_name||'')}<br><span style="font-size:.74rem;color:rgba(255,255,255,.4)">${esc(c.insured_phone||'')}</span></td>
+      <td>${esc((c.claim_type||'').replace(/_/g,' '))}</td>
+      <td style="text-align:right">${c.disputed_amount?('₹'+fmt(c.disputed_amount)):'—'}</td>
+      <td>${esc((c.status||'').replace(/_/g,' '))}</td>
+      <td>${l2}</td>
+      <td style="font-size:.74rem;color:rgba(255,255,255,.4)">${fmtDate(c.created_at)}</td>
+    </tr>`;}).join('');
+  wrap.innerHTML=`<div class="table-wrap"><table>
+    <thead><tr><th>${hi?'ग्राहक':'Customer'}</th><th>${hi?'प्रकार':'Type'}</th><th>${hi?'राशि':'Amount'}</th><th>${hi?'स्थिति':'Status'}</th><th>Level-2</th><th>${hi?'दर्ज':'Raised'}</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function _mbEnsureRzp(cb){
+  if(window.Razorpay){ cb(); return; }
+  const s=document.createElement('script'); s.src='https://checkout.razorpay.com/v1/checkout.js';
+  s.onload=cb; s.onerror=()=>alert('Could not load payment library. Check your connection.');
+  document.head.appendChild(s);
+}
+async function mbL2Pay(claimId){
+  const hi=_mbHi();
+  const r=await API('/my-claims/'+claimId+'/l2-pay',{method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not start payment.'); return; }
+  const o=await r.json();
+  _mbEnsureRzp(()=>{
+    const rzp=new Razorpay({ key:o.razorpay_key_id, amount:o.amount, currency:o.currency,
+      name:'NidaanPartner', description:'Level-2 fee — claim #'+claimId, order_id:o.order_id,
+      handler: async function(resp){
+        const v=await API('/my-claims/'+claimId+'/l2-pay-verify',{method:'POST', body:JSON.stringify({
+          razorpay_order_id:resp.razorpay_order_id, razorpay_payment_id:resp.razorpay_payment_id,
+          razorpay_signature:resp.razorpay_signature })});
+        if(v.ok){ alert(hi?'भुगतान सफल — क्लेम Level-2 पर भेजा गया।':'Payment successful — claim sent to Level-2.'); mbLoadClaims(); }
+        else { const d=await v.json().catch(()=>({})); alert(d.detail||'Payment verification failed.'); }
+      },
+      theme:{color:'#06b6d4'} });
+    rzp.open();
+  });
+}
+async function mbL2Advance(claimId){
+  const hi=_mbHi();
+  if(!confirm(hi?'इस क्लेम को Level-2 पर भेजें?':'Send this claim to Level-2?')) return;
+  const r=await API('/my-claims/'+claimId+'/l2-advance',{method:'POST'});
+  if(r.ok){ mbLoadClaims(); } else { const d=await r.json().catch(()=>({})); alert(d.detail||'Could not advance.'); }
+}
+async function mbL2Link(claimId){
+  const r=await API('/my-claims/'+claimId+'/l2-payment-link',{method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not create link.'); return; }
+  const d=await r.json();
+  const hi=_mbHi();
+  const msg=(hi?'Level-2 शुल्क भुगतान लिंक (claim #'+claimId+'): ':'Level-2 fee payment link (claim #'+claimId+'): ')+d.short_url;
+  mbCopy(d.short_url); window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
 }
 
 function mbCopy(text, btn){
