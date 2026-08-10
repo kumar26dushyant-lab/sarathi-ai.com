@@ -5570,17 +5570,22 @@ SHIPPED so far:
   (no_scope + not L2-paid + review_delivered_at older than NO_SCOPE_ARCHIVE_DAYS=5). Branch
   dashboard + staff My Claims both gain Active/Archived tabs. L2 fee already ₹499 (branch_l2_fee).
 
-PENDING: Phase 4 easier login (stay-signed-in ALREADY effective — staff token has NO exp + stored
-in localStorage; real value = Telegram one-tap login [auth-sensitive, confirm design] + per-staff
-`telegram_access` toggle so third-party staff get password-only); Phase 5 mobile UX hardening
-(ROOT CAUSE found: nidaan_dashboard/nidaan_branch/sarathi dashboard have NO history handling +
-display:standalone PWA → phone back button EXITS app; ops has partial. Fix = unified back/close +
-visible back buttons + full responsive audit); Phase 6 branch chatbot + Support filter; Phase 7
-richer chat timestamps (date+time + per-message tag).
+- **Phase 4 (8243996) Easier login:** stay-signed-in already effective (staff token has NO exp +
+  localStorage). Telegram one-tap login SHIPPED: nidaan_staff.telegram_access (default 1) +
+  nidaan_tg_login nonce table; bot /start weblogin_<nonce> authorizes for a LINKED, telegram-
+  enabled staffer; POST /nidaan/ops/api/tg-login/start (nonce + t.me/NidaanOpsBot?start=weblogin_)
+  + GET .../tg-login/status (poll→mint session, single-use). Linking gated by telegram_access;
+  PATCH /staff/{id}/telegram-access (super_admin, deny also unlinks). Ops login screen "Login via
+  Telegram" + poll; Staff table per-staff ✈️ toggle. Password = universal fallback.
+- **Phase 5 CORE (3cccebd) Mobile back-button:** ROOT CAUSE = subscriber/branch/sarathi dashboards
+  had NO history handling + display:standalone PWA → phone Back EXITED app. Fix = shared
+  static/nidaan_backguard.js (keeps a history guard entry; Back closes top overlay then stays; in
+  installed PWA never accidental-exits; normal browser Back stays normal). Wired into
+  nidaan_dashboard, dashboard.html (sarathi), nidaan_branch. Ops left as-is (own tab-history).
 
-Telegram login DESIGN (proposed): pre-linked chat_id only (existing secure code-linking) → short-
-lived single-use nonce → bot confirms → ops session minted; gated by telegram_access. Password stays
-universal fallback.
+PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
+back-hardening; full responsive audit — needs real-device verification); Phase 6 branch chatbot +
+Support filter; Phase 7 richer chat timestamps (date+time + per-message tag).
 
 ---
 
