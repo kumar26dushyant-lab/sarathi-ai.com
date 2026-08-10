@@ -5643,6 +5643,27 @@ SHIPPED so far:
   'raise another claim — ₹499+GST per claim'. Net: one customer can raise unlimited claims, tiered
   ₹499/₹2000+GST each, from their own dashboard (submit → per-claim Pay → review).
 
+## 67. BRANCH/STAFF PARITY (owner Aug 10-11; design locked, building in phases)
+
+Owner intent: branch & staff are the SAME product (refer subscribers + raise retail claims), differ
+only in commission %. DECISIONS: (1) ONE shared role-aware dashboard; (2) L2 retail fee = SAME tier
+as homepage (₹499 / ₹2000 >₹10L + GST) collected at can_fight — NOT flat, NOT per-entity (only
+commission % is per-entity); homepage pays UPFRONT, branch/staff pay at the L2 decision; (3)
+attribution first-touch LOCKED. a–d (refer subs, raise retail free→pay-at-L2, share L2 link gated
+to can_fight, share signup link→self-register attributed) were ALREADY built for both — parity work
+mainly re-homes them into one UI.
+
+- **Phase A SHIPPED (02f4406):** branch_l2_fee_for_claim(claim_id) = single source of truth = tiered
+  review_fee_for(disputed) gated by charge policy; wired at ALL touch-points (branch+staff
+  pay/verify/link, webhook, admin-link + bulk reconcile); list_branch_claims returns per-claim
+  l2_fee; both dashboards show tiered amount + '+GST' + encouraging 'can be fought → pay to move to
+  Level-2' copy. Attribution LOCK: set_account_branch is first-touch-only (never overwrites);
+  subscriber profile referral field read-only once set.
+- PENDING: Phase B (post-payment 'your claim is moving to Level-2' shareable confirmation — pay copy
+  already added), Phase C (unified role-aware partner dashboard: shared renderer for branch page +
+  staff My Business), Phase D (subscriber 'Referred by [name]' read-only + end-to-end parity check).
+  FOUNDER TEST: raise a branch/staff claim with disputed >₹10L → verify L2 shows ₹2000+GST; <₹10L → ₹499+GST.
+
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
