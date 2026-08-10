@@ -2214,7 +2214,7 @@ async def create_support_thread(name: str = "", contact: str = "",
             """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel, lang)
                VALUES (?,?,?,?,?,?)""",
             (key, account_id, (name or "").strip()[:80], (contact or "").strip()[:120],
-             channel if channel in ("web", "whatsapp", "email") else "web",
+             channel if channel in ("web", "whatsapp", "email", "branch", "staff") else "web",
              lang if lang in ("en", "hi", "hinglish") else ""))
         await conn.commit()
         return {"thread_id": cur.lastrowid, "thread_key": key}

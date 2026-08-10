@@ -10,8 +10,20 @@
   // 'guide' (homepage — lead-gen/info only, NEVER sends the customer token). Threads are kept
   // separate per mode so a homepage guide chat and a dashboard support chat don't mix.
   var wmode = (window.NIDAAN_SUPPORT_MODE === 'support') ? 'support' : 'guide';
-  var TKEY = 'nidaan_support_thread' + (wmode === 'support' ? '_s' : '');
+  // Origin channel — a host page (e.g. the branch dashboard) can set window.NSW_CHANNEL
+  // so ops can identify/filter where the conversation came from.
+  var nswChannel = (window.NSW_CHANNEL === 'branch' || window.NSW_CHANNEL === 'staff') ? window.NSW_CHANNEL : '';
+  var TKEY = 'nidaan_support_thread' + (wmode === 'support' ? '_s' : '') + (nswChannel ? ('_' + nswChannel) : '');
   var LKEY = 'nidaan_support_lang';
+  // Format a stored (UTC) timestamp as IST date+time for per-message tags.
+  function fmtMsgTime(s){
+    if(!s) return '';
+    var iso = String(s).replace(' ', 'T');
+    if(!/[Zz]|[+-]\d\d:?\d\d$/.test(iso)) iso += 'Z';
+    var d = new Date(iso); if(isNaN(d.getTime())) return '';
+    try { return d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true, timeZone:'Asia/Kolkata'}); }
+    catch(e){ return ''; }
+  }
   function authHeaders(){
     var h = { 'Content-Type': 'application/json' };
     if (wmode === 'support') { var t=null; try{ t=localStorage.getItem('nidaan_token'); }catch(e){} if(t) h['Authorization']='Bearer '+t; }
@@ -175,13 +187,15 @@
     html = html.replace(/(^|[\s(])(\/(?:nidaan[^\s<]*|#[a-z]+))/g, function(m,pre,path){ return pre+'<a href="'+path+'" target="_blank" rel="noopener" style="color:#67e8f9">'+path+'</a>'; });
     return html;
   }
-  function bubble(text, who){
+  function bubble(text, who, ts){
     var b=document.createElement('div');
     b.className='nsw-b '+(who==='customer'?'me':(who==='staff'?'staff':'ai'));
     var tag = who==='staff' ? '<div class="nsw-tag">Support agent</div>'
              : (who==='ai' ? '<div class="nsw-tag" style="color:#67e8f9;opacity:.85">NidaanMitra</div>' : '');
     var content = (who==='customer') ? el(text) : linkify(el(text));
-    b.innerHTML = tag + content; msgs.appendChild(b); scroll();
+    var t = fmtMsgTime(ts);
+    var timeHtml = t ? '<div style="font-size:.62rem;opacity:.5;margin-top:.25rem;'+(who==='customer'?'text-align:right':'')+'">'+t+'</div>' : '';
+    b.innerHTML = tag + content + timeHtml; msgs.appendChild(b); scroll();
   }
   function note(text){ var n=document.createElement('div'); n.className='nsw-note'; n.innerHTML=el(text); msgs.appendChild(n); scroll(); }
 
@@ -254,7 +268,7 @@
     if(contact.length<3){ errEl.textContent='Please enter your email or mobile.'; return; }
     var btn=document.getElementById('nswLeadSubmit'); btn.disabled=true; errEl.textContent='';
     try{
-      var body={ name:name, contact:contact, message:m, lang:lang };
+      var body={ name:name, contact:contact, message:m, lang:lang }; if(nswChannel) body.channel=nswChannel;
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
       var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       var d=await r.json().catch(function(){return {};});
@@ -276,7 +290,7 @@
       var r = await fetch('/nidaan/api/support/thread?thread_id='+thread.id+'&thread_key='+encodeURIComponent(thread.key)+'&after_id=0');
       if(!r.ok){ thread=null; localStorage.removeItem(TKEY); if(!lang) showLangPicker(); else { showGreeting(); startPoll(); } return; }
       var d = await r.json();
-      (d.messages||[]).forEach(function(m){ bubble(m.body, m.sender_type); if(m.msg_id>lastMsgId) lastMsgId=m.msg_id; });
+      (d.messages||[]).forEach(function(m){ bubble(m.body, m.sender_type, m.created_at); if(m.msg_id>lastMsgId) lastMsgId=m.msg_id; });
       if(!(d.messages||[]).length) showGreeting();
       else if(!supportOpen && !leadDoneTicket()) renderChips();   // offer leave-details when offline
       greeted = true; startPoll();
@@ -289,7 +303,7 @@
       var r = await fetch('/nidaan/api/support/thread?thread_id='+thread.id+'&thread_key='+encodeURIComponent(thread.key)+'&after_id='+lastMsgId);
       if(!r.ok) return;
       var d = await r.json();
-      (d.messages||[]).forEach(function(m){ if(m.msg_id>lastMsgId){ bubble(m.body, m.sender_type); lastMsgId=m.msg_id; } });
+      (d.messages||[]).forEach(function(m){ if(m.msg_id>lastMsgId){ bubble(m.body, m.sender_type, m.created_at); lastMsgId=m.msg_id; } });
     }catch(e){}
   }
   function startPoll(){ if(pollTimer) return; pollTimer=setInterval(syncMessages, 4000); }
@@ -404,7 +418,7 @@
     if(preset==null){ input.value=''; input.style.height='auto'; }
     var typing=document.createElement('div'); typing.className='nsw-typing'; typing.innerHTML='<span class="nsw-dot"></span><span class="nsw-dot"></span><span class="nsw-dot"></span>'; msgs.appendChild(typing); scroll();
     try{
-      var body={ message:text, lang:lang };
+      var body={ message:text, lang:lang }; if(nswChannel){ body.channel=nswChannel; if(window.NSW_NAME) body.name=window.NSW_NAME; }
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
       var r = await fetch('/nidaan/api/support/message', { method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       typing.remove();

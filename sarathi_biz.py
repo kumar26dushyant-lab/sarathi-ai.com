@@ -1040,6 +1040,7 @@ class NidaanSupportMsgReq(BaseModel):
     name: str = Field("", max_length=80)
     contact: str = Field("", max_length=120)
     lang: str = Field("", max_length=10)   # en | hi | hinglish (preferred reply language)
+    channel: str = Field("", max_length=12)  # web | branch | staff — where the chat originates
     hp: str = Field("", max_length=100)    # honeypot — must stay empty (bots fill it)
 
 
@@ -1082,9 +1083,10 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         _prev_status = thread.get("status")
         _lang = _lang or (thread.get("lang") or "")
     else:
+        _ch = body.channel if body.channel in ("branch", "staff") else "web"
         started = await nidaan.create_support_thread(
             name=(_account.get("owner_name") if _account else body.name),
-            contact=body.contact, channel="web", lang=_lang,
+            contact=body.contact, channel=_ch, lang=_lang,
             account_id=(_account["account_id"] if _account else None))
         tid, tkey = started["thread_id"], started["thread_key"]
     # Per-thread flood cap: stop a single conversation from being spammed unbounded.
