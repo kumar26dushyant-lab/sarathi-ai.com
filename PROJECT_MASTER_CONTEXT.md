@@ -5547,6 +5547,41 @@ index/about/admin/dashboard/demo/features/getting-started/help/partner/superadmi
 terms/index_v2/v3/v4 → 7-day. Extend-trial DEFAULTS (sa_extend Query(14), admin_extend Query(7))
 left as separate operational knobs (not trial length). Future trial-length change = edit 2 constants.
 
+## 66. STAFF-AS-BRANCH v2 + REFERRAL + L2 FLOW (owner Aug 9-10; 7-phase batch, discuss-first)
+
+Owner batch (staff claim-raising, branch L2 flow, referral robustness, easy login, mobile UX)
++ 2 additions (branch chatbot+Support filter; richer chat timestamps). Agreed order 1→7.
+
+SHIPPED so far:
+- **Phase 1 (c207cc7) Referral bulletproofing:** `resolve_ref_info` + public GET /nidaan/api/ref-info
+  (code→{valid,type,name}). Signup page: ref = URL ?ref/?branch OR persisted first-touch
+  (NidaanTrack) → shows "✓ Referred by <name>" + LOCKS the code so attribution can't be lost.
+  Chain already worked server-side (is_valid_ref_code accepts staff SP- codes → create_account
+  stores branch_code → counted in My Business + superadmin + analytics); this makes it visible+
+  tamper-proof. Verified: SP-Q2K34U→Dushyant Sharma, IND-HO→Indore Head Office, bogus→invalid.
+- **Phase 2 (4c5f6a9) Staff claim-raising in existing ops login:** additive ops-authed routes
+  reusing the ENTIRE branch pipeline with the staffer's SP- code: POST/GET /nidaan/ops/api/my-claims
+  + /{id}/l2-pay, l2-pay-verify, l2-advance, l2-payment-link. House account via
+  get_or_create_branch_house_account(SP-code); origin='branch'. My Business panel gains a
+  "📝 Raise a claim" form + "Your raised claims" table (Pay ₹fee via Razorpay checkout injected
+  on demand, Share link, Send-to-L2-free). _staff_business_row adds claims_raised. NO change to
+  live branch endpoints. Rejection letter optional at staff-raise (they attach via Claims Dashboard).
+- **Phase 3 (d5e5d79) no_scope 5-day auto-archive:** list_branch_claims returns `archived` flag
+  (no_scope + not L2-paid + review_delivered_at older than NO_SCOPE_ARCHIVE_DAYS=5). Branch
+  dashboard + staff My Claims both gain Active/Archived tabs. L2 fee already ₹499 (branch_l2_fee).
+
+PENDING: Phase 4 easier login (stay-signed-in ALREADY effective — staff token has NO exp + stored
+in localStorage; real value = Telegram one-tap login [auth-sensitive, confirm design] + per-staff
+`telegram_access` toggle so third-party staff get password-only); Phase 5 mobile UX hardening
+(ROOT CAUSE found: nidaan_dashboard/nidaan_branch/sarathi dashboard have NO history handling +
+display:standalone PWA → phone back button EXITS app; ops has partial. Fix = unified back/close +
+visible back buttons + full responsive audit); Phase 6 branch chatbot + Support filter; Phase 7
+richer chat timestamps (date+time + per-message tag).
+
+Telegram login DESIGN (proposed): pre-linked chat_id only (existing secure code-linking) → short-
+lived single-use nonce → bot confirms → ops session minted; gated by telegram_access. Password stays
+universal fallback.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
