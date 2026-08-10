@@ -1604,17 +1604,48 @@ async def get_or_create_branch_house_account(branch_code: str) -> int:
         return cur.lastrowid
 
 
+NO_SCOPE_ARCHIVE_DAYS = 5  # no_scope claims stay visible this long, then auto-archive
+
+
+def _parse_ts(v):
+    """Tolerant timestamp parse (isoformat or 'YYYY-MM-DD HH:MM:SS'). None on failure."""
+    if not v:
+        return None
+    s = str(v).strip().replace("T", " ")
+    from datetime import datetime as _dt
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return _dt.strptime(s[:26] if "." in s else s[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
 async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
-    """Claims a branch has raised (origin='branch'), newest first, with review + L2 state."""
+    """Claims a branch (or staff SP- code) has raised (origin='branch'), newest first, with
+    review + L2 state. Adds an `archived` flag: a no_scope claim auto-archives once its review
+    is older than NO_SCOPE_ARCHIVE_DAYS (kept forever, just moved to the Archived view)."""
+    from datetime import datetime as _dt, timedelta as _td
     code = (branch_code or "").strip().upper()
+    cutoff = _dt.now() - _td(days=NO_SCOPE_ARCHIVE_DAYS)
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
             "SELECT claim_id, insured_name, insured_phone, claim_type, insurer_name, "
-            "       disputed_amount, status, review_outcome, l2_payment_status, l2_fee_paid, created_at "
+            "       disputed_amount, status, review_outcome, l2_payment_status, l2_fee_paid, "
+            "       review_delivered_at, created_at "
             "FROM nidaan_claims WHERE origin='branch' AND UPPER(branch_code)=? "
             "ORDER BY claim_id DESC LIMIT ?", (code, limit))).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            archived = False
+            if d.get("review_outcome") == "no_scope" and d.get("l2_payment_status") != "paid":
+                dt = _parse_ts(d.get("review_delivered_at"))
+                archived = bool(dt and dt < cutoff)
+            d["archived"] = archived
+            out.append(d)
+        return out
 
 
 async def branch_l2_pricing() -> dict:

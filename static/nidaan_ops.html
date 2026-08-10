@@ -3577,8 +3577,23 @@ async function mbLoadClaims(){
   const hi=_mbHi();
   const r=await API('/my-claims');
   if(!r.ok){ wrap.innerHTML=`<div class="empty"><p>${hi?'क्लेम लोड नहीं हो सके।':'Could not load claims.'}</p></div>`; return; }
-  const d=await r.json(); const claims=d.claims||[]; window._mbL2=d.l2||{};
-  if(!claims.length){ wrap.innerHTML=`<div class="empty"><div class="ei">📋</div><p>${hi?'अभी कोई क्लेम नहीं। ऊपर फ़ॉर्म से दर्ज करें।':'No claims yet — use the form above.'}</p></div>`; return; }
+  const d=await r.json(); window._mbClaims=d.claims||[]; window._mbL2=d.l2||{};
+  window._mbClaimsView=window._mbClaimsView||'active';
+  mbRenderClaims();
+}
+function mbClaimsTab(v){ window._mbClaimsView=v; mbRenderClaims(); }
+function mbRenderClaims(){
+  const wrap=document.getElementById('mbClaimsWrap'); if(!wrap) return;
+  const hi=_mbHi();
+  const all=window._mbClaims||[];
+  const active=all.filter(c=>!c.archived), archived=all.filter(c=>c.archived);
+  const view=window._mbClaimsView||'active';
+  const tabs=`<div style="display:flex;gap:.4rem;margin-bottom:.6rem">
+    <button class="btn ${view==='active'?'btn-primary':'btn-ghost'}" style="font-size:.78rem;padding:.3rem .7rem" onclick="mbClaimsTab('active')">${hi?'सक्रिय':'Active'} (${active.length})</button>
+    <button class="btn ${view==='archived'?'btn-primary':'btn-ghost'}" style="font-size:.78rem;padding:.3rem .7rem" onclick="mbClaimsTab('archived')">🗄️ ${hi?'संग्रहित':'Archived'} (${archived.length})</button></div>`;
+  const claims = view==='archived'?archived:active;
+  if(!all.length){ wrap.innerHTML=`<div class="empty"><div class="ei">📋</div><p>${hi?'अभी कोई क्लेम नहीं। ऊपर फ़ॉर्म से दर्ज करें।':'No claims yet — use the form above.'}</p></div>`; return; }
+  if(!claims.length){ wrap.innerHTML=tabs+`<div class="empty"><p>${view==='archived'?(hi?'कोई संग्रहित क्लेम नहीं।':'No archived claims.'):(hi?'कोई सक्रिय क्लेम नहीं।':'No active claims.')}</p></div>`; return; }
   const l2cfg=window._mbL2||{};
   const rows=claims.map(c=>{
     let l2=`<span style="color:rgba(255,255,255,.35)">${hi?'समीक्षाधीन':'Under review'}</span>`;
@@ -3600,7 +3615,7 @@ async function mbLoadClaims(){
       <td>${l2}</td>
       <td style="font-size:.74rem;color:rgba(255,255,255,.4)">${fmtDate(c.created_at)}</td>
     </tr>`;}).join('');
-  wrap.innerHTML=`<div class="table-wrap"><table>
+  wrap.innerHTML=tabs+`<div class="table-wrap"><table>
     <thead><tr><th>${hi?'ग्राहक':'Customer'}</th><th>${hi?'प्रकार':'Type'}</th><th>${hi?'राशि':'Amount'}</th><th>${hi?'स्थिति':'Status'}</th><th>Level-2</th><th>${hi?'दर्ज':'Raised'}</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }

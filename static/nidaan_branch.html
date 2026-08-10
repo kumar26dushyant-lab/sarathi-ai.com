@@ -316,9 +316,25 @@ async function loadBranchClaims(){
     const r = await fetch('/nidaan/branch/api/claims',{headers:authHeaders()});
     if(r.status===401){ logout(); return; }
     const data = await r.json();
-    const claims = data.claims || [];
-    const l2cfg = data.l2 || {fee:0, charge_required:false};
-    if(!claims.length){ $('bcClaimsWrap').innerHTML = '<div class="empty">No claims raised yet. Use the form above to submit your customer\'s rejected claim.</div>'; return; }
+    window._bcAll = data.claims || [];
+    window._bcL2 = data.l2 || {fee:0, charge_required:false};
+    window._bcView = window._bcView || 'active';
+    renderBranchClaims();
+  }catch(e){ $('bcClaimsWrap').innerHTML = '<div class="empty">Could not load claims.</div>'; }
+}
+function bcClaimsTab(v){ window._bcView=v; renderBranchClaims(); }
+function renderBranchClaims(){
+  try{
+    const all = window._bcAll || [];
+    const l2cfg = window._bcL2 || {fee:0, charge_required:false};
+    const active = all.filter(c=>!c.archived), archived = all.filter(c=>c.archived);
+    const view = window._bcView || 'active';
+    const tabs = `<div style="display:flex;gap:.4rem;margin-bottom:.7rem">
+      <button class="btn ${view==='active'?'btn-cyan':''}" style="padding:.35rem .8rem;font-size:.8rem;${view!=='active'?'background:rgba(255,255,255,.1);color:#fff':''}" onclick="bcClaimsTab('active')">Active (${active.length})</button>
+      <button class="btn ${view==='archived'?'btn-cyan':''}" style="padding:.35rem .8rem;font-size:.8rem;${view!=='archived'?'background:rgba(255,255,255,.1);color:#fff':''}" onclick="bcClaimsTab('archived')">🗄️ Archived (${archived.length})</button></div>`;
+    if(!all.length){ $('bcClaimsWrap').innerHTML = '<div class="empty">No claims raised yet. Use the form above to submit your customer\'s rejected claim.</div>'; return; }
+    const claims = view==='archived'?archived:active;
+    if(!claims.length){ $('bcClaimsWrap').innerHTML = tabs + '<div class="empty">'+(view==='archived'?'No archived claims.':'No active claims.')+'</div>'; return; }
     const rows = claims.map(c=>{
       let l2 = '<span style="color:rgba(255,255,255,.35)">Under review</span>';
       const btnStyle = 'padding:.4rem .7rem;font-size:.78rem;margin-top:.35rem';
@@ -345,7 +361,7 @@ async function loadBranchClaims(){
         <td style="font-size:.76rem;color:rgba(255,255,255,.4)">${fmtDate(c.created_at)}</td>
       </tr>`;
     }).join('');
-    $('bcClaimsWrap').innerHTML = `<div class="table-wrap"><table>
+    $('bcClaimsWrap').innerHTML = tabs + `<div class="table-wrap"><table>
       <thead><tr><th>Customer</th><th>Type</th><th>Amount</th><th>Status</th><th>Level-2</th><th>Raised</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }catch(e){ $('bcClaimsWrap').innerHTML = '<div class="empty">Could not load claims.</div>'; }
