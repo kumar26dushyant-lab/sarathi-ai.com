@@ -411,6 +411,19 @@ function loadRzp(){
     document.head.appendChild(s);
   });
 }
+// Screenshot-friendly "moving to Level-2" confirmation (branch can show/share it to the customer).
+function l2Confirm(claimId){
+  const ov=document.createElement('div'); ov.setAttribute('data-l2c','1');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML='<div style="background:#0f1e3a;border:1px solid rgba(52,211,153,.45);border-radius:16px;max-width:420px;width:100%;padding:1.6rem;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)">'
+    +'<div style="font-size:2.6rem">⚖️✅</div>'
+    +'<div style="font-size:1.2rem;font-weight:800;color:#6ee7b7;margin:.5rem 0">Your claim is moving to Level-2!</div>'
+    +'<div style="color:rgba(255,255,255,.8);font-size:.92rem;line-height:1.55">Claim #'+String(claimId).padStart(3,'0')+' — payment received ✓. Our legal team will now take up the fight for the rightful claim.</div>'
+    +'<div style="font-size:.76rem;color:rgba(255,255,255,.4);margin-top:.7rem">📸 You can screenshot this to reassure your customer.</div>'
+    +'<button onclick="this.closest(\'[data-l2c]\').remove()" style="margin-top:1rem;background:#06b6d4;color:#fff;border:none;border-radius:8px;padding:.6rem 1.6rem;font-weight:700;cursor:pointer">Done</button>'
+    +'</div>';
+  document.body.appendChild(ov);
+}
 async function l2Pay(claimId){
   try{
     await loadRzp();
@@ -428,8 +441,9 @@ async function l2Pay(claimId){
             body:JSON.stringify({razorpay_order_id:resp.razorpay_order_id,
               razorpay_payment_id:resp.razorpay_payment_id,razorpay_signature:resp.razorpay_signature})});
           const vd=await v.json().catch(()=>({}));
+          if(vd.status==='pending'){ alert(vd.message||'Payment is still processing — we will confirm shortly.'); loadBranchClaims(); return; }
           if(!v.ok) throw new Error(vd.detail||'Payment verification failed');
-          alert('Payment received ✓ — Claim #'+claimId+' is now queued for the legal team.');
+          l2Confirm(claimId);
           loadBranchClaims();
         }catch(e){ alert(e.message); }
       }
@@ -444,7 +458,7 @@ async function l2Advance(claimId){
     const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-advance',{method:'POST',headers:authHeaders()});
     const d=await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.detail||'Could not send to Level-2');
-    alert('Claim #'+claimId+' is queued for the legal team ✓');
+    l2Confirm(claimId);
     loadBranchClaims();
   }catch(e){ alert(e.message); }
 }

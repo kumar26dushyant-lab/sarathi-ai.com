@@ -3688,6 +3688,19 @@ function _mbEnsureRzp(cb){
   s.onload=cb; s.onerror=()=>alert('Could not load payment library. Check your connection.');
   document.head.appendChild(s);
 }
+function mbL2Confirm(claimId){
+  const hi=_mbHi();
+  const ov=document.createElement('div'); ov.setAttribute('data-l2c','1');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML='<div style="background:#0f1e3a;border:1px solid rgba(52,211,153,.45);border-radius:16px;max-width:420px;width:100%;padding:1.6rem;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)">'
+    +'<div style="font-size:2.6rem">⚖️✅</div>'
+    +'<div style="font-size:1.2rem;font-weight:800;color:#6ee7b7;margin:.5rem 0">'+(hi?'आपका क्लेम Level-2 पर जा रहा है!':'Your claim is moving to Level-2!')+'</div>'
+    +'<div style="color:rgba(255,255,255,.8);font-size:.92rem;line-height:1.55">'+(hi?('क्लेम #'+String(claimId).padStart(3,"0")+' — भुगतान प्राप्त ✓। हमारी कानूनी टीम अब सही क्लेम के लिए लड़ेगी।'):('Claim #'+String(claimId).padStart(3,"0")+' — payment received ✓. Our legal team will now take up the fight for the rightful claim.'))+'</div>'
+    +'<div style="font-size:.76rem;color:rgba(255,255,255,.4);margin-top:.7rem">📸 '+(hi?'ग्राहक को दिखाने के लिए स्क्रीनशॉट लें।':'You can screenshot this to reassure your customer.')+'</div>'
+    +'<button onclick="this.closest(\'[data-l2c]\').remove()" style="margin-top:1rem;background:#06b6d4;color:#fff;border:none;border-radius:8px;padding:.6rem 1.6rem;font-weight:700;cursor:pointer">'+(hi?'ठीक है':'Done')+'</button>'
+    +'</div>';
+  document.body.appendChild(ov);
+}
 async function mbL2Pay(claimId){
   const hi=_mbHi();
   const r=await API('/my-claims/'+claimId+'/l2-pay',{method:'POST'});
@@ -3700,8 +3713,10 @@ async function mbL2Pay(claimId){
         const v=await API('/my-claims/'+claimId+'/l2-pay-verify',{method:'POST', body:JSON.stringify({
           razorpay_order_id:resp.razorpay_order_id, razorpay_payment_id:resp.razorpay_payment_id,
           razorpay_signature:resp.razorpay_signature })});
-        if(v.ok){ alert(hi?'भुगतान सफल — क्लेम Level-2 पर भेजा गया।':'Payment successful — claim sent to Level-2.'); mbLoadClaims(); }
-        else { const d=await v.json().catch(()=>({})); alert(d.detail||'Payment verification failed.'); }
+        const vd=await v.json().catch(()=>({}));
+        if(v.ok && vd.status==='pending'){ alert(vd.message||(hi?'भुगतान प्रोसेस हो रहा है — जल्द पुष्टि होगी।':'Payment is processing — we will confirm shortly.')); mbLoadClaims(); }
+        else if(v.ok){ mbL2Confirm(claimId); mbLoadClaims(); }
+        else { alert(vd.detail||'Payment verification failed.'); }
       },
       theme:{color:'#06b6d4'} });
     rzp.open();
@@ -3711,7 +3726,7 @@ async function mbL2Advance(claimId){
   const hi=_mbHi();
   if(!confirm(hi?'इस क्लेम को Level-2 पर भेजें?':'Send this claim to Level-2?')) return;
   const r=await API('/my-claims/'+claimId+'/l2-advance',{method:'POST'});
-  if(r.ok){ mbLoadClaims(); } else { const d=await r.json().catch(()=>({})); alert(d.detail||'Could not advance.'); }
+  if(r.ok){ mbL2Confirm(claimId); mbLoadClaims(); } else { const d=await r.json().catch(()=>({})); alert(d.detail||'Could not advance.'); }
 }
 async function mbL2Link(claimId){
   const r=await API('/my-claims/'+claimId+'/l2-payment-link',{method:'POST'});
