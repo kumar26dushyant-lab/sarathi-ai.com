@@ -10139,5 +10139,23 @@ function segSend(segId, segName) {
 }
 
 </script>
+<script src="/static/nidaan_backguard.js?v=1"></script>
+<script>
+/* Register Sarathi dashboard overlays so the phone Back button closes them instead of
+ * exiting the installed app. */
+(function(){
+  if(!window.PWABack) return;
+  // Any .modal-overlay currently shown → close the topmost via the app's closeModal(id).
+  PWABack.register(
+    function(){ return !!document.querySelector('.modal-overlay.show'); },
+    function(){ var m=document.querySelector('.modal-overlay.show'); if(m){ try{ closeModal(m.id); }catch(e){ m.classList.remove('show'); } } }
+  );
+  // Add-customer overlay (created/removed dynamically).
+  PWABack.register(
+    function(){ return !!document.getElementById('addCustOv'); },
+    function(){ try{ closeAddCust(); }catch(e){} }
+  );
+})();
+</script>
 </body>
 </html>

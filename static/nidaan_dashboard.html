@@ -2863,5 +2863,17 @@ if ('serviceWorker' in navigator) {
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
 <script src="/static/nidaan_support_widget.js?v=16" defer></script>
 <script src="/static/nidaan_track.js?v=1"></script>
+<script src="/static/nidaan_backguard.js?v=1"></script>
+<script>
+/* Register this dashboard's overlays so the phone Back button closes them instead of
+ * exiting the installed app. */
+(function(){
+  if(!window.PWABack) return;
+  PWABack.registerClass('claimDrawer', function(){ try{ closeDrawer(); }catch(e){} });
+  PWABack.registerClass('claimModal', function(){ try{ closeModal(); }catch(e){} });
+  PWABack.registerClass('subscribeModal', function(){ try{ closeSubscribeModal(); }catch(e){} });
+  PWABack.registerEl('waVcardModalBg');
+})();
+</script>
 </body>
 </html>
