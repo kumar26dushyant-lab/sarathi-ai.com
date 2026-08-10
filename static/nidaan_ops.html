@@ -3311,7 +3311,8 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Claims</div><div class="section-sub">All claims across the platform</div></div>
-      ${_role==='super_admin'?`<button id="claimAutoBtn" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="When ON, new paid/subscription claims auto-assign to the least-loaded handler" onclick="toggleClaimAutoAssign()">⏳ Auto-assign…</button>`:''}
+      ${_role==='super_admin'?`<button id="claimAutoBtn" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="When ON, new paid/subscription claims auto-assign to the least-loaded handler" onclick="toggleClaimAutoAssign()">⏳ Auto-assign…</button>
+      <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="Re-check recent Razorpay payments and unlock any claim/L2 that was captured but not reflected" onclick="reconcilePayments()">🔄 Reconcile payments</button>`:''}
     </div>
     <div class="filter-bar">
       <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="applyClaimFilters()" style="flex:1;min-width:160px">
@@ -3808,6 +3809,27 @@ async function toggleClaimAutoAssign(){
   const r=await API('/claims-auto-assign',{method:'PATCH', body:JSON.stringify({on:next})});
   if(r.ok){ loadClaimAutoAssignState(); ndUI.toast(next?'Auto-assign turned ON':'Auto-assign turned OFF','success'); }
   else ndUI.toast('Failed to toggle auto-assign','error');
+}
+// Re-check recent Razorpay payments and unlock any claim/L2 captured-but-not-reflected.
+async function reconcilePayments(){
+  ndUI.toast('Checking recent Razorpay payments…','info');
+  const r = await API('/payments/reconcile?dry_run=true&hours=168', {method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Reconcile failed','error'); return; }
+  const d = await r.json();
+  const fixable = (d.claim_unlock||[]).length + (d.l2_unlock||[]).length;
+  if(!fixable){
+    alert('✓ All settled.\n\nScanned '+d.scanned+' recent Razorpay orders — every captured payment is already reflected. Nothing to fix.');
+    return;
+  }
+  const lines = []
+    .concat((d.claim_unlock||[]).map(x=>'• Claim #'+String(x.claim_id).padStart(3,'0')+' — captured but showing "'+(x.was||'unpaid')+'"'))
+    .concat((d.l2_unlock||[]).map(x=>'• L2 claim #'+String(x.claim_id).padStart(3,'0')+' ('+x.branch+') — captured but not queued'));
+  if(!confirm('Found '+fixable+' payment(s) captured on Razorpay but not reflected here:\n\n'+lines.join('\n')+'\n\nApply the fixes now (mark them paid / queue for legal)?')) return;
+  const r2 = await API('/payments/reconcile?dry_run=false&hours=168', {method:'POST'});
+  if(!r2.ok){ const d2=await r2.json().catch(()=>({})); ndUI.toast(d2.detail||'Apply failed','error'); return; }
+  const d2 = await r2.json();
+  ndUI.toast('✓ Reconciled '+((d2.claim_unlock||[]).length+(d2.l2_unlock||[]).length)+' payment(s)','success');
+  loadClaims();
 }
 async function openClaimDrawer(claimId) {
   document.getElementById('drawerBg').classList.add('open');
