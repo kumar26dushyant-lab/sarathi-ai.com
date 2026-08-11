@@ -292,6 +292,65 @@ def require_permission(permission: str):
 
 
 # ── OTP System ───────────────────────────────────────────────────────────────
+# OTPs are persisted in the SHARED SQLite DB, not process memory. The app runs behind an nginx
+# upstream of TWO web workers (8001 + 8002); an in-memory store means an OTP generated on one
+# worker is invisible to the other → ~50% of verifications fail as "code expired". The DB store
+# is visible to both workers and survives deploys/restarts. Same sync signatures — no caller change.
+import sqlite3 as _sqlite3
+_OTP_DB_PATH = os.getenv("SARATHI_DB_PATH", "sarathi_biz.db")
+
+
+def _otp_conn():
+    c = _sqlite3.connect(_OTP_DB_PATH, timeout=5)
+    c.execute("PRAGMA busy_timeout=4000")
+    c.execute("CREATE TABLE IF NOT EXISTS otp_store "
+              "(k TEXT PRIMARY KEY, otp TEXT, expires REAL, attempts INTEGER DEFAULT 0, last_sent REAL)")
+    return c
+
+
+def _otp_last_sent(k: str) -> float:
+    try:
+        with _otp_conn() as c:
+            row = c.execute("SELECT last_sent FROM otp_store WHERE k=?", (k,)).fetchone()
+            return float(row[0]) if row and row[0] is not None else 0.0
+    except Exception:
+        return 0.0
+
+
+def _otp_put(k: str, otp: str, expires: float, last_sent: float) -> None:
+    with _otp_conn() as c:
+        c.execute(
+            "INSERT INTO otp_store (k,otp,expires,attempts,last_sent) VALUES (?,?,?,0,?) "
+            "ON CONFLICT(k) DO UPDATE SET otp=excluded.otp, expires=excluded.expires, "
+            "attempts=0, last_sent=excluded.last_sent",
+            (k, otp, expires, last_sent))
+        c.commit()
+
+
+def _otp_check_and_consume(k: str, otp: str) -> bool:
+    """Verify OTP for key k: expiry + max-attempts + constant-time match; count the attempt;
+    consume (delete) on success or when spent. Works across both workers (shared DB)."""
+    now = time.time()
+    try:
+        with _otp_conn() as c:
+            row = c.execute("SELECT otp, expires, attempts FROM otp_store WHERE k=?", (k,)).fetchone()
+            if not row:
+                return False
+            stored_otp = str(row[0] or "")
+            expires = float(row[1] or 0)
+            attempts = int(row[2] or 0)
+            if now > expires or attempts >= OTP_MAX_ATTEMPTS:
+                c.execute("DELETE FROM otp_store WHERE k=?", (k,)); c.commit()
+                return False
+            c.execute("UPDATE otp_store SET attempts=attempts+1 WHERE k=?", (k,)); c.commit()
+            if hmac.compare_digest(stored_otp, (otp or "").strip()):
+                c.execute("DELETE FROM otp_store WHERE k=?", (k,)); c.commit()
+                return True
+            return False
+    except Exception as _e:
+        logger.error("OTP verify failed for %s: %s", k[:8], _e)
+        return False
+
 
 def generate_otp(phone: str) -> dict:
     """
@@ -303,10 +362,9 @@ def generate_otp(phone: str) -> dict:
         return {"error": "Invalid phone number"}
 
     now = time.time()
-    entry = _otp_store.get(phone, {})
-
+    k = "p:" + phone
     # Rate limiting: cooldown between OTPs
-    last_sent = entry.get("last_sent", 0)
+    last_sent = _otp_last_sent(k)
     if now - last_sent < OTP_COOLDOWN_SECONDS:
         wait = int(OTP_COOLDOWN_SECONDS - (now - last_sent))
         return {"error": f"Please wait {wait} seconds before requesting a new OTP"}
@@ -317,13 +375,7 @@ def generate_otp(phone: str) -> dict:
     else:
         otp = f"{secrets.randbelow(900000) + 100000}"
 
-    _otp_store[phone] = {
-        "otp": otp,
-        "expires": now + (OTP_EXPIRE_MINUTES * 60),
-        "attempts": 0,
-        "last_sent": now,
-    }
-
+    _otp_put(k, otp, now + (OTP_EXPIRE_MINUTES * 60), now)
     logger.info("📱 OTP generated for ***%s", phone[-4:])
     return {"otp": otp, "expires_in": OTP_EXPIRE_MINUTES * 60}
 
@@ -331,39 +383,17 @@ def generate_otp(phone: str) -> dict:
 def verify_otp(phone: str, otp: str) -> bool:
     """Verify OTP for a phone number."""
     phone = sanitize_phone(phone)
-    entry = _otp_store.get(phone)
-
-    if not entry:
-        return False
-
-    # Check expiry
-    if time.time() > entry["expires"]:
-        del _otp_store[phone]
-        return False
-
-    # Check max attempts
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
-        del _otp_store[phone]
-        return False
-
-    entry["attempts"] += 1
-
-    if hmac.compare_digest(entry["otp"], otp.strip()):
-        del _otp_store[phone]  # OTP consumed
-        return True
-
-    return False
+    return _otp_check_and_consume("p:" + phone, otp)
 
 
 def clear_expired_otps():
-    """Cleanup expired OTPs from memory."""
-    now = time.time()
-    expired = [p for p, e in _otp_store.items() if now > e.get("expires", 0)]
-    for p in expired:
-        del _otp_store[p]
-    expired_email = [e for e, v in _email_otp_store.items() if now > v.get("expires", 0)]
-    for e in expired_email:
-        del _email_otp_store[e]
+    """Cleanup expired OTPs from the shared store."""
+    try:
+        with _otp_conn() as c:
+            c.execute("DELETE FROM otp_store WHERE expires < ?", (time.time(),))
+            c.commit()
+    except Exception:
+        pass
 
 
 def generate_email_otp(email: str) -> dict:
@@ -376,23 +406,15 @@ def generate_email_otp(email: str) -> dict:
         return {"error": "Invalid email address"}
 
     now = time.time()
-    entry = _email_otp_store.get(email, {})
-
+    k = "e:" + email
     # Rate limiting: cooldown between OTPs
-    last_sent = entry.get("last_sent", 0)
+    last_sent = _otp_last_sent(k)
     if now - last_sent < OTP_COOLDOWN_SECONDS:
         wait = int(OTP_COOLDOWN_SECONDS - (now - last_sent))
         return {"error": f"Please wait {wait} seconds before requesting a new OTP"}
 
     otp = f"{secrets.randbelow(900000) + 100000}"
-
-    _email_otp_store[email] = {
-        "otp": otp,
-        "expires": now + (OTP_EXPIRE_MINUTES * 60),
-        "attempts": 0,
-        "last_sent": now,
-    }
-
+    _otp_put(k, otp, now + (OTP_EXPIRE_MINUTES * 60), now)
     logger.info("📧 Email OTP generated for %s", email[:3] + "***")
     return {"otp": otp, "expires_in": OTP_EXPIRE_MINUTES * 60}
 
@@ -400,26 +422,7 @@ def generate_email_otp(email: str) -> dict:
 def verify_email_otp(email: str, otp: str) -> bool:
     """Verify OTP for an email address."""
     email = (email or "").strip().lower()
-    entry = _email_otp_store.get(email)
-
-    if not entry:
-        return False
-
-    if time.time() > entry["expires"]:
-        del _email_otp_store[email]
-        return False
-
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
-        del _email_otp_store[email]
-        return False
-
-    entry["attempts"] += 1
-
-    if hmac.compare_digest(entry["otp"], otp.strip()):
-        del _email_otp_store[email]  # OTP consumed
-        return True
-
-    return False
+    return _otp_check_and_consume("e:" + email, otp)
 
 
 # ── Recovery OTP (for users who lost access to their email) ──────────────────
@@ -440,42 +443,21 @@ def generate_recovery_otp(email: str, channel: str) -> dict:
         return {"error": "Invalid recovery channel"}
 
     now = time.time()
-    key = _rec_key(email, channel)
-    entry = _recovery_otp_store.get(key, {})
-
-    last_sent = entry.get("last_sent", 0)
+    k = "r:" + _rec_key(email, channel)
+    last_sent = _otp_last_sent(k)
     if now - last_sent < OTP_COOLDOWN_SECONDS:
         wait = int(OTP_COOLDOWN_SECONDS - (now - last_sent))
         return {"error": f"Please wait {wait} seconds before requesting a new code"}
 
     otp = f"{secrets.randbelow(900000) + 100000}"
-    _recovery_otp_store[key] = {
-        "otp": otp,
-        "expires": now + (OTP_EXPIRE_MINUTES * 60),
-        "attempts": 0,
-        "last_sent": now,
-    }
+    _otp_put(k, otp, now + (OTP_EXPIRE_MINUTES * 60), now)
     logger.info("🔐 Recovery OTP generated for %s*** via %s", email[:3], channel)
     return {"otp": otp, "expires_in": OTP_EXPIRE_MINUTES * 60}
 
 
 def verify_recovery_otp(email: str, channel: str, otp: str) -> bool:
     """Verify a recovery OTP. One-shot: consumed on success."""
-    key = _rec_key(email, channel)
-    entry = _recovery_otp_store.get(key)
-    if not entry:
-        return False
-    if time.time() > entry["expires"]:
-        del _recovery_otp_store[key]
-        return False
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
-        del _recovery_otp_store[key]
-        return False
-    entry["attempts"] += 1
-    if hmac.compare_digest(entry["otp"], (otp or "").strip()):
-        del _recovery_otp_store[key]
-        return True
-    return False
+    return _otp_check_and_consume("r:" + _rec_key(email, channel), otp)
 
 
 def mask_phone(phone: str) -> str:
