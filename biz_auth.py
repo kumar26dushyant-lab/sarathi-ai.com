@@ -303,7 +303,7 @@ _OTP_DB_PATH = os.getenv("SARATHI_DB_PATH", "sarathi_biz.db")
 def _otp_conn():
     c = _sqlite3.connect(_OTP_DB_PATH, timeout=5)
     c.execute("PRAGMA busy_timeout=4000")
-    c.execute("CREATE TABLE IF NOT EXISTS otp_store "
+    c.execute("CREATE TABLE IF NOT EXISTS auth_otp "
               "(k TEXT PRIMARY KEY, otp TEXT, expires REAL, attempts INTEGER DEFAULT 0, last_sent REAL)")
     return c
 
@@ -311,7 +311,7 @@ def _otp_conn():
 def _otp_last_sent(k: str) -> float:
     try:
         with _otp_conn() as c:
-            row = c.execute("SELECT last_sent FROM otp_store WHERE k=?", (k,)).fetchone()
+            row = c.execute("SELECT last_sent FROM auth_otp WHERE k=?", (k,)).fetchone()
             return float(row[0]) if row and row[0] is not None else 0.0
     except Exception:
         return 0.0
@@ -320,7 +320,7 @@ def _otp_last_sent(k: str) -> float:
 def _otp_put(k: str, otp: str, expires: float, last_sent: float) -> None:
     with _otp_conn() as c:
         c.execute(
-            "INSERT INTO otp_store (k,otp,expires,attempts,last_sent) VALUES (?,?,?,0,?) "
+            "INSERT INTO auth_otp (k,otp,expires,attempts,last_sent) VALUES (?,?,?,0,?) "
             "ON CONFLICT(k) DO UPDATE SET otp=excluded.otp, expires=excluded.expires, "
             "attempts=0, last_sent=excluded.last_sent",
             (k, otp, expires, last_sent))
@@ -333,18 +333,18 @@ def _otp_check_and_consume(k: str, otp: str) -> bool:
     now = time.time()
     try:
         with _otp_conn() as c:
-            row = c.execute("SELECT otp, expires, attempts FROM otp_store WHERE k=?", (k,)).fetchone()
+            row = c.execute("SELECT otp, expires, attempts FROM auth_otp WHERE k=?", (k,)).fetchone()
             if not row:
                 return False
             stored_otp = str(row[0] or "")
             expires = float(row[1] or 0)
             attempts = int(row[2] or 0)
             if now > expires or attempts >= OTP_MAX_ATTEMPTS:
-                c.execute("DELETE FROM otp_store WHERE k=?", (k,)); c.commit()
+                c.execute("DELETE FROM auth_otp WHERE k=?", (k,)); c.commit()
                 return False
-            c.execute("UPDATE otp_store SET attempts=attempts+1 WHERE k=?", (k,)); c.commit()
+            c.execute("UPDATE auth_otp SET attempts=attempts+1 WHERE k=?", (k,)); c.commit()
             if hmac.compare_digest(stored_otp, (otp or "").strip()):
-                c.execute("DELETE FROM otp_store WHERE k=?", (k,)); c.commit()
+                c.execute("DELETE FROM auth_otp WHERE k=?", (k,)); c.commit()
                 return True
             return False
     except Exception as _e:
@@ -390,7 +390,7 @@ def clear_expired_otps():
     """Cleanup expired OTPs from the shared store."""
     try:
         with _otp_conn() as c:
-            c.execute("DELETE FROM otp_store WHERE expires < ?", (time.time(),))
+            c.execute("DELETE FROM auth_otp WHERE expires < ?", (time.time(),))
             c.commit()
     except Exception:
         pass
