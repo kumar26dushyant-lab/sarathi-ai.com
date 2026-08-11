@@ -2182,6 +2182,13 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
     try:
         import biz_nidaan_notifications as _nnot
         _aio.create_task(_nnot.on_funnel_paid(claim_id, account_id, sla_due.isoformat()))
+        # All-channel PAID alert to super-admins (bell + email + Telegram + push) — parity with
+        # the failed/pending alerts, so a received payment is never silent for ops.
+        _aio.create_task(_nnot.on_payment_success(
+            f"₹{_fee} claim review", _fee,
+            detail=f"Claim #{claim_id} — {claim.get('insured_name','')} · {claim.get('claim_type','')}",
+            contact=claim.get('insured_phone') or claim.get('account_phone') or "",
+            account_id=account_id, claim_id=claim_id))
     except Exception:
         pass
     _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
@@ -3890,6 +3897,16 @@ async def nidaan_razorpay_webhook(request: Request):
                 _asyncio.create_task(email_svc.send_nidaan_subscription_email(
                     _row["email"], _row["owner_name"], plan, amount_paise // 100, _renewal
                 ))
+                # All-channel PAID alert to super-admins on a NEW activation (not on idempotent re-calls).
+                if not already:
+                    try:
+                        import biz_nidaan_notifications as _nf_ok
+                        _asyncio.create_task(_nf_ok.on_payment_success(
+                            f"Subscription ({plan})", amount_paise // 100,
+                            detail=f"Account #{account_id} — {_row.get('owner_name','')}",
+                            contact=_row.get("phone") or _row.get("email") or "", account_id=account_id))
+                    except Exception:
+                        pass
         return {"status": "ok", "event": event}
 
     # ── Legacy subscription events (kept for backward compat) ─────────────────

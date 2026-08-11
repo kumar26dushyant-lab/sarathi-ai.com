@@ -1650,6 +1650,32 @@ async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
         logger.warning("on_payment_failed alert failed: %s", e)
 
 
+async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", contact: str = "",
+                             account_id=None, claim_id=None):
+    """A payment SUCCEEDED / was captured (subscription, ₹499/₹2000 review, L2, or a payment
+    link). Alert EVERY super-admin on ALL channels — dashboard bell + email + Telegram + push —
+    so PAID events are as visible as failures/pending. Mirrors on_payment_failed (no ack needed)."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    if not ids:
+        return
+    subj = f"🟢 Payment RECEIVED — {kind}" + (f" ₹{amount_rupees}" if amount_rupees else "")
+    body = ("A payment was received ✓\n\n"
+            f"Type: {kind}\n"
+            + (f"Amount: ₹{amount_rupees}\n" if amount_rupees else "")
+            + (f"Customer: {contact}\n" if contact else "")
+            + (detail + "\n" if detail else "")
+            + "\nOpen: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="payment.success",
+                                 email=True, require_ack=False, claim_id=claim_id)
+    except Exception as e:
+        logger.warning("on_payment_success alert failed: %s", e)
+
+
 async def on_branch_l2_paid(claim_id: int, branch_code: str):
     """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
     — alert SA/Admin that the case is queued for the legal team."""
