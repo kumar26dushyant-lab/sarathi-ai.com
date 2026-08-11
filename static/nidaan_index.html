@@ -54,8 +54,13 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .lang-btn.active{background:var(--cyan);border-color:var(--cyan);color:#fff}
 .nav-cta{padding:.45rem 1.1rem;background:var(--cyan);color:#fff;border-radius:8px;font-weight:600;font-size:.88rem;transition:background .2s}
 .nav-cta:hover{background:var(--cyan-dark)}
-.nav-crm{padding:.4rem .95rem;background:rgba(6,182,212,.12);color:var(--cyan-light);border-radius:8px;font-weight:600;font-size:.85rem;border:1.5px solid rgba(6,182,212,.35);transition:all .2s;white-space:nowrap}
-.nav-crm:hover{background:rgba(6,182,212,.28);color:#fff}
+/* Sarathi-AI CRM — eye-catching (advisor-only): emerald gradient + gentle glow. */
+.nav-crm{padding:.42rem 1rem;background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(6,182,212,.28));color:#d1fae5;border-radius:8px;font-weight:700;font-size:.85rem;border:1.5px solid rgba(16,185,129,.6);transition:all .2s;white-space:nowrap;animation:navCrmGlow 2.4s ease-in-out infinite}
+.nav-crm:hover{background:linear-gradient(135deg,rgba(16,185,129,.45),rgba(6,182,212,.4));color:#fff}
+@keyframes navCrmGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.0)}50%{box-shadow:0 0 12px 1px rgba(16,185,129,.45)}}
+/* Audience Switch — make it pop next to the brand/Home. */
+.nav-switch{animation:navSwGlow 2.6s ease-in-out infinite}
+@keyframes navSwGlow{0%,100%{box-shadow:0 0 0 0 rgba(6,182,212,.0)}50%{box-shadow:0 0 10px 1px rgba(6,182,212,.5)}}
 /* Mobile: two-row nav — row1=brand, row2=scrollable links */
 @media(max-width:768px){
   .nav{padding:0 .85rem}
@@ -697,7 +702,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
         <button class="lang-btn active" onclick="setLang('en')">EN</button>
         <button class="lang-btn" onclick="setLang('hi')">हिं</button>
       </div>
-      <a href="https://sarathi-ai.com" id="navCrmBtn" class="nav-crm">Sarathi-AI CRM ↗</a>
+      <a href="https://sarathi-ai.com" target="_blank" rel="noopener" id="navCrmBtn" class="nav-crm only-adv">Sarathi-AI CRM ↗</a>
       <a href="/nidaan/start" class="nav-cta en" title="Already subscribed or a ₹499 review customer? Log in here.">Member Login</a>
       <a href="/nidaan/start" class="nav-cta hi" style="display:none" title="पहले से सब्सक्राइब्ड या ₹499 रिव्यू ग्राहक? यहाँ लॉगिन करें।">सदस्य लॉगिन</a>
     </div>
@@ -1541,6 +1546,10 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
         </p>
       </div>
     </div>
+  </div>
+  <div style="max-width:1100px;margin:0 auto 1rem;font-size:.7rem;color:rgba(255,255,255,.32);line-height:1.5">
+    <span class="en">Note: Our review/process fee covers only the professional review of your claim documents — to assess whether your claim was settled correctly and whether it can be challenged. It is not a fee for filing or applying to any court, ombudsman, or other competent authority.</span>
+    <span class="hi" style="display:none">नोट: हमारी समीक्षा/प्रोसेस फ़ीस केवल आपके क्लेम दस्तावेज़ों की पेशेवर समीक्षा के लिए है — यह जाँचने के लिए कि आपका क्लेम सही तरीके से निपटाया गया या नहीं और उसे चुनौती दी जा सकती है या नहीं। यह किसी न्यायालय, लोकपाल या अन्य सक्षम प्राधिकारी में आवेदन/दाख़िल करने की फ़ीस नहीं है।</span>
   </div>
   <div class="footer-bottom">
     <span>© 2026 Nidaan – The Legal Consultants LLP. All rights reserved.</span>
