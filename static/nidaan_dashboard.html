@@ -871,11 +871,11 @@
       <label class="hi">ईमेल <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
       <input type="email" id="ppEmail" placeholder="you@example.com">
     </div>
-    <div class="field">
-      <label class="en">Nidaan Branch Code <span style="opacity:.5;font-weight:400">(optional)</span></label>
-      <label class="hi">Nidaan ब्रांच कोड <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
-      <input type="text" id="ppBranch" maxlength="12" autocomplete="off" placeholder="e.g. MUM-01" oninput="this.value=this.value.toUpperCase()">
-      <div id="ppRefBy" style="display:none;margin-top:.35rem;font-size:.8rem;color:#6ee7b7"></div>
+    <div class="field" id="ppBranchField" style="display:none">
+      <!-- Referral code is captured ONCE at signup (from the link) and locked; here we only
+           SHOW who referred them, never ask again. Hidden input keeps back-compat with the POST. -->
+      <input type="hidden" id="ppBranch">
+      <div id="ppRefBy" style="display:none;font-size:.82rem;color:#6ee7b7">🤝 Referred by: —</div>
     </div>
     <div class="msg" id="ppMsg"></div>
     <div class="modal-footer">
@@ -2033,18 +2033,17 @@ function openPrePayCapture(){
   if (g('ppPhone'))  g('ppPhone').value  = (_meCache && _meCache.phone) ? String(_meCache.phone).replace(/[^0-9]/g,'').slice(-10) : '';
   if (g('ppEmail'))  g('ppEmail').value  = _meCache ? (_meCache.email || '') : '';
   if (g('ppBranch')) {
+    // Referral code is captured ONCE at signup (auto-filled + locked from the link). Here we
+    // never ask again — we only SHOW who referred them (read-only), if anyone.
     const _bc = _meCache ? (_meCache.branch_code || '') : '';
     g('ppBranch').value = _bc;
-    // First-touch lock: once a referral code is attributed, it can't be changed.
-    if (_bc) {
-      g('ppBranch').readOnly = true; g('ppBranch').style.opacity = '.7'; g('ppBranch').title = 'Referral code is locked once set.';
-      // Show WHO referred them (name), read-only, via the public ref-info resolver.
-      const _rb = g('ppRefBy');
-      if (_rb) { _rb.style.display='none';
-        fetch('/nidaan/api/ref-info?code='+encodeURIComponent(_bc)).then(r=>r.ok?r.json():null).then(d=>{
-          if(d && d.valid){ _rb.textContent = 'Referred by: '+d.name; _rb.style.display='block'; }
-        }).catch(()=>{}); }
-    } else { g('ppBranch').readOnly = false; g('ppBranch').style.opacity = ''; }
+    const _field = g('ppBranchField'); const _rb = g('ppRefBy');
+    if (_field) _field.style.display = 'none';
+    if (_bc && _field && _rb) {
+      fetch('/nidaan/api/ref-info?code='+encodeURIComponent(_bc)).then(r=>r.ok?r.json():null).then(d=>{
+        if(d && d.valid){ _rb.textContent = '🤝 Referred by: '+d.name; _rb.style.display='block'; _field.style.display=''; }
+      }).catch(()=>{});
+    }
   }
   const m = g('ppMsg'); if (m) { m.className = 'msg'; m.textContent = ''; }
   const b = g('ppBtn'); if (b) b.disabled = false;

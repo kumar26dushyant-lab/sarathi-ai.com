@@ -3563,6 +3563,18 @@ async function loadMyBusiness() {
       </div>`:''}
     </div>
 
+    <!-- Walk-through: how sharing works -->
+    <details style="margin:0 0 1rem;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.2);border-radius:10px;padding:.1rem .9rem">
+      <summary style="cursor:pointer;font-weight:700;color:#67e8f9;padding:.6rem 0;list-style:none">📖 ${hi?'शेयर कैसे करें — आसान गाइड':'How sharing works — quick guide'}</summary>
+      <ol style="font-size:.85rem;color:rgba(255,255,255,.78);line-height:1.7;margin:.1rem 0 .8rem 1.1rem;padding:0">
+        <li>${hi?'ऊपर "WhatsApp पर भेजें" से अपना लिंक भेजें (या कोड कॉपी करके भेजें)।':'Tap "Share on WhatsApp" above (or copy your code) and send it to people.'}</li>
+        <li>${hi?'वे आपके लिंक से मुफ़्त खाता बनाते हैं — आपका कोड अपने-आप भर जाता है और लॉक हो जाता है।':'They open your link and create a free account — your code auto-fills and locks to you.'}</li>
+        <li><b>${hi?'सब्सक्राइबर (एडवाइज़र):':'Subscribers (advisors):'}</b> ${hi?'वे प्लान लेते हैं → आपको उनकी सब्सक्रिप्शन पर कमीशन मिलता है।':'they pick a plan → you earn commission on their subscription.'}</li>
+        <li><b>${hi?'एक-बार समीक्षा ग्राहक:':'One-time review customers:'}</b> ${hi?'वे अपना क्लेम जमा करते हैं → ₹499 (₹10 लाख से ऊपर ₹2000) देते हैं → विशेषज्ञ समीक्षा पाते हैं।':'they submit a claim → pay ₹499 (₹2000 if disputed > ₹10L) → get an expert review.'}</li>
+        <li>${hi?'या नीचे फ़ॉर्म से खुद किसी वॉक-इन ग्राहक का क्लेम दर्ज करें — समीक्षा मुफ़्त; शुल्क तभी जब Level-2 पर जाए।':'Or raise a claim yourself below for a walk-in customer — free review; you pay only if it goes to Level-2.'}</li>
+      </ol>
+    </details>
+
     <!-- Stat tiles -->
     <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem">
       ${tile(hi?'जुड़े लोग (साइनअप)':'People joined (signups)', fmt(signups), '#f1f5f9')}
