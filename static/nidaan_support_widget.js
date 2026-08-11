@@ -112,8 +112,11 @@
   }
 
   var css = ''
-    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:26px;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}'
+    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:26px;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:nswBtnPulse 2.6s ease-in-out infinite}'
     + '.nsw-btn:active{transform:scale(.92)}'
+    + '@keyframes nswBtnPulse{0%,100%{box-shadow:0 6px 20px rgba(6,182,212,.45)}50%{box-shadow:0 6px 26px rgba(6,182,212,.75)}}'
+    + '.nsw-dot-live{position:absolute;top:-1px;right:-1px;width:15px;height:15px;border-radius:50%;background:#22c55e;border:2.5px solid #0a1628;animation:nswLive 1.3s ease-in-out infinite}'
+    + '@keyframes nswLive{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.7);opacity:1}50%{box-shadow:0 0 0 6px rgba(34,197,94,0);opacity:.65}}'
     + '.nsw-panel{position:fixed;right:18px;bottom:86px;z-index:99999;width:360px;max-width:calc(100vw - 24px);height:540px;max-height:calc(100vh - 110px);background:#0a1628;border:1px solid rgba(255,255,255,.12);border-radius:16px;display:none;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}'
     + '.nsw-panel.open{display:flex}'
     + '.nsw-hdr{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;padding:.85rem 8rem .85rem 1rem;position:relative}'
@@ -155,7 +158,9 @@
   var style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
 
   var btn = document.createElement('button');
-  btn.className = 'nsw-btn'; btn.setAttribute('aria-label', 'Chat with us'); btn.innerHTML = '💬';
+  btn.className = 'nsw-btn'; btn.setAttribute('aria-label', 'Chat with us');
+  // 💬 with an always-on blinking green "we're live" dot to catch the eye.
+  btn.innerHTML = '💬<span class="nsw-dot-live"></span>';
   document.body.appendChild(btn);
 
   var panel = document.createElement('div');
