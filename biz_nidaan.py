@@ -6477,6 +6477,33 @@ async def save_claim_document(
         return cur.lastrowid
 
 
+async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None,
+                                claim_id: Optional[int] = None, purchase_id: Optional[int] = None,
+                                allow_any: bool = False) -> Optional[str]:
+    """Delete one claim/review document row, ownership-guarded. Returns the stored_name (so the
+    caller can remove the file from disk) or None if not found / not permitted.
+    - allow_any=True: ops staff (no ownership check).
+    - else: the doc must match the given account_id / claim_id / purchase_id (whichever supplied)."""
+    await ensure_claim_documents_table()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_claim_documents WHERE doc_id=?", (doc_id,))).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        if not allow_any:
+            if account_id is not None and int(d.get("account_id") or 0) != int(account_id):
+                return None
+            if claim_id is not None and int(d.get("claim_id") or 0) != int(claim_id):
+                return None
+            if purchase_id is not None and int(d.get("purchase_id") or 0) != int(purchase_id):
+                return None
+        await conn.execute("DELETE FROM nidaan_claim_documents WHERE doc_id=?", (doc_id,))
+        await conn.commit()
+        return d.get("stored_name")
+
+
 async def get_claim_documents(
     purchase_id: Optional[int] = None,
     claim_id: Optional[int] = None,

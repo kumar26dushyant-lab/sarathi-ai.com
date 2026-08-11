@@ -2991,6 +2991,67 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
     return {"uploaded": saved, "count": len(saved), "doc_key": doc_key, "checklist": checklist}
 
 
+def _nidaan_remove_doc_file(stored_name: str) -> None:
+    """Best-effort removal of a document file from disk after its DB row is deleted."""
+    try:
+        if stored_name:
+            p = _NIDAAN_DOCS_DIR / stored_name
+            if p.exists():
+                p.unlink()
+    except Exception as _fe:
+        logger.warning("doc file removal failed for %s: %s", stored_name, _fe)
+
+
+@app.delete("/nidaan/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """Customer/subscriber deletes one of THEIR OWN claim documents (ownership-checked)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    stored = await nidaan.delete_claim_document(doc_id, account_id=payload["sub"], claim_id=claim_id)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    return {"ok": True}
+
+
+@app.delete("/nidaan/api/review/{purchase_id}/documents/{doc_id}")
+async def nidaan_delete_review_doc(purchase_id: int, doc_id: int, request: Request):
+    """Customer deletes one of THEIR OWN ₹499-review documents (ownership-checked)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    stored = await nidaan.delete_claim_document(doc_id, account_id=payload["sub"], purchase_id=purchase_id)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    return {"ok": True}
+
+
+@app.delete("/nidaan/branch/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_branch_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """A branch deletes a document on one of ITS OWN raised claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(404, "Claim not found")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    return {"ok": True}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_ops_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """Ops staff delete a document on any claim (staff-raised, subscriber, one-time, branch)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "team_member")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    await _ops_audit(request, "claim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/review-requests/{purchase_id}/documents")
 async def ops_get_review_docs(purchase_id: int, request: Request):
     """Staff: get uploaded documents for a ₹499 review purchase."""

@@ -4062,8 +4062,8 @@ async function openClaimDrawer(claimId) {
         const dd = await dr.json();
         if (dd.docs && dd.docs.length > 0) {
           docEl.innerHTML = dd.docs.map(d =>
-            `<div style="margin-bottom:.4rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(d.original_name)}</a>
-             <span style="opacity:.4;font-size:.78rem">(${(d.file_size/1024).toFixed(0)} KB · ${d.uploaded_at ? d.uploaded_at.split('T')[0] : ''})</span></div>`
+            `<div style="margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.original_name)}</a>
+             <span style="opacity:.4;font-size:.78rem;white-space:nowrap">(${(d.file_size/1024).toFixed(0)} KB · ${d.uploaded_at ? d.uploaded_at.split('T')[0] : ''})</span>${d.doc_id?`<button onclick="opsDeleteClaimDoc(${c.claim_id},${d.doc_id},this)" title="Delete this document" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
           ).join('');
         } else {
           docEl.textContent = 'No documents uploaded by advisor yet.';
@@ -4980,7 +4980,7 @@ async function viewClaimDocs(claimId, btn) {
     newRow.innerHTML = `<td colspan="${colCount}" style="padding:.75rem 1rem">
       <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:.4rem">📎 DOCUMENTS FOR CLAIM #${fmtClaimNum(claimId)}</div>
       ${d.docs && d.docs.length > 0
-        ? d.docs.map(f=>`<div style="margin:.25rem 0">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(f.original_name)}</a> <span style="opacity:.4;font-size:.75rem">(${(f.file_size/1024).toFixed(0)} KB · ${f.uploaded_at?f.uploaded_at.slice(0,10):''})</span></div>`).join('')
+        ? d.docs.map(f=>`<div style="margin:.25rem 0;display:flex;align-items:center;gap:.4rem">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.original_name)}</a> <span style="opacity:.4;font-size:.75rem;white-space:nowrap">(${(f.file_size/1024).toFixed(0)} KB · ${f.uploaded_at?f.uploaded_at.slice(0,10):''})</span>${f.doc_id?`<button onclick="opsDeleteClaimDoc(${claimId},${f.doc_id},this)" title="Delete this document" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`).join('')
         : '<span style="color:rgba(255,255,255,.35);font-size:.82rem">No documents uploaded for this claim yet.</span>'
       }
     </td>`;
@@ -4989,6 +4989,15 @@ async function viewClaimDocs(claimId, btn) {
   } catch(e) {
     btn.textContent = '📎 View';
   }
+}
+
+// Ops delete a claim document (works for subscriber, one-time, branch & staff-raised claims).
+async function opsDeleteClaimDoc(claimId, docId, btn){
+  if(!confirm('Delete this document? This cannot be undone.')) return;
+  const r = await API('/claims/'+claimId+'/documents/'+docId, {method:'DELETE'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not delete this document.'); return; }
+  try{ if(btn && btn.closest) btn.closest('div').remove(); }catch(e){}
+  try{ ndUI.toast('Document deleted','success'); }catch(e){}
 }
 
 async function showSarathiLink(accountId) {

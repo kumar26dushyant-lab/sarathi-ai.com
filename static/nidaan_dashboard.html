@@ -1624,12 +1624,21 @@ async function loadRvDocs(id, type) {
     const d = await r.json();
     if (d.docs && d.docs.length > 0) {
       el.innerHTML = d.docs.map(f =>
-        `<div style="margin-bottom:.25rem">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(f.original_name)}</a> <span style="opacity:.4">(${(f.file_size/1024).toFixed(0)} KB)</span></div>`
+        `<div style="margin-bottom:.25rem;display:flex;align-items:center;gap:.4rem">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.original_name)}</a> <span style="opacity:.4">(${(f.file_size/1024).toFixed(0)} KB)</span>${f.doc_id?`<button onclick="deleteRvDoc(${id},'${type}',${f.doc_id})" title="Delete this file" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
       ).join('');
     } else {
       el.textContent = 'No documents uploaded yet';
     }
   } catch(_) { el.textContent = 'Could not load documents'; }
+}
+
+async function deleteRvDoc(id, type, docId) {
+  const isHi = document.body.classList.contains('hi');
+  if (!confirm(isHi ? 'यह फ़ाइल हटाएं?' : 'Delete this file?')) return;
+  const endpoint = type === 'review' ? `/nidaan/api/review/${id}/documents/${docId}` : `/nidaan/api/claims/${id}/documents/${docId}`;
+  const r = await api(endpoint, { method: 'DELETE' });
+  if (r && r.ok) loadRvDocs(id, type);
+  else alert(isHi ? 'फ़ाइल हटाई नहीं जा सकी।' : 'Could not delete the file.');
 }
 
 function previewRvDocs(id) {
