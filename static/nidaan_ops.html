@@ -6266,6 +6266,49 @@ function closeModal() {
 // ═══════════════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════════════
+// ── Universal column sorting: click any table header to sort its rows (asc/desc). Works on
+// every ops table (claims, tasks, staff, accounts, branches, support, …) via event delegation —
+// no per-table wiring. Detects numbers (incl. ₹/commas), dates, else text. Mobile: tap the header.
+(function(){
+  try{
+    var st=document.createElement('style');
+    st.textContent='.table-wrap th{cursor:pointer;user-select:none;white-space:nowrap}'
+      +'.table-wrap th:hover{color:#67e8f9}'
+      +'.sort-ind{margin-left:.3rem;opacity:.75;font-size:.8em}';
+    document.head.appendChild(st);
+  }catch(e){}
+  function cellVal(row, idx){ var c=row.cells[idx]; return c ? (c.innerText||c.textContent||'').trim() : ''; }
+  function parseVal(t){
+    if(t==='' || t==='—') return {n:null, s:''};
+    var cleaned=t.replace(/[₹,\s]/g,'');
+    if(/^-?\d+(\.\d+)?%?$/.test(cleaned)){ var n=parseFloat(cleaned); if(!isNaN(n)) return {n:n, s:t.toLowerCase()}; }
+    var d=Date.parse(t); if(!isNaN(d) && /\d{4}|\d{1,2}[\/\-\s][A-Za-z]/.test(t)) return {n:d, s:t.toLowerCase()};
+    return {n:null, s:t.toLowerCase()};
+  }
+  document.addEventListener('click', function(e){
+    var th=e.target.closest ? e.target.closest('th') : null;
+    if(!th) return;
+    var table=th.closest('table'); if(!table || !table.tBodies || !table.tBodies.length) return;
+    if(!th.closest('.table-wrap')) return;                 // only our data tables
+    var headRow=th.parentNode; var idx=Array.prototype.indexOf.call(headRow.children, th);
+    var tbody=table.tBodies[0];
+    var rows=Array.prototype.filter.call(tbody.rows, function(r){ return r.cells.length>idx && !r.hasAttribute('data-noSort'); });
+    if(rows.length<2) return;
+    var dir = th.getAttribute('data-sort-dir')==='asc' ? 'desc' : 'asc';
+    Array.prototype.forEach.call(headRow.children, function(h){ if(h!==th){ h.removeAttribute('data-sort-dir'); var i=h.querySelector('.sort-ind'); if(i) i.remove(); }});
+    th.setAttribute('data-sort-dir', dir);
+    rows.sort(function(a,b){
+      var va=parseVal(cellVal(a,idx)), vb=parseVal(cellVal(b,idx)), r;
+      if(va.n!==null && vb.n!==null) r = va.n-vb.n;
+      else if(va.n!==null) r=-1; else if(vb.n!==null) r=1;
+      else r = va.s<vb.s?-1:(va.s>vb.s?1:0);
+      return dir==='asc'? r : -r;
+    });
+    rows.forEach(function(r){ tbody.appendChild(r); });
+    var ind=th.querySelector('.sort-ind'); if(!ind){ ind=document.createElement('span'); ind.className='sort-ind'; th.appendChild(ind); }
+    ind.textContent = dir==='asc'?'▲':'▼';
+  });
+})();
 function esc(s){ if(!s&&s!==0)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmt(n){ if(!n&&n!==0)return '0'; return Number(n).toLocaleString('en-IN'); }
 function fmtClaimNum(id){ if (id == null || id === '') return '—'; return String(id).padStart(3, '0'); }
