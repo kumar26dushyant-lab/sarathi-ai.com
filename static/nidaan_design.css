@@ -160,10 +160,10 @@
   --nd-border-strong:  rgba(15,23,42,.22);
 
   --nd-text-primary:   #0f172a;
-  --nd-text-secondary: rgba(15,23,42,.72);
-  --nd-text-muted:     rgba(15,23,42,.55);
-  --nd-text-faint:     rgba(15,23,42,.42);
-  --nd-text-disabled:  rgba(15,23,42,.28);
+  --nd-text-secondary: rgba(15,23,42,.82);
+  --nd-text-muted:     rgba(15,23,42,.66);
+  --nd-text-faint:     rgba(15,23,42,.54);
+  --nd-text-disabled:  rgba(15,23,42,.4);
 
   /* status text tuned for dark-on-light contrast */
   --nd-success-text:   #15803d;

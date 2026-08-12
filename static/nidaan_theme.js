@@ -25,8 +25,8 @@
       var b = btns[i];
       // Show the mode you'd switch TO, with a plain-language label (Tier II/III).
       b.innerHTML = dark
-        ? '☀️ <span class="en">Light</span><span class="hi" style="display:none">लाइट</span>'
-        : '🌙 <span class="en">Dark</span><span class="hi" style="display:none">डार्क</span>';
+        ? '☀️ <span class="en">Light</span><span class="hi">लाइट</span>'
+        : '🌙 <span class="en">Dark</span><span class="hi">डार्क</span>';
       b.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
       b.setAttribute('aria-label', b.title);
     }
