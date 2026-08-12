@@ -175,6 +175,9 @@
 
   --nd-shadow-inset:   inset 0 1px 0 rgba(255,255,255,.6);
 }
+/* Native dropdown popups follow the theme (dark option lists look wrong on light). */
+:root[data-theme="light"] select { color-scheme: light; }
+:root[data-theme="light"] select option { background: #ffffff; color: #0f172a; }
 
 
 /* ═══ RESET (light, doesn't break existing pages) ════════════════════════ */
