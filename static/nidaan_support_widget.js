@@ -12,7 +12,7 @@
   var wmode = (window.NIDAAN_SUPPORT_MODE === 'support') ? 'support' : 'guide';
   // Origin channel — a host page (e.g. the branch dashboard) can set window.NSW_CHANNEL
   // so ops can identify/filter where the conversation came from.
-  var nswChannel = (window.NSW_CHANNEL === 'branch' || window.NSW_CHANNEL === 'staff') ? window.NSW_CHANNEL : '';
+  var nswChannel = (['branch','staff','homepage','review'].indexOf(window.NSW_CHANNEL) !== -1) ? window.NSW_CHANNEL : '';
   var TKEY = 'nidaan_support_thread' + (wmode === 'support' ? '_s' : '') + (nswChannel ? ('_' + nswChannel) : '');
   var LKEY = 'nidaan_support_lang';
   // Format a stored (UTC) timestamp as IST date+time for per-message tags.

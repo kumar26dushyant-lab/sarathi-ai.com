@@ -5896,11 +5896,58 @@ function fmtDateTime(s){
   try { return d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true, timeZone:'Asia/Kolkata'}); }
   catch(e){ return String(s).slice(0,16); }
 }
-const _SUP_CH = {web:'🌐 Web', branch:'🏢 Branch', staff:'🧑‍💼 Staff', whatsapp:'💬 WhatsApp', email:'✉️ Email'};
+const _SUP_CH = {web:'🌐 Web', homepage:'🏠 Homepage', subscriber:'⭐ Subscriber', review:'📄 One-time review', branch:'🏢 Branch', staff:'🧑‍💼 Staff', whatsapp:'💬 WhatsApp', email:'✉️ Email'};
 
 // ── Customer support inbox ────────────────────────────────────────────────────
 let _supportFilter = 'escalated';
 let _supportChannel = '';
+let _supportDays = 30;
+
+// Chat analytics summary — sessions, CSAT (👍/👎), escalation rate, and per-channel /
+// plan-wise breakdowns. Theme-aware (var tokens) + mobile-first (flex-wrap).
+async function loadSupportAnalytics(){
+  const box = document.getElementById('supAnalytics'); if(!box) return;
+  const r = await API('/support/analytics?days='+_supportDays);
+  if(!r.ok){ box.innerHTML=''; return; }
+  const a = await r.json();
+  const card = (label, val, sub) =>
+    `<div style="flex:1 1 130px;min-width:120px;background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:12px;padding:.6rem .75rem">
+       <div style="font-size:1.35rem;font-weight:800;color:var(--nd-text-primary);line-height:1.1">${val}</div>
+       <div style="font-size:.72rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div>
+       ${sub?`<div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.1rem">${sub}</div>`:''}
+     </div>`;
+  const csat = (a.csat==null) ? '—' : (a.csat+'%');
+  const dayPick = [7,30,90].map(d=>
+    `<button class="btn ${(_supportDays===d)?'btn-primary':'btn-ghost'}" style="font-size:.72rem;padding:.2rem .55rem" onclick="_supportDays=${d};loadSupportAnalytics()">${d}d</button>`).join(' ');
+  const chRows = (a.by_channel||[]).map(c=>{
+    const rated = (c.up||0)+(c.down||0);
+    return `<tr>
+      <td style="padding:.3rem .5rem">${_SUP_CH[c.channel]||esc(c.channel)}</td>
+      <td style="padding:.3rem .5rem;text-align:center">${c.sessions||0}</td>
+      <td style="padding:.3rem .5rem;text-align:center;color:var(--nd-warning-text)">${c.escalated||0}</td>
+      <td style="padding:.3rem .5rem;text-align:center">👍 ${c.up||0} · 👎 ${c.down||0}${rated?` <span style="color:var(--nd-text-faint)">(${Math.round(100*(c.up||0)/rated)}%)</span>`:''}</td>
+    </tr>`;}).join('') || `<tr><td colspan="4" style="padding:.4rem .5rem;color:var(--nd-text-faint)">No chats in this window.</td></tr>`;
+  const planRows = (a.by_plan||[]).map(p=>
+    `<tr><td style="padding:.3rem .5rem">${esc(p.plan)}</td>
+      <td style="padding:.3rem .5rem;text-align:center">${p.sessions||0}</td>
+      <td style="padding:.3rem .5rem;text-align:center">👍 ${p.up||0} · 👎 ${p.down||0}</td></tr>`).join('');
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+      <div style="font-size:.82rem;font-weight:700;color:var(--nd-text-secondary)">📊 Chat analytics · last ${a.days} days</div>
+      <div style="display:flex;gap:.25rem">${dayPick}</div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
+      ${card('Sessions', a.sessions||0, (a.closed||0)+' closed')}
+      ${card('Satisfaction (CSAT)', csat, (a.rated||0)+' rated · 👍'+(a.up||0)+' 👎'+(a.down||0))}
+      ${card('Escalated to human', (a.escalation_rate||0)+'%', (a.escalated||0)+' chats')}
+    </div>
+    <div class="table-wrap" style="margin-bottom:.5rem"><table style="font-size:.78rem">
+      <thead><tr><th style="text-align:left;padding:.3rem .5rem">Channel</th><th style="padding:.3rem .5rem">Sessions</th><th style="padding:.3rem .5rem">Escalated</th><th style="padding:.3rem .5rem">Rating</th></tr></thead>
+      <tbody>${chRows}</tbody></table></div>
+    ${planRows?`<div class="table-wrap"><table style="font-size:.78rem">
+      <thead><tr><th style="text-align:left;padding:.3rem .5rem">⭐ Subscriber plan</th><th style="padding:.3rem .5rem">Sessions</th><th style="padding:.3rem .5rem">Rating</th></tr></thead>
+      <tbody>${planRows}</tbody></table></div>`:''}`;
+}
+
 async function loadSupport(){
   const el = document.getElementById('panel-support');
   el.innerHTML = `
@@ -5909,28 +5956,30 @@ async function loadSupport(){
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadSupport()">🔄 Refresh</button></div>
     <div id="supHours" style="margin-bottom:.7rem"></div>
     <div id="supReps" style="margin-bottom:.7rem"></div>
+    <div id="supAnalytics" style="margin-bottom:.7rem"></div>
     <div id="supSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
     <div id="supChanBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem"></div>
     <div id="supListWrap"><div class="empty"><p>Loading…</p></div></div>`;
-  loadSupportHours(); loadSupportReps();
+  loadSupportHours(); loadSupportReps(); loadSupportAnalytics();
   const segs = [['escalated','🔔 Needs human'],['ai','AI-handled'],['closed','Closed'],['','All']];
   document.getElementById('supSegBar').innerHTML = segs.map(([k,label])=>
     `<button class="btn ${(_supportFilter===k)?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="_supportFilter='${k}';loadSupport()">${label}</button>`).join('');
-  const chans = [['','All channels'],['web','🌐 Web'],['branch','🏢 Branch'],['staff','🧑‍💼 Staff']];
+  const chans = [['','All channels'],['homepage','🏠 Homepage'],['subscriber','⭐ Subscriber'],['review','📄 One-time'],['branch','🏢 Branch'],['staff','🧑‍💼 Staff'],['web','🌐 Web']];
   document.getElementById('supChanBar').innerHTML = chans.map(([k,label])=>
     `<button class="btn ${(_supportChannel===k)?'btn-primary':'btn-ghost'}" style="font-size:.76rem;padding:.3rem .7rem" onclick="_supportChannel='${k}';loadSupport()">${label}</button>`).join('');
-  const r = await API('/support/threads' + (_supportFilter?('?status='+_supportFilter):''));
+  const _qs = [ _supportFilter?('status='+_supportFilter):'', _supportChannel?('channel='+_supportChannel):'' ].filter(Boolean).join('&');
+  const r = await API('/support/threads' + (_qs?('?'+_qs):''));
   if (!r.ok){ document.getElementById('supListWrap').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
   let threads = (await r.json()).threads || [];
-  if (_supportChannel) threads = threads.filter(t=>(t.channel||'web')===_supportChannel);
   if (!threads.length){ document.getElementById('supListWrap').innerHTML='<div class="empty"><div class="ei">💬</div><p>No conversations here.</p></div>'; return; }
   const rows = threads.map(t=>{
     const esc9 = t.status==='escalated';
     const ch = t.channel||'web';
     const chBadge = ch!=='web' ? ` <span class="pill-status" style="background:rgba(167,139,250,.18);color:var(--nd-purple-text);font-size:.66rem">${_SUP_CH[ch]||esc(ch)}</span>` : '';
+    const rateBadge = t.rating===1 ? ' <span title="Customer rated this chat helpful" style="font-size:.82rem">👍</span>' : (t.rating===-1 ? ' <span title="Customer rated this chat not helpful" style="font-size:.82rem">👎</span>' : '');
     return `<tr style="cursor:pointer" onclick="openSupportThread(${t.thread_id})">
       <td><strong>#${t.thread_id}</strong></td>
-      <td>${esc(t.name||'Visitor')}${chBadge}${t.contact?`<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(t.contact)}</span>`:''}</td>
+      <td>${esc(t.name||'Visitor')}${chBadge}${rateBadge}${t.contact?`<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(t.contact)}</span>`:''}</td>
       <td style="max-width:340px;color:var(--nd-text-secondary);font-size:.85rem">${esc((t.last_customer||'').slice(0,120))}</td>
       <td style="text-align:center">${t.msg_count||0}</td>
       <td>${esc9?'<span class="pill-status" style="background:rgba(251,191,36,.18);color:var(--nd-warning-text)">🔔 waiting</span>':(t.status==='closed'?'<span class="pill-status" style="background:rgba(148,163,184,.18);color:var(--nd-text-secondary)">closed</span>':'<span class="pill-status" style="background:rgba(34,211,238,.15);color:var(--nd-cyan-text)">AI</span>')}</td>
@@ -6046,7 +6095,7 @@ async function openSupportThread(id){
   ov.innerHTML=`
     <div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column">
       <div style="padding:.9rem 1rem;border-bottom:1px solid var(--nd-border-strong);display:flex;justify-content:space-between;align-items:center">
-        <div><b>Chat #${id}</b> ${(meta.channel&&meta.channel!=='web')?`<span class="pill-status" style="background:rgba(167,139,250,.18);color:var(--nd-purple-text);font-size:.66rem">${_SUP_CH[meta.channel]||esc(meta.channel)}</span> `:''}<span style="font-size:.75rem;color:var(--nd-text-muted)">${esc(meta.name||'Visitor')}${meta.contact?' · '+esc(meta.contact):''}</span></div>
+        <div><b>Chat #${id}</b> ${(meta.channel&&meta.channel!=='web')?`<span class="pill-status" style="background:rgba(167,139,250,.18);color:var(--nd-purple-text);font-size:.66rem">${_SUP_CH[meta.channel]||esc(meta.channel)}</span> `:''}${meta.rating===1?'<span title="Rated helpful" style="font-size:.9rem">👍</span> ':(meta.rating===-1?'<span title="Rated not helpful" style="font-size:.9rem">👎</span> ':'')}<span style="font-size:.75rem;color:var(--nd-text-muted)">${esc(meta.name||'Visitor')}${meta.contact?' · '+esc(meta.contact):''}</span></div>
         <button onclick="document.getElementById('supModal').remove()" style="background:none;border:none;color:var(--nd-text-muted);font-size:1.4rem;cursor:pointer">×</button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:1rem">${bubbles||'<div class="empty"><p>No messages</p></div>'}</div>

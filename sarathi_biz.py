@@ -1071,6 +1071,17 @@ async def nidaan_ops_list_payment_links(request: Request):
 
 
 # ── Customer support chat (public; AI first-line + human handoff) ─────────────
+def _derive_support_channel(declared: str, account) -> str:
+    """Origin channel for a NEW support thread (single source of truth for both the
+    message and lead endpoints). A logged-in customer is a 'subscriber' chat (plan
+    derived later via account_id); a page may declare homepage/review/branch/staff;
+    anything else falls back to 'web'."""
+    ch = declared if declared in ("branch", "staff", "homepage", "review") else ""
+    if account and ch not in ("branch", "staff"):
+        ch = "subscriber"
+    return ch or "web"
+
+
 class NidaanSupportMsgReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(..., min_length=1, max_length=1500)
@@ -1158,7 +1169,7 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         _prev_status = thread.get("status")
         _lang = _lang or (thread.get("lang") or "")
     else:
-        _ch = body.channel if body.channel in ("branch", "staff") else "web"
+        _ch = _derive_support_channel(body.channel, _account)
         started = await nidaan.create_support_thread(
             name=(_account.get("owner_name") if _account else body.name),
             contact=body.contact, channel=_ch, lang=_lang,
@@ -1257,6 +1268,7 @@ class NidaanSupportLeadReq(BaseModel):
     thread_id: Optional[int] = None
     thread_key: Optional[str] = None
     lang: str = Field("", max_length=10)
+    channel: str = Field("", max_length=12)  # where the chat originates (branch/staff/homepage/review)
     hp: str = Field("", max_length=100)    # honeypot — must stay empty
 
 
@@ -1288,7 +1300,12 @@ async def nidaan_support_lead(body: NidaanSupportLeadReq, request: Request):
         tid, tkey = thread["thread_id"], body.thread_key
         await nidaan.update_support_thread_contact(tid, name=name, contact=contact)
     else:
-        started = await nidaan.create_support_thread(name=name, contact=contact, channel="web", lang=_lang)
+        _payload = _nidaan_bearer(request)
+        _account = (await _nidaan_account_from_payload(_payload)) if _payload else None
+        _ch = _derive_support_channel(body.channel, _account)
+        started = await nidaan.create_support_thread(
+            name=name, contact=contact, channel=_ch, lang=_lang,
+            account_id=(_account["account_id"] if _account else None))
         tid, tkey = started["thread_id"], started["thread_key"]
     note = body.message.strip() or "(Requested a callback — left contact details)"
     await nidaan.add_support_message(tid, "customer", f"📇 Lead — {name} · {contact}\n{note}")
@@ -5579,11 +5596,22 @@ async def ops_update_plan_config(plan_key: str, body: OpsPlanConfigUpdate, reque
 
 # ── Ops: customer-support inbox (staff read + reply) ──────────────────────────
 @app.get("/nidaan/ops/api/support/threads")
-async def ops_support_threads(request: Request, status: Optional[str] = None):
+async def ops_support_threads(request: Request, status: Optional[str] = None,
+                              channel: Optional[str] = None):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
-    return {"threads": await nidaan.list_support_threads_ops(status=status)}
+    return {"threads": await nidaan.list_support_threads_ops(status=status, channel=channel)}
+
+
+@app.get("/nidaan/ops/api/support/analytics")
+async def ops_support_analytics(request: Request, days: int = 30):
+    """Chat/support analytics for the ops Support panel: sessions, ratings (CSAT),
+    escalation rate, per-channel and plan-wise breakdowns over the last `days`."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await nidaan.support_analytics(days=days)
 
 
 @app.get("/nidaan/ops/api/support/threads/{thread_id}")

@@ -2229,6 +2229,23 @@ async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
 
 
 # ── Customer support chat (AI first-line + human handoff) ─────────────────────
+# Support origin channels (single source of truth). Segments the chat inbox + analytics:
+#   homepage=anon nidaanpartner.com visitor · subscriber=logged-in customer (plan derived
+#   via account_id) · review=one-time review page · branch/staff=partner dashboards ·
+#   web=legacy/fallback · whatsapp/email=other inbound rails.
+SUPPORT_CHANNELS = ("web", "homepage", "subscriber", "review", "branch", "staff", "whatsapp", "email")
+
+
+async def _ensure_support_extra_columns(conn) -> None:
+    """Add the rating/session columns if they don't exist yet (ALTER-on-first-use is
+    lazy, so SELECTs from ops analytics must guarantee the columns are present)."""
+    for col, typ in (("rating", "INTEGER"), ("rated_at", "TIMESTAMP"), ("closed_at", "TIMESTAMP")):
+        try:
+            await conn.execute(f"ALTER TABLE nidaan_support_threads ADD COLUMN {col} {typ}")
+        except Exception:
+            pass
+
+
 async def create_support_thread(name: str = "", contact: str = "",
                                 account_id: Optional[int] = None,
                                 channel: str = "web", lang: str = "") -> dict:
@@ -2240,7 +2257,7 @@ async def create_support_thread(name: str = "", contact: str = "",
             """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel, lang)
                VALUES (?,?,?,?,?,?)""",
             (key, account_id, (name or "").strip()[:80], (contact or "").strip()[:120],
-             channel if channel in ("web", "whatsapp", "email", "branch", "staff") else "web",
+             channel if channel in SUPPORT_CHANNELS else "web",
              lang if lang in ("en", "hi", "hinglish") else ""))
         await conn.commit()
         return {"thread_id": cur.lastrowid, "thread_key": key}
@@ -2249,11 +2266,7 @@ async def create_support_thread(name: str = "", contact: str = "",
 async def set_support_rating(thread_id: int, rating: int) -> None:
     """Record a 👍/👎 (1 / -1) on a support thread (adds the columns on first use)."""
     async with aiosqlite.connect(DB_PATH) as conn:
-        for col, typ in (("rating", "INTEGER"), ("rated_at", "TIMESTAMP")):
-            try:
-                await conn.execute(f"ALTER TABLE nidaan_support_threads ADD COLUMN {col} {typ}")
-            except Exception:
-                pass
+        await _ensure_support_extra_columns(conn)
         await conn.execute(
             "UPDATE nidaan_support_threads SET rating=?, rated_at=datetime('now') WHERE thread_id=?",
             (1 if rating > 0 else -1, thread_id))
@@ -2263,10 +2276,7 @@ async def set_support_rating(thread_id: int, rating: int) -> None:
 async def close_support_session(thread_id: int) -> None:
     """End a support session (its thread) — files it to history. Adds the column on first use."""
     async with aiosqlite.connect(DB_PATH) as conn:
-        try:
-            await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN closed_at TIMESTAMP")
-        except Exception:
-            pass
+        await _ensure_support_extra_columns(conn)
         await conn.execute(
             "UPDATE nidaan_support_threads SET status='closed', closed_at=datetime('now') "
             "WHERE thread_id=? AND COALESCE(status,'') != 'closed'", (thread_id,))
@@ -2349,17 +2359,22 @@ async def clear_support_sa_escalation(thread_id: int) -> None:
         await conn.commit()
 
 
-async def list_support_threads_ops(status: Optional[str] = None, limit: int = 150) -> list[dict]:
-    """Ops support inbox: all threads (escalated first, newest activity first) with a preview."""
-    where, params = "", []
+async def list_support_threads_ops(status: Optional[str] = None, channel: Optional[str] = None,
+                                   limit: int = 150) -> list[dict]:
+    """Ops support inbox: all threads (escalated first, newest activity first) with a preview.
+    Optional status + channel filters (channel segments the inbox by origin)."""
+    clauses, params = [], []
     if status in ("ai", "escalated", "closed"):
-        where = "WHERE t.status=?"
-        params.append(status)
+        clauses.append("t.status=?"); params.append(status)
+    if channel in SUPPORT_CHANNELS:
+        clauses.append("t.channel=?"); params.append(channel)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_support_extra_columns(conn)
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
             f"""SELECT t.thread_id, t.name, t.contact, t.channel, t.status,
-                       t.created_at, t.last_at,
+                       t.created_at, t.last_at, t.rating, t.closed_at,
                        (SELECT COUNT(*) FROM nidaan_support_messages m
                          WHERE m.thread_id=t.thread_id) AS msg_count,
                        (SELECT body FROM nidaan_support_messages m
@@ -2374,11 +2389,71 @@ async def list_support_threads_ops(status: Optional[str] = None, limit: int = 15
 async def get_support_thread_meta(thread_id: int) -> Optional[dict]:
     """Thread row for ops (no key needed — staff-authed at the route)."""
     async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_support_extra_columns(conn)
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT thread_id, name, contact, channel, status, created_at, last_at "
+            "SELECT thread_id, name, contact, channel, status, created_at, last_at, rating, closed_at "
             "FROM nidaan_support_threads WHERE thread_id=?", (thread_id,))).fetchone()
         return dict(row) if row else None
+
+
+async def support_analytics(days: int = 30) -> dict:
+    """Support/chat analytics over the last `days` — overall + per-channel + plan-wise
+    breakdown of subscriber chats, ratings (👍/👎) and escalation rate. Staff-only (route)."""
+    days = max(1, min(int(days or 30), 365))
+    since = f"-{days} days"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_support_extra_columns(conn)
+        conn.row_factory = aiosqlite.Row
+        # Overall
+        tot = await (await conn.execute(
+            f"""SELECT COUNT(*) AS sessions,
+                       SUM(CASE WHEN status='escalated' THEN 1 ELSE 0 END) AS escalated,
+                       SUM(CASE WHEN status='closed' THEN 1 ELSE 0 END) AS closed,
+                       SUM(CASE WHEN rating=1 THEN 1 ELSE 0 END) AS up,
+                       SUM(CASE WHEN rating=-1 THEN 1 ELSE 0 END) AS down
+                FROM nidaan_support_threads
+                WHERE created_at >= datetime('now', ?)""", (since,))).fetchone()
+        # Per channel
+        by_ch = await (await conn.execute(
+            f"""SELECT COALESCE(NULLIF(channel,''),'web') AS channel, COUNT(*) AS sessions,
+                       SUM(CASE WHEN status='escalated' THEN 1 ELSE 0 END) AS escalated,
+                       SUM(CASE WHEN rating=1 THEN 1 ELSE 0 END) AS up,
+                       SUM(CASE WHEN rating=-1 THEN 1 ELSE 0 END) AS down
+                FROM nidaan_support_threads
+                WHERE created_at >= datetime('now', ?)
+                GROUP BY COALESCE(NULLIF(channel,''),'web')
+                ORDER BY sessions DESC""", (since,))).fetchall()
+        # Subscriber chats broken down by the account's current plan (plan-wise).
+        # Correlated subquery (not a JOIN) so an account with >1 active sub can't
+        # multiply a thread's row.
+        by_plan = await (await conn.execute(
+            f"""SELECT COALESCE((SELECT s.plan FROM nidaan_subscriptions s
+                                  WHERE s.account_id=t.account_id AND s.status='active'
+                                  ORDER BY s.started_at DESC LIMIT 1), '(no plan)') AS plan,
+                       COUNT(*) AS sessions,
+                       SUM(CASE WHEN t.rating=1 THEN 1 ELSE 0 END) AS up,
+                       SUM(CASE WHEN t.rating=-1 THEN 1 ELSE 0 END) AS down
+                FROM nidaan_support_threads t
+                WHERE t.channel='subscriber' AND t.created_at >= datetime('now', ?)
+                GROUP BY plan
+                ORDER BY sessions DESC""", (since,))).fetchall()
+    d = dict(tot) if tot else {}
+    sessions = d.get("sessions") or 0
+    rated = (d.get("up") or 0) + (d.get("down") or 0)
+    return {
+        "days": days,
+        "sessions": sessions,
+        "escalated": d.get("escalated") or 0,
+        "closed": d.get("closed") or 0,
+        "up": d.get("up") or 0,
+        "down": d.get("down") or 0,
+        "rated": rated,
+        "csat": (round(100 * (d.get("up") or 0) / rated) if rated else None),
+        "escalation_rate": (round(100 * (d.get("escalated") or 0) / sessions) if sessions else 0),
+        "by_channel": [dict(r) for r in by_ch],
+        "by_plan": [dict(r) for r in by_plan],
+    }
 
 
 async def update_support_thread_contact(thread_id: int, name: str = "", contact: str = "") -> None:
