@@ -5697,6 +5697,48 @@ Decision: staging = MAIN test ground; prod = clean real data. Isolated, same Con
   reachable via curl --resolve / SSH. **Phase C (unified partner dashboard) will be built+tested HERE
   first, then promoted master→prod.**
 
+## 69. DUAL-APP PROJECT MAP — both products, one codebase (living overview, Aug 12)
+
+ONE FastAPI app (`sarathi_biz.py`) serves BOTH products, split by Host + path. Same SQLite DB
+(`sarathi_biz.db`, WAL), same blue-green web tier (8001/8002 behind nginx `sarathi_app`), same worker
+(`sarathi-worker` = bots + scheduler singletons). `biz_platform_bridge.py` is the ONLY module that
+crosses the boundary. Host routing: `_is_nidaan_host(request)` → nidaanpartner.com; else Sarathi.
+
+### 69.1 sarathi-ai.com — Sarathi-AI CRM (AI financial-advisor CRM)
+- **Who:** multi-tenant SaaS for financial advisors. `tenants` (firm/owner/billing) + `agents` (per-firm
+  users). Served at ROOT paths (`/`, `/admin`, `/api/...`, `/ws/agent`).
+- **Core:** Leads→Customers split (separate `customers` table + per-type portfolio + shareable revocable
+  link, [[project_sarathi_customers]]); WhatsApp agent via Evolution API (`wa_conversations`,
+  `wa_agent_devices`, `wa_send_queue`, brain-locks); Gemini AI replies; marketing studio (`biz_marketing`,
+  own `DB_PATH` env); Razorpay tenant subscriptions; trial 7d / referral 14d.
+- **Homepage:** `static/index.html` (+ index_v2/v3/v4 variants). NO GA yet (would need its own GA4 ID).
+
+### 69.2 nidaanpartner.com — Nidaan · The Legal Consultants LLP (insurance claim disputes)
+- **Who:** policyholders (retail ₹499/₹2000 review) + advisors/subscribers (plans) + branches + staff
+  (staff-as-branch). Served under `/nidaan/*` + host-based homepage.
+- **Surfaces:** homepage `nidaan_index.html`; login `nidaan_start.html`; subscriber dashboard
+  `nidaan_dashboard.html`; ops/admin portal `nidaan_ops.html` (`/nidaan/ops`); branch dashboard
+  `nidaan_branch.html`; staff "My Business" (inside ops). Support widget everywhere.
+- **Money:** tiered review fee `review_fee_for(disputed)` = ₹499 base / ₹2000 if >₹10L, +GST
+  (GST-exclusive via `charge_with_gst`); homepage pays UPFRONT, branch/staff pay at L2 decision
+  (`branch_l2_fee_for_claim` = single source of truth). Razorpay orders + subscriptions; capture-verified.
+- **Ops:** claim workflow (assign/tag/@mention/notes + two-way customer↔ops messages + watchers);
+  L2 (legal) flow with auto-assign-on-move; Telegram ops bot @NidaanOpsBot; Business Analytics
+  (channel attribution + funnel + failures, `nidaan_events`); all-channel notifications (bell/email/
+  telegram/push). [[project_nidaan_erp]], [[project_nidaan_analytics]], [[project_nidaan_telegram]].
+- **Marketing/SEO (Aug 12):** GA4 `G-CJMN1DJGFM` (host-guarded to real prod only) + Search Console
+  (meta tag + `/google3df0c6b7c9115ee9.html` file route, nidaan-host-gated). nginx CSP widened for
+  googletagmanager + google-analytics. `🏠 Home` nav on homepage + subscriber dashboard (start page
+  already had back-to-home).
+
+### 69.3 Shared infra (both)
+App server 84.247.172.252 (Contabo). biz.env `sarathi:sarathi 600` [[infra_bizenv_ownership]].
+Cloudflare in front (proxied apex; caches /static) [[infra_cloudflare_cache]]. Backups: local 7d +
+off-server AES-256 [[infra_backups]]. **Staging** = isolated `/opt/sarathi-staging` on :8003
+(sec.68 / [[infra_staging_env]]) at staging.nidaanpartner.com + staging.sarathi-ai.com (HTTPS,
+basic-auth gated, sanitized data). Deploys: prod `deploy/auto-deploy-zerodowntime.sh` (master),
+staging `deploy/staging-deploy.sh` (staging branch).
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
