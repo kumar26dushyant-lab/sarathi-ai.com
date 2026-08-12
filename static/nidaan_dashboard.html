@@ -1045,7 +1045,24 @@ async function api(path, opts = {}) {
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts.headers || {}) }
   });
   if (r.status === 401) { doLogout(); return null; }
+  // Live reflection: after a successful action, re-render the dashboard so it
+  // updates without a manual page refresh. Debounced + skipped while a payment
+  // or overlay is open (mid-flow), then fires when it closes.
+  const _m = (opts.method || 'GET').toUpperCase();
+  if (r.ok && _m !== 'GET' && _m !== 'HEAD') _scheduleDashRefresh();
   return r;
+}
+let _dashRefreshTimer = null;
+function _dashOverlayOpen(){
+  return !!document.querySelector('.razorpay-container, iframe.razorpay-checkout-frame, [data-l2c], .nsw-panel.open, [data-ndmodal]');
+}
+function _scheduleDashRefresh(){
+  if (_dashRefreshTimer) clearTimeout(_dashRefreshTimer);
+  _dashRefreshTimer = setTimeout(function(){
+    _dashRefreshTimer = null;
+    if (_dashOverlayOpen()) { _scheduleDashRefresh(); return; }
+    try { if (typeof loadDashboard === 'function') loadDashboard(); } catch(e){}
+  }, 700);
 }
 
 // ── Status pill ───────────────────────────────────────────────────────────────
