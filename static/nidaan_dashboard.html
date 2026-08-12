@@ -45,7 +45,7 @@
   a{color:var(--nd-cyan-text);text-decoration:none}
 
   /* NAV */
-  nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.5rem;background:rgba(10,22,40,.97);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50;gap:.5rem;overflow:hidden}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.5rem;background:rgba(10,22,40,.97);border-bottom:1px solid var(--nd-border);position:sticky;top:0;z-index:50;gap:.5rem;overflow:hidden}
   /* App feel: when installed to the home screen, respect the notch / status bar
      and the home-indicator so the header/content don't sit under system UI. */
   @media (display-mode:standalone){
@@ -86,7 +86,7 @@
   /* LOCKED OVERLAY on data sections */
   .locked-section{pointer-events:none}
   /* TAB-LEVEL lock overlay for non-subscribers */
-  .tab-lock{position:relative;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;text-align:center;padding:3rem 1.5rem;background:rgba(6,15,30,.55);border:1px solid rgba(255,255,255,.07);border-radius:14px;backdrop-filter:blur(6px)}
+  .tab-lock{position:relative;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;text-align:center;padding:3rem 1.5rem;background:rgba(6,15,30,.55);border:1px solid var(--nd-border);border-radius:14px;backdrop-filter:blur(6px)}
   .tab-lock-icon{font-size:3rem;line-height:1}
   .tab-lock-title{font-size:1.05rem;font-weight:800;color:var(--nd-text-primary)}
   .tab-lock-sub{font-size:.85rem;color:var(--nd-text-faint);max-width:320px}
@@ -103,12 +103,12 @@
   /* CLAIMS TABLE */
   .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;flex-wrap:wrap;gap:.5rem}
   .section-title{font-size:1.05rem;font-weight:700}
-  .card{background:var(--nd-bg-surface);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden}
+  .card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;overflow:hidden}
   table{width:100%;border-collapse:collapse;font-size:.86rem}
   thead{background:var(--nd-bg-surface-2)}
   th{padding:.7rem 1rem;text-align:left;font-weight:600;color:var(--nd-text-muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
   td{padding:.75rem 1rem;border-top:1px solid var(--nd-border);color:var(--nd-text-primary)}
-  tr:hover td{background:rgba(255,255,255,.025)}
+  tr:hover td{background:var(--nd-bg-surface)}
   .status-pill{display:inline-block;padding:.2rem .6rem;border-radius:20px;font-size:.72rem;font-weight:700;text-transform:uppercase}
   .s-intimated{background:rgba(234,179,8,.15);color:var(--nd-warning-text)}
   .s-assigned{background:rgba(59,130,246,.15);color:var(--nd-info-text)}
@@ -197,7 +197,7 @@
   .drawer-close:hover{color:var(--nd-text-primary)}
   .drawer-section{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:1rem}
   .drawer-section h4{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--nd-text-faint);margin-bottom:.75rem}
-  .detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.85rem;gap:.5rem}
+  .detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid var(--nd-border);font-size:.85rem;gap:.5rem}
   .detail-row:last-child{border-bottom:none}
   .detail-label{color:var(--nd-text-muted);flex-shrink:0;min-width:110px}
   .detail-val{color:var(--nd-text-primary);text-align:right;word-break:break-word}
@@ -244,7 +244,7 @@
   .btn-danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--nd-danger-text);border-radius:8px;padding:.6rem 1.2rem;font-size:.85rem;font-weight:600;cursor:pointer}
   .btn-danger:hover{background:rgba(239,68,68,.3)}
   .plan-upgrade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
-  .plan-opt{border:2px solid var(--nd-border-strong);border-radius:10px;padding:.85rem .65rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;background:rgba(255,255,255,.02)}
+  .plan-opt{border:2px solid var(--nd-border-strong);border-radius:10px;padding:.85rem .65rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;background:var(--nd-bg-surface)}
   .plan-opt:hover{border-color:rgba(6,182,212,.4);background:rgba(6,182,212,.06)}
   .plan-opt.current-plan{border-color:#22d3ee;background:rgba(6,182,212,.1)}
   .plan-opt .po-name{font-weight:800;font-size:.88rem;color:var(--nd-text-primary);margin-bottom:.3rem;text-transform:capitalize}
@@ -489,8 +489,8 @@
       <div style="min-width:0">
         <div style="font-weight:700;font-size:.98rem;margin-bottom:.15rem" class="en">Get real-time case updates on WhatsApp</div>
         <div style="font-weight:700;font-size:.98rem;margin-bottom:.15rem" class="hi">WhatsApp पर रीयल-टाइम केस अपडेट पाएं</div>
-        <div style="font-size:.82rem;color:rgba(255,255,255,.62)" class="en">Status changes, documents, urgent action items — all directly to your phone.</div>
-        <div style="font-size:.82rem;color:rgba(255,255,255,.62)" class="hi">स्थिति परिवर्तन, दस्तावेज़, तत्काल कार्य — सीधे आपके फोन पर।</div>
+        <div style="font-size:.82rem;color:var(--nd-text-secondary)" class="en">Status changes, documents, urgent action items — all directly to your phone.</div>
+        <div style="font-size:.82rem;color:var(--nd-text-secondary)" class="hi">स्थिति परिवर्तन, दस्तावेज़, तत्काल कार्य — सीधे आपके फोन पर।</div>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:.65rem;flex-shrink:0">
@@ -508,11 +508,11 @@
         We may message you from any of these. Save all 3 so our messages don't go to spam.
       </p>
       <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
           <div><div style="font-weight:600">Nidaan Cases</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98272 84804</div></div>
           <button onclick="copyOfficial('+919827284804')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
           <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98260 11116</div></div>
           <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
@@ -763,7 +763,7 @@
       <span class="hi" style="font-size:.85em;color:var(--nd-text-secondary)">मासिक</span>
       <label style="position:relative;display:inline-block;width:46px;height:24px;cursor:pointer">
         <input type="checkbox" id="nidaanBillingToggle" onchange="toggleNidaanBilling()" style="opacity:0;width:0;height:0">
-        <span id="nidaanToggleTrack" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></span>
+        <span id="nidaanToggleTrack" style="position:absolute;inset:0;background:var(--nd-bg-surface-3);border-radius:24px;transition:.3s"></span>
         <span id="nidaanToggleThumb" style="position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s"></span>
       </label>
       <span class="en" style="font-size:.85em;color:var(--nd-text-secondary)">Yearly <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">Save 10%</span></span>
@@ -1001,7 +1001,7 @@
       </div>
       <!-- ── Data-protection assurance (plain, no specific-act wording) ──── -->
       <div class="field" style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);border-radius:10px;padding:.75rem .95rem;margin-top:.25rem">
-        <div style="font-size:.78rem;line-height:1.55;color:rgba(255,255,255,.78)">
+        <div style="font-size:.78rem;line-height:1.55;color:var(--nd-text-primary)">
           <strong style="color:var(--nd-cyan-text)">🛡️ <span class="en">Your data is safe &amp; secure</span><span class="hi">आपका डेटा सुरक्षित है</span></strong>
           <p class="en" style="margin:.35rem 0 0">
             We follow all the data guidelines of every competent government authority, so your data always stays safe and secure.
@@ -1025,7 +1025,7 @@
 </div>
 
 <!-- #6: persistent commission disclaimer at the bottom — shown for SUBSCRIBERS (advisors) only -->
-<div id="subCommissionDisclaimer" style="display:none;max-width:900px;margin:1.5rem auto 2.5rem;padding:1rem 1.2rem;background:rgba(34,211,238,.05);border:1px dashed rgba(34,211,238,.3);border-radius:12px;color:rgba(255,255,255,.72);font-size:.82rem;line-height:1.75">
+<div id="subCommissionDisclaimer" style="display:none;max-width:900px;margin:1.5rem auto 2.5rem;padding:1rem 1.2rem;background:rgba(34,211,238,.05);border:1px dashed rgba(34,211,238,.3);border-radius:12px;color:var(--nd-text-secondary);font-size:.82rem;line-height:1.75">
   <div style="font-weight:800;color:var(--nd-cyan-text);margin-bottom:.4rem">💰 <span class="en">Advisor reward — how it works</span><span class="hi">एडवाइज़र इनाम — यह कैसे काम करता है</span></div>
   <div class="en">For every claim marked <b>fightable</b>, you earn a reward — paid once the insurance company actually pays your client. Your reward is <b>15% of Nidaan's fee</b>, and Nidaan's fee is <b>15% of the amount recovered</b>.<br><br><b>Simple example:</b> stuck claim ₹2,00,000 → insurer finally pays ₹1,50,000 → Nidaan fee (15%) = ₹22,500 → <b>your reward (15% of that) = ₹3,375</b>. No win, no fee — you're paid only after the case is won and your client has received the money.</div>
   <div class="hi">हर <b>लड़ने लायक</b> क्लेम पर आपको इनाम मिलता है — जो तब मिलता है जब बीमा कंपनी सचमुच आपके ग्राहक को भुगतान कर देती है। आपका इनाम <b>Nidaan की फ़ीस का 15%</b> है, और Nidaan की फ़ीस <b>वसूली गई राशि का 15%</b> है।<br><br><b>आसान उदाहरण:</b> अटका क्लेम ₹2,00,000 → कंपनी आख़िर में देती है ₹1,50,000 → Nidaan फ़ीस (15%) = ₹22,500 → <b>आपका इनाम (उसका 15%) = ₹3,375</b>। जीत नहीं तो फ़ीस नहीं — पैसा तभी मिलता है जब केस जीता जाए और ग्राहक को भुगतान मिल जाए।</div>
@@ -1296,7 +1296,7 @@ async function loadDashboard() {
           </button>
           <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.5rem">Review delivered within 48–72 business hours after payment</div>
         </div>
-        <div style="margin-top:1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.85rem">
+        <div style="margin-top:1rem;border-top:1px solid var(--nd-border);padding-top:.85rem">
           <div style="font-size:.78rem;font-weight:700;color:var(--nd-text-muted);margin-bottom:.5rem">📎 SUPPORTING DOCUMENTS</div>
           <div id="rvDocList_${p.purchase_id}" style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.5rem">Loading…</div>
           <label for="rvDocInput_${p.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.13);border:2px dashed rgba(59,130,246,.35);border-radius:6px;cursor:pointer;font-size:.82rem;color:var(--nd-info-text);font-weight:700">📂 Select Files to Attach</label>
@@ -1752,7 +1752,7 @@ async function openClaimDrawer(claim_id) {
       <div style="background:${bg};border:1px solid ${col}55;border-radius:10px;padding:.85rem 1rem;margin-bottom:.6rem">
         <div style="font-weight:700;color:${col};font-size:.9rem;line-height:1.5">${banner}</div>
       </div>
-      <div style="font-size:.86rem;color:rgba(255,255,255,.82);line-height:1.6;white-space:pre-wrap;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
+      <div style="font-size:.86rem;color:var(--nd-text-primary);line-height:1.6;white-space:pre-wrap;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
     </div>`;
   }
 
