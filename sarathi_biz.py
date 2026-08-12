@@ -1083,6 +1083,42 @@ class NidaanSupportMsgReq(BaseModel):
     hp: str = Field("", max_length=100)    # honeypot — must stay empty (bots fill it)
 
 
+class _SupportRateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thread_id: int
+    thread_key: str
+    rating: int   # 1 = 👍, -1 = 👎
+
+
+@app.post("/nidaan/api/support/rate")
+@limiter.limit("20/minute")
+async def nidaan_support_rate(body: _SupportRateReq, request: Request):
+    """Customer rates a chat 👍/👎 (recorded on the thread for Support analytics)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+    if not thread: raise HTTPException(404, "Thread not found")
+    await nidaan.set_support_rating(body.thread_id, body.rating)
+    return {"ok": True}
+
+
+class _SupportCloseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thread_id: int
+    thread_key: str
+
+
+@app.post("/nidaan/api/support/close")
+@limiter.limit("30/minute")
+async def nidaan_support_close(body: _SupportCloseReq, request: Request):
+    """End a chat session (files the thread to history). Called when the customer
+    closes the chat, or when the widget detects the 30-min session expiry."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+    if not thread: raise HTTPException(404, "Thread not found")
+    await nidaan.close_support_session(body.thread_id)
+    return {"ok": True}
+
+
 @app.post("/nidaan/api/support/message")
 @limiter.limit("20/minute")
 async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):

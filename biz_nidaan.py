@@ -2246,6 +2246,33 @@ async def create_support_thread(name: str = "", contact: str = "",
         return {"thread_id": cur.lastrowid, "thread_key": key}
 
 
+async def set_support_rating(thread_id: int, rating: int) -> None:
+    """Record a 👍/👎 (1 / -1) on a support thread (adds the columns on first use)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for col, typ in (("rating", "INTEGER"), ("rated_at", "TIMESTAMP")):
+            try:
+                await conn.execute(f"ALTER TABLE nidaan_support_threads ADD COLUMN {col} {typ}")
+            except Exception:
+                pass
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET rating=?, rated_at=datetime('now') WHERE thread_id=?",
+            (1 if rating > 0 else -1, thread_id))
+        await conn.commit()
+
+
+async def close_support_session(thread_id: int) -> None:
+    """End a support session (its thread) — files it to history. Adds the column on first use."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        try:
+            await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN closed_at TIMESTAMP")
+        except Exception:
+            pass
+        await conn.execute(
+            "UPDATE nidaan_support_threads SET status='closed', closed_at=datetime('now') "
+            "WHERE thread_id=? AND COALESCE(status,'') != 'closed'", (thread_id,))
+        await conn.commit()
+
+
 async def get_support_thread(thread_id: int, thread_key: str) -> Optional[dict]:
     """Fetch a thread only if the thread_key matches (constant-time)."""
     async with aiosqlite.connect(DB_PATH) as conn:

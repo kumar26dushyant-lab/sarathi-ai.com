@@ -299,7 +299,7 @@
       var r=await fetch('/nidaan/api/support/lead',{ method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       var d=await r.json().catch(function(){return {};});
       if(!r.ok){ errEl.textContent=d.detail||'Could not submit. Please try again later.'; btn.disabled=false; return; }
-      if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key}; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
+      if(d.thread_key && d.ticket){ thread={id:d.ticket, key:d.thread_key, ts:Date.now()}; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
       try{ localStorage.setItem(LEADKEY, String(d.ticket)); }catch(e){}
       var lf=document.getElementById('nswLeadForm'); if(lf) lf.remove();
       inBox.style.display='';
@@ -336,15 +336,53 @@
   function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
 
   var openedOnce=false;
-  function openPanel(){ removeTeaser(); panel.classList.add('open'); if(!openedOnce){ openedOnce=true; loadHistory(); } else startPoll(); setTimeout(function(){ if(input.offsetParent) input.focus(); },100); }
+  function openPanel(){ removeTeaser(); if(_sessionExpired()){ _endSession(); if(msgs) msgs.innerHTML=''; } panel.classList.add('open'); if(!openedOnce){ openedOnce=true; loadHistory(); } else startPoll(); setTimeout(function(){ if(input.offsetParent) input.focus(); },100); }
   function closePanel(){ panel.classList.remove('open'); stopPoll(); }
   var _suppressClick = false;
   btn.addEventListener('click', function(){
     if(_suppressClick){ _suppressClick=false; return; }   // it was a drag, not a tap
     panel.classList.contains('open')?closePanel():openPanel();
   });
-  panel.querySelector('.nsw-x').addEventListener('click', closePanel);
+  // ── Session model: one chat = one ~30-min session. 30 min of inactivity, or Close (×),
+  // ends it → it's filed to history (its thread id is the session number) and the next
+  // message starts a fresh session. Minimize (–) just hides it; the session stays alive. ──
+  var SESSION_MS = 30 * 60 * 1000, _idleTimer = null, ratedThisSession = false;
+  function _touchSession(){
+    if (thread){ thread.ts = Date.now(); try{ localStorage.setItem(TKEY, JSON.stringify(thread)); }catch(e){} }
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(function(){ _endSession(); }, SESSION_MS + 2000);
+  }
+  function _sessionExpired(){ return !!(thread && thread.ts && (Date.now() - thread.ts > SESSION_MS)); }
+  function _endSession(){
+    if (_idleTimer){ clearTimeout(_idleTimer); _idleTimer = null; }
+    if (thread){ try{ fetch('/nidaan/api/support/close', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({thread_id:thread.id, thread_key:thread.key})}); }catch(e){} }
+    thread = null; lastMsgId = 0; greeted = false; openedOnce = false; ratedThisSession = false;
+    try{ localStorage.removeItem(TKEY); }catch(e){}
+    stopPoll(); hideRating();
+  }
+  panel.querySelector('.nsw-x').addEventListener('click', function(){ _endSession(); if (msgs) msgs.innerHTML=''; closePanel(); });
   var _minBtn = panel.querySelector('.nsw-min'); if (_minBtn) _minBtn.addEventListener('click', closePanel);
+
+  // ── 👍/👎 rate this chat (recorded for Support analytics) ──
+  function _rateBarEl(){
+    var b = document.getElementById('nswRate'); if (b) return b;
+    b = document.createElement('div'); b.id = 'nswRate';
+    b.style.cssText = 'display:none;align-items:center;justify-content:center;gap:.5rem;padding:.4rem .6rem;border-top:1px solid rgba(255,255,255,.08);background:#0a1628;font-size:.8rem;color:rgba(255,255,255,.72)';
+    b.innerHTML = '<span class="nswRateLbl">' + ((lang==='hi')?'यह चैट कैसी रही?':(lang==='hinglish'?'Chat kaisi rahi?':'How was this chat?')) + '</span>'
+      + '<button type="button" data-r="1" aria-label="Good" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:.12rem .5rem;cursor:pointer;font-size:1rem">👍</button>'
+      + '<button type="button" data-r="-1" aria-label="Bad" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:.12rem .5rem;cursor:pointer;font-size:1rem">👎</button>';
+    var inRow = panel.querySelector('.nsw-in'); if (inRow) panel.insertBefore(b, inRow); else panel.appendChild(b);
+    var bts = b.querySelectorAll('button'); for (var i=0;i<bts.length;i++){ bts[i].addEventListener('click', (function(bt){ return function(){ _rate(parseInt(bt.getAttribute('data-r'),10)); }; })(bts[i])); }
+    return b;
+  }
+  function showRating(){ if (ratedThisSession || !thread) return; _rateBarEl().style.display = 'flex'; }
+  function hideRating(){ var b = document.getElementById('nswRate'); if (b) b.style.display = 'none'; }
+  function _rate(r){
+    if (!thread) return; ratedThisSession = true;
+    try{ fetch('/nidaan/api/support/rate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({thread_id:thread.id, thread_key:thread.key, rating:r})}); }catch(e){}
+    var b = document.getElementById('nswRate'); if (b) b.innerHTML = '<span style="color:#6ee7b7">' + ((lang==='hi')?'फ़ीडबैक के लिए धन्यवाद! 🙏':(lang==='hinglish'?'Feedback ke liye dhanyawaad! 🙏':'Thanks for the feedback! 🙏')) + '</span>';
+    setTimeout(hideRating, 2600);
+  }
 
   // ── Draggable FAB — users can move the chat button anywhere (e.g. off a Send
   // button). Position persists; tap still opens the chat (drag is distinguished). ──
@@ -440,6 +478,7 @@
       else { switchLang(li.lang, true); }
       return;
     }
+    if(_sessionExpired()){ _endSession(); if(msgs) msgs.innerHTML=''; }   // idle >30min → this message opens a fresh session
     busy=true; sendBtn.disabled=true;
     if(chipsBox.style.display!=='none'){ chipsBox.style.display='none'; chipsBox.innerHTML=''; }
     var optimistic=document.createElement('div'); optimistic.className='nsw-b me'; optimistic.innerHTML=el(text); msgs.appendChild(optimistic); scroll();
@@ -452,11 +491,13 @@
       typing.remove();
       var d = await r.json().catch(function(){ return {}; });
       if(!r.ok){ bubble(d.detail||'Sorry, something went wrong. Please try again.', 'ai'); busy=false; sendBtn.disabled=false; return; }
-      if(d.thread_id && d.thread_key){ thread={ id:d.thread_id, key:d.thread_key }; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
+      if(d.thread_id && d.thread_key){ thread={ id:d.thread_id, key:d.thread_key, ts:Date.now() }; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
       optimistic.remove();                 // replace optimistic bubble with server truth
       busy=false;                          // allow sync to run
       await syncMessages();                // pulls the stored customer msg + AI reply (with ids)
       if(d.escalated) note('🔔 A team member will follow up during support hours (Mon–Fri, 10am–6pm IST).');
+      _touchSession();                     // keep this session alive + reset 30-min idle timer
+      showRating();                        // offer 👍/👎 once the conversation is underway
       startPoll();
     }catch(e){ typing.remove(); bubble('Network issue — please try again.', 'ai'); }
     busy=false; sendBtn.disabled=false; if(input.offsetParent) input.focus();
@@ -498,7 +539,7 @@
     var _q = new URLSearchParams(location.search);
     var _nc = _q.get('nchat'), _nk = _q.get('k');
     if(_nc && _nk && /^\d+$/.test(_nc)){
-      thread = { id: parseInt(_nc, 10), key: _nk };
+      thread = { id: parseInt(_nc, 10), key: _nk, ts: Date.now() };
       try{ localStorage.setItem(TKEY, JSON.stringify(thread)); }catch(e){}
       // strip the key from the address bar / history
       try{ _q.delete('nchat'); _q.delete('k'); history.replaceState(null, '', location.pathname + (_q.toString()?('?'+_q.toString()):'') + location.hash); }catch(e){}
