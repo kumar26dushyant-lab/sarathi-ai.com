@@ -5667,6 +5667,36 @@ mainly re-homes them into one UI.
 PENDING: Phase 5 REMAINDER (visible back/close buttons on every panel/drawer/modal; ops modal
 back-hardening; full responsive audit — needs real-device verification).
 
+- **G3b SHIPPED (d97e145):** SA/Admin edit Claim info + Advisor info from the ops claim drawer
+  (mobile-friendly modals; disputed-amount edit re-tiers L2 fee; audited).
+- **G3 (L2 process) SHIPPED (af02789):** the assign/tag/two-way-comms/all-channel-notifications
+  were ALREADY in the shared claim workflow; closed the one gap — a claim moving to L2
+  (on_moved_to_l2 for can_fight; on_branch_l2_paid for branch/staff) now AUTO-ASSIGNS a least-loaded
+  owner (no-op if already assigned or auto-assign off) and includes that owner in the L2 alert.
+
+## 68. STAGING ENVIRONMENT (owner Aug 12; BUILT, awaiting DNS/TLS)
+
+Decision: staging = MAIN test ground; prod = clean real data. Isolated, same Contabo box, cheap.
+- **Install:** /opt/sarathi-staging on the `staging` git branch (prod = master). WEB-ONLY systemd unit
+  `sarathi-web-staging` on **port 8003** (APP_ROLE=web → NO worker/bots/scheduler). Shares prod venv.
+- **Isolation:** OWN DB `/opt/sarathi-staging/sarathi_biz.db` (all 3 modules resolve cwd-relative —
+  biz_database DB_PATH is hardcoded, so the sanitized file is NAMED sarathi_biz.db; do NOT set
+  SARATHI_DB_PATH or OTP splits). OWN neutralized biz.env: live Razorpay/SMTP/WA(Evolution)/FAST2SMS/
+  Brevo/VAPID/Backup/GitHub keys BLANKED; TELEGRAM_BOT_TOKEN = a fake disabled value (empty crashes
+  startup guard; fake = Telegram 401, no real send); SMTP ports kept 587/465 (int() of '' crashes);
+  fresh JWT_SECRET; SERVER_URL=https://staging.nidaanpartner.com. → staging can't charge money or
+  message real people. prod DB provably distinct (different md5).
+- **Data:** sanitized clone of prod via `deploy/sanitize_staging_db.py` (anonymizes phones/emails/names,
+  blanks external IDs+in-db secrets with unique fakes, clears OTP/nonce/WA queues; 6109 cells rewritten).
+- **nginx** `deploy/nginx-staging.conf` → staging.* proxy to :8003, **HTTP basic-auth gated**
+  (/etc/nginx/.staging_htpasswd, user `founder`, pw in /opt/sarathi-staging/.staging_access via SSH) +
+  `X-Robots-Tag: noindex`. staging.* is a transport alias: apex Host mapped in for routing.
+- **Deploy:** `deploy/staging-deploy.sh` (pull origin/staging → syntax gate → restart → /health gate).
+- **AWAITING (user):** add DNS A records staging.nidaanpartner.com + staging.sarathi-ai.com →
+  84.247.172.252 (DNS-only/grey-cloud recommended); THEN run certbot --nginx for TLS. Until then
+  reachable via curl --resolve / SSH. **Phase C (unified partner dashboard) will be built+tested HERE
+  first, then promoted master→prod.**
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
