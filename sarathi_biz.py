@@ -8418,6 +8418,7 @@ class _AnnounceReq(BaseModel):
     title: str = Field(min_length=2, max_length=140)
     message: str = Field(min_length=2, max_length=2000)
     roles: list[str] = Field(default_factory=list)   # empty = everyone
+    client_token: str = Field(default="", max_length=80)  # idempotency: same token never re-sends
 
 
 @app.post("/nidaan/ops/api/announce")
@@ -8430,23 +8431,81 @@ async def ops_announce(body: _AnnounceReq, request: Request):
     staff = _require_staff(request, "super_admin")
     valid = {"team_member", "sub_super_admin", "super_admin"}
     roles = [r for r in (body.roles or []) if r in valid]
+    subject = f"🆕 What's new: {body.title}"
     async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("""CREATE TABLE IF NOT EXISTS nidaan_announcements(
+            announce_id INTEGER PRIMARY KEY AUTOINCREMENT, client_token TEXT, title TEXT,
+            message TEXT, roles TEXT, subject TEXT, sent_by INTEGER,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reverted_at TIMESTAMP, notified INTEGER DEFAULT 0)""")
+        await conn.commit()
+        # ── Idempotency: the SAME client_token never re-sends; also a backstop that blocks an
+        # identical title+message from the same sender within 60s (defends against double-taps). ──
+        dup = None
+        if body.client_token:
+            dup = await (await conn.execute(
+                "SELECT * FROM nidaan_announcements WHERE client_token=? ORDER BY announce_id DESC LIMIT 1",
+                (body.client_token,))).fetchone()
+        if not dup:
+            dup = await (await conn.execute(
+                "SELECT * FROM nidaan_announcements WHERE sent_by=? AND title=? AND message=? "
+                "AND sent_at > datetime('now','-60 seconds') ORDER BY announce_id DESC LIMIT 1",
+                (staff["staff_id"], body.title, body.message))).fetchone()
+        if dup:
+            return {"ok": True, "duplicate": True, "announce_id": dup["announce_id"],
+                    "notified": dup["notified"], "targeted": dup["notified"],
+                    "sent_at": dup["sent_at"], "reverted": bool(dup["reverted_at"])}
         if roles:
             ph = ",".join("?" * len(roles))
-            q = (f"SELECT staff_id FROM nidaan_staff WHERE status='active' "
-                 f"AND deleted_at IS NULL AND role IN ({ph})")
-            rows = await (await conn.execute(q, roles)).fetchall()
+            rows = await (await conn.execute(
+                f"SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+                f"AND role IN ({ph})", roles)).fetchall()
         else:
             rows = await (await conn.execute(
-                "SELECT staff_id FROM nidaan_staff WHERE status='active' "
-                "AND deleted_at IS NULL")).fetchall()
-    ids = [r[0] for r in rows]
-    n = await nnot.notify_staff_inapp(
-        ids, subject=f"🆕 What's new: {body.title}", body=body.message,
-        event_key="ops.announcement")
-    await _ops_audit(request, "announce", "announcement", 0,
+                "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
+        ids = [r[0] for r in rows]
+        # Record BEFORE sending, so a racing second request finds the token and won't re-send.
+        cur = await conn.execute(
+            "INSERT INTO nidaan_announcements(client_token,title,message,roles,subject,sent_by,notified) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (body.client_token, body.title, body.message, ",".join(roles) or "all", subject, staff["staff_id"], len(ids)))
+        announce_id = cur.lastrowid
+        await conn.commit()
+    n = await nnot.notify_staff_inapp(ids, subject=subject, body=body.message, event_key="ops.announcement")
+    await _ops_audit(request, "announce", "announcement", announce_id,
                      f"{body.title} → {len(ids)} staff ({','.join(roles) or 'all'})")
-    return {"ok": True, "notified": n, "targeted": len(ids)}
+    return {"ok": True, "notified": n, "targeted": len(ids), "announce_id": announce_id}
+
+
+@app.post("/nidaan/ops/api/announce/{announce_id}/revert")
+async def ops_announce_revert(announce_id: int, request: Request):
+    """Undo a sent announcement within 15 minutes — removes it from every staffer's
+    in-app bell. (Telegram/email/push are already delivered and cannot be recalled.)
+    super_admin only. Idempotent: reverting again is a no-op."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        a = await (await conn.execute(
+            "SELECT *, sent_at > datetime('now','-15 minutes') AS in_window "
+            "FROM nidaan_announcements WHERE announce_id=?", (announce_id,))).fetchone()
+        if not a:
+            raise HTTPException(404, "Announcement not found")
+        if a["reverted_at"]:
+            return {"ok": True, "already_reverted": True, "removed": 0}
+        if not a["in_window"]:
+            raise HTTPException(400, "The 15-minute revert window has passed.")
+        cur = await conn.execute(
+            "DELETE FROM nidaan_notifications WHERE event_key='ops.announcement' AND subject=? "
+            "AND created_at >= datetime(?, '-5 seconds') AND created_at <= datetime(?, '+120 seconds')",
+            (a["subject"], a["sent_at"], a["sent_at"]))
+        removed = cur.rowcount
+        await conn.execute("UPDATE nidaan_announcements SET reverted_at=CURRENT_TIMESTAMP WHERE announce_id=?",
+                           (announce_id,))
+        await conn.commit()
+    await _ops_audit(request, "announce_revert", "announcement", announce_id,
+                     f"reverted; removed {removed} bell notifications")
+    return {"ok": True, "removed": removed}
 
 
 @app.post("/nidaan/ops/api/broadcast")

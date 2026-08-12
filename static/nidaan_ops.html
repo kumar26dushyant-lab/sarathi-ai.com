@@ -792,25 +792,84 @@ function openAnnounceModal(){
         <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer"><input type="checkbox" class="annRole" value="super_admin" checked> Super admins</label>
         <div style="font-size:.72rem;color:var(--nd-text-faint)">Leave all ticked to reach everyone. Untick a role if the feature doesn't apply to them.</div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:.5rem">
+      <div id="annActions" style="display:flex;justify-content:flex-end;gap:.5rem">
         <button class="btn-sm btn-ghost" onclick="document.getElementById('announceBg').remove()">Cancel</button>
-        <button class="btn-sm" style="background:#38bdf8;color:#04121f;font-weight:800" onclick="submitAnnounce()">Send update</button>
+        <button id="annSendBtn" class="btn-sm" style="background:#38bdf8;color:#04121f;font-weight:800" onclick="annAskConfirm()">Send update</button>
       </div>
+      <div id="annConfirm" style="display:none;margin-top:.75rem;padding:.75rem .85rem;background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);border-radius:10px">
+        <div style="font-size:.83rem;color:var(--nd-text-primary);margin-bottom:.6rem">📣 This will notify the selected staff on their <b>bell, app push, Telegram &amp; email</b>. Send now?</div>
+        <div style="display:flex;justify-content:flex-end;gap:.5rem">
+          <button class="btn-sm btn-ghost" onclick="annCancelConfirm()">Go back</button>
+          <button id="annConfirmBtn" class="btn-sm" style="background:#22c55e;color:#04121f;font-weight:800" onclick="submitAnnounce()">✓ Yes, send now</button>
+        </div>
+      </div>
+      <div id="annStatus" style="margin-top:.75rem"></div>
     </div>`;
+  bg.dataset.token = 'ann_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
   document.body.appendChild(bg);
 }
-async function submitAnnounce(){
+function annAskConfirm(){
   const title=(document.getElementById('annTitle').value||'').trim();
   const message=(document.getElementById('annMsg').value||'').trim();
   const roles=Array.from(document.querySelectorAll('.annRole:checked')).map(c=>c.value);
   if (title.length<2||message.length<2){ ndUI.toast('Add a title and details','error'); return; }
   if (!roles.length){ ndUI.toast('Pick at least one role','error'); return; }
+  document.getElementById('annActions').style.display='none';
+  document.getElementById('annConfirm').style.display='block';
+}
+function annCancelConfirm(){
+  const c=document.getElementById('annConfirm'); if(c) c.style.display='none';
+  const a=document.getElementById('annActions'); if(a) a.style.display='flex';
+}
+let _annCountdownTimer=null;
+async function submitAnnounce(){
+  const bg=document.getElementById('announceBg'); if(!bg) return;
+  const btn=document.getElementById('annConfirmBtn');
+  if(btn){ if(btn.disabled) return; btn.disabled=true; btn.textContent='Sending…'; }   // hard-block double-tap
+  const title=(document.getElementById('annTitle').value||'').trim();
+  const message=(document.getElementById('annMsg').value||'').trim();
+  const roles=Array.from(document.querySelectorAll('.annRole:checked')).map(c=>c.value);
   const allRoles = roles.length===3;
-  const r = await fetch('/nidaan/ops/api/announce', { method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
-    body: JSON.stringify({title, message, roles: allRoles?[]:roles}) });
-  const d = await r.json().catch(()=>({}));
-  if (r.ok){ ndUI.toast('Update sent to '+(d.notified||0)+' staff ✓','success'); document.getElementById('announceBg')?.remove(); }
-  else ndUI.toast(_extractErr(d,'Failed'),'error');
+  const token = bg.dataset.token || '';
+  let d={};
+  try{
+    const r = await fetch('/nidaan/ops/api/announce', { method:'POST', headers:{...hdrs(),'Content-Type':'application/json'},
+      body: JSON.stringify({title, message, roles: allRoles?[]:roles, client_token: token}) });
+    d = await r.json().catch(()=>({}));
+    if(!r.ok){ ndUI.toast(_extractErr(d,'Failed'),'error'); if(btn){ btn.disabled=false; btn.textContent='✓ Yes, send now'; } return; }
+  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='✓ Yes, send now'; } return; }
+  const conf=document.getElementById('annConfirm'); if(conf) conf.style.display='none';
+  ndUI.toast('Update sent to '+(d.notified||0)+' staff ✓','success');
+  annStartRevert(d.announce_id, d.reverted, (d.notified||0), d.duplicate?' (already sent — not resent)':'');
+}
+function annStartRevert(announceId, alreadyReverted, notified, note){
+  const st=document.getElementById('annStatus'); if(!st) return;
+  if(!announceId){ st.innerHTML='<div style="font-size:.83rem;color:var(--nd-success-text)">✓ Sent to '+notified+' staff'+(note||'')+'.</div>'; return; }
+  if(alreadyReverted){ st.innerHTML='<div style="font-size:.83rem;color:var(--nd-text-muted)">This update was already reverted.</div>'; return; }
+  const deadline = Date.now() + 15*60*1000;
+  function render(){
+    const left = Math.max(0, Math.floor((deadline-Date.now())/1000));
+    const mm=String(Math.floor(left/60)).padStart(2,'0'), ss=String(left%60).padStart(2,'0');
+    if(left<=0){
+      if(_annCountdownTimer){ clearInterval(_annCountdownTimer); _annCountdownTimer=null; }
+      st.innerHTML='<div style="font-size:.83rem;color:var(--nd-success-text)">✓ Sent to '+notified+' staff'+(note||'')+'. <span style="color:var(--nd-text-faint)">Revert window closed.</span></div>'; return;
+    }
+    st.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap">'
+      +'<span style="font-size:.83rem;color:var(--nd-success-text)">✓ Sent to '+notified+' staff'+(note||'')+'.</span>'
+      +'<button class="btn-sm btn-ghost" onclick="annRevert('+announceId+')">↩ Revert ('+mm+':'+ss+')</button></div>';
+  }
+  render(); if(_annCountdownTimer) clearInterval(_annCountdownTimer); _annCountdownTimer=setInterval(render,1000);
+}
+async function annRevert(announceId){
+  if(!confirm('Revert this update? It will be removed from staff bells. (Telegram/email already delivered cannot be recalled.)')) return;
+  try{
+    const r=await fetch('/nidaan/ops/api/announce/'+announceId+'/revert',{method:'POST',headers:hdrs()});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ ndUI.toast(_extractErr(d,'Could not revert'),'error'); return; }
+    if(_annCountdownTimer){ clearInterval(_annCountdownTimer); _annCountdownTimer=null; }
+    const st=document.getElementById('annStatus'); if(st) st.innerHTML='<div style="font-size:.83rem;color:var(--nd-text-muted)">↩ Reverted — removed from '+(d.removed||0)+' staff bells.</div>';
+    ndUI.toast('Update reverted','success');
+  }catch(e){ ndUI.toast('Network error','error'); }
 }
 
 function buildSidebar() {
