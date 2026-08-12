@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Branch Portal — Nidaan Partner</title>
 <link rel="icon" href="/static/nidaan_logo.png">
-<link rel="stylesheet" href="/static/nidaan_design.css?v=4">
+<link rel="stylesheet" href="/static/nidaan_design.css?v=5">
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -350,7 +350,7 @@ async function loadBranchClaims(){
 }
 async function raiseBranchClaim(){
   const msg=$('bcMsg'), btn=$('bcSubmitBtn');
-  const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'rgba(255,255,255,.6)'); };
+  const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'var(--nd-text-muted)'); };
   const name=($('bcName').value||'').trim();
   const phone=($('bcPhone').value||'').replace(/[^0-9]/g,'');
   const type=$('bcType').value;

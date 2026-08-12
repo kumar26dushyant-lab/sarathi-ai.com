@@ -11,7 +11,7 @@
 try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.classList.add('ops-has-token'); } catch (e) {}
 </script>
 <title>Nidaan Ops — Internal Portal</title>
-<link rel="stylesheet" href="/static/nidaan_design.css?v=4">
+<link rel="stylesheet" href="/static/nidaan_design.css?v=5">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
 <!-- PWA: installable staff app -->
@@ -1678,7 +1678,7 @@ async function loadEscalationsWidget(){
     <div class="nd-card" style="padding:1rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.85rem">
         <div style="font-weight:700;font-size:.98rem">⚖️ Internal Escalations</div>
-        <div style="font-size:.78rem;color:${total?'#a78bfa':'rgba(255,255,255,.45)'}">
+        <div style="font-size:.78rem;color:${total?'#a78bfa':'var(--nd-text-faint)'}">
           ${pending.length} pending approval · ${inEsc.length} in escalation
         </div>
       </div>
@@ -2303,7 +2303,7 @@ async function loadTaskRegistry(){
   const chip = (key,label) => {
     const active = _registryState.status===key;
     const n = key==='all'?counts.all : key==='active'?counts.active : counts[key];
-    return `<button onclick="setRegistryStatus('${key}')" style="background:${active?'#22d3ee':'rgba(255,255,255,.05)'};color:${active?'#0a1628':'rgba(255,255,255,.75)'};border:1px solid ${active?'#22d3ee':'rgba(255,255,255,.12)'};font-weight:${active?'700':'500'};padding:.3rem .6rem;border-radius:999px;font-size:.78rem;cursor:pointer">${label}${(n!=null)?` ${n}`:''}</button>`;
+    return `<button onclick="setRegistryStatus('${key}')" style="background:${active?'#22d3ee':'rgba(255,255,255,.05)'};color:${active?'#0a1628':'var(--nd-text-secondary)'};border:1px solid ${active?'#22d3ee':'rgba(255,255,255,.12)'};font-weight:${active?'700':'500'};padding:.3rem .6rem;border-radius:999px;font-size:.78rem;cursor:pointer">${label}${(n!=null)?` ${n}`:''}</button>`;
   };
   const selStyle = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.32rem .5rem;border-radius:6px;font-size:.8rem';
 
@@ -3043,7 +3043,7 @@ function _widgetFollowupsDue(followups) {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:.55rem .75rem;
                 border-bottom:1px solid var(--nd-border)">
       <div onclick="openClaimDrawer(${f.claim_id})" style="cursor:pointer;flex:1;min-width:0">
-        <div style="font-size:.78rem;color:${f.overdue?'#f87171':'rgba(255,255,255,.5)'};font-weight:600">
+        <div style="font-size:.78rem;color:${f.overdue?'#f87171':'var(--nd-text-muted)'};font-weight:600">
           📅 ${f.due_date}${f.overdue?' · OVERDUE':''}
         </div>
         <div style="font-size:.85rem;margin-top:.15rem;color:var(--nd-cyan-text)">#${fmtClaimNum(f.claim_id)} ${esc(f.insured_name||'—')}</div>
@@ -3057,7 +3057,7 @@ function _widgetFollowupsDue(followups) {
     <div class="nd-card" style="padding:1rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.85rem">
         <div style="font-weight:700;font-size:.98rem">📅 Follow-ups Due This Week</div>
-        <div style="font-size:.78rem;color:${overdue?'#f87171':'rgba(255,255,255,.45)'}">
+        <div style="font-size:.78rem;color:${overdue?'#f87171':'var(--nd-text-faint)'}">
           ${followups.length} total${overdue?` · ${overdue} overdue`:''}
         </div>
       </div>
@@ -3093,7 +3093,7 @@ function _widgetNeedsAttention(claims) {
     <div class="nd-card" style="padding:1rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.85rem">
         <div style="font-weight:700;font-size:.98rem">🔔 Needs Attention</div>
-        <div style="font-size:.78rem;color:${claims.length?'#fbbf24':'rgba(255,255,255,.45)'}">${claims.length} past suggested timeline</div>
+        <div style="font-size:.78rem;color:${claims.length?'#fbbf24':'var(--nd-text-faint)'}">${claims.length} past suggested timeline</div>
       </div>
       ${claims.length ? items :
         '<div style="padding:1rem;text-align:center;color:var(--nd-text-faint);font-size:.85rem">All on track ✓</div>'}
@@ -4253,7 +4253,7 @@ async function loadClaimMentions(claimId){
     if (!cands.length){ box.innerHTML='<span style="opacity:.5">No teammates to tag</span>'; return; }
     box.innerHTML = '<span style="opacity:.55;align-self:center">Tag:</span>' + cands.slice(0,40).map(c=>{
       const on = _claimMentionSel[claimId].has(c.staff_id);
-      return `<button type="button" id="claimMent_${claimId}_${c.staff_id}" onclick="claimToggleMention(${claimId},${c.staff_id})" style="background:${on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'};border:1px solid ${on?'#fbbf24':'rgba(255,255,255,.14)'};color:${on?'#fde68a':'rgba(255,255,255,.6)'};border-radius:14px;padding:.15rem .5rem;font-size:.75rem;cursor:pointer">${c.is_assignee?'★ ':''}${esc(c.name)}</button>`;
+      return `<button type="button" id="claimMent_${claimId}_${c.staff_id}" onclick="claimToggleMention(${claimId},${c.staff_id})" style="background:${on?'var(--nd-warning-soft)':'var(--nd-bg-surface-2)'};border:1px solid ${on?'#fbbf24':'var(--nd-border-strong)'};color:${on?'var(--nd-warning-text)':'var(--nd-text-secondary)'};border-radius:14px;padding:.15rem .5rem;font-size:.75rem;font-weight:600;cursor:pointer">${c.is_assignee?'★ ':''}${esc(c.name)}</button>`;
     }).join('');
   } catch(e){ box.innerHTML=''; }
 }
@@ -4262,7 +4262,7 @@ function claimToggleMention(claimId, staffId){
   const on = !_claimMentionSel[claimId].has(staffId);
   if (on) _claimMentionSel[claimId].add(staffId); else _claimMentionSel[claimId].delete(staffId);
   const el = document.getElementById('claimMent_'+claimId+'_'+staffId);
-  if (el){ el.style.background = on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'; el.style.borderColor = on?'#fbbf24':'rgba(255,255,255,.14)'; el.style.color = on?'#fde68a':'rgba(255,255,255,.6)'; }
+  if (el){ el.style.background = on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'; el.style.borderColor = on?'#fbbf24':'rgba(255,255,255,.14)'; el.style.color = on?'#fde68a':'var(--nd-text-muted)'; }
 }
 function claimNoteFilesPicked(claimId){
   const fi = document.getElementById('claimNoteFiles_'+claimId), fl = document.getElementById('claimNoteFileList_'+claimId);
@@ -4778,7 +4778,7 @@ function renderAcctDrawer() {
         <div onclick="switchAcctTab('${t}')"
              style="padding:.7rem 1rem;cursor:pointer;font-size:.84rem;font-weight:600;
                     border-bottom:2px solid ${_acctDrawerTab===t?'#22d3ee':'transparent'};
-                    color:${_acctDrawerTab===t?'#22d3ee':'rgba(255,255,255,.55)'};
+                    color:${_acctDrawerTab===t?'#22d3ee':'var(--nd-text-muted)'};
                     white-space:nowrap;transition:color .15s">
           ${labels[t]}
         </div>`).join('')}
@@ -4892,7 +4892,7 @@ function _acctTabClaims(d) {
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status s-${c.status}" style="font-size:.7rem">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
-      <td style="text-align:center;color:${c.open_tasks?'#fbbf24':'rgba(255,255,255,.4)'};font-weight:${c.open_tasks?'700':'400'}">${c.open_tasks||0}</td>
+      <td style="text-align:center;color:${c.open_tasks?'#fbbf24':'var(--nd-text-faint)'};font-weight:${c.open_tasks?'700':'400'}">${c.open_tasks||0}</td>
       <td style="font-size:.75rem;color:var(--nd-text-muted)">${esc((c.created_at||'').split('T')[0])}</td>
     </tr>`).join('');
   return `<div class="table-wrap"><table>
@@ -4915,7 +4915,7 @@ function _acctTabTasks(d) {
             ${t.priority && t.priority !== 'normal'?` · <b style="color:var(--nd-warning-text)">${esc(t.priority)}</b>`:''}
           </div>
         </div>
-        ${t.sla_due_at ? `<div style="font-size:.74rem;color:${ndUI.parseServerTime(t.sla_due_at)<new Date()?'#fbbf24':'rgba(255,255,255,.5)'};white-space:nowrap">due ${esc((t.sla_due_at||'').split('T')[0])}</div>`:''}
+        ${t.sla_due_at ? `<div style="font-size:.74rem;color:${ndUI.parseServerTime(t.sla_due_at)<new Date()?'#fbbf24':'var(--nd-text-muted)'};white-space:nowrap">due ${esc((t.sla_due_at||'').split('T')[0])}</div>`:''}
       </div>
     </div>`).join('');
 }
@@ -5274,7 +5274,7 @@ async function loadStaff() {
       ? `<button class="btn-icon" style="color:var(--nd-success-text)" onclick="restoreStaff(${s.staff_id})" title="Restore as inactive">♻️ Restore</button>`
       : `
         <button class="btn-icon" onclick="openEditStaffModal(${s.staff_id})" title="Edit">✏️</button>
-        ${_role==='super_admin'?`<button class="btn-icon" style="color:${s.telegram_access?'#60a5fa':'rgba(255,255,255,.3)'}" onclick="toggleStaffTg(${s.staff_id},${s.telegram_access?1:0})" title="${s.telegram_access?'Telegram enabled — click to disable (password-only)':'Telegram disabled — click to enable'}">${s.telegram_access?'✈️':'✈︎̶'}</button>`:''}
+        ${_role==='super_admin'?`<button class="btn-icon" style="color:${s.telegram_access?'#60a5fa':'var(--nd-text-faint)'}" onclick="toggleStaffTg(${s.staff_id},${s.telegram_access?1:0})" title="${s.telegram_access?'Telegram enabled — click to disable (password-only)':'Telegram disabled — click to enable'}">${s.telegram_access?'✈️':'✈︎̶'}</button>`:''}
         ${_role==='super_admin'?`<button class="btn-icon" style="color:var(--nd-warning-text)" onclick="resetStaffPassword(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')" title="Reset password (one click)">🔑↻</button>`:''}
         ${isSuper
           ? '<span class="btn-icon" style="opacity:.3;cursor:not-allowed" title="Super admins are protected">🔒</span>'
@@ -5526,8 +5526,8 @@ async function loadAnalytics() {
     <td style="text-align:center;color:var(--nd-success-text)">${fmt(c.subscribers)}</td>
     <td style="text-align:center;color:var(--nd-purple-text)">${fmt(c.onetime)}</td>
     <td style="text-align:right;font-size:.8rem">₹${fmt(c.revenue)}</td>
-    <td style="text-align:center;color:${c.abandoned>0?'#fbbf24':'rgba(255,255,255,.3)'}">${fmt(c.abandoned)}</td>
-    <td style="text-align:center;color:${c.payment_failed>0?'#fca5a5':'rgba(255,255,255,.3)'}">${fmt(c.payment_failed)}</td>
+    <td style="text-align:center;color:${c.abandoned>0?'#fbbf24':'var(--nd-text-faint)'}">${fmt(c.abandoned)}</td>
+    <td style="text-align:center;color:${c.payment_failed>0?'#fca5a5':'var(--nd-text-faint)'}">${fmt(c.payment_failed)}</td>
   </tr>`).join('');
 
   const failRows = (d.recent_failures||[]).map(fr=>{
@@ -6018,7 +6018,7 @@ async function openSupportThread(id){
     const ts = fmtDateTime(m.created_at);
     return `<div style="display:flex;justify-content:${side};margin:.35rem 0">
       <div style="max-width:80%;background:${bg};color:${col};padding:.55rem .8rem;border-radius:14px;${side==='flex-end'?'border-bottom-right-radius:5px':'border-bottom-left-radius:5px'};font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18)">
-        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'#67e8f9':'#a5b4fc')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}</div>`:''}</div></div>`;
+        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'var(--nd-text-secondary)':(ai?'#67e8f9':'#a5b4fc')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}</div>`:''}</div></div>`;
   }).join('');
   const ov = document.createElement('div');
   ov.id='supModal';
@@ -6075,7 +6075,7 @@ async function exportCSV(table){
 async function healthAction(action, desc){
   if (!confirm('Run this fix?\n\n• '+desc+'\n\nThis is logged/audited.')) return;
   const msgEl = document.getElementById('healthActionMsg');
-  if (msgEl){ msgEl.style.color='rgba(255,255,255,.6)'; msgEl.textContent='Working…'; }
+  if (msgEl){ msgEl.style.color='var(--nd-text-muted)'; msgEl.textContent='Working…'; }
   try {
     const r = await API('/health/action', {method:'POST', body:JSON.stringify({action})});
     const d = await r.json().catch(()=>({}));
@@ -7430,7 +7430,7 @@ function plPurposeChange(){
 async function genPaymentLink(){
   const g = id => document.getElementById(id);
   const msg = g('plMsg');
-  const setMsg = (t,ok)=>{ if(msg){ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'rgba(255,255,255,.6)'); } };
+  const setMsg = (t,ok)=>{ if(msg){ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'var(--nd-text-muted)'); } };
   const purpose = g('plPurpose').value;
   const name = (g('plName').value||'').trim();
   const phone = (g('plPhone').value||'').replace(/[^0-9]/g,'');

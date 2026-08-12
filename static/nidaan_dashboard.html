@@ -26,7 +26,7 @@
 })();
 </script>
 <title>Dashboard — Nidaan Partner</title>
-<link rel="stylesheet" href="/static/nidaan_design.css?v=4">
+<link rel="stylesheet" href="/static/nidaan_design.css?v=5">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
 <link rel="manifest" href="/static/nidaan.webmanifest">
 <meta name="theme-color" content="#06b6d4">
@@ -1349,7 +1349,7 @@ async function loadDashboard() {
           review_completed: '✅ Review Completed',
           pending_payment: '💳 Pending Payment',
         }[h.status] || h.status;
-        const statusColor = h.status === 'review_completed' ? '#4ade80' : h.status === 'pending_review' ? '#fbbf24' : 'rgba(255,255,255,.5)';
+        const statusColor = h.status === 'review_completed' ? '#4ade80' : h.status === 'pending_review' ? '#fbbf24' : 'var(--nd-text-muted)';
         return `
         <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:.6rem;padding:.85rem;margin-bottom:.7rem">
           <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">
@@ -1661,7 +1661,7 @@ async function uploadRvDocs(id, type) {
   const msgEl = document.getElementById(`rvDocMsg_${id}`);
   if (!files.length) return;
   btn.disabled = true;
-  msgEl.style.color = 'rgba(255,255,255,.5)';
+  msgEl.style.color = 'var(--nd-text-muted)';
   msgEl.textContent = 'Uploading…';
   try {
     const endpoint = type === 'review' ? `/nidaan/api/review/${id}/documents/upload` : `/nidaan/api/claims/${id}/documents/upload`;
@@ -1876,7 +1876,7 @@ async function uploadDrawerDocs(claim_id) {
   const msgEl = document.getElementById('drawerUploadMsg');
   if (!files.length) return;
   btn.disabled = true;
-  msgEl.style.color = 'rgba(255,255,255,.5)';
+  msgEl.style.color = 'var(--nd-text-muted)';
   msgEl.textContent = 'Uploading…';
   try {
     const fd = new FormData();
