@@ -121,12 +121,16 @@
   }
 
   var css = ''
-    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;gap:7px;padding:11px 17px;border-radius:999px;font-family:inherit;font-size:14.5px;font-weight:700;line-height:1;transition:transform .15s;animation:nswBtnPulse 2.6s ease-in-out infinite}'
+    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;gap:7px;padding:11px 17px;border-radius:999px;font-family:inherit;font-size:14.5px;font-weight:700;line-height:1;transition:transform .15s;animation:nswBtnPulse 2.6s ease-in-out infinite,nswBtnBounce 4.2s ease-in-out infinite}'
     + '.nsw-btn .nsw-btn-ico{font-size:21px;line-height:1}'
     + '.nsw-btn .nsw-btn-txt{white-space:nowrap;letter-spacing:.01em}'
     + '@media(max-width:400px){.nsw-btn{right:12px;bottom:12px;padding:10px 14px;font-size:13px;gap:6px}.nsw-btn .nsw-btn-ico{font-size:18px}}'
     + '.nsw-btn:active{transform:scale(.94)}'
     + '@keyframes nswBtnPulse{0%,100%{box-shadow:0 6px 20px rgba(6,182,212,.45)}50%{box-shadow:0 6px 26px rgba(6,182,212,.75)}}'
+    + '@keyframes nswBtnBounce{0%,68%,100%{transform:translateY(0)}78%{transform:translateY(-7px)}86%{transform:translateY(-3px)}92%{transform:translateY(-1px)}}'
+    + '.nsw-btn.nsw-dragging{animation:none!important;transition:none!important;cursor:grabbing}'
+    + '.nsw-min{position:absolute;top:.7rem;right:2.5rem;background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;line-height:1;opacity:.9}'
+    + '.nsw-min:hover{opacity:1}'
     + '.nsw-dot-live{position:absolute;top:-1px;right:-1px;width:15px;height:15px;border-radius:50%;background:#22c55e;border:2.5px solid #0a1628;animation:nswLive 1.3s ease-in-out infinite}'
     + '@keyframes nswLive{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.7);opacity:1}50%{box-shadow:0 0 0 6px rgba(34,197,94,0);opacity:.65}}'
     + '.nsw-panel{position:fixed;right:18px;bottom:86px;z-index:99999;width:360px;max-width:calc(100vw - 24px);height:540px;max-height:calc(100vh - 110px);background:#0a1628;border:1px solid rgba(255,255,255,.12);border-radius:16px;display:none;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}'
@@ -162,7 +166,7 @@
     + '.nsw-panel ::placeholder{color:rgba(255,255,255,.5)!important}'
     + '.nsw-in button{background:#06b6d4;border:none;border-radius:10px;color:#fff;padding:0 1rem;font-weight:700;cursor:pointer;font-size:1.1rem}'
     + '.nsw-in button:disabled{opacity:.5;cursor:default}'
-    + '.nsw-langbtn{position:absolute;top:.6rem;right:2.7rem;display:flex;align-items:center;gap:.2rem;white-space:nowrap;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:.8rem;font-weight:700;line-height:1;cursor:pointer;opacity:1;border-radius:16px;padding:.32rem .6rem}'
+    + '.nsw-langbtn{position:absolute;top:.6rem;right:4.6rem;display:flex;align-items:center;gap:.2rem;white-space:nowrap;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:.8rem;font-weight:700;line-height:1;cursor:pointer;opacity:1;border-radius:16px;padding:.32rem .6rem}'
     + '.nsw-langbtn:active{background:rgba(255,255,255,.32)}'
     + '.nsw-langbtn .cx{font-size:.62rem;opacity:.9}'
     + '.nsw-langmenu{position:absolute;top:2.5rem;right:.6rem;background:#0f1e3a;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:.3rem;display:none;flex-direction:column;gap:.15rem;z-index:6;box-shadow:0 6px 18px rgba(0,0,0,.4)}'
@@ -186,6 +190,7 @@
     + '<p id="nswHdrSub">Nidaan Partner · team online Mon–Fri, 10am–6pm IST</p>'
     + '<div id="nswChatId" style="font-size:.68rem;opacity:.92;margin-top:.15rem;display:none"></div>'
     + '<button class="nsw-langbtn" id="nswLangBtn" title="भाषा बदलें / Change language" aria-label="Change language"><span id="nswLangLabel">भाषा</span><span class="cx">▾</span></button>'
+    + '<button class="nsw-min" aria-label="Minimize" title="Minimize">–</button>'
     + '<button class="nsw-x" aria-label="Close">×</button>'
     + '<div class="nsw-langmenu" id="nswLangMenu"><button data-l="en">English</button><button data-l="hi">हिंदी</button><button data-l="hinglish">Hinglish</button></div></div>'
     + '<div class="nsw-msgs" id="nswMsgs"></div>'
@@ -339,6 +344,7 @@
     panel.classList.contains('open')?closePanel():openPanel();
   });
   panel.querySelector('.nsw-x').addEventListener('click', closePanel);
+  var _minBtn = panel.querySelector('.nsw-min'); if (_minBtn) _minBtn.addEventListener('click', closePanel);
 
   // ── Draggable FAB — users can move the chat button anywhere (e.g. off a Send
   // button). Position persists; tap still opens the chat (drag is distinguished). ──
@@ -357,11 +363,12 @@
     btn.addEventListener('pointermove', function(e){
       if(!dragging) return;
       var dx=e.clientX-sx, dy=e.clientY-sy;
-      if(!moved && (Math.abs(dx)>5 || Math.abs(dy)>5)) moved=true;
+      if(!moved && (Math.abs(dx)>5 || Math.abs(dy)>5)){ moved=true; btn.classList.add('nsw-dragging'); }
       if(moved){ applyPos(ox+dx, oy+dy); e.preventDefault(); }
     });
     btn.addEventListener('pointerup', function(){
       if(!dragging) return; dragging=false;
+      btn.classList.remove('nsw-dragging');
       if(moved){
         _suppressClick=true;   // don't open the chat when finishing a drag
         var r=btn.getBoundingClientRect();
