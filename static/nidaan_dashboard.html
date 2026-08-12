@@ -2468,7 +2468,8 @@ async function renderLeadChecklist(claimId) {
     const labelHtml = `<div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem"><span class="en">${esc(it.en||it.label||'')}</span><span class="hi">${esc(it.hi||it.en||it.label||'')}</span></div>`;
     if (it.received) {
       const delBtn = it.received_doc_id ? `<button type="button" onclick="deleteChecklistDoc('${claimId}',${it.received_doc_id})" title="Remove this file" style="background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-danger-text);border-radius:7px;padding:.35rem .55rem;font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap">🗑 <span class="en">Remove</span><span class="hi">हटाएँ</span></button>` : '';
-      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1">${labelHtml}<div style="font-size:.75rem;color:var(--nd-success-text)"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>${delBtn}`;
+      const fname = it.received_name ? `<div style="font-size:.72rem;color:var(--nd-text-muted);word-break:break-all;margin-top:.1rem">📎 ${esc(it.received_name)}</div>` : '';
+      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1">${labelHtml}<div style="font-size:.75rem;color:var(--nd-success-text)"><span class="en">Received</span><span class="hi">मिल गया</span></div>${fname}</div>${delBtn}`;
     } else {
       const inputId = 'lcfile_' + it.key, actId = 'lcact_' + it.key;
       row.innerHTML = `<div style="font-size:1.1rem">📄</div>
@@ -2919,7 +2920,7 @@ if ('serviceWorker' in navigator) {
 <script>window.NIDAAN_APP_ID='sub';window.NIDAAN_APP_NAME='Nidaan Partner';</script>
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
-<script src="/static/nidaan_support_widget.js?v=17" defer></script>
+<script src="/static/nidaan_support_widget.js?v=18" defer></script>
 <script src="/static/nidaan_track.js?v=1"></script>
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>

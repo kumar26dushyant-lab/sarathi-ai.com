@@ -3032,6 +3032,11 @@ async def nidaan_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
     stored = await nidaan.delete_claim_document(doc_id, account_id=payload["sub"], claim_id=claim_id)
     if stored is None: raise HTTPException(404, "Document not found")
     _nidaan_remove_doc_file(stored)
+    try:   # clear the checklist item that pointed to this doc, so it no longer shows 'Received'
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as _e:
+        logger.warning("checklist unmark on delete failed (claim %s doc %s): %s", claim_id, doc_id, _e)
     return {"ok": True}
 
 

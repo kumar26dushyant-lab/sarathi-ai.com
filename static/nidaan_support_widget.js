@@ -156,6 +156,10 @@
     + '.nsw-in{display:flex;gap:.5rem;padding:.7rem;border-top:1px solid rgba(255,255,255,.1);background:#0a1628}'
     + '.nsw-in textarea{flex:1;resize:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:.6rem;color:#fff;font-size:.9rem;font-family:inherit;max-height:90px}'
     + '.nsw-in textarea:focus{outline:none;border-color:#22d3ee}'
+    // The chat widget is always dark, even when the host page is in light mode — keep its
+    // fields light-on-dark so the global light-mode form rule can't blank them out.
+    + '.nsw-panel textarea,.nsw-panel input,.nsw-panel select{color:#fff!important;background:rgba(255,255,255,.06)!important;border-color:rgba(255,255,255,.14)!important}'
+    + '.nsw-panel ::placeholder{color:rgba(255,255,255,.5)!important}'
     + '.nsw-in button{background:#06b6d4;border:none;border-radius:10px;color:#fff;padding:0 1rem;font-weight:700;cursor:pointer;font-size:1.1rem}'
     + '.nsw-in button:disabled{opacity:.5;cursor:default}'
     + '.nsw-langbtn{position:absolute;top:.6rem;right:2.7rem;display:flex;align-items:center;gap:.2rem;white-space:nowrap;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:.8rem;font-weight:700;line-height:1;cursor:pointer;opacity:1;border-radius:16px;padding:.32rem .6rem}'

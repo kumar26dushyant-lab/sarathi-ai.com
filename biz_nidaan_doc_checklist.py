@@ -321,9 +321,32 @@ def pay_gate_ready(st: dict) -> bool:
     return rec >= min(PAY_GATE_MIN_DOCS, req)
 
 
+async def unmark_doc_by_doc_id(claim_id: int, doc_id: int) -> bool:
+    """When a customer deletes a document, clear the checklist item that pointed to it
+    so it shows as still-needed (Upload) again instead of a stale 'Received'."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_claim_doc_checklist SET received=0, received_via=NULL, "
+            "received_doc_id=NULL, updated_at=datetime('now') "
+            "WHERE claim_id=? AND received_doc_id=?", (claim_id, doc_id))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 async def checklist_status(claim_id: int, claim_type: str) -> dict:
     """Full status for dashboard/ops: counts + pending + complete flag."""
     rows = {r["doc_key"]: r for r in await _rows(claim_id)}
+    # original filenames of received docs, so the customer sees exactly what they attached
+    doc_ids = [r["received_doc_id"] for r in rows.values() if r and r["received_doc_id"]]
+    names = {}
+    if doc_ids:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            ph = ",".join("?" * len(doc_ids))
+            for dr in await (await conn.execute(
+                    f"SELECT doc_id, original_name FROM nidaan_claim_documents WHERE doc_id IN ({ph})",
+                    doc_ids)).fetchall():
+                names[dr["doc_id"]] = dr["original_name"]
     tmpl = doc_template_for(claim_type)
     required_total = received_required = 0
     items = []
@@ -332,12 +355,13 @@ async def checklist_status(claim_id: int, claim_type: str) -> dict:
         is_required = (r["required"] == 1) if r else d["required"]
         received = (r["received"] == 1) if r else False
         via = r["received_via"] if r else None
+        rdid = r["received_doc_id"] if r else None
         if is_required:
             required_total += 1
             received_required += 1 if received else 0
         items.append({**d, "required_effective": is_required,
                       "received": received, "received_via": via,
-                      "received_doc_id": (r["received_doc_id"] if r else None)})
+                      "received_doc_id": rdid, "received_name": names.get(rdid)})
     complete = required_total > 0 and received_required == required_total
     return {
         "claim_id": claim_id,

@@ -2596,7 +2596,7 @@ async function openQuickTaskDrawer(qid){
 
 function _renderQTThread(notes, qid, canComment){
   if (!notes.length) return '<div style="color:var(--nd-text-faint);font-size:.85rem">No comments yet.</div>';
-  const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
+  const roleColors = {super_admin:'var(--nd-purple-text)', sub_super_admin:'var(--nd-cyan-text)', team_member:'var(--nd-success-text)'};
   const roleLabel = {super_admin:'SA', sub_super_admin:'ADMIN', team_member:'ASSOC'};
   const isAdmin = (_role==='super_admin' || _role==='sub_super_admin');
   const byParent = {};
@@ -2606,7 +2606,7 @@ function _renderQTThread(notes, qid, canComment){
     else roots.push(n);
   });
   const renderNote = (n, isReply) => {
-    const c = roleColors[n.staff_role] || '#94a3b8';
+    const c = roleColors[n.staff_role] || 'var(--nd-text-muted)';
     const l = roleLabel[n.staff_role] || 'STAFF';
     // Seen-receipt — ✓ sent, ✓✓ Seen (by whom, on hover). Replaces approval.
     const readers = n.reads || [];
@@ -2984,7 +2984,7 @@ function _widgetTaskPipeline(tasks) {
   };
   const total = tasks.reduce((s,t)=>s + (t.cnt||0), 0);
   const rows = tasks.length ? tasks.map(t => {
-    const color = statusColors[t.status_slug] || '#94a3b8';
+    const color = statusColors[t.status_slug] || 'var(--nd-text-muted)';
     const label = (t.status_slug||'').replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase());
     return `
       <div onclick="drillIntoTaskStatus('${esc(t.status_slug)}','${esc(label)}')"
@@ -3139,7 +3139,7 @@ function _widgetClaimsByStatus(rows) {
   };
   const total = rows.reduce((s,r)=>s+(r.cnt||0),0);
   const items = rows.map(r => {
-    const color = statusColors[r.status] || '#94a3b8';
+    const color = statusColors[r.status] || 'var(--nd-text-muted)';
     const label = (r.status||'').replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase());
     const pct = total ? (r.cnt/total*100) : 0;
     return `
@@ -3183,9 +3183,9 @@ function _widgetWorkload(rows) {
 
 // ── Widget: Recent Comments (SA / admin) ─────────────────────────────────────
 function _widgetRecentComments(comments) {
-  const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
+  const roleColors = {super_admin:'var(--nd-purple-text)', sub_super_admin:'var(--nd-cyan-text)', team_member:'var(--nd-success-text)'};
   const items = comments.slice(0, 8).map(c => {
-    const color = roleColors[c.staff_role] || '#94a3b8';
+    const color = roleColors[c.staff_role] || 'var(--nd-text-muted)';
     const snip = (c.note||'').substring(0, 140) + (c.note && c.note.length > 140 ? '…' : '');
     const target = c.source === 'task'
       ? `task on #${fmtClaimNum(c.claim_id)} · ${esc(c.task_title||'')}`
@@ -3215,7 +3215,7 @@ let _opsPayFilter = '';   // '' | 'unpaid_lead' | 'paid' | 'subscription'
 function _payBadge(ps) {
   if (ps === 'unpaid_lead') return '<span title="Free lead — not yet paid" style="background:#7c2d12;color:#fdba74;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px;letter-spacing:.04em">LEAD</span>';
   if (ps === 'subscription') return '<span title="Covered by subscription" style="background:#1e3a8a;color:#93c5fd;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">SUB</span>';
-  return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:#6ee7b7;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
+  return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:var(--nd-success-text);font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
 }
 function setOpsPayFilter(ps) {
   _opsPayFilter = (_opsPayFilter === ps) ? '' : ps;  // toggle
@@ -3497,7 +3497,7 @@ async function loadBranches() {
       <td style="text-align:right;font-size:.78rem">₹${fmt(b.revenue||0)}</td>
       <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:var(--nd-cyan-text);font-size:.7rem">edit</a>`:''}</td>
       <td style="text-align:right;font-size:.78rem;color:var(--nd-warning-text)">₹${fmt(b.share||0)}</td>
-      <td><span style="font-size:.7rem;font-weight:700;color:${active?'#34d399':'#fca5a5'}">${b.status}</span></td>
+      <td><span style="font-size:.7rem;font-weight:700;color:${active?'var(--nd-success-text)':'#fca5a5'}">${b.status}</span></td>
       <td style="white-space:nowrap">${_role==='super_admin'?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this branch's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
@@ -3893,12 +3893,12 @@ async function openClaimDrawer(claimId) {
       <h4>Branch &amp; Level-2</h4>
       <div class="kv"><span class="kv-label">Origin</span><span class="kv-val">Branch${c.branch_code?(' · '+esc(c.branch_code)):''}</span></div>
       <div class="kv"><span class="kv-label">Review</span><span class="kv-val">${
-        c.review_outcome==='can_fight'?'<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Can be challenged (GO)</span>'
+        c.review_outcome==='can_fight'?'<span style="background:#065f46;color:var(--nd-success-text);padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Can be challenged (GO)</span>'
         :(c.review_outcome==='no_scope'?'<span style="background:#7c2d12;color:#fdba74;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">No scope</span>':'—')
       }</span></div>
       <div class="kv"><span class="kv-label">Level-2</span><span class="kv-val">${
         c.l2_payment_status==='paid'
-          ? '<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' paid'):'no charge')+'</span>'
+          ? '<span style="background:#065f46;color:var(--nd-success-text);padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' paid'):'no charge')+'</span>'
           : (c.review_outcome==='can_fight'?'<span style="background:#78350f;color:#fcd34d;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Awaiting branch payment</span>':'—')
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
@@ -4198,12 +4198,12 @@ let _claimMentionSel = {};   // claimId -> Set(staff_id) currently selected to @
 
 function _renderClaimNotesThread(notes, claimId){
   if (!notes || !notes.length) return '<div style="font-size:.8rem;color:var(--nd-text-faint)">No notes yet</div>';
-  const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
+  const roleColors = {super_admin:'var(--nd-purple-text)', sub_super_admin:'var(--nd-cyan-text)', team_member:'var(--nd-success-text)'};
   const roleLabel  = {super_admin:'SA', sub_super_admin:'ADMIN', team_member:'ASSOC'};
   const byParent = {}, roots = [];
   notes.forEach(n => { if (n.parent_note_id) (byParent[n.parent_note_id]=byParent[n.parent_note_id]||[]).push(n); else roots.push(n); });
   const renderNote = (n, isReply) => {
-    const col = roleColors[n.staff_role] || '#94a3b8';
+    const col = roleColors[n.staff_role] || 'var(--nd-text-muted)';
     const lab = roleLabel[n.staff_role] || 'STAFF';
     const readers = n.reads || [];
     const tick = readers.length
@@ -4754,7 +4754,7 @@ function renderAcctDrawer() {
         </div>
         <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .75rem">
           <div style="font-size:.7rem;color:var(--nd-text-muted);text-transform:uppercase">Open Tasks</div>
-          <div style="font-weight:800;font-size:1.15rem;color:${s.open_tasks?'#fbbf24':'#86efac'}">${s.open_tasks}</div>
+          <div style="font-weight:800;font-size:1.15rem;color:${s.open_tasks?'#fbbf24':'var(--nd-success-text)'}">${s.open_tasks}</div>
         </div>
         <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .75rem">
           <div style="font-size:.7rem;color:var(--nd-text-muted);text-transform:uppercase">Paid (LTV)</div>
@@ -5516,7 +5516,7 @@ async function loadAnalytics() {
     return `<div style="flex:1;min-width:120px;text-align:center;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);border-radius:12px;padding:.7rem .4rem">
       <div style="font-size:1.35rem;font-weight:800;color:var(--nd-cyan-text)">${fmt(val)}</div>
       <div style="font-size:.72rem;color:var(--nd-text-secondary)">${label}</div>
-      ${pct!==null?`<div style="font-size:.66rem;color:${pct>=50?'#34d399':'#fbbf24'};margin-top:.15rem">${pct}% of prev</div>`:''}
+      ${pct!==null?`<div style="font-size:.66rem;color:${pct>=50?'var(--nd-success-text)':'#fbbf24'};margin-top:.15rem">${pct}% of prev</div>`:''}
     </div>`;
   };
 
@@ -6821,7 +6821,7 @@ function _renderTaskThread(notes, taskId, canComment){
   if (!notes || !notes.length) {
     return '<div style="color:var(--nd-text-faint);font-size:.85rem">No comments yet — say something to kick things off.</div>';
   }
-  const roleColors = {super_admin:'#a78bfa', sub_super_admin:'#22d3ee', team_member:'#86efac'};
+  const roleColors = {super_admin:'var(--nd-purple-text)', sub_super_admin:'var(--nd-cyan-text)', team_member:'var(--nd-success-text)'};
   const roleLabel = {super_admin:'SA', sub_super_admin:'ADMIN', team_member:'ASSOC'};
   const byParent = {};
   const roots = [];
@@ -6833,7 +6833,7 @@ function _renderTaskThread(notes, taskId, canComment){
     }
   });
   const renderNote = (n, isReply) => {
-    const color = roleColors[n.staff_role] || '#94a3b8';
+    const color = roleColors[n.staff_role] || 'var(--nd-text-muted)';
     const label = roleLabel[n.staff_role] || 'STAFF';
     return `
       <div style="${isReply?'margin-left:1.25rem;border-left:2px solid '+color+'33;padding-left:.6rem':''};margin-bottom:.6rem">
@@ -7476,7 +7476,7 @@ async function loadPaymentLinks(){
     if(!r.ok){ box.innerHTML=''; return; }
     const links = (await r.json()).links || [];
     if(!links.length){ box.innerHTML='<div style="font-size:.8rem;color:var(--nd-text-faint)">No payment links generated yet.</div>'; return; }
-    const badge = s => { const c = s==='paid'?'#065f46;color:#6ee7b7':(s==='expired'||s==='cancelled'?'#7c2d12;color:#fdba74':'#334155;color:var(--nd-text-secondary)'); return '<span style="background:'+c+';padding:.1rem .5rem;border-radius:10px;font-size:.72rem;font-weight:700">'+esc(s)+'</span>'; };
+    const badge = s => { const c = s==='paid'?'#065f46;color:var(--nd-success-text)':(s==='expired'||s==='cancelled'?'#7c2d12;color:#fdba74':'#334155;color:var(--nd-text-secondary)'); return '<span style="background:'+c+';padding:.1rem .5rem;border-radius:10px;font-size:.72rem;font-weight:700">'+esc(s)+'</span>'; };
     const rows = links.map(l=>`<tr>
       <td style="padding:.4rem .5rem">${esc(l.customer_name||'—')}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(l.customer_phone||'')}</span></td>
       <td style="padding:.4rem .5rem">${esc(l.purpose)}${l.plan?(' · '+esc(l.plan)):''}</td>
@@ -7747,7 +7747,7 @@ async function loadTelegramPanel(){
     const dc = d.device_count || 1;
     const devList = (d.devices||[]).map(v=>`<div style="font-size:.78rem;color:var(--nd-text-muted)">• ${v.username?('@'+esc(v.username)):('chat '+esc(String(v.chat_id||'').slice(-4))) } <span style="color:var(--nd-text-faint)">· ${esc(String(v.linked_at||'').slice(0,10))}</span></div>`).join('');
     mine = `<div class="nd-card" style="padding:1rem;margin-bottom:1rem;border-color:rgba(34,197,94,.35)">
-      <div style="font-weight:700;font-size:1rem;margin-bottom:.4rem">🔗 My Telegram <span style="color:#22c55e">✅ Connected</span> <span style="font-size:.76rem;color:var(--nd-text-muted);font-weight:500">· ${dc} device${dc>1?'s':''}</span></div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:.4rem">🔗 My Telegram <span style="color:var(--nd-success-text)">✅ Connected</span> <span style="font-size:.76rem;color:var(--nd-text-muted);font-weight:500">· ${dc} device${dc>1?'s':''}</span></div>
       <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:.5rem">
         You're receiving NidaanPartner notifications on Telegram. If you use the <b>same</b> Telegram account elsewhere, it's already covered there automatically.
       </div>
@@ -7875,14 +7875,14 @@ async function loadTgTeamStatus(){
           ? `✅ Connected${s.device_count>1?` · ${s.device_count} devices`:''}${s.username?` · @${esc(s.username)}`:''}`
           : '<span style="color:var(--nd-warning-text)">⏳ Not connected</span>'}</div>
       </div>
-      ${on ? '<span style="color:#22c55e;font-size:1.1rem;flex-shrink:0">●</span>'
+      ${on ? '<span style="color:var(--nd-success-text);font-size:1.1rem;flex-shrink:0">●</span>'
            : `<button class="btn-sm btn-ghost" style="flex-shrink:0;color:var(--nd-cyan-text)" onclick="tgInstantLink(${s.staff_id},'${esc((s.name||'').replace(/'/g,''))}')">🔗 Instant link</button>`}
     </div>`;
   }).join('');
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
       <div style="font-weight:700;font-size:1rem">👥 Team connections</div>
-      <div style="font-size:.8rem;color:var(--nd-text-muted)"><b style="color:#22c55e">${d.connected}</b> connected · <b style="color:var(--nd-warning-text)">${d.pending}</b> pending · ${d.total} staff</div>
+      <div style="font-size:.8rem;color:var(--nd-text-muted)"><b style="color:var(--nd-success-text)">${d.connected}</b> connected · <b style="color:var(--nd-warning-text)">${d.pending}</b> pending · ${d.total} staff</div>
     </div>
     <div style="font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.5rem">For anyone struggling, tap <b>Instant link</b> and share it with them — one tap connects them (valid 15 min, one-time).</div>
     ${rows}
@@ -7905,7 +7905,7 @@ async function tgInstantLink(staffId, name){
     <div style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .65rem;font-size:.8rem;color:var(--nd-cyan-text);word-break:break-all;margin-bottom:.75rem">${esc(url)}</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
       <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>ndUI.toast('Link copied','success'))">📋 Copy link</button>
-      <a class="btn-sm btn-ghost" style="text-decoration:none;color:#22c55e" target="_blank" href="https://wa.me/?text=${encodeURIComponent('Connect to NidaanPartner Telegram: '+url)}">📲 Share on WhatsApp</a>
+      <a class="btn-sm btn-ghost" style="text-decoration:none;color:var(--nd-success-text)" target="_blank" href="https://wa.me/?text=${encodeURIComponent('Connect to NidaanPartner Telegram: '+url)}">📲 Share on WhatsApp</a>
       <button class="btn-sm btn-ghost" style="margin-left:auto" onclick="document.getElementById('tgLinkBg').remove()">Close</button>
     </div>
   </div>`;
@@ -8108,7 +8108,7 @@ function _renderQRConnected(slot){
   document.getElementById('drawerBody').innerHTML = `
     <div style="text-align:center;padding:1.5rem">
       <div style="font-size:2.5rem;margin-bottom:.5rem">✅</div>
-      <h3 style="margin-bottom:.5rem;color:#22c55e">Slot ${slot} connected!</h3>
+      <h3 style="margin-bottom:.5rem;color:var(--nd-success-text)">Slot ${slot} connected!</h3>
       <div style="font-size:.85rem;color:var(--nd-text-secondary)">WhatsApp is now linked and ready to send.</div>
     </div>`;
   ndUI.toast('Slot '+slot+' connected!','success');
@@ -8122,7 +8122,7 @@ function _renderQRDrawer(slot, d){
     html = `
       <div style="text-align:center;padding:1.5rem">
         <div style="font-size:2.5rem;margin-bottom:.5rem">✅</div>
-        <h3 style="margin-bottom:.5rem;color:#22c55e">Slot ${slot} is already connected</h3>
+        <h3 style="margin-bottom:.5rem;color:var(--nd-success-text)">Slot ${slot} is already connected</h3>
         <div style="font-size:.85rem;color:var(--nd-text-secondary)">
           No QR needed — this WhatsApp instance is paired and active. If you want to re-pair
           (e.g. moved SIM to a new phone), use Re-pair to log it out first.
@@ -8271,7 +8271,7 @@ async function loadRefunds(containerId){
   const statusPill = (s) => {
     const colors = {processed:'#22c55e', processing:'#06b6d4', pending:'#fbbf24',
                     failed:'#f87171', manual:'#a78bfa'};
-    const c = colors[s] || '#94a3b8';
+    const c = colors[s] || 'var(--nd-text-muted)';
     return `<span class="task-pill" style="background:${c}22;color:${c};border:1px solid ${c}44;padding:.2rem .55rem">${s.toUpperCase()}</span>`;
   };
 
