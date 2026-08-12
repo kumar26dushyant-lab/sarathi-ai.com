@@ -13,29 +13,31 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Nidaan Partner">
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
+<link rel="stylesheet" href="/static/nidaan_design.css?v=2">
+<script src="/static/nidaan_theme.js?v=1"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060f1e;color:#fff;min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
-select{color-scheme:dark}select option{background:#0f1e3a;color:#e2e8f0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--nd-bg-base);color:var(--nd-text-primary);min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
+select{color-scheme:dark}select option{background:var(--nd-bg-base-2);color:var(--nd-text-primary)}
 
 /* ── i18n: EN / हिं toggle (matches homepage + dashboard) ── */
 body.en .hi{display:none!important}
 body.hi .en{display:none!important}
 .i18n-inline .en,.i18n-inline .hi{display:inline}
 .lang-toggle{display:flex;gap:.25rem}
-.lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:700;border:1.5px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
+.lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:700;border:1.5px solid var(--nd-border-strong);background:transparent;color:var(--nd-text-secondary);cursor:pointer;transition:all .2s}
 .lang-btn.active{background:#06b6d4;border-color:#06b6d4;color:#fff}
 
 /* ── NAV ── */
-nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:rgba(6,15,30,.95);border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
-.nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;text-decoration:none}
+nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;background:var(--nd-bg-elev-blur);border-bottom:1px solid var(--nd-border);flex-shrink:0}
+.nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:var(--nd-text-primary);text-decoration:none}
 .nav-brand img{height:32px;border-radius:5px}
-.nav-back{font-size:.85rem;color:rgba(255,255,255,.5);text-decoration:none;transition:color .15s}
-.nav-back:hover{color:#22d3ee}
+.nav-back{font-size:.85rem;color:var(--nd-text-muted);text-decoration:none;transition:color .15s}
+.nav-back:hover{color:var(--nd-cyan-text)}
 
 /* ── LAYOUT ── */
 .page{flex:1;display:flex;align-items:center;justify-content:center;padding:1.5rem 1rem;overflow-y:auto}
-.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:440px;position:relative}
+.card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:440px;position:relative}
 
 /* ── STEPS ── */
 .step{display:none}
@@ -44,16 +46,16 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem
 /* ── HEADINGS ── */
 .card-icon{font-size:2rem;margin-bottom:.6rem}
 h1{font-size:1.45rem;font-weight:800;line-height:1.25;margin-bottom:.35rem}
-.card-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
-.email-chip{display:inline-flex;align-items:center;gap:.5rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .75rem .3rem .6rem;font-size:.85rem;color:#22d3ee;margin-bottom:1.25rem;cursor:pointer}
+.card-sub{color:var(--nd-text-muted);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
+.email-chip{display:inline-flex;align-items:center;gap:.5rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .75rem .3rem .6rem;font-size:.85rem;color:var(--nd-cyan-text);margin-bottom:1.25rem;cursor:pointer}
 .email-chip svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0}
 
 /* ── FORM FIELDS ── */
 .field{margin-bottom:1rem}
-label{display:block;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.6);margin-bottom:.35rem}
-input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;transition:border .15s;-webkit-appearance:none}
+label{display:block;font-size:.8rem;font-weight:600;color:var(--nd-text-secondary);margin-bottom:.35rem}
+input{width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:10px;padding:.75rem 1rem;color:var(--nd-text-primary);font-size:.95rem;outline:none;transition:border .15s;-webkit-appearance:none}
 input:focus{border-color:#22d3ee}
-input::placeholder{color:rgba(255,255,255,.25)}
+input::placeholder{color:var(--nd-text-disabled)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
 
 /* ── BUTTONS ── */
@@ -61,42 +63,42 @@ input::placeholder{color:rgba(255,255,255,.25)}
 .btn-cyan{background:#06b6d4;color:#fff}
 .btn-cyan:hover{background:#0891b2}
 .btn-cyan:disabled{background:#1e4a5c;cursor:not-allowed;opacity:.7}
-.btn-ghost{background:transparent;border:1.5px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7)}
-.btn-ghost:hover{border-color:rgba(255,255,255,.4);color:#fff}
+.btn-ghost{background:transparent;border:1.5px solid var(--nd-border-strong);color:var(--nd-text-secondary)}
+.btn-ghost:hover{border-color:var(--nd-border-strong);color:var(--nd-text-primary)}
 .btn-sm{font-size:.84rem;padding:.6rem 1rem;width:auto}
 
 /* ── DIVIDER ── */
 .divider{display:flex;align-items:center;gap:.75rem;margin:1.1rem 0}
-.divider span{font-size:.78rem;color:rgba(255,255,255,.35);white-space:nowrap}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.09)}
+.divider span{font-size:.78rem;color:var(--nd-text-faint);white-space:nowrap}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--nd-bg-surface-3)}
 
 /* ── GOOGLE BUTTON ── */
 .google-wrap{width:100%;min-height:44px;display:flex;justify-content:center;margin-bottom:.25rem}
-.google-stub{width:100%;text-align:center;padding:.75rem;color:rgba(255,255,255,.3);font-size:.8rem;border:1.5px dashed rgba(255,255,255,.1);border-radius:10px}
+.google-stub{width:100%;text-align:center;padding:.75rem;color:var(--nd-text-faint);font-size:.8rem;border:1.5px dashed var(--nd-border-strong);border-radius:10px}
 
 /* ── TABS ── */
-.tabs{display:flex;gap:.4rem;margin-bottom:1.1rem;background:rgba(255,255,255,.04);border-radius:10px;padding:.25rem}
-.tab{flex:1;padding:.45rem;border-radius:7px;border:none;background:transparent;color:rgba(255,255,255,.45);font-size:.84rem;font-weight:600;cursor:pointer;transition:all .15s}
-.tab.active{background:rgba(34,211,238,.15);color:#22d3ee}
+.tabs{display:flex;gap:.4rem;margin-bottom:1.1rem;background:var(--nd-bg-surface);border-radius:10px;padding:.25rem}
+.tab{flex:1;padding:.45rem;border-radius:7px;border:none;background:transparent;color:var(--nd-text-muted);font-size:.84rem;font-weight:600;cursor:pointer;transition:all .15s}
+.tab.active{background:rgba(34,211,238,.15);color:var(--nd-cyan-text)}
 
 /* ── OTP ── */
 .otp-actions{display:flex;gap:.6rem;align-items:center;margin-top:.6rem}
-.otp-hint{font-size:.78rem;color:rgba(255,255,255,.4)}
-#countdown{font-size:.78rem;color:#22d3ee;font-weight:700}
+.otp-hint{font-size:.78rem;color:var(--nd-text-faint)}
+#countdown{font-size:.78rem;color:var(--nd-cyan-text);font-weight:700}
 
 /* ── MESSAGES ── */
 .msg{font-size:.83rem;padding:.55rem .85rem;border-radius:8px;margin-top:.75rem;display:none;line-height:1.5}
-.msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
-.msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#86efac;display:block}
-.msg.info{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);color:#67e8f9;display:block}
+.msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:var(--nd-danger-text);display:block}
+.msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:var(--nd-success-text);display:block}
+.msg.info{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);color:var(--nd-cyan-text);display:block}
 
 /* ── FOOTER LINKS ── */
-.card-foot{text-align:center;margin-top:1.25rem;font-size:.84rem;color:rgba(255,255,255,.4)}
-.card-foot a{color:#22d3ee}
+.card-foot{text-align:center;margin-top:1.25rem;font-size:.84rem;color:var(--nd-text-faint)}
+.card-foot a{color:var(--nd-cyan-text)}
 
 /* ── BACK ARROW ── */
-.back-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;color:rgba(255,255,255,.4);cursor:pointer;margin-bottom:1rem;background:none;border:none;padding:0;transition:color .15s}
-.back-link:hover{color:#22d3ee}
+.back-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;color:var(--nd-text-faint);cursor:pointer;margin-bottom:1rem;background:none;border:none;padding:0;transition:color .15s}
+.back-link:hover{color:var(--nd-cyan-text)}
 
 /* ── RESPONSIVE ── */
 @media(max-width:480px){
@@ -124,7 +126,7 @@ input::placeholder{color:rgba(255,255,255,.25)}
 <body class="en">
 <div id="nbusy" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(6,13,26,.75);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:1rem">
   <div style="width:44px;height:44px;border:4px solid rgba(34,211,238,.25);border-top-color:#22d3ee;border-radius:50%;animation:nspin .8s linear infinite"></div>
-  <div id="nbusyText" style="font-weight:600;color:#22d3ee;font-size:.95rem">Signing you in…</div>
+  <div id="nbusyText" style="font-weight:600;color:var(--nd-cyan-text);font-size:.95rem">Signing you in…</div>
 </div>
 <style>@keyframes nspin{to{transform:rotate(360deg)}}</style>
 
@@ -135,6 +137,7 @@ input::placeholder{color:rgba(255,255,255,.25)}
   </a>
   <div style="display:flex;align-items:center;gap:1rem">
     <a href="/" class="nav-back"><span class="en">← Back to home</span><span class="hi">← होम पर वापस</span></a>
+    <button class="nd-theme-toggle" style="font-size:.8rem;background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary);border-radius:6px;padding:.25rem .55rem;cursor:pointer"></button>
     <div class="lang-toggle">
       <button class="lang-btn active" onclick="setLang('en')">EN</button>
       <button class="lang-btn" onclick="setLang('hi')">हिं</button>
@@ -196,8 +199,8 @@ function setLang(l){
 
       <!-- Funnel framing: shown only when arriving via "Check if you have a case" -->
       <div id="funnel-auth-note" style="display:none;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.22);border-radius:12px;padding:.85rem 1rem;margin-bottom:1.1rem;text-align:left">
-        <div style="font-weight:700;color:#22d3ee;font-size:.9rem;margin-bottom:.25rem"><span class="en">📋 Let's check if you have a case</span><span class="hi">📋 आइए देखें कि आपके पास केस है या नहीं</span></div>
-        <div style="font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5"><span class="en">Create your free account to submit your rejected or underpaid claim. <strong style="color:rgba(255,255,255,.85)">No payment to start</strong> — our legal experts review it first.</span><span class="hi">अपना खारिज या कम भुगतान वाला क्लेम जमा करने के लिए मुफ़्त खाता बनाएं। <strong style="color:rgba(255,255,255,.85)">शुरू करने के लिए कोई भुगतान नहीं</strong> — हमारे कानूनी विशेषज्ञ पहले इसकी समीक्षा करते हैं।</span></div>
+        <div style="font-weight:700;color:var(--nd-cyan-text);font-size:.9rem;margin-bottom:.25rem"><span class="en">📋 Let's check if you have a case</span><span class="hi">📋 आइए देखें कि आपके पास केस है या नहीं</span></div>
+        <div style="font-size:.82rem;color:var(--nd-text-secondary);line-height:1.5"><span class="en">Create your free account to submit your rejected or underpaid claim. <strong style="color:var(--nd-text-primary)">No payment to start</strong> — our legal experts review it first.</span><span class="hi">अपना खारिज या कम भुगतान वाला क्लेम जमा करने के लिए मुफ़्त खाता बनाएं। <strong style="color:var(--nd-text-primary)">शुरू करने के लिए कोई भुगतान नहीं</strong> — हमारे कानूनी विशेषज्ञ पहले इसकी समीक्षा करते हैं।</span></div>
       </div>
 
       <!-- Google first -->
@@ -211,8 +214,8 @@ function setLang(l){
       <div class="field">
         <label><span class="en">Work email *</span><span class="hi">कार्य ईमेल *</span></label>
         <input type="email" id="emailInput" placeholder="advisor@example.com" autocomplete="email" inputmode="email">
-        <p class="en" style="font-size:.72rem;color:rgba(255,255,255,.5);margin:.28rem 0 0">📧 With your email you'll get status updates and support replies straight to your inbox.</p>
-        <p class="hi" style="font-size:.72rem;color:rgba(255,255,255,.5);margin:.28rem 0 0">📧 आपके ईमेल पर आपको प्रगति अपडेट और सपोर्ट के जवाब सीधे मिलेंगे।</p>
+        <p class="en" style="font-size:.72rem;color:var(--nd-text-muted);margin:.28rem 0 0">📧 With your email you'll get status updates and support replies straight to your inbox.</p>
+        <p class="hi" style="font-size:.72rem;color:var(--nd-text-muted);margin:.28rem 0 0">📧 आपके ईमेल पर आपको प्रगति अपडेट और सपोर्ट के जवाब सीधे मिलेंगे।</p>
       </div>
       <button class="btn btn-cyan" id="continueBtn" onclick="checkEmail()">
         <span class="en">Continue &rarr;</span><span class="hi">जारी रखें &rarr;</span>
@@ -355,9 +358,9 @@ function setLang(l){
           <input type="text" id="regFirm" placeholder="Optional">
         </div>
         <div class="field">
-          <label><span class="en">Branch / referral code</span><span class="hi">ब्रांच / रेफ़रल कोड</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">if someone referred you</span><span class="hi">यदि किसी ने भेजा हो</span>)</span></label>
+          <label><span class="en">Branch / referral code</span><span class="hi">ब्रांच / रेफ़रल कोड</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">if someone referred you</span><span class="hi">यदि किसी ने भेजा हो</span>)</span></label>
           <input type="text" id="regBranch" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters">
-          <div id="regRefBy" style="display:none;margin-top:.4rem;font-size:.82rem;color:#6ee7b7"></div>
+          <div id="regRefBy" style="display:none;margin-top:.4rem;font-size:.82rem;color:var(--nd-success-text)"></div>
         </div>
         <div class="field">
           <label><span class="en">Password *</span><span class="hi">पासवर्ड *</span></label>
@@ -1051,39 +1054,39 @@ async function _prefillClaimForm() {
 <style>
 #review-section{display:none;flex:1;flex-direction:column;align-items:center;padding:1.5rem 1rem}
 .rev-wrap{display:flex;gap:1.5rem;width:100%;max-width:980px;align-items:flex-start}
-#review-section .rev-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2.25rem 2rem;flex:1 1 540px;min-width:0}
+#review-section .rev-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:20px;padding:2.25rem 2rem;flex:1 1 540px;min-width:0}
 /* Motivational side panel — fills the blank space + nudges users to get a review */
 .rev-side{flex:0 0 320px;display:flex;flex-direction:column;gap:.9rem;position:sticky;top:1.25rem}
-.rev-side-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.1rem 1.2rem}
+.rev-side-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:16px;padding:1.1rem 1.2rem}
 .rev-side-hero{background:linear-gradient(135deg,rgba(6,182,212,.14),rgba(8,145,178,.06));border:1px solid rgba(34,211,238,.25)}
 .rev-stat{display:flex;align-items:center;gap:.7rem;padding:.4rem 0}
-.rev-stat b{font-size:1.35rem;color:#22d3ee;font-family:'Poppins',sans-serif;min-width:64px;text-align:center}
-.rev-step{display:flex;gap:.6rem;align-items:flex-start;font-size:.84rem;color:rgba(255,255,255,.7);padding:.3rem 0;line-height:1.45}
-.rev-step .n{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(34,211,238,.18);color:#22d3ee;font-weight:800;font-size:.78rem;display:flex;align-items:center;justify-content:center}
+.rev-stat b{font-size:1.35rem;color:var(--nd-cyan-text);font-family:'Poppins',sans-serif;min-width:64px;text-align:center}
+.rev-step{display:flex;gap:.6rem;align-items:flex-start;font-size:.84rem;color:var(--nd-text-secondary);padding:.3rem 0;line-height:1.45}
+.rev-step .n{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(34,211,238,.18);color:var(--nd-cyan-text);font-weight:800;font-size:.78rem;display:flex;align-items:center;justify-content:center}
 /* Document upload slots */
 #rev-docs-wrap{margin-bottom:1.1rem}
-.doc-slot{display:flex;align-items:center;gap:.7rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.6rem .75rem;margin-bottom:.55rem}
+.doc-slot{display:flex;align-items:center;gap:.7rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border-strong);border-radius:10px;padding:.6rem .75rem;margin-bottom:.55rem}
 .doc-slot.done{border-color:rgba(52,211,153,.4);background:rgba(16,185,129,.08)}
-.doc-slot .dlabel{flex:1;min-width:0;font-size:.85rem;color:#fff;font-weight:600}
-.doc-slot .dwhy{font-size:.72rem;color:rgba(255,255,255,.4);line-height:1.4;font-weight:400}
+.doc-slot .dlabel{flex:1;min-width:0;font-size:.85rem;color:var(--nd-text-primary);font-weight:600}
+.doc-slot .dwhy{font-size:.72rem;color:var(--nd-text-faint);line-height:1.4;font-weight:400}
 .doc-slot button{background:#0891b2;color:#fff;border:none;border-radius:7px;padding:.4rem .85rem;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap}
-.doc-slot.done .dtick{color:#34d399;font-weight:800}
+.doc-slot.done .dtick{color:var(--nd-success-text);font-weight:800}
 #review-section h2{font-size:1.45rem;font-weight:800;margin-bottom:.35rem}
-#review-section .rev-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
-#review-section .rev-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .85rem;font-size:.82rem;color:#22d3ee;margin-bottom:1.25rem}
-#review-section fieldset{border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:1rem 1.15rem .65rem;margin-bottom:1.1rem}
-#review-section legend{font-size:.78rem;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.05em;padding:0 .5rem}
+#review-section .rev-sub{color:var(--nd-text-muted);font-size:.88rem;margin-bottom:1.5rem;line-height:1.5}
+#review-section .rev-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:.3rem .85rem;font-size:.82rem;color:var(--nd-cyan-text);margin-bottom:1.25rem}
+#review-section fieldset{border:1px solid var(--nd-border);border-radius:12px;padding:1rem 1.15rem .65rem;margin-bottom:1.1rem}
+#review-section legend{font-size:.78rem;font-weight:700;color:var(--nd-text-faint);text-transform:uppercase;letter-spacing:.05em;padding:0 .5rem}
 .rev-row2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
 .rev-price-line{display:flex;align-items:center;justify-content:space-between;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.25);border-radius:10px;padding:.75rem 1rem;margin-bottom:1.25rem}
-.rev-price-line .rev-amount{font-size:1.45rem;font-weight:800;color:#22d3ee}
-.rev-price-line .rev-label{font-size:.8rem;color:rgba(255,255,255,.5);line-height:1.4}
+.rev-price-line .rev-amount{font-size:1.45rem;font-weight:800;color:var(--nd-cyan-text)}
+.rev-price-line .rev-label{font-size:.8rem;color:var(--nd-text-muted);line-height:1.4}
 #rev-msg{font-size:.85rem;padding:.6rem .9rem;border-radius:9px;display:none;margin-bottom:.9rem;line-height:1.5}
-#rev-msg.err{background:rgba(239,68,68,.13);border:1px solid rgba(239,68,68,.35);color:#fca5a5;display:block}
-#rev-msg.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac;display:block}
+#rev-msg.err{background:rgba(239,68,68,.13);border:1px solid rgba(239,68,68,.35);color:var(--nd-danger-text);display:block}
+#rev-msg.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--nd-success-text);display:block}
 .btn-pay{width:100%;border:none;border-radius:11px;padding:.9rem 1rem;font-size:1rem;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.5rem}
 .btn-pay:hover{opacity:.9;transform:translateY(-1px)}
 .btn-pay:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.rev-note{font-size:.84rem;color:rgba(255,255,255,.55);text-align:center;margin-top:.85rem;line-height:1.55;font-weight:600}
+.rev-note{font-size:.84rem;color:var(--nd-text-muted);text-align:center;margin-top:.85rem;line-height:1.55;font-weight:600}
 @media(max-width:900px){
   .rev-wrap{flex-direction:column;max-width:560px}
   .rev-side{flex:auto;width:100%;position:static;order:-1;flex-direction:column}
@@ -1100,7 +1103,7 @@ async function _prefillClaimForm() {
   <div class="rev-card">
     <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
     <h2><span class="en">Check if you have a case</span><span class="hi">देखें कि आपके पास केस है या नहीं</span></h2>
-    <p class="rev-sub"><span class="en">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:rgba(255,255,255,.75)">free to submit, no payment to start.</strong></span><span class="hi">अपने खारिज या कम भुगतान वाले क्लेम के बारे में बताएं। हमारे कानूनी विशेषज्ञ इसकी समीक्षा करते हैं और बताते हैं कि आप कहां खड़े हैं — <strong style="color:rgba(255,255,255,.75)">जमा करना मुफ़्त, शुरू में कोई भुगतान नहीं।</strong></span></p>
+    <p class="rev-sub"><span class="en">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:var(--nd-text-secondary)">free to submit, no payment to start.</strong></span><span class="hi">अपने खारिज या कम भुगतान वाले क्लेम के बारे में बताएं। हमारे कानूनी विशेषज्ञ इसकी समीक्षा करते हैं और बताते हैं कि आप कहां खड़े हैं — <strong style="color:var(--nd-text-secondary)">जमा करना मुफ़्त, शुरू में कोई भुगतान नहीं।</strong></span></p>
     <div class="rev-badge"><span class="en">🔒 Free to submit · Protected under applicable data-protection law</span><span class="hi">🔒 जमा करना मुफ़्त · लागू डेटा-सुरक्षा कानून के तहत सुरक्षित</span></div>
 
     <fieldset>
@@ -1109,14 +1112,14 @@ async function _prefillClaimForm() {
         <div class="field"><label><span class="en">Insured Name *</span><span class="hi">बीमित व्यक्ति का नाम *</span></label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
         <div class="field"><label><span class="en">Contact Phone *</span><span class="hi">संपर्क फ़ोन *</span></label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
       </div>
-      <p style="font-size:.74rem;color:rgba(255,255,255,.35);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
+      <p style="font-size:.74rem;color:var(--nd-text-faint);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
     </fieldset>
 
     <fieldset>
       <legend><span class="en">Claim Details</span><span class="hi">क्लेम विवरण</span></legend>
       <div class="rev-row2">
         <div class="field"><label><span class="en">Claim Type *</span><span class="hi">क्लेम का प्रकार *</span></label>
-          <select id="rv_claim_type" onchange="loadDocChecklist()" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.95rem;outline:none;-webkit-appearance:none">
+          <select id="rv_claim_type" onchange="loadDocChecklist()" style="width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:10px;padding:.75rem 1rem;color:var(--nd-text-primary);font-size:.95rem;outline:none;-webkit-appearance:none">
             <option value="">Select type… / प्रकार चुनें…</option>
             <option value="health">Health Insurance / स्वास्थ्य बीमा</option>
             <option value="life">Life Insurance / जीवन बीमा</option>
@@ -1149,14 +1152,14 @@ async function _prefillClaimForm() {
       <div class="rev-row2">
         <div class="field"><label><span class="en">Policy Inception Date</span><span class="hi">पॉलिसी आरंभ तिथि</span></label>
           <input type="date" id="rv_policy_inception" max="2100-12-31"></div>
-        <div class="field"><label><span class="en">TPA</span><span class="hi">TPA</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">optional</span><span class="hi">वैकल्पिक</span>)</span></label>
+        <div class="field"><label><span class="en">TPA</span><span class="hi">TPA</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">optional</span><span class="hi">वैकल्पिक</span>)</span></label>
           <input type="text" id="rv_tpa_name" placeholder="e.g. Medi Assist, Paramount"></div>
       </div>
       <div class="field"><label><span class="en">Disputed Amount (₹)</span><span class="hi">विवादित राशि (₹)</span></label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
       <div class="field"><label><span class="en">Brief Description / Notes</span><span class="hi">संक्षिप्त विवरण / नोट्स</span></label>
-        <textarea id="rv_notes" rows="3" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:.75rem 1rem;color:#fff;font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
+        <textarea id="rv_notes" rows="3" style="width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:10px;padding:.75rem 1rem;color:var(--nd-text-primary);font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
       </div>
-      <div class="field"><label><span class="en">Branch code</span><span class="hi">ब्रांच कोड</span> <span style="color:rgba(255,255,255,.35);font-weight:400">(<span class="en">if you have one</span><span class="hi">यदि आपके पास हो</span>)</span></label>
+      <div class="field"><label><span class="en">Branch code</span><span class="hi">ब्रांच कोड</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">if you have one</span><span class="hi">यदि आपके पास हो</span>)</span></label>
         <input type="text" id="rv_branch_code" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters"></div>
     </fieldset>
 
@@ -1164,15 +1167,15 @@ async function _prefillClaimForm() {
          letter to start; everything else can be added later from the dashboard. -->
     <div id="rev-docs-wrap">
       <fieldset>
-        <legend><span class="en">Upload your rejection / settlement letter</span><span class="hi">रिजेक्शन / सेटलमेंट लेटर अपलोड करें</span> <span style="color:rgba(255,255,255,.35);font-weight:400;font-size:.8rem">(<span class="en">optional — you can add later</span><span class="hi">वैकल्पिक — बाद में जोड़ सकते हैं</span>)</span></legend>
-        <div id="rev-doc-trust" style="font-size:.74rem;color:rgba(255,255,255,.42);line-height:1.5;margin-bottom:.75rem"><span class="en">🔒 Used only to fight your claim. Protected by applicable data-protection law — never shared.</span><span class="hi">🔒 केवल आपका क्लेम लड़ने के लिए। लागू डेटा-सुरक्षा कानून द्वारा सुरक्षित — कभी साझा नहीं।</span></div>
+        <legend><span class="en">Upload your rejection / settlement letter</span><span class="hi">रिजेक्शन / सेटलमेंट लेटर अपलोड करें</span> <span style="color:var(--nd-text-faint);font-weight:400;font-size:.8rem">(<span class="en">optional — you can add later</span><span class="hi">वैकल्पिक — बाद में जोड़ सकते हैं</span>)</span></legend>
+        <div id="rev-doc-trust" style="font-size:.74rem;color:var(--nd-text-muted);line-height:1.5;margin-bottom:.75rem"><span class="en">🔒 Used only to fight your claim. Protected by applicable data-protection law — never shared.</span><span class="hi">🔒 केवल आपका क्लेम लड़ने के लिए। लागू डेटा-सुरक्षा कानून द्वारा सुरक्षित — कभी साझा नहीं।</span></div>
         <div id="rev-doc-slots"></div>
       </fieldset>
     </div>
 
-    <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:rgba(255,255,255,.6);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
+    <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:var(--nd-text-secondary);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
       <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.1rem;flex-shrink:0;width:18px;height:18px;-webkit-appearance:auto;appearance:auto;accent-color:#06b6d4;background:none;border:0;padding:0">
-      <span><span class="en">Send me updates about this claim on <strong style="color:rgba(255,255,255,.8)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span><span class="hi">इस क्लेम के अपडेट मुझे <strong style="color:rgba(255,255,255,.8)">WhatsApp और ईमेल</strong> पर भेजें — दस्तावेज़ रिमाइंडर, स्थिति और मेरी रिपोर्ट। आप कभी भी STOP लिखकर रोक सकते हैं।</span></span>
+      <span><span class="en">Send me updates about this claim on <strong style="color:var(--nd-text-primary)">WhatsApp &amp; email</strong> — document reminders, status, and my report. You can reply STOP anytime.</span><span class="hi">इस क्लेम के अपडेट मुझे <strong style="color:var(--nd-text-primary)">WhatsApp और ईमेल</strong> पर भेजें — दस्तावेज़ रिमाइंडर, स्थिति और मेरी रिपोर्ट। आप कभी भी STOP लिखकर रोक सकते हैं।</span></span>
     </label>
 
     <div id="rev-msg"></div>
@@ -1186,25 +1189,25 @@ async function _prefillClaimForm() {
   <!-- ── Motivational side panel: fills the space + nudges users toward a review ── -->
   <aside class="rev-side">
     <div class="rev-side-card rev-side-hero">
-      <div style="font-size:1.08rem;font-weight:800;color:#fff;line-height:1.4"><span class="en">Your rejected claim might still be worth lakhs.</span><span class="hi">आपका खारिज क्लेम अब भी लाखों का हो सकता है।</span></div>
-      <div style="font-size:.85rem;color:rgba(255,255,255,.72);margin-top:.45rem;line-height:1.55"><span class="en">A rejection letter isn't the end — it's often just the insurer hoping you'll walk away. Let our experts find out if yours can be reopened.</span><span class="hi">रिजेक्शन लेटर अंत नहीं है — अक्सर कंपनी यही चाहती है कि आप हार मान लें। हमारे विशेषज्ञ बताएंगे कि क्या आपका केस फिर से खोला जा सकता है।</span></div>
+      <div style="font-size:1.08rem;font-weight:800;color:var(--nd-text-primary);line-height:1.4"><span class="en">Your rejected claim might still be worth lakhs.</span><span class="hi">आपका खारिज क्लेम अब भी लाखों का हो सकता है।</span></div>
+      <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-top:.45rem;line-height:1.55"><span class="en">A rejection letter isn't the end — it's often just the insurer hoping you'll walk away. Let our experts find out if yours can be reopened.</span><span class="hi">रिजेक्शन लेटर अंत नहीं है — अक्सर कंपनी यही चाहती है कि आप हार मान लें। हमारे विशेषज्ञ बताएंगे कि क्या आपका केस फिर से खोला जा सकता है।</span></div>
     </div>
     <div class="rev-side-card">
-      <div class="rev-stat"><b>95%</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">success rate on cases we take up</span><span class="hi">हम जो केस लेते हैं उनमें सफलता दर</span></span></div>
-      <div class="rev-stat"><b>5,000+</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">policyholders helped</span><span class="hi">पॉलिसीधारकों की मदद की</span></span></div>
-      <div class="rev-stat"><b style="font-size:1.05rem">₹ Lakhs</b><span style="font-size:.83rem;color:rgba(255,255,255,.7)"><span class="en">recovered for rightful claims</span><span class="hi">सही क्लेम के लिए वापस दिलाए</span></span></div>
+      <div class="rev-stat"><b>95%</b><span style="font-size:.83rem;color:var(--nd-text-secondary)"><span class="en">success rate on cases we take up</span><span class="hi">हम जो केस लेते हैं उनमें सफलता दर</span></span></div>
+      <div class="rev-stat"><b>5,000+</b><span style="font-size:.83rem;color:var(--nd-text-secondary)"><span class="en">policyholders helped</span><span class="hi">पॉलिसीधारकों की मदद की</span></span></div>
+      <div class="rev-stat"><b style="font-size:1.05rem">₹ Lakhs</b><span style="font-size:.83rem;color:var(--nd-text-secondary)"><span class="en">recovered for rightful claims</span><span class="hi">सही क्लेम के लिए वापस दिलाए</span></span></div>
     </div>
     <div class="rev-side-card">
-      <div style="font-size:.76rem;font-weight:700;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem"><span class="en">How it works</span><span class="hi">यह कैसे काम करता है</span></div>
-      <div class="rev-step"><span class="n">1</span><span><span class="en">Tell us about your claim &amp; upload your documents — <strong style="color:rgba(255,255,255,.85)">free</strong>.</span><span class="hi">अपने क्लेम के बारे में बताएं और दस्तावेज़ अपलोड करें — <strong style="color:rgba(255,255,255,.85)">मुफ़्त</strong>।</span></span></div>
+      <div style="font-size:.76rem;font-weight:700;color:var(--nd-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem"><span class="en">How it works</span><span class="hi">यह कैसे काम करता है</span></div>
+      <div class="rev-step"><span class="n">1</span><span><span class="en">Tell us about your claim &amp; upload your documents — <strong style="color:var(--nd-text-primary)">free</strong>.</span><span class="hi">अपने क्लेम के बारे में बताएं और दस्तावेज़ अपलोड करें — <strong style="color:var(--nd-text-primary)">मुफ़्त</strong>।</span></span></div>
       <div class="rev-step"><span class="n">2</span><span><span class="en">Our lawyers + insurance experts audit your case.</span><span class="hi">हमारे वकील + बीमा विशेषज्ञ आपके केस की जांच करते हैं।</span></span></div>
       <div class="rev-step"><span class="n">3</span><span><span class="en">Get a clear legal report — is your claim worth fighting?</span><span class="hi">एक स्पष्ट कानूनी रिपोर्ट पाएं — क्या आपका क्लेम लड़ने लायक है?</span></span></div>
     </div>
     <div class="rev-side-card">
-      <div style="font-size:.84rem;color:rgba(255,255,255,.75);line-height:1.55;font-style:italic"><span class="en">"They reopened my health claim after the company rejected it twice. I got my ₹2.8 lakh back."</span><span class="hi">"कंपनी ने मेरा हेल्थ क्लेम दो बार खारिज किया था, इन्होंने फिर से खुलवाया। मुझे मेरे ₹2.8 लाख वापस मिले।"</span></div>
-      <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.45rem"><span class="en">— a policyholder we helped</span><span class="hi">— एक पॉलिसीधारक जिसकी हमने मदद की</span></div>
+      <div style="font-size:.84rem;color:var(--nd-text-secondary);line-height:1.55;font-style:italic"><span class="en">"They reopened my health claim after the company rejected it twice. I got my ₹2.8 lakh back."</span><span class="hi">"कंपनी ने मेरा हेल्थ क्लेम दो बार खारिज किया था, इन्होंने फिर से खुलवाया। मुझे मेरे ₹2.8 लाख वापस मिले।"</span></div>
+      <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.45rem"><span class="en">— a policyholder we helped</span><span class="hi">— एक पॉलिसीधारक जिसकी हमने मदद की</span></div>
     </div>
-    <div style="font-size:.74rem;color:rgba(255,255,255,.4);text-align:center;line-height:1.5"><span class="en">🔒 Your documents are used only to fight your claim. Protected by applicable data-protection law — never shared.</span><span class="hi">🔒 आपके दस्तावेज़ केवल आपका क्लेम लड़ने के लिए उपयोग होते हैं। लागू डेटा-सुरक्षा कानून द्वारा सुरक्षित — कभी साझा नहीं।</span></div>
+    <div style="font-size:.74rem;color:var(--nd-text-faint);text-align:center;line-height:1.5"><span class="en">🔒 Your documents are used only to fight your claim. Protected by applicable data-protection law — never shared.</span><span class="hi">🔒 आपके दस्तावेज़ केवल आपका क्लेम लड़ने के लिए उपयोग होते हैं। लागू डेटा-सुरक्षा कानून द्वारा सुरक्षित — कभी साझा नहीं।</span></div>
   </aside>
   </div>
 </section>
