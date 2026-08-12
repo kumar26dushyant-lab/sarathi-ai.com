@@ -9026,21 +9026,31 @@ async def wa_agent_conversations(request: Request, limit: int = Query(100, le=50
 
 
 @app.get("/sitemap.xml")
-async def sitemap_xml():
-    """XML sitemap for Google Search Console. Lists public, indexable pages."""
-    base = (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+async def sitemap_xml(request: Request):
+    """Host-aware XML sitemap for Google Search Console — lists public, indexable
+    pages for whichever domain is being served (nidaanpartner.com vs sarathi-ai.com)."""
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    base = f"{scheme}://{host}" if host else (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
     today = _time.strftime("%Y-%m-%d")
-    # Only public / indexable routes — exclude auth-gated pages
-    pages = [
-        {"loc": f"{base}/",              "priority": "1.0", "changefreq": "weekly"},
-        {"loc": f"{base}/onboarding",    "priority": "0.9", "changefreq": "monthly"},
-        {"loc": f"{base}/calculators",   "priority": "0.9", "changefreq": "weekly"},
-        {"loc": f"{base}/features",      "priority": "0.8", "changefreq": "monthly"},
-        {"loc": f"{base}/about",         "priority": "0.8", "changefreq": "yearly"},
-        {"loc": f"{base}/login",         "priority": "0.5", "changefreq": "yearly"},
-        {"loc": f"{base}/privacy",       "priority": "0.3", "changefreq": "yearly"},
-        {"loc": f"{base}/terms",         "priority": "0.3", "changefreq": "yearly"},
-    ]
+    if _is_nidaan_host(request):
+        pages = [
+            {"loc": f"{base}/",              "priority": "1.0", "changefreq": "weekly"},
+            {"loc": f"{base}/nidaan/about",  "priority": "0.8", "changefreq": "monthly"},
+            {"loc": f"{base}/nidaan/start",  "priority": "0.7", "changefreq": "monthly"},
+        ]
+    else:
+        # Only public / indexable routes — exclude auth-gated pages
+        pages = [
+            {"loc": f"{base}/",              "priority": "1.0", "changefreq": "weekly"},
+            {"loc": f"{base}/onboarding",    "priority": "0.9", "changefreq": "monthly"},
+            {"loc": f"{base}/calculators",   "priority": "0.9", "changefreq": "weekly"},
+            {"loc": f"{base}/features",      "priority": "0.8", "changefreq": "monthly"},
+            {"loc": f"{base}/about",         "priority": "0.8", "changefreq": "yearly"},
+            {"loc": f"{base}/login",         "priority": "0.5", "changefreq": "yearly"},
+            {"loc": f"{base}/privacy",       "priority": "0.3", "changefreq": "yearly"},
+            {"loc": f"{base}/terms",         "priority": "0.3", "changefreq": "yearly"},
+        ]
     url_entries = "\n".join(
         f"  <url><loc>{p['loc']}</loc><lastmod>{today}</lastmod>"
         f"<changefreq>{p['changefreq']}</changefreq><priority>{p['priority']}</priority></url>"
@@ -9056,9 +9066,25 @@ async def sitemap_xml():
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
-async def robots_txt():
-    """robots.txt — allow public pages, block dashboard + APIs from crawlers."""
-    base = (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+async def robots_txt(request: Request):
+    """robots.txt — host-aware: allow public pages, block dashboards + APIs from crawlers."""
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    base = f"{scheme}://{host}" if host else (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+    if _is_nidaan_host(request):
+        return (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Allow: /nidaan/about\n"
+            "Allow: /nidaan/start\n"
+            "Disallow: /nidaan/ops\n"
+            "Disallow: /nidaan/dashboard\n"
+            "Disallow: /nidaan/admin\n"
+            "Disallow: /admin\n"
+            "Disallow: /api/\n"
+            "Disallow: /uploads/\n"
+            f"\nSitemap: {base}/sitemap.xml\n"
+        )
     return (
         "User-agent: *\n"
         "Allow: /\n"

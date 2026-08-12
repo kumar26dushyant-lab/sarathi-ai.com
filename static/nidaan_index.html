@@ -5,22 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Google Search Console verification -->
 <meta name="google-site-verification" content="5nsPx04_faef65tYouBeBPGETEr-e_ZnHI3rQjplzUk" />
-<!-- Google Analytics (GA4) — loads ONLY on the live nidaanpartner.com host, never on
-     staging.* or localhost, so test traffic never pollutes analytics. -->
-<script>
-(function(){
-  var h = (location.hostname || '').toLowerCase();
-  if (h === 'nidaanpartner.com' || h === 'www.nidaanpartner.com') {
-    var s = document.createElement('script');
-    s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=G-CJMN1DJGFM';
-    document.head.appendChild(s);
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function(){ dataLayer.push(arguments); };
-    gtag('js', new Date());
-    gtag('config', 'G-CJMN1DJGFM');
-  }
-})();
-</script>
+<!-- Google Analytics (GA4) — shared include; loads ONLY on the live nidaanpartner.com
+     host (never staging/localhost), so test traffic never pollutes analytics. -->
+<script src="/static/nidaan_ga.js"></script>
 <title>Nidaan — The Legal Consultants | Insurance Claim Dispute Resolution India</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
