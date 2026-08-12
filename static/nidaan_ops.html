@@ -3558,7 +3558,7 @@ async function loadMyBusiness() {
       ${link?`
       <div style="margin-top:.8rem;font-size:.78rem;color:rgba(255,255,255,.6);margin-bottom:.3rem">${hi?'आपका शेयर करने लायक लिंक':'Your shareable link'}</div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <input id="mbLink" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25)">
+        <input id="mbLink" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:#e2e8f0;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:.5rem .6rem">
         <button class="btn btn-primary" onclick="mbCopy('${esc(link)}',this)">${hi?'लिंक कॉपी करें':'Copy link'}</button>
         <button class="btn-sm btn-ghost" onclick="mbShare('${esc(link)}')" style="color:#34d399">${hi?'WhatsApp पर भेजें':'Share on WhatsApp'}</button>
       </div>`:''}
