@@ -6,6 +6,34 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-13 — Smarter help chat (movable button, sessions, thumbs rating) — SEND AFTER PROD
+
+> Status: shipped to **staging**, awaiting owner verify. Send this only once it's live on prod.
+
+**Title (EN):**
+💬 Chat just got smarter — move it, minimise it, rate it
+
+**Details (EN):**
+Team, our help chat (NidaanMitra) got three handy upgrades 🎉
+• **Move & minimise** — customers can drag the chat button anywhere and minimise the chat instead of closing it, so it never hides your Send button.
+• **Clean sessions** — each chat is now one session. After 30 minutes of no activity (or when the customer taps Close), it neatly files itself into history with a session number — no endless threads.
+• **👍 / 👎 rating** — customers can rate a chat. Their feedback is recorded so we can see what's working. (A Support dashboard to view ratings & history is coming next.)
+Nothing changes in how you reply — this just makes the customer side smoother.
+
+**Title (HI):**
+💬 चैट अब और स्मार्ट — हिलाएँ, छोटा करें, रेटिंग दें
+
+**Details (HI):**
+टीम, हमारी हेल्प चैट (NidaanMitra) में तीन आसान सुधार हुए हैं 🎉
+• **हिलाएँ और छोटा करें** — ग्राहक चैट बटन को कहीं भी खिसका सकते हैं और चैट को बंद करने के बजाय छोटा कर सकते हैं, ताकि वह Send बटन को न ढके।
+• **साफ़-सुथरे सेशन** — अब हर चैट एक सेशन है। 30 मिनट तक कोई गतिविधि न हो (या ग्राहक Close दबाए) तो वह सेशन नंबर के साथ अपने-आप हिस्ट्री में चला जाता है — लंबी-लंबी थ्रेड नहीं।
+• **👍 / 👎 रेटिंग** — ग्राहक चैट को रेट कर सकते हैं। उनकी राय दर्ज होती है ताकि हमें पता चले क्या अच्छा चल रहा है। (रेटिंग और हिस्ट्री देखने के लिए Support डैशबोर्ड जल्द आ रहा है।)
+आपके जवाब देने के तरीके में कोई बदलाव नहीं — यह सिर्फ़ ग्राहक की तरफ़ का अनुभव बेहतर बनाता है।
+
+*Suggested roles: all staff. Optional — the changes are customer-facing.*
+
+---
+
 ## 2026-08-13 — New look + easier app (light/dark, always-on chat, full Hindi)
 
 **Title (EN):**

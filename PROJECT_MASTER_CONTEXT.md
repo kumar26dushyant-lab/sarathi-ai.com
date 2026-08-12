@@ -5763,6 +5763,20 @@ staging `deploy/staging-deploy.sh` (staging branch).
   (auto-close on inactivity/minimize → filed to history with session ID, no endless thread/backlog);
   bouncing+draggable launcher; minimize button; 👍/👎 rating recorded; Support-page chat analytics;
   channel segregation (homepage / subscriber plan-wise / one-time-review / branch).
+- **SHIPPED TO STAGING (Aug 13, commit 5c501aa, widget v20) — awaiting owner verify:**
+  - *Bouncing + draggable launcher + minimize button* (v19, already staging).
+  - *30-min session model:* one chat = one ~30-min session. 30 min inactivity **or** Close (×) ends
+    it → filed to history (thread id = session number); next message opens a fresh session. Minimize (–)
+    keeps the session alive. Idle timer + expiry checks on open and on send; `ts` stamped on every
+    thread create/restore/reply. Backend `close_support_session()` (ALTER-on-first-use `closed_at`,
+    status='closed'); `POST /nidaan/api/support/close` (thread_key-validated).
+  - *👍/👎 rating:* bilingual (EN/HI/Hinglish) dark-island rate bar, mobile-first, appears once the
+    chat is underway; `POST /nidaan/api/support/rate` → `set_support_rating()` (ALTER-on-first-use
+    `rating`/`rated_at`). Recorded on the thread for Support analytics.
+  - *Smoke-tested on staging:* empty body→422, bogus thread→404 (thread_key validation), widget v20 served.
+- **STILL QUEUED (piece 4 of the batch):** Support-page chat analytics + **channel segregation**
+  (homepage / subscriber plan-wise / one-time-review / branch) — surface ratings, session history,
+  and per-channel volume in the ops Support panel. Data spine now captured (rating/closed_at/channel).
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
