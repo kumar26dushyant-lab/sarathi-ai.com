@@ -5016,8 +5016,10 @@ async def find_eligible_unrefunded_cancellations(days: int = 30) -> list[dict]:
 
 
 async def update_account_profile(account_id: int, owner_name: str = None,
-                                  firm_name: str = None, phone: str = None) -> bool:
-    """Update mutable profile fields on a Nidaan account."""
+                                  firm_name: str = None, phone: str = None,
+                                  email: str = None) -> bool:
+    """Update mutable profile fields on a Nidaan account. Email is UNIQUE — a clash is reported
+    via ValueError so the caller can surface a clean message."""
     fields, vals = [], []
     if owner_name is not None:
         fields.append("owner_name=?"); vals.append(owner_name)
@@ -5025,15 +5027,54 @@ async def update_account_profile(account_id: int, owner_name: str = None,
         fields.append("firm_name=?"); vals.append(firm_name)
     if phone is not None:
         fields.append("phone=?"); vals.append(phone)
+    if email is not None:
+        fields.append("email=?"); vals.append((email or "").strip().lower() or None)
     if not fields:
         return False
     vals.append(account_id)
     async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            f"UPDATE nidaan_accounts SET {', '.join(fields)} WHERE account_id=?", vals
-        )
-        await conn.commit()
+        try:
+            await conn.execute(
+                f"UPDATE nidaan_accounts SET {', '.join(fields)} WHERE account_id=?", vals
+            )
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            raise ValueError("That email is already used by another account.")
     return True
+
+
+async def update_claim_info(claim_id: int, *, insured_name=None, insured_phone=None,
+                            insured_email=None, claim_type=None, insurer_name=None,
+                            policy_no=None, disputed_amount=None) -> bool:
+    """Super-admin/admin edit of a claim's core details (name/phone/email/type/insurer/policy/
+    disputed amount). Only the provided fields are changed. Names are stored uppercase."""
+    fields, vals = [], []
+    if insured_name is not None:
+        fields.append("insured_name=?"); vals.append(_capname(insured_name))
+    if insured_phone is not None:
+        fields.append("insured_phone=?"); vals.append((insured_phone or "").strip())
+    if insured_email is not None:
+        fields.append("insured_email=?"); vals.append((insured_email or "").strip().lower())
+    if claim_type is not None:
+        fields.append("claim_type=?"); vals.append((claim_type or "").strip())
+    if insurer_name is not None:
+        fields.append("insurer_name=?"); vals.append((insurer_name or "").strip())
+    if policy_no is not None:
+        fields.append("policy_no=?"); vals.append((policy_no or "").strip())
+    if disputed_amount is not None:
+        try:
+            vals.append(int(disputed_amount) if disputed_amount != "" else None)
+            fields.append("disputed_amount=?")
+        except (TypeError, ValueError):
+            pass
+    if not fields:
+        return False
+    vals.append(claim_id)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            f"UPDATE nidaan_claims SET {', '.join(fields)} WHERE claim_id=?", vals)
+        await conn.commit()
+        return cur.rowcount > 0
 
 
 # =============================================================================

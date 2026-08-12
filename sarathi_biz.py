@@ -5823,6 +5823,67 @@ async def ops_claims_auto_assign_set(body: OpsAutoAssignReq, request: Request):
     return {"ok": True, "on": body.on}
 
 
+class OpsClaimInfoUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    insured_name: Optional[str] = Field(None, max_length=120)
+    insured_phone: Optional[str] = Field(None, max_length=15)
+    insured_email: Optional[str] = Field(None, max_length=120)
+    claim_type: Optional[str] = Field(None, max_length=40)
+    insurer_name: Optional[str] = Field(None, max_length=120)
+    policy_no: Optional[str] = Field(None, max_length=80)
+    disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/info")
+async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request: Request):
+    """Super-admin/Admin: correct a claim's core details (name/phone/email/type/insurer/policy/
+    disputed amount). Only supplied fields change."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(400, "Nothing to update")
+    if not await nidaan.update_claim_info(claim_id, **data):
+        raise HTTPException(404, "Claim not found or nothing changed")
+    await _ops_audit(request, "claim.info_edit", "claim", str(claim_id),
+                     ", ".join(f"{k}" for k in data))
+    return {"ok": True}
+
+
+class OpsAdvisorUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: Optional[str] = Field(None, max_length=120)
+    firm_name: Optional[str] = Field(None, max_length=160)
+    phone: Optional[str] = Field(None, max_length=15)
+    email: Optional[str] = Field(None, max_length=120)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/advisor")
+async def ops_update_claim_advisor(claim_id: int, body: OpsAdvisorUpdate, request: Request):
+    """Super-admin/Admin: correct the advisor/account details behind a claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    acct_id = claim.get("account_id")
+    if not acct_id:
+        raise HTTPException(400, "This claim has no linked account")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(400, "Nothing to update")
+    try:
+        if not await nidaan.update_account_profile(int(acct_id), **data):
+            raise HTTPException(404, "Account not found or nothing changed")
+    except ValueError as ve:
+        raise HTTPException(400, detail=str(ve))
+    await _ops_audit(request, "claim.advisor_edit", "account", str(acct_id),
+                     ", ".join(f"{k}" for k in data))
+    return {"ok": True}
+
+
 class OpsClaimStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
     new_status: str

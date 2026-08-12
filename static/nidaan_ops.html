@@ -3900,7 +3900,7 @@ async function openClaimDrawer(claimId) {
   document.getElementById('drawerBody').innerHTML = `
     <!-- Claim Info -->
     <div class="drawer-section">
-      <h4>Claim Info</h4>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Claim Info${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:#7dd3fc" onclick="editClaimInfoModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
       <div class="kv"><span class="kv-label">Claim ID</span><span class="kv-val">#${fmtClaimNum(c.claim_id)}</span></div>
       <div class="kv"><span class="kv-label">Type</span><span class="kv-val">${esc(c.claim_type)}</span></div>
       <div class="kv"><span class="kv-label">Status</span><span class="kv-val"><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></span></div>
@@ -3930,7 +3930,7 @@ async function openClaimDrawer(claimId) {
     </div>`:''}
     <!-- Advisor -->
     <div class="drawer-section">
-      <h4>Advisor</h4>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Advisor${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:#7dd3fc" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
       <div class="kv"><span class="kv-label">Name</span><span class="kv-val">${esc(c.owner_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Firm</span><span class="kv-val">${esc(c.firm_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
@@ -5001,6 +5001,68 @@ async function viewClaimDocs(claimId, btn) {
   } catch(e) {
     btn.textContent = '📎 View';
   }
+}
+
+// ── SA/Admin edit of Claim info + Advisor info (from the claim drawer) ─────────
+function _editOverlay(title, innerHtml){
+  const ov=document.createElement('div'); ov.id='editEntityOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto';
+  ov.innerHTML='<div style="background:#0f1e3a;border:1px solid rgba(255,255,255,.14);border-radius:14px;max-width:440px;width:100%;padding:1.2rem;max-height:90vh;overflow-y:auto">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><b style="font-size:1.05rem">'+title+'</b><button onclick="document.getElementById(\'editEntityOv\').remove()" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer">×</button></div>'
+    +innerHtml+'</div>';
+  document.body.appendChild(ov);
+}
+function _efInput(label, id, val, type){
+  return '<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:rgba(255,255,255,.6)">'+label
+    +'<input id="'+id+'" type="'+(type||'text')+'" value="'+esc(val==null?'':String(val))+'" style="width:100%;box-sizing:border-box;margin-top:.2rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem .6rem;border-radius:8px;font-size:.9rem"></label>';
+}
+async function editClaimInfoModal(claimId){
+  const r=await API('/claims/'+claimId); if(!r.ok){ alert('Could not load claim'); return; }
+  const c=await r.json();
+  const std=['health','life','motor','general']; let opts=std.slice();
+  if(c.claim_type && std.indexOf(c.claim_type)<0) opts.unshift(c.claim_type);
+  const typeOpts=opts.map(t=>'<option value="'+esc(t)+'"'+((c.claim_type||'')===t?' selected':'')+'>'+esc(t)+'</option>').join('');
+  _editOverlay('Edit Claim #'+fmtClaimNum(claimId),
+    _efInput('Insured name','ecName',c.insured_name)
+    +_efInput('Phone','ecPhone',c.insured_phone)
+    +_efInput('Email','ecEmail',c.insured_email)
+    +'<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:rgba(255,255,255,.6)">Claim type<select id="ecType" style="width:100%;box-sizing:border-box;margin-top:.2rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.5rem;border-radius:8px">'+typeOpts+'</select></label>'
+    +_efInput('Insurer','ecInsurer',c.insurer_name)
+    +_efInput('Policy no.','ecPolicy',c.policy_no)
+    +_efInput('Disputed amount ₹','ecAmount',c.disputed_amount,'number')
+    +'<div id="ecMsg" style="font-size:.82rem;margin:.3rem 0"></div>'
+    +'<button class="btn btn-primary" style="width:100%" onclick="saveClaimInfo('+claimId+')">💾 Save changes</button>');
+}
+async function saveClaimInfo(claimId){
+  const g=id=>document.getElementById(id); const msg=g('ecMsg');
+  const body={ insured_name:(g('ecName').value||'').trim(), insured_phone:(g('ecPhone').value||'').trim(),
+    insured_email:(g('ecEmail').value||'').trim(), claim_type:g('ecType').value,
+    insurer_name:(g('ecInsurer').value||'').trim(), policy_no:(g('ecPolicy').value||'').trim() };
+  const amt=(g('ecAmount').value||'').trim(); if(amt!=='') body.disputed_amount=parseInt(amt,10);
+  if(msg){msg.style.color='#94a3b8';msg.textContent='Saving…';}
+  const r=await API('/claims/'+claimId+'/info',{method:'PATCH',body:JSON.stringify(body)});
+  if(r.ok){ const ov=g('editEntityOv'); if(ov)ov.remove(); openClaimDrawer(claimId); try{ndUI.toast('Claim updated','success');}catch(e){} }
+  else { const d=await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171';msg.textContent='✕ '+(d.detail||'Failed');} }
+}
+async function editAdvisorModal(claimId){
+  const r=await API('/claims/'+claimId); if(!r.ok){ alert('Could not load claim'); return; }
+  const c=await r.json();
+  _editOverlay('Edit Advisor',
+    _efInput('Name','eaName',c.owner_name)
+    +_efInput('Firm','eaFirm',c.firm_name)
+    +_efInput('Email','eaEmail',c.advisor_email||c.email)
+    +_efInput('Phone','eaPhone',c.advisor_phone||c.phone)
+    +'<div id="eaMsg" style="font-size:.82rem;margin:.3rem 0"></div>'
+    +'<button class="btn btn-primary" style="width:100%" onclick="saveAdvisorInfo('+claimId+')">💾 Save changes</button>');
+}
+async function saveAdvisorInfo(claimId){
+  const g=id=>document.getElementById(id); const msg=g('eaMsg');
+  const body={ owner_name:(g('eaName').value||'').trim(), firm_name:(g('eaFirm').value||'').trim(),
+    email:(g('eaEmail').value||'').trim(), phone:(g('eaPhone').value||'').trim() };
+  if(msg){msg.style.color='#94a3b8';msg.textContent='Saving…';}
+  const r=await API('/claims/'+claimId+'/advisor',{method:'PATCH',body:JSON.stringify(body)});
+  if(r.ok){ const ov=g('editEntityOv'); if(ov)ov.remove(); openClaimDrawer(claimId); try{ndUI.toast('Advisor updated','success');}catch(e){} }
+  else { const d=await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171';msg.textContent='✕ '+(d.detail||'Failed');} }
 }
 
 // Ops delete a claim document (works for subscriber, one-time, branch & staff-raised claims).
