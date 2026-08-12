@@ -577,6 +577,16 @@ async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict
 
 # ── Page routes ───────────────────────────────────────────────────────────────
 
+@app.get("/google3df0c6b7c9115ee9.html", response_class=PlainTextResponse, include_in_schema=False)
+async def google_search_console_verify(request: Request):
+    """Google Search Console HTML-file verification for nidaanpartner.com.
+    (A <meta google-site-verification> tag is also present on the homepage; either
+    method verifies the property.)"""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return "google-site-verification: google3df0c6b7c9115ee9.html"
+
+
 @app.get("/nidaan/start", response_class=HTMLResponse)
 async def nidaan_start_page(request: Request):
     if not _is_nidaan_host(request):

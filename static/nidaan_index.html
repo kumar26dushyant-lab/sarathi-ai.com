@@ -3,6 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Google Search Console verification -->
+<meta name="google-site-verification" content="5nsPx04_faef65tYouBeBPGETEr-e_ZnHI3rQjplzUk" />
+<!-- Google Analytics (GA4) — loads ONLY on the live nidaanpartner.com host, never on
+     staging.* or localhost, so test traffic never pollutes analytics. -->
+<script>
+(function(){
+  var h = (location.hostname || '').toLowerCase();
+  if (h === 'nidaanpartner.com' || h === 'www.nidaanpartner.com') {
+    var s = document.createElement('script');
+    s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=G-CJMN1DJGFM';
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function(){ dataLayer.push(arguments); };
+    gtag('js', new Date());
+    gtag('config', 'G-CJMN1DJGFM');
+  }
+})();
+</script>
 <title>Nidaan — The Legal Consultants | Insurance Claim Dispute Resolution India</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=1">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
@@ -687,6 +705,8 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
       </div>
     </a>
     <div class="nav-links">
+      <a href="/" class="en">🏠 Home</a>
+      <a href="/" class="hi" style="display:none">🏠 होम</a>
       <a href="#how-it-works" class="en only-adv">How It Works</a>
       <a href="#how-it-works" class="hi only-adv" style="display:none">कैसे काम करता है</a>
       <a href="#plans" class="en only-adv">Plans</a>
