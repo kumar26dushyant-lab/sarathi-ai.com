@@ -78,7 +78,7 @@ def upd(t, c, expr):
 for t, c in PHONE:  upd(t, c, "'9' || substr('000000000'||rowid, -9)")
 for t, c in EMAIL:  upd(t, c, "'user' || rowid || '@staging.local'")
 for t, c in NAME:   upd(t, c, "'Test ' || rowid")
-for t, c in BLANK:  upd(t, c, "''")
+for t, c in BLANK:  upd(t, c, "'staged-' || rowid")  # unique fake: removes real value, no UNIQUE collision
 
 cleared = []
 for t in CLEAR:
