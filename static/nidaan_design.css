@@ -54,6 +54,7 @@
   --nd-purple:         #a78bfa;
   --nd-purple-soft:    rgba(139,92,246,.15);
   --nd-purple-text:    #c4b5fd;
+  --nd-cyan-text:      #22d3ee;   /* cyan used as TEXT (darkens in light mode) */
   --nd-orange-soft:    rgba(249,115,22,.15);
   --nd-orange-text:    #fdba74;
 
@@ -170,6 +171,7 @@
   --nd-danger-text:    #b91c1c;
   --nd-info-text:      #1d4ed8;
   --nd-purple-text:    #6d28d9;
+  --nd-cyan-text:      #0e7490;
 
   --nd-shadow-inset:   inset 0 1px 0 rgba(255,255,255,.6);
 }

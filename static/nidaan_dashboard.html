@@ -37,11 +37,12 @@
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="/static/_err.js?v=1"></script>
+<script src="/static/nidaan_theme.js?v=1"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#fff;min-height:100vh;min-height:100svh}
-  select{color-scheme:dark}select option{background:#0f1e3a;color:#e2e8f0}
-  a{color:#22d3ee;text-decoration:none}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--nd-bg-base);color:var(--nd-text-primary);min-height:100vh;min-height:100svh}
+  select{color-scheme:dark}select option{background:var(--nd-bg-base-2);color:var(--nd-text-primary)}
+  a{color:var(--nd-cyan-text);text-decoration:none}
 
   /* NAV */
   nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.5rem;background:rgba(10,22,40,.97);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50;gap:.5rem;overflow:hidden}
@@ -51,29 +52,29 @@
     nav{padding-top:calc(.8rem + env(safe-area-inset-top))}
     body{padding-bottom:env(safe-area-inset-bottom)}
   }
-  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;min-width:0}
+  .nav-brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1rem;color:var(--nd-text-primary);flex-shrink:0;min-width:0}
   .nav-brand img{height:32px;border-radius:5px;flex-shrink:0}
   .nav-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .nav-right{display:flex;align-items:center;gap:.75rem;flex-shrink:0}
-  .plan-badge{background:rgba(6,182,212,.18);border:1px solid rgba(6,182,212,.4);color:#22d3ee;padding:.25rem .65rem;border-radius:20px;font-size:.76rem;font-weight:700;text-transform:uppercase}
+  .plan-badge{background:rgba(6,182,212,.18);border:1px solid rgba(6,182,212,.4);color:var(--nd-cyan-text);padding:.25rem .65rem;border-radius:20px;font-size:.76rem;font-weight:700;text-transform:uppercase}
   .btn-sm{padding:.35rem .85rem;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer;border:none}
   .btn-cyan{background:#06b6d4;color:#fff}
-  .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7)}
+  .btn-ghost{background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary)}
   .lang-toggle{display:flex;gap:.3rem}
-  .lang-btn{padding:.25rem .6rem;border-radius:5px;border:1px solid rgba(255,255,255,.18);background:transparent;color:rgba(255,255,255,.55);font-size:.75rem;cursor:pointer}
+  .lang-btn{padding:.25rem .6rem;border-radius:5px;border:1px solid var(--nd-border-strong);background:transparent;color:var(--nd-text-muted);font-size:.75rem;cursor:pointer}
   .lang-btn.active{background:#22d3ee;color:#0a1628;border-color:#22d3ee;font-weight:700}
 
   /* LAYOUT */
   .container{max-width:1100px;margin:0 auto;padding:1.75rem 1.25rem}
   .page-title{font-size:1.4rem;font-weight:800;margin-bottom:.3rem}
-  .page-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:1.75rem}
+  .page-sub{color:var(--nd-text-muted);font-size:.88rem;margin-bottom:1.75rem}
 
   /* STAT CARDS */
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.75rem}
-  .stat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1rem 1.2rem}
-  .stat-label{font-size:.75rem;color:rgba(255,255,255,.5);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem}
-  .stat-val{font-size:1.7rem;font-weight:800;color:#22d3ee}
-  .stat-sub{font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.2rem}
+  .stat{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem 1.2rem}
+  .stat-label{font-size:.75rem;color:var(--nd-text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem}
+  .stat-val{font-size:1.7rem;font-weight:800;color:var(--nd-cyan-text)}
+  .stat-sub{font-size:.75rem;color:var(--nd-text-faint);margin-top:.2rem}
 
   /* SUBSCRIPTION BANNER */
   .sub-banner{border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem}
@@ -87,14 +88,14 @@
   /* TAB-LEVEL lock overlay for non-subscribers */
   .tab-lock{position:relative;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;text-align:center;padding:3rem 1.5rem;background:rgba(6,15,30,.55);border:1px solid rgba(255,255,255,.07);border-radius:14px;backdrop-filter:blur(6px)}
   .tab-lock-icon{font-size:3rem;line-height:1}
-  .tab-lock-title{font-size:1.05rem;font-weight:800;color:rgba(255,255,255,.85)}
-  .tab-lock-sub{font-size:.85rem;color:rgba(255,255,255,.4);max-width:320px}
-  .tab-btn[data-requires-sub].locked-tab{color:rgba(255,255,255,.3)}
+  .tab-lock-title{font-size:1.05rem;font-weight:800;color:var(--nd-text-primary)}
+  .tab-lock-sub{font-size:.85rem;color:var(--nd-text-faint);max-width:320px}
+  .tab-btn[data-requires-sub].locked-tab{color:var(--nd-text-faint)}
   .tab-btn[data-requires-sub].locked-tab::after{content:' 🔒';font-size:.72em}
   .lock-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:11;gap:.75rem;text-align:center;padding:1.5rem;background:rgba(6,15,30,.72);border-radius:14px;backdrop-filter:blur(4px)}
   .lock-overlay-icon{font-size:2.5rem}
-  .lock-overlay-text{color:rgba(255,255,255,.85);font-size:.95rem;font-weight:700}
-  .lock-overlay-sub{color:rgba(255,255,255,.45);font-size:.82rem}
+  .lock-overlay-text{color:var(--nd-text-primary);font-size:.95rem;font-weight:700}
+  .lock-overlay-sub{color:var(--nd-text-muted);font-size:.82rem}
   @keyframes pulse-border{0%,100%{border-color:rgba(234,179,8,.4)}50%{border-color:rgba(234,179,8,.8)}}
   .sub-banner-text{font-size:.9rem}
   .sub-banner-text strong{display:block;font-size:1rem;margin-bottom:.15rem}
@@ -102,44 +103,44 @@
   /* CLAIMS TABLE */
   .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;flex-wrap:wrap;gap:.5rem}
   .section-title{font-size:1.05rem;font-weight:700}
-  .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden}
+  .card{background:var(--nd-bg-surface);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden}
   table{width:100%;border-collapse:collapse;font-size:.86rem}
-  thead{background:rgba(255,255,255,.05)}
-  th{padding:.7rem 1rem;text-align:left;font-weight:600;color:rgba(255,255,255,.55);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
-  td{padding:.75rem 1rem;border-top:1px solid rgba(255,255,255,.05);color:rgba(255,255,255,.85)}
+  thead{background:var(--nd-bg-surface-2)}
+  th{padding:.7rem 1rem;text-align:left;font-weight:600;color:var(--nd-text-muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+  td{padding:.75rem 1rem;border-top:1px solid var(--nd-border);color:var(--nd-text-primary)}
   tr:hover td{background:rgba(255,255,255,.025)}
   .status-pill{display:inline-block;padding:.2rem .6rem;border-radius:20px;font-size:.72rem;font-weight:700;text-transform:uppercase}
-  .s-intimated{background:rgba(234,179,8,.15);color:#fbbf24}
-  .s-assigned{background:rgba(59,130,246,.15);color:#93c5fd}
-  .s-in_review{background:rgba(139,92,246,.15);color:#c4b5fd}
+  .s-intimated{background:rgba(234,179,8,.15);color:var(--nd-warning-text)}
+  .s-assigned{background:rgba(59,130,246,.15);color:var(--nd-info-text)}
+  .s-in_review{background:rgba(139,92,246,.15);color:var(--nd-purple-text)}
   .s-in_negotiation{background:rgba(249,115,22,.15);color:#fdba74}
-  .s-resolved_won{background:rgba(34,197,94,.15);color:#86efac}
-  .s-resolved_lost{background:rgba(239,68,68,.15);color:#fca5a5}
+  .s-resolved_won{background:rgba(34,197,94,.15);color:var(--nd-success-text)}
+  .s-resolved_lost{background:rgba(239,68,68,.15);color:var(--nd-danger-text)}
   .s-closed,.s-withdrawn{background:rgba(107,114,128,.15);color:#9ca3af}
-  .empty{text-align:center;padding:2.5rem;color:rgba(255,255,255,.3);font-size:.9rem}
+  .empty{text-align:center;padding:2.5rem;color:var(--nd-text-faint);font-size:.9rem}
 
   /* MODAL */
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem}
   .modal-bg.open{display:flex}
-  .modal{background:#0f1e3a;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:1.75rem;width:100%;max-width:540px;max-height:90vh;overflow-y:auto}
+  .modal{background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:16px;padding:1.75rem;width:100%;max-width:540px;max-height:90vh;overflow-y:auto}
   .modal h2{font-size:1.15rem;font-weight:800;margin-bottom:1.25rem}
   .field{margin-bottom:1rem}
-  label{display:block;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.6);margin-bottom:.35rem}
-  input,select,textarea{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:.65rem .9rem;color:#fff;font-size:.9rem;outline:none;transition:border .15s;font-family:inherit}
+  label{display:block;font-size:.8rem;font-weight:600;color:var(--nd-text-secondary);margin-bottom:.35rem}
+  input,select,textarea{width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:8px;padding:.65rem .9rem;color:var(--nd-text-primary);font-size:.9rem;outline:none;transition:border .15s;font-family:inherit}
   input:focus,select:focus,textarea:focus{border-color:#22d3ee}
-  input::placeholder,textarea::placeholder{color:rgba(255,255,255,.25)}
-  select option{background:#0f1e3a}
+  input::placeholder,textarea::placeholder{color:var(--nd-text-disabled)}
+  select option{background:var(--nd-bg-base-2)}
   textarea{resize:vertical;min-height:70px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
   .modal-footer{display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end}
   .btn{padding:.7rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer;border:none}
   .btn-primary{background:#06b6d4;color:#fff}
   .btn-primary:hover{background:#0891b2}
-  .btn-cancel{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6)}
+  .btn-cancel{background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary)}
   .btn-primary:disabled{background:#1e4a5c;cursor:not-allowed}
   .msg{font-size:.83rem;padding:.55rem .8rem;border-radius:7px;margin-top:.75rem;display:none}
-  .msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:#fca5a5;display:block}
-  .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#86efac;display:block}
+  .msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:var(--nd-danger-text);display:block}
+  .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:var(--nd-success-text);display:block}
 
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
@@ -189,70 +190,70 @@
   #newClaimBtn[disabled]::after{content:'Subscribe to unlock';position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fbbf24;font-size:.72rem;padding:.3rem .6rem;border-radius:6px;white-space:nowrap;pointer-events:none;border:1px solid rgba(251,191,36,.3)}
   .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;justify-content:flex-end}
   .drawer-bg.open{display:flex}
-  .drawer{background:#0f1e3a;width:100%;max-width:480px;height:100%;overflow-y:auto;box-shadow:-4px 0 32px rgba(0,0,0,.5);padding:1.5rem 1.25rem;display:flex;flex-direction:column;gap:1rem}
+  .drawer{background:var(--nd-bg-base-2);width:100%;max-width:480px;height:100%;overflow-y:auto;box-shadow:-4px 0 32px rgba(0,0,0,.5);padding:1.5rem 1.25rem;display:flex;flex-direction:column;gap:1rem}
   .drawer-header{display:flex;align-items:center;justify-content:space-between}
   .drawer-header h3{font-size:1.1rem;font-weight:800}
-  .drawer-close{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.4rem;cursor:pointer;line-height:1;padding:.2rem .4rem}
-  .drawer-close:hover{color:#fff}
-  .drawer-section{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:1rem}
-  .drawer-section h4{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:.75rem}
+  .drawer-close{background:transparent;border:none;color:var(--nd-text-muted);font-size:1.4rem;cursor:pointer;line-height:1;padding:.2rem .4rem}
+  .drawer-close:hover{color:var(--nd-text-primary)}
+  .drawer-section{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:1rem}
+  .drawer-section h4{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--nd-text-faint);margin-bottom:.75rem}
   .detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.85rem;gap:.5rem}
   .detail-row:last-child{border-bottom:none}
-  .detail-label{color:rgba(255,255,255,.45);flex-shrink:0;min-width:110px}
-  .detail-val{color:#e2e8f0;text-align:right;word-break:break-word}
+  .detail-label{color:var(--nd-text-muted);flex-shrink:0;min-width:110px}
+  .detail-val{color:var(--nd-text-primary);text-align:right;word-break:break-word}
   /* Timeline */
   .timeline{display:flex;flex-direction:column;gap:0}
   .tl-item{display:flex;gap:.75rem;position:relative}
-  .tl-item:not(:last-child)::before{content:'';position:absolute;left:9px;top:20px;width:2px;bottom:-8px;background:rgba(255,255,255,.1)}
-  .tl-dot{width:20px;height:20px;border-radius:50%;border:2px solid #22d3ee;background:#0f1e3a;flex-shrink:0;margin-top:.15rem;display:flex;align-items:center;justify-content:center}
+  .tl-item:not(:last-child)::before{content:'';position:absolute;left:9px;top:20px;width:2px;bottom:-8px;background:var(--nd-bg-surface-3)}
+  .tl-dot{width:20px;height:20px;border-radius:50%;border:2px solid #22d3ee;background:var(--nd-bg-base-2);flex-shrink:0;margin-top:.15rem;display:flex;align-items:center;justify-content:center}
   .tl-dot.won{border-color:#4ade80}
   .tl-dot.lost{border-color:#f87171}
   .tl-content{flex:1;padding-bottom:.9rem}
-  .tl-status{font-weight:700;font-size:.85rem;color:#22d3ee}
-  .tl-status.won{color:#4ade80}
-  .tl-status.lost{color:#f87171}
-  .tl-date{font-size:.74rem;color:rgba(255,255,255,.35);margin-top:.1rem}
-  .tl-note{font-size:.82rem;color:rgba(255,255,255,.6);margin-top:.3rem;background:rgba(255,255,255,.04);border-radius:6px;padding:.4rem .6rem;border-left:3px solid rgba(34,211,238,.3)}
-  .tl-empty{font-size:.85rem;color:rgba(255,255,255,.3);text-align:center;padding:1rem 0}
+  .tl-status{font-weight:700;font-size:.85rem;color:var(--nd-cyan-text)}
+  .tl-status.won{color:var(--nd-success-text)}
+  .tl-status.lost{color:var(--nd-danger-text)}
+  .tl-date{font-size:.74rem;color:var(--nd-text-faint);margin-top:.1rem}
+  .tl-note{font-size:.82rem;color:var(--nd-text-secondary);margin-top:.3rem;background:var(--nd-bg-surface);border-radius:6px;padding:.4rem .6rem;border-left:3px solid rgba(34,211,238,.3)}
+  .tl-empty{font-size:.85rem;color:var(--nd-text-faint);text-align:center;padding:1rem 0}
   @media(max-width:520px){.drawer{max-width:100%}}
 
   /* PLAN CARDS */
   .plan-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-bottom:1.25rem}
-  .plan-card{border:2px solid rgba(255,255,255,.12);border-radius:12px;padding:1rem .75rem;cursor:pointer;transition:border .18s,background .18s;text-align:center;background:rgba(255,255,255,.03)}
+  .plan-card{border:2px solid var(--nd-border-strong);border-radius:12px;padding:1rem .75rem;cursor:pointer;transition:border .18s,background .18s;text-align:center;background:var(--nd-bg-surface)}
 
   /* TABS */
-  .tab-nav{display:flex;gap:.25rem;margin-bottom:1.75rem;border-bottom:1px solid rgba(255,255,255,.08);overflow-x:auto}
-  .tab-btn{padding:.6rem 1.1rem;background:transparent;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,.45);font-size:.88rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;margin-bottom:-1px}
-  .tab-btn.active{color:#22d3ee;border-bottom-color:#22d3ee}
-  .tab-btn:hover:not(.active){color:rgba(255,255,255,.7)}
+  .tab-nav{display:flex;gap:.25rem;margin-bottom:1.75rem;border-bottom:1px solid var(--nd-border);overflow-x:auto}
+  .tab-btn{padding:.6rem 1.1rem;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--nd-text-muted);font-size:.88rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;margin-bottom:-1px}
+  .tab-btn.active{color:var(--nd-cyan-text);border-bottom-color:#22d3ee}
+  .tab-btn:hover:not(.active){color:var(--nd-text-secondary)}
   .tab-panel{display:none}.tab-panel.active{display:block}
 
   /* PROFILE / SETTINGS */
   .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
-  .info-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1.4rem}
-  .info-card h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:1rem}
-  .info-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.86rem;gap:.5rem}
+  .info-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1.4rem}
+  .info-card h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--nd-text-faint);margin-bottom:1rem}
+  .info-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--nd-border);font-size:.86rem;gap:.5rem}
   .info-row:last-child{border-bottom:none}
-  .info-label{color:rgba(255,255,255,.45);flex-shrink:0}
-  .info-val{color:#e2e8f0;text-align:right}
+  .info-label{color:var(--nd-text-muted);flex-shrink:0}
+  .info-val{color:var(--nd-text-primary);text-align:right}
   .edit-form .field{margin-bottom:.85rem}
-  .edit-form input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:.6rem .85rem;color:#fff;font-size:.88rem;outline:none;transition:border .15s;font-family:inherit}
+  .edit-form input{width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:8px;padding:.6rem .85rem;color:var(--nd-text-primary);font-size:.88rem;outline:none;transition:border .15s;font-family:inherit}
   .edit-form input:focus{border-color:#22d3ee}
-  .edit-form input::placeholder{color:rgba(255,255,255,.25)}
-  .edit-form label{display:block;font-size:.77rem;font-weight:600;color:rgba(255,255,255,.5);margin-bottom:.3rem}
-  .btn-danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:8px;padding:.6rem 1.2rem;font-size:.85rem;font-weight:600;cursor:pointer}
+  .edit-form input::placeholder{color:var(--nd-text-disabled)}
+  .edit-form label{display:block;font-size:.77rem;font-weight:600;color:var(--nd-text-muted);margin-bottom:.3rem}
+  .btn-danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--nd-danger-text);border-radius:8px;padding:.6rem 1.2rem;font-size:.85rem;font-weight:600;cursor:pointer}
   .btn-danger:hover{background:rgba(239,68,68,.3)}
   .plan-upgrade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
-  .plan-opt{border:2px solid rgba(255,255,255,.1);border-radius:10px;padding:.85rem .65rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;background:rgba(255,255,255,.02)}
+  .plan-opt{border:2px solid var(--nd-border-strong);border-radius:10px;padding:.85rem .65rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;background:rgba(255,255,255,.02)}
   .plan-opt:hover{border-color:rgba(6,182,212,.4);background:rgba(6,182,212,.06)}
   .plan-opt.current-plan{border-color:#22d3ee;background:rgba(6,182,212,.1)}
-  .plan-opt .po-name{font-weight:800;font-size:.88rem;color:#fff;margin-bottom:.3rem;text-transform:capitalize}
-  .plan-opt .po-price{font-size:1.15rem;font-weight:800;color:#22d3ee;line-height:1}
-  .plan-opt .po-period{font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.1rem}
-  .plan-opt .po-quota{font-size:.72rem;color:rgba(255,255,255,.45);margin-top:.45rem;line-height:1.35}
+  .plan-opt .po-name{font-weight:800;font-size:.88rem;color:var(--nd-text-primary);margin-bottom:.3rem;text-transform:capitalize}
+  .plan-opt .po-price{font-size:1.15rem;font-weight:800;color:var(--nd-cyan-text);line-height:1}
+  .plan-opt .po-period{font-size:.68rem;color:var(--nd-text-faint);margin-top:.1rem}
+  .plan-opt .po-quota{font-size:.72rem;color:var(--nd-text-muted);margin-top:.45rem;line-height:1.35}
   .plan-opt .po-badge{display:inline-block;background:#22d3ee;color:#0a1628;font-size:.62rem;font-weight:800;padding:.15rem .45rem;border-radius:10px;margin-bottom:.35rem}
   .settings-section{margin-bottom:1.5rem}
-  .settings-section h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:.85rem}
+  .settings-section h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--nd-text-faint);margin-bottom:.85rem}
   /* ── MOBILE ── */
   @media(max-width:700px){
     .profile-grid{grid-template-columns:1fr}
@@ -312,11 +313,11 @@
   }
   .plan-card:hover{border-color:rgba(6,182,212,.5);background:rgba(6,182,212,.07)}
   .plan-card.selected{border-color:#06b6d4;background:rgba(6,182,212,.12)}
-  .plan-card .pc-name{font-weight:800;font-size:.95rem;text-transform:capitalize;margin-bottom:.35rem;color:#fff}
-  .plan-card .pc-price{font-size:1.35rem;font-weight:800;color:#22d3ee;line-height:1}
-  .plan-card .pc-period{font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem}
-  .plan-card .pc-quota{font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.35}
-  .sub-info{font-size:.82rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.9rem}
+  .plan-card .pc-name{font-weight:800;font-size:.95rem;text-transform:capitalize;margin-bottom:.35rem;color:var(--nd-text-primary)}
+  .plan-card .pc-price{font-size:1.35rem;font-weight:800;color:var(--nd-cyan-text);line-height:1}
+  .plan-card .pc-period{font-size:.7rem;color:var(--nd-text-faint);margin-top:.1rem}
+  .plan-card .pc-quota{font-size:.75rem;color:var(--nd-text-muted);margin-top:.5rem;line-height:1.35}
+  .sub-info{font-size:.82rem;color:var(--nd-text-muted);text-align:center;margin-bottom:.9rem}
 </style>
 </head>
 <body class="body en">
@@ -328,9 +329,10 @@
   </a>
   <div class="nav-right">
     <a href="/" class="btn-sm btn-ghost" style="text-decoration:none" title="Back to nidaanpartner.com home"><span class="en">🏠 Home</span><span class="hi">🏠 होम</span></a>
+    <button class="btn-sm btn-ghost nd-theme-toggle" style="cursor:pointer" title="Toggle light/dark mode"></button>
     <div id="notifWrap" style="position:relative">
       <button id="notifBell" class="btn-sm btn-ghost" title="Notifications" aria-label="Notifications" style="position:relative;font-size:1.05rem" onclick="toggleNotif(event)">🔔<span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:.6rem;font-weight:800;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px;text-align:center"></span></button>
-      <div id="notifMenu" style="display:none;position:fixed;right:12px;top:60px;background:#0f1e3a;border:1px solid rgba(255,255,255,.14);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:9999;overflow:hidden"></div>
+      <div id="notifMenu" style="display:none;position:fixed;right:12px;top:60px;background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:9999;overflow:hidden"></div>
     </div>
     <span class="plan-badge" id="planBadge">—</span>
     <div class="lang-toggle">
@@ -370,36 +372,36 @@
   <div class="tab-panel active" id="tab-dashboard">
 
   <!-- ₹499 funnel: free-lead claim — document checklist + pay-gate -->
-  <div id="leadChecklistCard" style="display:none;background:#0f1e3a;border:1px solid rgba(34,211,238,.25);border-radius:16px;padding:1.4rem 1.5rem;margin-bottom:1.3rem;box-shadow:0 8px 28px rgba(0,0,0,.35)">
+  <div id="leadChecklistCard" style="display:none;background:var(--nd-bg-base-2);border:1px solid rgba(34,211,238,.25);border-radius:16px;padding:1.4rem 1.5rem;margin-bottom:1.3rem;box-shadow:0 8px 28px rgba(0,0,0,.35)">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
       <div>
-        <div style="font-size:1.15rem;font-weight:800;color:#fff">📋 <span class="en">Your claim review</span><span class="hi">आपकी क्लेम समीक्षा</span></div>
-        <div style="font-size:.85rem;color:rgba(255,255,255,.6);margin-top:.25rem"><span class="en">Pay ₹499 below to start your review now. Documents are optional — add any you have; our experts will ask if more are needed.</span><span class="hi">अभी समीक्षा शुरू करने के लिए नीचे ₹499 दें। दस्तावेज़ वैकल्पिक हैं — जो हों जोड़ें; ज़रूरत होने पर विशेषज्ञ पूछेंगे।</span></div>
+        <div style="font-size:1.15rem;font-weight:800;color:var(--nd-text-primary)">📋 <span class="en">Your claim review</span><span class="hi">आपकी क्लेम समीक्षा</span></div>
+        <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-top:.25rem"><span class="en">Pay ₹499 below to start your review now. Documents are optional — add any you have; our experts will ask if more are needed.</span><span class="hi">अभी समीक्षा शुरू करने के लिए नीचे ₹499 दें। दस्तावेज़ वैकल्पिक हैं — जो हों जोड़ें; ज़रूरत होने पर विशेषज्ञ पूछेंगे।</span></div>
       </div>
       <div style="text-align:right;min-width:120px">
-        <div id="lcProgressText" style="font-size:.8rem;font-weight:700;color:#22d3ee"></div>
-        <div style="width:120px;height:7px;background:rgba(255,255,255,.1);border-radius:99px;margin-top:.35rem;overflow:hidden"><div id="lcBarFill" style="height:100%;width:0;background:linear-gradient(90deg,#06b6d4,#22d3ee);transition:width .3s"></div></div>
+        <div id="lcProgressText" style="font-size:.8rem;font-weight:700;color:var(--nd-cyan-text)"></div>
+        <div style="width:120px;height:7px;background:var(--nd-bg-surface-3);border-radius:99px;margin-top:.35rem;overflow:hidden"><div id="lcBarFill" style="height:100%;width:0;background:linear-gradient(90deg,#06b6d4,#22d3ee);transition:width .3s"></div></div>
       </div>
     </div>
-    <div id="lcTrust" style="font-size:.78rem;color:rgba(255,255,255,.5);background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);border-radius:8px;padding:.55rem .75rem;margin:.9rem 0;line-height:1.5"></div>
+    <div id="lcTrust" style="font-size:.78rem;color:var(--nd-text-muted);background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);border-radius:8px;padding:.55rem .75rem;margin:.9rem 0;line-height:1.5"></div>
     <div id="lcSlots" style="display:flex;flex-direction:column;gap:.6rem"></div>
     <!-- pay-gate — shown whenever the claim is an unpaid lead. Documents are optional. -->
     <div id="lcPayGate" style="display:none;margin-top:1.1rem;background:linear-gradient(135deg,#065f46,#0f766e);border:1px solid #10b981;border-radius:14px;padding:1.4rem 1.5rem;text-align:center">
-      <div style="font-size:1.25rem;font-weight:800;color:#fff">🎯 <span class="en">Unlock your expert legal review</span><span class="hi">अपनी विशेषज्ञ कानूनी समीक्षा अनलॉक करें</span></div>
-      <div style="font-size:.92rem;color:rgba(255,255,255,.85);margin:.6rem auto 0;max-width:520px;line-height:1.6">
+      <div style="font-size:1.25rem;font-weight:800;color:var(--nd-text-primary)">🎯 <span class="en">Unlock your expert legal review</span><span class="hi">अपनी विशेषज्ञ कानूनी समीक्षा अनलॉक करें</span></div>
+      <div style="font-size:.92rem;color:var(--nd-text-primary);margin:.6rem auto 0;max-width:520px;line-height:1.6">
         <span class="en">Pay ₹499 to start your review. Documents are optional — add them now or any time; our experts will follow up if anything is needed.</span>
         <span class="hi">समीक्षा शुरू करने के लिए ₹499 दें। दस्तावेज़ वैकल्पिक हैं — अभी या कभी भी जोड़ें; ज़रूरत होने पर हमारे विशेषज्ञ संपर्क करेंगे।</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:center;gap:1.5rem;flex-wrap:wrap;margin:1.1rem 0 .4rem">
-        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your disputed claim</span><span class="hi">आपका विवादित क्लेम</span></div><div id="lcDisputed" style="font-size:1.8rem;font-weight:800;color:#fff;font-family:'Poppins',sans-serif"></div></div>
-        <div style="font-size:1.6rem;color:rgba(255,255,255,.5)">vs</div>
-        <div style="text-align:center"><div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your review</span><span class="hi">आपकी समीक्षा</span></div><div id="lcFeeAmt" style="font-size:1.8rem;font-weight:800;color:#fcd34d;font-family:'Poppins',sans-serif">₹499</div></div>
+        <div style="text-align:center"><div style="font-size:.72rem;color:var(--nd-text-secondary);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your disputed claim</span><span class="hi">आपका विवादित क्लेम</span></div><div id="lcDisputed" style="font-size:1.8rem;font-weight:800;color:var(--nd-text-primary);font-family:'Poppins',sans-serif"></div></div>
+        <div style="font-size:1.6rem;color:var(--nd-text-muted)">vs</div>
+        <div style="text-align:center"><div style="font-size:.72rem;color:var(--nd-text-secondary);text-transform:uppercase;letter-spacing:.05em"><span class="en">Your review</span><span class="hi">आपकी समीक्षा</span></div><div id="lcFeeAmt" style="font-size:1.8rem;font-weight:800;color:var(--nd-warning-text);font-family:'Poppins',sans-serif">₹499</div></div>
       </div>
-      <div style="font-size:.85rem;color:#fcd34d;font-weight:600;margin-bottom:1rem"><span class="en">Don't leave your money on the table.</span><span class="hi">अपना पैसा यूँ ही मत छोड़िए।</span></div>
+      <div style="font-size:.85rem;color:var(--nd-warning-text);font-weight:600;margin-bottom:1rem"><span class="en">Don't leave your money on the table.</span><span class="hi">अपना पैसा यूँ ही मत छोड़िए।</span></div>
       <button id="lcPayBtn" style="background:#fcd34d;color:#1c1917;border:none;border-radius:10px;padding:.85rem 2rem;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 6px 18px rgba(252,211,77,.3)">
         <span class="en">Pay ₹499 &amp; Get My Report</span><span class="hi">₹499 दें और मेरी रिपोर्ट पाएं</span> →
       </button>
-      <div style="font-size:.78rem;color:rgba(255,255,255,.6);margin-top:.7rem"><span class="en">Once you pay, your case goes under expert review — report in 24–48 business hours, here and on WhatsApp.</span><span class="hi">भुगतान के बाद आपका केस विशेषज्ञ समीक्षा में जाता है — रिपोर्ट 24–48 कार्य-घंटों में, यहाँ और WhatsApp पर।</span></div>
+      <div style="font-size:.78rem;color:var(--nd-text-secondary);margin-top:.7rem"><span class="en">Once you pay, your case goes under expert review — report in 24–48 business hours, here and on WhatsApp.</span><span class="hi">भुगतान के बाद आपका केस विशेषज्ञ समीक्षा में जाता है — रिपोर्ट 24–48 कार्य-घंटों में, यहाँ और WhatsApp पर।</span></div>
     </div>
   </div>
 
@@ -500,23 +502,23 @@
 
   <!-- Saved-all-3-contacts confirmation prompt (shown after Turn On) -->
   <div id="waVcardModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target.id==='waVcardModalBg')document.getElementById('waVcardModalBg').style.display='none'">
-    <div style="background:#0a1628;border:1px solid rgba(255,255,255,.15);border-radius:14px;max-width:480px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
+    <div style="background:var(--nd-bg-base);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:480px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
       <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 Save All 3 Nidaan Numbers</h2>
-      <p style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1rem">
+      <p style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:1rem">
         We may message you from any of these. Save all 3 so our messages don't go to spam.
       </p>
-      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
+      <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
-          <div><div style="font-weight:600">Nidaan Cases</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 98272 84804</div></div>
-          <button onclick="copyOfficial('+919827284804')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+          <div><div style="font-weight:600">Nidaan Cases</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98272 84804</div></div>
+          <button onclick="copyOfficial('+919827284804')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.07)">
-          <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 98260 11116</div></div>
-          <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+          <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98260 11116</div></div>
+          <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0">
-          <div><div style="font-weight:600">Nidaan Support</div><div style="font-family:monospace;color:rgba(255,255,255,.55);font-size:.85rem">+91 95844 68804</div></div>
-          <button onclick="copyOfficial('+919584468804')" class="btn-sm" style="background:rgba(255,255,255,.08);color:#fff;padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+          <div><div style="font-weight:600">Nidaan Support</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 95844 68804</div></div>
+          <button onclick="copyOfficial('+919584468804')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
       </div>
       <a href="/nidaan/api/official-vcard" download="NidaanPartner.vcf" class="btn-sm btn-cyan" style="display:block;text-align:center;padding:.75rem;border-radius:8px;font-weight:700;margin-bottom:.65rem">
@@ -524,7 +526,7 @@
       </a>
       <div style="display:flex;gap:.5rem">
         <button onclick="confirmSavedNumbers()" class="btn-sm btn-cyan" style="flex:1;padding:.65rem;border-radius:8px;font-weight:700">✓ I've saved them</button>
-        <button onclick="document.getElementById('waVcardModalBg').style.display='none'" class="btn-sm" style="background:transparent;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7);padding:.65rem 1rem;border-radius:8px">Later</button>
+        <button onclick="document.getElementById('waVcardModalBg').style.display='none'" class="btn-sm" style="background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary);padding:.65rem 1rem;border-radius:8px">Later</button>
       </div>
     </div>
   </div>
@@ -652,10 +654,10 @@
           <div class="po-quota hi">10 क्लेम/माह · प्रति ₹50 लाख तक</div>
         </div>
       </div>
-      <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="en">
+      <p style="font-size:.8rem;color:var(--nd-text-faint);margin-top:.85rem" class="en">
         Click a plan to subscribe or upgrade. You'll be taken through secure checkout.
       </p>
-      <p style="font-size:.8rem;color:rgba(255,255,255,.35);margin-top:.85rem" class="hi">
+      <p style="font-size:.8rem;color:var(--nd-text-faint);margin-top:.85rem" class="hi">
         अपग्रेड करने के लिए किसी प्लान पर क्लिक करें।
       </p>
     </div>
@@ -686,8 +688,8 @@
       <h3 class="hi">प्राथमिकताएं</h3>
       <div class="info-row">
         <span>
-          <span class="en" style="color:#e2e8f0;font-size:.88rem">Interface Language</span>
-          <span class="hi" style="color:#e2e8f0;font-size:.88rem">इंटरफेस भाषा</span>
+          <span class="en" style="color:var(--nd-text-primary);font-size:.88rem">Interface Language</span>
+          <span class="hi" style="color:var(--nd-text-primary);font-size:.88rem">इंटरफेस भाषा</span>
         </span>
         <div style="display:flex;gap:.4rem">
           <button class="lang-btn active" onclick="setLang('en');this.classList.add('active');this.nextElementSibling.classList.remove('active')">EN</button>
@@ -702,9 +704,9 @@
       <h3 class="hi">खाता</h3>
       <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
         <div>
-          <span class="en" style="color:#e2e8f0;font-size:.88rem">Log out from all devices</span>
-          <span class="hi" style="color:#e2e8f0;font-size:.88rem">सभी डिवाइस से लॉग आउट करें</span>
-          <div style="font-size:.78rem;color:rgba(255,255,255,.35);margin-top:.15rem" class="en">Clears your session token.</div>
+          <span class="en" style="color:var(--nd-text-primary);font-size:.88rem">Log out from all devices</span>
+          <span class="hi" style="color:var(--nd-text-primary);font-size:.88rem">सभी डिवाइस से लॉग आउट करें</span>
+          <div style="font-size:.78rem;color:var(--nd-text-faint);margin-top:.15rem" class="en">Clears your session token.</div>
         </div>
         <button class="btn-danger" onclick="doLogout()">
           <span class="en">Log Out</span><span class="hi">लॉग आउट</span>
@@ -714,16 +716,16 @@
 
     <!-- Delete account (DPDP right-to-erasure) -->
     <div class="info-card settings-section" style="border-color:rgba(239,68,68,.3)">
-      <h3 class="en" style="color:#fca5a5">Delete my account</h3>
-      <h3 class="hi" style="color:#fca5a5">मेरा खाता हटाएं</h3>
+      <h3 class="en" style="color:var(--nd-danger-text)">Delete my account</h3>
+      <h3 class="hi" style="color:var(--nd-danger-text)">मेरा खाता हटाएं</h3>
       <div id="del-pending-banner" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:.85rem 1rem;margin-bottom:.85rem">
-        <div style="color:#fca5a5;font-weight:700;font-size:.9rem" id="del-pending-text"></div>
+        <div style="color:var(--nd-danger-text);font-weight:700;font-size:.9rem" id="del-pending-text"></div>
         <button class="btn btn-primary" style="margin-top:.6rem;font-size:.85rem" onclick="undoAccountDeletion()">
           <span class="en">↺ Keep my account</span><span class="hi">↺ मेरा खाता रखें</span>
         </button>
       </div>
       <div id="del-default">
-        <p style="font-size:.82rem;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:.75rem">
+        <p style="font-size:.82rem;color:var(--nd-text-muted);line-height:1.6;margin-bottom:.75rem">
           <span class="en">Permanently delete your account and all your data (claims, documents, messages). Any active subscription is cancelled. Under applicable data-protection law, this is irreversible after a 7-day grace period. Financial records may be retained in anonymised form as required by law.</span>
           <span class="hi">अपना खाता और सारा डेटा (क्लेम, दस्तावेज़, संदेश) स्थायी रूप से हटाएं। कोई भी सक्रिय सदस्यता रद्द हो जाएगी। लागू डेटा-सुरक्षा कानून के तहत, 7-दिन की छूट अवधि के बाद यह अपरिवर्तनीय है।</span>
         </p>
@@ -745,7 +747,7 @@
       <h3 id="drawerTitle">Claim Detail</h3>
       <button class="drawer-close" onclick="closeDrawer()">&#x2715;</button>
     </div>
-    <div id="drawerBody"><div style="text-align:center;padding:3rem;color:rgba(255,255,255,.3)">Loading…</div></div>
+    <div id="drawerBody"><div style="text-align:center;padding:3rem;color:var(--nd-text-faint)">Loading…</div></div>
   </div>
 </div>
 
@@ -757,15 +759,15 @@
 
     <!-- Billing period toggle -->
     <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px">
-      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Monthly</span>
-      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">मासिक</span>
+      <span class="en" style="font-size:.85em;color:var(--nd-text-secondary)">Monthly</span>
+      <span class="hi" style="font-size:.85em;color:var(--nd-text-secondary)">मासिक</span>
       <label style="position:relative;display:inline-block;width:46px;height:24px;cursor:pointer">
         <input type="checkbox" id="nidaanBillingToggle" onchange="toggleNidaanBilling()" style="opacity:0;width:0;height:0">
         <span id="nidaanToggleTrack" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></span>
         <span id="nidaanToggleThumb" style="position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s"></span>
       </label>
-      <span class="en" style="font-size:.85em;color:rgba(255,255,255,.6)">Yearly <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">Save 10%</span></span>
-      <span class="hi" style="font-size:.85em;color:rgba(255,255,255,.6)">वार्षिक <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">10% बचत</span></span>
+      <span class="en" style="font-size:.85em;color:var(--nd-text-secondary)">Yearly <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">Save 10%</span></span>
+      <span class="hi" style="font-size:.85em;color:var(--nd-text-secondary)">वार्षिक <span style="background:#22c55e;color:#fff;font-size:.72em;padding:1px 6px;border-radius:10px;font-weight:700">10% बचत</span></span>
     </div>
 
     <!-- Plan cards — monthly -->
@@ -832,8 +834,8 @@
     <!-- All subscriptions are recurring (auto-renew). Informational, not a toggle. -->
     <div id="autoRenewRow" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0;padding:10px 14px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);border-radius:10px">
       <span style="font-size:1.05em">🔄</span>
-      <span class="en" id="autoRenewLabelEn" style="font-size:.82em;color:rgba(255,255,255,.8)">Auto-renews automatically — cancel anytime from your dashboard</span>
-      <span class="hi" id="autoRenewLabelHi" style="font-size:.82em;color:rgba(255,255,255,.8)">स्वतः नवीनीकरण — डैशबोर्ड से कभी भी रद्द करें</span>
+      <span class="en" id="autoRenewLabelEn" style="font-size:.82em;color:var(--nd-text-secondary)">Auto-renews automatically — cancel anytime from your dashboard</span>
+      <span class="hi" id="autoRenewLabelHi" style="font-size:.82em;color:var(--nd-text-secondary)">स्वतः नवीनीकरण — डैशबोर्ड से कभी भी रद्द करें</span>
     </div>
 
     <div class="msg" id="subMsg"></div>
@@ -853,18 +855,18 @@
   <div class="modal" style="max-width:440px">
     <h2 class="en">Confirm your details</h2>
     <h2 class="hi">अपनी जानकारी की पुष्टि करें</h2>
-    <p style="font-size:.85rem;color:rgba(255,255,255,.6);margin:-.4rem 0 .6rem">
+    <p style="font-size:.85rem;color:var(--nd-text-secondary);margin:-.4rem 0 .6rem">
       <span class="en">We'll use these for your subscription &amp; receipts.</span>
       <span class="hi">इनका उपयोग आपकी सदस्यता और रसीद के लिए होगा।</span>
     </p>
     <div class="field">
-      <label class="en">Your Name <span style="color:#f87171">*</span></label>
-      <label class="hi">आपका नाम <span style="color:#f87171">*</span></label>
+      <label class="en">Your Name <span style="color:var(--nd-danger-text)">*</span></label>
+      <label class="hi">आपका नाम <span style="color:var(--nd-danger-text)">*</span></label>
       <input type="text" id="ppName" placeholder="Full name" required style="text-transform:uppercase">
     </div>
     <div class="field">
-      <label class="en">Mobile Number <span style="color:#f87171">*</span></label>
-      <label class="hi">मोबाइल नंबर <span style="color:#f87171">*</span></label>
+      <label class="en">Mobile Number <span style="color:var(--nd-danger-text)">*</span></label>
+      <label class="hi">मोबाइल नंबर <span style="color:var(--nd-danger-text)">*</span></label>
       <input type="tel" id="ppPhone" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="9876543210" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" required>
     </div>
     <div class="field">
@@ -876,7 +878,7 @@
       <!-- Referral code is captured ONCE at signup (from the link) and locked; here we only
            SHOW who referred them, never ask again. Hidden input keeps back-compat with the POST. -->
       <input type="hidden" id="ppBranch">
-      <div id="ppRefBy" style="display:none;font-size:.82rem;color:#6ee7b7">🤝 Referred by: —</div>
+      <div id="ppRefBy" style="display:none;font-size:.82rem;color:var(--nd-success-text)">🤝 Referred by: —</div>
     </div>
     <div class="msg" id="ppMsg"></div>
     <div class="modal-footer">
@@ -950,9 +952,9 @@
           <label class="en">Disputed Amount (₹)</label>
           <label class="hi">विवादित राशि (₹)</label>
           <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0" oninput="checkDisputedCap()">
-          <p class="en" style="font-size:.71rem;color:rgba(255,255,255,.5);margin:.25rem 0 0">Enter only the <b>disputed</b> amount — the shortfall you're fighting for, <b>not</b> the sum assured. E.g. cover ₹50L → claimed ₹10L → insurer paid ₹6L → <b>disputed = ₹4L</b>.</p>
-          <p class="hi" style="font-size:.71rem;color:rgba(255,255,255,.5);margin:.25rem 0 0">केवल <b>विवादित</b> राशि भरें — वह अंतर जिसके लिए आप लड़ रहे हैं, <b>बीमा राशि नहीं</b>। जैसे कवर ₹50L → क्लेम ₹10L → कंपनी ने दिए ₹6L → <b>विवादित = ₹4L</b>।</p>
-          <div id="disputedCapNudge" style="display:none;font-size:.74rem;margin:.45rem 0 0;padding:.5rem .7rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.32);border-radius:8px;color:#fcd34d;line-height:1.45"></div>
+          <p class="en" style="font-size:.71rem;color:var(--nd-text-muted);margin:.25rem 0 0">Enter only the <b>disputed</b> amount — the shortfall you're fighting for, <b>not</b> the sum assured. E.g. cover ₹50L → claimed ₹10L → insurer paid ₹6L → <b>disputed = ₹4L</b>.</p>
+          <p class="hi" style="font-size:.71rem;color:var(--nd-text-muted);margin:.25rem 0 0">केवल <b>विवादित</b> राशि भरें — वह अंतर जिसके लिए आप लड़ रहे हैं, <b>बीमा राशि नहीं</b>। जैसे कवर ₹50L → क्लेम ₹10L → कंपनी ने दिए ₹6L → <b>विवादित = ₹4L</b>।</p>
+          <div id="disputedCapNudge" style="display:none;font-size:.74rem;margin:.45rem 0 0;padding:.5rem .7rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.32);border-radius:8px;color:var(--nd-warning-text);line-height:1.45"></div>
         </div>
       </div>
       <div class="row2">
@@ -968,10 +970,10 @@
         </div>
       </div>
       <div class="field">
-        <label class="en">Claim Rejection Letter <span style="color:#f87171">*</span></label>
-        <label class="hi">क्लेम अस्वीकृति पत्र <span style="color:#f87171">*</span></label>
+        <label class="en">Claim Rejection Letter <span style="color:var(--nd-danger-text)">*</span></label>
+        <label class="hi">क्लेम अस्वीकृति पत्र <span style="color:var(--nd-danger-text)">*</span></label>
         <div style="margin-top:.35rem;background:rgba(248,113,113,.05);border:2px dashed rgba(248,113,113,.35);border-radius:8px;padding:.85rem">
-          <label class="doc-upload-btn" for="claimRejectionLetter" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(248,113,113,.16);border:1px solid rgba(248,113,113,.4);border-radius:6px;cursor:pointer;font-size:.9rem;color:#fca5a5;font-weight:700">
+          <label class="doc-upload-btn" for="claimRejectionLetter" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(248,113,113,.16);border:1px solid rgba(248,113,113,.4);border-radius:6px;cursor:pointer;font-size:.9rem;color:var(--nd-danger-text);font-weight:700">
             📄 <span class="en">Attach rejection letter</span><span class="hi">अस्वीकृति पत्र संलग्न करें</span>
           </label>
           <input type="file" id="claimRejectionLetter" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="showRejectionLetterName()">
@@ -983,11 +985,11 @@
         <label class="en">Other Supporting Documents <span style="opacity:.5;font-weight:400">(optional)</span></label>
         <label class="hi">सहायक दस्तावेज़ <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
         <div style="margin-top:.35rem;background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
-          <label class="doc-upload-btn" for="claimDocs" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.45);border-radius:6px;cursor:pointer;font-size:.9rem;color:#93c5fd;font-weight:700">
+          <label class="doc-upload-btn" for="claimDocs" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.45);border-radius:6px;cursor:pointer;font-size:.9rem;color:var(--nd-info-text);font-weight:700">
             📂 <span class="en">Select Files to Attach</span><span class="hi">फ़ाइलें चुनें</span>
           </label>
           <input type="file" id="claimDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="showClaimDocList()">
-          <p style="text-align:center;color:#93c5fd;opacity:.75;font-size:.78rem;margin:.4rem 0 .15rem;font-weight:600">💡 <span class="en">You can select multiple files at once from the file picker</span><span class="hi">आप एक साथ कई फ़ाइलें चुन सकते हैं</span></p>
+          <p style="text-align:center;color:var(--nd-info-text);opacity:.75;font-size:.78rem;margin:.4rem 0 .15rem;font-weight:600">💡 <span class="en">You can select multiple files at once from the file picker</span><span class="hi">आप एक साथ कई फ़ाइलें चुन सकते हैं</span></p>
           <div id="claimDocList" style="margin-top:.5rem;font-size:.82rem"></div>
           <p style="opacity:.45;font-size:.73rem;margin:.4rem 0 0;text-align:center">PDF · JPG · PNG · WebP · DOC/DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files<br>iPhone: if a HEIC photo is rejected, share it as “JPG”.</p>
         </div>
@@ -1000,7 +1002,7 @@
       <!-- ── Data-protection assurance (plain, no specific-act wording) ──── -->
       <div class="field" style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);border-radius:10px;padding:.75rem .95rem;margin-top:.25rem">
         <div style="font-size:.78rem;line-height:1.55;color:rgba(255,255,255,.78)">
-          <strong style="color:#22d3ee">🛡️ <span class="en">Your data is safe &amp; secure</span><span class="hi">आपका डेटा सुरक्षित है</span></strong>
+          <strong style="color:var(--nd-cyan-text)">🛡️ <span class="en">Your data is safe &amp; secure</span><span class="hi">आपका डेटा सुरक्षित है</span></strong>
           <p class="en" style="margin:.35rem 0 0">
             We follow all the data guidelines of every competent government authority, so your data always stays safe and secure.
           </p>
@@ -1024,7 +1026,7 @@
 
 <!-- #6: persistent commission disclaimer at the bottom — shown for SUBSCRIBERS (advisors) only -->
 <div id="subCommissionDisclaimer" style="display:none;max-width:900px;margin:1.5rem auto 2.5rem;padding:1rem 1.2rem;background:rgba(34,211,238,.05);border:1px dashed rgba(34,211,238,.3);border-radius:12px;color:rgba(255,255,255,.72);font-size:.82rem;line-height:1.75">
-  <div style="font-weight:800;color:#22d3ee;margin-bottom:.4rem">💰 <span class="en">Advisor reward — how it works</span><span class="hi">एडवाइज़र इनाम — यह कैसे काम करता है</span></div>
+  <div style="font-weight:800;color:var(--nd-cyan-text);margin-bottom:.4rem">💰 <span class="en">Advisor reward — how it works</span><span class="hi">एडवाइज़र इनाम — यह कैसे काम करता है</span></div>
   <div class="en">For every claim marked <b>fightable</b>, you earn a reward — paid once the insurance company actually pays your client. Your reward is <b>15% of Nidaan's fee</b>, and Nidaan's fee is <b>15% of the amount recovered</b>.<br><br><b>Simple example:</b> stuck claim ₹2,00,000 → insurer finally pays ₹1,50,000 → Nidaan fee (15%) = ₹22,500 → <b>your reward (15% of that) = ₹3,375</b>. No win, no fee — you're paid only after the case is won and your client has received the money.</div>
   <div class="hi">हर <b>लड़ने लायक</b> क्लेम पर आपको इनाम मिलता है — जो तब मिलता है जब बीमा कंपनी सचमुच आपके ग्राहक को भुगतान कर देती है। आपका इनाम <b>Nidaan की फ़ीस का 15%</b> है, और Nidaan की फ़ीस <b>वसूली गई राशि का 15%</b> है।<br><br><b>आसान उदाहरण:</b> अटका क्लेम ₹2,00,000 → कंपनी आख़िर में देती है ₹1,50,000 → Nidaan फ़ीस (15%) = ₹22,500 → <b>आपका इनाम (उसका 15%) = ₹3,375</b>। जीत नहीं तो फ़ीस नहीं — पैसा तभी मिलता है जब केस जीता जाए और ग्राहक को भुगतान मिल जाए।</div>
 </div>
@@ -1124,7 +1126,7 @@ function toggleNotif(ev) {
     const label = isEn ? `Claim #${fmtClaimNum(id)} — ${n} new repl${n > 1 ? 'ies' : 'y'}` : `क्लेम #${fmtClaimNum(id)} — ${n} नया जवाब`;
     return `<button onclick="openNotifClaim(${id})" style="${rowStyle}">📋 ${label}</button>`;
   }).join('');
-  if (!html) html = `<div style="padding:.8rem 1rem;color:#94a3b8;font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
+  if (!html) html = `<div style="padding:.8rem 1rem;color:var(--nd-text-muted);font-size:.85rem">${isEn ? 'No new updates' : 'कोई नया अपडेट नहीं'}</div>`;
   m.innerHTML = html;
   // Move the menu out of the nav (which is overflow:hidden) and pin it to the viewport under the
   // bell, so it never gets clipped by the nav or hidden behind the dashboard panel.
@@ -1279,27 +1281,27 @@ async function loadDashboard() {
       const claimInfoCard = document.createElement('div');
       claimInfoCard.style.cssText = 'margin:.9rem 0 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:.75rem;padding:1rem 1.25rem';
       claimInfoCard.innerHTML = `
-        <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.06em;margin-bottom:.6rem">YOUR CLAIM DETAILS</div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--nd-text-faint);letter-spacing:.06em;margin-bottom:.6rem">YOUR CLAIM DETAILS</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem .9rem;font-size:.88rem">
-          <div><span style="color:rgba(255,255,255,.4)">Type: </span>${esc(p.claim_type||'—')}</div>
-          <div><span style="color:rgba(255,255,255,.4)">Insurer: </span>${esc(p.insurer_name||'Not specified')}</div>
-          <div><span style="color:rgba(255,255,255,.4)">Amount: </span>${p.disputed_amount ? '₹'+p.disputed_amount.toLocaleString('en-IN') : 'Not specified'}</div>
-          <div><span style="color:rgba(255,255,255,.4)">Status: </span><span style="color:#fbbf24">⏳ Awaiting Payment</span></div>
+          <div><span style="color:var(--nd-text-faint)">Type: </span>${esc(p.claim_type||'—')}</div>
+          <div><span style="color:var(--nd-text-faint)">Insurer: </span>${esc(p.insurer_name||'Not specified')}</div>
+          <div><span style="color:var(--nd-text-faint)">Amount: </span>${p.disputed_amount ? '₹'+p.disputed_amount.toLocaleString('en-IN') : 'Not specified'}</div>
+          <div><span style="color:var(--nd-text-faint)">Status: </span><span style="color:var(--nd-warning-text)">⏳ Awaiting Payment</span></div>
         </div>
-        ${p.brief_description ? `<div style="margin-top:.6rem;font-size:.82rem;color:rgba(255,255,255,.5)">"${esc(p.brief_description)}"</div>` : ''}
+        ${p.brief_description ? `<div style="margin-top:.6rem;font-size:.82rem;color:var(--nd-text-muted)">"${esc(p.brief_description)}"</div>` : ''}
         <div style="margin-top:.85rem;text-align:center">
           <button onclick="payForReview(${p.purchase_id})"
             style="background:#f59e0b;color:#000;border:none;border-radius:8px;padding:.7rem 2rem;font-weight:800;font-size:1rem;cursor:pointer;width:100%">
             Pay ₹499 to Start Legal Review →
           </button>
-          <div style="font-size:.75rem;color:rgba(255,255,255,.35);margin-top:.5rem">Review delivered within 48–72 business hours after payment</div>
+          <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.5rem">Review delivered within 48–72 business hours after payment</div>
         </div>
         <div style="margin-top:1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.85rem">
-          <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:.5rem">📎 SUPPORTING DOCUMENTS</div>
-          <div id="rvDocList_${p.purchase_id}" style="font-size:.82rem;color:rgba(255,255,255,.45);margin-bottom:.5rem">Loading…</div>
-          <label for="rvDocInput_${p.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.13);border:2px dashed rgba(59,130,246,.35);border-radius:6px;cursor:pointer;font-size:.82rem;color:#93c5fd;font-weight:700">📂 Select Files to Attach</label>
+          <div style="font-size:.78rem;font-weight:700;color:var(--nd-text-muted);margin-bottom:.5rem">📎 SUPPORTING DOCUMENTS</div>
+          <div id="rvDocList_${p.purchase_id}" style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.5rem">Loading…</div>
+          <label for="rvDocInput_${p.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.13);border:2px dashed rgba(59,130,246,.35);border-radius:6px;cursor:pointer;font-size:.82rem;color:var(--nd-info-text);font-weight:700">📂 Select Files to Attach</label>
           <input type="file" id="rvDocInput_${p.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewRvDocs(${p.purchase_id})">
-          <p style="text-align:center;color:#93c5fd;opacity:.6;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 You can select multiple files at once</p>
+          <p style="text-align:center;color:var(--nd-info-text);opacity:.6;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 You can select multiple files at once</p>
           <div id="rvDocPreview_${p.purchase_id}" style="margin-top:.35rem;font-size:.78rem"></div>
           <button id="rvDocUploadBtn_${p.purchase_id}" onclick="uploadRvDocs(${p.purchase_id},'review')" style="display:none;margin-top:.35rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
           <div id="rvDocMsg_${p.purchase_id}" style="font-size:.78rem;margin-top:.3rem"></div>
@@ -1349,19 +1351,19 @@ async function loadDashboard() {
         }[h.status] || h.status;
         const statusColor = h.status === 'review_completed' ? '#4ade80' : h.status === 'pending_review' ? '#fbbf24' : 'rgba(255,255,255,.5)';
         return `
-        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:.6rem;padding:.85rem;margin-bottom:.7rem">
-          <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">
+        <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:.6rem;padding:.85rem;margin-bottom:.7rem">
+          <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">
             Review #${h.purchase_id} · ${h.created_at ? h.created_at.split('T')[0] : ''} — <span style="color:${statusColor}">${statusLabel}</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .9rem;font-size:.84rem;margin-bottom:.5rem">
-            <div><span style="color:rgba(255,255,255,.4)">Type: </span>${esc(h.claim_type||'—')}</div>
-            <div><span style="color:rgba(255,255,255,.4)">Insurer: </span>${esc(h.insurer_name||'—')}</div>
+            <div><span style="color:var(--nd-text-faint)">Type: </span>${esc(h.claim_type||'—')}</div>
+            <div><span style="color:var(--nd-text-faint)">Insurer: </span>${esc(h.insurer_name||'—')}</div>
           </div>
           ${h.findings_note ? `<div style="font-size:.84rem;line-height:1.5;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:.4rem;padding:.6rem;margin-bottom:.5rem">${esc(h.findings_note)}</div>` : ''}
-          <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:.6rem;margin-top:.4rem">
-            <div style="font-size:.72rem;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:.35rem">📎 DOCUMENTS</div>
-            <div id="rvDocList_${h.purchase_id}" style="font-size:.8rem;color:rgba(255,255,255,.4);margin-bottom:.4rem">Loading…</div>
-            <label for="rvDocInput_${h.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.4rem .75rem;background:rgba(59,130,246,.12);border:2px dashed rgba(59,130,246,.32);border-radius:5px;cursor:pointer;font-size:.78rem;color:#93c5fd;font-weight:700">📂 Select Files (multiple allowed)</label>
+          <div style="border-top:1px solid var(--nd-border);padding-top:.6rem;margin-top:.4rem">
+            <div style="font-size:.72rem;font-weight:700;color:var(--nd-text-faint);margin-bottom:.35rem">📎 DOCUMENTS</div>
+            <div id="rvDocList_${h.purchase_id}" style="font-size:.8rem;color:var(--nd-text-faint);margin-bottom:.4rem">Loading…</div>
+            <label for="rvDocInput_${h.purchase_id}" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.4rem .75rem;background:rgba(59,130,246,.12);border:2px dashed rgba(59,130,246,.32);border-radius:5px;cursor:pointer;font-size:.78rem;color:var(--nd-info-text);font-weight:700">📂 Select Files (multiple allowed)</label>
             <input type="file" id="rvDocInput_${h.purchase_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewRvDocs(${h.purchase_id})">
             <div id="rvDocPreview_${h.purchase_id}" style="margin-top:.3rem;font-size:.76rem"></div>
             <button id="rvDocUploadBtn_${h.purchase_id}" onclick="uploadRvDocs(${h.purchase_id},'review')" style="display:none;margin-top:.3rem;width:100%;background:#2563eb;color:#fff;border:none;border-radius:5px;padding:.35rem .75rem;font-size:.78rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
@@ -1374,7 +1376,7 @@ async function loadDashboard() {
         const card = document.createElement('div');
         card.id = 'rvHistorySection';
         card.style.cssText = 'margin:.75rem 0 0;';
-        card.innerHTML = '<div style="font-size:.82rem;font-weight:600;color:rgba(255,255,255,.55);margin-bottom:.5rem">📋 Review History</div>' + historyHtml;
+        card.innerHTML = '<div style="font-size:.82rem;font-weight:600;color:var(--nd-text-muted);margin-bottom:.5rem">📋 Review History</div>' + historyHtml;
         banner.insertAdjacentElement('afterend', card);
         // Load docs for each history item
         allHistory.forEach(h => loadRvDocs(h.purchase_id, 'review'));
@@ -1441,8 +1443,8 @@ async function loadDashboard() {
   }
   tbody.innerHTML = claims.map(c => `
     <tr style="cursor:pointer" onclick="openClaimDrawer(${c.claim_id})">
-      <td style="white-space:nowrap;font-weight:800;color:#22d3ee">#${fmtClaimNum(c.claim_id)}</td>
-      <td>${esc(c.insured_name)}<br><small style="color:rgba(255,255,255,.4)">${esc(c.insured_phone)}</small></td>
+      <td style="white-space:nowrap;font-weight:800;color:var(--nd-cyan-text)">#${fmtClaimNum(c.claim_id)}</td>
+      <td>${esc(c.insured_name)}<br><small style="color:var(--nd-text-faint)">${esc(c.insured_phone)}</small></td>
       <td style="text-transform:capitalize">${esc(c.claim_type)}</td>
       <td>${esc(c.insurer_name||'—')}</td>
       <td>${c.created_at ? c.created_at.split('T')[0] : '—'}</td>
@@ -1625,7 +1627,7 @@ async function loadRvDocs(id, type) {
     const d = await r.json();
     if (d.docs && d.docs.length > 0) {
       el.innerHTML = d.docs.map(f =>
-        `<div style="margin-bottom:.25rem;display:flex;align-items:center;gap:.4rem">📄 <a href="${f.url}" target="_blank" style="color:#93c5fd;text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.original_name)}</a> <span style="opacity:.4">(${(f.file_size/1024).toFixed(0)} KB)</span>${f.doc_id?`<button onclick="deleteRvDoc(${id},'${type}',${f.doc_id})" title="Delete this file" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
+        `<div style="margin-bottom:.25rem;display:flex;align-items:center;gap:.4rem">📄 <a href="${f.url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.original_name)}</a> <span style="opacity:.4">(${(f.file_size/1024).toFixed(0)} KB)</span>${f.doc_id?`<button onclick="deleteRvDoc(${id},'${type}',${f.doc_id})" title="Delete this file" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
       ).join('');
     } else {
       el.textContent = 'No documents uploaded yet';
@@ -1694,7 +1696,7 @@ const STATUS_LABELS_FULL = {
 
 async function openClaimDrawer(claim_id) {
   document.getElementById('drawerTitle').textContent = `Claim #${fmtClaimNum(claim_id)}`;
-  document.getElementById('drawerBody').innerHTML = '<div style="text-align:center;padding:3rem;color:rgba(255,255,255,.3)">Loading…</div>';
+  document.getElementById('drawerBody').innerHTML = '<div style="text-align:center;padding:3rem;color:var(--nd-text-faint)">Loading…</div>';
   document.getElementById('claimDrawer').classList.add('open');
   const res = await api(`/nidaan/api/claims/${claim_id}`);
   if (!res) return;
@@ -1750,7 +1752,7 @@ async function openClaimDrawer(claim_id) {
       <div style="background:${bg};border:1px solid ${col}55;border-radius:10px;padding:.85rem 1rem;margin-bottom:.6rem">
         <div style="font-weight:700;color:${col};font-size:.9rem;line-height:1.5">${banner}</div>
       </div>
-      <div style="font-size:.86rem;color:rgba(255,255,255,.82);line-height:1.6;white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
+      <div style="font-size:.86rem;color:rgba(255,255,255,.82);line-height:1.6;white-space:pre-wrap;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.75rem .9rem">${esc(c.review_findings)}</div>
     </div>`;
   }
 
@@ -1762,11 +1764,11 @@ async function openClaimDrawer(claim_id) {
     ${reviewSection}
     <div class="drawer-section">
       <h4>${isHi ? 'दस्तावेज़' : 'Documents'}</h4>
-      <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:rgba(255,255,255,.5)">Loading documents…</div>
+      <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:var(--nd-text-muted)">Loading documents…</div>
       <div style="background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
-        <label for="drawerDocInput" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);border-radius:6px;cursor:pointer;font-size:.85rem;color:#93c5fd;font-weight:700">📂 ${isHi ? 'दस्तावेज़ चुनें' : 'Select Files to Upload'}</label>
+        <label for="drawerDocInput" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);border-radius:6px;cursor:pointer;font-size:.85rem;color:var(--nd-info-text);font-weight:700">📂 ${isHi ? 'दस्तावेज़ चुनें' : 'Select Files to Upload'}</label>
         <input type="file" id="drawerDocInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewDrawerDocs()">
-        <p style="text-align:center;color:#93c5fd;opacity:.7;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 ${isHi ? 'एक साथ कई फ़ाइलें चुनें' : 'You can select multiple files at once from the file picker'}</p>
+        <p style="text-align:center;color:var(--nd-info-text);opacity:.7;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 ${isHi ? 'एक साथ कई फ़ाइलें चुनें' : 'You can select multiple files at once from the file picker'}</p>
         <div id="drawerDocPreview" style="margin-top:.4rem;font-size:.8rem"></div>
         <p style="opacity:.35;font-size:.72rem;margin:.4rem 0 .5rem;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>
         <button id="drawerUploadBtn" onclick="uploadDrawerDocs(${claim_id})" style="display:none;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
@@ -1782,11 +1784,11 @@ async function openClaimDrawer(claim_id) {
       <div id="msgThread" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">${isHi ? 'लोड हो रहा है…' : 'Loading…'}</div>
       <div style="display:flex;gap:.5rem;align-items:center">
         <input type="file" id="msgFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="msgFilePicked()">
-        <button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>
-        <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#fff;font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
+        <button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>
+        <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
         <button id="msgSendBtn" onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
       </div>
-      <div id="msgFileName" style="font-size:.74rem;color:#22d3ee;margin-top:.25rem"></div>
+      <div id="msgFileName" style="font-size:.74rem;color:var(--nd-cyan-text);margin-top:.25rem"></div>
     </div>`;
 
   // Load existing documents
@@ -1797,7 +1799,7 @@ async function openClaimDrawer(claim_id) {
       const docList = document.getElementById('drawerDocList');
       if (dd.docs && dd.docs.length > 0) {
         docList.innerHTML = dd.docs.map(d =>
-          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
+          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
         ).join('');
       } else {
         docList.textContent = isHi ? 'कोई दस्तावेज़ नहीं' : 'No documents uploaded yet';
@@ -1812,9 +1814,9 @@ function _renderClaimMsg(m){
   const isHi = document.body.classList.contains('hi');
   const who = mine ? (isHi ? 'आप' : 'You') : (m.staff_name || 'Nidaan');
   const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
-  const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:#93c5fd;text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
+  const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
   return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:82%;background:${mine?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${mine?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
-    <div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-bottom:.15rem">${esc(who)} · ${t}</div>
+    <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}</div>
     ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
 }
 async function loadClaimMessages(claim_id){
@@ -1825,7 +1827,7 @@ async function loadClaimMessages(claim_id){
     if(!r || !r.ok){ el.innerHTML=''; return; }
     const msgs = (await r.json()).messages || [];
     el.innerHTML = msgs.length ? msgs.map(_renderClaimMsg).join('')
-      : `<div style="color:rgba(255,255,255,.4);text-align:center;padding:.5rem">${isHi ? 'अभी कोई संदेश नहीं। अपने क्लेम के बारे में कुछ भी पूछें।' : 'No messages yet — ask us anything about your claim.'}</div>`;
+      : `<div style="color:var(--nd-text-faint);text-align:center;padding:.5rem">${isHi ? 'अभी कोई संदेश नहीं। अपने क्लेम के बारे में कुछ भी पूछें।' : 'No messages yet — ask us anything about your claim.'}</div>`;
     el.scrollTop = el.scrollHeight;
   } catch(e){ el.innerHTML=''; }
 }
@@ -1897,7 +1899,7 @@ async function uploadDrawerDocs(claim_id) {
       const docList = document.getElementById('drawerDocList');
       if (dd2.docs && dd2.docs.length > 0) {
         docList.innerHTML = dd2.docs.map(d =>
-          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:#93c5fd;text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
+          `<div style="margin-bottom:.3rem">📄 <a href="${d.url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none">${esc(d.original_name)}</a> <span style="opacity:.4">(${(d.file_size/1024).toFixed(0)} KB)</span></div>`
         ).join('');
       }
     }
@@ -2080,16 +2082,16 @@ function _gstConfirm(gst, planLabel){
     const inr = n => (Number(n)||0).toLocaleString('en-IN');
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
-    ov.innerHTML='<div style="max-width:400px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
-      +'<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.8rem">'+(isHi?'भुगतान सारांश':'Payment summary')+(planLabel?(' — '+planLabel):'')+'</div>'
-      +'<div style="font-size:.92rem;color:#cbd5e1;line-height:2">'
+    ov.innerHTML='<div style="max-width:400px;width:100%;background:var(--nd-bg-base-2);border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
+      +'<div style="font-weight:800;color:var(--nd-text-primary);font-size:1.05rem;margin-bottom:.8rem">'+(isHi?'भुगतान सारांश':'Payment summary')+(planLabel?(' — '+planLabel):'')+'</div>'
+      +'<div style="font-size:.92rem;color:var(--nd-text-secondary);line-height:2">'
       +'<div style="display:flex;justify-content:space-between"><span>'+(isHi?'राशि':'Amount')+'</span><span>₹'+inr(gst.base)+'</span></div>'
       +'<div style="display:flex;justify-content:space-between"><span>GST ('+gst.rate+'%)</span><span>₹'+inr(gst.gst)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.15);margin-top:.4rem;padding-top:.4rem;font-weight:800;color:#fff"><span>'+(isHi?'कुल देय':'Total payable')+'</span><span>₹'+inr(gst.total)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--nd-border-strong);margin-top:.4rem;padding-top:.4rem;font-weight:800;color:var(--nd-text-primary)"><span>'+(isHi?'कुल देय':'Total payable')+'</span><span>₹'+inr(gst.total)+'</span></div>'
       +'</div>'
-      +'<div style="font-size:.75rem;color:rgba(255,255,255,.45);margin-top:.7rem">'+(isHi?'Razorpay केवल कुल राशि दिखाएगा।':'Razorpay will show only the total amount.')+'</div>'
+      +'<div style="font-size:.75rem;color:var(--nd-text-muted);margin-top:.7rem">'+(isHi?'Razorpay केवल कुल राशि दिखाएगा।':'Razorpay will show only the total amount.')+'</div>'
       +'<div style="display:flex;gap:.5rem;margin-top:1.1rem">'
-      +'<button id="gstcxCancel" style="flex:1;padding:.65rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-weight:700;cursor:pointer">'+(isHi?'रद्द करें':'Cancel')+'</button>'
+      +'<button id="gstcxCancel" style="flex:1;padding:.65rem;background:var(--nd-bg-surface-3);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;font-weight:700;cursor:pointer">'+(isHi?'रद्द करें':'Cancel')+'</button>'
       +'<button id="gstcxProceed" style="flex:2;padding:.65rem;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer">'+(isHi?'आगे बढ़ें → भुगतान':'Proceed to pay →')+'</button>'
       +'</div></div>';
     document.body.appendChild(ov);
@@ -2464,11 +2466,11 @@ async function renderLeadChecklist(claimId) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:.75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.7rem .85rem';
     if (it.received) {
-      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1"><div style="font-weight:600;color:#fff;font-size:.9rem">${esc(it.label)}</div><div style="font-size:.75rem;color:#34d399"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>`;
+      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem">${esc(it.label)}</div><div style="font-size:.75rem;color:var(--nd-success-text)"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>`;
     } else {
       const inputId = 'lcfile_' + it.key;
       row.innerHTML = `<div style="font-size:1.1rem">📄</div>
-        <div style="flex:1"><div style="font-weight:600;color:#fff;font-size:.9rem">${esc(it.label)}</div><div style="font-size:.74rem;color:rgba(255,255,255,.5);line-height:1.4">${esc(it.why_en || '')}</div></div>
+        <div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem">${esc(it.label)}</div><div style="font-size:.74rem;color:var(--nd-text-muted);line-height:1.4">${esc(it.why_en || '')}</div></div>
         <input type="file" id="${inputId}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="uploadChecklistDoc('${claimId}','${it.key}',this)">
         <button type="button" onclick="document.getElementById('${inputId}').click()" style="background:#0891b2;color:#fff;border:none;border-radius:7px;padding:.45rem .9rem;font-weight:700;font-size:.82rem;cursor:pointer;white-space:nowrap"><span class="en">Upload</span><span class="hi">अपलोड</span></button>`;
     }
@@ -2485,7 +2487,7 @@ async function renderLeadChecklist(claimId) {
       const _fee = _feeForAmount(d.disputed_amount, _cfg);
       let _total = _fee, _gstAmt = 0;
       if(_gst.enabled){ _gstAmt = Math.round(_fee * (Number(_gst.rate)||0)) / 100; _total = Math.round((_fee + _gstAmt) * 100) / 100; }
-      const _feeEl = document.getElementById('lcFeeAmt'); if(_feeEl) _feeEl.innerHTML = '₹' + _total + (_gst.enabled?('<div style="font-size:.6rem;color:rgba(255,255,255,.55);font-weight:600">incl. ₹'+_gstAmt.toFixed(2)+' GST ('+_gst.rate+'%)</div>'):'');
+      const _feeEl = document.getElementById('lcFeeAmt'); if(_feeEl) _feeEl.innerHTML = '₹' + _total + (_gst.enabled?('<div style="font-size:.6rem;color:var(--nd-text-muted);font-weight:600">incl. ₹'+_gstAmt.toFixed(2)+' GST ('+_gst.rate+'%)</div>'):'');
       const _btn = document.getElementById('lcPayBtn');
       if(_btn){ const _en=_btn.querySelector('.en'), _hi=_btn.querySelector('.hi');
         if(_en) _en.textContent='Pay ₹'+_total+' & Get My Report'; if(_hi) _hi.textContent='₹'+_total+' दें और मेरी रिपोर्ट पाएं'; }
@@ -2539,8 +2541,8 @@ function _claimPaidOverlay(){
   ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.92);display:flex;align-items:center;justify-content:center;padding:1.5rem';
   ov.innerHTML = `<div style="max-width:440px;text-align:center;background:linear-gradient(135deg,#065f46,#0f766e);border:1px solid #10b981;border-radius:16px;padding:2rem 1.6rem">
     <div style="font-size:2.6rem">✅</div>
-    <div style="font-size:1.2rem;font-weight:800;color:#fff;margin:.4rem 0">${isHi ? 'भुगतान सफल!' : 'Payment confirmed!'}</div>
-    <div style="font-size:.95rem;color:rgba(255,255,255,.9);line-height:1.6">${isHi ? 'आपका केस अब समीक्षा में है। हम आपकी रिपोर्ट 24–48 कार्य-घंटों में साझा करेंगे — यहाँ डैशबोर्ड पर और WhatsApp पर।' : "Your case is now under review. We'll share your report within 24–48 business hours — here on your dashboard and on WhatsApp."}</div>
+    <div style="font-size:1.2rem;font-weight:800;color:var(--nd-text-primary);margin:.4rem 0">${isHi ? 'भुगतान सफल!' : 'Payment confirmed!'}</div>
+    <div style="font-size:.95rem;color:var(--nd-text-primary);line-height:1.6">${isHi ? 'आपका केस अब समीक्षा में है। हम आपकी रिपोर्ट 24–48 कार्य-घंटों में साझा करेंगे — यहाँ डैशबोर्ड पर और WhatsApp पर।' : "Your case is now under review. We'll share your report within 24–48 business hours — here on your dashboard and on WhatsApp."}</div>
   </div>`;
   document.body.appendChild(ov);
   setTimeout(() => location.reload(), 3500);
@@ -2569,11 +2571,11 @@ function _claimConfirmingOverlay(claimId, orderId){
   ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.92);display:flex;align-items:center;justify-content:center;padding:1.5rem';
   ov.innerHTML = `<div style="max-width:460px;text-align:center;background:linear-gradient(135deg,#1e3a5f,#0f766e);border:1px solid #38bdf8;border-radius:16px;padding:2rem 1.6rem">
     <div style="font-size:2.4rem">⏳</div>
-    <div style="font-size:1.15rem;font-weight:800;color:#fff;margin:.4rem 0">${isHi ? 'भुगतान की पुष्टि हो रही है…' : 'Confirming your payment…'}</div>
-    <div style="font-size:.92rem;color:rgba(255,255,255,.9);line-height:1.6">${isHi ? 'अगर आपके खाते से कोई राशि कटी है, तो चिंता न करें — आपकी समीक्षा कुछ ही मिनटों में अपने-आप शुरू हो जाएगी और हम आपको यहाँ व WhatsApp पर सूचित करेंगे। अगर पैसे नहीं कटे, तो दोबारा कोशिश करें।' : "If any amount was debited, don't worry — your review will unlock automatically within a few minutes, and we'll notify you here and on WhatsApp. If nothing was debited, you can simply try again."}</div>
+    <div style="font-size:1.15rem;font-weight:800;color:var(--nd-text-primary);margin:.4rem 0">${isHi ? 'भुगतान की पुष्टि हो रही है…' : 'Confirming your payment…'}</div>
+    <div style="font-size:.92rem;color:var(--nd-text-primary);line-height:1.6">${isHi ? 'अगर आपके खाते से कोई राशि कटी है, तो चिंता न करें — आपकी समीक्षा कुछ ही मिनटों में अपने-आप शुरू हो जाएगी और हम आपको यहाँ व WhatsApp पर सूचित करेंगे। अगर पैसे नहीं कटे, तो दोबारा कोशिश करें।' : "If any amount was debited, don't worry — your review will unlock automatically within a few minutes, and we'll notify you here and on WhatsApp. If nothing was debited, you can simply try again."}</div>
     <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1.2rem;flex-wrap:wrap">
       <button id="claimPendCheck" style="padding:.6rem 1.1rem;background:#0891b2;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">${isHi ? 'अभी जांचें' : 'Check now'}</button>
-      <button id="claimPendClose" style="padding:.6rem 1.1rem;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;font-weight:700;cursor:pointer">${isHi ? 'बंद करें' : 'Close'}</button>
+      <button id="claimPendClose" style="padding:.6rem 1.1rem;background:var(--nd-bg-surface-3);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;font-weight:700;cursor:pointer">${isHi ? 'बंद करें' : 'Close'}</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
@@ -2833,7 +2835,7 @@ function checkDisputedCap() {
     m += isHi
       ? ` यदि सही है, तो <b>${fit.label}</b> (${_fmtL(fit.disputed_cap)} तक) में अपग्रेड करें।`
       : ` If it's genuinely higher, upgrade to <b>${fit.label}</b> (up to ${_fmtL(fit.disputed_cap)}) to proceed.`;
-    m += ` <a href="#" onclick="event.preventDefault();try{closeModal();switchPlan('${fit.plan}')}catch(e){}" style="color:#22d3ee;font-weight:700;text-decoration:underline">${isHi ? `${fit.label} में अपग्रेड करें →` : `Upgrade to ${fit.label} →`}</a>`;
+    m += ` <a href="#" onclick="event.preventDefault();try{closeModal();switchPlan('${fit.plan}')}catch(e){}" style="color:var(--nd-cyan-text);font-weight:700;text-decoration:underline">${isHi ? `${fit.label} में अपग्रेड करें →` : `Upgrade to ${fit.label} →`}</a>`;
   }
   nudge.innerHTML = '⚠️ ' + m;
   nudge.style.display = 'block';
