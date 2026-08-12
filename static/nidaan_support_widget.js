@@ -87,6 +87,14 @@
   // GROUND RULE: every visible string converts with the selected language — header, subtitle,
   // placeholder, chips, greeting, lead form. (chips/greeting/lead already have per-lang maps.)
   var HDRTITLE = { en: 'Chat with NidaanMitra', hi: 'NidaanMitra से बात करें', hinglish: 'NidaanMitra se baat karein' };
+  // Persistent, eye-catching launcher label (bilingual) — words, not just an icon (Tier II/III).
+  var ASKLABEL = { en: 'Ask NidaanMitra', hi: 'NidaanMitra से पूछें', hinglish: 'NidaanMitra se poochein' };
+  function askLabelText(){
+    var l = lang;
+    if (!l) { try { l = localStorage.getItem('nidaan_lang') || (document.body.classList.contains('hi') ? 'hi' : 'en'); } catch(e){ l = 'en'; } }
+    return ASKLABEL[l] || ASKLABEL.en;
+  }
+  function refreshAskLabel(){ var t = document.querySelector('.nsw-btn .nsw-btn-txt'); if (t) t.textContent = askLabelText(); }
   var HDRSUB = {
     en: 'Nidaan Partner · team online Mon–Fri, 10am–6pm IST',
     hi: 'Nidaan Partner · टीम सोम–शुक्र, सुबह 10 – शाम 6 बजे',
@@ -95,6 +103,7 @@
   var PLACEHOLD = { en: 'Type your question…', hi: 'अपना सवाल यहाँ लिखें…', hinglish: 'Apna sawaal yahan likhein…' };
   function updateLangLabel(){
     var L = lang || 'en';
+    refreshAskLabel();   // keep the launcher label in the current language
     var e2=document.getElementById('nswLangLabel'); if(e2) e2.textContent = LANGLABEL[lang] || 'भाषा';
     var t=document.getElementById('nswHdrTitle'); if(t) t.textContent = HDRTITLE[L] || HDRTITLE.en;
     var s=document.getElementById('nswHdrSub'); if(s) s.textContent = HDRSUB[L] || HDRSUB.en;
@@ -112,8 +121,11 @@
   }
 
   var css = ''
-    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:26px;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:nswBtnPulse 2.6s ease-in-out infinite}'
-    + '.nsw-btn:active{transform:scale(.92)}'
+    + '.nsw-btn{position:fixed;right:18px;bottom:18px;z-index:99998;border:none;cursor:pointer;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;box-shadow:0 6px 20px rgba(6,182,212,.45);display:flex;align-items:center;gap:7px;padding:11px 17px;border-radius:999px;font-family:inherit;font-size:14.5px;font-weight:700;line-height:1;transition:transform .15s;animation:nswBtnPulse 2.6s ease-in-out infinite}'
+    + '.nsw-btn .nsw-btn-ico{font-size:21px;line-height:1}'
+    + '.nsw-btn .nsw-btn-txt{white-space:nowrap;letter-spacing:.01em}'
+    + '@media(max-width:400px){.nsw-btn{right:12px;bottom:12px;padding:10px 14px;font-size:13px;gap:6px}.nsw-btn .nsw-btn-ico{font-size:18px}}'
+    + '.nsw-btn:active{transform:scale(.94)}'
     + '@keyframes nswBtnPulse{0%,100%{box-shadow:0 6px 20px rgba(6,182,212,.45)}50%{box-shadow:0 6px 26px rgba(6,182,212,.75)}}'
     + '.nsw-dot-live{position:absolute;top:-1px;right:-1px;width:15px;height:15px;border-radius:50%;background:#22c55e;border:2.5px solid #0a1628;animation:nswLive 1.3s ease-in-out infinite}'
     + '@keyframes nswLive{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.7);opacity:1}50%{box-shadow:0 0 0 6px rgba(34,197,94,0);opacity:.65}}'
@@ -158,9 +170,9 @@
   var style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
 
   var btn = document.createElement('button');
-  btn.className = 'nsw-btn'; btn.setAttribute('aria-label', 'Chat with us');
-  // 💬 with an always-on blinking green "we're live" dot to catch the eye.
-  btn.innerHTML = '💬<span class="nsw-dot-live"></span>';
+  btn.className = 'nsw-btn'; btn.setAttribute('aria-label', 'Ask NidaanMitra');
+  // 💬 + persistent "Ask NidaanMitra" label + an always-on blinking green "we're live" dot.
+  btn.innerHTML = '<span class="nsw-btn-ico">💬</span><span class="nsw-btn-txt">' + askLabelText() + '</span><span class="nsw-dot-live"></span>';
   document.body.appendChild(btn);
 
   var panel = document.createElement('div');
