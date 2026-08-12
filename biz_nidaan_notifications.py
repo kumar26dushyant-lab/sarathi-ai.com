@@ -1588,6 +1588,14 @@ async def on_moved_to_l2(claim_id: int):
     """#7: a claim's review was delivered as GO (can_fight) → it moves into the L2 section.
     Alert super-admins + sub-admins + everyone assigned to the claim, on all channels
     (must-acknowledge popup + email + Telegram + push)."""
+    # Ensure an L2 claim always has an owner so the process keeps moving. No-op if it is
+    # already assigned or if auto-assign is turned off (SA then assigns manually).
+    try:
+        import biz_nidaan as _bn
+        if await _bn.is_claim_auto_assign():
+            await _bn.auto_assign_claim(claim_id)
+    except Exception as e:
+        logger.warning("on_moved_to_l2 auto-assign failed: %s", e)
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         c = await (await conn.execute(
@@ -1679,10 +1687,19 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
 async def on_branch_l2_paid(claim_id: int, branch_code: str):
     """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
     — alert SA/Admin that the case is queued for the legal team."""
+    # Give the L2 case an owner so it doesn't sit idle. No-op if already assigned or
+    # if auto-assign is off (SA assigns manually).
+    try:
+        import biz_nidaan as _bn
+        if await _bn.is_claim_auto_assign():
+            await _bn.auto_assign_claim(claim_id)
+    except Exception as e:
+        logger.warning("on_branch_l2_paid auto-assign failed: %s", e)
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT claim_id, insured_name, claim_type, disputed_amount, l2_fee_paid "
+            "SELECT claim_id, insured_name, claim_type, disputed_amount, l2_fee_paid, "
+            "assigned_to_staff_id "
             "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
         if not row:
             return
@@ -1690,6 +1707,9 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
         ids = [r["staff_id"] for r in await (await conn.execute(
             "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
             "AND status='active' AND deleted_at IS NULL")).fetchall()]
+        # Include the handler the case was (auto-)assigned to, so the owner is alerted too.
+        if c.get("assigned_to_staff_id") and c["assigned_to_staff_id"] not in ids:
+            ids.append(c["assigned_to_staff_id"])
     if not ids:
         return
     fee = int(c.get("l2_fee_paid") or 0)
