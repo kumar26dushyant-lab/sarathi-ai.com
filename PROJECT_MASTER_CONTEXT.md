@@ -5774,9 +5774,26 @@ staging `deploy/staging-deploy.sh` (staging branch).
     chat is underway; `POST /nidaan/api/support/rate` → `set_support_rating()` (ALTER-on-first-use
     `rating`/`rated_at`). Recorded on the thread for Support analytics.
   - *Smoke-tested on staging:* empty body→422, bogus thread→404 (thread_key validation), widget v20 served.
-- **STILL QUEUED (piece 4 of the batch):** Support-page chat analytics + **channel segregation**
-  (homepage / subscriber plan-wise / one-time-review / branch) — surface ratings, session history,
-  and per-channel volume in the ops Support panel. Data spine now captured (rating/closed_at/channel).
+- **SHIPPED TO STAGING (Aug 13, commit d03ef1b, widget v21) — completes the chat batch, awaiting owner verify:**
+  - *Channel segregation (single source of truth):* `_derive_support_channel()` in sarathi_biz.py used by
+    BOTH thread-creation endpoints (message + lead). Logged-in customer → `subscriber` (plan derived via
+    account_id); a page declares `homepage`/`review`/`branch`/`staff`; else `web`. `SUPPORT_CHANNELS`
+    whitelist in `create_support_thread`. Homepage sets `window.NSW_CHANNEL='homepage'`; widget whitelist
+    accepts homepage/review. Also fixed a **latent 422**: the lead model forbade the `channel` field the
+    widget already sends (branch/staff leads would have failed).
+  - *Ops Support panel analytics (new):* `📊 Chat analytics` summary — sessions, **CSAT** (👍/👎),
+    escalation rate, **per-channel** table, **plan-wise** subscriber breakdown; 7/30/90-day picker;
+    theme-aware tokens + mobile-first. `GET /nidaan/ops/api/support/analytics` → `support_analytics()`
+    (plan via correlated subquery — no row multiplication).
+  - *Inbox:* channel filter now **server-side** (`threads?channel=`); 👍/👎 **rating chip** per row + in
+    the thread detail header. `_SUP_CH` map extended (homepage/subscriber/review).
+  - *Backend additive:* `_ensure_support_extra_columns()` guarantees rating/rated_at/closed_at exist
+    before any ops SELECT (ALTER-on-first-use is lazy).
+  - *Verified on staging:* channel stamping (homepage→homepage, review→review, bogus→web), analytics
+    401 without staff auth, `support_analytics(90d)` runs clean (23 sessions; web 21 / review 1 /
+    homepage 1; CSAT 100% on 1 rating), channel filter returns the homepage thread.
+  - **Whole chat enhancements batch is now on staging** (launcher drag+bounce+minimize · 30-min session
+    model · 👍/👎 rating · Support analytics + channel segregation). Next: owner verifies → promote to prod.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
