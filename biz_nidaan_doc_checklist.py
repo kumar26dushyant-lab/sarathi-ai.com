@@ -336,7 +336,8 @@ async def checklist_status(claim_id: int, claim_type: str) -> dict:
             required_total += 1
             received_required += 1 if received else 0
         items.append({**d, "required_effective": is_required,
-                      "received": received, "received_via": via})
+                      "received": received, "received_via": via,
+                      "received_doc_id": (r["received_doc_id"] if r else None)})
     complete = required_total > 0 and received_required == required_total
     return {
         "claim_id": claim_id,
