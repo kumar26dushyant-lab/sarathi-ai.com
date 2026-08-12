@@ -461,8 +461,28 @@ let _claimsCache = [];
 const API = (path, opts={}) => {
   const headers = {'Content-Type':'application/json'};
   if (_token) headers['Authorization'] = 'Bearer ' + _token;
-  return fetch('/nidaan/ops/api' + path, {headers, ...opts});
+  const req = fetch('/nidaan/ops/api' + path, {headers, ...opts});
+  // Live reflection: after any successful action (POST/PATCH/PUT/DELETE), re-render
+  // the active panel so changes show WITHOUT a manual page refresh.
+  const _m = (opts.method || 'GET').toUpperCase();
+  if (_m !== 'GET' && _m !== 'HEAD') req.then(r => { if (r && r.ok) _scheduleAutoRefresh(); }).catch(()=>{});
+  return req;
 };
+// Debounced (coalesces bursts of calls) + overlay-aware: while a drawer/modal/chat
+// is open the user is mid-flow, so we hold the refresh until they close it, then
+// silently re-run the current panel's loader.
+let _autoRefreshTimer = null;
+function _ndOverlayOpen(){
+  return !!document.querySelector('.drawer-bg.open, #announceBg, [data-l2c], .nsw-panel.open, .qt-modal, [data-ndmodal]');
+}
+function _scheduleAutoRefresh(){
+  if (_autoRefreshTimer) clearTimeout(_autoRefreshTimer);
+  _autoRefreshTimer = setTimeout(function(){
+    _autoRefreshTimer = null;
+    if (_ndOverlayOpen()) { _scheduleAutoRefresh(); return; }   // retry once the overlay closes
+    try { if (typeof _currentPanel !== 'undefined' && _currentPanel && typeof showPanel === 'function') showPanel(_currentPanel, true); } catch(e){}
+  }, 600);
+}
 
 // Generic headers helper used by Phase 3 & Phase 4 loaders (tasks, kanban,
 // workflow settings, official numbers). Returns plain object so it composes
