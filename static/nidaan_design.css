@@ -139,6 +139,41 @@
   --nd-z-fab-panel:  9999;
 }
 
+/* ═══ LIGHT THEME ════════════════════════════════════════════════════════
+ * Opt-in: <html data-theme="light"> (set by nidaan_theme.js). Only the color
+ * tokens flip; brand accents (cyan/green/amber/red/purple) stay vivid because
+ * they read fine on both grounds. Anything that references a --nd-* token
+ * follows automatically; hardcoded inline colors are converted page-by-page.
+ * ─────────────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --nd-bg-base:        #f1f5f9;   /* page background      */
+  --nd-bg-base-2:      #e2e8f0;   /* darker shell         */
+  --nd-bg-surface:     rgba(15,23,42,.045);   /* card / panel        */
+  --nd-bg-surface-2:   rgba(15,23,42,.08);    /* hover / nested card */
+  --nd-bg-surface-3:   rgba(15,23,42,.12);    /* active / pressed    */
+  --nd-bg-overlay:     rgba(15,23,42,.45);    /* modal scrim         */
+  --nd-bg-scrim:       rgba(226,232,240,.85);
+  --nd-bg-elev-blur:   rgba(248,250,252,.97); /* sticky nav          */
+
+  --nd-border:         rgba(15,23,42,.12);
+  --nd-border-strong:  rgba(15,23,42,.22);
+
+  --nd-text-primary:   #0f172a;
+  --nd-text-secondary: rgba(15,23,42,.72);
+  --nd-text-muted:     rgba(15,23,42,.55);
+  --nd-text-faint:     rgba(15,23,42,.42);
+  --nd-text-disabled:  rgba(15,23,42,.28);
+
+  /* status text tuned for dark-on-light contrast */
+  --nd-success-text:   #15803d;
+  --nd-warning-text:   #b45309;
+  --nd-danger-text:    #b91c1c;
+  --nd-info-text:      #1d4ed8;
+  --nd-purple-text:    #6d28d9;
+
+  --nd-shadow-inset:   inset 0 1px 0 rgba(255,255,255,.6);
+}
+
 
 /* ═══ RESET (light, doesn't break existing pages) ════════════════════════ */
 .nd-reset *, .nd-reset *::before, .nd-reset *::after { box-sizing: border-box; }
