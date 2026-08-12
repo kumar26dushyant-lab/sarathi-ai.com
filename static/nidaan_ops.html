@@ -121,7 +121,7 @@ select option{background-color:var(--nd-bg-base-2);color:var(--nd-text-primary)}
 /* ── DETAIL PANEL (slide-in drawer) ── */
 .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;justify-content:flex-end}
 .drawer-bg.open{display:flex}
-.drawer{background:#0c1a2e;width:100%;max-width:600px;height:100%;overflow-y:auto;box-shadow:-4px 0 40px rgba(0,0,0,.5);padding:0;display:flex;flex-direction:column}
+.drawer{background:var(--nd-bg-base-2);width:100%;max-width:600px;height:100%;overflow-y:auto;box-shadow:-4px 0 40px rgba(0,0,0,.5);padding:0;display:flex;flex-direction:column}
 .drawer-top{padding:1.25rem 1.5rem;border-bottom:1px solid var(--nd-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .drawer-top h2{font-size:1.05rem;font-weight:800;color:var(--nd-text-primary)}
 .drawer-body{flex:1;overflow-y:auto;padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1.25rem}
@@ -136,7 +136,7 @@ select option{background-color:var(--nd-bg-base-2);color:var(--nd-text-primary)}
 .tl{display:flex;flex-direction:column;gap:0}
 .tl-item{display:flex;gap:.65rem;position:relative}
 .tl-item:not(:last-child)::before{content:'';position:absolute;left:9px;top:20px;width:2px;bottom:-8px;background:var(--nd-bg-surface-2)}
-.tl-dot{width:20px;height:20px;border-radius:50%;border:2px solid rgba(34,211,238,.5);background:#0c1a2e;flex-shrink:0;margin-top:.15rem}
+.tl-dot{width:20px;height:20px;border-radius:50%;border:2px solid rgba(34,211,238,.5);background:var(--nd-bg-base-2);flex-shrink:0;margin-top:.15rem}
 .tl-content{flex:1;padding-bottom:.85rem}
 .tl-status{font-weight:700;font-size:.82rem;color:var(--nd-cyan-text);text-transform:capitalize}
 .tl-meta{font-size:.72rem;color:var(--nd-text-faint);margin-top:.1rem}
@@ -3238,7 +3238,7 @@ async function renderActiveClaimsWidget(statusFilter, search) {
   const claims = d.claims || [];
   const pl = d.pipeline || {};
   // Pipeline summary bar — paid/active work vs the unpaid-lead funnel.
-  const chip = (ps, label, n, on) => `<button onclick="setOpsPayFilter('${ps}')" style="cursor:pointer;border:1px solid ${on?'#22d3ee':'rgba(255,255,255,.12)'};background:${on?'rgba(34,211,238,.12)':'transparent'};color:#e2e8f0;border-radius:999px;padding:.25rem .7rem;font-size:.72rem;font-weight:700">${label} <span style="opacity:.7">${n||0}</span></button>`;
+  const chip = (ps, label, n, on) => `<button onclick="setOpsPayFilter('${ps}')" style="cursor:pointer;border:1px solid ${on?'#22d3ee':'rgba(255,255,255,.12)'};background:${on?'rgba(34,211,238,.12)':'transparent'};color:var(--nd-text-primary);border-radius:999px;padding:.25rem .7rem;font-size:.72rem;font-weight:700">${label} <span style="opacity:.7">${n||0}</span></button>`;
   const bar = (pl.unpaid_lead !== undefined) ? `<div style="display:flex;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
       ${chip('', 'All', (pl.unpaid_lead||0)+(pl.paid||0)+(pl.subscription||0), _opsPayFilter==='')}
       ${chip('unpaid_lead', '🟠 Leads', pl.unpaid_lead, _opsPayFilter==='unpaid_lead')}
@@ -6110,11 +6110,11 @@ async function loadHealth() {
   const claimStatus = Object.entries(d.claims_by_status||{}).map(([s,c])=>
     `<span class="pill-status s-${s}" style="margin:.15rem">${s.replace(/_/g,' ')}: ${c}</span>`).join('');
 
-  const latencyColor = d.db_latency_ms < 50 ? '#4ade80' : d.db_latency_ms < 200 ? '#fbbf24' : '#f87171';
+  const latencyColor = d.db_latency_ms < 50 ? 'var(--nd-success-text)' : d.db_latency_ms < 200 ? 'var(--nd-warning-text)' : 'var(--nd-danger-text)';
 
   const checks = (d.checks||[]).map(c=>
     `<div class="stat-card ${c.ok?'ok':'danger'}" title="${esc(c.note||'')}">
-      <div class="sv" style="font-size:1.1rem;color:${c.ok?'#4ade80':'#f87171'}">${c.ok?'✓':'✕'}</div>
+      <div class="sv" style="font-size:1.1rem;color:${c.ok?'var(--nd-success-text)':'var(--nd-danger-text)'}">${c.ok?'✓':'✕'}</div>
       <div class="sl">${esc(c.name)}<div style="font-size:.66rem;color:var(--nd-text-faint)">${esc(c.note||'')}</div></div>
     </div>`).join('');
 
@@ -6133,18 +6133,18 @@ async function loadHealth() {
       const sy = d.system||{}, lt = d.latency||{}, load = sy.load||{};
       const upt = sy.uptime_sec||0;
       const uptStr = upt>=86400 ? Math.floor(upt/86400)+'d '+Math.floor((upt%86400)/3600)+'h' : Math.floor(upt/3600)+'h '+Math.floor((upt%3600)/60)+'m';
-      const loadColor = (v)=> (sy.cpu_count && v>sy.cpu_count)?'#f87171':(sy.cpu_count && v>sy.cpu_count*0.7)?'#fbbf24':'#4ade80';
-      const pctColor = (p)=> p>=90?'#f87171':p>=75?'#fbbf24':'#4ade80';
-      const latColor = (lt.p95_ms==null)?'#94a3b8':(lt.p95_ms<300?'#4ade80':lt.p95_ms<1000?'#fbbf24':'#f87171');
-      const card = (label,val,sub,color)=>`<div class="stat-card"><div class="sv" style="font-size:1.05rem;color:${color||'#e2e8f0'}">${val}</div><div class="sl">${label}${sub?`<div style="font-size:.66rem;color:var(--nd-text-faint)">${sub}</div>`:''}</div></div>`;
+      const loadColor = (v)=> (sy.cpu_count && v>sy.cpu_count)?'var(--nd-danger-text)':(sy.cpu_count && v>sy.cpu_count*0.7)?'var(--nd-warning-text)':'var(--nd-success-text)';
+      const pctColor = (p)=> p>=90?'var(--nd-danger-text)':p>=75?'var(--nd-warning-text)':'var(--nd-success-text)';
+      const latColor = (lt.p95_ms==null)?'var(--nd-text-muted)':(lt.p95_ms<300?'var(--nd-success-text)':lt.p95_ms<1000?'var(--nd-warning-text)':'var(--nd-danger-text)');
+      const card = (label,val,sub,color)=>`<div class="stat-card"><div class="sv" style="font-size:1.05rem;color:${color||'var(--nd-text-primary)'}">${val}</div><div class="sl">${label}${sub?`<div style="font-size:.66rem;color:var(--nd-text-faint)">${sub}</div>`:''}</div></div>`;
       return `<div style="margin-bottom:1.5rem">
         <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">🖥️ System</div><div style="font-size:.72rem;color:var(--nd-text-faint)">uptime ${uptStr}</div></div>
         <div class="stats-row">
           ${card('Latency p95', (lt.count?lt.p95_ms+' ms':'—'), (lt.count?`avg ${lt.avg_ms} · max ${lt.max_ms} · n=${lt.count}`:'no samples yet'), latColor)}
           ${card('Load 1m', (load.m1!=null?load.m1:'—'), (load.m5!=null?`5m ${load.m5} · 15m ${load.m15} · ${sy.cpu_count||'?'} CPU`:''), loadColor(load.m1||0))}
-          ${card('Memory', (sy.mem?sy.mem.used_pct+'%':'—'), (sy.mem?`of ${sy.mem.total_gb} GB`:''), sy.mem?pctColor(sy.mem.used_pct):'#94a3b8')}
-          ${card('Disk', (sy.disk?sy.disk.used_pct+'%':'—'), (sy.disk?`${sy.disk.free_gb} GB free`:''), sy.disk?pctColor(sy.disk.used_pct):'#94a3b8')}
-          ${card('Database', (sy.db_mb!=null?sy.db_mb+' MB':'—'), 'SQLite file', '#93c5fd')}
+          ${card('Memory', (sy.mem?sy.mem.used_pct+'%':'—'), (sy.mem?`of ${sy.mem.total_gb} GB`:''), sy.mem?pctColor(sy.mem.used_pct):'var(--nd-text-muted)')}
+          ${card('Disk', (sy.disk?sy.disk.used_pct+'%':'—'), (sy.disk?`${sy.disk.free_gb} GB free`:''), sy.disk?pctColor(sy.disk.used_pct):'var(--nd-text-muted)')}
+          ${card('Database', (sy.db_mb!=null?sy.db_mb+' MB':'—'), 'SQLite file', 'var(--nd-info-text)')}
           ${card('DB probe', (d.db_latency_ms!=null?d.db_latency_ms+' ms':'—'), 'health query', latencyColor)}
         </div>
       </div>`;
@@ -6177,7 +6177,7 @@ async function loadHealth() {
           const up = w.state==='open';
           const ghost = up && w.send_broken;
           const cls = ghost ? 'warn' : (up ? 'ok' : 'danger');
-          const col = ghost ? '#fb923c' : (up ? '#4ade80' : '#f87171');
+          const col = ghost ? '#fb923c' : (up ? 'var(--nd-success-text)' : 'var(--nd-danger-text)');
           const lbl = ghost ? '⚠️ Send failing' : (up ? '🟢 Connected' : '🔴 Offline');
           return `<div class="stat-card ${cls}">
             <div class="sv" style="font-size:1rem;color:${col}">${lbl}</div>
@@ -6192,11 +6192,11 @@ async function loadHealth() {
         <div class="sl">DB Latency</div>
       </div>
       <div class="stat-card ${d.overdue_followups>0?'warn':'ok'}">
-        <div class="sv" style="color:${d.overdue_followups>0?'#fbbf24':'#4ade80'}">${d.overdue_followups}</div>
+        <div class="sv" style="color:${d.overdue_followups>0?'var(--nd-warning-text)':'var(--nd-success-text)'}">${d.overdue_followups}</div>
         <div class="sl">Overdue Follow-ups</div>
       </div>
       <div class="stat-card ${d.unassigned_open_claims>0?'warn':'ok'}">
-        <div class="sv" style="color:${d.unassigned_open_claims>5?'#f87171':d.unassigned_open_claims>0?'#fbbf24':'#4ade80'}">${d.unassigned_open_claims}</div>
+        <div class="sv" style="color:${d.unassigned_open_claims>5?'var(--nd-danger-text)':d.unassigned_open_claims>0?'var(--nd-warning-text)':'var(--nd-success-text)'}">${d.unassigned_open_claims}</div>
         <div class="sl">Unassigned Open Claims</div>
       </div>
       <div class="stat-card">
@@ -7476,7 +7476,7 @@ async function loadPaymentLinks(){
     if(!r.ok){ box.innerHTML=''; return; }
     const links = (await r.json()).links || [];
     if(!links.length){ box.innerHTML='<div style="font-size:.8rem;color:var(--nd-text-faint)">No payment links generated yet.</div>'; return; }
-    const badge = s => { const c = s==='paid'?'#065f46;color:#6ee7b7':(s==='expired'||s==='cancelled'?'#7c2d12;color:#fdba74':'#334155;color:#cbd5e1'); return '<span style="background:'+c+';padding:.1rem .5rem;border-radius:10px;font-size:.72rem;font-weight:700">'+esc(s)+'</span>'; };
+    const badge = s => { const c = s==='paid'?'#065f46;color:#6ee7b7':(s==='expired'||s==='cancelled'?'#7c2d12;color:#fdba74':'#334155;color:var(--nd-text-secondary)'); return '<span style="background:'+c+';padding:.1rem .5rem;border-radius:10px;font-size:.72rem;font-weight:700">'+esc(s)+'</span>'; };
     const rows = links.map(l=>`<tr>
       <td style="padding:.4rem .5rem">${esc(l.customer_name||'—')}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(l.customer_phone||'')}</span></td>
       <td style="padding:.4rem .5rem">${esc(l.purpose)}${l.plan?(' · '+esc(l.plan)):''}</td>
@@ -8395,7 +8395,7 @@ async function processRefund(subId, amount){
 <style>
 #pwaInstall{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;align-items:center;gap:.6rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none;border-radius:999px;padding:.7rem 1.15rem;font-weight:700;font-size:.85rem;box-shadow:0 10px 30px rgba(124,58,237,.45);cursor:pointer}
 #pwaInstall .x{margin-left:.2rem;opacity:.85;font-weight:800;padding:0 .2rem}
-#pwaIosTip{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;background:#0d1b30;border:1px solid rgba(34,211,238,.35);color:#e2e8f0;border-radius:14px;padding:.85rem 1rem;font-size:.82rem;line-height:1.5;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+#pwaIosTip{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;background:var(--nd-bg-base-2);border:1px solid rgba(34,211,238,.35);color:var(--nd-text-primary);border-radius:14px;padding:.85rem 1rem;font-size:.82rem;line-height:1.5;box-shadow:0 12px 34px rgba(0,0,0,.5)}
 #pwaIosTip b{color:var(--nd-cyan-text)}#pwaIosTip .x{float:right;color:var(--nd-text-muted);font-weight:800;cursor:pointer}
 </style>
 <button id="pwaInstall">📲 <span>Install Nidaan Ops app</span><span class="x" title="Dismiss">✕</span></button>
