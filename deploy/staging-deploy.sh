@@ -28,8 +28,7 @@ PY=/opt/sarathi/venv/bin/python
 # Syntax gate — abort before touching the running staging process.
 "$PY" -c "import ast; ast.parse(open('$APP_DIR/sarathi_biz.py', encoding='utf-8').read()); print('Syntax OK')"
 
-# Idempotent migration against the STAGING db (env from the staging unit file).
-set -a; . "$APP_DIR/biz.env"; set +a
+# Idempotent migration against the STAGING db (cwd-relative sarathi_biz.db).
 "$PY" -c "
 import asyncio, os, sys
 os.chdir('$APP_DIR'); sys.path.insert(0, '$APP_DIR')
