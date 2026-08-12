@@ -1,0 +1,43 @@
+# =============================================================================
+#  sarathi-web-staging.service — the STAGING web tier (isolated, port 8003)
+# =============================================================================
+#  A single WEB-ONLY instance (APP_ROLE=web → NO bots, NO scheduler) at
+#  /opt/sarathi-staging on the `staging` branch. Uses its OWN sanitized DB
+#  (/opt/sarathi-staging/sarathi_biz.db) and its OWN neutralized biz.env
+#  (no live Razorpay / SMTP / WhatsApp / Telegram / push keys), so staging can
+#  neither charge money nor message real people. Shares the prod venv
+#  interpreter (identical deps); only the app dir + DB + env differ.
+#
+#  Install:
+#    sudo cp deploy/sarathi-web-staging.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now sarathi-web-staging
+# =============================================================================
+[Unit]
+Description=Sarathi-AI — STAGING web (HTTP only, port 8003, isolated)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi-staging
+EnvironmentFile=/opt/sarathi-staging/biz.env
+# Overrides win over biz.env:
+Environment=APP_ROLE=web
+Environment=SERVER_HOST=127.0.0.1
+Environment=SERVER_PORT=8003
+ExecStart=/opt/sarathi/venv/bin/python sarathi_biz.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sarathi-staging
+PrivateTmp=true
+LimitNOFILE=65535
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

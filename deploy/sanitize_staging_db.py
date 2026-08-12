@@ -14,8 +14,9 @@ import sqlite3, sys, os
 if len(sys.argv) != 2:
     sys.exit("usage: sanitize_staging_db.py <staging_db_path>")
 DB = sys.argv[1]
-if DB.rstrip("/").endswith("sarathi_biz.db") or "staging" not in DB:
-    sys.exit(f"REFUSING: '{DB}' does not look like a staging db (must contain 'staging').")
+# Guard: only ever run inside the staging install dir, never against prod.
+if "sarathi-staging" not in os.path.abspath(DB).replace("\\", "/"):
+    sys.exit(f"REFUSING: '{DB}' is not under /opt/sarathi-staging — will not sanitize.")
 if not os.path.exists(DB):
     sys.exit(f"no such db: {DB}")
 

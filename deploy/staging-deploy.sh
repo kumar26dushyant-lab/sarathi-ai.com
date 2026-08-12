@@ -33,9 +33,9 @@ set -a; . "$APP_DIR/biz.env"; set +a
 "$PY" -c "
 import asyncio, os, sys
 os.chdir('$APP_DIR'); sys.path.insert(0, '$APP_DIR')
-from biz_database import init_db
+from biz_database import init_db, DB_PATH
 asyncio.run(init_db())
-print('Staging DB OK:', os.getenv('SARATHI_DB_PATH'))
+print('Staging DB OK:', os.path.abspath(DB_PATH))
 "
 
 echo "Restarting staging web (port $PORT)…"
