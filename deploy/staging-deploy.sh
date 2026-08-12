@@ -28,15 +28,8 @@ PY=/opt/sarathi/venv/bin/python
 # Syntax gate — abort before touching the running staging process.
 "$PY" -c "import ast; ast.parse(open('$APP_DIR/sarathi_biz.py', encoding='utf-8').read()); print('Syntax OK')"
 
-# Idempotent migration against the STAGING db (cwd-relative sarathi_biz.db).
-"$PY" -c "
-import asyncio, os, sys
-os.chdir('$APP_DIR'); sys.path.insert(0, '$APP_DIR')
-from biz_database import init_db, DB_PATH
-asyncio.run(init_db())
-print('Staging DB OK:', os.path.abspath(DB_PATH))
-"
-
+# DB migration runs on app startup (sarathi_biz.py calls init_db with the unit's
+# env present), so the restart below applies any schema changes idempotently.
 echo "Restarting staging web (port $PORT)…"
 sudo systemctl restart sarathi-web-staging
 for _ in $(seq 1 40); do
