@@ -171,6 +171,7 @@
   <p class="foot">Payout shown is your commission at the current share rate — a reconciliation figure settled by head office. Figures update as your referrals subscribe.</p>
 </div>
 
+<script src="/static/nidaan_partner_claims.js?v=1"></script>
 <script>
 const TOKEN_KEY = 'nidaan_branch_token';
 let _email = '';
@@ -319,6 +320,15 @@ async function showDashboard(){
         <thead><tr><th>Name</th><th>Mobile</th><th>Status</th><th>Plan</th><th>Joined</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     }
+    NidaanPartnerClaims.init({
+      mount: 'bcClaimsWrap',
+      getClaims: () => window._bcAll || [],
+      getL2: () => window._bcL2 || { fee: 0, charge_required: false },
+      hi: () => false,
+      api: (path, opts) => { opts = opts || {}; const h = { ...authHeaders() }; if (opts.body) h['Content-Type'] = 'application/json'; return fetch('/nidaan/branch/api' + path, { ...opts, headers: h }); },
+      l2Path: (id, a) => '/claims/' + id + '/' + a,
+      reload: loadBranchClaims
+    });
     loadBranchClaims();
   }catch(e){ $('acctWrap').innerHTML = '<div class="empty">Could not load. Please refresh.</div>'; }
 }
@@ -330,57 +340,9 @@ async function loadBranchClaims(){
     const data = await r.json();
     window._bcAll = data.claims || [];
     window._bcL2 = data.l2 || {fee:0, charge_required:false};
-    window._bcView = window._bcView || 'active';
-    renderBranchClaims();
+    NidaanPartnerClaims.render();
   }catch(e){ $('bcClaimsWrap').innerHTML = '<div class="empty">Could not load claims.</div>'; }
 }
-function bcClaimsTab(v){ window._bcView=v; renderBranchClaims(); }
-function renderBranchClaims(){
-  try{
-    const all = window._bcAll || [];
-    const l2cfg = window._bcL2 || {fee:0, charge_required:false};
-    const active = all.filter(c=>!c.archived), archived = all.filter(c=>c.archived);
-    const view = window._bcView || 'active';
-    const tabs = `<div style="display:flex;gap:.4rem;margin-bottom:.7rem">
-      <button class="btn ${view==='active'?'btn-cyan':''}" style="padding:.35rem .8rem;font-size:.8rem;${view!=='active'?'background:rgba(255,255,255,.1);color:#fff':''}" onclick="bcClaimsTab('active')">Active (${active.length})</button>
-      <button class="btn ${view==='archived'?'btn-cyan':''}" style="padding:.35rem .8rem;font-size:.8rem;${view!=='archived'?'background:rgba(255,255,255,.1);color:#fff':''}" onclick="bcClaimsTab('archived')">🗄️ Archived (${archived.length})</button></div>`;
-    if(!all.length){ $('bcClaimsWrap').innerHTML = '<div class="empty">No claims raised yet. Use the form above to submit your customer\'s rejected claim.</div>'; return; }
-    const claims = view==='archived'?archived:active;
-    if(!claims.length){ $('bcClaimsWrap').innerHTML = tabs + '<div class="empty">'+(view==='archived'?'No archived claims.':'No active claims.')+'</div>'; return; }
-    const rows = claims.map(c=>{
-      let l2 = '<span style="color:rgba(255,255,255,.35)">Under review</span>';
-      const btnStyle = 'padding:.4rem .7rem;font-size:.78rem;margin-top:.35rem';
-      if(c.l2_payment_status==='paid'){
-        l2='<span class="pill paid">Queued for legal ✓</span>';
-      } else if(c.review_outcome==='can_fight'){
-        const badge='<div class="pill" style="background:#065f46;color:#6ee7b7">Reviewed: can be challenged</div>';
-        if(l2cfg.charge_required){
-          const _f = (c.l2_fee!=null? c.l2_fee : l2cfg.fee);
-          l2=badge
-            +`<div style="font-size:.78rem;color:#6ee7b7;margin:.15rem 0 .3rem">🎉 Great — this claim can be fought! Pay ₹${_f} + GST to move it to Level-2 legal action.</div>`
-            +`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Pay(${c.claim_id})">Pay ₹${_f} + GST now</button>`
-            +`<button class="btn" style="${btnStyle};background:rgba(255,255,255,.12);color:#fff;margin-left:.3rem" onclick="l2ShareLink(${c.claim_id})">🔗 Share payment link</button>`;
-        } else {
-          l2=badge+`<button class="btn btn-cyan" style="${btnStyle}" onclick="l2Advance(${c.claim_id})">Send to Level-2 (free)</button>`;
-        }
-      } else if(c.review_outcome==='no_scope'){
-        l2='<span class="pill" style="background:#7c2d12;color:#fdba74">Reviewed: no scope</span>';
-      }
-      return `<tr>
-        <td>${esc(c.insured_name)}<br><span style="font-size:.76rem;color:rgba(255,255,255,.4)">${esc(c.insured_phone)}</span></td>
-        <td>${esc((c.claim_type||'').replace(/_/g,' '))}</td>
-        <td>${c.disputed_amount?('₹'+Number(c.disputed_amount).toLocaleString('en-IN')):'—'}</td>
-        <td><span class="pill lead">${esc((c.status||'').replace(/_/g,' '))}</span></td>
-        <td>${l2}</td>
-        <td style="font-size:.76rem;color:rgba(255,255,255,.4)">${fmtDate(c.created_at)}</td>
-      </tr>`;
-    }).join('');
-    $('bcClaimsWrap').innerHTML = tabs + `<div class="table-wrap"><table>
-      <thead><tr><th>Customer</th><th>Type</th><th>Amount</th><th>Status</th><th>Level-2</th><th>Raised</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
-  }catch(e){ $('bcClaimsWrap').innerHTML = '<div class="empty">Could not load claims.</div>'; }
-}
-
 async function raiseBranchClaim(){
   const msg=$('bcMsg'), btn=$('bcSubmitBtn');
   const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'rgba(255,255,255,.6)'); };
@@ -408,93 +370,6 @@ async function raiseBranchClaim(){
     loadBranchClaims();
   }catch(e){ setMsg(e.message,false); }
   btn.disabled=false;
-}
-
-// ── Level-2 payment gate (Item 3.3) ──────────────────────────────────────────
-function loadRzp(){
-  return new Promise((resolve,reject)=>{
-    if(window.Razorpay) return resolve();
-    const s=document.createElement('script');
-    s.src='https://checkout.razorpay.com/v1/checkout.js';
-    s.onload=()=>resolve();
-    s.onerror=()=>reject(new Error('Could not load the payment gateway. Check your connection and try again.'));
-    document.head.appendChild(s);
-  });
-}
-// Screenshot-friendly "moving to Level-2" confirmation (branch can show/share it to the customer).
-function l2Confirm(claimId){
-  const ov=document.createElement('div'); ov.setAttribute('data-l2c','1');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  ov.innerHTML='<div style="background:#0f1e3a;border:1px solid rgba(52,211,153,.45);border-radius:16px;max-width:420px;width:100%;padding:1.6rem;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)">'
-    +'<div style="font-size:2.6rem">⚖️✅</div>'
-    +'<div style="font-size:1.2rem;font-weight:800;color:#6ee7b7;margin:.5rem 0">Your claim is moving to Level-2!</div>'
-    +'<div style="color:rgba(255,255,255,.8);font-size:.92rem;line-height:1.55">Claim #'+String(claimId).padStart(3,'0')+' — payment received ✓. Our legal team will now take up the fight for the rightful claim.</div>'
-    +'<div style="font-size:.76rem;color:rgba(255,255,255,.4);margin-top:.7rem">📸 You can screenshot this to reassure your customer.</div>'
-    +'<button onclick="this.closest(\'[data-l2c]\').remove()" style="margin-top:1rem;background:#06b6d4;color:#fff;border:none;border-radius:8px;padding:.6rem 1.6rem;font-weight:700;cursor:pointer">Done</button>'
-    +'</div>';
-  document.body.appendChild(ov);
-}
-async function l2Pay(claimId){
-  try{
-    await loadRzp();
-    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-pay',{method:'POST',headers:authHeaders()});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.detail||'Could not start the payment');
-    const rzp=new Razorpay({
-      key:d.razorpay_key_id, amount:d.amount, currency:d.currency||'INR',
-      name:'Nidaan Partner', description:'Level-2 fee — Claim #'+claimId,
-      order_id:d.order_id, theme:{color:'#06b6d4'},
-      handler:async function(resp){
-        try{
-          const v=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-pay-verify',{method:'POST',
-            headers:{...authHeaders(),'Content-Type':'application/json'},
-            body:JSON.stringify({razorpay_order_id:resp.razorpay_order_id,
-              razorpay_payment_id:resp.razorpay_payment_id,razorpay_signature:resp.razorpay_signature})});
-          const vd=await v.json().catch(()=>({}));
-          if(vd.status==='pending'){ alert(vd.message||'Payment is still processing — we will confirm shortly.'); loadBranchClaims(); return; }
-          if(!v.ok) throw new Error(vd.detail||'Payment verification failed');
-          l2Confirm(claimId);
-          loadBranchClaims();
-        }catch(e){ alert(e.message); }
-      }
-    });
-    rzp.on('payment.failed',function(){ alert('Payment failed or was cancelled. Please try again.'); });
-    rzp.open();
-  }catch(e){ alert(e.message); }
-}
-async function l2Advance(claimId){
-  if(!confirm('Send Claim #'+claimId+' to the legal team (Level-2)? No charge applies.')) return;
-  try{
-    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-advance',{method:'POST',headers:authHeaders()});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.detail||'Could not send to Level-2');
-    l2Confirm(claimId);
-    loadBranchClaims();
-  }catch(e){ alert(e.message); }
-}
-async function l2ShareLink(claimId){
-  try{
-    const r=await fetch('/nidaan/branch/api/claims/'+claimId+'/l2-payment-link',{method:'POST',headers:authHeaders()});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.detail||'Could not create payment link');
-    const url=d.short_url;
-    const wa='https://wa.me/?text='+encodeURIComponent('Namaste! Apne insurance claim ka Level-2 legal process shuru karne ke liye ₹'+d.fee+' yahan pay karein (Nidaan Partner): '+url);
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
-    ov.innerHTML='<div style="max-width:420px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
-      +'<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.5rem">🔗 Payment link ready — Claim #'+claimId+'</div>'
-      +'<div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.8rem">Share this with your customer to pay the ₹'+d.fee+' Level-2 fee. Valid 3 days. The claim moves to Level-2 automatically once paid.</div>'
-      +'<input id="plUrl" readonly value="'+esc(url)+'" onclick="this.select()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.8rem;margin-bottom:.7rem">'
-      +'<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
-      +'<button id="plCopy" class="btn btn-cyan" style="flex:1">📋 Copy</button>'
-      +'<a href="'+esc(wa)+'" target="_blank" rel="noopener" class="btn" style="flex:1;background:#25D366;color:#053b1e;font-weight:700;text-align:center;text-decoration:none;line-height:1.9">💬 WhatsApp</a>'
-      +'<button id="plClose" class="btn" style="background:rgba(255,255,255,.12);color:#fff">Close</button>'
-      +'</div></div>';
-    document.body.appendChild(ov);
-    document.getElementById('plClose').onclick=()=>ov.remove();
-    document.getElementById('plCopy').onclick=()=>{ try{navigator.clipboard.writeText(url);}catch(e){} document.getElementById('plCopy').textContent='✓ Copied'; };
-    loadBranchClaims();
-  }catch(e){ alert(e.message); }
 }
 
 // Auto-enter dashboard if already signed in
