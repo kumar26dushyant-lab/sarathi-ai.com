@@ -2101,6 +2101,10 @@ async def nidaan_api_claim_checklist(claim_id: int, request: Request):
     st["payment_status"] = row["payment_status"]
     st["disputed_amount"] = row["disputed_amount"]
     st["trust_line"] = _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])
+    # Also return BOTH languages so the dashboard can switch label/why/trust live with
+    # its EN/HI toggle (the single `label`/`trust_line` above stays for the WhatsApp mirror).
+    st["trust_line_en"] = _ck.TRUST_LINE["en"]
+    st["trust_line_hi"] = _ck.TRUST_LINE.get("hi", _ck.TRUST_LINE["en"])
     # Payment is available ANY time for an unpaid lead — documents are optional and
     # can be added before OR after paying. We never gate ₹499 behind uploads
     # (that only blocked customers from paying). `docs_optional` tells the UI to

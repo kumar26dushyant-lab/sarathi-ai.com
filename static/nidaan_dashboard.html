@@ -2456,7 +2456,7 @@ async function renderLeadChecklist(claimId) {
   if (!r || !r.ok) { card.style.display = 'none'; return; }
   const d = await r.json();
   card.style.display = 'block';
-  document.getElementById('lcTrust').textContent = d.trust_line || '';
+  document.getElementById('lcTrust').innerHTML = '<span class="en">'+esc(d.trust_line_en||d.trust_line||'')+'</span><span class="hi">'+esc(d.trust_line_hi||d.trust_line||'')+'</span>';
   const done = d.received_required, total = d.required_total;
   document.getElementById('lcProgressText').textContent = done + ' / ' + total;
   document.getElementById('lcBarFill').style.width = total ? Math.round(done / total * 100) + '%' : '0%';
@@ -2466,11 +2466,11 @@ async function renderLeadChecklist(claimId) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:.75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.7rem .85rem';
     if (it.received) {
-      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem">${esc(it.label)}</div><div style="font-size:.75rem;color:var(--nd-success-text)"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>`;
+      row.innerHTML = `<div style="font-size:1.1rem">✅</div><div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem"><span class="en">${esc(it.en||it.label||'')}</span><span class="hi">${esc(it.hi||it.en||it.label||'')}</span></div><div style="font-size:.75rem;color:var(--nd-success-text)"><span class="en">Received</span><span class="hi">मिल गया</span></div></div>`;
     } else {
       const inputId = 'lcfile_' + it.key;
       row.innerHTML = `<div style="font-size:1.1rem">📄</div>
-        <div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem">${esc(it.label)}</div><div style="font-size:.74rem;color:var(--nd-text-muted);line-height:1.4">${esc(it.why_en || '')}</div></div>
+        <div style="flex:1"><div style="font-weight:600;color:var(--nd-text-primary);font-size:.9rem"><span class="en">${esc(it.en||it.label||'')}</span><span class="hi">${esc(it.hi||it.en||it.label||'')}</span></div><div style="font-size:.74rem;color:var(--nd-text-muted);line-height:1.4"><span class="en">${esc(it.why_en||'')}</span><span class="hi">${esc(it.why_hi||it.why_en||'')}</span></div></div>
         <input type="file" id="${inputId}" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="uploadChecklistDoc('${claimId}','${it.key}',this)">
         <button type="button" onclick="document.getElementById('${inputId}').click()" style="background:#0891b2;color:#fff;border:none;border-radius:7px;padding:.45rem .9rem;font-weight:700;font-size:.82rem;cursor:pointer;white-space:nowrap"><span class="en">Upload</span><span class="hi">अपलोड</span></button>`;
     }

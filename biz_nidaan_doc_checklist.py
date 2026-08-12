@@ -40,8 +40,48 @@ TRUST_LINE = {
 }
 
 
+# Hindi for the "why we need this" one-liners, keyed by the English text (many
+# repeat across claim types, so one lookup covers all of them).
+WHY_HI = {
+    "The insurer's letter saying no or paying less — the basis of the dispute.": "बीमाकर्ता का ना या कम भुगतान का पत्र — विवाद का आधार।",
+    "Shows your coverage and the exclusions the insurer is relying on.": "आपका कवरेज और वे बहिष्करण दिखाता है जिन पर बीमाकर्ता भरोसा कर रहा है।",
+    "The most important hospital paper — establishes the treatment given.": "सबसे ज़रूरी अस्पताल दस्तावेज़ — किए गए इलाज को स्थापित करता है।",
+    "Room rent, medicines and doctor fees shown separately — proves the amount.": "कमरा किराया, दवाइयाँ और डॉक्टर फीस अलग-अलग — राशि साबित करता है।",
+    "Only if a pre-existing disease is alleged — records from before the policy.": "केवल अगर पहले से मौजूद बीमारी का आरोप हो — पॉलिसी से पहले के रिकॉर्ड।",
+    "The insurer's decision — the basis of the dispute.": "बीमाकर्ता का निर्णय — विवाद का आधार।",
+    "The policy and its terms.": "पॉलिसी और उसकी शर्तें।",
+    "Issued by the Municipal Corporation — the official record.": "नगर निगम द्वारा जारी — आधिकारिक रिकॉर्ड।",
+    "From the attending doctor/hospital — links the cause to coverage.": "इलाज करने वाले डॉक्टर/अस्पताल से — कारण को कवरेज से जोड़ता है।",
+    "Proves everything was disclosed truthfully when the policy was bought.": "साबित करता है कि पॉलिसी खरीदते समय सब कुछ सही-सही बताया गया था।",
+    "The insurer's no or under-assessment — the basis of the dispute.": "बीमाकर्ता का ना या कम आकलन — विवाद का आधार।",
+    "Shows the Sum Insured for building and contents.": "इमारत और सामान के लिए बीमित राशि दिखाता है।",
+    "For fire or theft — proves the incident occurred.": "आग या चोरी के लिए — साबित करता है कि घटना हुई।",
+    "Taken right after the incident, before anything was cleaned or moved.": "घटना के तुरंत बाद ली गई — कुछ भी साफ़ या हटाने से पहले।",
+    "Proves the value of what was lost or damaged.": "जो खोया या क्षतिग्रस्त हुआ उसका मूल्य साबित करता है।",
+    "What the insurer's surveyor wrote after visiting — needed to contest underpayment.": "बीमाकर्ता के सर्वेयर ने दौरे के बाद जो लिखा — कम भुगतान को चुनौती देने के लिए ज़रूरी।",
+    "Shows your coverage (Own Damage / Third Party) and the IDV.": "आपका कवरेज (ओन डैमेज / थर्ड पार्टी) और IDV दिखाता है।",
+    "For accidents or theft — proves the incident occurred.": "दुर्घटना या चोरी के लिए — साबित करता है कि घटना हुई।",
+    "Shows the extent of damage to the vehicle.": "वाहन को हुए नुकसान की सीमा दिखाता है।",
+    "Proves the cost of repair you are claiming.": "आप जिस मरम्मत का दावा कर रहे हैं उसकी लागत साबित करता है।",
+    "The insurer's surveyor assessment — needed to contest underpayment.": "बीमाकर्ता के सर्वेयर का आकलन — कम भुगतान को चुनौती देने के लिए ज़रूरी।",
+    "For the damage or shortage — the basis of the dispute.": "क्षति या कमी के लिए — विवाद का आधार।",
+    "Your coverage for the consignment.": "खेप के लिए आपका कवरेज।",
+    "The paper trail proving what was shipped and its value.": "क्या भेजा गया और उसका मूल्य साबित करने वाला दस्तावेज़ी रिकॉर्ड।",
+    "Proves the loss/damage at the port or on arrival.": "बंदरगाह पर या पहुँचने पर हुई हानि/क्षति साबित करता है।",
+    "The remark made at delivery (e.g. damage noted on the courier receipt).": "डिलीवरी के समय की गई टिप्पणी (जैसे कूरियर रसीद पर दर्ज क्षति)।",
+    "The insurer's refusal — the basis of the dispute.": "बीमाकर्ता का इनकार — विवाद का आधार।",
+    "The cover you bought for the trip.": "यात्रा के लिए आपने जो कवर खरीदा।",
+    "With entry/exit stamps — proves the trip and timeline.": "प्रवेश/निकास मुहरों सहित — यात्रा और समयरेखा साबित करता है।",
+    "Airline delay certificate, lost-baggage PIR, or overseas medical bills — proves the event.": "एयरलाइन देरी प्रमाणपत्र, खोया-सामान PIR, या विदेशी मेडिकल बिल — घटना साबित करता है।",
+    "Your coverage and its terms.": "आपका कवरेज और उसकी शर्तें।",
+    "Any bills, reports, or proof relevant to your claim.": "आपके क्लेम से संबंधित कोई भी बिल, रिपोर्ट या प्रमाण।",
+}
+
+def why_hi_for(why_en: str) -> str:
+    return WHY_HI.get(why_en or "", "")
+
 def _doc(key, en, hi, why_en, required=True, conditional=False):
-    return {"key": key, "en": en, "hi": hi, "why_en": why_en,
+    return {"key": key, "en": en, "hi": hi, "why_en": why_en, "why_hi": WHY_HI.get(why_en, ""),
             "required": required, "conditional": conditional}
 
 
