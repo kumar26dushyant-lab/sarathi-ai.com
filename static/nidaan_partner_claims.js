@@ -42,29 +42,29 @@
     const l2cfg = (CFG.getL2 && CFG.getL2()) || { fee: 0, charge_required: false };
     const bs = 'padding:.35rem .6rem;font-size:.76rem;margin-top:.3rem';
     const rows = claims.map(c => {
-      let l2 = `<span style="color:rgba(255,255,255,.35)">${h ? 'समीक्षाधीन' : 'Under review'}</span>`;
+      let l2 = `<span style="color:var(--nd-text-faint)">${h ? 'समीक्षाधीन' : 'Under review'}</span>`;
       if (c.l2_payment_status === 'paid') {
-        l2 = `<span style="color:#34d399;font-weight:700">${h ? 'लीगल के लिए भेजा ✓' : 'Queued for legal ✓'}</span>`;
+        l2 = `<span style="color:var(--nd-success-text);font-weight:700">${h ? 'लीगल के लिए भेजा ✓' : 'Queued for legal ✓'}</span>`;
       } else if (c.review_outcome === 'can_fight') {
         const f = (c.l2_fee != null ? c.l2_fee : l2cfg.fee);
-        const badge = `<div style="color:#6ee7b7;font-weight:600;margin-bottom:.15rem">${h ? ('🎉 समीक्षा: लड़ा जा सकता है — Level-2 भेजने के लिए ₹' + f + ' + GST दें') : ('🎉 Reviewed: can be challenged — pay ₹' + f + ' + GST to move it to Level-2')}</div>`;
+        const badge = `<div style="color:var(--nd-success-text);font-weight:600;margin-bottom:.15rem">${h ? ('🎉 समीक्षा: लड़ा जा सकता है — Level-2 भेजने के लिए ₹' + f + ' + GST दें') : ('🎉 Reviewed: can be challenged — pay ₹' + f + ' + GST to move it to Level-2')}</div>`;
         if (l2cfg.charge_required) {
           l2 = badge
             + `<button class="btn btn-primary btn-cyan" style="${bs}" onclick="NidaanPartnerClaims.pay(${c.claim_id})">${h ? ('₹' + f + ' + GST भुगतान करें') : ('Pay ₹' + f + ' + GST now')}</button>`
-            + `<button class="btn-sm btn-ghost" style="${bs};margin-left:.3rem;color:#7dd3fc" onclick="NidaanPartnerClaims.link(${c.claim_id})">🔗 ${h ? 'लिंक भेजें' : 'Share link'}</button>`;
+            + `<button class="btn-sm btn-ghost" style="${bs};margin-left:.3rem;color:var(--nd-cyan-text)" onclick="NidaanPartnerClaims.link(${c.claim_id})">🔗 ${h ? 'लिंक भेजें' : 'Share link'}</button>`;
         } else {
           l2 = badge + `<button class="btn btn-primary btn-cyan" style="${bs}" onclick="NidaanPartnerClaims.advance(${c.claim_id})">${h ? 'Level-2 भेजें (मुफ़्त)' : 'Send to Level-2 (free)'}</button>`;
         }
       } else if (c.review_outcome === 'no_scope') {
-        l2 = `<span style="color:#fdba74">${h ? 'समीक्षा: कोई गुंजाइश नहीं' : 'Reviewed: no scope'}</span>`;
+        l2 = `<span style="color:var(--nd-warning-text)">${h ? 'समीक्षा: कोई गुंजाइश नहीं' : 'Reviewed: no scope'}</span>`;
       }
       return `<tr>
-        <td>${esc(c.insured_name || '')}<br><span style="font-size:.74rem;color:rgba(255,255,255,.4)">${esc(c.insured_phone || '')}</span></td>
+        <td>${esc(c.insured_name || '')}<br><span style="font-size:.74rem;color:var(--nd-text-faint)">${esc(c.insured_phone || '')}</span></td>
         <td>${esc((c.claim_type || '').replace(/_/g, ' '))}</td>
         <td style="text-align:right">${c.disputed_amount ? ('₹' + fmt(c.disputed_amount)) : '—'}</td>
         <td>${esc((c.status || '').replace(/_/g, ' '))}</td>
         <td>${l2}</td>
-        <td style="font-size:.74rem;color:rgba(255,255,255,.4)">${fmtDate(c.created_at)}</td>
+        <td style="font-size:.74rem;color:var(--nd-text-faint)">${fmtDate(c.created_at)}</td>
       </tr>`;
     }).join('');
     wrap.innerHTML = tabs + `<div class="table-wrap"><table>
