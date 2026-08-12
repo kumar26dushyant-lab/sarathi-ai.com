@@ -6,9 +6,9 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
-## 2026-08-13 — Smarter help chat (movable button, sessions, thumbs rating) — SEND AFTER PROD
+## 2026-08-13 — Smarter help chat (movable button, sessions, thumbs rating) — READY TO SEND
 
-> Status: shipped to **staging**, awaiting owner verify. Send this only once it's live on prod.
+> Status: **LIVE on prod** (Aug 13). Ready for you to review + send via ops → 🆕 Announce.
 
 **Title (EN):**
 💬 Chat just got smarter — move it, minimise it, rate it

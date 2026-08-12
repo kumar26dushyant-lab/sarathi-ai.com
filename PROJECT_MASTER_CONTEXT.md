@@ -5794,6 +5794,12 @@ staging `deploy/staging-deploy.sh` (staging branch).
     homepage 1; CSAT 100% on 1 rating), channel filter returns the homepage thread.
   - **Whole chat enhancements batch is now on staging** (launcher drag+bounce+minimize · 30-min session
     model · 👍/👎 rating · Support analytics + channel segregation). Next: owner verifies → promote to prod.
+- **✅ PROMOTED TO PROD (Aug 13, commit de664e9, widget v21, zero-downtime):** master fast-forwarded from
+  staging; both web workers rolled healthy. Prod smoke: widget v21 served, analytics 401 without staff
+  auth, homepage page sets `NSW_CHANNEL='homepage'`, `support_analytics(30d)` runs clean on the prod DB
+  (19 historical sessions, all `web`), rating/closed_at columns added to prod schema (additive). Cloudflare
+  gets a fresh URL from the v21 bump. **Entire chat enhancements batch is LIVE.** Staff announcement in
+  ANNOUNCEMENTS.md flipped to READY-TO-SEND (owner reviews + sends).
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
