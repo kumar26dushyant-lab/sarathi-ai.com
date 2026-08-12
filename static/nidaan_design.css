@@ -179,6 +179,19 @@
 :root[data-theme="light"] select { color-scheme: light; }
 :root[data-theme="light"] select option { background: #ffffff; color: #0f172a; }
 
+/* Form fields: guarantee readable text in light mode even when a JS-generated
+ * modal sets a hardcoded light color inline (converter can't reach ${}/string
+ * styles) — !important so those inline values can't leave text invisible. */
+:root[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] select {
+  background-color: var(--nd-bg-surface-2) !important;
+  color: var(--nd-text-primary) !important;
+  border-color: var(--nd-border-strong);
+}
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder { color: var(--nd-text-faint) !important; }
+
 
 /* ═══ RESET (light, doesn't break existing pages) ════════════════════════ */
 .nd-reset *, .nd-reset *::before, .nd-reset *::after { box-sizing: border-box; }
