@@ -5739,6 +5739,33 @@ off-server AES-256 [[infra_backups]]. **Staging** = isolated `/opt/sarathi-stagi
 basic-auth gated, sanitized data). Deploys: prod `deploy/auto-deploy-zerodowntime.sh` (master),
 staging `deploy/staging-deploy.sh` (staging branch).
 
+## 70. LIGHT/DARK THEME + CHAT LABEL + CHECKLIST i18n (owner Aug 12-13; SHIPPED to prod)
+
+- **Theme engine:** `nidaan_design.css` `:root[data-theme="light"]` palette (overrides --nd-* color
+  tokens; brand accents kept). `nidaan_theme.js` applies saved theme early (default dark → nothing
+  changes for current users), auto-wires any `.nd-theme-toggle` button (bilingual ☀️Light/🌙Dark,
+  persisted). Added `--nd-cyan-text` (darkens cyan text in light). Global light `<select>` fix.
+- **Converted to dual-theme (ALL LIVE on prod):** subscriber dashboard, review (/get-reviewed),
+  start/login, branch portal, ops portal (~980 static colors), shared `nidaan_partner_claims.js`.
+  Self-contained pages (review/start/branch) got design.css+theme.js added. Conversion via a
+  property-aware, badge/button-safe script (scratchpad `theme_convert.py`): each token's DARK value
+  equals the prior hardcoded value → **dark mode pixel-identical**; only light mode is new. Rule:
+  white-on-dark flips; white-on-colored-button STAYS; `${}` JS-template styles skipped (verified 0
+  invisible-in-light text per page; ternary counts unchanged; inline JS valid). Nav bars with
+  dark-navy RGBA bg → `--nd-bg-elev-blur` so they flip; modal scrims stay dark. Cache versions:
+  design.css v3, theme.js v2, partner_claims.js v2, support-widget v17.
+- **Chat launcher:** persistent bilingual **"Ask NidaanMitra"** pill + blinking green live dot (mobile-aware).
+- **Doc checklist i18n:** headings/descriptions/DPDP disclaimer now switch with the live EN/HI toggle
+  (were bound to comm_lang). Added `WHY_HI` for every doc in `biz_nidaan_doc_checklist.py`; API returns
+  both langs + trust_line_en/hi; dashboard renders .en/.hi spans.
+- **QUEUED (agreed to-dos):** (a) Attachments — confirm-before-submit review step (support/ops
+  backend delete already exists via G2). (b) Chat enhancements BIG batch: **30-min session model**
+  (auto-close on inactivity/minimize → filed to history with session ID, no endless thread/backlog);
+  bouncing+draggable launcher; minimize button; 👍/👎 rating recorded; Support-page chat analytics;
+  channel segregation (homepage / subscriber plan-wise / one-time-review / branch).
+- **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
+  was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
