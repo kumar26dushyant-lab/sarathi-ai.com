@@ -6,6 +6,32 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-13 — L2 claims stay visible + attach files when raising a claim — READY TO SEND
+
+> Status: **LIVE on prod** (Aug 13). Ready for you to review + send via ops → 🆕 Announce.
+
+**Title (EN):**
+⚖️ L2 claims now stay in the L2 list + attach files when raising a claim
+
+**Details (EN):**
+Team, two useful fixes are live 🎉
+• **L2 claims stay put** — once a claim is reviewed as "can be challenged (GO)", it now stays in the **L2 Claims** list all the way through — even after the branch pays and it's assigned. A new **Stage** column shows where each one is. (Earlier, a paid + assigned L2 claim would disappear from the list.)
+• **Paid L2 is clear** — a claim whose ₹499 L2 fee is paid now shows an **"L2 ✓"** tag instead of just "Lead".
+• **Attach files while raising a claim** — in **My Business → Raise a claim for a customer**, you can now attach the rejection letter / bills right away: add several files, remove any before submitting, then submit. No need to go to the Claims Dashboard afterwards.
+
+**Title (HI):**
+⚖️ L2 क्लेम अब L2 सूची में बने रहेंगे + क्लेम दर्ज करते समय फ़ाइल संलग्न करें
+
+**Details (HI):**
+टीम, दो उपयोगी सुधार लाइव हैं 🎉
+• **L2 क्लेम सूची में बने रहेंगे** — जैसे ही किसी क्लेम की समीक्षा "लड़ा जा सकता है (GO)" होती है, वह अब **L2 Claims** सूची में पूरे सफ़र तक बना रहता है — भुगतान और असाइन होने के बाद भी। नया **Stage** कॉलम दिखाता है कि हर क्लेम किस चरण में है। (पहले भुगतान + असाइन हुआ L2 क्लेम सूची से गायब हो जाता था।)
+• **भुगतान हुआ L2 साफ़ दिखे** — जिस क्लेम का ₹499 L2 शुल्क चुका दिया गया है, वह अब सिर्फ़ "Lead" नहीं, बल्कि **"L2 ✓"** टैग दिखाता है।
+• **क्लेम दर्ज करते समय फ़ाइल संलग्न करें** — **My Business → ग्राहक के लिए क्लेम दर्ज करें** में अब आप अस्वीकृति पत्र / बिल तुरंत जोड़ सकते हैं: कई फ़ाइलें जोड़ें, जमा करने से पहले कोई हटाएँ, फिर जमा करें। बाद में Claims Dashboard जाने की ज़रूरत नहीं।
+
+*Suggested roles: all staff (branch-facing + review team most relevant).*
+
+---
+
 ## 2026-08-13 — Smarter help chat (movable button, sessions, thumbs rating) — READY TO SEND
 
 > Status: **LIVE on prod** (Aug 13). Ready for you to review + send via ops → 🆕 Announce.

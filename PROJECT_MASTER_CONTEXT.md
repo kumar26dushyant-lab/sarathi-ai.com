@@ -5808,6 +5808,26 @@ staging `deploy/staging-deploy.sh` (staging branch).
   full-text detail modal** — announcements show 📣 + "Tap to read →"; the web/mobile way to re-read an
   announcement in full (previously a click did nothing + body was silently truncated). (5) Dashboard
   notif-dropdown rows `#e2e8f0` → token. Verified live on both prod workers.
+- **✅ CLAIMS + SECURITY BATCH (Aug 13, commit a5153d1, prod):** from owner report on branch claim #44.
+  - *L2 routing fix:* L2 bucket (`review_outcome=can_fight`) was `AND status='review_delivered'`, so a
+    reviewed-GO claim that advanced (L2 paid → queued → **assigned**) silently vanished from L2. Now shows
+    every ACTIVE GO claim (excludes only terminal closed/withdrawn/resolved_won/resolved_lost) → branch/staff
+    L2 claims track like retail. Added a **Stage** column to the L2 list. Verified #44 back in the bucket.
+  - *Paid-L2 badge:* claims list showed a bare **"Lead"** even when the ₹499 L2 fee was paid; now appends
+    **"L2 ✓"** (reads `l2_payment_status`). `payPill` takes the claim, not just payment_status.
+  - *Raise-a-claim attachments (My Business):* new ops upload endpoint
+    `/nidaan/ops/api/my-claims/{id}/documents/upload` (scoped to the staffer's own claim code, mirrors branch
+    rules); form now stages multiple files with per-file remove + review-before-submit, then attaches to the
+    just-created claim. **Gap fixed:** ops previously had no claim-doc upload endpoint (only view/delete).
+  - *Confirm-before-delete (new GROUND RULE, [[feedback_confirm_before_delete]]):* audited every delete/remove
+    across ops + dashboard + shared module — all real destructive actions already have a confirm gate (native
+    `confirm()` or modal); only false positives found (a view-filter toggle, overlay `.remove()`). New
+    attachment feature complies (staged files are pre-submission).
+  - *Staff removal + security:* staff JWTs carry **no expiry** and auth didn't re-check DB status, so a removed
+    staffer's live session would linger forever. `_get_staff_from_request` now re-checks (cached ~30s) that the
+    staffer is active/not-archived. Then **soft-deleted (archived, reversible) PAWAN GORANA** (staff_id=31,
+    super_admin) on prod — 3 super admins remain (founder Dushyant Sharma intact); status re-check confirms the
+    session is now rejected. Restore via `restore_staff` if ever needed.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
