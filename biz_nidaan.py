@@ -5576,9 +5576,27 @@ async def list_deleted_staff() -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def _sever_staff_connections(conn, staff_id: int) -> None:
+    """Cut every live link for an archived staffer so there is NO residual connection to
+    either app: Telegram devices + legacy pointer + access flag, and web-push subscriptions.
+    Combined with the status='active'/deleted_at filters on every notification + bot-auth
+    query, this guarantees an archived staffer gets no notifications and can't use the bot."""
+    for sql, args in (
+        ("DELETE FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,)),
+        ("UPDATE nidaan_staff SET telegram_chat_id=NULL, telegram_username=NULL, "
+         "telegram_linked_at=NULL, telegram_access=0 WHERE staff_id=?", (staff_id,)),
+        ("DELETE FROM nidaan_push_subscriptions WHERE staff_id=?", (staff_id,)),
+    ):
+        try:
+            await conn.execute(sql, args)
+        except Exception:
+            pass   # optional tables/columns — never let cleanup block the archive
+
+
 async def soft_delete_staff(staff_id: int) -> bool:
-    """Archive a staffer (reversible). Super admins are protected. Also flips
-    status to inactive so every existing status='active' query excludes them."""
+    """Archive a staffer (reversible). Super admins are protected. Also flips status to
+    inactive so every existing status='active' query excludes them, and severs all
+    Telegram/push connections (no notifications, no bot) — nothing lingers."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
@@ -5591,6 +5609,7 @@ async def soft_delete_staff(staff_id: int) -> bool:
         await conn.execute(
             "UPDATE nidaan_staff SET deleted_at=CURRENT_TIMESTAMP, status='inactive' "
             "WHERE staff_id=? AND deleted_at IS NULL", (staff_id,))
+        await _sever_staff_connections(conn, staff_id)
         await conn.commit()
     return True
 
@@ -5606,14 +5625,19 @@ async def restore_staff(staff_id: int) -> bool:
 
 
 async def delete_inactive_staff() -> int:
-    """Bulk-archive every currently-inactive staffer except super admins.
-    Returns the number archived."""
+    """Bulk-archive every currently-inactive staffer except super admins, severing each
+    one's Telegram/push connections too. Returns the number archived."""
     async with aiosqlite.connect(DB_PATH) as conn:
-        cur = await conn.execute(
-            "UPDATE nidaan_staff SET deleted_at=CURRENT_TIMESTAMP "
-            "WHERE status='inactive' AND deleted_at IS NULL AND role != 'super_admin'")
+        conn.row_factory = aiosqlite.Row
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='inactive' AND deleted_at IS NULL "
+            "AND role != 'super_admin'")).fetchall()]
+        for sid in ids:
+            await conn.execute(
+                "UPDATE nidaan_staff SET deleted_at=CURRENT_TIMESTAMP WHERE staff_id=?", (sid,))
+            await _sever_staff_connections(conn, sid)
         await conn.commit()
-        return cur.rowcount
+        return len(ids)
 
 
 async def update_staff(staff_id: int, name: str = None, role: str = None,
