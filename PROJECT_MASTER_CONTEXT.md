@@ -5828,6 +5828,16 @@ staging `deploy/staging-deploy.sh` (staging branch).
     staffer is active/not-archived. Then **soft-deleted (archived, reversible) PAWAN GORANA** (staff_id=31,
     super_admin) on prod — 3 super admins remain (founder Dushyant Sharma intact); status re-check confirms the
     session is now rejected. Restore via `restore_staff` if ever needed.
+  - *Archive = full disconnect (Aug 13 follow-up, commit 704bbb9):* per founder — an archived/deleted
+    staffer must get NO notifications, NO Telegram, and no connection to EITHER app. Verified + hardened:
+    (a) every staff notification recipient query already filters `status='active'` (most also
+    `deleted_at IS NULL`) → no bell/email/push; (b) the bot's `_staff_by_chat` already filters the same →
+    an archived staffer can't command @NidaanOpsBot; (c) staff auth re-check (above) blocks the ops portal;
+    (d) NEW `_sever_staff_connections()` (called by `soft_delete_staff` + `delete_inactive_staff`) actively
+    DELETEs their `nidaan_staff_telegram` devices, clears legacy telegram pointer, sets `telegram_access=0`,
+    and DELETEs web-push subs — no residual link; (e) `nidaan_staff` has NO mapping into Sarathi, so an
+    archived Nidaan staffer has zero access to sarathi-ai.com. Applied the sever to PAWAN (31) on prod:
+    telegram device removed, access=0, pointer cleared.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
