@@ -3377,13 +3377,14 @@ function _renderOutcome(key){
   if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims here yet</p></div>'; return; }
   const isL2 = key==='l2claims';
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
+    + (isL2?'<th>L2 fee</th><th>Stage</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>`<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
         <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
         <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
-        + (isL2?`<td>${c.l2_payment_status==='paid'?'<span style="color:var(--nd-success-text);font-weight:700">Paid ✓</span>':'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`:'')
+        + (isL2?`<td>${c.l2_payment_status==='paid'?'<span style="color:var(--nd-success-text);font-weight:700">Paid ✓</span>':'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
+             + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`:'')
         + `<td>${c.origin==='branch'?('🏢 Branch '+esc(c.branch_code||'')):esc(c.owner_name||'—')}</td>
         <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
       </tr>`).join('') + '</tbody></table></div>';
@@ -3450,10 +3451,14 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
     return;
   }
 
-  const payPill = (p)=>{
-    const map = {unpaid_lead:['#fbbf24','Lead'], paid:['#34d399','Paid'], subscription:['#22d3ee','Sub']};
-    const [col,lbl] = map[p||'paid'] || ['#94a3b8', (p||'—')];
-    return `<span style="font-size:.68rem;font-weight:700;color:${col}">${lbl}</span>`;
+  const payPill = (c)=>{
+    const p = (typeof c==='object') ? c.payment_status : c;
+    const map = {unpaid_lead:['var(--nd-warning-text)','Lead'], paid:['var(--nd-success-text)','Paid'], subscription:['var(--nd-cyan-text)','Sub']};
+    const [col,lbl] = map[p||'paid'] || ['var(--nd-text-secondary)', (p||'—')];
+    // A branch/staff L2 fee that's been paid must not read as a bare "Lead" — surface it.
+    const l2 = (typeof c==='object' && c.l2_payment_status==='paid')
+      ? ` <span title="Level-2 fee paid — queued for legal" style="font-size:.62rem;font-weight:800;color:var(--nd-success-text);background:rgba(52,211,153,.15);border-radius:4px;padding:.05rem .3rem">L2 ✓</span>` : '';
+    return `<span style="font-size:.68rem;font-weight:700;color:${col}">${lbl}</span>${l2}`;
   };
   const rows = d.claims.map(c=>`
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
@@ -3463,7 +3468,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
-      <td>${payPill(c.payment_status)}</td>
+      <td>${payPill(c)}</td>
       <td>${c.origin==='branch'
             ? `🏢 <span style="color:var(--nd-purple-text);font-weight:700">Branch ${esc(c.branch_code||'')}</span><br><span style="font-size:.72rem;color:var(--nd-text-faint)">raised on behalf</span>`
             : `${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.firm_name||'')}</span>`}</td>
@@ -3691,7 +3696,12 @@ async function loadMyBusiness() {
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
       </div>
       <textarea id="mbcNotes" placeholder="${hi?'संक्षिप्त पृष्ठभूमि / अस्वीकृति का कारण…':'Brief background / reason for rejection…'}" style="width:100%;margin-top:.55rem;min-height:56px;resize:vertical"></textarea>
-      <div style="font-size:.74rem;color:var(--nd-text-faint);margin-top:.4rem">${hi?'सुझाव: क्लेम दर्ज करने के बाद क्लेम में अस्वीकृति पत्र संलग्न करें (Claims Dashboard से)।':'Tip: after raising, attach the rejection letter to the claim from the Claims Dashboard.'}</div>
+      <div id="mbcFilesWrap" style="margin-top:.55rem">
+        <input id="mbcFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="mbcAddFiles(this)">
+        <button type="button" class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="document.getElementById('mbcFiles').click()">📎 ${hi?'दस्तावेज़ संलग्न करें':'Attach document(s)'}</button>
+        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अस्वीकृति पत्र, बिल आदि — PDF/JPG/PNG/DOCX (10MB तक)':'Rejection letter, bills, etc. — PDF/JPG/PNG/DOCX (up to 10MB)'}</span>
+        <div id="mbcFileList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem"></div>
+      </div>
       <div id="mbcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
       <button class="btn btn-primary" id="mbcSubmit" style="margin-top:.6rem" onclick="mbRaiseClaim()">${hi?'क्लेम जमा करें →':'Submit claim →'}</button>
     </div>
@@ -3716,6 +3726,27 @@ async function loadMyBusiness() {
   }
 }
 
+// ── Raise-claim staged attachments (review before submit, remove individually) ──
+let _mbcFiles = [];
+const _MBC_MAX = 5, _MBC_MAXSIZE = 10*1024*1024;
+function mbcAddFiles(input){
+  const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
+  const picked = Array.from(input.files||[]);
+  input.value='';   // allow re-picking the same file after a remove
+  for(const f of picked){
+    if(_mbcFiles.length >= _MBC_MAX){ if(msg){ msg.style.color='#fbbf24'; msg.textContent=hi?'अधिकतम 5 फ़ाइलें।':'Up to 5 files.'; } break; }
+    if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(f.name)+' — '+(hi?'10MB से बड़ी।':'over 10MB.'); } continue; }
+    if(_mbcFiles.some(x=>x.name===f.name && x.size===f.size)) continue;  // dedupe
+    _mbcFiles.push(f);
+  }
+  mbcRenderFiles();
+}
+function mbcRemoveFile(i){ _mbcFiles.splice(i,1); mbcRenderFiles(); }   // pre-submit unstage — nothing persisted yet
+function mbcRenderFiles(){
+  const box=document.getElementById('mbcFileList'); if(!box) return;
+  box.innerHTML = _mbcFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:.35rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.2rem .5rem;font-size:.78rem;color:var(--nd-text-secondary)">📄 ${esc(f.name)} <span style="color:var(--nd-text-faint);font-size:.7rem">(${(f.size/1024).toFixed(0)} KB)</span> <button type="button" onclick="mbcRemoveFile(${i})" title="Remove" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.95rem;line-height:1;padding:0">×</button></span>`).join('');
+}
+
 async function mbRaiseClaim(){
   const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
   const g=id=>document.getElementById(id);
@@ -3732,11 +3763,25 @@ async function mbRaiseClaim(){
     disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
     notes:(g('mbcNotes').value||'').trim()};
   const r=await API('/my-claims',{method:'POST', body:JSON.stringify(body)});
+  if(!r.ok){ btn.disabled=false; btn.textContent=ob; const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); return; }
+  const cd = await r.json().catch(()=>({}));
+  const claimId = cd.claim_id;
+  // Attach the staged files to the just-created claim.
+  let attachMsg='';
+  if(claimId && _mbcFiles.length){
+    btn.textContent=hi?'फ़ाइलें अपलोड हो रही हैं…':'Uploading files…';
+    try{
+      const fd=new FormData(); _mbcFiles.forEach(f=>fd.append('files', f));
+      const ur=await fetch('/nidaan/ops/api/my-claims/'+claimId+'/documents/upload', {method:'POST', headers:hdrs(), body:fd});
+      if(ur.ok){ const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(ud.count||0)+(hi?' फ़ाइल संलग्न':' file(s) attached'); }
+      else { const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(hi?'फ़ाइल अपलोड विफल: ':'file upload failed: ')+_extractErr(ud,'error'); }
+    }catch(e){ attachMsg = ' · '+(hi?'फ़ाइल अपलोड में नेटवर्क त्रुटि':'file upload network error'); }
+  }
   btn.disabled=false; btn.textContent=ob;
-  if(r.ok){ msg.style.color='#4ade80'; msg.textContent=hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.';
-    ['mbcName','mbcPhone','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
-    mbLoadClaims(); setTimeout(()=>{msg.textContent='';},3500); }
-  else{ const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); }
+  msg.style.color='#4ade80'; msg.textContent=(hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.')+attachMsg;
+  ['mbcName','mbcPhone','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
+  _mbcFiles=[]; mbcRenderFiles();
+  mbLoadClaims(); setTimeout(()=>{msg.textContent='';},5000);
 }
 
 async function mbLoadClaims(){

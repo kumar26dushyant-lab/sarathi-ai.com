@@ -5691,8 +5691,17 @@ async def get_claims_ops(
         if status:
             conditions.append("c.status=?")
             params.append(status)
-        if review_outcome:
-            # #7: L2 section = review delivered with a GO outcome; Archived = no_scope.
+        if review_outcome == "can_fight":
+            # L2 bucket = every reviewed-GO claim still ACTIVE in the legal pipeline —
+            # not just those parked at 'review_delivered'. Once a GO claim advances
+            # (L2 paid → queued → assigned → in negotiation) it must STAY here until it
+            # terminally closes, so branch/staff L2 claims track like retail. (Prev bug:
+            # a paid+assigned branch L2 claim silently vanished from this bucket.)
+            conditions.append(
+                "c.review_outcome='can_fight' AND c.status NOT IN "
+                "('closed','withdrawn','resolved_won','resolved_lost')")
+        elif review_outcome:
+            # Archived / other outcomes (e.g. no_scope) — as reviewed & delivered.
             conditions.append("c.review_outcome=? AND c.status='review_delivered'")
             params.append(review_outcome)
         if payment_status:

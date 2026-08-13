@@ -4813,12 +4813,51 @@ async def nidaan_api_admin_update_claim(
 #  NIDAAN OPS PORTAL  (/nidaan/ops/*)
 # =============================================================================
 
+# Staff JWTs carry no expiry, and the token alone can't tell us if the staffer was
+# later archived/deactivated. Re-check the DB (cached ~30s) so a removed staffer's live
+# session stops working promptly instead of lingering forever. {staff_id: (active, ts)}
+_staff_active_cache: dict = {}
+_STAFF_ACTIVE_TTL = 30.0  # seconds
+
+
+def _staff_still_active(staff_id: int) -> bool:
+    import time as _t, sqlite3 as _sq
+    now = _t.monotonic()
+    hit = _staff_active_cache.get(staff_id)
+    if hit and (now - hit[1]) < _STAFF_ACTIVE_TTL:
+        return hit[0]
+    active = True
+    try:
+        conn = _sq.connect(nidaan.DB_PATH, timeout=3)
+        try:
+            row = conn.execute(
+                "SELECT status, deleted_at FROM nidaan_staff WHERE staff_id=?",
+                (staff_id,)).fetchone()
+        finally:
+            conn.close()
+        active = bool(row) and (row[1] is None) and (row[0] == "active")
+    except Exception:
+        active = True   # fail-open on a DB blip — don't lock out all staff at once
+    _staff_active_cache[staff_id] = (active, now)
+    return active
+
+
 def _get_staff_from_request(request: Request) -> Optional[dict]:
-    """Extract and verify staff JWT from Authorization header."""
+    """Extract and verify staff JWT from Authorization header, and confirm the staffer
+    is still active (not archived/deactivated) — tokens never expire, so we re-check."""
     h = request.headers.get("Authorization", "")
     if not h.startswith("Bearer "):
         return None
-    return nidaan.verify_staff_token(h[7:])
+    payload = nidaan.verify_staff_token(h[7:])
+    if not payload:
+        return None
+    try:
+        sid = int(payload.get("sub"))
+    except (TypeError, ValueError):
+        return None
+    if not _staff_still_active(sid):
+        return None
+    return payload
 
 
 def _require_staff(request: Request, min_role: str = "team_member") -> dict:
@@ -5344,6 +5383,41 @@ async def ops_my_list_claims(request: Request):
     _staff, code = await _staff_claim_code(request)
     return {"claims": await nidaan.list_branch_claims(code),
             "l2": await nidaan.branch_l2_pricing()}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def ops_my_upload_claim_doc(claim_id: int, request: Request,
+                                  files: list[UploadFile] = File(...)):
+    """Staffer attaches documents (e.g. the rejection letter) to a claim THEY raised —
+    same rules/limits as the branch upload, scoped to the staffer's own claim code."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=? AND origin='branch' "
+            "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    if len(files) > 5: raise HTTPException(400, "Maximum 5 files per upload")
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    return {"uploaded": saved, "count": len(saved)}
 
 
 @app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-pay")
