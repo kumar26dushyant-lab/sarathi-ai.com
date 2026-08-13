@@ -5800,6 +5800,14 @@ staging `deploy/staging-deploy.sh` (staging branch).
   (19 historical sessions, all `web`), rating/closed_at columns added to prod schema (additive). Cloudflare
   gets a fresh URL from the v21 bump. **Entire chat enhancements batch is LIVE.** Staff announcement in
   ANNOUNCEMENTS.md flipped to READY-TO-SEND (owner reviews + sends).
+- **✅ LIGHT-MODE + MOBILE NITS FIXED (Aug 13, commit 4266eb2, prod):** from owner phone screenshots.
+  (1) Business Analytics stat cards — white `#f1f5f9` Signups + fluorescent hardcoded colors → theme
+  tokens (readable both modes); same for funnel + channel table. (2) Hamburger ☰ `#e2e8f0` →
+  `var(--nd-text-primary)` (was invisible in light mode) + thicker bars. (3) Mobile drawer nav darker
+  (secondary) + larger (1rem/700) + 48px targets, sidebar 260px. (4) **Bell notifications now open a
+  full-text detail modal** — announcements show 📣 + "Tap to read →"; the web/mobile way to re-read an
+  announcement in full (previously a click did nothing + body was silently truncated). (5) Dashboard
+  notif-dropdown rows `#e2e8f0` → token. Verified live on both prod workers.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
