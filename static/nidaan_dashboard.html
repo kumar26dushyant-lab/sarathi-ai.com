@@ -1131,7 +1131,7 @@ function toggleNotif(ev) {
   const isEn = document.body.classList.contains('en');
   const claims = _notifData.claims || {};
   const ids = Object.keys(claims);
-  const rowStyle = 'display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.07);color:#e2e8f0;padding:.7rem 1rem;cursor:pointer;font-size:.85rem';
+  const rowStyle = 'display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--nd-border);color:var(--nd-text-primary);padding:.7rem 1rem;cursor:pointer;font-size:.85rem';
   let html = '';
   const chatT = _notifData.chat_unread_total || 0;
   if (chatT > 0) {

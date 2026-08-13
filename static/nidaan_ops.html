@@ -216,7 +216,7 @@ select.form-input option{background:#1e293b}
 
 /* ── MOBILE ── */
 .hamburger-btn{display:none;flex-direction:column;justify-content:center;gap:5px;cursor:pointer;border:none;background:none;padding:.35rem .4rem;border-radius:6px;margin-right:.35rem}
-.hamburger-btn span{display:block;width:20px;height:2px;background:#e2e8f0;border-radius:2px}
+.hamburger-btn span{display:block;width:22px;height:2.5px;background:var(--nd-text-primary);border-radius:2px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100}
 .sidebar-overlay.open{display:block}
 
@@ -235,7 +235,10 @@ select.form-input option{background:#1e293b}
   .topbar{padding:.6rem .85rem}
   /* Bigger tap targets on touch screens */
   .btn-sm,.nd-btn-sm{padding:.55rem 1rem;font-size:.85rem;min-height:40px}
-  .nav-item{padding:.85rem 1rem;min-height:44px}
+  /* Drawer nav on phones: darker + larger so items are easy to read/tap */
+  .sidebar{width:260px}
+  .nav-item{padding:.9rem 1.1rem;min-height:48px;font-size:1rem;font-weight:700;color:var(--nd-text-secondary)}
+  .nav-item.active{color:var(--nd-cyan-text)}
   /* Force the inline Add Task grid to single column on phones */
   [id^="newTaskForm_"] > div[style*="grid-template-columns:1fr 1fr"]{
     grid-template-columns:1fr !important
@@ -5536,7 +5539,7 @@ async function loadAnalytics() {
     return `<div style="flex:1;min-width:120px;text-align:center;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);border-radius:12px;padding:.7rem .4rem">
       <div style="font-size:1.35rem;font-weight:800;color:var(--nd-cyan-text)">${fmt(val)}</div>
       <div style="font-size:.72rem;color:var(--nd-text-secondary)">${label}</div>
-      ${pct!==null?`<div style="font-size:.66rem;color:${pct>=50?'var(--nd-success-text)':'#fbbf24'};margin-top:.15rem">${pct}% of prev</div>`:''}
+      ${pct!==null?`<div style="font-size:.66rem;color:${pct>=50?'var(--nd-success-text)':'var(--nd-warning-text)'};margin-top:.15rem">${pct}% of prev</div>`:''}
     </div>`;
   };
 
@@ -5546,8 +5549,8 @@ async function loadAnalytics() {
     <td style="text-align:center;color:var(--nd-success-text)">${fmt(c.subscribers)}</td>
     <td style="text-align:center;color:var(--nd-purple-text)">${fmt(c.onetime)}</td>
     <td style="text-align:right;font-size:.8rem">₹${fmt(c.revenue)}</td>
-    <td style="text-align:center;color:${c.abandoned>0?'#fbbf24':'var(--nd-text-faint)'}">${fmt(c.abandoned)}</td>
-    <td style="text-align:center;color:${c.payment_failed>0?'#fca5a5':'var(--nd-text-faint)'}">${fmt(c.payment_failed)}</td>
+    <td style="text-align:center;color:${c.abandoned>0?'var(--nd-warning-text)':'var(--nd-text-faint)'}">${fmt(c.abandoned)}</td>
+    <td style="text-align:center;color:${c.payment_failed>0?'var(--nd-danger-text)':'var(--nd-text-faint)'}">${fmt(c.payment_failed)}</td>
   </tr>`).join('');
 
   const failRows = (d.recent_failures||[]).map(fr=>{
@@ -5567,12 +5570,12 @@ async function loadAnalytics() {
 
   document.getElementById('anBody').innerHTML = `
     <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem">
-      ${card('Signups', fmt(t.signups||0), '#f1f5f9')}
-      ${card('Subscribers', fmt(t.subscribers||0), '#34d399')}
-      ${card('One-time reviews', fmt(t.onetime||0), '#a78bfa')}
-      ${card('Revenue', '₹'+fmt(t.revenue||0), '#7dd3fc')}
-      ${card('Payment failures', fmt(t.payment_failed||0), '#fca5a5')}
-      ${card('Abandoned at pay', fmt(t.abandoned||0), '#fbbf24', (t.stuck_reviews||0)+' unpaid reviews')}
+      ${card('Signups', fmt(t.signups||0), 'var(--nd-text-primary)')}
+      ${card('Subscribers', fmt(t.subscribers||0), 'var(--nd-success-text)')}
+      ${card('One-time reviews', fmt(t.onetime||0), 'var(--nd-purple-text)')}
+      ${card('Revenue', '₹'+fmt(t.revenue||0), 'var(--nd-cyan-text)')}
+      ${card('Payment failures', fmt(t.payment_failed||0), 'var(--nd-danger-text)')}
+      ${card('Abandoned at pay', fmt(t.abandoned||0), 'var(--nd-warning-text)', (t.stuck_reviews||0)+' unpaid reviews')}
     </div>
 
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:14px;padding:1rem;margin-bottom:1.1rem">
@@ -6567,7 +6570,7 @@ async function _ackAll(){
   _ackClose(); loadBell();
 }
 function _ackOpenClaim(claimId, notifId){ _ackOne(notifId); try{ openClaimDrawer(claimId); }catch(e){} }
-function _bellIcon(ev){ ev=ev||''; return ev==='broadcast'?'📢':ev.indexOf('quick_task')===0?'✅':ev.indexOf('leave')===0?'🌴':ev.indexOf('task')===0?'🗂️':'🔔'; }
+function _bellIcon(ev){ ev=ev||''; return ev==='broadcast'?'📢':ev==='ops.announcement'?'📣':ev.indexOf('quick_task')===0?'✅':ev.indexOf('leave')===0?'🌴':ev.indexOf('task')===0?'🗂️':'🔔'; }
 function _renderBell(){
   const dd = document.getElementById('bellDropdown'); if(!dd) return;
   const items = window._bellData || [];
@@ -6592,12 +6595,20 @@ function _renderBell(){
     const _b = String(n.body||'');
     const qtM = _b.match(/[?&]qt=(\d+)/);
     const acM = _b.match(/[?&]account=(\d+)/);
+    // Deep-link where we can; otherwise tapping opens the full text (so announcements
+    // and any long message can be re-read in full, on web + mobile).
     const oc = qtM ? `openQuickTaskDrawer(${qtM[1]});toggleBell()`
-             : acM ? `openAccountDrawer(${acM[1]});toggleBell()` : '';
-    return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid rgba(255,255,255,.05);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
-      <div style="font-size:.82rem;font-weight:600">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
-      <div style="font-size:.76rem;color:var(--nd-text-secondary);margin-top:.15rem">${esc(String(n.body||'').split('\n')[0]).slice(0,120)}</div>
-      <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.15rem">${n.created_at?ndUI.timeAgo(n.created_at):''}</div>
+             : acM ? `openAccountDrawer(${acM[1]});toggleBell()`
+             : `_showNotifDetail(${n.notif_id||0})`;
+    const isAnn = n.event_key==='ops.announcement';
+    const preview = esc(_b.split('\n')[0]).slice(0,120);
+    return `<div ${oc?`onclick="${oc}"`:''} style="padding:.55rem .8rem;border-bottom:1px solid var(--nd-border);${oc?'cursor:pointer;':''}${unread?'background:rgba(34,211,238,.06)':''}">
+      <div style="font-size:.82rem;font-weight:600;color:var(--nd-text-primary)">${_bellIcon(n.event_key)} ${esc(n.subject||'')}</div>
+      <div style="font-size:.76rem;color:var(--nd-text-secondary);margin-top:.15rem">${preview}${_b.length>120?'…':''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.15rem">
+        <span style="font-size:.68rem;color:var(--nd-text-faint)">${n.created_at?ndUI.timeAgo(n.created_at):''}</span>
+        ${isAnn?'<span style="font-size:.68rem;color:var(--nd-cyan-text);font-weight:700">Tap to read →</span>':''}
+      </div>
     </div>`;
   }).join('');
   dd.innerHTML = `
@@ -6722,6 +6733,27 @@ function toggleBell(){
   _renderBell();
   dd.style.display = 'block';
   markBellRead();   // opening the bell = read
+}
+// Full-text view for a notification (announcements etc.) — the way to re-read a
+// message in full on web + mobile straight from the bell.
+function _showNotifDetail(id){
+  const n = (window._bellData||[]).find(x=>(x.notif_id||0)===id);
+  if(!n){ return; }
+  let ov=document.getElementById('notifDetailBg'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='notifDetailBg';
+  ov.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(2,12,27,.82);display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div style="max-width:480px;width:100%;max-height:82vh;display:flex;flex-direction:column;background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+     <div style="padding:1rem 1.2rem;border-bottom:1px solid var(--nd-border);display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+       <div style="font-weight:800;font-size:1rem;color:var(--nd-text-primary)">${_bellIcon(n.event_key)} ${esc(n.subject||'Notification')}</div>
+       <button onclick="document.getElementById('notifDetailBg').remove()" aria-label="Close" style="background:none;border:none;color:var(--nd-text-muted);font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
+     </div>
+     <div style="padding:1rem 1.2rem;overflow-y:auto;flex:1">
+       <div style="font-size:.9rem;color:var(--nd-text-secondary);white-space:pre-wrap;line-height:1.55;word-break:break-word">${esc(n.body||'')}</div>
+       <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.9rem">${n.created_at?fmtDateTime(n.created_at):''}</div>
+     </div>
+   </div>`;
+  document.body.appendChild(ov);
 }
 async function markBellRead(){
   try { await fetch('/nidaan/ops/api/notifications/read', {method:'POST', headers: hdrs()}); } catch(e){}
