@@ -5838,6 +5838,18 @@ staging `deploy/staging-deploy.sh` (staging branch).
     and DELETEs web-push subs — no residual link; (e) `nidaan_staff` has NO mapping into Sarathi, so an
     archived Nidaan staffer has zero access to sarathi-ai.com. Applied the sever to PAWAN (31) on prod:
     telegram device removed, access=0, pointer cleared.
+- **✅ PAID-REVIEW CLASSIFICATION FIX (Aug 14, commit 2c96caf, prod):** owner reported a paid ₹499
+  customer (SUHANA #65 / claim #45) showing as **"Lead"** in ops Accounts while the user dashboard showed
+  paid. Root cause — TWO disjoint ₹499 funnels: (a) `nidaan_per_claim_purchase` (D2C "buy a review credit")
+  and (b) direct review-fee on an advisor-submitted claim (`_finalize_paid_claim` → `nidaan_claims.payment_status
+  ='paid'`, review_fee_paid; **no purchase row**). Every "paid/one-time" rollup only tested funnel (a), so
+  funnel-(b) payers were invisible. **Unified "paid one-time" = active sub OR paid per_claim_purchase OR a
+  claim with payment_status='paid'**, applied read-only (no migration) at 4 sites: `get_all_accounts_admin`
+  (account_type per_claim not lead; +direct_paid_reviews; usage cell shows "₹499 review paid"), `_BRANCH_PAID_EXISTS`
+  (branch paid/lead counts + is_paid), analytics one-time COUNT, analytics REVENUE (guarded `NOT EXISTS(purchase
+  linked to claim)` → no double-count). Verified on prod: 8 accounts (31,40,46,49,56,57,58,65) flip lead→per_claim;
+  revenue +₹1996 real, ₹0 duplicated (0 paid claims are purchase-linked). Subscription precedence + branch
+  revenue/payout SUM untouched. Internal admin data-accuracy fix — no staff announcement needed.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
