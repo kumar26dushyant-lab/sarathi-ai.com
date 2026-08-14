@@ -4504,7 +4504,12 @@ function accUsageCell(a){
     const col = used>=cap?'#f87171':(used>=cap*0.7?'#fbbf24':'#22d3ee');
     return `<div style="min-width:92px"><div style="font-size:.72rem;color:var(--nd-text-secondary);margin-bottom:2px">${used}/${cap} claims</div><div style="height:5px;background:var(--nd-bg-surface-3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col}"></div></div></div>`;
   }
-  if(a.account_type==='per_claim') return `<span style="font-size:.72rem;color:var(--nd-purple-text)">${a.per_claim_balance||0} left · ${a.per_claim_total||0} bought</span>`;
+  if(a.account_type==='per_claim'){
+    // Bought review credits (D2C funnel) show balance; a directly-paid claim review
+    // (advisor-lead funnel) has no purchased credit, so show it plainly instead of "0 bought".
+    if((a.per_claim_total||0)>0) return `<span style="font-size:.72rem;color:var(--nd-purple-text)">${a.per_claim_balance||0} left · ${a.per_claim_total||0} bought</span>`;
+    return `<span style="font-size:.72rem;color:var(--nd-purple-text)">₹499 review paid${(a.direct_paid_reviews||0)>1?' · ×'+a.direct_paid_reviews:''}</span>`;
+  }
   return '<span style="color:var(--nd-text-faint)">—</span>';
 }
 function accTypeBadge(a){

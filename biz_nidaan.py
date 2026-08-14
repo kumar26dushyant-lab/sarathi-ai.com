@@ -574,14 +574,18 @@ async def create_account(
 
 
 # ── Affiliate branches (offline city vendors selling subscriptions) ──────────
-# An account is "paid" for a branch if it has an active subscription OR a
-# per-claim review that progressed past pending_payment (i.e. they actually paid).
+# An account is "paid" for a branch if it has an active subscription, OR a per-claim
+# review credit that progressed past pending_payment, OR a claim whose ₹499 review fee
+# was paid directly (advisor-lead funnel — that path marks nidaan_claims.payment_status
+# ='paid' and creates NO per_claim_purchase row, so it must be tested explicitly).
 _BRANCH_PAID_EXISTS = (
     "(EXISTS(SELECT 1 FROM nidaan_subscriptions s "
     "        WHERE s.account_id=a.account_id AND s.status='active') "
     " OR EXISTS(SELECT 1 FROM nidaan_per_claim_purchase p "
     "           WHERE p.account_id=a.account_id "
-    "             AND p.status NOT IN ('pending_payment','cancelled')))"
+    "             AND p.status NOT IN ('pending_payment','cancelled')) "
+    " OR EXISTS(SELECT 1 FROM nidaan_claims c "
+    "           WHERE c.account_id=a.account_id AND c.payment_status='paid'))"
 )
 
 
@@ -805,6 +809,8 @@ async def get_business_analytics(days: int = 30) -> dict:
                        SUM(CASE WHEN EXISTS(SELECT 1 FROM nidaan_per_claim_purchase p
                                             WHERE p.account_id=a.account_id
                                               AND p.status NOT IN ('pending_payment','cancelled','failed','refunded'))
+                                     OR EXISTS(SELECT 1 FROM nidaan_claims c
+                                               WHERE c.account_id=a.account_id AND c.payment_status='paid')
                                 THEN 1 ELSE 0 END) AS onetime
                 FROM nidaan_accounts a
                 WHERE a.created_at >= datetime('now', ?)
@@ -828,7 +834,11 @@ async def get_business_analytics(days: int = 30) -> dict:
                                  WHERE su.account_id=a.account_id),0)
                      + COALESCE((SELECT SUM(p.amount_paid) FROM nidaan_per_claim_purchase p
                                  WHERE p.account_id=a.account_id
-                                   AND p.status NOT IN ('pending_payment','cancelled','failed','refunded')),0) AS rev
+                                   AND p.status NOT IN ('pending_payment','cancelled','failed','refunded')),0)
+                     + COALESCE((SELECT SUM(c.review_fee_paid) FROM nidaan_claims c
+                                 WHERE c.account_id=a.account_id AND c.payment_status='paid'
+                                   AND NOT EXISTS(SELECT 1 FROM nidaan_per_claim_purchase p2
+                                                  WHERE p2.linked_claim_id=c.claim_id)),0) AS rev
                 FROM nidaan_accounts a
                 WHERE a.created_at >= datetime('now', ?)
                   AND COALESCE(a.deleted_at,'')=''
@@ -2734,7 +2744,10 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
                         WHERE p.account_id = a.account_id AND p.status = 'paid') AS per_claim_total,
                       (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
                         WHERE p.account_id = a.account_id AND p.status = 'paid'
-                          AND p.linked_claim_id IS NULL) AS per_claim_balance
+                          AND p.linked_claim_id IS NULL) AS per_claim_balance,
+                      (SELECT COUNT(*) FROM nidaan_claims c
+                        WHERE c.account_id = a.account_id AND c.payment_status = 'paid')
+                        AS direct_paid_reviews
                FROM nidaan_accounts a
                LEFT JOIN nidaan_subscriptions s ON s.account_id = a.account_id
                    AND s.status = 'active'
@@ -2756,7 +2769,12 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
                 used = 0                                    # window rolled over → resets on next claim
             r["claims_used"] = used
         else:
-            r["account_type"] = "per_claim" if (r.get("per_claim_total") or 0) > 0 else "lead"
+            # "Paid one-time" = a bought review CREDIT (per_claim_purchase) OR a claim
+            # whose ₹499 review fee was paid directly (advisor-lead funnel — no purchase
+            # row is created there). Without the second test, a customer who paid to
+            # unlock a specific claim's review was wrongly shown as an unpaid 'lead'.
+            _paid_reviews = (r.get("per_claim_total") or 0) + (r.get("direct_paid_reviews") or 0)
+            r["account_type"] = "per_claim" if _paid_reviews > 0 else "lead"
             r["claims_cap"] = None
             r["disputed_cap"] = None
             r["claims_used"] = 0
