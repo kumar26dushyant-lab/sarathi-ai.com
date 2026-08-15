@@ -3400,7 +3400,7 @@ function _renderOutcome(key){
   if(isL2){
     const m = document.getElementById('oc_l2claims_metrics');
     if(m){
-      const paid = all.filter(c=>c.l2_payment_status==='paid').length;
+      const paid = all.filter(_l2Eligible).length;   // paid = L2 fee OR ₹499 review OR subscription
       const sent = all.filter(c=>c.claimshield_case_id).length;
       const disputed = all.reduce((s,c)=>s+(c.disputed_amount||0),0);
       const card=(label,val,col)=>`<div style="flex:1 1 118px;min-width:108px;background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div></div>`;
@@ -3444,7 +3444,7 @@ function _renderOutcome(key){
         <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
-        + (isL2?`<td>${c.l2_payment_status==='paid'?'<span style="color:var(--nd-success-text);font-weight:700">Paid ✓</span>':'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
+        + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
              + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
              + csCell:'')
         + `<td>${c.origin==='branch'?('🏢 Branch '+esc(c.branch_code||'')):esc(c.owner_name||'—')}</td>
