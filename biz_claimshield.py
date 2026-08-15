@@ -132,21 +132,29 @@ def parse_case_ref(case_ref) -> Optional[int]:
 
 # ── INBOUND: record a status pushed by ClaimShield ────────────────────────────
 async def record_status_update(case_ref, raw_status: str, source: str = "claimshield") -> dict:
-    """Map + persist a status ClaimShield pushed for our case. Idempotent: a repeat of
-    the same raw status just refreshes the timestamp (no duplicate log spam)."""
-    claim_id = parse_case_ref(case_ref)
-    if not claim_id:
-        return {"ok": False, "error": "bad_case_ref"}
+    """Persist a status ClaimShield pushed for our case. ClaimShield maps to customer-safe
+    statuses on THEIR side, so we display their text AS-IS (the bucket map is only a
+    best-effort category/fallback). Matches by our claim id OR their caseReferenceNumber.
+    Idempotent: a repeat of the same status just refreshes the timestamp."""
     m = map_status(raw_status)
     bucket = m["bucket"]
     async with aiosqlite.connect(DB_PATH) as conn:
         await _ensure_schema(conn)
         conn.row_factory = aiosqlite.Row
-        row = await (await conn.execute(
-            "SELECT claim_id, claimshield_status_raw FROM nidaan_claims WHERE claim_id=?",
-            (claim_id,))).fetchone()
+        # Match on our Nidaan claim id first; fall back to their caseReferenceNumber.
+        claim_id = parse_case_ref(case_ref)
+        row = None
+        if claim_id:
+            row = await (await conn.execute(
+                "SELECT claim_id, claimshield_status_raw FROM nidaan_claims WHERE claim_id=?",
+                (claim_id,))).fetchone()
+        if not row and case_ref is not None:
+            row = await (await conn.execute(
+                "SELECT claim_id, claimshield_status_raw FROM nidaan_claims "
+                "WHERE claimshield_case_id=?", (str(case_ref).strip(),))).fetchone()
         if not row:
             return {"ok": False, "error": "claim_not_found", "claim_id": claim_id}
+        claim_id = row["claim_id"]
         prev_raw = (row["claimshield_status_raw"] or "")
         changed = (prev_raw.strip().lower() != (raw_status or "").strip().lower())
         await conn.execute(
@@ -180,11 +188,11 @@ async def get_claimshield_state(claim_id: int) -> Optional[dict]:
     return {
         "case_id": c["claimshield_case_id"],
         "sent": bool(c["claimshield_sent_at"]),
+        # ClaimShield sends customer-safe text → show it AS-IS; bucket is best-effort only.
+        "display": c["claimshield_status_raw"],
         "bucket": bucket,
-        "labels": _BUCKET_LABELS.get(bucket) if bucket else None,
         "status_at": c["claimshield_status_at"],
-        "timeline": [{"raw": l["raw_status"], "bucket": l["bucket"],
-                      "labels": _BUCKET_LABELS.get(l["bucket"] or "unknown"),
+        "timeline": [{"status": l["raw_status"], "bucket": l["bucket"],
                       "at": l["created_at"]} for l in logs],
     }
 
@@ -216,7 +224,55 @@ async def already_sent(claim_id: int) -> bool:
             (claim_id,))).fetchone()
     return bool(row and (row[0] or row[1]))
 
-# NOTE: the actual create_case() HTTP call is intentionally NOT implemented yet —
-# it needs ClaimShield's exact endpoint path, field names, auth header, and response
-# format (requested by email). already_sent()/mark_case_sent() are the idempotency
-# rails it will use. Wiring the auto-send trigger comes after that reply.
+async def create_case(claim_id: int) -> dict:
+    """Create a case at ClaimShield for a Nidaan claim. Sends ONLY name/mobile/amount +
+    our case number (their spec). Idempotent — never sends twice (they don't dedupe).
+    Returns {ok, already?, case_id?, error?}.
+
+    Spec (ClaimShield, Aug 15):
+      POST {base}/api/partnercreatecase   header x-api-key: <key>
+      body {patientName, patientMobile, claimAmount, Nidaanpartnercasenumber}
+      resp {message:"success", caseReferenceNumber:<int>}
+    """
+    import os
+    import httpx
+    base = os.getenv("CLAIMSHIELD_API_BASE", "https://www.claimshield.in").rstrip("/")
+    key = os.getenv("CLAIMSHIELD_API_KEY", "").strip()
+    if not key:
+        return {"ok": False, "error": "not_configured"}
+    if await already_sent(claim_id):
+        return {"ok": True, "already": True}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT claim_id, insured_name, insured_phone, disputed_amount "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not c:
+        return {"ok": False, "error": "claim_not_found"}
+    payload = {
+        "patientName": (c["insured_name"] or "").strip(),
+        "patientMobile": "".join(ch for ch in (c["insured_phone"] or "") if ch.isdigit())[-10:],
+        "claimAmount": str(int(c["disputed_amount"] or 0)),
+        "Nidaanpartnercasenumber": str(claim_id),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as cl:
+            r = await cl.post(f"{base}/api/partnercreatecase", json=payload,
+                              headers={"x-api-key": key, "Content-Type": "application/json"})
+        data = r.json() if r.content else {}
+    except Exception as e:
+        logger.warning("claimshield create_case network error claim=%s: %s", claim_id, e)
+        return {"ok": False, "error": "network"}
+    if r.status_code == 200 and str(data.get("message", "")).strip().lower() == "success":
+        cs_ref = str(data.get("caseReferenceNumber", "") or "")
+        await mark_case_sent(claim_id, cs_ref)
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await _ensure_schema(conn)
+            await conn.execute(
+                "INSERT INTO nidaan_claimshield_log (claim_id, raw_status, bucket, source) "
+                "VALUES (?, ?, ?, ?)", (claim_id, "Sent to ClaimShield", "registered", "system"))
+            await conn.commit()
+        return {"ok": True, "case_id": cs_ref}
+    logger.warning("claimshield create_case rejected claim=%s status=%s body=%s",
+                   claim_id, r.status_code, str(data)[:300])
+    return {"ok": False, "error": "rejected", "status_code": r.status_code, "detail": str(data)[:200]}

@@ -3744,6 +3744,8 @@ class _ClaimShieldStatusReq(BaseModel):
     reference: Optional[str] = None
     nidaan_case_id: Optional[str] = None
     nidaan_ref: Optional[str] = None
+    Nidaanpartnercasenumber: Optional[str] = None   # our ref, as ClaimShield names it
+    caseReferenceNumber: Optional[str] = None         # their ref (from create-case response)
     status: Optional[str] = None
     case_status: Optional[str] = None
     token: Optional[str] = None
@@ -3763,8 +3765,8 @@ async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Reques
     provided = (request.headers.get("X-ClaimShield-Token", "") or (body.token or "")).strip()
     if not secret or not provided or not _hm.compare_digest(provided, secret):
         raise HTTPException(status_code=401, detail="Unauthorized")
-    case_ref = (body.case_ref or body.case_id or body.reference
-                or body.nidaan_case_id or body.nidaan_ref)
+    case_ref = (body.case_ref or body.Nidaanpartnercasenumber or body.nidaan_case_id
+                or body.nidaan_ref or body.reference or body.caseReferenceNumber or body.case_id)
     raw_status = (body.status or body.case_status or "").strip()
     if not case_ref or not raw_status:
         raise HTTPException(status_code=400, detail="Missing case reference or status")
@@ -3776,6 +3778,28 @@ async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Reques
         raise HTTPException(status_code=400, detail=result.get("error", "Could not record status"))
     # Phase 2 will notify the customer + ops here when result["changed"] is True.
     return {"ok": True, "bucket": result["bucket"]}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/send-to-claimshield")
+@limiter.limit("30/minute")
+async def ops_send_to_claimshield(claim_id: int, request: Request):
+    """Ops manually pushes a claim to ClaimShield (L2 legal). Idempotent — never creates
+    a duplicate (ClaimShield doesn't dedupe). sub_super_admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_claimshield as _cs
+    result = await _cs.create_case(claim_id)
+    if not result.get("ok"):
+        _emap = {"not_configured": "ClaimShield API key not set on the server",
+                 "claim_not_found": "Claim not found",
+                 "network": "Could not reach ClaimShield — please try again",
+                 "rejected": "ClaimShield rejected the case"}
+        raise HTTPException(status_code=400,
+                            detail=_emap.get(result.get("error"), result.get("error") or "Failed"))
+    await _ops_audit(request, "claimshield.create", "claim", str(claim_id),
+                     f"sent to ClaimShield (case {result.get('case_id') or 'already-sent'})")
+    return result
 
 
 @app.post("/nidaan/api/webhook")
