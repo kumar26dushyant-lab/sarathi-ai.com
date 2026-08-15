@@ -5853,6 +5853,15 @@ staging `deploy/staging-deploy.sh` (staging branch).
   linked to claim)` → no double-count). Verified on prod: 8 accounts (31,40,46,49,56,57,58,65) flip lead→per_claim;
   revenue +₹1996 real, ₹0 duplicated (0 paid claims are purchase-linked). Subscription precedence + branch
   revenue/payout SUM untouched. Internal admin data-accuracy fix — no staff announcement needed.
+- **✅ [NIDAAN] MOBILE HOMEPAGE DECLUTTER (Aug 15, commits 3bec3de+032b65c, prod):** owner: mobile felt
+  "messy — so many pop-ups". Root cause = multiple auto-firing elements on load. Fixed systematically:
+  (a) support teaser (widget v22) narrowed + lifted above the bottom-left Listen button (no overlap);
+  (b) audience **Switch** button = amber→pink→purple gradient standout, labelled with the DESTINATION
+  ("⇄ Policyholder page" / "⇄ Advisor page", bilingual); (c) 2-min **walkthrough panel is now TAP-ONLY**
+  (removed the 1.2s auto-open + open-on-first-scroll/tap); (d) **PWA install banner deferred** 30s + only
+  when gate/walkthrough closed + not previously dismissed (× remembers); (e) top nav collapses into a **☰
+  hamburger** on mobile (was wrapping to 3 rows) — `navToggle()`, vertical dropdown, closes on link tap.
+  First load now = clean page + the single audience entry-gate (or clean page for returning visitors).
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
