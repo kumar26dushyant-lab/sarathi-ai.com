@@ -5862,6 +5862,18 @@ staging `deploy/staging-deploy.sh` (staging branch).
   when gate/walkthrough closed + not previously dismissed (× remembers); (e) top nav collapses into a **☰
   hamburger** on mobile (was wrapping to 3 rows) — `navToggle()`, vertical dropdown, closes on link tap.
   First load now = clean page + the single audience entry-gate (or clean page for returning visitors).
+- **✅ [NIDAAN] L2 ACCOUNTABILITY + IMPERSONATION UNMASK (Aug 15, commits 17abf6b+757994c, prod):** owner
+  wants the REAL person who pushed a claim to ClaimShield always visible, even under impersonation.
+  (a) `claimshield_sent_by` column + shown as "👤 name" in the L2 dashboard ClaimShield cell + in the case
+  log ("Sent to ClaimShield by <name> — <reason>"). (b) **Staff-impersonation hole fixed:**
+  `ops_impersonate_staff` minted a token that was fully the target's identity (real actor lost);
+  `create_staff_token` now embeds `imp_by{id,name}`, and new `_actor_label(staff)` returns
+  "RealName (as ImpersonatedName)" — used for ClaimShield sent_by AND every `_ops_audit` entry, so the
+  audit trail + dashboard never show a masked identity. (c) Backfilled #16 sent_by="Dushyant Sharma" (from
+  audit; the recorded actor for that pre-fix push). (d) Deleted the test dummy claim #47 + account 66 (CS
+  case 804198 is ClaimShield's to remove). Real sent case remaining for live-push confirmation: #16 (CS 804199).
+  NOTE (payment model reminder): a claim is eligible for ClaimShield only if PAID (l2_payment_status='paid'
+  OR review paid/subscription); unpaid branch leads show "Awaiting branch ₹499 L2 fee" and are guard-blocked.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 

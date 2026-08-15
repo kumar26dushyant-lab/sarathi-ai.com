@@ -4,6 +4,42 @@ Ready-to-send drafts for the **Announce an update** feature (ops portal → 🆕
 Rule: I draft these; **you review and send** — nothing goes out automatically.
 Keep the language simple, warm, and motivating. Paste Title + Details, pick roles, Send.
 
+**Adoption convention (new):** every update now asks staff to **react 👍 to confirm they've read + understood**, and to **contact the office IT SPOC** if anything is unclear. This tracks adoption and means the Nidaan team needn't explain each feature one-by-one.
+
+---
+
+## 2026-08-15 — Your ops portal keeps getting better (latest roundup) — READY TO SEND
+
+> Supersedes the two older Aug-13 drafts below — this consolidates the latest into one clean update.
+
+**Title (EN):**
+🚀 Your ops portal keeps getting better — here's what's new (please 👍)
+
+**Details (EN):**
+Team, a quick roundup of upgrades that make your day easier 🎉
+• ⚖️ **L2 Claims Dashboard** — all Level-2 claims at a glance: paid vs due, disputed amount, type, branch, with filters. One-tap **"Send to ClaimShield"** (with a reason box), and you can now see **who sent each case**.
+• 🔗 **ClaimShield connected** — an eligible Level-2 claim goes to ClaimShield in one click, and its status flows back to the customer's dashboard automatically — no more manual "any update?" follow-ups.
+• 💬 **Support chat upgrades** — clean 30-min sessions, 👍/👎 ratings, and a Support analytics view (satisfaction, channels).
+• 📱 **Cleaner mobile pages** + 🔔 **tap any announcement in the bell to read it in full**.
+• 🌗 Light/Dark mode across the portal.
+
+**How to use this update:** react **👍** below to confirm you've **read and understood** it. If anything is unclear, please reach out to our **office IT SPOC** — they'll walk you through it. Your 👍 helps us know everyone's on board, so we can keep shipping improvements without long training sessions. 🙏
+
+**Title (HI):**
+🚀 आपका ऑप्स पोर्टल लगातार बेहतर हो रहा है — क्या नया है (कृपया 👍 करें)
+
+**Details (HI):**
+टीम, कुछ सुधार जो आपका काम आसान बनाते हैं 🎉
+• ⚖️ **L2 क्लेम्स डैशबोर्ड** — सभी Level-2 क्लेम एक नज़र में: भुगतान हुआ/बाकी, विवादित राशि, प्रकार, ब्रांच, फ़िल्टर के साथ। एक-टैप **"ClaimShield को भेजें"** (कारण बॉक्स के साथ), और अब यह भी दिखता है कि **हर केस किसने भेजा**।
+• 🔗 **ClaimShield जुड़ गया** — योग्य Level-2 क्लेम एक क्लिक में ClaimShield जाता है, और उसकी स्थिति अपने-आप ग्राहक के डैशबोर्ड पर आती है — बार-बार "कोई अपडेट?" पूछने की ज़रूरत नहीं।
+• 💬 **सपोर्ट चैट सुधार** — साफ़ 30-मिनट सेशन, 👍/👎 रेटिंग, और सपोर्ट एनालिटिक्स।
+• 📱 **साफ़-सुथरे मोबाइल पेज** + 🔔 **बेल में किसी भी अनाउंसमेंट पर टैप करके पूरा पढ़ें**।
+• 🌗 पूरे पोर्टल में लाइट/डार्क मोड।
+
+**इस अपडेट का उपयोग:** नीचे **👍** करके पुष्टि करें कि आपने इसे **पढ़ा और समझ लिया** है। कुछ भी समझ न आए तो कृपया ऑफ़िस के **IT SPOC** से संपर्क करें — वे आपकी मदद करेंगे। आपका 👍 हमें बताता है कि सब तैयार हैं, ताकि हम बिना लंबी ट्रेनिंग के सुधार लाते रहें। 🙏
+
+*Suggested roles: all staff.*
+
 ---
 
 ## 2026-08-13 — L2 claims stay visible + attach files when raising a claim — READY TO SEND
