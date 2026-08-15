@@ -5874,6 +5874,15 @@ staging `deploy/staging-deploy.sh` (staging branch).
   case 804198 is ClaimShield's to remove). Real sent case remaining for live-push confirmation: #16 (CS 804199).
   NOTE (payment model reminder): a claim is eligible for ClaimShield only if PAID (l2_payment_status='paid'
   OR review paid/subscription); unpaid branch leads show "Awaiting branch ₹499 L2 fee" and are guard-blocked.
+- **✅ [NIDAAN] L2 FLOW CORRECTED (Aug 15, commit 55a0276, prod) — owner clarified (logic was inverted):**
+  (1) **PAID + reviewed-GO claim AUTO-moves to ClaimShield** — `auto_send_if_eligible()` fired from
+  `deliver_review` (retail/sub) + `mark_l2_paid` (branch), idempotent, best-effort, flag-gated
+  (`claimshield_auto_send` default ON), sent_by="Auto (payment confirmed)". (2) **DUE claim shows
+  "Awaiting branch ₹499 + GST L2 fee" + a manual "Send to CS" override button** — create_case guard
+  relaxed to require only `can_fight` (payment NOT required for manual override); the pusher's name
+  (real actor even under impersonation) is recorded. Modal shows ⚠️ DUE-override warning vs ✓ paid.
+  Auto-send only fires on NEW payment/review events — **existing paid+GO-but-unsent claims (#18,30,37,39,40,41,44)
+  still show the Send button** until sent (owner to decide: bulk-send now vs leave).
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
