@@ -224,9 +224,10 @@ async def already_sent(claim_id: int) -> bool:
             (claim_id,))).fetchone()
     return bool(row and (row[0] or row[1]))
 
-async def create_case(claim_id: int) -> dict:
+async def create_case(claim_id: int, reason: str = "") -> dict:
     """Create a case at ClaimShield for a Nidaan claim. Sends ONLY name/mobile/amount +
     our case number (their spec). Idempotent — never sends twice (they don't dedupe).
+    `reason` is the staff justification for the L2 move — recorded on the timeline.
     Returns {ok, already?, case_id?, error?}.
 
     Spec (ClaimShield, Aug 15):
@@ -276,11 +277,12 @@ async def create_case(claim_id: int) -> dict:
     if r.status_code == 200 and str(data.get("message", "")).strip().lower() == "success":
         cs_ref = str(data.get("caseReferenceNumber", "") or "")
         await mark_case_sent(claim_id, cs_ref)
+        _note = "Sent to ClaimShield" + (f" — {reason.strip()[:400]}" if reason and reason.strip() else "")
         async with aiosqlite.connect(DB_PATH) as conn:
             await _ensure_schema(conn)
             await conn.execute(
                 "INSERT INTO nidaan_claimshield_log (claim_id, raw_status, bucket, source) "
-                "VALUES (?, ?, ?, ?)", (claim_id, "Sent to ClaimShield", "registered", "system"))
+                "VALUES (?, ?, ?, ?)", (claim_id, _note, "registered", "ops"))
             await conn.commit()
         return {"ok": True, "case_id": cs_ref}
     logger.warning("claimshield create_case rejected claim=%s status=%s body=%s",

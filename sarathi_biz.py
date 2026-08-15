@@ -3788,8 +3788,15 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
+    reason = ""
+    try:
+        _b = await request.json()
+        if isinstance(_b, dict):
+            reason = (_b.get("reason") or "").strip()[:500]
+    except Exception:
+        reason = ""
     import biz_claimshield as _cs
-    result = await _cs.create_case(claim_id)
+    result = await _cs.create_case(claim_id, reason=reason)
     if not result.get("ok"):
         _emap = {"not_configured": "ClaimShield API key not set on the server",
                  "claim_not_found": "Claim not found",
