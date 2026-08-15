@@ -100,6 +100,7 @@ async def _ensure_schema(conn) -> None:
         ("claimshield_bucket", "TEXT"),
         ("claimshield_status_at", "TIMESTAMP"),
         ("claimshield_sent_at", "TIMESTAMP"),
+        ("claimshield_sent_by", "TEXT"),      # ops person who pushed it (accountability)
     ):
         try:
             await conn.execute(f"ALTER TABLE nidaan_claims ADD COLUMN {col} {typ}")
@@ -205,13 +206,14 @@ def is_configured() -> bool:
     return bool(os.getenv("CLAIMSHIELD_API_BASE") and os.getenv("CLAIMSHIELD_API_KEY"))
 
 
-async def mark_case_sent(claim_id: int, claimshield_case_id: str = "") -> None:
+async def mark_case_sent(claim_id: int, claimshield_case_id: str = "", sent_by: str = "") -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await _ensure_schema(conn)
         await conn.execute(
             "UPDATE nidaan_claims SET claimshield_sent_at=CURRENT_TIMESTAMP, "
-            "claimshield_case_id=COALESCE(NULLIF(?,''), claimshield_case_id) WHERE claim_id=?",
-            (claimshield_case_id or "", claim_id))
+            "claimshield_case_id=COALESCE(NULLIF(?,''), claimshield_case_id), "
+            "claimshield_sent_by=COALESCE(NULLIF(?,''), claimshield_sent_by) WHERE claim_id=?",
+            (claimshield_case_id or "", (sent_by or "").strip()[:80], claim_id))
         await conn.commit()
 
 
@@ -224,10 +226,11 @@ async def already_sent(claim_id: int) -> bool:
             (claim_id,))).fetchone()
     return bool(row and (row[0] or row[1]))
 
-async def create_case(claim_id: int, reason: str = "") -> dict:
+async def create_case(claim_id: int, reason: str = "", sent_by: str = "") -> dict:
     """Create a case at ClaimShield for a Nidaan claim. Sends ONLY name/mobile/amount +
     our case number (their spec). Idempotent — never sends twice (they don't dedupe).
     `reason` is the staff justification for the L2 move — recorded on the timeline.
+    `sent_by` is the ops person's name — stored for accountability (shown in L2 dashboard).
     Returns {ok, already?, case_id?, error?}.
 
     Spec (ClaimShield, Aug 15):
@@ -276,8 +279,9 @@ async def create_case(claim_id: int, reason: str = "") -> dict:
         return {"ok": False, "error": "network"}
     if r.status_code == 200 and str(data.get("message", "")).strip().lower() == "success":
         cs_ref = str(data.get("caseReferenceNumber", "") or "")
-        await mark_case_sent(claim_id, cs_ref)
-        _note = "Sent to ClaimShield" + (f" — {reason.strip()[:400]}" if reason and reason.strip() else "")
+        await mark_case_sent(claim_id, cs_ref, sent_by=sent_by)
+        _by = (f" by {sent_by.strip()}" if sent_by and sent_by.strip() else "")
+        _note = "Sent to ClaimShield" + _by + (f" — {reason.strip()[:400]}" if reason and reason.strip() else "")
         async with aiosqlite.connect(DB_PATH) as conn:
             await _ensure_schema(conn)
             await conn.execute(

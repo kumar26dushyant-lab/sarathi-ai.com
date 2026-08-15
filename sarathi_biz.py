@@ -3787,7 +3787,8 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     a duplicate (ClaimShield doesn't dedupe). sub_super_admin+ only."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    caller = _require_staff(request, "sub_super_admin")
+    _by = (caller.get("name") or caller.get("email") or ("staff#" + str(caller.get("staff_id") or ""))).strip()
     reason = ""
     try:
         _b = await request.json()
@@ -3796,7 +3797,7 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     except Exception:
         reason = ""
     import biz_claimshield as _cs
-    result = await _cs.create_case(claim_id, reason=reason)
+    result = await _cs.create_case(claim_id, reason=reason, sent_by=_by)
     if not result.get("ok"):
         _emap = {"not_configured": "ClaimShield API key not set on the server",
                  "claim_not_found": "Claim not found",
