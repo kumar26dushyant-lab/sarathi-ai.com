@@ -5877,10 +5877,22 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
   Verified on prod: no/wrong token→401, valid token+bogus case→404, both sites healthy after biz.env edit.
 - **Handed to ClaimShield (one-go email):** live callback URL + secret + payload shape + our case-ref format.
   **Awaiting from them:** exact create-case endpoint (path/fields/auth header/response) + part-2 of access key.
-- **Remaining (todo):** switch inbound to show status as-is; outbound create_case HTTP call + manual "Send to
-  ClaimShield" ops button (flagged) then auto-send on L2-paid; customer dashboard status+timeline + ops view;
-  status-change notifications; live test 1–2 sample cases round-trip. Open flow Qs asked: "Waiting for Customer
-  Approval" (customer action — do they need an approve-API from us?) + "Pending Payment" (extra fee?).
+- **✅ PHASE 1 COMPLETE + ROUND-TRIP VERIFIED ON PROD (Aug 15):** ClaimShield gave create-case spec —
+  `POST https://claimshield.in/api/partnercreatecase`, header `x-api-key`, body {patientName, patientMobile,
+  claimAmount, Nidaanpartnercasenumber}, resp {message:"success", caseReferenceNumber}. **Note: use non-www
+  host** — www.claimshield.in 307-redirects the POST. `CLAIMSHIELD_API_KEY` (part1+part2 combined) +
+  `CLAIMSHIELD_API_BASE=https://claimshield.in` in prod biz.env. `create_case()` implemented (idempotent) +
+  **ELIGIBILITY GUARD (owner rule): only reviewed-GO (`can_fight`) AND paid (l2_payment_status='paid' OR
+  payment_status IN paid/subscription) — never an unpaid lead**. Manual ops trigger
+  `POST /nidaan/ops/api/claims/{id}/send-to-claimshield` (sub_super_admin+, audited). Inbound shows their
+  status **as-is**, matches by our id OR their caseReferenceNumber. **Live test:** dummy (claim 47/acct 66) →
+  CS case **804198** created; simulated status push (their ref) reflected as-is. Dummy retained pending a REAL
+  ClaimShield status-push (to confirm their exact field names), then delete.
+- **Remaining:** confirm ClaimShield's real push field names → clean up dummy; **L2 CLAIMS DASHBOARD** (metrics
+  top: paid/due/disputed/claim-type/branch-advisors + filters + proper L2 management in the L2 Claims section);
+  ops "Send to ClaimShield" button in claim drawer; customer dashboard status+timeline; status-change
+  notifications; auto-send on L2-paid (flagged) after manual proven. Open flow Qs: "Waiting for Customer
+  Approval" (customer action — approve-API from them?) + "Pending Payment" (extra fee beyond ₹499?).
 
 ## 72. [SARATHI] CUSTOMER COMMS RAIL — RCS/SMS via Exotel (owner Aug 14-15; DISCUSSED, parked, not built)
 
