@@ -3432,10 +3432,11 @@ function _renderOutcome(key){
         if(isL2){
           if(c.claimshield_case_id){
             csCell=`<td style="font-size:.72rem"><span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?`<br><span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}${c.claimshield_sent_by?`<br><span style="color:var(--nd-text-faint)" title="Pushed to ClaimShield by">👤 ${esc(c.claimshield_sent_by)}</span>`:''}</td>`;
-          } else if(_l2Eligible(c)){
-            csCell=`<td><button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" title="Eligible — ${esc(_l2PayBasis(c))}" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id})">⚖️ Send to CS</button></td>`;
           } else {
-            csCell=`<td style="font-size:.7rem;color:var(--nd-text-faint)" title="A branch/staff claim can move to Level-2 only after the ₹499 L2 fee is paid">${c.origin==='branch'?'Awaiting branch ₹499 L2 fee':'Awaiting payment'}</td>`;
+            // Paid claims auto-move to ClaimShield; a DUE claim still shows the fee note
+            // PLUS a manual "Send to CS" override (whoever taps it gets their name stamped).
+            const _due=!(c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription');
+            csCell=`<td>${_due?'<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.25rem;white-space:nowrap">Awaiting branch ₹499 + GST L2 fee</div>':''}<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id})">⚖️ Send to CS</button></td>`;
           }
         }
         return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
@@ -3455,13 +3456,17 @@ function _l2PayBasis(c){
   if(c.l2_payment_status==='paid') return 'Branch/staff ₹499 L2 fee paid';
   if(c.payment_status==='subscription') return 'Subscription plan (covers legal)';
   if(c.payment_status==='paid') return '₹499 review paid (credited toward legal)';
-  return 'Paid';
+  return 'DUE — ₹499 + GST L2 fee not yet paid';
 }
 // Send-to-ClaimShield modal: shows the payment basis (why no separate payment is needed)
 // AND captures a reason/justification for the L2 move (recorded on the case timeline).
 function opsSendToClaimShield(claimId){
   const c=(_outcomeCache['l2claims']||[]).find(x=>x.claim_id===claimId);
   const basis = c?_l2PayBasis(c):'';
+  const _due = c && !(c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription');
+  const banner = _due
+    ? `<div style="font-size:.8rem;color:var(--nd-warning-text);background:var(--nd-warning-soft,rgba(251,191,36,.12));border:1px solid var(--nd-warning-line,rgba(251,191,36,.45));border-radius:8px;padding:.5rem .7rem;margin-bottom:.8rem">⚠️ Override — the ₹499 + GST L2 fee is <b>DUE</b>. Sending now is a manual override and will be recorded under <b>your name</b>.</div>`
+    : `<div style="font-size:.8rem;color:var(--nd-success-text);background:rgba(52,211,153,.12);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.8rem">✓ ${esc(basis)}. This creates a Level-2 case at ClaimShield.</div>`;
   let ov=document.getElementById('csSendOv'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='csSendOv';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;display:flex;align-items:center;justify-content:center;padding:1rem';
@@ -3472,7 +3477,7 @@ function opsSendToClaimShield(claimId){
       <button onclick="document.getElementById('csSendOv').remove()" style="background:none;border:none;color:var(--nd-text-muted);font-size:1.4rem;cursor:pointer">×</button>
     </div>
     <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:.5rem">${c?esc(c.insured_name||''):''} · ₹${c?fmt(c.disputed_amount||0):''} · ${c?esc(c.claim_type||''):''}</div>
-    <div style="font-size:.8rem;color:var(--nd-success-text);background:rgba(52,211,153,.12);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.8rem">✓ Eligible — ${esc(basis)}. This creates a Level-2 case at ClaimShield.</div>
+    ${banner}
     <label style="display:block;font-size:.8rem;color:var(--nd-text-secondary);margin-bottom:.3rem">Reason / note for moving to Level-2 <span style="color:var(--nd-text-faint)">(recorded on the case)</span></label>
     <textarea id="csSendReason" rows="3" placeholder="e.g. Rejection unjustified; documents in order; proceeding to legal." style="width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem;border-radius:8px;font-size:.88rem;font-family:inherit"></textarea>
     <div id="csSendMsg" style="font-size:.8rem;margin:.4rem 0"></div>

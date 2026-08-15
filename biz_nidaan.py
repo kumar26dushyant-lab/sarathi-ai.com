@@ -1740,6 +1740,13 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
             await record_gst(payment_id, "branch_l2", int(fee), claim_id=claim_id)
         except Exception as _ge:
             logger.warning("record_gst (branch_l2) failed: %s", _ge)
+    # Branch/staff L2 fee now paid on a reviewed-GO claim → auto-move to ClaimShield.
+    try:
+        import biz_claimshield as _cs
+        import asyncio as _aio
+        _aio.create_task(_cs.auto_send_if_eligible(claim_id))
+    except Exception:
+        pass
     return True
 
 
@@ -1966,6 +1973,14 @@ async def deliver_review(claim_id: int, outcome: str, findings: str,
             "changed_by_type, changed_by_id) VALUES (?, ?, 'review_delivered', ?, ?, ?)",
             (claim_id, old_status, f"outcome={outcome}", changed_by_type, changed_by_id))
         await conn.commit()
+    # Paid + reviewed-GO claims auto-move to ClaimShield (L2). Best-effort, non-blocking.
+    if outcome == "can_fight":
+        try:
+            import biz_claimshield as _cs
+            import asyncio as _aio
+            _aio.create_task(_cs.auto_send_if_eligible(claim_id))
+        except Exception:
+            pass
     return True
 
 

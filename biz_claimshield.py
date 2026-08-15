@@ -256,13 +256,12 @@ async def create_case(claim_id: int, reason: str = "", sent_by: str = "") -> dic
             "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not c:
         return {"ok": False, "error": "claim_not_found"}
-    # ELIGIBILITY GUARD (owner rule): only genuinely PAID, reviewed-GO cases move to L2.
-    # Paid = L2 fee paid (branch/staff) OR review paid (retail ₹499) OR subscriber ('sub').
-    # Never an unpaid lead. This is the single enforcement point for the ops button + auto-send.
-    _paid = (c["l2_payment_status"] == "paid") or (c["payment_status"] in ("paid", "subscription"))
-    if c["review_outcome"] != "can_fight" or not _paid:
+    # GUARD: only a reviewed-GO ('can_fight') claim can go to L2. Payment is NOT required
+    # here — a super-admin may MANUALLY override-send a still-due claim (their name is
+    # recorded for accountability). PAID claims are auto-sent via auto_send_if_eligible().
+    if c["review_outcome"] != "can_fight":
         return {"ok": False, "error": "not_eligible",
-                "detail": f"review_outcome={c['review_outcome']}, l2={c['l2_payment_status']}, pay={c['payment_status']}"}
+                "detail": f"review_outcome={c['review_outcome']} — only reviewed-GO claims go to L2"}
     payload = {
         "patientName": (c["insured_name"] or "").strip(),
         "patientMobile": "".join(ch for ch in (c["insured_phone"] or "") if ch.isdigit())[-10:],
@@ -292,3 +291,34 @@ async def create_case(claim_id: int, reason: str = "", sent_by: str = "") -> dic
     logger.warning("claimshield create_case rejected claim=%s status=%s body=%s",
                    claim_id, r.status_code, str(data)[:300])
     return {"ok": False, "error": "rejected", "status_code": r.status_code, "detail": str(data)[:200]}
+
+
+def _claim_is_paid(row) -> bool:
+    """Paid for L2 = branch/staff L2 fee paid, OR retail ₹499 review paid, OR subscriber."""
+    return (row["l2_payment_status"] == "paid") or (row["payment_status"] in ("paid", "subscription"))
+
+
+async def auto_send_if_eligible(claim_id: int) -> dict:
+    """Owner rule: a PAID + reviewed-GO claim moves to ClaimShield AUTOMATICALLY (no
+    manual button). Called from the payment/review state-changes. Idempotent, flag-gated
+    (ops setting 'claimshield_auto_send', default ON), and best-effort — never blocks the
+    caller. sent_by is stamped as an auto action (distinct from a person's manual push)."""
+    try:
+        flag = await _n.get_ops_setting("claimshield_auto_send", "1")
+    except Exception:
+        flag = "1"
+    if str(flag).strip().lower() not in ("1", "true", "on", "yes"):
+        return {"ok": False, "error": "auto_send_off"}
+    if not is_configured():
+        return {"ok": False, "error": "not_configured"}
+    if await already_sent(claim_id):
+        return {"ok": True, "already": True}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT review_outcome, l2_payment_status, payment_status "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not c or c["review_outcome"] != "can_fight" or not _claim_is_paid(c):
+        return {"ok": False, "error": "not_eligible_auto"}
+    return await create_case(claim_id, reason="Auto — payment confirmed",
+                             sent_by="Auto (payment confirmed)")
