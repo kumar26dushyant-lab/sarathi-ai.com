@@ -3731,6 +3731,53 @@ async def nidaan_sarathi_access(request: Request):
 
 # ── Nidaan Razorpay Webhook ────────────────────────────────────────────────────
 
+def _claimshield_webhook_secret() -> str:
+    return os.getenv("CLAIMSHIELD_WEBHOOK_SECRET", "").strip()
+
+
+class _ClaimShieldStatusReq(BaseModel):
+    # tolerate ClaimShield's exact field names (contract still being confirmed) — we
+    # accept several common aliases for the case reference + status.
+    model_config = ConfigDict(extra="allow")
+    case_ref: Optional[str] = None
+    case_id: Optional[str] = None
+    reference: Optional[str] = None
+    nidaan_case_id: Optional[str] = None
+    nidaan_ref: Optional[str] = None
+    status: Optional[str] = None
+    case_status: Optional[str] = None
+    token: Optional[str] = None
+
+
+@app.post("/nidaan/api/claimshield/status")
+@limiter.limit("120/minute")
+async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Request):
+    """Inbound webhook: ClaimShield pushes a status change for one of our L2 cases.
+    Authenticated by a shared secret (header X-ClaimShield-Token, or a 'token' field).
+    Maps their raw status → a friendly bilingual bucket and records it on the claim,
+    which then surfaces on the customer's dashboard."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import hmac as _hm
+    secret = _claimshield_webhook_secret()
+    provided = (request.headers.get("X-ClaimShield-Token", "") or (body.token or "")).strip()
+    if not secret or not provided or not _hm.compare_digest(provided, secret):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    case_ref = (body.case_ref or body.case_id or body.reference
+                or body.nidaan_case_id or body.nidaan_ref)
+    raw_status = (body.status or body.case_status or "").strip()
+    if not case_ref or not raw_status:
+        raise HTTPException(status_code=400, detail="Missing case reference or status")
+    import biz_claimshield as _cs
+    result = await _cs.record_status_update(case_ref, raw_status, source="claimshield")
+    if not result.get("ok"):
+        if result.get("error") == "claim_not_found":
+            raise HTTPException(status_code=404, detail="Case not found")
+        raise HTTPException(status_code=400, detail=result.get("error", "Could not record status"))
+    # Phase 2 will notify the customer + ops here when result["changed"] is True.
+    return {"ok": True, "bucket": result["bucket"]}
+
+
 @app.post("/nidaan/api/webhook")
 @limiter.limit("60/minute")
 async def nidaan_razorpay_webhook(request: Request):
