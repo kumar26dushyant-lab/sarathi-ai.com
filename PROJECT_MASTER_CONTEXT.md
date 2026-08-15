@@ -5883,6 +5883,17 @@ staging `deploy/staging-deploy.sh` (staging branch).
   (real actor even under impersonation) is recorded. Modal shows ⚠️ DUE-override warning vs ✓ paid.
   Auto-send only fires on NEW payment/review events — **existing paid+GO-but-unsent claims (#18,30,37,39,40,41,44)
   still show the Send button** until sent (owner to decide: bulk-send now vs leave).
+- **✅ [NIDAAN] ANNOUNCEMENT REACTIONS — WEB (Aug 15, commit 5c3fa5c, prod):** announcements told staff to
+  "react 👍" but had NO reaction UI (only broadcasts did). Added: `nidaan_notifications.announce_id` (links a
+  bell notification to its announcement) + `nidaan_announcement_reactions` (announce_id, staff_id, emoji,
+  **channel** — web/telegram/email so it's tracked across channels; one reaction per staff). `notify_staff_inapp`
+  + `_record_notification` carry announce_id; `ops_announce` passes it. `react_announcement()` (toggle/upsert) +
+  `announcement_reactions_for()`; `list_staff_notifications` attaches reactions+my_reaction to announcement rows.
+  `POST /nidaan/ops/api/announce/{id}/react`. Web UI: 👍✅🎉🙏 bar on announcement notifications in the bell AND
+  the full-read modal, live counts + highlighted choice. **Only NEW announcements (sent post-deploy) get the
+  bar** (old notifications have no announce_id link). **PHASE 2 (pending):** Telegram inline reaction buttons +
+  email trackable react-link (both write channel-aware into the same store) + an **adoption view** (who
+  acknowledged vs targeted-but-not).
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
 
