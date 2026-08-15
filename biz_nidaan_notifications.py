@@ -383,7 +383,7 @@ async def _wd_probe(slot: int) -> Optional[bool]:
 
 async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                              event_key: str = "ops.notice", email: bool = True,
-                             require_ack: bool = False, claim_id=None) -> int:
+                             require_ack: bool = False, claim_id=None, announce_id=None) -> int:
     """Dashboard bell + web push (+ optional email) to specific staff. Never WhatsApp —
     used for notices that must land regardless of messaging-channel state.
     require_ack=True (Item #3) marks it as a must-acknowledge update → surfaces in the
@@ -405,7 +405,8 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                 event_key=event_key, priority=PRIORITY_P2,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
-                status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id)
+                status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
+                announce_id=announce_id)
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
@@ -697,8 +698,9 @@ async def _record_notification(**kw) -> int:
             INSERT INTO nidaan_notifications
               (event_key, priority, claim_id, task_id, recipient_type, recipient_id,
                recipient_phone, recipient_email, channel, subject, body,
-               status, instance_slot, wa_message_id, error, sent_at, deferred_until, require_ack)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               status, instance_slot, wa_message_id, error, sent_at, deferred_until, require_ack,
+               announce_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (kw.get("event_key"), kw.get("priority", "P1"),
               kw.get("claim_id"), kw.get("task_id"),
               kw.get("recipient_type"), kw.get("recipient_id"),
@@ -707,7 +709,8 @@ async def _record_notification(**kw) -> int:
               kw.get("status", "queued"),
               kw.get("instance_slot"), kw.get("wa_message_id"),
               kw.get("error"), kw.get("sent_at"), kw.get("deferred_until"),
-              1 if kw.get("require_ack") else 0))
+              1 if kw.get("require_ack") else 0,
+              kw.get("announce_id")))
         await conn.commit()
         notif_id = cur.lastrowid
     # Web Push + Telegram mirror: only for a real staff dashboard notification.
@@ -1209,12 +1212,52 @@ async def react_broadcast(broadcast_id: int, staff_id: int, emoji: str) -> None:
         await conn.commit()
 
 
+async def react_announcement(announce_id: int, staff_id: int, emoji: str, channel: str = "web") -> None:
+    """Set/toggle a staffer's single reaction on an announcement (👍 = read & understood).
+    Channel-aware (web/telegram/email) so the same acknowledgement is tracked everywhere."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT emoji FROM nidaan_announcement_reactions WHERE announce_id=? AND staff_id=?",
+            (announce_id, staff_id))).fetchone()
+        if row and row[0] == emoji:   # tapping the same emoji toggles it off
+            await conn.execute(
+                "DELETE FROM nidaan_announcement_reactions WHERE announce_id=? AND staff_id=?",
+                (announce_id, staff_id))
+        else:
+            await conn.execute(
+                "INSERT INTO nidaan_announcement_reactions (announce_id, staff_id, emoji, channel) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(announce_id, staff_id) "
+                "DO UPDATE SET emoji=excluded.emoji, channel=excluded.channel, created_at=CURRENT_TIMESTAMP",
+                (announce_id, staff_id, emoji, channel))
+        await conn.commit()
+
+
+async def announcement_reactions_for(announce_ids: list, viewer_staff_id: int) -> dict:
+    """{announce_id: {counts:{emoji:n}, total:n, mine:emoji|None}} for the bell."""
+    ids = [a for a in (announce_ids or []) if a]
+    if not ids:
+        return {}
+    out = {}
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        ph = ",".join("?" * len(ids))
+        for r in await (await conn.execute(
+            f"SELECT announce_id, emoji, staff_id FROM nidaan_announcement_reactions "
+            f"WHERE announce_id IN ({ph})", ids)).fetchall():
+            a = out.setdefault(r["announce_id"], {"counts": {}, "total": 0, "mine": None})
+            a["counts"][r["emoji"]] = a["counts"].get(r["emoji"], 0) + 1
+            a["total"] += 1
+            if r["staff_id"] == viewer_staff_id:
+                a["mine"] = r["emoji"]
+    return out
+
+
 async def list_staff_notifications(staff_id: int, limit: int = 40):
     """Recent dashboard notifications for the bell + the unread count."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
-            "SELECT notif_id, event_key, subject, body, task_id, claim_id, read_at, created_at "
+            "SELECT notif_id, event_key, subject, body, task_id, claim_id, announce_id, read_at, created_at "
             "FROM nidaan_notifications "
             "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
             "ORDER BY notif_id DESC LIMIT ?", (staff_id, limit))
@@ -1223,6 +1266,15 @@ async def list_staff_notifications(staff_id: int, limit: int = 40):
             "SELECT COUNT(*) FROM nidaan_notifications "
             "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
             "AND read_at IS NULL", (staff_id,))).fetchone()
+    # Attach reaction summary to announcement rows so the bell can render the 👍 bar.
+    _reacts = await announcement_reactions_for(
+        [r.get("announce_id") for r in rows], staff_id)
+    for r in rows:
+        _a = r.get("announce_id")
+        if _a and _a in _reacts:
+            r["reactions"] = _reacts[_a]["counts"]
+            r["my_reaction"] = _reacts[_a]["mine"]
+            r["reaction_total"] = _reacts[_a]["total"]
     return rows, (uc[0] if uc else 0)
 
 

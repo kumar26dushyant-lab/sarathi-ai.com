@@ -6767,6 +6767,7 @@ function _renderBell(){
         <span style="font-size:.68rem;color:var(--nd-text-faint)">${n.created_at?ndUI.timeAgo(n.created_at):''}</span>
         ${isAnn?'<span style="font-size:.68rem;color:var(--nd-cyan-text);font-weight:700">Tap to read →</span>':''}
       </div>
+      ${isAnn?_annReactBar(n):''}
     </div>`;
   }).join('');
   dd.innerHTML = `
@@ -6786,6 +6787,26 @@ async function reactBroadcast(bid, emoji){
     await fetch('/nidaan/ops/api/broadcasts/'+bid+'/react', {method:'POST', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify({emoji})});
     await loadBell(); _renderBell();
   } catch(e){}
+}
+// Announcement reactions — 👍 = "read & understood" (tracked for adoption).
+async function reactAnnouncement(aid, emoji){
+  try {
+    await fetch('/nidaan/ops/api/announce/'+aid+'/react', {method:'POST', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify({emoji})});
+    await loadBell(); _renderBell();
+  } catch(e){}
+}
+function _annReactBar(n){
+  if(!n || !n.announce_id) return '';
+  var emojis=['👍','✅','🎉','🙏'], counts=n.reactions||{}, mine=n.my_reaction||'';
+  var chips=emojis.map(function(em){
+    var c=counts[em]||0, on=(mine===em);
+    return '<button onclick="event.stopPropagation();reactAnnouncement('+n.announce_id+',\''+em+'\')" '
+      +'style="background:'+(on?'rgba(34,211,238,.25)':'rgba(255,255,255,.06)')+';border:1px solid '+(on?'#22d3ee':'var(--nd-border)')
+      +';border-radius:12px;padding:.12rem .45rem;font-size:.9rem;cursor:pointer;line-height:1.2">'+em
+      +(c?'<span style="font-size:.66rem;color:var(--nd-text-secondary);margin-left:.15rem">'+c+'</span>':'')+'</button>';
+  }).join('');
+  return '<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.4rem" onclick="event.stopPropagation()">'
+    + chips + '<span style="font-size:.64rem;color:var(--nd-text-faint);align-self:center;margin-left:.2rem">react to confirm you\'ve read this</span></div>';
 }
 // Full emoji panel for broadcast reactions
 const _ALL_EMOJIS = ['👍','❤️','🎉','😂','🙏','🔥','👏','✅','💯','🚀','😍','😮','😢','😡','🤔','👀','💪','🙌','🥳','😎','🤝','💡','⭐','✨','😅','😉','🫡','🤩','🥰','🤯','👌','🫶','💥','⚡','🏆','📌','⏰','✔️','❗','🙏🏼'];
@@ -6908,6 +6929,7 @@ function _showNotifDetail(id){
      </div>
      <div style="padding:1rem 1.2rem;overflow-y:auto;flex:1">
        <div style="font-size:.9rem;color:var(--nd-text-secondary);white-space:pre-wrap;line-height:1.55;word-break:break-word">${esc(n.body||'')}</div>
+       ${n.announce_id?_annReactBar(n):''}
        <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.9rem">${n.created_at?fmtDateTime(n.created_at):''}</div>
      </div>
    </div>`;

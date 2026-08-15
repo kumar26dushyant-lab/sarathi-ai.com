@@ -8712,7 +8712,8 @@ async def ops_announce(body: _AnnounceReq, request: Request):
             (body.client_token, body.title, body.message, ",".join(roles) or "all", subject, staff["staff_id"], len(ids)))
         announce_id = cur.lastrowid
         await conn.commit()
-    n = await nnot.notify_staff_inapp(ids, subject=subject, body=body.message, event_key="ops.announcement")
+    n = await nnot.notify_staff_inapp(ids, subject=subject, body=body.message,
+                                      event_key="ops.announcement", announce_id=announce_id)
     await _ops_audit(request, "announce", "announcement", announce_id,
                      f"{body.title} → {len(ids)} staff ({','.join(roles) or 'all'})")
     return {"ok": True, "notified": n, "targeted": len(ids), "announce_id": announce_id}
@@ -8779,6 +8780,16 @@ async def ops_broadcast_react(bid: int, body: _ReactReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     await nnot.react_broadcast(bid, staff["staff_id"], body.emoji)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/announce/{announce_id}/react")
+async def ops_announce_react(announce_id: int, body: _ReactReq, request: Request):
+    """A staffer reacts to an announcement (👍 = read & understood) from the bell.
+    Recorded for adoption tracking (channel='web')."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.react_announcement(announce_id, staff["staff_id"], body.emoji, "web")
     return {"ok": True}
 
 

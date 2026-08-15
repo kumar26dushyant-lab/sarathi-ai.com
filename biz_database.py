@@ -2342,11 +2342,26 @@ async def init_db():
         for _ack_sql in (
             "ALTER TABLE nidaan_notifications ADD COLUMN require_ack INTEGER DEFAULT 0",
             "ALTER TABLE nidaan_notifications ADD COLUMN ack_at TIMESTAMP",
+            # Links an announcement bell-notification back to its announcement so staff
+            # can REACT (👍 = read & understood) right from the bell — tracked for adoption.
+            "ALTER TABLE nidaan_notifications ADD COLUMN announce_id INTEGER",
         ):
             try:
                 await conn.execute(_ack_sql)
             except Exception:
                 pass
+        # Announcement reactions (👍 etc.) — one per staff per announcement, channel-aware
+        # (web / telegram / email) so the same acknowledgement is tracked across channels.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_announcement_reactions (
+                announce_id  INTEGER NOT NULL,
+                staff_id     INTEGER NOT NULL,
+                emoji        TEXT NOT NULL,
+                channel      TEXT DEFAULT 'web',
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(announce_id, staff_id)
+            )
+        """)
         # Broadcasts (canonical feed) + emoji reactions.
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS nidaan_broadcasts (
