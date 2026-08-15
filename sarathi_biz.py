@@ -3788,7 +3788,7 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "sub_super_admin")
-    _by = (caller.get("name") or caller.get("email") or ("staff#" + str(caller.get("staff_id") or ""))).strip()
+    _by = _actor_label(caller)   # real actor, even if impersonating another staff
     reason = ""
     try:
         _b = await request.json()
@@ -4952,6 +4952,20 @@ def _require_staff(request: Request, min_role: str = "team_member") -> dict:
     return staff
 
 
+def _actor_label(staff: dict) -> str:
+    """The REAL person behind an action, for accountability. If this is a staff-
+    impersonation session, surface the real super-admin — never let the impersonated
+    identity mask who actually acted: returns 'RealName (as ImpersonatedName)'."""
+    if not staff:
+        return ""
+    name = (staff.get("name") or staff.get("email")
+            or ("staff#" + str(staff.get("staff_id") or staff.get("sub") or ""))).strip()
+    imp = staff.get("imp_by") or {}
+    if isinstance(imp, dict) and imp.get("name"):
+        return f"{imp['name']} (as {name})"
+    return name
+
+
 async def _ops_audit(request: Request, action: str, target_type: str = "",
                      target_id="", detail: str = ""):
     """Best-effort: record a superadmin ops action to the activity trail."""
@@ -4960,7 +4974,7 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
         ip = request.client.host if request.client else ""
         await nidaan.log_activity(
             action=action, actor_type="staff", actor_id=staff.get("staff_id"),
-            actor_name=staff.get("name") or staff.get("email", ""),
+            actor_name=_actor_label(staff),
             actor_role=staff.get("role", ""), target_type=target_type,
             target_id=target_id, detail=detail, ip=ip)
     except Exception:
@@ -6728,7 +6742,10 @@ async def ops_impersonate_staff(staff_id: int, request: Request):
     target = await nidaan.get_staff_by_id(staff_id)
     if not target or target.get("status") != "active":
         raise HTTPException(status_code=404, detail="Staff not found or inactive")
-    token = nidaan.create_staff_token(target["staff_id"], target["role"], target["name"])
+    token = nidaan.create_staff_token(
+        target["staff_id"], target["role"], target["name"],
+        imp_by_id=caller["staff_id"],
+        imp_by_name=(caller.get("name") or caller.get("email") or ("staff#" + str(caller["staff_id"]))))
     logger.warning("STAFF_IMPERSONATE: staff_id=%d impersonating staff_id=%d (%s role=%s)",
                    caller["staff_id"], staff_id, target["email"], target["role"])
     return {"staff_token": token, "staff_id": staff_id, "role": target["role"],

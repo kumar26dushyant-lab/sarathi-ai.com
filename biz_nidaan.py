@@ -5418,7 +5418,8 @@ def _staff_jwt_secret() -> str:
     return base + _STAFF_JWT_SUFFIX
 
 
-def create_staff_token(staff_id: int, role: str, name: str) -> str:
+def create_staff_token(staff_id: int, role: str, name: str,
+                       imp_by_id=None, imp_by_name: str = "") -> str:
     import jwt as _jwt
     payload = {
         "sub": str(staff_id),
@@ -5427,6 +5428,10 @@ def create_staff_token(staff_id: int, role: str, name: str) -> str:
         "typ": "nidaan_staff",
         "iat": datetime.utcnow(),
     }
+    # Staff-impersonation: keep the REAL super-admin on the token so their identity
+    # can never be masked by the impersonated one (accountability for every action).
+    if imp_by_id:
+        payload["imp_by"] = {"id": int(imp_by_id), "name": (imp_by_name or "")[:80]}
     return _jwt.encode(payload, _staff_jwt_secret(), algorithm="HS256")
 
 
