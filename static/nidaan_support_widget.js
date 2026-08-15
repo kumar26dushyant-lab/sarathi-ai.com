@@ -125,6 +125,9 @@
     + '.nsw-btn .nsw-btn-ico{font-size:21px;line-height:1}'
     + '.nsw-btn .nsw-btn-txt{white-space:nowrap;letter-spacing:.01em}'
     + '@media(max-width:400px){.nsw-btn{right:12px;bottom:12px;padding:10px 14px;font-size:13px;gap:6px}.nsw-btn .nsw-btn-ico{font-size:18px}}'
+    // Mobile: keep the proactive teaser narrow + lifted clear above the bottom-left
+    // "Listen" button, so the three floating elements never overlap (owner: no mess).
+    + '@media(max-width:640px){#nswTeaser{max-width:240px !important;right:12px !important;bottom:156px !important}}'
     + '.nsw-btn:active{transform:scale(.94)}'
     + '@keyframes nswBtnPulse{0%,100%{box-shadow:0 6px 20px rgba(6,182,212,.45)}50%{box-shadow:0 6px 26px rgba(6,182,212,.75)}}'
     + '@keyframes nswBtnBounce{0%,68%,100%{transform:translateY(0)}78%{transform:translateY(-7px)}86%{transform:translateY(-3px)}92%{transform:translateY(-1px)}}'
