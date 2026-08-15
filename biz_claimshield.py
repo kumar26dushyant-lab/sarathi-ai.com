@@ -236,7 +236,9 @@ async def create_case(claim_id: int) -> dict:
     """
     import os
     import httpx
-    base = os.getenv("CLAIMSHIELD_API_BASE", "https://www.claimshield.in").rstrip("/")
+    # Canonical host is non-www; www.claimshield.in 307-redirects (which would drop the
+    # POST body / risk forwarding the api-key), so default to the canonical host.
+    base = os.getenv("CLAIMSHIELD_API_BASE", "https://claimshield.in").rstrip("/")
     key = os.getenv("CLAIMSHIELD_API_KEY", "").strip()
     if not key:
         return {"ok": False, "error": "not_configured"}
