@@ -5708,9 +5708,11 @@ crosses the boundary. Host routing: `_is_nidaan_host(request)` → nidaanpartner
 - **Who:** multi-tenant SaaS for financial advisors. `tenants` (firm/owner/billing) + `agents` (per-firm
   users). Served at ROOT paths (`/`, `/admin`, `/api/...`, `/ws/agent`).
 - **Core:** Leads→Customers split (separate `customers` table + per-type portfolio + shareable revocable
-  link, [[project_sarathi_customers]]); WhatsApp agent via Evolution API (`wa_conversations`,
-  `wa_agent_devices`, `wa_send_queue`, brain-locks); Gemini AI replies; marketing studio (`biz_marketing`,
-  own `DB_PATH` env); Razorpay tenant subscriptions; trial 7d / referral 14d.
+  link, [[project_sarathi_customers]]); advisor **cockpit = Telegram bot** (`biz_bot.py`); customer
+  **megaphone** = WhatsApp via Evolution API (`biz_whatsapp_evolution.py`, `wa_instances`) — **that service
+  is currently DOWN and being retired for an official RCS/SMS rail via Exotel, see §72**; Gemini AI replies;
+  reminders/nurture/marketing (`biz_reminders`/`biz_nurture`/`biz_marketing`, own `DB_PATH` env); Razorpay
+  tenant subscriptions; trial 7d / referral 14d.
 - **Homepage:** `static/index.html` (+ index_v2/v3/v4 variants). NO GA yet (would need its own GA4 ID).
 
 ### 69.2 nidaanpartner.com — Nidaan · The Legal Consultants LLP (insurance claim disputes)
@@ -5723,7 +5725,8 @@ crosses the boundary. Host routing: `_is_nidaan_host(request)` → nidaanpartner
   (GST-exclusive via `charge_with_gst`); homepage pays UPFRONT, branch/staff pay at L2 decision
   (`branch_l2_fee_for_claim` = single source of truth). Razorpay orders + subscriptions; capture-verified.
 - **Ops:** claim workflow (assign/tag/@mention/notes + two-way customer↔ops messages + watchers);
-  L2 (legal) flow with auto-assign-on-move; Telegram ops bot @NidaanOpsBot; Business Analytics
+  L2 (legal) flow with auto-assign-on-move + **ClaimShield.in integration** (L2 legal partner, see §71);
+  Telegram ops bot @NidaanOpsBot; Business Analytics
   (channel attribution + funnel + failures, `nidaan_events`); all-channel notifications (bell/email/
   telegram/push). [[project_nidaan_erp]], [[project_nidaan_analytics]], [[project_nidaan_telegram]].
 - **Marketing/SEO (Aug 12):** GA4 `G-CJMN1DJGFM` (host-guarded to real prod only) + Search Console
@@ -5852,6 +5855,59 @@ staging `deploy/staging-deploy.sh` (staging branch).
   revenue/payout SUM untouched. Internal admin data-accuracy fix — no staff announcement needed.
 - **GOTCHA (Aug 12):** committed on `master` while intending `staging` → `git push origin staging`
   was a no-op; staging deployed stale code. Always check `git branch --show-current` before commit/push.
+
+## 71. [NIDAAN] CLAIMSHIELD.IN — L2 LEGAL INTEGRATION (owner Aug 15; Phase 1a LIVE, rest awaiting partner)
+
+**App: nidaanpartner.com only.** ClaimShield.in is the confirmed L2 legal partner ([[project_nidaan_legal_api]]).
+When a Nidaan claim is reviewed GO (`can_fight`) + L2 fee paid ("queued for legal"), it transfers to
+ClaimShield; ClaimShield works the case and pushes customer-safe status back to the customer's dashboard.
+
+- **Model = PUSH, not polling.** WE POST create-case (our case ref + name/mobile/claim amount ONLY —
+  ClaimShield declined extra fields to avoid coupling). ClaimShield stores our ref and POSTs status back.
+  **We own de-dup** (they don't dedupe): send each case at most once.
+- **Mapping is THEIRS, not ours** (owner decision Aug 15): ClaimShield keeps some internal statuses hidden
+  and sends only already customer-safe statuses. So our inbound will DISPLAY their status text **as-is**
+  (the `biz_claimshield.py` bucket map stays as an optional fallback only — TODO to switch display to as-is).
+- **BUILT + LIVE on prod (Phase 1a, commit babbb2a):** `biz_claimshield.py` (map_status,
+  `record_status_update` idempotent, `get_claimshield_state`, outbound `create_case` SCAFFOLD w/
+  `already_sent`/`mark_case_sent` idempotency rails — HTTP call NOT written yet). Additive schema on
+  `nidaan_claims` (claimshield_case_id/status_raw/bucket/status_at/sent_at) + `nidaan_claimshield_log`.
+  Inbound webhook **`POST /nidaan/api/claimshield/status`** — secret-gated (`CLAIMSHIELD_WEBHOOK_SECRET` in
+  biz.env; header `X-ClaimShield-Token` or body `token`, constant-time), tolerant of field-name aliases.
+  Verified on prod: no/wrong token→401, valid token+bogus case→404, both sites healthy after biz.env edit.
+- **Handed to ClaimShield (one-go email):** live callback URL + secret + payload shape + our case-ref format.
+  **Awaiting from them:** exact create-case endpoint (path/fields/auth header/response) + part-2 of access key.
+- **Remaining (todo):** switch inbound to show status as-is; outbound create_case HTTP call + manual "Send to
+  ClaimShield" ops button (flagged) then auto-send on L2-paid; customer dashboard status+timeline + ops view;
+  status-change notifications; live test 1–2 sample cases round-trip. Open flow Qs asked: "Waiting for Customer
+  Approval" (customer action — do they need an approve-API from us?) + "Pending Payment" (extra fee?).
+
+## 72. [SARATHI] CUSTOMER COMMS RAIL — RCS/SMS via Exotel (owner Aug 14-15; DISCUSSED, parked, not built)
+
+**App: sarathi-ai.com only.** Replacing the broken WhatsApp-Evolution customer channel with an official rail.
+
+- **Why now:** the self-hosted **Evolution/Baileys service is DOWN** — nothing on :8080, no container on the
+  server, though `EVOLUTION_API_URL` is still set → every customer WhatsApp send silently fails. Two tenant
+  `wa_instances` (14, 27) show stale health=100. Unofficial WhatsApp is unsustainable (ban risk + Meta ToS) →
+  **retire, don't revive.** (Advisors' customer reminders are currently NOT going out — adds urgency.)
+- **The core model (resolves the repeated churn):** stop making ONE channel do two jobs.
+  **Cockpit** = advisor ↔ CRM (rich, free, buttons + voice notes) → **Telegram** (`biz_bot.py`) — KEEP, don't
+  touch; UX is improvable *within* Telegram. **Megaphone** = business ↔ its customers (reminders/support) →
+  **RCS/SMS** now, official WhatsApp later if Meta clears. Running the CRM *on* SMS/RCS = wrong (text-only or
+  billed light-buttons, no voice-note workflow).
+- **Direction agreed:** **SMS-first (co-branded under Sarathi's DLT header, business name in content = quick
+  setup, ships fast, reaches any phone with no internet)**, **RCS as opt-in rich upgrade** once brand-verified
+  (real: Aspero Bonds RCS over Jio confirms India RCS is live), WhatsApp parked (Meta business is restricted).
+  **Official rails only** from now — no more gray tech. **Gemini** for AI replies (not Claude). Exotel chosen
+  deliberately (SMS+RCS now, **AI voice receptionist later** on same vendor).
+- **Integration shape (low-risk):** RCS/SMS = a NEW provider in the EXISTING send abstraction
+  (`biz_reminders.py` already "tries channel A, falls back to B" + a "onboard new providers" hook); Evolution
+  becomes a disabled provider. New `biz_exotel` module + per-tenant config + feature flag + metered (so it can
+  become a **paid Nidaan add-on later** — Sarathi is bundled with Nidaan; premium features aren't free).
+- **Phase 1 (when unparked):** outbound reminders only (RCS→SMS fallback, or SMS-first), no AI replies yet.
+  DLT (SMS) + Google RCS brand verification are the compliance gates (accept them; the co-branded model does
+  ONE verification for all businesses). Also a horizontal-SMB thesis (clinics/lenders/local services), to be
+  validated with GoLuQ + one non-financial pilot before going broad. See [[project_sarathi_whatsapp]].
 
 ---
 
