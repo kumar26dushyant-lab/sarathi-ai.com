@@ -3358,36 +3358,105 @@ function applyClaimFilters(){
              _cfVal('claimBranchFilter'), _cfVal('claimPlanFilter'), _cfVal('claimAssignFilter'));
 }
 // #7: L2 (can_fight) + Archived (no_scope) claim lists — review-delivered outcomes.
+// L2 is a full dashboard: metrics on top + filters + ClaimShield (L2 legal) management.
 let _outcomeCache = {};
+let _l2f = {pay:'', cs:'', type:''};   // L2 dashboard filters
+function _setL2f(k,v){ _l2f[k]=v; _renderOutcome('l2claims'); }
+// Eligible to send to ClaimShield = reviewed-GO (all rows here are) AND paid
+// (L2 fee paid, or review ₹499 paid, or subscriber) — mirrors the backend guard.
+function _l2Eligible(c){ return c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription'; }
+function _reloadL2(){ loadOutcomeClaims('l2claims','can_fight','⚖️ Level-2 (L2) Claims','Reviewed GO — ready for legal action · ClaimShield status'); }
+
 async function loadOutcomeClaims(key, outcome, title, sub){
   const el = document.getElementById('panel-'+key);
-  el.innerHTML = `<div class="section-hdr"><div><div class="section-title">${title}</div><div class="section-sub">${sub}</div></div></div>
-    <div class="filter-bar"><input id="oc_${key}_s" placeholder="🔍 Search name / phone / policy / claim #…" oninput="_renderOutcome('${key}')" style="flex:1;min-width:180px"></div>
+  const isL2 = key==='l2claims';
+  el.innerHTML = `<div class="section-hdr"><div><div class="section-title">${title}</div><div class="section-sub">${sub}</div></div>
+      ${isL2?`<button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_reloadL2()">🔄 Refresh</button>`:''}</div>
+    ${isL2?'<div id="oc_l2claims_metrics" style="margin:.2rem 0 .7rem"></div>':''}
+    <div class="filter-bar" style="flex-wrap:wrap;gap:.4rem">
+      <input id="oc_${key}_s" placeholder="🔍 Search name / phone / policy / claim #…" oninput="_renderOutcome('${key}')" style="flex:1;min-width:170px">
+      ${isL2?`
+      <select onchange="_setL2f('pay',this.value)" style="min-width:118px"><option value="">L2 fee: All</option><option value="paid">Paid</option><option value="due">Due</option></select>
+      <select onchange="_setL2f('cs',this.value)" style="min-width:150px"><option value="">ClaimShield: All</option><option value="sent">Sent</option><option value="notsent">Not sent</option></select>
+      <select id="oc_l2claims_type" onchange="_setL2f('type',this.value)" style="min-width:110px"><option value="">Type: All</option></select>
+      `:''}
+    </div>
     <div id="oc_${key}_wrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
   const r = await API('/claims?review_outcome='+outcome+'&limit=300');
   if(!r || !r.ok){ document.getElementById('oc_'+key+'_wrap').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
   _outcomeCache[key] = (await r.json()).claims || [];
+  if(isL2){
+    const types=[...new Set((_outcomeCache[key]||[]).map(c=>c.claim_type).filter(Boolean))].sort();
+    const sel=document.getElementById('oc_l2claims_type');
+    if(sel) sel.innerHTML='<option value="">Type: All</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  }
   _renderOutcome(key);
 }
 function _renderOutcome(key){
   const wrap = document.getElementById('oc_'+key+'_wrap'); if(!wrap) return;
-  const q = (((document.getElementById('oc_'+key+'_s')||{}).value)||'').toLowerCase();
-  let rows = _outcomeCache[key] || [];
-  if(q) rows = rows.filter(c => ((c.insured_name||'')+' '+(c.insured_phone||'')+' '+(c.policy_no||'')+' '+(c.insurer_name||'')+' '+c.claim_id).toLowerCase().includes(q));
-  if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims here yet</p></div>'; return; }
   const isL2 = key==='l2claims';
+  const all = _outcomeCache[key] || [];
+  // Metrics matrix (L2 only) — from the FULL set, independent of the active filter.
+  if(isL2){
+    const m = document.getElementById('oc_l2claims_metrics');
+    if(m){
+      const paid = all.filter(c=>c.l2_payment_status==='paid').length;
+      const sent = all.filter(c=>c.claimshield_case_id).length;
+      const disputed = all.reduce((s,c)=>s+(c.disputed_amount||0),0);
+      const card=(label,val,col)=>`<div style="flex:1 1 118px;min-width:108px;background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div></div>`;
+      m.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        ${card('Total L2', all.length)}
+        ${card('L2 fee paid', paid, 'var(--nd-success-text)')}
+        ${card('L2 fee due', all.length-paid, 'var(--nd-warning-text)')}
+        ${card('Disputed', '₹'+fmt(disputed))}
+        ${card('Sent to ClaimShield', sent, 'var(--nd-cyan-text)')}
+        ${card('Not sent', all.length-sent, 'var(--nd-text-secondary)')}
+      </div>`;
+    }
+  }
+  const q = (((document.getElementById('oc_'+key+'_s')||{}).value)||'').toLowerCase();
+  let rows = all;
+  if(q) rows = rows.filter(c => ((c.insured_name||'')+' '+(c.insured_phone||'')+' '+(c.policy_no||'')+' '+(c.insurer_name||'')+' '+c.claim_id).toLowerCase().includes(q));
+  if(isL2){
+    if(_l2f.pay==='paid') rows=rows.filter(c=>c.l2_payment_status==='paid');
+    else if(_l2f.pay==='due') rows=rows.filter(c=>c.l2_payment_status!=='paid');
+    if(_l2f.cs==='sent') rows=rows.filter(c=>c.claimshield_case_id);
+    else if(_l2f.cs==='notsent') rows=rows.filter(c=>!c.claimshield_case_id);
+    if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
+  }
+  if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims match.</p></div>'; return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th><th>Stage</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
-    + rows.map(c=>`<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
+    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
+    + rows.map(c=>{
+        let csCell='';
+        if(isL2){
+          if(c.claimshield_case_id){
+            csCell=`<td style="font-size:.72rem"><span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?`<br><span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}</td>`;
+          } else if(_l2Eligible(c)){
+            csCell=`<td><button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id},this)">⚖️ Send to CS</button></td>`;
+          } else {
+            csCell=`<td style="font-size:.7rem;color:var(--nd-text-faint)">Awaiting L2 payment</td>`;
+          }
+        }
+        return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
         <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
         <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
         + (isL2?`<td>${c.l2_payment_status==='paid'?'<span style="color:var(--nd-success-text);font-weight:700">Paid ✓</span>':'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
-             + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`:'')
+             + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
+             + csCell:'')
         + `<td>${c.origin==='branch'?('🏢 Branch '+esc(c.branch_code||'')):esc(c.owner_name||'—')}</td>
         <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
-      </tr>`).join('') + '</tbody></table></div>';
+      </tr>`;}).join('') + '</tbody></table></div>';
+}
+async function opsSendToClaimShield(claimId, btn){
+  if(!confirm('Send claim #'+fmtClaimNum(claimId)+' to ClaimShield (Level-2 legal)? This creates a case on their side.')) return;
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  const r = await API('/claims/'+claimId+'/send-to-claimshield', {method:'POST'});
+  const d = await r.json().catch(()=>({}));
+  if(r && r.ok){ try{ndUI.toast('Sent to ClaimShield ✓'+(d.case_id?(' (case '+d.case_id+')'):''),'success');}catch(e){} _reloadL2(); }
+  else { try{ndUI.toast(_extractErr(d,'Could not send to ClaimShield'),'error');}catch(e){} if(btn){btn.disabled=false;btn.textContent='⚖️ Send to CS';} }
 }
 
 async function loadClaims(statusFilter='', search='', branch='', plan='', assigned='') {
