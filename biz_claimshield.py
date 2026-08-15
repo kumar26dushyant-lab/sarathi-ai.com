@@ -245,10 +245,18 @@ async def create_case(claim_id: int) -> dict:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         c = await (await conn.execute(
-            "SELECT claim_id, insured_name, insured_phone, disputed_amount "
+            "SELECT claim_id, insured_name, insured_phone, disputed_amount, "
+            "       review_outcome, l2_payment_status, payment_status "
             "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not c:
         return {"ok": False, "error": "claim_not_found"}
+    # ELIGIBILITY GUARD (owner rule): only genuinely PAID, reviewed-GO cases move to L2.
+    # Paid = L2 fee paid (branch/staff) OR review paid (retail ₹499) OR subscriber ('sub').
+    # Never an unpaid lead. This is the single enforcement point for the ops button + auto-send.
+    _paid = (c["l2_payment_status"] == "paid") or (c["payment_status"] in ("paid", "subscription"))
+    if c["review_outcome"] != "can_fight" or not _paid:
+        return {"ok": False, "error": "not_eligible",
+                "detail": f"review_outcome={c['review_outcome']}, l2={c['l2_payment_status']}, pay={c['payment_status']}"}
     payload = {
         "patientName": (c["insured_name"] or "").strip(),
         "patientMobile": "".join(ch for ch in (c["insured_phone"] or "") if ch.isdigit())[-10:],

@@ -3793,6 +3793,8 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     if not result.get("ok"):
         _emap = {"not_configured": "ClaimShield API key not set on the server",
                  "claim_not_found": "Claim not found",
+                 "not_eligible": "Only a reviewed-GO (can-fight) claim that is PAID "
+                                 "(₹499 review / subscription / L2 fee) can go to ClaimShield",
                  "network": "Could not reach ClaimShield — please try again",
                  "rejected": "ClaimShield rejected the case"}
         raise HTTPException(status_code=400,
