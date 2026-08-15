@@ -54,6 +54,7 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .nav-links{display:flex;align-items:center;gap:1.5rem}
 .nav-links a{color:rgba(255,255,255,.85);font-size:.88rem;font-weight:500;transition:color .2s}
 .nav-links a:hover{color:var(--cyan-light)}
+.nav-burger{display:none;background:none;border:none;color:#fff;font-size:1.6rem;line-height:1;cursor:pointer;padding:.2rem .55rem;border-radius:8px}
 .lang-toggle{display:flex;gap:.25rem}
 .lang-btn{padding:.25rem .55rem;border-radius:6px;font-size:.78rem;font-weight:600;border:1.5px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
 .lang-btn.active{background:var(--cyan);border-color:var(--cyan);color:#fff}
@@ -73,12 +74,17 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
   .nav-brand{padding:.1rem 0;font-size:.95rem}
   .nav-brand img{height:36px;border-radius:6px}
   .nav-brand .brand-sub{display:none}
-  /* Wrap all nav options onto multiple rows so everything is visible without horizontal scroll (mobile) */
-  .nav-links{width:100%;flex-wrap:wrap;gap:.3rem .5rem;justify-content:center;padding:.4rem 0 .35rem}
-  .nav-links a{font-size:.76rem!important;white-space:nowrap;padding:.26rem .55rem}
-  .nav-cta{padding:.3rem .75rem!important;font-size:.77rem!important}
-  .nav-crm{padding:.28rem .65rem;font-size:.77rem}
-  .lang-btn{padding:.22rem .45rem;font-size:.74rem}
+  .nav-burger{display:inline-flex}
+  /* Tap ☰ to reveal the menu — top bar stays a single clean row, no multi-row clutter. */
+  .nav-inner{flex-direction:row;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:space-between}
+  .nav-links{display:none;flex-basis:100%;width:100%;flex-direction:column;align-items:stretch;gap:.1rem;padding:.35rem 0 .2rem}
+  .nav-inner.nav-open .nav-links{display:flex}
+  .nav-links a{font-size:.9rem!important;white-space:nowrap;padding:.6rem .55rem;border-bottom:1px solid rgba(255,255,255,.08)}
+  .nav-switch,.nav-crm,.nav-cta{width:100%;justify-content:center;text-align:center;margin:.15rem 0}
+  .nav-cta{padding:.55rem .75rem!important;font-size:.85rem!important}
+  .nav-crm{padding:.5rem .65rem!important;font-size:.85rem}
+  .lang-toggle{justify-content:center;padding:.25rem 0}
+  .lang-btn{padding:.3rem .7rem;font-size:.82rem}
 }
 
 /* HERO */
@@ -487,6 +493,8 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
     try{ if(window.nwChoose) nwChoose(kind); }catch(e){}
   }
   function egReopen(){ var g=document.getElementById('entryGate'); if(g) g.classList.remove('hide'); window.scrollTo(0,0); }
+  function navToggle(){ var n=document.querySelector('.nav-inner'); if(!n) return; n.classList.toggle('nav-open'); var b=document.querySelector('.nav-burger'); if(b) b.setAttribute('aria-expanded', n.classList.contains('nav-open')?'true':'false'); }
+  window.navToggle=navToggle;
   (function(){
     var saved=null; try{ saved=localStorage.getItem('nidaanAudience'); }catch(e){}
     if(saved==='advisor'||saved==='policyholder'){
@@ -674,11 +682,9 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
     document.removeEventListener('keydown',armNwAutoStart);
     document.removeEventListener('touchstart',armNwAutoStart);
   }
-  setTimeout(function(){ if(!nwAutoStarted){ try{ nwAutoStart(); }catch(e){} } },1200);
-  document.addEventListener('click',armNwAutoStart,{once:false});
-  document.addEventListener('scroll',armNwAutoStart,{once:false});
-  document.addEventListener('keydown',armNwAutoStart,{once:false});
-  document.addEventListener('touchstart',armNwAutoStart,{once:false});
+  // Walkthrough is TAP-ONLY now (open via the 🎧 Listen button) — no auto-open on a
+  // timer or first scroll/tap, so the visitor is never greeted by an uninvited popup.
+  void armNwAutoStart;   // kept for the Listen button path; intentionally not auto-armed
 })();
 </script>
 
@@ -692,7 +698,8 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
         <span class="brand-sub">The Legal Consultants LLP</span>
       </div>
     </a>
-    <div class="nav-links">
+    <button class="nav-burger" onclick="navToggle()" aria-label="Menu" aria-expanded="false">☰</button>
+    <div class="nav-links" onclick="if(event.target.closest('a')){var n=this.closest('.nav-inner');if(n)n.classList.remove('nav-open')}">
       <a href="/" class="en">🏠 Home</a>
       <a href="/" class="hi" style="display:none">🏠 होम</a>
       <a href="#how-it-works" class="en only-adv">How It Works</a>
@@ -1578,7 +1585,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
   </div>
   <div style="display:flex;gap:.4rem;flex-shrink:0">
     <button onclick="triggerInstall()" style="background:#fff;color:#0891b2;border:none;padding:.4rem .85rem;border-radius:7px;font-weight:700;font-size:.8rem;cursor:pointer">Install</button>
-    <button onclick="document.getElementById('pwaInstallBanner').style.display='none'" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:.4rem .6rem;border-radius:7px;font-size:.8rem;cursor:pointer">✕</button>
+    <button onclick="document.getElementById('pwaInstallBanner').style.display='none';try{localStorage.setItem('pwa_install_dismissed','1')}catch(e){}" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:.4rem .6rem;border-radius:7px;font-size:.8rem;cursor:pointer">✕</button>
   </div>
 </div>
 
@@ -1718,9 +1725,20 @@ window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   _deferredInstall = e;
   if (!_isMobileDevice) return; // never show on desktop/laptop
-  var banner = document.getElementById('pwaInstallBanner');
-  if (banner) banner.style.display = 'flex';
+  // Don't stack a banner on first impression. Wait, then show ONCE only when no
+  // gate/walkthrough is open and the visitor hasn't dismissed it before. (not messy)
+  setTimeout(_maybeShowInstallBanner, 30000);
 });
+function _maybeShowInstallBanner(){
+  try{ if(localStorage.getItem('pwa_install_dismissed')) return; }catch(e){}
+  if(!_deferredInstall) return;
+  var gate=document.getElementById('entryGate');
+  if(gate && !gate.classList.contains('hide')) return;          // audience gate still open
+  var p=document.getElementById('nwPanel');
+  if(p && p.style.display && p.style.display!=='none') return;   // walkthrough open
+  var banner=document.getElementById('pwaInstallBanner');
+  if(banner) banner.style.display='flex';
+}
 window.addEventListener('appinstalled', function() {
   var banner = document.getElementById('pwaInstallBanner');
   if (banner) banner.style.display = 'none';
