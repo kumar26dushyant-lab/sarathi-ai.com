@@ -45,9 +45,17 @@ _TIMEOUT = 15.0
 # Public base URL for webhook registration (Sarathi host).
 SARATHI_BASE_URL = os.getenv("SARATHI_BASE_URL", "https://sarathi-ai.com").rstrip("/")
 
-# Master feature flag — off = every entry point below no-ops safely.
-def is_enabled() -> bool:
-    return os.getenv("SARATHI_TGCRM_ENABLED", "0") not in ("0", "", "false", "False")
+# Feature gate. Global flag SARATHI_TGCRM_ENABLED turns it on for everyone;
+# SARATHI_TGCRM_BETA_TENANTS (comma-separated tenant_ids) turns it on for just
+# those firms — so we can beta-test on prod without exposing a half-built feature.
+def is_enabled(tenant_id: Optional[int] = None) -> bool:
+    if os.getenv("SARATHI_TGCRM_ENABLED", "0") not in ("0", "", "false", "False"):
+        return True
+    if tenant_id is not None:
+        beta = os.getenv("SARATHI_TGCRM_BETA_TENANTS", "")
+        if str(tenant_id) in {x.strip() for x in beta.split(",") if x.strip()}:
+            return True
+    return False
 
 
 # ── Token encryption at rest ─────────────────────────────────────────────────
@@ -283,8 +291,8 @@ async def get_bot_status(tenant_id: int) -> dict:
                 (tenant_id,))).fetchone()
             members = m["c"] if m else 0
     if not row or row["status"] != "active":
-        return {"connected": False, "enabled": is_enabled()}
-    return {"connected": True, "enabled": is_enabled(),
+        return {"connected": False, "enabled": is_enabled(tenant_id)}
+    return {"connected": True, "enabled": is_enabled(tenant_id),
             "bot_username": row["bot_username"],
             "status": row["status"], "linked_members": members,
             "connected_at": row["created_at"]}
@@ -321,11 +329,11 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
     """Entry point for POST /api/tg/hook/{bot_id}. Verifies the per-bot secret,
     resolves firm + actor, and dispatches. P0: secure pipeline + minimal replies.
     Always returns {'ok': True} so Telegram doesn't retry-storm."""
-    if not is_enabled():
-        return {"ok": True}
     bot = await _bot_by_id(bot_id)
     if not bot:
         return {"ok": True}  # unknown/removed bot — silently ignore
+    if not is_enabled(int(bot["tenant_id"])):
+        return {"ok": True}  # feature off for this firm
     # Anti-spoof: constant-time compare of the Telegram secret header.
     if not secret_header or not secrets.compare_digest(secret_header, bot["webhook_secret"] or ""):
         logger.warning("tgcrm webhook secret mismatch for bot %s", bot_id)

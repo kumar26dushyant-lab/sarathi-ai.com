@@ -21361,7 +21361,7 @@ class TgConnectReq(BaseModel):
 async def api_tg_connect(req: TgConnectReq, request: Request,
                          tenant: dict = Depends(auth.require_owner)):
     """Connect the firm's own Telegram bot (owner/admin only)."""
-    if not tgcrm.is_enabled():
+    if not tgcrm.is_enabled(tenant["tenant_id"]):
         return JSONResponse({"detail": "Telegram CRM is not enabled yet."}, status_code=403)
     res = await tgcrm.connect_bot(tenant["tenant_id"], req.token, tenant.get("agent_id"))
     if not res.get("ok"):
