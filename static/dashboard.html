@@ -1911,7 +1911,9 @@ function exitImpersonation() {
                 <div style="font-size:.85em;color:var(--muted,#6b7280);margin-top:4px"><span data-i18n="tg_members_lbl">Linked team members</span>: <span id="tgMembers">0</span></div>
               </div>
               <button class="btn btn-primary" style="margin-right:8px" onclick="tgOwnerLink()" data-i18n="tg_activate_btn">🔗 Open my bot</button>
+              <button class="btn" style="margin-right:8px;border:1px solid var(--border,#e5e7eb)" onclick="tgInviteMember()" data-i18n="tg_invite_btn">➕ Invite team member</button>
               <button class="btn" style="border:1px solid #c0392b;color:#c0392b;background:transparent" onclick="tgDisconnect()" data-i18n="tg_disconnect_btn">Disconnect</button>
+              <div id="tgInviteLink" style="margin-top:12px;font-size:.85em;word-break:break-all"></div>
             </div>
 
             <details style="margin-top:18px">
@@ -3216,6 +3218,8 @@ const _DT = {
   tg_members_lbl:{en:'Linked team members',hi:'जुड़े हुए टीम सदस्य'},
   tg_disconnect_btn:{en:'Disconnect',hi:'डिस्कनेक्ट करें'},
   tg_activate_btn:{en:'🔗 Open my bot',hi:'🔗 मेरा बॉट खोलें'},
+  tg_invite_btn:{en:'➕ Invite team member',hi:'➕ टीम सदस्य जोड़ें'},
+  tg_invite_share:{en:'Share this one-time link with your team member (works for one firm only, expires in 3 days):',hi:'यह एक-बार लिंक अपने टीम सदस्य को भेजें (केवल एक फर्म के लिए, 3 दिन में समाप्त):'},
   tg_disconnect_confirm:{en:'Disconnect the bot? Your team will lose Telegram access until you reconnect.',hi:'बॉट डिस्कनेक्ट करें? दोबारा कनेक्ट करने तक आपकी टीम की टेलीग्राम पहुँच बंद हो जाएगी।'},
   tg_need_token:{en:'Please paste your bot token first.',hi:'कृपया पहले अपना बॉट टोकन डालें।'},
   tg_guide_title:{en:'How to create your bot (10 minutes)',hi:'अपना बॉट कैसे बनाएँ (10 मिनट)'},
@@ -4221,6 +4225,13 @@ async function tgDisconnect(){
 async function tgOwnerLink(){
   try{ const r=await fetch('/api/tg/owner-link',{method:'POST',headers:hdrs()}); const d=await r.json();
     if(r.ok && d.link) window.open(d.link,'_blank'); else alert((d&&d.detail)||'Could not create link'); }catch(e){}
+}
+async function tgInviteMember(){
+  const box=document.getElementById('tgInviteLink'); if(box) box.textContent='…';
+  try{ const r=await fetch('/api/tg/invite',{method:'POST',headers:hdrs()}); const d=await r.json();
+    if(r.ok && d.link){ box.innerHTML=_dt('tg_invite_share')+'<br><a href="'+d.link+'" target="_blank" style="color:#0d9488;font-weight:700">'+d.link+'</a>'; }
+    else { box.textContent=(d&&d.detail)||'Could not create invite'; }
+  }catch(e){ if(box) box.textContent='Network error'; }
 }
 
 // ═══════════ OVERVIEW ═══════════

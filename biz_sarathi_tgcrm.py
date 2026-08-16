@@ -349,8 +349,9 @@ async def create_invite(tenant_id: int, role: str = "member",
     return code
 
 
-async def owner_deeplink(tenant_id: int, created_by: Optional[int] = None) -> dict:
-    """One-time deep link the owner taps to bind their own Telegram to the firm."""
+async def invite_link(tenant_id: int, role: str = "member",
+                      created_by: Optional[int] = None, hours: int = 72) -> dict:
+    """Build a one-time t.me deep link that binds the tapper to the firm with `role`."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         r = await (await conn.execute(
@@ -358,8 +359,27 @@ async def owner_deeplink(tenant_id: int, created_by: Optional[int] = None) -> di
             (tenant_id,))).fetchone()
     if not r or not r["bot_username"]:
         return {"ok": False}
-    code = await create_invite(tenant_id, "owner", created_by, hours=168)
-    return {"ok": True, "code": code, "link": f"https://t.me/{r['bot_username']}?start={code}"}
+    code = await create_invite(tenant_id, role, created_by, hours=hours)
+    return {"ok": True, "code": code, "role": role,
+            "link": f"https://t.me/{r['bot_username']}?start={code}"}
+
+
+async def owner_deeplink(tenant_id: int, created_by: Optional[int] = None) -> dict:
+    """One-time deep link the owner taps to bind their own Telegram to the firm."""
+    return await invite_link(tenant_id, "owner", created_by, hours=168)
+
+
+async def revoke_agent_links(agent_id: int) -> int:
+    """Sever a member's Telegram binding (offboarding). Frees their single-firm slot
+    so they can later join another firm. Returns rows revoked."""
+    if not agent_id:
+        return 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE tg_links SET status='revoked', revoked_at=? "
+            "WHERE agent_id=? AND status='active'", (_now(), agent_id))
+        await conn.commit()
+        return cur.rowcount or 0
 
 
 async def _redeem_invite(code: str, tg_uid: int, tg_name: str, bot_tenant: int) -> dict:

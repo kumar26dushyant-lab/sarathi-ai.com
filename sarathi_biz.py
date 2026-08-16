@@ -21383,6 +21383,19 @@ async def api_tg_owner_link(request: Request,
     return {"link": dl.get("link", "")}
 
 
+@app.post("/api/tg/invite")
+@limiter.limit("15/minute")
+async def api_tg_invite(request: Request,
+                        tenant: dict = Depends(auth.require_owner)):
+    """Generate a one-time member invite deep link (assigned-leads-only role)."""
+    if not tgcrm.is_enabled(tenant["tenant_id"]):
+        return JSONResponse({"detail": "Telegram CRM is not enabled yet."}, status_code=403)
+    dl = await tgcrm.invite_link(tenant["tenant_id"], "member", tenant.get("agent_id"))
+    if not dl.get("ok"):
+        return JSONResponse({"detail": "Connect a bot first."}, status_code=400)
+    return {"link": dl.get("link", ""), "role": "member"}
+
+
 @app.post("/api/tg/disconnect")
 @limiter.limit("5/minute")
 async def api_tg_disconnect(request: Request,
@@ -21608,6 +21621,13 @@ async def api_deactivate_agent(agent_id: int, request: Request,
     if agent.get("role") == "owner":
         return JSONResponse({"error": "Cannot deactivate the firm owner"}, status_code=400)
     await db.deactivate_agent(agent_id, tenant_id=tenant["tenant_id"])
+    # Instant offboarding across all surfaces: sever Telegram binding + drop the
+    # auth cache so web/mobile sessions die within seconds (not at token expiry).
+    try:
+        await tgcrm.revoke_agent_links(agent_id)
+    except Exception as _re:
+        logger.warning("tgcrm revoke on deactivate failed: %s", _re)
+    auth.invalidate_agent_cache(agent_id)
     await db.log_audit("agent_deactivated", f"Agent {agent_id} ({agent.get('name')}) deactivated",
                        tenant_id=tenant["tenant_id"], ip_address=request.client.host)
     return {"success": True, "message": f"Agent {agent.get('name')} deactivated"}

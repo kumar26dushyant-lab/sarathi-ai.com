@@ -196,6 +196,51 @@ def _extract_token(request: Request, credentials=None) -> Optional[str]:
     return token
 
 
+# ── Instant deactivation guard ───────────────────────────────────────────────
+# JWTs are self-contained (no per-request DB hit), so a deactivated agent's OPEN
+# session would otherwise survive to token expiry (~24h). This cached (~30s)
+# is_active re-check cuts them within seconds across web + mobile (and the
+# Telegram bot re-checks the same column), so one "deactivate" is truly instant.
+_agent_active_cache: Dict[int, tuple] = {}
+_AGENT_ACTIVE_TTL = 30  # seconds
+
+
+def invalidate_agent_cache(agent_id) -> None:
+    """Drop the cache entry so a deactivation takes effect on the very next request."""
+    try:
+        _agent_active_cache.pop(int(agent_id), None)
+    except (TypeError, ValueError):
+        pass
+
+
+async def _agent_still_active(agent_id) -> bool:
+    """True if the agent is still is_active=1. Cached ~30s. Fail-open on DB error
+    (a transient DB blip must not lock everyone out)."""
+    if not agent_id:
+        return True
+    try:
+        aid = int(agent_id)
+    except (TypeError, ValueError):
+        return True
+    now = time.time()
+    cached = _agent_active_cache.get(aid)
+    if cached and cached[1] > now:
+        return cached[0]
+    active = True
+    try:
+        import biz_database as _db
+        import aiosqlite as _asql
+        async with _asql.connect(_db.DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT is_active FROM agents WHERE agent_id=?", (aid,))).fetchone()
+            if row is not None:
+                active = bool(row[0])
+    except Exception:
+        active = True  # fail-open
+    _agent_active_cache[aid] = (active, now + _AGENT_ACTIVE_TTL)
+    return active
+
+
 async def get_current_tenant(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
@@ -212,6 +257,10 @@ async def get_current_tenant(
         raise HTTPException(status_code=401, detail="Authentication required. Please login.")
 
     payload = verify_access_token(token)
+    _aid = payload.get("aid")
+    if _aid and not await _agent_still_active(_aid):
+        raise HTTPException(status_code=401,
+                            detail="Your access has changed. Please sign in again.")
     return {
         "tenant_id": int(payload["sub"]),
         "phone": payload.get("phone", ""),
@@ -235,6 +284,9 @@ async def get_optional_tenant(
         return None
     try:
         payload = verify_access_token(token)
+        _aid = payload.get("aid")
+        if _aid and not await _agent_still_active(_aid):
+            return None
         return {
             "tenant_id": int(payload["sub"]),
             "phone": payload.get("phone", ""),
