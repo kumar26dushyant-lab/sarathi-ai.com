@@ -698,6 +698,7 @@ function exitImpersonation() {
     <div class="nav-item" data-tab="quotes" onclick="switchTab('quotes')" data-i18n="nav_quotes">💰 Quote Compare</div>
     <div class="nav-item" data-tab="lapse" onclick="switchTab('lapse')" data-i18n="nav_lapse">🚨 Lapse Risk</div>
     <div class="nav-item" data-tab="whatsapp" onclick="switchTab('whatsapp')" data-i18n="nav_whatsapp">💬 WhatsApp</div>
+    <div class="nav-item" id="nav-tgcrm" data-tab="tgcrm" onclick="switchTab('tgcrm')" data-i18n="nav_tgcrm" style="display:none">🤖 Telegram CRM</div>
     <div class="nav-item hidden" data-tab="agents" id="nav-agents" onclick="switchTab('agents')" data-i18n="nav_team">👥 Team</div>
     <div class="nav-divider"></div>
     <div class="nav-item" data-tab="subscription" onclick="switchTab('subscription')" data-i18n="nav_subscription">💎 Subscription</div>
@@ -1890,6 +1891,41 @@ function exitImpersonation() {
         </div>
 
         <!-- ═══ MARKETING STUDIO TAB ═══ -->
+        <div class="tab-panel" id="tab-tgcrm">
+          <div class="card" style="max-width:640px">
+            <h2 style="margin:0 0 4px;font-size:1.4em" data-i18n="tg_h">🤖 Run your CRM from Telegram</h2>
+            <div style="color:var(--muted,#6b7280);font-size:.9em;margin-bottom:16px" data-i18n="tg_sub">Connect your own bot — you and your team manage leads, reminders and updates by voice note.</div>
+
+            <div id="tgStatus" style="font-size:.9em;color:var(--muted,#6b7280);margin-bottom:12px" data-i18n="tg_status_checking">Checking…</div>
+
+            <div id="tgConnectForm" style="display:none">
+              <label style="font-weight:600;display:block;margin-bottom:6px" data-i18n="tg_token_label">Paste your BotFather token</label>
+              <input id="tgToken" type="text" autocomplete="off" placeholder="123456789:AA..." style="width:100%;padding:11px;border:1px solid var(--border,#e5e7eb);border-radius:8px;margin-bottom:10px;font-family:monospace;box-sizing:border-box">
+              <button id="tgConnectBtn" class="btn btn-primary" onclick="tgConnect()" data-i18n="tg_connect_btn">Connect bot</button>
+              <div id="tgMsg" style="margin-top:10px;font-size:.88em"></div>
+            </div>
+
+            <div id="tgConnected" style="display:none">
+              <div style="padding:12px;background:var(--bg,#f9fafb);border-radius:10px;border-left:3px solid #0d9488;margin-bottom:12px">
+                <div style="font-weight:700"><span data-i18n="tg_connected_lbl">Connected</span>: <span id="tgBotName" style="font-family:monospace"></span></div>
+                <div style="font-size:.85em;color:var(--muted,#6b7280);margin-top:4px"><span data-i18n="tg_members_lbl">Linked team members</span>: <span id="tgMembers">0</span></div>
+              </div>
+              <button class="btn" style="border:1px solid #c0392b;color:#c0392b;background:transparent" onclick="tgDisconnect()" data-i18n="tg_disconnect_btn">Disconnect</button>
+            </div>
+
+            <details style="margin-top:18px">
+              <summary style="cursor:pointer;font-weight:600" data-i18n="tg_guide_title">How to create your bot (10 minutes)</summary>
+              <ol style="margin:12px 0 0;padding-left:20px;line-height:1.9;font-size:.9em">
+                <li data-i18n="tg_g1">Open @BotFather in Telegram.</li>
+                <li data-i18n="tg_g2">Send /newbot and follow the prompts to name your bot.</li>
+                <li data-i18n="tg_g3">Copy the token BotFather gives you.</li>
+                <li data-i18n="tg_g4">Paste it above and tap Connect.</li>
+                <li data-i18n="tg_g5">Done — invite your team and start using voice notes.</li>
+              </ol>
+            </details>
+          </div>
+        </div>
+
         <div class="tab-panel" id="tab-marketing">
           <div class="card uc-banner">
             <div class="uc-icon">🚧</div>
@@ -3166,6 +3202,26 @@ const _DT = {
   uc_title:{en:'🚧 Coming Soon',hi:'🚧 जल्द आ रहा है'},
   uc_wa_msg:{en:"WhatsApp isn't available yet. It will open here once approved. Until then, please use your other channels.",hi:'वाट्सऐप अभी उपलब्ध नहीं है। मंज़ूरी मिलते ही यह यहीं खुल जाएगा। तब तक कृपया अपने अन्य माध्यम इस्तेमाल करें।'},
   uc_mkt_msg:{en:'Marketing Studio is not fully ready yet. We are polishing it and it will open here soon.',hi:'मार्केटिंग स्टूडियो अभी पूरी तरह तैयार नहीं है। हम इसे बेहतर बना रहे हैं और यह जल्द ही यहीं खुल जाएगा।'},
+  // ── Telegram Voice CRM ──
+  nav_tgcrm:{en:'🤖 Telegram CRM',hi:'🤖 टेलीग्राम CRM'},
+  tt_tgcrm:{en:'Telegram CRM',hi:'टेलीग्राम CRM'},
+  tg_h:{en:'🤖 Run your CRM from Telegram',hi:'🤖 टेलीग्राम से अपना CRM चलाएँ'},
+  tg_sub:{en:'Connect your own bot — you and your team manage leads, reminders and updates by voice note.',hi:'अपना बॉट जोड़ें — आप और आपकी टीम वॉइस नोट से लीड, रिमाइंडर और अपडेट संभालें।'},
+  tg_status_checking:{en:'Checking…',hi:'जाँच रहे हैं…'},
+  tg_token_label:{en:'Paste your BotFather token',hi:'अपना BotFather टोकन यहाँ डालें'},
+  tg_connect_btn:{en:'Connect bot',hi:'बॉट कनेक्ट करें'},
+  tg_connecting:{en:'Connecting…',hi:'कनेक्ट हो रहा है…'},
+  tg_connected_lbl:{en:'Connected',hi:'कनेक्ट हो गया'},
+  tg_members_lbl:{en:'Linked team members',hi:'जुड़े हुए टीम सदस्य'},
+  tg_disconnect_btn:{en:'Disconnect',hi:'डिस्कनेक्ट करें'},
+  tg_disconnect_confirm:{en:'Disconnect the bot? Your team will lose Telegram access until you reconnect.',hi:'बॉट डिस्कनेक्ट करें? दोबारा कनेक्ट करने तक आपकी टीम की टेलीग्राम पहुँच बंद हो जाएगी।'},
+  tg_need_token:{en:'Please paste your bot token first.',hi:'कृपया पहले अपना बॉट टोकन डालें।'},
+  tg_guide_title:{en:'How to create your bot (10 minutes)',hi:'अपना बॉट कैसे बनाएँ (10 मिनट)'},
+  tg_g1:{en:'Open @BotFather in Telegram.',hi:'टेलीग्राम में @BotFather खोलें।'},
+  tg_g2:{en:'Send /newbot and follow the prompts to name your bot.',hi:'/newbot भेजें और बॉट का नाम देने के लिए निर्देश फॉलो करें।'},
+  tg_g3:{en:'Copy the token BotFather gives you.',hi:'BotFather से मिला टोकन कॉपी करें।'},
+  tg_g4:{en:'Paste it above and tap Connect.',hi:'ऊपर पेस्ट करें और Connect दबाएँ।'},
+  tg_g5:{en:'Done — invite your team and start using voice notes.',hi:'हो गया — टीम को इनवाइट करें और वॉइस नोट से शुरू करें।'},
   wa_title:{en:'💬 WhatsApp Automation',hi:'💬 वाट्सऐप ऑटोमेशन'},
   wa_badge_safe:{en:'SAFE • COMPLIANT',hi:'सुरक्षित • अनुपालन'},
   wa_intro:{en:"Connect your WhatsApp once. Sarathi handles reminders, suggests AI replies for you to approve, and protects you from bans with built-in safety guards.",hi:'अपना वाट्सऐप एक बार जोड़ें। सारथी रिमाइंडर भेजता है, AI जवाब सुझाता है जिन्हें आप मंज़ूर करते हैं, और बिल्ट-इन सुरक्षा से आपको बैन से बचाता है।'},
@@ -4055,6 +4111,7 @@ function switchTab(tab) {
     else if (tab==='lapse') loadLapse();
     else if (tab==='microsite') loadMicrosite();
     else if (tab==='marketing') { if(!UC_LOCKED.marketing){ loadMarketing(); loadVideoStudio(); loadCalendar(); loadSegments(); } }
+    else if (tab==='tgcrm') loadTgcrm();
 }
 
 // ── Plan-based UI ────
@@ -4117,6 +4174,47 @@ function configurePlanUI(overviewData) {
     // Hide partner CTA if already a partner
     const partnerCta = document.getElementById('nav-partner-cta');
     if (partnerCta) partnerCta.style.display = STATE.isPartner ? 'none' : '';
+    // Telegram CRM tab — owners only, and only when enabled server-side
+    if (typeof initTgcrm === 'function') initTgcrm(isOwner);
+}
+
+// ═══════════ TELEGRAM CRM ═══════════
+async function initTgcrm(isOwner){
+  const n=document.getElementById('nav-tgcrm'); if(!n) return;
+  if(!isOwner){ n.style.display='none'; return; }
+  try{ const r=await fetch('/api/tg/status',{headers:hdrs()}); if(!r.ok){ n.style.display='none'; return; }
+    const d=await r.json(); n.style.display = (d && d.enabled) ? '' : 'none';
+  }catch(e){ n.style.display='none'; }
+}
+async function loadTgcrm(){
+  const s=document.getElementById('tgStatus'); if(s){ s.textContent=_dt('tg_status_checking'); s.style.display=''; }
+  try{ const r=await fetch('/api/tg/status',{headers:hdrs()}); const d=await r.json(); _renderTgcrm(d); }
+  catch(e){ if(s) s.textContent='—'; }
+}
+function _renderTgcrm(d){
+  const s=document.getElementById('tgStatus'), conn=document.getElementById('tgConnected'), form=document.getElementById('tgConnectForm');
+  if(s) s.style.display='none';
+  if(d && d.connected){ if(form)form.style.display='none'; if(conn)conn.style.display='block';
+    var bn=document.getElementById('tgBotName'); if(bn) bn.textContent='@'+(d.bot_username||'');
+    var mm=document.getElementById('tgMembers'); if(mm) mm.textContent=(d.linked_members||0);
+  } else { if(conn)conn.style.display='none'; if(form)form.style.display='block'; }
+}
+async function tgConnect(){
+  const inp=document.getElementById('tgToken'), btn=document.getElementById('tgConnectBtn'), msg=document.getElementById('tgMsg');
+  const tok=(inp.value||'').trim();
+  if(!tok){ msg.textContent=_dt('tg_need_token'); msg.style.color='#c0392b'; return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent=_dt('tg_connecting');
+  try{
+    const r=await fetch('/api/tg/connect',{method:'POST',headers:hdrs(),body:JSON.stringify({token:tok})});
+    const d=await r.json();
+    if(r.ok){ inp.value=''; msg.style.color='#0d9488'; msg.textContent='✅ @'+(d.bot_username||'')+' — '+_dt('tg_connected_lbl'); loadTgcrm(); }
+    else { msg.style.color='#c0392b'; msg.textContent=(d&&d.detail)||'Could not connect.'; }
+  }catch(e){ msg.style.color='#c0392b'; msg.textContent='Network error'; }
+  btn.disabled=false; btn.textContent=old;
+}
+async function tgDisconnect(){
+  if(!confirm(_dt('tg_disconnect_confirm'))) return;
+  try{ const r=await fetch('/api/tg/disconnect',{method:'POST',headers:hdrs()}); if(r.ok) loadTgcrm(); }catch(e){}
 }
 
 // ═══════════ OVERVIEW ═══════════

@@ -283,8 +283,9 @@ async def get_bot_status(tenant_id: int) -> dict:
                 (tenant_id,))).fetchone()
             members = m["c"] if m else 0
     if not row or row["status"] != "active":
-        return {"connected": False}
-    return {"connected": True, "bot_username": row["bot_username"],
+        return {"connected": False, "enabled": is_enabled()}
+    return {"connected": True, "enabled": is_enabled(),
+            "bot_username": row["bot_username"],
             "status": row["status"], "linked_members": members,
             "connected_at": row["created_at"]}
 
