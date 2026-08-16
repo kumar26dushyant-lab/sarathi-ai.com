@@ -446,13 +446,50 @@ def _menu_kb(role: str) -> list:
             [{"text": "📊 Today", "callback_data": "today"}],
             [{"text": "📋 Leads", "callback_data": "leads"}],
             [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
+            [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
             [{"text": "❓ Help", "callback_data": "help"}],
         ]
     return [
         [{"text": "📋 My Leads", "callback_data": "leads"}],
         [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
+        [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
         [{"text": "❓ Help", "callback_data": "help"}],
     ]
+
+
+async def _firm_renewals(tenant_id: int, days: int = 60, limit: int = 15) -> list:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT p.*, l.name AS client_name FROM policies p "
+            "JOIN agents a ON p.agent_id=a.agent_id JOIN leads l ON p.lead_id=l.lead_id "
+            "WHERE a.tenant_id=? AND p.status='active' AND p.renewal_date IS NOT NULL "
+            "AND date(p.renewal_date) BETWEEN date('now','+5 hours','+30 minutes') "
+            "AND date('now','+5 hours','+30 minutes', ? || ' days') "
+            "ORDER BY p.renewal_date ASC LIMIT ?",
+            (tenant_id, str(days), limit))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def _renewals_view(token, chat_id, link) -> None:
+    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id")
+    if role in ("owner", "admin"):
+        rows = await _firm_renewals(tid, 60, 15)
+    else:
+        rows = (await db.get_upcoming_renewals(aid, 60))[:15] if aid else []
+    if not rows:
+        await send_message(token, chat_id, "No renewals due in the next 60 days 🎉",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
+    lines = []
+    for r in rows:
+        d = (r.get("renewal_date") or "")[:10]
+        nm = r.get("client_name", "?")
+        ins = r.get("insurer") or r.get("plan_name") or ""
+        lines.append(f"• <b>{nm}</b> — {d}{(' · ' + ins) if ins else ''}")
+    await send_message(token, chat_id,
+                       f"🔄 <b>Renewals due (next 60 days)</b> — {len(rows)}:\n" + "\n".join(lines),
+                       [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
 
 
 async def _firm_stats(tenant_id: int) -> dict:
@@ -602,6 +639,8 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         await _leads_view(token, chat_id, link)
     elif data == "followups":
         await _followups_view(token, chat_id, link)
+    elif data == "renewals":
+        await _renewals_view(token, chat_id, link)
     elif data == "help":
         await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
     elif data.startswith("lead:"):
