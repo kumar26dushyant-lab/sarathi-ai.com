@@ -5964,5 +5964,27 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
 
 ---
 
+## §73 — Sarathi hardening + login gating + platform decisions (Aug 16 2026)
+
+**Shipped (prod, staged+tested):**
+- **Dashboard freezes** — Marketing Studio + WhatsApp tabs show a bilingual (EN/HI via data-i18n) "Coming Soon" card and hide their unfinished content. Reusable `.card uc-banner` + sibling-hide CSS (`#tab-x > .uc-banner ~ *{display:none}`) + `UC_LOCKED{whatsapp,marketing}` guard skips the tab loaders. TO UNLOCK: delete the `.uc-banner` div + set `UC_LOCKED[tab]=false`. (commit 16ac182)
+- **Login gating** (`sarathi_biz.py` + `static/login.html`, commits 3505faa/f4c3ce9): unregistered phone/email/Google now return `code=not_registered` + friendly trial message at BOTH send-step (`send-otp`, `send-email-otp`) and verify-step + `/api/auth/google`; login.html shows a prominent "🎉 Start Free Trial" CTA and no longer wrongly advances to the OTP step on a cross-product `conflict`. EXCEPTION: `_try_bundle_login(email)` find-or-provisions the Sarathi tenant for an active Nidaan bundle (reuses `nidaan._provision_sarathi_bundle`). Safety switch `SARATHI_LOGIN_GATING=0` disables just the bundle fallback. Only the not-found branch changed — success path (registered users + Google) untouched.
+
+**Verified (read-only):**
+- **Trial cap = 7 days**: `TRIAL_DAYS=7` single source; `check_subscription_active()` + `/api/` middleware enforce expiry (403 on CRM, auth/pay/help open); Nidaan bundle bypass via `bundled_until`.
+- **Calculators/Quotes**: `biz_quotes.py` math internally correct (indicative, disclaimed). SOURCE = curated static rate-cards (FY24-25) → staleness risk; tenant rate-card upload override exists. TODO: refresh cadence + data-vintage label.
+
+**Infra cleanup:**
+- **Evolution/Baileys**: no SaaS fee (FOSS). NOT running on app server (no Docker there) — designed for Oracle VM. Neutralized `EVOLUTION_*` keys in `/opt/sarathi/biz.env` (commented `#DISABLED_`, perms kept `sarathi:sarathi 600`, health 200); `WHATSAPP_*` (Meta) kept parked. Oracle-VM `docker compose down` still needs Oracle access (owner).
+
+**Team-member auth (found, current state):** web/mobile login = phone/email **OTP** (no passwords) + Google; onboarding = admin invite (`/api/admin/invite` → `/invite` → accept); offboarding = `/api/agents/{id}/deactivate` (owner-only, Team+) sets `is_active=0` → blocks NEW logins everywhere (all login lookups filter `is_active=1`). GAP: `get_current_tenant`/`get_optional_tenant` read from JWT with no per-request DB check → a deactivated member's OPEN session survives to token expiry (~24h). FIX PLANNED: cached ~30s `is_active` re-check (mirror Nidaan `_staff_still_active`) → one deactivate button = instant cut across web+mobile+telegram.
+
+**Decisions locked (builds pending):**
+- **Telegram Voice CRM for subscribers** — one bot PER FIRM (BotFather token → webhook, routed by token); **SINGLE-FIRM agent model** (agent must leave before joining another firm — data-security trust guarantee, surface in invite copy); team member = **assigned-leads-only**; unified onboarding/offboarding + one deactivate button; voice-first, context-aware, member-support role; 10-min setup guide; full fallbacks. See [[project_sarathi_tgcrm]]. DESIGN DOC before code.
+- **Homepage chatbot** — reuse Nidaan support widget, Sarathi skin + curated KB + DB-backed pricing, host-gated (`_is_nidaan_host`), sales-aware (Start Free Trial), ticket escalation, mobile-first.
+- Ground rule reaffirmed: entire sarathi-ai.com must work flawlessly on iOS/Android mobile web (dedicated mobile audit item).
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
