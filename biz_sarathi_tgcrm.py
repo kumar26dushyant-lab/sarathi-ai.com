@@ -441,12 +441,57 @@ async def _redeem_invite(code: str, tg_uid: int, tg_name: str, bot_tenant: int) 
 
 # ── P2: menu + read flows ────────────────────────────────────────────────────
 def _menu_kb(role: str) -> list:
-    lead_label = "📋 Leads" if role in ("owner", "admin") else "📋 My Leads"
+    if role in ("owner", "admin"):
+        return [
+            [{"text": "📊 Today", "callback_data": "today"}],
+            [{"text": "📋 Leads", "callback_data": "leads"}],
+            [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
+            [{"text": "❓ Help", "callback_data": "help"}],
+        ]
     return [
-        [{"text": lead_label, "callback_data": "leads"}],
+        [{"text": "📋 My Leads", "callback_data": "leads"}],
         [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
         [{"text": "❓ Help", "callback_data": "help"}],
     ]
+
+
+async def _firm_stats(tenant_id: int) -> dict:
+    """Aggregate the firm's day at a glance (IST-aware)."""
+    IST = "'+5 hours','+30 minutes'"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async def _c(sql):
+            r = await (await conn.execute(sql, (tenant_id,))).fetchone()
+            return r["c"] if r else 0
+        new_leads = await _c(
+            "SELECT COUNT(*) c FROM leads l JOIN agents a ON l.agent_id=a.agent_id "
+            f"WHERE a.tenant_id=? AND date(l.created_at)=date('now',{IST})")
+        active = await _c(
+            "SELECT COUNT(*) c FROM leads l JOIN agents a ON l.agent_id=a.agent_id "
+            "WHERE a.tenant_id=? AND l.stage NOT IN ('closed_won','closed_lost')")
+        followups = await _c(
+            "SELECT COUNT(*) c FROM interactions i JOIN leads l ON i.lead_id=l.lead_id "
+            "JOIN agents a ON l.agent_id=a.agent_id WHERE a.tenant_id=? "
+            f"AND i.follow_up_date IS NOT NULL AND date(i.follow_up_date)<=date('now',{IST}) "
+            "AND (i.follow_up_status IS NULL OR i.follow_up_status!='done')")
+        renewals = await _c(
+            "SELECT COUNT(*) c FROM policies p JOIN agents a ON p.agent_id=a.agent_id "
+            "WHERE a.tenant_id=? AND p.renewal_date IS NOT NULL "
+            f"AND date(p.renewal_date) BETWEEN date('now',{IST}) AND date('now',{IST},'+30 days')")
+    return {"new_leads": new_leads, "active": active,
+            "followups": followups, "renewals": renewals}
+
+
+async def _today_view(token, chat_id, link) -> None:
+    tid = int(link["tenant_id"])
+    firm = await _tenant_firm(tid)
+    s = await _firm_stats(tid)
+    txt = (f"📊 <b>{firm} — Today</b>\n\n"
+           f"🆕 New leads today: <b>{s['new_leads']}</b>\n"
+           f"📋 Active leads: <b>{s['active']}</b>\n"
+           f"🔔 Follow-ups due: <b>{s['followups']}</b>\n"
+           f"🔄 Renewals (next 30 days): <b>{s['renewals']}</b>")
+    await send_message(token, chat_id, txt, [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
 
 
 def _help_text(role: str) -> str:
@@ -548,6 +593,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         return {"ok": True}
     if data == "menu":
         await _send_menu(token, chat_id, link)
+    elif data == "today":
+        if link["role"] in ("owner", "admin"):
+            await _today_view(token, chat_id, link)
+        else:
+            await _send_menu(token, chat_id, link)
     elif data == "leads":
         await _leads_view(token, chat_id, link)
     elif data == "followups":
