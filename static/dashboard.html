@@ -1324,7 +1324,21 @@ function exitImpersonation() {
         </div>
 
         <!-- ═══ WHATSAPP v2 TAB (Agent-Assist) ═══ -->
+        <style>
+          /* Under-construction freeze. TO UNLOCK a tab: delete its .uc-banner div
+             AND set UC_LOCKED[tab]=false in switchTab(). Nothing else to change. */
+          .uc-banner{text-align:center;max-width:520px;margin:40px auto;padding:32px 24px}
+          .uc-banner .uc-icon{font-size:3em;margin-bottom:8px}
+          .uc-banner h2{margin:0 0 10px;font-size:1.3em}
+          .uc-banner p{margin:0;color:var(--muted,#6b7280);font-size:.95em;line-height:1.6}
+          #tab-whatsapp > .uc-banner ~ *, #tab-marketing > .uc-banner ~ *{display:none !important}
+        </style>
         <div class="tab-panel" id="tab-whatsapp">
+            <div class="card uc-banner">
+              <div class="uc-icon">🚧</div>
+              <h2 data-i18n="uc_title">🚧 Coming Soon</h2>
+              <p data-i18n="uc_wa_msg">WhatsApp isn't available yet. It will open here once approved. Until then, please use your other channels.</p>
+            </div>
 
             <!-- ── How AI Automation Works ─────────────────────────────── -->
             <div class="card" style="margin-bottom:20px;border:1px solid rgba(37,211,102,0.25)">
@@ -1877,6 +1891,11 @@ function exitImpersonation() {
 
         <!-- ═══ MARKETING STUDIO TAB ═══ -->
         <div class="tab-panel" id="tab-marketing">
+          <div class="card uc-banner">
+            <div class="uc-icon">🚧</div>
+            <h2 data-i18n="uc_title">🚧 Coming Soon</h2>
+            <p data-i18n="uc_mkt_msg">Marketing Studio is not fully ready yet. We are polishing it and it will open here soon.</p>
+          </div>
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
               <div>
@@ -3143,6 +3162,10 @@ const _DT = {
   nav_whatsapp:{en:'💬 WhatsApp',hi:'💬 वाट्सऐप'},
   bnav_wa:{en:'WA',hi:'WA'},
   tt_whatsapp:{en:'WhatsApp Automation',hi:'वाट्सऐप ऑटोमेशन'},
+  // ── Under-construction freeze (WhatsApp + Marketing Studio) ──
+  uc_title:{en:'🚧 Coming Soon',hi:'🚧 जल्द आ रहा है'},
+  uc_wa_msg:{en:"WhatsApp isn't available yet. It will open here once approved. Until then, please use your other channels.",hi:'वाट्सऐप अभी उपलब्ध नहीं है। मंज़ूरी मिलते ही यह यहीं खुल जाएगा। तब तक कृपया अपने अन्य माध्यम इस्तेमाल करें।'},
+  uc_mkt_msg:{en:'Marketing Studio is not fully ready yet. We are polishing it and it will open here soon.',hi:'मार्केटिंग स्टूडियो अभी पूरी तरह तैयार नहीं है। हम इसे बेहतर बना रहे हैं और यह जल्द ही यहीं खुल जाएगा।'},
   wa_title:{en:'💬 WhatsApp Automation',hi:'💬 वाट्सऐप ऑटोमेशन'},
   wa_badge_safe:{en:'SAFE • COMPLIANT',hi:'सुरक्षित • अनुपालन'},
   wa_intro:{en:"Connect your WhatsApp once. Sarathi handles reminders, suggests AI replies for you to approve, and protects you from bans with built-in safety guards.",hi:'अपना वाट्सऐप एक बार जोड़ें। सारथी रिमाइंडर भेजता है, AI जवाब सुझाता है जिन्हें आप मंज़ूर करते हैं, और बिल्ट-इन सुरक्षा से आपको बैन से बचाता है।'},
@@ -3982,6 +4005,8 @@ function closeSidebar() {
 }
 
 // ── Tab Switching ────
+// Under-construction locks. To UNLOCK: set the tab false here AND delete its .uc-banner div.
+const UC_LOCKED = { whatsapp: true, marketing: true };
 function switchTab(tab) {
     closeSidebar();
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -4019,7 +4044,7 @@ function switchTab(tab) {
     else if (tab==='subscription') loadSubscription();
     else if (tab==='profile') loadProfile();
     else if (tab==='support') loadTickets();
-    else if (tab==='whatsapp') { loadWhatsAppStatus(); }   // Sarathi Agent APK removed — Evolution scan-QR only
+    else if (tab==='whatsapp') { if(!UC_LOCKED.whatsapp) loadWhatsAppStatus(); }   // Sarathi Agent APK removed — Evolution scan-QR only
     else if (tab==='drip') { loadDripSequences(); loadDripEnrollments('active');
         if (isOwnerRole && isOwnerRole()) {
             document.getElementById('drip-test-btn').style.display='inline-block';
@@ -4029,7 +4054,7 @@ function switchTab(tab) {
     }
     else if (tab==='lapse') loadLapse();
     else if (tab==='microsite') loadMicrosite();
-    else if (tab==='marketing') { loadMarketing(); loadVideoStudio(); loadCalendar(); loadSegments(); }
+    else if (tab==='marketing') { if(!UC_LOCKED.marketing){ loadMarketing(); loadVideoStudio(); loadCalendar(); loadSegments(); } }
 }
 
 // ── Plan-based UI ────
