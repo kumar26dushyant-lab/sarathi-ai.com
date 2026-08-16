@@ -233,7 +233,10 @@ async def connect_bot(tenant_id: int, token: str, created_by: Optional[int]) -> 
     # they'll get greeted when they open the bot.
     await _notify_owner_connected(tenant_id, token, ident.get("username", ""))
 
-    return {"ok": True, "bot_username": ident.get("username", ""), "bot_id": bot_id}
+    # One-time deep link the owner taps to bind their own Telegram to the firm.
+    dl = await owner_deeplink(tenant_id, created_by)
+    return {"ok": True, "bot_username": ident.get("username", ""), "bot_id": bot_id,
+            "owner_link": dl.get("link", "")}
 
 
 async def _notify_owner_connected(tenant_id: int, token: str, username: str) -> None:
@@ -325,6 +328,97 @@ async def _active_link(telegram_user_id: int) -> Optional[dict]:
     return dict(row)
 
 
+async def _tenant_firm(tenant_id: int) -> str:
+    try:
+        t = await db.get_tenant(tenant_id)
+        return (t or {}).get("firm_name", "") or "your firm"
+    except Exception:
+        return "your firm"
+
+
+async def create_invite(tenant_id: int, role: str = "member",
+                        created_by: Optional[int] = None, hours: int = 72) -> str:
+    code = secrets.token_urlsafe(6)[:10]
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO tg_invites (code, tenant_id, role, created_by, expires_at, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (code, tenant_id, role, created_by,
+             (datetime.now() + timedelta(hours=hours)).isoformat(), _now()))
+        await conn.commit()
+    return code
+
+
+async def owner_deeplink(tenant_id: int, created_by: Optional[int] = None) -> dict:
+    """One-time deep link the owner taps to bind their own Telegram to the firm."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT bot_username FROM tg_firm_bots WHERE tenant_id=? AND status='active'",
+            (tenant_id,))).fetchone()
+    if not r or not r["bot_username"]:
+        return {"ok": False}
+    code = await create_invite(tenant_id, "owner", created_by, hours=168)
+    return {"ok": True, "code": code, "link": f"https://t.me/{r['bot_username']}?start={code}"}
+
+
+async def _redeem_invite(code: str, tg_uid: int, tg_name: str, bot_tenant: int) -> dict:
+    """Validate + consume an invite and bind the Telegram user to the firm.
+    Enforces single-firm (a TG user active in another firm is refused)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        inv = await (await conn.execute(
+            "SELECT * FROM tg_invites WHERE code=?", (code,))).fetchone()
+        if not inv:
+            return {"ok": False, "error": "invalid"}
+        if inv["used_by"]:
+            return {"ok": False, "error": "used"}
+        if inv["expires_at"] and inv["expires_at"] < _now():
+            return {"ok": False, "error": "expired"}
+        if int(inv["tenant_id"]) != int(bot_tenant):
+            return {"ok": False, "error": "wrong_bot"}
+        # Single-firm guarantee
+        ex = await (await conn.execute(
+            "SELECT tenant_id FROM tg_links WHERE telegram_user_id=? AND status='active'",
+            (tg_uid,))).fetchone()
+        if ex and int(ex["tenant_id"]) != int(bot_tenant):
+            return {"ok": False, "error": "other_firm"}
+        role = inv["role"] or "member"
+        agent_id = None
+        if role in ("owner", "admin"):
+            a = await (await conn.execute(
+                "SELECT agent_id FROM agents WHERE tenant_id=? AND role IN ('owner','admin') "
+                "AND is_active=1 ORDER BY agent_id LIMIT 1", (bot_tenant,))).fetchone()
+            agent_id = a["agent_id"] if a else None
+        else:
+            cnt = await (await conn.execute(
+                "SELECT COUNT(*) c FROM agents WHERE tenant_id=? AND is_active=1",
+                (bot_tenant,))).fetchone()
+            t = await db.get_tenant(bot_tenant)
+            plan = (t or {}).get("plan", "trial")
+            mx = db.PLAN_FEATURES.get(plan, db.PLAN_FEATURES["trial"]).get("max_agents", 1)
+            if cnt and cnt["c"] >= mx:
+                return {"ok": False, "error": "seats_full"}
+            cur = await conn.execute(
+                "INSERT INTO agents (tenant_id, telegram_id, name, phone, email, role, is_active) "
+                "VALUES (?,?,?,?,?, 'agent', 1)",
+                (bot_tenant, str(tg_uid), tg_name, "", ""))
+            agent_id = cur.lastrowid
+        await conn.execute(
+            "INSERT INTO tg_links (telegram_user_id, tenant_id, agent_id, role, status, linked_at) "
+            "VALUES (?,?,?,?, 'active', ?) "
+            "ON CONFLICT(telegram_user_id) DO UPDATE SET tenant_id=excluded.tenant_id, "
+            "agent_id=excluded.agent_id, role=excluded.role, status='active', "
+            "linked_at=excluded.linked_at, revoked_at=NULL",
+            (tg_uid, bot_tenant, agent_id, role, _now()))
+        await conn.execute("UPDATE tg_invites SET used_by=?, used_at=? WHERE code=?",
+                           (tg_uid, _now(), code))
+        await conn.commit()
+    firm = await _tenant_firm(bot_tenant)
+    logger.info("🔗 tgcrm link: tg %s → tenant %s as %s", tg_uid, bot_tenant, role)
+    return {"ok": True, "role": role, "firm": firm}
+
+
 async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
     """Entry point for POST /api/tg/hook/{bot_id}. Verifies the per-bot secret,
     resolves firm + actor, and dispatches. P0: secure pipeline + minimal replies.
@@ -353,28 +447,53 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
 
     text = (update.get("message", {}) or {}).get("text", "") or ""
 
-    # /start <invite_code> → onboarding (P1). P0: acknowledge safely.
+    tenant_id = int(bot["tenant_id"])
+
+    # /start [invite_code] → onboarding.
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         code = parts[1].strip() if len(parts) > 1 else ""
         link = await _active_link(tg_uid)
-        if link and int(link["tenant_id"]) == int(bot["tenant_id"]):
+        if link and int(link["tenant_id"]) == tenant_id:
+            firm = await _tenant_firm(tenant_id)
             await send_message(token, chat_id,
-                               "👋 You're connected to your firm's CRM. Full menu is on the way.")
-        elif code:
-            await send_message(token, chat_id,
-                               "🔐 Invite received. Member onboarding goes live shortly.")
-        else:
-            await send_message(token, chat_id,
-                               "This bot runs a Sarathi-AI CRM. Ask your firm admin for an invite link to join.")
+                               f"👋 You're already connected to <b>{firm}</b> as {link['role']}. "
+                               f"Your voice-first CRM menu is coming as we roll out features.")
+            return {"ok": True}
+        if code:
+            nm = (from_user.get("first_name", "") + " " + from_user.get("last_name", "")).strip() or "Member"
+            res = await _redeem_invite(code, tg_uid, nm, tenant_id)
+            if res.get("ok"):
+                firm = res.get("firm", "your firm"); role = res.get("role", "member")
+                if role in ("owner", "admin"):
+                    await send_message(token, chat_id,
+                                       f"✅ Welcome! You're connected as <b>{role}</b> of <b>{firm}</b>. "
+                                       f"Your voice-first CRM is ready — full features rolling out now.")
+                else:
+                    await send_message(token, chat_id,
+                                       f"✅ Welcome to <b>{firm}</b>'s CRM! You can manage your assigned "
+                                       f"leads here by voice note. More coming soon.")
+            elif res.get("error") == "other_firm":
+                await send_message(token, chat_id,
+                                   "You're already part of another firm on Sarathi. Ask them to remove you "
+                                   "first — your data stays secure — then you can join a new firm.")
+            elif res.get("error") == "seats_full":
+                await send_message(token, chat_id,
+                                   "Your firm's plan has no free team seats right now. Please ask your admin to upgrade.")
+            else:
+                await send_message(token, chat_id,
+                                   "This invite link is invalid or has expired. Please ask your firm admin for a new one.")
+            return {"ok": True}
+        await send_message(token, chat_id,
+                           "This bot runs a Sarathi-AI CRM. Ask your firm admin for an invite link to join.")
         return {"ok": True}
 
     # Any other message: only ACTIVE, LINKED members of THIS firm get a response;
     # everyone else gets a neutral message (no info leakage to strangers).
     link = await _active_link(tg_uid)
-    if link and int(link["tenant_id"]) == int(bot["tenant_id"]):
+    if link and int(link["tenant_id"]) == tenant_id:
         await send_message(token, chat_id, "✅ Received. Your CRM actions will appear here soon.")
     else:
         await send_message(token, chat_id,
-                           "You're not linked to this CRM. Please ask your firm admin for an invite.")
+                           "You're not linked to this CRM. Please ask your firm admin for an invite link.")
     return {"ok": True}

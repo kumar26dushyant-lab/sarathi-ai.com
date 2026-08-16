@@ -1910,6 +1910,7 @@ function exitImpersonation() {
                 <div style="font-weight:700"><span data-i18n="tg_connected_lbl">Connected</span>: <span id="tgBotName" style="font-family:monospace"></span></div>
                 <div style="font-size:.85em;color:var(--muted,#6b7280);margin-top:4px"><span data-i18n="tg_members_lbl">Linked team members</span>: <span id="tgMembers">0</span></div>
               </div>
+              <button class="btn btn-primary" style="margin-right:8px" onclick="tgOwnerLink()" data-i18n="tg_activate_btn">🔗 Open my bot</button>
               <button class="btn" style="border:1px solid #c0392b;color:#c0392b;background:transparent" onclick="tgDisconnect()" data-i18n="tg_disconnect_btn">Disconnect</button>
             </div>
 
@@ -3214,6 +3215,7 @@ const _DT = {
   tg_connected_lbl:{en:'Connected',hi:'कनेक्ट हो गया'},
   tg_members_lbl:{en:'Linked team members',hi:'जुड़े हुए टीम सदस्य'},
   tg_disconnect_btn:{en:'Disconnect',hi:'डिस्कनेक्ट करें'},
+  tg_activate_btn:{en:'🔗 Open my bot',hi:'🔗 मेरा बॉट खोलें'},
   tg_disconnect_confirm:{en:'Disconnect the bot? Your team will lose Telegram access until you reconnect.',hi:'बॉट डिस्कनेक्ट करें? दोबारा कनेक्ट करने तक आपकी टीम की टेलीग्राम पहुँच बंद हो जाएगी।'},
   tg_need_token:{en:'Please paste your bot token first.',hi:'कृपया पहले अपना बॉट टोकन डालें।'},
   tg_guide_title:{en:'How to create your bot (10 minutes)',hi:'अपना बॉट कैसे बनाएँ (10 मिनट)'},
@@ -4215,6 +4217,10 @@ async function tgConnect(){
 async function tgDisconnect(){
   if(!confirm(_dt('tg_disconnect_confirm'))) return;
   try{ const r=await fetch('/api/tg/disconnect',{method:'POST',headers:hdrs()}); if(r.ok) loadTgcrm(); }catch(e){}
+}
+async function tgOwnerLink(){
+  try{ const r=await fetch('/api/tg/owner-link',{method:'POST',headers:hdrs()}); const d=await r.json();
+    if(r.ok && d.link) window.open(d.link,'_blank'); else alert((d&&d.detail)||'Could not create link'); }catch(e){}
 }
 
 // ═══════════ OVERVIEW ═══════════

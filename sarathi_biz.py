@@ -21366,7 +21366,21 @@ async def api_tg_connect(req: TgConnectReq, request: Request,
     res = await tgcrm.connect_bot(tenant["tenant_id"], req.token, tenant.get("agent_id"))
     if not res.get("ok"):
         return JSONResponse({"detail": res.get("error", "Could not connect bot.")}, status_code=400)
-    return {"status": "connected", "bot_username": res.get("bot_username", "")}
+    return {"status": "connected", "bot_username": res.get("bot_username", ""),
+            "owner_link": res.get("owner_link", "")}
+
+
+@app.post("/api/tg/owner-link")
+@limiter.limit("10/minute")
+async def api_tg_owner_link(request: Request,
+                           tenant: dict = Depends(auth.require_owner)):
+    """Generate a one-time deep link for the owner to bind their Telegram."""
+    if not tgcrm.is_enabled(tenant["tenant_id"]):
+        return JSONResponse({"detail": "Telegram CRM is not enabled yet."}, status_code=403)
+    dl = await tgcrm.owner_deeplink(tenant["tenant_id"], tenant.get("agent_id"))
+    if not dl.get("ok"):
+        return JSONResponse({"detail": "Connect a bot first."}, status_code=400)
+    return {"link": dl.get("link", "")}
 
 
 @app.post("/api/tg/disconnect")
