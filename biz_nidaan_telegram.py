@@ -1270,6 +1270,23 @@ async def _handle_callback(cq: dict) -> None:
         return
     lang = _lang(staff)
     try:
+        if data.startswith("annr:"):
+            # Announcement reaction (👍 = read & understood) — recorded for adoption.
+            parts = data.split(":")
+            _emojis = ["👍", "✅", "🎉", "🙏"]
+            try:
+                _aid = int(parts[1]); _idx = int(parts[2])
+            except Exception:
+                await ack(); return
+            _em = _emojis[_idx] if 0 <= _idx < len(_emojis) else "👍"
+            try:
+                import biz_nidaan_notifications as _nn
+                await _nn.react_announcement(_aid, staff["staff_id"], _em, "telegram")
+                await ack(f"Recorded {_em} — thank you!")
+            except Exception:
+                await ack("Could not record — please try again")
+            return
+
         if data == "m:home":
             t, kb = _main_menu(staff); await _edit(chat_id, message_id, t, kb); await ack(); return
 
@@ -1734,9 +1751,11 @@ _DEAD_CHAT_MARKERS = ("blocked", "deactivated", "chat not found", "bot was kicke
                       "user is deactivated", "peer_id_invalid", "chat_id is empty")
 
 
-async def notify_staff(staff_id: int, text: str, url: Optional[str] = None) -> tuple[bool, str]:
+async def notify_staff(staff_id: int, text: str, url: Optional[str] = None,
+                       extra_buttons: Optional[list] = None) -> tuple[bool, str]:
     """Send an ops notification to ALL of a staffer's linked devices/accounts. Succeeds if
-    at least one delivers; prunes any device the bot can no longer reach (blocked/deleted)."""
+    at least one delivers; prunes any device the bot can no longer reach (blocked/deleted).
+    extra_buttons = extra inline-keyboard rows (e.g. announcement reaction buttons)."""
     if not await is_enabled():
         return (False, "telegram_disabled")
     async with aiosqlite.connect(db.DB_PATH) as conn:
@@ -1744,7 +1763,12 @@ async def notify_staff(staff_id: int, text: str, url: Optional[str] = None) -> t
             "SELECT chat_id FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,))).fetchall()]
     if not chats:
         return (False, "not_linked")
-    buttons = [[{"text": "Open in portal", "url": url}]] if url else None
+    buttons = []
+    if url:
+        buttons.append([{"text": "Open in portal", "url": url}])
+    if extra_buttons:
+        buttons.extend(extra_buttons)
+    buttons = buttons or None
     ok_any, last_err = False, ""
     for c in chats:
         ok, err = await send_message(c, text, buttons)

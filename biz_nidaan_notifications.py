@@ -731,19 +731,32 @@ async def _record_notification(**kw) -> int:
         # Fire-and-forget so a slow/edge Telegram call never blocks the request.
         try:
             _tg_text = ((kw.get("subject") or "Nidaan Ops") + "\n\n" + (kw.get("body") or "")).strip()
+            # Announcements get inline reaction buttons (👍 = read & understood) so staff can
+            # acknowledge right from Telegram — recorded channel-aware for adoption tracking.
+            _tg_btns = None
+            _aid = kw.get("announce_id")
+            if kw.get("event_key") == "ops.announcement" and _aid:
+                _tg_text += "\n\n👇 Tap to confirm you've read this:"
+                _tg_btns = [[
+                    {"text": "👍", "callback_data": f"annr:{_aid}:0"},
+                    {"text": "✅", "callback_data": f"annr:{_aid}:1"},
+                    {"text": "🎉", "callback_data": f"annr:{_aid}:2"},
+                    {"text": "🙏", "callback_data": f"annr:{_aid}:3"},
+                ]]
             asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
-                                                 NIDAAN_BASE_URL + url))
+                                                 NIDAAN_BASE_URL + url, _tg_btns))
         except Exception:
             pass
     return notif_id
 
 
-async def _telegram_mirror(staff_id: int, text: str, url: str) -> None:
+async def _telegram_mirror(staff_id: int, text: str, url: str, buttons: list = None) -> None:
     """Best-effort Telegram delivery for a staff notification. Silent when the bot
-    isn't configured or the staffer hasn't linked — those aren't errors."""
+    isn't configured or the staffer hasn't linked — those aren't errors.
+    `buttons` = extra inline-keyboard rows (e.g. announcement reaction buttons)."""
     try:
         import biz_nidaan_telegram as _tg
-        ok, err = await _tg.notify_staff(staff_id, text, url=url)
+        ok, err = await _tg.notify_staff(staff_id, text, url=url, extra_buttons=buttons)
         if not ok and err not in ("not_linked", "telegram_disabled", "no_chat_id"):
             logger.info("Telegram notify failed for staff %s: %s", staff_id, err)
     except Exception as e:
