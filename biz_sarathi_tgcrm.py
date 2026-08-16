@@ -165,6 +165,17 @@ async def ensure_schema() -> None:
             pending          TEXT DEFAULT '',
             updated_at       TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS tg_digest_prefs (
+            telegram_user_id INTEGER PRIMARY KEY,
+            tenant_id        INTEGER NOT NULL,
+            enabled          INTEGER DEFAULT 1,
+            hour_ist         INTEGER DEFAULT 9,
+            last_sent_date   TEXT DEFAULT '',
+            enabled_by       INTEGER,          -- admin agent_id who enabled it (self or for a teammate)
+            created_at       TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_tg_digest_due ON tg_digest_prefs(enabled, hour_ist);
         """)
         await conn.commit()
 
@@ -447,6 +458,7 @@ def _menu_kb(role: str) -> list:
             [{"text": "📋 Leads", "callback_data": "leads"}],
             [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
             [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
+            [{"text": "📅 Daily summary", "callback_data": "digest"}],
             [{"text": "❓ Help", "callback_data": "help"}],
         ]
     return [
@@ -614,6 +626,105 @@ async def _followups_view(token, chat_id, link) -> None:
                        [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
 
 
+# ── Daily digest ─────────────────────────────────────────────────────────────
+async def get_digest_pref(tg_uid: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT * FROM tg_digest_prefs WHERE telegram_user_id=?", (tg_uid,))).fetchone()
+        return dict(r) if r else None
+
+
+async def set_digest_pref(tg_uid: int, tenant_id: int, enabled: bool,
+                          hour_ist: int = 9, enabled_by: Optional[int] = None) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO tg_digest_prefs (telegram_user_id, tenant_id, enabled, hour_ist, enabled_by, created_at) "
+            "VALUES (?,?,?,?,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET "
+            "tenant_id=excluded.tenant_id, enabled=excluded.enabled, hour_ist=excluded.hour_ist, "
+            "enabled_by=excluded.enabled_by",
+            (tg_uid, tenant_id, 1 if enabled else 0, hour_ist, enabled_by, _now()))
+        await conn.commit()
+
+
+async def compose_digest(tenant_id: int) -> str:
+    firm = await _tenant_firm(tenant_id)
+    s = await _firm_stats(tenant_id)
+    IST = "'+5 hours','+30 minutes'"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        pol = await (await conn.execute(
+            "SELECT COUNT(*) c FROM policies p JOIN agents a ON p.agent_id=a.agent_id "
+            f"WHERE a.tenant_id=? AND date(p.created_at)=date('now',{IST})", (tenant_id,))).fetchone()
+    new_pol = pol["c"] if pol else 0
+    return (f"📅 <b>{firm} — Daily Summary</b>\n"
+            f"<i>{datetime.now().strftime('%d %b %Y')}</i>\n\n"
+            f"🆕 New leads today: <b>{s['new_leads']}</b>\n"
+            f"📋 Active leads: <b>{s['active']}</b>\n"
+            f"🔔 Follow-ups due: <b>{s['followups']}</b>\n"
+            f"🔄 Renewals (next 30 days): <b>{s['renewals']}</b>\n"
+            f"📄 New policies today: <b>{new_pol}</b>\n\n"
+            f"Have a productive day! 🙏")
+
+
+async def run_digests() -> int:
+    """Worker loop entry — send due daily digests (IST hour match, once/day). Returns count sent."""
+    ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    hour = ist_now.hour
+    today = ist_now.strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        prefs = await (await conn.execute(
+            "SELECT * FROM tg_digest_prefs WHERE enabled=1 AND hour_ist=? AND last_sent_date!=?",
+            (hour, today))).fetchall()
+    sent = 0
+    for p in prefs:
+        tid = int(p["tenant_id"]); tg_uid = int(p["telegram_user_id"])
+        if not is_enabled(tid):
+            continue
+        link = await _active_link(tg_uid)
+        if not (link and int(link["tenant_id"]) == tid):
+            continue
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            b = await (await conn.execute(
+                "SELECT bot_token_enc FROM tg_firm_bots WHERE tenant_id=? AND status='active'",
+                (tid,))).fetchone()
+        if not b:
+            continue
+        try:
+            token = decrypt_token(b["bot_token_enc"])
+            await send_message(token, tg_uid, await compose_digest(tid))
+            sent += 1
+        except Exception as e:
+            logger.warning("digest send failed tenant %s: %s", tid, str(e)[:120])
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute("UPDATE tg_digest_prefs SET last_sent_date=? WHERE telegram_user_id=?",
+                               (today, tg_uid))
+            await conn.commit()
+    if sent:
+        logger.info("📅 tgcrm digests sent: %d", sent)
+    return sent
+
+
+async def _digest_view(token, chat_id, tg_uid, link) -> None:
+    pref = await get_digest_pref(tg_uid)
+    on = bool(pref and pref.get("enabled"))
+    hr = (pref or {}).get("hour_ist", 9)
+    status = f"🟢 ON — every day around {hr}:00 IST" if on else "⚪ OFF"
+    txt = (f"📅 <b>Daily Summary</b>\nStatus: {status}\n\n"
+           f"A once-a-day snapshot of your firm's progress — new leads, follow-ups, "
+           f"renewals and new policies.")
+    kb = []
+    if on:
+        kb.append([{"text": "Turn OFF", "callback_data": "digest_off"}])
+    else:
+        kb.append([{"text": "Turn ON (9 AM)", "callback_data": "digest_on"}])
+    kb.append([{"text": "📤 Send me one now", "callback_data": "digest_now"}])
+    kb.append([{"text": "⬅️ Menu", "callback_data": "menu"}])
+    await send_message(token, chat_id, txt, kb)
+
+
 async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     cid = cb.get("id")
     data = cb.get("data", "") or ""
@@ -641,6 +752,21 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         await _followups_view(token, chat_id, link)
     elif data == "renewals":
         await _renewals_view(token, chat_id, link)
+    elif data in ("digest", "digest_on", "digest_off", "digest_now"):
+        if link["role"] not in ("owner", "admin"):
+            await _send_menu(token, chat_id, link)
+        elif data == "digest_on":
+            await set_digest_pref(tg_uid, tenant_id, True, 9, link.get("agent_id"))
+            await _digest_view(token, chat_id, tg_uid, link)
+        elif data == "digest_off":
+            _cur = await get_digest_pref(tg_uid)
+            await set_digest_pref(tg_uid, tenant_id, False,
+                                  (_cur or {}).get("hour_ist", 9), link.get("agent_id"))
+            await _digest_view(token, chat_id, tg_uid, link)
+        elif data == "digest_now":
+            await send_message(token, chat_id, await compose_digest(tenant_id))
+        else:
+            await _digest_view(token, chat_id, tg_uid, link)
     elif data == "help":
         await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
     elif data.startswith("lead:"):

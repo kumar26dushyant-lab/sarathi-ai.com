@@ -22727,6 +22727,19 @@ async def main():
                 await asyncio.sleep(24 * 3600)  # daily
         asyncio.create_task(account_erasure_loop())
 
+        # Step 6g: Sarathi Telegram CRM daily digests — worker-only singleton.
+        async def tgcrm_digest_loop():
+            await asyncio.sleep(120)  # let startup settle
+            while True:
+                try:
+                    await tgcrm.run_digests()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("tgcrm digest loop error: %s", e)
+                await asyncio.sleep(900)  # check every 15 min; sends once/day per pref
+        asyncio.create_task(tgcrm_digest_loop())
+
         # Step 6f: Marketing daily batch — pre-generate each enabled tenant's
         # poster in the off-peak early morning (05:00) so load is smoothed
         # instead of spiking when everyone opens the app. Worker-only singleton.
