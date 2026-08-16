@@ -63,6 +63,7 @@ import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
 import biz_nidaan_telegram as tg
+import biz_sarathi_tgcrm as tgcrm
 import biz_wa_agent as wa_agent
 
 # Public base URL for Nidaan (deep links + Telegram webhook registration).
@@ -180,6 +181,11 @@ async def _install_bg_exception_handler():
         await nidaan.seed_review_templates()
     except Exception as _rte:
         logger.warning("nidaan review-templates seed failed: %s", _rte)
+    # Sarathi Telegram Voice CRM — self-contained additive schema (idempotent).
+    try:
+        await tgcrm.ensure_schema()
+    except Exception as _tge:
+        logger.warning("tgcrm schema init failed: %s", _tge)
 
 # ── Rate Limiting ────────────────────────────────────────────────────────────
 # IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
@@ -21344,6 +21350,53 @@ async def api_subscription_status(tenant: dict = Depends(auth.get_current_tenant
 # =============================================================================
 #  AGENT MANAGEMENT — Deactivate/Transfer/Remove
 # =============================================================================
+
+# ── Sarathi Telegram Voice CRM (per-firm bot) ────────────────────────────────
+class TgConnectReq(BaseModel):
+    token: str
+
+
+@app.post("/api/tg/connect")
+@limiter.limit("5/minute")
+async def api_tg_connect(req: TgConnectReq, request: Request,
+                         tenant: dict = Depends(auth.require_owner)):
+    """Connect the firm's own Telegram bot (owner/admin only)."""
+    if not tgcrm.is_enabled():
+        return JSONResponse({"detail": "Telegram CRM is not enabled yet."}, status_code=403)
+    res = await tgcrm.connect_bot(tenant["tenant_id"], req.token, tenant.get("agent_id"))
+    if not res.get("ok"):
+        return JSONResponse({"detail": res.get("error", "Could not connect bot.")}, status_code=400)
+    return {"status": "connected", "bot_username": res.get("bot_username", "")}
+
+
+@app.post("/api/tg/disconnect")
+@limiter.limit("5/minute")
+async def api_tg_disconnect(request: Request,
+                            tenant: dict = Depends(auth.require_owner)):
+    """Disconnect the firm's Telegram bot (owner/admin only)."""
+    res = await tgcrm.disconnect_bot(tenant["tenant_id"])
+    return {"status": "disconnected"} if res.get("ok") else JSONResponse(
+        {"detail": "Could not disconnect."}, status_code=400)
+
+
+@app.get("/api/tg/status")
+async def api_tg_status(tenant: dict = Depends(auth.get_current_tenant)):
+    """Current firm bot connection status."""
+    return await tgcrm.get_bot_status(tenant["tenant_id"])
+
+
+@app.post("/api/tg/hook/{bot_id}")
+async def api_tg_webhook(bot_id: str, request: Request):
+    """Telegram webhook for a firm bot. Secret-verified inside handle_update.
+    Always 200 so Telegram doesn't retry-storm."""
+    try:
+        secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        update = await request.json()
+        await tgcrm.handle_update(bot_id, secret, update)
+    except Exception as e:
+        logger.warning("tg webhook error: %s", str(e)[:150])
+    return {"ok": True}
+
 
 @app.get("/api/agents")
 async def api_list_agents(tenant: dict = Depends(auth.get_current_tenant)):
