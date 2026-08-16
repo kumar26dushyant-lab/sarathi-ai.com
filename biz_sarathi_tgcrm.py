@@ -439,9 +439,132 @@ async def _redeem_invite(code: str, tg_uid: int, tg_name: str, bot_tenant: int) 
     return {"ok": True, "role": role, "firm": firm}
 
 
+# ── P2: menu + read flows ────────────────────────────────────────────────────
+def _menu_kb(role: str) -> list:
+    lead_label = "📋 Leads" if role in ("owner", "admin") else "📋 My Leads"
+    return [
+        [{"text": lead_label, "callback_data": "leads"}],
+        [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
+        [{"text": "❓ Help", "callback_data": "help"}],
+    ]
+
+
+def _help_text(role: str) -> str:
+    if role in ("owner", "admin"):
+        return ("<b>Sarathi CRM — quick help</b>\n"
+                "• 📋 Leads — your firm's leads; tap one for details\n"
+                "• 🔔 Follow-ups due — what needs action\n"
+                "• ➕ Add team members from your web dashboard\n"
+                "🎤 Voice commands (log calls, set follow-ups) are rolling out next.")
+    return ("<b>Sarathi CRM — quick help</b>\n"
+            "• 📋 My Leads — your assigned leads; tap one for details\n"
+            "• 🔔 Follow-ups due — what needs action\n"
+            "🎤 Voice commands are rolling out next.")
+
+
+async def _send_menu(token, chat_id, link) -> None:
+    firm = await _tenant_firm(int(link["tenant_id"]))
+    await send_message(token, chat_id,
+                       f"🙏 <b>{firm}</b> — what would you like to do?",
+                       _menu_kb(link["role"]))
+
+
+async def _firm_leads(tenant_id: int, limit: int = 8) -> list:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT l.* FROM leads l JOIN agents a ON l.agent_id=a.agent_id "
+            "WHERE a.tenant_id=? ORDER BY l.updated_at DESC LIMIT ?",
+            (tenant_id, limit))).fetchall()
+        return [dict(r) for r in rows]
+
+
+async def _leads_view(token, chat_id, link) -> None:
+    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id")
+    if role in ("owner", "admin"):
+        rows = await _firm_leads(tid, 8)
+    else:
+        rows = (await db.get_leads_by_agent(aid))[:8] if aid else []
+    if not rows:
+        await send_message(token, chat_id,
+                           "No leads yet. Add leads from your web dashboard and they'll appear here.",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
+    kb = [[{"text": f"👤 {(r.get('name') or '—')[:28]} · {r.get('stage','')}",
+            "callback_data": f"lead:{r['lead_id']}"}] for r in rows]
+    kb.append([{"text": "⬅️ Menu", "callback_data": "menu"}])
+    await send_message(token, chat_id, f"📋 Showing {len(rows)} lead(s) — tap for details:", kb)
+
+
+async def _lead_detail(token, chat_id, link, lead_id: int) -> None:
+    lead = await db.get_lead(lead_id, int(link["tenant_id"]))
+    if not lead:
+        await send_message(token, chat_id, "Lead not found.",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
+    if link["role"] not in ("owner", "admin") and lead.get("agent_id") != link.get("agent_id"):
+        await send_message(token, chat_id, "You can only view your assigned leads.",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
+    txt = (f"👤 <b>{lead.get('name','—')}</b>\n"
+           f"📞 {lead.get('phone') or '—'}\n"
+           f"📊 Stage: {lead.get('stage') or '—'}\n"
+           f"🩺 Need: {lead.get('need_type') or '—'}\n"
+           f"🏙 {lead.get('city') or '—'}\n"
+           f"📝 {lead.get('notes') or '—'}")
+    kb = [[{"text": "⬅️ Back to leads", "callback_data": "leads"}],
+          [{"text": "⬅️ Menu", "callback_data": "menu"}]]
+    await send_message(token, chat_id, txt, kb)
+
+
+async def _followups_view(token, chat_id, link) -> None:
+    aid = link.get("agent_id")
+    rows = await db.get_pending_followups(aid) if aid else []
+    if not rows:
+        await send_message(token, chat_id, "No pending follow-ups 🎉",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
+    lines = []
+    for r in rows[:10]:
+        d = (r.get("follow_up_date") or "")[:10]
+        lines.append(f"• <b>{r.get('lead_name','?')}</b> — {d} {(r.get('summary') or '')}".rstrip())
+    await send_message(token, chat_id, "🔔 <b>Pending follow-ups</b>:\n" + "\n".join(lines),
+                       [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+
+
+async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
+    cid = cb.get("id")
+    data = cb.get("data", "") or ""
+    chat_id = (cb.get("message", {}) or {}).get("chat", {}).get("id")
+    tg_uid = (cb.get("from", {}) or {}).get("id")
+    if cid:
+        await _call("answerCallbackQuery", {"callback_query_id": cid}, token=token)
+    link = await _active_link(tg_uid) if tg_uid else None
+    if not (link and int(link["tenant_id"]) == tenant_id):
+        if chat_id:
+            await send_message(token, chat_id, "You're no longer linked to this CRM.")
+        return {"ok": True}
+    if not chat_id:
+        return {"ok": True}
+    if data == "menu":
+        await _send_menu(token, chat_id, link)
+    elif data == "leads":
+        await _leads_view(token, chat_id, link)
+    elif data == "followups":
+        await _followups_view(token, chat_id, link)
+    elif data == "help":
+        await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
+    elif data.startswith("lead:"):
+        try:
+            await _lead_detail(token, chat_id, link, int(data.split(":", 1)[1]))
+        except (ValueError, IndexError):
+            pass
+    return {"ok": True}
+
+
 async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
     """Entry point for POST /api/tg/hook/{bot_id}. Verifies the per-bot secret,
-    resolves firm + actor, and dispatches. P0: secure pipeline + minimal replies.
+    resolves firm + actor, and dispatches (P2: menu + read flows).
     Always returns {'ok': True} so Telegram doesn't retry-storm."""
     bot = await _bot_by_id(bot_id)
     if not bot:
@@ -452,47 +575,46 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
     if not secret_header or not secrets.compare_digest(secret_header, bot["webhook_secret"] or ""):
         logger.warning("tgcrm webhook secret mismatch for bot %s", bot_id)
         return {"ok": True}
-
     try:
         token = decrypt_token(bot["bot_token_enc"])
     except Exception:
         return {"ok": True}
-
-    msg = update.get("message") or update.get("callback_query", {}).get("message") or {}
-    from_user = (update.get("message", {}) or update.get("callback_query", {})).get("from", {})
-    tg_uid = from_user.get("id")
-    chat_id = msg.get("chat", {}).get("id") or tg_uid
-    if not tg_uid or not chat_id:
-        return {"ok": True}
-
-    text = (update.get("message", {}) or {}).get("text", "") or ""
-
     tenant_id = int(bot["tenant_id"])
 
-    # /start [invite_code] → onboarding.
+    # Button tap
+    cb = update.get("callback_query")
+    if cb:
+        return await _handle_callback(token, tenant_id, cb)
+
+    msg = update.get("message") or {}
+    from_user = msg.get("from", {}) or {}
+    tg_uid = from_user.get("id")
+    chat_id = (msg.get("chat", {}) or {}).get("id") or tg_uid
+    if not tg_uid or not chat_id:
+        return {"ok": True}
+    text = msg.get("text", "") or ""
+    is_voice = bool(msg.get("voice") or msg.get("audio"))
+
+    # /start [invite_code] → onboarding (then show the menu).
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         code = parts[1].strip() if len(parts) > 1 else ""
         link = await _active_link(tg_uid)
         if link and int(link["tenant_id"]) == tenant_id:
-            firm = await _tenant_firm(tenant_id)
-            await send_message(token, chat_id,
-                               f"👋 You're already connected to <b>{firm}</b> as {link['role']}. "
-                               f"Your voice-first CRM menu is coming as we roll out features.")
+            await _send_menu(token, chat_id, link)
             return {"ok": True}
         if code:
             nm = (from_user.get("first_name", "") + " " + from_user.get("last_name", "")).strip() or "Member"
             res = await _redeem_invite(code, tg_uid, nm, tenant_id)
             if res.get("ok"):
                 firm = res.get("firm", "your firm"); role = res.get("role", "member")
-                if role in ("owner", "admin"):
-                    await send_message(token, chat_id,
-                                       f"✅ Welcome! You're connected as <b>{role}</b> of <b>{firm}</b>. "
-                                       f"Your voice-first CRM is ready — full features rolling out now.")
-                else:
-                    await send_message(token, chat_id,
-                                       f"✅ Welcome to <b>{firm}</b>'s CRM! You can manage your assigned "
-                                       f"leads here by voice note. More coming soon.")
+                greet = (f"✅ Welcome! You're connected as <b>{role}</b> of <b>{firm}</b>."
+                         if role in ("owner", "admin")
+                         else f"✅ Welcome to <b>{firm}</b>'s CRM! You can manage your assigned leads here.")
+                await send_message(token, chat_id, greet)
+                newlink = await _active_link(tg_uid)
+                if newlink:
+                    await _send_menu(token, chat_id, newlink)
             elif res.get("error") == "other_firm":
                 await send_message(token, chat_id,
                                    "You're already part of another firm on Sarathi. Ask them to remove you "
@@ -508,12 +630,16 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
                            "This bot runs a Sarathi-AI CRM. Ask your firm admin for an invite link to join.")
         return {"ok": True}
 
-    # Any other message: only ACTIVE, LINKED members of THIS firm get a response;
-    # everyone else gets a neutral message (no info leakage to strangers).
+    # Non-/start messages — only ACTIVE, LINKED members of THIS firm get a response.
     link = await _active_link(tg_uid)
-    if link and int(link["tenant_id"]) == tenant_id:
-        await send_message(token, chat_id, "✅ Received. Your CRM actions will appear here soon.")
-    else:
+    if not (link and int(link["tenant_id"]) == tenant_id):
         await send_message(token, chat_id,
                            "You're not linked to this CRM. Please ask your firm admin for an invite link.")
+        return {"ok": True}
+    if is_voice:
+        await send_message(token, chat_id,
+                           "🎤 I heard your voice note — voice commands are rolling out next. For now, tap a button:",
+                           _menu_kb(link["role"]))
+        return {"ok": True}
+    await _send_menu(token, chat_id, link)
     return {"ok": True}
