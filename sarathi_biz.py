@@ -9506,7 +9506,10 @@ async def api_send_otp(req: SendOTPRequest, request: Request):
                 # Build a pseudo-tenant row for token creation
                 tenant = agent_match
     if not tenant:
-        return JSONResponse({"detail": "No account found with this phone number. Please sign up first."}, status_code=404)
+        return JSONResponse({
+            "detail": "You're not registered yet. Start your free 7-day trial to get access.",
+            "code": "not_registered", "phone": phone,
+        }, status_code=404)
 
     result = auth.generate_otp(phone)
     if "error" in result:
@@ -9860,7 +9863,8 @@ async def api_send_email_otp(req: SendEmailOTPRequest, request: Request):
         if cross_product:
             return JSONResponse({"conflict": cross_product}, status_code=200)
         return JSONResponse(
-            {"detail": "No account found with this email. Please sign up first."},
+            {"detail": "You're not registered yet. Start your free 7-day trial to get access.",
+             "code": "not_registered", "email": email},
             status_code=404)
 
     result = auth.generate_email_otp(email)

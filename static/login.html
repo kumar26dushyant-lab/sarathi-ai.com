@@ -158,13 +158,17 @@ async function sendOtp(isResend){
     });
     var data = await res.json();
     hideBusy();
-    if (res.ok) {
+    if (res.ok && !(data && data.conflict)) {
       document.getElementById('step1').classList.add('hide');
       document.getElementById('step2').classList.remove('hide');
       document.getElementById('resendBtn').classList.remove('hide');
       document.getElementById('emailEcho').textContent = email;
       document.getElementById('otp').focus();
       _msg('✅ OTP sent to ' + email, false);
+    } else if (data && data.conflict) {
+      _msg(_err(data.conflict, 'This email is linked to another account. Please use the correct sign-in.'), true);
+    } else if (data && data.code === 'not_registered') {
+      _msg("You're not registered yet.", true); _showTrialCta(true);
     } else {
       _msg(_err(data, res.status === 429 ? 'Too many attempts — please wait a minute.' : 'Could not send OTP. Check the email and try again.'), true);
     }
