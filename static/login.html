@@ -96,6 +96,11 @@ input:focus{border-color:var(--teal)}
     </div>
 
     <div class="msg" id="msg"></div>
+    <div id="trialCta" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--border,#e5e7eb);border-radius:12px;text-align:center;background:var(--bg,#f9fafb)">
+      <div style="font-weight:700;margin-bottom:4px">New to Sarathi-AI?</div>
+      <div style="font-size:.86em;color:var(--muted,#6b7280);margin-bottom:10px">This account isn't registered yet. Start your free 7-day trial — no card needed.</div>
+      <a href="/#pricing" style="display:block;width:100%;padding:12px;background:#0d9488;color:#fff;border-radius:10px;text-decoration:none;font-weight:700">🎉 Start Free Trial</a>
+    </div>
 
     <div class="divider">or</div>
     <div class="gwrap">
@@ -135,11 +140,13 @@ function _err(data, fallback){
   }
   return fallback;
 }
+function _showTrialCta(show){ var c=document.getElementById('trialCta'); if(c) c.style.display = show ? 'block' : 'none'; }
 
 async function sendOtp(isResend){
   var email = (document.getElementById('email').value || '').trim().toLowerCase();
   if (!email || email.indexOf('@') < 1) { _msg('Please enter a valid email address.', true); return; }
   _email = email;
+  _showTrialCta(false);
   var btn = document.getElementById(isResend ? 'resendBtn' : 'sendBtn');
   btn.disabled = true; var old = btn.textContent; btn.textContent = 'Sending…';
   showBusy('Sending OTP to your email…');
@@ -183,7 +190,8 @@ async function verifyOtp(){
       setTimeout(function(){ location.replace('/dashboard'); }, 500);
     } else {
       hideBusy();
-      _msg(_err(data, 'Invalid or expired OTP.'), true);
+      if (data && data.code === 'not_registered') { _msg("You're not registered yet.", true); _showTrialCta(true); }
+      else _msg(_err(data, 'Invalid or expired OTP.'), true);
       btn.disabled = false; btn.textContent = 'Verify & Sign In';
     }
   } catch (e) {
@@ -201,6 +209,7 @@ function backToEmail(){
 
 async function onGoogleCredential(response){
   showBusy('Signing in with Google…');
+  _showTrialCta(false);
   _msg('⏳ Signing in with Google…', false);
   try {
     var res = await fetch('/api/auth/google', {
@@ -214,7 +223,8 @@ async function onGoogleCredential(response){
       setTimeout(function(){ location.replace('/dashboard'); }, 400);
     } else {
       hideBusy();
-      _msg(_err(data, 'No account found for this Google email.'), true);
+      if (data && data.code === 'not_registered') { _msg("You're not registered yet.", true); _showTrialCta(true); }
+      else _msg(_err(data, 'No account found for this Google email.'), true);
     }
   } catch (e) { hideBusy(); _msg('Network error. Please try again.', true); }
 }

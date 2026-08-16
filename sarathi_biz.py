@@ -9556,6 +9556,59 @@ async def api_send_otp(req: SendOTPRequest, request: Request):
     return resp_data
 
 
+# ── Login gating ─────────────────────────────────────────────────────────────
+# Unregistered users get a clear "Start Free Trial" prompt instead of a silent
+# failure. EXCEPTION: an active Nidaan bundle (matched by email) is auto-
+# provisioned and logged straight in. Safety switch: SARATHI_LOGIN_GATING=0
+# disables ONLY the bundle-provision fallback (the friendly message stays).
+_LOGIN_GATING = os.getenv("SARATHI_LOGIN_GATING", "1") != "0"
+
+
+async def _try_bundle_login(email: str = "") -> Optional[dict]:
+    """If `email` maps to a Nidaan account whose active plan includes the
+    Sarathi bundle, find-or-provision the linked Sarathi tenant and return it.
+    Returns None if there's no such bundle. Never raises (auth path)."""
+    if not _LOGIN_GATING or not email:
+        return None
+    try:
+        account = await nidaan.get_account_by_email(email)
+        if not account:
+            return None
+        account_id = account["account_id"]
+        sub = await nidaan.get_active_subscription(account_id)
+        if not sub:
+            return None
+        plan = sub.get("plan", "")
+        if not nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+            return None
+        tid = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+        if not tid:
+            # Derive remaining period from the subscription's current_period_end.
+            async with aiosqlite.connect(nidaan.DB_PATH) as _mc:
+                _row = await (await _mc.execute(
+                    "SELECT current_period_end FROM nidaan_subscriptions "
+                    "WHERE account_id=? AND status='active' "
+                    "ORDER BY started_at DESC LIMIT 1", (account_id,))).fetchone()
+            from datetime import date as _d
+            _period = 30
+            if _row and _row[0]:
+                try:
+                    _period = max(1, (_d.fromisoformat(_row[0][:10]) - _d.today()).days)
+                except ValueError:
+                    _period = 30
+            await nidaan._provision_sarathi_bundle(account_id, plan, _period)
+            tid = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+        if not tid:
+            return None
+        t = await db.get_tenant(tid)
+        if t:
+            logger.info("🔗 Bundle auto-login: %s → Sarathi tenant %d", email, tid)
+        return t
+    except Exception as e:
+        logger.warning("bundle auto-login failed for %s: %s", email, e)
+        return None
+
+
 @app.post("/api/auth/verify-otp")
 @limiter.limit("10/minute")
 async def api_verify_otp(req: VerifyOTPRequest, request: Request):
@@ -9587,7 +9640,12 @@ async def api_verify_otp(req: VerifyOTPRequest, request: Request):
                 tenant = agent_row
                 role = agent_row["role"]
     if not tenant:
-        return JSONResponse({"detail": "Account not found"}, status_code=404)
+        # Unregistered phone (no email here to match a Nidaan bundle) → prompt trial.
+        return JSONResponse({
+            "detail": "You're not registered yet. Start your free 7-day trial to get access.",
+            "code": "not_registered",
+            "phone": phone,
+        }, status_code=404)
 
     tenant = dict(tenant)
     # Look up agent_id for the logged-in user
@@ -9876,7 +9934,16 @@ async def api_verify_email_otp(req: VerifyEmailOTPRequest, request: Request):
                 role = agent_row["role"]
                 agent_id = agent_row["agent_id"]
     if not tenant:
-        return JSONResponse({"detail": "Account not found"}, status_code=404)
+        _bt = await _try_bundle_login(email)
+        if _bt:
+            tenant = _bt
+            role = "owner"
+        else:
+            return JSONResponse({
+                "detail": "You're not registered yet. Start your free 7-day trial to get access.",
+                "code": "not_registered",
+                "email": email,
+            }, status_code=404)
 
     tenant = dict(tenant)
     phone = tenant.get("phone", "")
@@ -10211,11 +10278,16 @@ async def api_google_signin(req: GoogleSignInRequest, request: Request):
                 tenant = agent_row
 
     if not tenant:
-        return JSONResponse({
-            "detail": "No account found with this Google email. Please sign up first.",
-            "email": email,
-            "name": name,
-        }, status_code=404)
+        _bt = await _try_bundle_login(email)
+        if _bt:
+            tenant = _bt
+        else:
+            return JSONResponse({
+                "detail": "You're not registered yet. Start your free 7-day trial to get access.",
+                "code": "not_registered",
+                "email": email,
+                "name": name,
+            }, status_code=404)
 
     tenant = dict(tenant)
     role = tenant.get("role", "owner")
