@@ -725,6 +725,166 @@ async def _digest_view(token, chat_id, tg_uid, link) -> None:
     await send_message(token, chat_id, txt, kb)
 
 
+# ── P3: voice + text WRITE flows (log note / set follow-up) ──────────────────
+async def _download_file(token: str, file_id: str) -> Optional[bytes]:
+    res = await _call("getFile", {"file_id": file_id}, token=token)
+    fp = ((res.get("result") or {}).get("file_path")) if res.get("ok") else None
+    if not fp:
+        return None
+    url = f"https://api.telegram.org/file/bot{token}/{fp}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            r = await c.get(url)
+            if r.status_code == 200:
+                return r.content
+    except Exception as e:
+        logger.info("tgcrm file download failed: %s", e)
+    return None
+
+
+async def _transcribe(audio: bytes, mime: str) -> Optional[dict]:
+    """Gemini transcribe + clarity/safety assessment → {status, transcript, language}."""
+    import os as _os, base64 as _b64, json as _json
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        return None
+    prompt = (
+        "You are the voice front-end of a CRM app. Listen and reply with ONLY JSON: "
+        '{"status":"clear|unclear|noisy|silent|abusive|nonsense","transcript":"...","language":"hi|en"}. '
+        "Put EXACT spoken words in transcript; keep names, numbers, amounts, dates verbatim; never invent words.")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    payload = {"contents": [{"parts": [
+        {"text": prompt},
+        {"inline_data": {"mime_type": mime or "audio/ogg", "data": _b64.b64encode(audio).decode()}},
+    ]}], "generationConfig": {"response_mime_type": "application/json", "temperature": 0}}
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as c:
+            r = await c.post(url, json=payload)
+            data = r.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        raw = (parts[0].get("text") or "").strip()
+        if not raw:
+            if (data.get("promptFeedback") or {}).get("blockReason"):
+                return {"status": "abusive", "transcript": "", "language": "en"}
+            return None
+        out = _json.loads(raw)
+        if out.get("status") not in ("clear", "unclear", "noisy", "silent", "abusive", "nonsense"):
+            out["status"] = "unclear"
+        return out
+    except Exception as e:
+        logger.info("tgcrm transcription failed: %s", e)
+        return None
+
+
+async def _parse_intent(text: str) -> dict:
+    """Turn a note into a CRM action (STRICT JSON)."""
+    import os as _os, json as _json
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key or not (text or "").strip():
+        return {"action": "none"}
+    today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+    prompt = (
+        "Convert an insurance advisor's short note/voice message into a CRM action as STRICT JSON.\n"
+        f"Today (IST) is {today}. Shape:\n"
+        '{"action":"log_note|set_followup|none","lead_name":"","summary":"","followup_date":"YYYY-MM-DD","followup_time":"HH:MM"}\n'
+        "- 'set_followup' = schedule a future call/meeting/reminder for a lead (has a date).\n"
+        "- 'log_note' = record something that happened (a call/update) with no future date.\n"
+        "- 'none' = greeting/question/not a specific lead action.\n"
+        "- lead_name = the customer name mentioned. summary = concise note.\n"
+        "- Resolve relative dates (today/tomorrow/next monday) to YYYY-MM-DD. Empty strings if absent.\n"
+        "Output ONLY the JSON.\n\n" f"MESSAGE: {text}")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
+                                        "generationConfig": {"response_mime_type": "application/json", "temperature": 0}})
+            data = r.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        out = _json.loads((parts[0].get("text") or "").strip() or "{}")
+        if out.get("action") not in ("log_note", "set_followup", "none"):
+            out["action"] = "none"
+        return out
+    except Exception as e:
+        logger.info("tgcrm intent parse failed: %s", e)
+        return {"action": "none"}
+
+
+async def _set_pending(tg_uid: int, tenant_id: int, payload: Optional[dict]) -> None:
+    import json as _json
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO tg_context (telegram_user_id, tenant_id, pending, updated_at) "
+            "VALUES (?,?,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET "
+            "tenant_id=excluded.tenant_id, pending=excluded.pending, updated_at=excluded.updated_at",
+            (tg_uid, tenant_id, _json.dumps(payload) if payload else "", _now()))
+        await conn.commit()
+
+
+async def _get_pending(tg_uid: int) -> Optional[dict]:
+    import json as _json
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT pending FROM tg_context WHERE telegram_user_id=?", (tg_uid,))).fetchone()
+    if not r or not r["pending"]:
+        return None
+    try:
+        return _json.loads(r["pending"])
+    except Exception:
+        return None
+
+
+async def _find_lead(link, name: str) -> list:
+    name = (name or "").strip()
+    if not name:
+        return []
+    if link["role"] in ("owner", "admin"):
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            rows = await (await conn.execute(
+                "SELECT l.* FROM leads l JOIN agents a ON l.agent_id=a.agent_id "
+                "WHERE a.tenant_id=? AND l.name LIKE ? ORDER BY l.updated_at DESC LIMIT 5",
+                (int(link["tenant_id"]), f"%{name}%"))).fetchall()
+            return [dict(r) for r in rows]
+    aid = link.get("agent_id")
+    return (await db.search_leads(aid, name))[:5] if aid else []
+
+
+async def _process_command(token, chat_id, tg_uid, link, text) -> None:
+    """Parse a note (typed or transcribed) → confirm card → (on Save) write."""
+    intent = await _parse_intent(text)
+    act = intent.get("action", "none")
+    if act == "none":
+        await _send_menu(token, chat_id, link)
+        return
+    leads = await _find_lead(link, intent.get("lead_name", ""))
+    if not leads:
+        await send_message(token, chat_id,
+                           f"I couldn't find a lead named “{intent.get('lead_name','')}”. "
+                           f"Add them on the web dashboard, or try the exact name.",
+                           _menu_kb(link["role"]))
+        return
+    lead = leads[0]
+    summary = (intent.get("summary") or text).strip()
+    fud = (intent.get("followup_date") or "").strip()
+    fut = (intent.get("followup_time") or "").strip()
+    await _set_pending(tg_uid, int(link["tenant_id"]), {
+        "action": act, "lead_id": lead["lead_id"], "lead_name": lead.get("name", ""),
+        "lead_agent": lead.get("agent_id"), "summary": summary, "fud": fud, "fut": fut})
+    if act == "set_followup":
+        when = (fud + ((" " + fut) if fut else "")) or "the given date"
+        card = f"📇 <b>{lead.get('name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary}"
+    else:
+        card = f"📇 <b>{lead.get('name','')}</b>\n📝 Note: {summary}"
+    if len(leads) > 1:
+        card += f"\n\n<i>(Matched {len(leads)} leads — using the most recent; cancel if wrong.)</i>"
+    await send_message(token, chat_id, "Please confirm:\n\n" + card,
+                       [[{"text": "✅ Save", "callback_data": "cfm:save"},
+                         {"text": "❌ Cancel", "callback_data": "cfm:cancel"}]])
+
+
 async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     cid = cb.get("id")
     data = cb.get("data", "") or ""
@@ -769,6 +929,31 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
             await _digest_view(token, chat_id, tg_uid, link)
     elif data == "help":
         await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
+    elif data == "cfm:save":
+        p = await _get_pending(tg_uid)
+        if not p:
+            await send_message(token, chat_id, "Nothing to save.",
+                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        elif link["role"] not in ("owner", "admin") and p.get("lead_agent") != link.get("agent_id"):
+            await send_message(token, chat_id, "You can only update your assigned leads.")
+        else:
+            itype = "followup" if p.get("action") == "set_followup" else "note"
+            try:
+                await db.log_interaction(
+                    int(p["lead_id"]), int(p.get("lead_agent") or link.get("agent_id") or 0),
+                    itype, "telegram", p.get("summary", ""),
+                    p.get("fud") or None, p.get("fut") or None, link.get("agent_id"))
+                await _set_pending(tg_uid, tenant_id, None)
+                done = "🔔 Follow-up set" if itype == "followup" else "📝 Note saved"
+                await send_message(token, chat_id, f"✅ {done} for <b>{p.get('lead_name','')}</b>.",
+                                   [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+            except Exception as e:
+                logger.warning("tgcrm save failed: %s", e)
+                await send_message(token, chat_id, "⚠️ Couldn't save — please try again.")
+    elif data == "cfm:cancel":
+        await _set_pending(tg_uid, tenant_id, None)
+        await send_message(token, chat_id, "Cancelled.",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
     elif data.startswith("lead:"):
         try:
             await _lead_detail(token, chat_id, link, int(data.split(":", 1)[1]))
@@ -852,9 +1037,26 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
                            "You're not linked to this CRM. Please ask your firm admin for an invite link.")
         return {"ok": True}
     if is_voice:
-        await send_message(token, chat_id,
-                           "🎤 I heard your voice note — voice commands are rolling out next. For now, tap a button:",
-                           _menu_kb(link["role"]))
+        v = msg.get("voice") or msg.get("audio") or {}
+        if int(v.get("duration") or 0) > 150:
+            await send_message(token, chat_id, "⏱️ Please keep voice notes under ~2 minutes and try again.",
+                               _menu_kb(link["role"]))
+            return {"ok": True}
+        await send_message(token, chat_id, "🎧 Listening…")
+        audio = await _download_file(token, v.get("file_id"))
+        tr = await _transcribe(audio, v.get("mime_type") or "audio/ogg") if audio else None
+        if not tr or tr.get("status") != "clear" or not (tr.get("transcript") or "").strip():
+            st = (tr or {}).get("status", "unclear")
+            emap = {"silent": "🤫 I didn't hear any speech.", "noisy": "🔊 Too much background noise.",
+                    "unclear": "🙉 I couldn't catch that clearly.", "abusive": "🙏 Let's keep it professional.",
+                    "nonsense": "🤔 I couldn't make out a request."}
+            await send_message(token, chat_id,
+                               emap.get(st, "⚠️ Couldn't process that audio.") + " Please try again or type it.",
+                               _menu_kb(link["role"]))
+            return {"ok": True}
+        await send_message(token, chat_id, f"🗣️ I heard: “{tr['transcript']}”")
+        await _process_command(token, chat_id, tg_uid, link, tr["transcript"])
         return {"ok": True}
-    await _send_menu(token, chat_id, link)
+    # Typed message → try a CRM command; falls back to the menu if it's not one.
+    await _process_command(token, chat_id, tg_uid, link, text)
     return {"ok": True}
