@@ -128,11 +128,11 @@
   function injectCss(){
     if (document.getElementById('ngCss')) return;
     var css = ''
-      + '.ng-btn{position:fixed;left:18px;bottom:18px;z-index:2147482000;display:flex;align-items:center;gap:.5rem;'
+      + '.ng-btn{position:fixed;left:18px;bottom:18px;z-index:2147483600;display:flex;align-items:center;gap:.5rem;'
       + 'background:' + CY + ';color:#fff;border:none;border-radius:999px;padding:12px 18px;font-weight:700;font-size:15px;'
       + 'box-shadow:0 8px 24px rgba(6,182,212,.42);cursor:pointer;font-family:inherit}'
       + '.ng-btn:hover{background:' + CY2 + '}'
-      + '.ng-panel{position:fixed;left:18px;bottom:18px;z-index:2147482000;width:400px;max-width:calc(100vw - 24px);'
+      + '.ng-panel{position:fixed;left:18px;bottom:18px;z-index:2147483600;width:400px;max-width:calc(100vw - 24px);'
       + 'height:620px;max-height:calc(100vh - 32px);background:#fff;color:' + INK + ';border-radius:18px;'
       + 'box-shadow:0 20px 54px rgba(0,0,0,.32);display:none;flex-direction:column;overflow:hidden;font-family:inherit}'
       + '.ng-panel.open{display:flex}'
@@ -192,14 +192,17 @@
   }
 
   function setLang(l){ if (l === G.lang) return; stopSpeech(); G.lang = l;
+    try{ localStorage.setItem('nidaan_guide_lang', l); }catch(e){}
     G.btn.querySelector('span:last-child').textContent = (l === 'hi' ? 'गाइड सुनें' : 'Guide'); applyLang(); }
 
   var API = {
     init: function (cfg){
       if (!cfg || !cfg.steps || G.cfg) return;
       G.cfg = cfg;
-      // Default Hindi; honour an explicit page language if the host set body.classList 'hi'/'en'.
-      G.lang = (document.body && document.body.classList.contains('en')) ? 'en' : 'hi';
+      // Default HINDI always (per product requirement). Only switch to English if the user
+      // previously chose it in the guide (remembered) — the page's own language is ignored.
+      var saved = null; try{ saved = localStorage.getItem('nidaan_guide_lang'); }catch(e){}
+      G.lang = (saved === 'en') ? 'en' : 'hi';
       var run = function(){
         build();
         // First visit → auto-OPEN (visual greeting). Voice starts on the user's tap (browser policy).
