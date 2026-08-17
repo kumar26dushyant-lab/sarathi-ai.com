@@ -1373,3 +1373,87 @@ async def nidaan_support_reply(message: str, history: Optional[list] = None, lan
     except Exception as e:
         logger.warning("Nidaan support AI failed: %s", e)
         return {"answer": "", "escalate": True, "reason": "ai_error"}
+
+
+# ── Sarathi-AI.com homepage guide (sales-aware, anonymous visitors) ───────────────
+_SARATHI_GUIDE_KB = """SARATHI-AI — what it is:
+• Sarathi-AI (sarathi-ai.com) is a VOICE-FIRST CRM built for Indian insurance advisors/agents and
+  small offices. The advisor runs their whole day by VOICE NOTE on a private Telegram bot — plus a
+  web app and mobile web. "Sarathi" = charioteer (your guiding co-pilot).
+• Core jobs it does: capture & track LEADS and a follow-up pipeline; RENEWALS & lapse-risk tracking;
+  client/policy book; TASKS & reminders; QUOTE comparison across insurers; 12+ financial CALCULATORS;
+  AI TOOLS (objection handler, ready-to-send message templates, AI pitch); a referral program to earn.
+• Telegram Voice CRM: each firm gets its own bot. Team members can log leads, set follow-ups, get
+  reminders, ask AI, and raise things by voice — in Hindi, English, or Hinglish. Works great for
+  Tier-2/Tier-3 users; words over jargon.
+• Team & office: SOLO for one advisor; TEAM / ENTERPRISE for offices (roles, one deactivate button
+  cuts a member across web + mobile + Telegram). 25–50 people can run an office on the web app +
+  mobile + Telegram combination.
+• WhatsApp: on the roadmap; today the product is Telegram-first for automation. (Don't promise a date.)
+
+PRICING & TRIAL (authoritative unless the FACTS block below overrides):
+• Starts at ₹199/month. 7-DAY FREE TRIAL. No credit card needed to start. Cancel anytime. Setup < 5 min.
+• To start: from the homepage, click "Start Free Trial" (enter firm details) — or "Login" if they
+  already have an account.
+
+RELATED PRODUCT (mention only if relevant, don't hard-sell):
+• NidaanPartner.com is a separate product for fighting rejected/underpaid insurance CLAIMS. Some Nidaan
+  plans bundle Sarathi-AI CRM free. If a visitor asks about claim disputes, point them to nidaanpartner.com.
+
+BOUNDARIES:
+• You are talking to an ANONYMOUS website visitor — you have NO access to any account, subscription,
+  payment, or personal data. If they ask about THEIR account/billing/login/a technical problem, tell
+  them to log in, or offer to connect them with the team (escalate)."""
+
+_SARATHI_GUIDE_PROMPT = """You are "Sarathi", the friendly AI guide on the Sarathi-AI.com homepage. You help
+website visitors understand the product and, when they show interest, warmly encourage them to START
+THE FREE TRIAL. Be a helpful sales+support rep: concise, warm, concrete, never pushy. Short replies
+(2–5 sentences), plain language for Tier-2/3 Indian advisors.
+
+KNOWLEDGE BASE (your only source of truth about the product):
+{kb}
+{facts_block}
+LANGUAGE: {lang_rule}
+
+Decide two extra signals:
+• "cta": set to "trial" when the visitor shows buying/curiosity intent (pricing, features, how to
+  start, "is it for me") — the UI will show a "Start Free Trial" button. Set "human" when they need a
+  person (account/billing/login/technical/partnership) — also set escalate=true. Otherwise "".
+• "escalate": true only when they genuinely need a human (account-specific, billing, a problem).
+
+Conversation so far:
+{history}
+
+Visitor: {message}
+
+Respond with JSON ONLY: {{"answer": "<reply in the visitor's language>", "cta": "<trial|human|>", "escalate": <true|false>}}"""
+
+
+async def sarathi_guide_reply(message: str, history: Optional[list] = None, lang: str = "",
+                              facts_block: str = "") -> dict:
+    """Anonymous homepage guide for Sarathi-AI.com — bilingual, sales-aware. Answers product/pricing
+    questions from a fixed KB and nudges the free trial; escalates account/billing/technical to a human.
+    Returns {answer, cta, escalate}. Safe-escalates on any failure. Sarathi-only (no Nidaan data)."""
+    hist = ""
+    for m in (history or [])[-8:]:
+        role = "Visitor" if m.get("sender_type") == "customer" else "Sarathi"
+        hist += f"{role}: {(m.get('body') or '')[:500]}\n"
+    lang_rule = _SUPPORT_LANG_RULE.get(lang,
+        "Reply in the SAME language/style the visitor used (English, Hindi, or Hinglish). Match them.")
+    facts = ("\nAUTHORITATIVE FACTS (override the KB prices if different):\n" + facts_block + "\n") if facts_block else ""
+    prompt = _SARATHI_GUIDE_PROMPT.format(
+        kb=_SARATHI_GUIDE_KB, facts_block=facts, lang_rule=lang_rule,
+        history=hist or "(none)", message=(message or "")[:1500])
+    try:
+        raw = await _ask_gemini(prompt, json_mode=True)
+        data = _clean_json(raw)
+        answer = (data.get("answer") or "").strip()
+        if not answer:
+            raise ValueError("empty answer")
+        cta = (data.get("cta") or "").strip().lower()
+        if cta not in ("trial", "human", ""):
+            cta = ""
+        return {"answer": answer, "cta": cta, "escalate": bool(data.get("escalate", False))}
+    except Exception as e:
+        logger.warning("Sarathi guide AI failed: %s", e)
+        return {"answer": "", "cta": "human", "escalate": True}

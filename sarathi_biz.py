@@ -9652,6 +9652,35 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class GuideAskReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=1500)
+    history: list = Field(default_factory=list)   # [{role:'user'|'bot', text:str}]
+    lang: str = Field("", max_length=10)
+
+
+@app.post("/api/guide/ask")
+@limiter.limit("20/minute")
+async def sarathi_guide_ask(req: GuideAskReq, request: Request):
+    """Anonymous homepage AI guide for Sarathi-AI.com — answers product/pricing questions and
+    nudges the free trial. Sarathi-only (404 on the Nidaan host); stateless (client holds history);
+    no account data. Returns {answer, cta, escalate}."""
+    if _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_ai as ai_mod
+    hist = [{"sender_type": ("customer" if (m or {}).get("role") == "user" else "bot"),
+             "body": str((m or {}).get("text") or "")[:600]}
+            for m in (req.history or [])][-8:]
+    lang = req.lang if req.lang in ("en", "hi", "hinglish") else ""
+    res = await ai_mod.sarathi_guide_reply(req.message, history=hist, lang=lang)
+    answer = res.get("answer") or ""
+    if not answer:
+        # Safe fallback — never leave the visitor hanging.
+        answer = ("I couldn't process that just now. You can start a 7-day free trial (no card) from "
+                  "the homepage, or ask me about pricing, features, or the Telegram CRM.")
+    return {"answer": answer, "cta": res.get("cta", ""), "escalate": bool(res.get("escalate", False))}
+
+
 @app.post("/api/auth/send-otp")
 @limiter.limit("5/minute")
 async def api_send_otp(req: SendOTPRequest, request: Request):
