@@ -465,6 +465,7 @@ def _menu_kb(role: str) -> list:
             [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
             [{"text": "🤖 Ask AI", "callback_data": "ask"}],
             [{"text": "📅 Daily summary", "callback_data": "digest"}],
+            [{"text": "🎫 Support", "callback_data": "support"}],
             [{"text": "❓ Help", "callback_data": "help"}],
         ]
     return [
@@ -472,6 +473,7 @@ def _menu_kb(role: str) -> list:
         [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
         [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
         [{"text": "🤖 Ask AI", "callback_data": "ask"}],
+        [{"text": "🎫 Support", "callback_data": "support"}],
         [{"text": "❓ Help", "callback_data": "help"}],
     ]
 
@@ -1076,6 +1078,24 @@ async def _ask_ai(link, question: str) -> str:
 
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
     """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
+    # Support capture mode: the next message becomes a support ticket.
+    _pend = await _get_pending(tg_uid)
+    if _pend and _pend.get("action") == "support_capture":
+        await _set_pending(tg_uid, int(link["tenant_id"]), None)
+        body = (text or "").strip()
+        try:
+            tkt = await db.create_ticket(
+                tenant_id=int(link["tenant_id"]), agent_id=link.get("agent_id"),
+                subject=(body[:60] or "Support request (Telegram)"),
+                description=body, category="general", priority="normal")
+            await send_message(token, chat_id,
+                               f"🎫 Ticket <b>#{tkt}</b> raised. Our team will get back to you.",
+                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        except Exception as e:
+            logger.warning("tgcrm support ticket failed: %s", e)
+            await send_message(token, chat_id, "⚠️ Couldn't raise the ticket — please try again.",
+                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        return
     intent = await _parse_intent(text)
     act = intent.get("action", "none")
     if act == "none":
@@ -1185,6 +1205,12 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                            "🤖 Ask me anything about your leads, follow-ups, renewals or customers — "
                            "just type or send a voice note.\n\nE.g. <i>“what's pending this week?”</i>",
                            [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    elif data == "support":
+        await _set_pending(tg_uid, tenant_id, {"action": "support_capture"})
+        await send_message(token, chat_id,
+                           "🎫 <b>Support</b>\nDescribe your issue in a message or voice note and I'll "
+                           "raise a ticket for you.",
+                           [[{"text": "❌ Cancel", "callback_data": "cfm:cancel"}]])
     elif data in ("digest", "digest_on", "digest_off", "digest_now"):
         if link["role"] not in ("owner", "admin"):
             await _send_menu(token, chat_id, link)
