@@ -22621,13 +22621,19 @@ async def main():
         use_webhook = SERVER_URL.startswith("https://")
         webhook_base = SERVER_URL if use_webhook else ""
         bot_mode = "webhook" if use_webhook else "polling"
-        logger.info("🤖 Starting master Telegram bot (%s mode)...", bot_mode)
-        await mgr.start_master_bot(TELEGRAM_TOKEN, webhook_base_url=webhook_base)
-        logger.info("✅ Master bot ready (Sarathi-AI.com / @SarathiBizBot)")
-
-        logger.info("🤖 Starting tenant bots...")
-        tenant_count = await mgr.start_all_tenant_bots()
-        logger.info("✅ %d tenant bot(s) started", tenant_count)
+        # RESILIENCE: a bad/revoked legacy bot token (InvalidToken) must NOT crash the
+        # whole worker — the scheduler, Nidaan ops bot, reminders and tgcrm digests all
+        # run here. On any legacy-bot startup failure, log and continue without it.
+        try:
+            logger.info("🤖 Starting master Telegram bot (%s mode)...", bot_mode)
+            await mgr.start_master_bot(TELEGRAM_TOKEN, webhook_base_url=webhook_base)
+            logger.info("✅ Master bot ready (Sarathi-AI.com / @SarathiBizBot)")
+            logger.info("🤖 Starting tenant bots...")
+            tenant_count = await mgr.start_all_tenant_bots()
+            logger.info("✅ %d tenant bot(s) started", tenant_count)
+        except Exception as _legacy_bot_err:
+            logger.error("⚠️ Legacy Sarathi bot startup failed — continuing WITHOUT it "
+                         "(scheduler/Nidaan bot/digests unaffected): %s", _legacy_bot_err)
     else:
         logger.info("🌐 APP_ROLE=%s — skipping Telegram bots (web-only instance)", APP_ROLE)
 
