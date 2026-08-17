@@ -6030,5 +6030,17 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
 
 ---
 
+## A77 — Nidaan branch/staff attribution gaps fixed (Aug 17 2026, commit 990794e)
+
+Founder spotted a branch (BIAORA-01) showing 0/0/0 signups despite an existing claim, and a subscriber (Manish #72, referred by staff Avi `SP-GADPB2`) not appearing on the staff dashboard/ops, plus a lower-cased name. **Not latency/space — three concrete code gaps:**
+
+1. **Branch reconciliation counted only REFERRED accounts.** `list_branches` counted `nidaan_accounts.branch_code`, but a branch that RAISES a claim for a walk-in uses a **house account** (blank branch_code) with attribution on `CLAIM.branch_code` + `origin='branch'`. So a branch that had only raised claims read all-zeros. Fixed: signups/paid/unpaid now = referred accounts **+ branch-raised claims** (`ref_signups`/`raised_claims` exposed separately). BIAORA-01 → signups 1 / unpaid 1. Revenue still = subscription rupees only (review-fee revenue for paid raised claims = noted TBD; share math untouched).
+2. **Referral dropped on Google signup.** `nidaan_start.html` + `nidaan_signup.html` Google-signup fetches sent `{credential, plan}` but **not `branch_code`**, so `?ref=` attribution was lost for every Google signup — even though the backend + `is_valid_ref_code` already accept staff codes (`SP-xxxxxx`). Fixed: both forward the captured ref. (Sarathi's own `/api/signup/google` already sent `referral_code` — unaffected. Password/email signup already passed it.)
+3. **Name not upper-cased on Google signup.** `create_account_google` inserted `owner_name` raw; `create_account`/`submit_claim` apply `_capname`. Added `_capname`.
+
+**Backfilled the reported account:** #72 → `MANISH RATHORE`, `branch_code=SP-GADPB2`, `source_channel=staff` → now shows on Avi's "Your Business" (signups 1 / paid 1 / ₹590). New signups are correct going forward.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
