@@ -5986,5 +5986,25 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
 
 ---
 
+## A74 — Nidaan payment robustness + claims-visibility fix (Aug 17 2026)
+
+**Context:** founder flagged NidaanPartner payment-failure noise + a claim visible in the "Pending Reviews" widget but missing from All Claims/search. Also a standing directive: keep Sarathi-AI.com and NidaanPartner.com **separate** (only the bundle couples them). All work below is Nidaan-only.
+
+**Emergency fixes (prod, verified):**
+- **Worker crash-loop** — `sarathi-worker` was crash-looping (~every 17s) on a revoked legacy `@SarathiBizBot` token (python-telegram-bot `InvalidToken` at startup), silently killing the scheduler, Nidaan ops bot, reminders and digests. Wrapped `start_master_bot`/`start_all_tenant_bots` in try/except → `NRestarts=0` stable.
+- **SMTP 535 "false alarm"** — every "SMTP failed" was followed by "Brevo ✓": mail WAS delivering; dead Gmail creds only. Gated Nidaan Gmail SMTP behind `NIDAAN_SMTP_ENABLED` (default off) → Nidaan mail goes **Brevo-first**. (Owner optional: regen Gmail app password → set flag on.)
+
+**Payment features (prod, verified):**
+- **A — customer retry link:** on `payment.failed`, resolve the customer email (event → account), mint a fresh Razorpay link, email it (`_send_customer_retry_link` + `_nidaan_retry_email_html`). Fires for all payment types.
+- **B — account pay-status red-flag + Mark-paid:** `get_all_accounts_admin` now derives `pay_status` (paid / attempted / halted / none) via an `unpaid_links` subquery; ops accounts list shows 🟡 payment-pending / 🔴 auto-pay-failed badges. **Super-admin-only** `POST /nidaan/ops/api/accounts/{id}/mark-paid` for offline/QR payments → `create_subscription(...MANUAL:ref...)` (+bundle provision if plan carries it) + `_ops_audit`.
+- **C — auto-pay audit PASSED:** recurring path (`/nidaan/api/subscribe/recurring` → `create_nidaan_recurring_subscription`) creates a **Razorpay Subscription** (mandate/auto-pay authorised at checkout); `subscription.charged` auto-renews; fallbacks already robust (`HALTED` → alert+mark-failed, mandate-pending nudge). Active subs carry real `sub_…` ids = mandate is being collected.
+
+**Claims-visibility fix (prod, verified) — commit 4a51eb6:**
+- **Root cause:** two ₹499 funnels. `nidaan_claim_499` (advisor-lead) creates a real `nidaan_claims` row → visible. `nidaan_review_999` (D2C direct purchase) only wrote a `nidaan_per_claim_purchase` row → showed in the "Pending Reviews" widget but was **invisible in All Claims / search / filters / assignment** (those read `nidaan_claims`). GOURAV PANDIT (purchase #2, paid) was exactly this.
+- **Fix:** new `nidaan.ensure_claim_for_paid_purchase(purchase_id)` — idempotently materialises a `nidaan_claims` row from a paid purchase's intake details (`payment_status='paid'`, `origin='d2c_review'`) and links it back (`linked_claim_id` + `converted_to_claim_id`). No-op if not paid / bare credit (no details) / already converted. Wired into **BOTH** payment-success paths (client verify @ `pay-verify` + webhook `nidaan_review_999` safety-net), each guarded so a claim-creation hiccup never fails payment confirmation. Now both ₹499 funnels land uniformly in the claims workspace.
+- **Backfill:** ran the helper over all paid+unlinked+with-details purchases → GOURAV purchase #2 → **claim 50**. Verified: appears in `get_all_claims_admin`, `get_claims_ops` list, and search by name (any case) + phone.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 

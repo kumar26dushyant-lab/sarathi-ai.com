@@ -8,6 +8,34 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-17 — Every paid ₹499 review now shows in your Claims list — READY TO SEND
+
+**Title (EN):**
+✅ Paid ₹499 reviews now always appear in Claims & Search (please 👍)
+
+**Details (EN):**
+Team, a small but important fix 🛠️
+• Earlier, a customer who paid ₹499 for a **direct claim review** showed up only in the **"Pending Reviews"** box on the overview — not in **All Claims** or **Search**. That's fixed.
+• Now, the moment a ₹499 review is paid, it becomes a **proper claim** you can **open, search (by name or phone), assign, and deliver findings on** — just like every other claim.
+• Nothing changes in how you work — paid reviews simply stop hiding. If you ever paid-review someone and couldn't find them in Claims, try again now.
+
+**How to use this update:** react **👍** to confirm you've **read and understood**. Anything unclear? Please reach out to our **office IT SPOC**. 🙏
+
+**Title (HI):**
+✅ हर भुगतान किया गया ₹499 रिव्यू अब Claims और Search में दिखेगा (कृपया 👍 करें)
+
+**Details (HI):**
+टीम, एक छोटा पर ज़रूरी सुधार 🛠️
+• पहले, जो ग्राहक **सीधे क्लेम रिव्यू** के लिए ₹499 भुगतान करता था, वह सिर्फ़ ओवरव्यू के **"Pending Reviews"** बॉक्स में दिखता था — **All Claims** या **Search** में नहीं। यह ठीक कर दिया गया है।
+• अब जैसे ही ₹499 रिव्यू का भुगतान होता है, वह एक **पूरा क्लेम** बन जाता है जिसे आप **खोल सकते हैं, नाम या फ़ोन से सर्च कर सकते हैं, असाइन कर सकते हैं और फाइंडिंग्स दे सकते हैं** — बाकी सभी क्लेम्स की तरह।
+• आपके काम करने का तरीका नहीं बदला — भुगतान किए रिव्यू अब छिपेंगे नहीं। अगर पहले कोई पेड-रिव्यू Claims में नहीं मिल रहा था, तो अब दोबारा देखें।
+
+**इस अपडेट का उपयोग:** नीचे **👍** करके पुष्टि करें कि आपने **पढ़ा और समझ लिया**। कुछ भी अस्पष्ट हो तो कृपया ऑफ़िस के **IT SPOC** से संपर्क करें। 🙏
+
+*Suggested roles: all Nidaan ops staff (super-admins, sub-super-admins, team members).*
+
+---
+
 ## 2026-08-15 — Your ops portal keeps getting better (latest roundup) — READY TO SEND
 
 > Supersedes the two older Aug-13 drafts below — this consolidates the latest into one clean update.
