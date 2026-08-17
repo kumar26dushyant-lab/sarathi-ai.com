@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import secrets
+import time
 from datetime import datetime, date, timedelta
 from typing import Optional
 
@@ -2269,12 +2270,17 @@ def create_branch_magic_token(branch_code: str, email: str, minutes: int = 20) -
     Bound to BOTH the branch_code and the login email; the landing endpoint re-checks the
     branch is still active before issuing a real session. Kept separate typ so it can never
     be used as a session token."""
+    # NOTE: use a real POSIX epoch (time.time()), NOT datetime.utcnow().timestamp() — the
+    # latter is naive-local and shifts by the server's TZ offset (e.g. +0200 CEST), which
+    # silently pre-expires short-lived tokens. Long-lived session tokens absorb the shift;
+    # this one (minutes) cannot.
+    now = int(time.time())
     payload = {
         "typ": "nidaan_branch_magic",
         "sub": (branch_code or "").strip().upper(),
         "email": (email or "").strip().lower(),
-        "iat": int(datetime.utcnow().timestamp()),
-        "exp": int((datetime.utcnow() + timedelta(minutes=max(1, int(minutes)))).timestamp()),
+        "iat": now,
+        "exp": now + max(1, int(minutes)) * 60,
     }
     return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
 
