@@ -2964,85 +2964,29 @@ document.addEventListener('DOMContentLoaded', function(){
   var _curLang = 'hi'; try{ _curLang = localStorage.getItem('nidaan_lang') || 'hi'; }catch(e){}
   var _opts = { mount: '#guideMic', lang: _curLang,
     onLangChange: function(l){ try{ window.setLang && window.setLang(l); }catch(e){} } };
-
-  // Steps for a PAID SUBSCRIBER (active plan → claims included; NO per-review ₹499).
-  function subscriberSteps(planLabel){
-    var P = planLabel || '';
-    return [
-      { hi: { t: "आपके प्लान में क्लेम शामिल हैं", b: "आपके " + (P||"") + " प्लान में हर महीने तय संख्या में क्लेम समीक्षा शामिल हैं। हर क्लेम पर अलग से ₹499 देने की ज़रूरत नहीं — बस क्लेम भेजते जाएँ।" },
-        en: { t: "Your plan includes claim reviews", b: "Your " + (P||"") + " plan includes a set number of claim reviews every month. You do NOT pay ₹499 per review — just keep submitting claims." } },
-      { hi: { t: "नया क्लेम भेजें", b: "रिजेक्ट या कम भुगतान वाले क्लेम की जानकारी भरकर भेजें। हमारी कानूनी टीम उसकी समीक्षा करेगी।" },
-        en: { t: "Submit a new claim", b: "Fill in the details of a rejected or underpaid claim and submit it. Our legal team will review it." } },
-      { hi: { t: "ज़रूरी दस्तावेज़ अपलोड करें", b: "पॉलिसी और रिजेक्शन लेटर जैसे दस्तावेज़ लगाएँ, ताकि समीक्षा सही और तेज़ हो।" },
-        en: { t: "Upload documents", b: "Attach documents like the policy and rejection letter so the review is accurate and fast." } },
-      { hi: { t: "क्लेम की स्थिति देखें", b: "क्लेम सेक्शन में हर क्लेम की स्थिति और अगला कदम दिखता है।" },
-        en: { t: "Track claim status", b: "The Claims section shows each claim's status and the next step." } },
-      { hi: { t: "समीक्षा का नतीजा पढ़ें", b: "समीक्षा पूरी होने पर पता चलेगा कि क्लेम लड़ने लायक है या नहीं, और आगे क्या करें।" },
-        en: { t: "Read the review findings", b: "Once the review is done, you'll see whether the claim is worth fighting and what to do next." } },
-      { hi: { t: "मुफ़्त Sarathi-AI CRM का इस्तेमाल करें", b: "आपके प्लान के साथ Sarathi-AI.com CRM भी मुफ़्त मिलता है — अपने लीड्स, फॉलो-अप, रिन्यूअल और क्लाइंट्स को सिर्फ़ वॉइस नोट से मैनेज करें। इससे आपका पूरा बिज़नेस आसान हो जाता है।" },
-        en: { t: "Use your free Sarathi-AI CRM", b: "Your plan also includes the Sarathi-AI.com CRM free — manage your leads, follow-ups, renewals and clients with just voice notes. It makes running your whole business effortless." } },
-      { hi: { t: "तीनों Nidaan नंबर सेव करें", b: "तीनों WhatsApp नंबर अपने फ़ोन में सेव करें, ताकि हर अपडेट समय पर मिले।" },
-        en: { t: "Save all 3 Nidaan numbers", b: "Save all three WhatsApp numbers in your phone so you get every update on time." } },
-      { hi: { t: "प्रोफ़ाइल और सेटिंग्स", b: "प्रोफ़ाइल में अपनी जानकारी अपडेट करें; सेटिंग्स में भाषा और अन्य विकल्प बदलें।" },
-        en: { t: "Profile and settings", b: "Update your details in Profile; change the language and other options in Settings." } },
-      { hi: { t: "मदद चाहिए? हमसे बात करें", b: "कोई सवाल हो तो चैट या सहायता से पूछें। हम मदद के लिए यहाँ हैं।" },
-        en: { t: "Need help? Talk to us", b: "For any question, use chat or support. We're here to help." } }
-    ];
+  function _cap(s){ return s ? (s.charAt(0).toUpperCase() + s.slice(1)) : ''; }
+  // Substitute {plan} in the server-provided content with the account's plan name.
+  function _fill(c, plan){
+    var P = plan || (_curLang === 'hi' ? 'अपने' : 'your');
+    function r(s){ return String(s == null ? '' : s).replace(/\{plan\}/g, P); }
+    return { title: { hi: r(c.title.hi), en: r(c.title.en) },
+             greeting: { hi: r(c.greeting.hi), en: r(c.greeting.en) },
+             steps: (c.steps || []).map(function(st){ return { hi:{t:r(st.hi.t),b:r(st.hi.b)}, en:{t:r(st.en.t),b:r(st.en.b)} }; }) };
   }
-
-  // Steps for a ONE-TIME ₹499 REVIEW user (no active plan) — pay per review + upsell to a plan.
-  var reviewSteps = [
-    { hi: { t: "अपना क्लेम समीक्षा के लिए भेजें", b: "क्लेम समीक्षा शुरू करें पर जाएँ और अपने रिजेक्ट या कम भुगतान वाले क्लेम की जानकारी भरें।" },
-      en: { t: "Send your claim for review", b: "Open Raise a Claim Review and fill in the details of your rejected or underpaid claim." } },
-    { hi: { t: "ज़रूरी दस्तावेज़ अपलोड करें", b: "पॉलिसी और रिजेक्शन लेटर जैसे दस्तावेज़ अपलोड करें।" },
-      en: { t: "Upload your documents", b: "Attach documents like your policy and the rejection letter." } },
-    { hi: { t: "₹499 समीक्षा शुल्क का भुगतान करें", b: "एक बार की समीक्षा के लिए ₹499 भरें (₹10 लाख से ऊपर के क्लेम पर ₹2000)। भुगतान के बाद समीक्षा शुरू हो जाती है।" },
-      en: { t: "Pay the ₹499 review fee", b: "Pay ₹499 for a one-time review (₹2000 if the disputed amount is above ₹10 lakh). The review begins once paid." } },
-    { hi: { t: "क्लेम की स्थिति देखें", b: "क्लेम सेक्शन में अपने क्लेम की स्थिति देखें।" },
-      en: { t: "Track your claim status", b: "See your claim's status in the Claims section." } },
-    { hi: { t: "समीक्षा का नतीजा पढ़ें", b: "समीक्षा पूरी होने पर बताया जाएगा कि क्लेम लड़ने लायक है या नहीं, और आगे क्या करें।" },
-      en: { t: "Read the review findings", b: "Once done, you'll learn whether the claim is worth fighting and what to do next." } },
-    { hi: { t: "बार-बार क्लेम भेजते हैं? प्लान लें और CRM मुफ़्त पाएँ", b: "अगर आप एडवाइज़र हैं और कई क्लेम भेजते हैं, तो सदस्यता प्लान लें — हर बार ₹499 देने से सस्ता, और साथ में Sarathi-AI.com CRM मुफ़्त मिलता है जिससे अपना पूरा बिज़नेस वॉइस से चलाएँ।" },
-      en: { t: "Sending many claims? Take a plan, get the CRM free", b: "If you're an advisor sending many claims, take a subscription plan — cheaper than ₹499 each time, and it includes the Sarathi-AI.com CRM free to run your whole business by voice." } },
-    { hi: { t: "मदद चाहिए? हमसे बात करें", b: "कोई सवाल हो तो चैट या सहायता से पूछें।" },
-      en: { t: "Need help? Talk to us", b: "For any question, use chat or support." } }
-  ];
-
-  function cap(s){ return s ? (s.charAt(0).toUpperCase() + s.slice(1)) : ''; }
-
-  // Identify THIS account (subscriber vs one-time review) and mount the matching guide.
-  function mount(state){
-    var isSub = state && state.type === 'subscriber';
-    var plan = cap((state && state.plan) || '');
-    if (isSub){
-      NidaanGuide.init(Object.assign({}, _opts, {
-        key: 'subscriber',
-        title: { hi: 'आपका गाइड', en: 'Your Guide' },
-        greeting: {
-          hi: "नमस्ते! यह आपका Nidaan डैशबोर्ड है। आपके पास सक्रिय " + (plan || '') + " प्लान है। मैं बताऊँगा कि इसका पूरा फ़ायदा कैसे उठाएँ — क्लेम भेजने से लेकर अपने मुफ़्त CRM तक।",
-          en: "Hello! This is your Nidaan dashboard. You have an active " + (plan || '') + " plan. Let me show you how to make the most of it — from submitting claims to your free CRM."
-        },
-        steps: subscriberSteps(plan)
-      }));
-    } else {
-      NidaanGuide.init(Object.assign({}, _opts, {
-        key: 'review',
-        title: { hi: 'आपका गाइड', en: 'Your Guide' },
-        greeting: {
-          hi: "नमस्ते! यह आपका Nidaan डैशबोर्ड है। यहाँ आप अपने रिजेक्ट या कम भुगतान वाले बीमा क्लेम की विशेषज्ञ समीक्षा करा सकते हैं। आइए शुरू करें।",
-          en: "Hello! This is your Nidaan dashboard. Here you can get an expert review of your rejected or underpaid insurance claim. Let's begin."
-        },
-        steps: reviewSteps
-      }));
-    }
-  }
-
-  // Read the account type from the server (single source of truth), then mount.
+  // Identify this account (subscriber vs one-time review), fetch the matching guide from the
+  // SINGLE server source (/nidaan/api/guide — same source the chatbot uses), then mount.
   var token = ''; try{ token = localStorage.getItem('nidaan_token') || ''; }catch(e){}
   fetch('/nidaan/api/me', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} })
     .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(d){ mount((d && d.account_state) || { type: 'new' }); })
-    .catch(function(){ mount({ type: 'new' }); });   // safe default = one-time review guide
+    .then(function(d){
+      var stt = (d && d.account_state) || { type: 'new' };
+      var ctx = (stt.type === 'subscriber') ? 'subscriber' : 'review';
+      var plan = _cap((stt && stt.plan) || '');
+      return fetch('/nidaan/api/guide?ctx=' + ctx)
+        .then(function(r){ return r.json(); })
+        .then(function(c){ NidaanGuide.init(Object.assign({}, _opts, { key: ctx }, _fill(c, plan))); });
+    })
+    .catch(function(){ /* guide content unavailable — skip silently */ });
 });
 </script>
 </body>

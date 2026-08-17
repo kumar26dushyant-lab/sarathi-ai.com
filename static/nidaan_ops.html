@@ -395,6 +395,7 @@ select.form-input option{background:#1e293b}
         <span id="staffName" style="color:var(--nd-text-secondary);font-size:.82rem"></span>
         <span class="role-badge" id="staffRoleBadge"></span>
       </button>
+      <span id="guideMic" style="display:inline-flex;align-items:center"></span>
       <button class="btn-sm btn-ghost nd-theme-toggle" style="cursor:pointer" title="Toggle light/dark mode"></button>
       <button class="btn-sm btn-ghost" onclick="doLogout()">Logout</button>
     </div>
@@ -8799,6 +8800,18 @@ async function processRefund(subId, amount){
     setTimeout(function(){ var t=document.getElementById('pwaIosTip'); if(t) t.style.display='block'; }, 3500);
   }
 })();
+</script>
+<!-- Self-onboarding voice+readable STAFF guide (mic in top menu, Hindi default) -->
+<script src="/static/nidaan_guide.js?v=3" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  if (!window.NidaanGuide) return;
+  // Fetch the staff guide from the SINGLE server source (same source the chatbot uses).
+  fetch('/nidaan/api/guide?ctx=staff')
+    .then(function(r){ return r.json(); })
+    .then(function(c){ NidaanGuide.init(Object.assign({ key: 'staff', mount: '#guideMic', lang: 'hi' }, c)); })
+    .catch(function(){ /* guide content unavailable — skip silently */ });
+});
 </script>
 </body>
 </html>

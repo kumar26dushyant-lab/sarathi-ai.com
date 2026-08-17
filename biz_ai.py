@@ -1356,6 +1356,14 @@ async def nidaan_support_reply(message: str, history: Optional[list] = None, lan
         customer_block = "CUSTOMER CONTEXT (this logged-in user): " + ", ".join(parts) + "\n\n"
     # Canonical facts (single source of truth) — authoritative over the static KB prose.
     kb = _NIDAAN_SUPPORT_KB
+    # Product HOW-TO comes from the SAME source as the in-app dashboard guides, so "how do I…"
+    # answers always match what the guide walks users through.
+    try:
+        import biz_nidaan_guide as _nguide
+        kb += ("\n\nIN-APP HOW-TO GUIDES (use these to answer 'how do I…' / 'where do I…' "
+               "product questions, per user type):\n" + _nguide.kb_text("hi" if lang == "hi" else "en"))
+    except Exception:
+        pass
     if facts_block:
         kb += ("\n\nAUTHORITATIVE FACTS (super-admin-maintained — if anything above differs, "
                "THESE win; use these exact values):\n" + facts_block)

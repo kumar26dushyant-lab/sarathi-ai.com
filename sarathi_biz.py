@@ -2196,6 +2196,19 @@ async def nidaan_review_fee_config(request: Request):
     return await nidaan.review_fee_config()
 
 
+@app.get("/nidaan/api/guide")
+async def nidaan_guide_content(request: Request, ctx: str = "subscriber"):
+    """Single source for the in-app self-onboarding guides (subscriber | review | branch |
+    staff). The dashboard widgets AND the support chatbot both read from biz_nidaan_guide,
+    so guide text stays in one place and updates everywhere at once."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_guide as _guide
+    if ctx not in _guide.GUIDE_CONTENT:
+        ctx = "subscriber"
+    return _guide.get_context(ctx)
+
+
 @app.get("/nidaan/api/claims/{claim_id}")
 async def nidaan_api_claim_detail(claim_id: int, request: Request):
     payload = _nidaan_bearer(request)
