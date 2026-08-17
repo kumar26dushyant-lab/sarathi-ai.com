@@ -601,9 +601,14 @@ async def list_branches(include_disabled: bool = True) -> list[dict]:
             f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.status, b.created_at,
                        COALESCE(b.share_pct, 0) AS share_pct,
                        (SELECT COUNT(*) FROM nidaan_accounts a
-                        WHERE UPPER(a.branch_code)=b.branch_code) AS signups,
+                        WHERE UPPER(a.branch_code)=b.branch_code) AS ref_signups,
                        (SELECT COUNT(*) FROM nidaan_accounts a
-                        WHERE UPPER(a.branch_code)=b.branch_code AND {_BRANCH_PAID_EXISTS}) AS paid,
+                        WHERE UPPER(a.branch_code)=b.branch_code AND {_BRANCH_PAID_EXISTS}) AS ref_paid,
+                       (SELECT COUNT(*) FROM nidaan_claims c
+                        WHERE UPPER(COALESCE(c.branch_code,''))=b.branch_code AND c.origin='branch') AS raised_claims,
+                       (SELECT COUNT(*) FROM nidaan_claims c
+                        WHERE UPPER(COALESCE(c.branch_code,''))=b.branch_code AND c.origin='branch'
+                          AND c.payment_status='paid') AS raised_paid,
                        (SELECT COALESCE(SUM(su.amount_paid), 0)
                           FROM nidaan_subscriptions su
                           JOIN nidaan_accounts a2 ON a2.account_id = su.account_id
@@ -612,11 +617,24 @@ async def list_branches(include_disabled: bool = True) -> list[dict]:
                 ORDER BY b.city, b.branch_code""")
         rows = [dict(r) for r in await cur.fetchall()]
     for r in rows:
-        r["accounts"] = r.get("signups", 0)   # back-compat alias
-        r["unpaid"] = max(0, int(r.get("signups", 0)) - int(r.get("paid", 0)))
+        # A branch brings business two ways: (1) REFERRED subscriber accounts (their code
+        # lands in nidaan_accounts.branch_code), and (2) claims they RAISE on behalf of a
+        # walk-in customer (a house account, so the attribution is on the CLAIM.branch_code,
+        # origin='branch'). Both count toward the branch's signups/paid/unpaid — otherwise a
+        # branch that has only raised claims (the common early case) shows all-zeros.
+        ref_signups = int(r.pop("ref_signups", 0) or 0)
+        ref_paid = int(r.pop("ref_paid", 0) or 0)
+        raised = int(r.pop("raised_claims", 0) or 0)
+        raised_paid = int(r.pop("raised_paid", 0) or 0)
+        r["ref_signups"] = ref_signups          # referred subscriber accounts
+        r["raised_claims"] = raised             # claims raised by the branch
+        r["signups"] = ref_signups + raised
+        r["paid"] = ref_paid + raised_paid
+        r["accounts"] = r["signups"]            # back-compat alias
+        r["unpaid"] = max(0, r["signups"] - r["paid"])
         rev = int(r.get("revenue") or 0)
         pct = float(r.get("share_pct") or 0)
-        r["revenue"] = rev                    # rupees
+        r["revenue"] = rev                    # rupees (subscription revenue; review fees TBD)
         r["share"] = round(rev * pct / 100)   # rupees owed to the branch
     return rows
 
@@ -1378,6 +1396,7 @@ async def create_account_google(
     Stores an unguessable pw_hash so password login is permanently disabled for these accounts.
     Returns account_id or None on duplicate email. Carries referral/marketing attribution."""
     pw_hash = "google$" + secrets.token_hex(32)
+    owner_name = _capname(owner_name)   # #6: store names in caps (parity with create_account)
     code = (branch_code or "").strip().upper()
     channel, _rc = await resolve_channel(code, utm_source)
     us, um, uc = (utm_source or "").strip(), (utm_medium or "").strip(), (utm_campaign or "").strip()

@@ -939,7 +939,7 @@ async function _handleGoogleStep1(response) {
     if (res.status === 404) {
       const res2 = await fetch('/nidaan/api/signup/google', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver'})
+        body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver', branch_code: (_ref || '')})
       });
       if (res2.ok) { _loginSuccess(await res2.json()); return; }
       const d2 = await res2.json();
@@ -969,7 +969,7 @@ async function _handleGoogleSignup(response) {
   try {
     const res = await fetch('/nidaan/api/signup/google', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver'})
+      body: JSON.stringify({credential: response.credential, plan: ['silver','gold','platinum'].includes(_plan) ? _plan : 'silver', branch_code: (_ref || '')})
     });
     const data = await res.json();
     if (!res.ok) throw new Error(_extractErr(data, 'Google sign-up failed'));

@@ -300,9 +300,10 @@
   async function _handleGoogleSignup(response) {
     const hi = document.body.classList.contains('hi');
     try {
+      const _refCode = (new URLSearchParams(location.search).get('ref') || new URLSearchParams(location.search).get('branch') || '').trim().toUpperCase();
       const res = await fetch('/nidaan/api/signup/google', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({credential: response.credential, plan: selectedPlan})
+        body: JSON.stringify({credential: response.credential, plan: selectedPlan, branch_code: _refCode})
       });
       const data = await res.json();
       if (!res.ok) throw new Error(_extractErr(data, 'Google signup failed'));
