@@ -2951,5 +2951,40 @@ if ('serviceWorker' in navigator) {
   PWABack.registerEl('waVcardModalBg');
 })();
 </script>
+<!-- Self-onboarding voice+readable user guide (Hindi default) -->
+<script src="/static/nidaan_guide.js?v=1" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  if (!window.NidaanGuide) return;
+  NidaanGuide.init({
+    key: 'subscriber',
+    title: { hi: 'आपका गाइड', en: 'Your Guide' },
+    greeting: {
+      hi: "नमस्ते! मैं आपका Nidaan गाइड हूँ। मैं आसान भाषा में बताऊँगा कि इस डैशबोर्ड पर आपको क्या-क्या करना है। सुनें और साथ-साथ करते चलें।",
+      en: "Hello! I'm your Nidaan guide. I'll walk you through, in simple steps, everything you can do on this dashboard. Just listen and follow along."
+    },
+    steps: [
+      { hi: { t: "अपना क्लेम समीक्षा के लिए भेजें", b: "अगर आपका बीमा क्लेम रिजेक्ट हुआ है या कम पैसे मिले हैं, तो क्लेम समीक्षा शुरू करें पर जाएँ और अपने क्लेम की जानकारी भरें।" },
+        en: { t: "Send your claim for review", b: "If your insurance claim was rejected or underpaid, open Raise a Claim Review and fill in your claim details." } },
+      { hi: { t: "ज़रूरी दस्तावेज़ अपलोड करें", b: "अपनी पॉलिसी और रिजेक्शन लेटर जैसे दस्तावेज़ अपलोड करें, ताकि हमारी टीम सही समीक्षा कर सके।" },
+        en: { t: "Upload your documents", b: "Attach documents like your policy and the rejection letter so our team can review your case properly." } },
+      { hi: { t: "समीक्षा शुल्क का भुगतान करें", b: "₹499 का समीक्षा शुल्क भरें। भुगतान के बाद हमारी कानूनी टीम आपके क्लेम की जाँच शुरू कर देती है।" },
+        en: { t: "Pay the review fee", b: "Pay the ₹499 review fee. Once paid, our legal team starts examining your claim." } },
+      { hi: { t: "अपने क्लेम की स्थिति देखें", b: "क्लेम सेक्शन में आप अपने हर क्लेम की स्थिति देख सकते हैं — कहाँ तक पहुँचा और आगे क्या होगा।" },
+        en: { t: "Track your claim status", b: "In the Claims section you can see the status of each claim — where it has reached and what happens next." } },
+      { hi: { t: "समीक्षा का नतीजा पढ़ें", b: "समीक्षा पूरी होने पर आपको बताया जाता है कि आपका क्लेम लड़ने लायक है या नहीं, और आगे क्या करना है।" },
+        en: { t: "Read the review findings", b: "When the review is done, you'll learn whether your claim is worth fighting and what to do next." } },
+      { hi: { t: "सदस्यता प्लान चुनें (एडवाइज़र के लिए)", b: "अगर आप एडवाइज़र हैं और कई क्लेम भेजना चाहते हैं, तो एक सदस्यता प्लान चुनें — इससे बेहतर दरें और सुविधाएँ मिलती हैं।" },
+        en: { t: "Choose a plan (for advisors)", b: "If you're an advisor handling many claims, pick a subscription plan for better rates and features." } },
+      { hi: { t: "तीनों Nidaan नंबर सेव करें", b: "3 Nidaan नंबर सेव करें से हमारे तीनों WhatsApp नंबर अपने फ़ोन में सेव कर लें, ताकि हर अपडेट आपको मिलता रहे।" },
+        en: { t: "Save all 3 Nidaan numbers", b: "Use Save All 3 Nidaan Numbers to store our WhatsApp numbers in your phone so you never miss an update." } },
+      { hi: { t: "प्रोफ़ाइल और सेटिंग्स", b: "प्रोफ़ाइल में अपना नाम, फ़ोन और जानकारी अपडेट करें। सेटिंग्स में भाषा और अन्य विकल्प बदल सकते हैं।" },
+        en: { t: "Profile and settings", b: "In Profile update your name, phone and details. In Settings you can change the language and other options." } },
+      { hi: { t: "मदद चाहिए? हमसे बात करें", b: "कोई भी सवाल हो तो नीचे चैट बटन या सहायता से हमसे पूछें। हम आपकी मदद के लिए यहाँ हैं।" },
+        en: { t: "Need help? Talk to us", b: "For any question, use the chat button or support below. We're here to help you." } }
+    ]
+  });
+});
+</script>
 </body>
 </html>
