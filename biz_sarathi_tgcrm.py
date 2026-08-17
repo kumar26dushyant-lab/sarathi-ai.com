@@ -794,8 +794,8 @@ async def _parse_intent(text: str) -> dict:
     prompt = (
         "Convert an insurance advisor's short note/voice message into a CRM action as STRICT JSON.\n"
         f"Today (IST) is {today}. Shape:\n"
-        '{"action":"log_note|set_followup|move_stage|create_lead|ask|none","lead_name":"","summary":"",'
-        '"followup_date":"YYYY-MM-DD","followup_time":"HH:MM","stage":"","phone":"","need_type":""}\n'
+        '{"action":"log_note|set_followup|move_stage|create_lead|assign|ask|none","lead_name":"","summary":"",'
+        '"followup_date":"YYYY-MM-DD","followup_time":"HH:MM","stage":"","phone":"","need_type":"","assignee_name":""}\n'
         "- 'set_followup' = schedule a future call/meeting/reminder for a lead (has a date).\n"
         "- 'log_note' = record something that happened (a call/update) with no future date.\n"
         "- 'move_stage' = change a lead's pipeline stage. 'stage' MUST be one of: "
@@ -803,6 +803,8 @@ async def _parse_intent(text: str) -> dict:
         "(map 'won'->closed_won, 'lost'->closed_lost, 'quoted'/'proposal'->proposal_sent).\n"
         "- 'create_lead' = add a NEW lead/customer. phone = digits only if spoken; "
         "need_type = product if said (health/life/term/motor/etc).\n"
+        "- 'assign' = reassign an existing lead to a team member. lead_name = the lead; "
+        "assignee_name = the team member's name.\n"
         "- 'ask' = a QUESTION about their CRM (leads, pipeline, follow-ups, renewals, "
         "customers, counts, 'what's pending', 'who did I add') to be answered from data.\n"
         "- 'none' = greeting or small talk, not an action or a data question.\n"
@@ -818,7 +820,8 @@ async def _parse_intent(text: str) -> dict:
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
         out = _json.loads((parts[0].get("text") or "").strip() or "{}")
-        if out.get("action") not in ("log_note", "set_followup", "move_stage", "create_lead", "ask", "none"):
+        if out.get("action") not in ("log_note", "set_followup", "move_stage", "create_lead",
+                                     "assign", "ask", "none"):
             out["action"] = "none"
         return out
     except Exception as e:
@@ -826,7 +829,7 @@ async def _parse_intent(text: str) -> dict:
         return {"action": "none"}
 
 
-_ACTIONABLE = {"log_note", "set_followup", "move_stage", "create_lead"}
+_ACTIONABLE = {"log_note", "set_followup", "move_stage", "create_lead", "assign"}
 
 
 async def _set_pending(tg_uid: int, tenant_id: int, payload: Optional[dict]) -> None:
@@ -882,6 +885,8 @@ def _describe_pending(p: dict) -> str:
         return f"follow-up for {nm}"
     if a == "move_stage":
         return f"move {nm} to {(p.get('stage') or '').replace('_',' ')}"
+    if a == "assign":
+        return f"assign {nm} to {p.get('assignee_name','')}"
     if a == "log_note":
         return f"note for {nm}"
     return "your draft"
@@ -896,6 +901,8 @@ async def _render_confirm(token, chat_id, p: dict) -> None:
         card = f"📇 <b>{p.get('lead_name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {p.get('summary','')}"
     elif a == "move_stage":
         card = f"📇 <b>{p.get('lead_name','')}</b>\n📊 Move stage to: <b>{(p.get('stage') or '').replace('_',' ')}</b>"
+    elif a == "assign":
+        card = f"📇 <b>{p.get('lead_name','')}</b>\n👥 Assign to: <b>{p.get('assignee_name','')}</b>"
     else:
         card = f"📇 <b>{p.get('lead_name','')}</b>\n📝 Note: {p.get('summary','')}"
     await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
@@ -984,10 +991,27 @@ async def _finalize_action(token, chat_id, tg_uid, link, intent, lead) -> None:
                                          "summary": summary or "Follow-up", "fud": fud, "fut": fut})
         when = (fud + ((" " + fut) if fut else "")) or "the given date"
         card = f"📇 <b>{lead.get('name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary or 'Follow-up'}"
+    elif act == "assign":
+        await _set_pending(tg_uid, tid, {**base, "action": "assign",
+                                         "assignee_agent": intent.get("assignee_agent"),
+                                         "assignee_name": intent.get("assignee_name", "")})
+        card = f"📇 <b>{lead.get('name','')}</b>\n👥 Assign to: <b>{intent.get('assignee_name','')}</b>"
     else:  # log_note
         await _set_pending(tg_uid, tid, {**base, "action": "log_note", "summary": summary or "Note"})
         card = f"📇 <b>{lead.get('name','')}</b>\n📝 Note: {summary or 'Note'}"
     await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+
+
+async def _find_member(tenant_id: int, name: str) -> Optional[dict]:
+    name = (name or "").strip()
+    if not name:
+        return None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT agent_id, name FROM agents WHERE tenant_id=? AND is_active=1 AND name LIKE ? "
+            "ORDER BY agent_id LIMIT 1", (tenant_id, f"%{name}%"))).fetchone()
+        return dict(r) if r else None
 
 
 async def _ai_context(link) -> dict:
@@ -1090,6 +1114,21 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
         if had_actionable:
             await _nudge_prev(token, chat_id, tg_uid)
         return
+
+    if act == "assign":
+        if link["role"] not in ("owner", "admin"):
+            await send_message(token, chat_id, "Only your admin can assign leads.",
+                               _menu_kb(link["role"]))
+            return
+        member = await _find_member(int(link["tenant_id"]), intent.get("assignee_name", ""))
+        if not member:
+            await send_message(token, chat_id,
+                               f"I couldn't find a team member named “{intent.get('assignee_name','')}”.",
+                               _menu_kb(link["role"]))
+            return
+        intent["assignee_agent"] = member["agent_id"]
+        intent["assignee_name"] = member.get("name", "")
+        # falls through to lead resolution below
 
     leads = await _find_lead(link, intent.get("lead_name", ""))
     if not leads:
@@ -1202,6 +1241,21 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
             except Exception as e:
                 logger.warning("tgcrm move_stage failed: %s", e)
                 await send_message(token, chat_id, "⚠️ Couldn't update the stage — please try again.")
+        elif p.get("action") == "assign":
+            try:
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    await conn.execute(
+                        "UPDATE leads SET agent_id=?, updated_at=datetime('now') WHERE lead_id=? "
+                        "AND agent_id IN (SELECT agent_id FROM agents WHERE tenant_id=?)",
+                        (int(p.get("assignee_agent") or 0), int(p["lead_id"]), tenant_id))
+                    await conn.commit()
+                await _set_pending(tg_uid, tenant_id, None)
+                await send_message(token, chat_id,
+                                   f"✅ <b>{p.get('lead_name','')}</b> assigned to "
+                                   f"<b>{p.get('assignee_name','')}</b>.", _menu_only)
+            except Exception as e:
+                logger.warning("tgcrm assign failed: %s", e)
+                await send_message(token, chat_id, "⚠️ Couldn't assign — please try again.")
         else:  # log_note / set_followup
             itype = "followup" if p.get("action") == "set_followup" else "note"
             try:
