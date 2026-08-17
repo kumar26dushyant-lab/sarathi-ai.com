@@ -377,6 +377,24 @@ async function raiseBranchClaim(){
   btn.disabled=false;
 }
 
+// Magic-link handoff: /nidaan/branch#t=<session token> → store it, clean the URL, sign in.
+(function(){
+  try{
+    const m=(location.hash||'').match(/[#&]t=([^&]+)/);
+    if(m && m[1]){
+      localStorage.setItem(TOKEN_KEY, decodeURIComponent(m[1]));
+      history.replaceState(null,'',location.pathname);
+    }
+    // Expired / inactive one-click link → tell the user to request a fresh code.
+    const e=new URLSearchParams(location.search).get('e');
+    if(e && typeof msg==='function'){
+      msg(e==='inactive' ? 'This branch login is not active. Please contact Nidaan.'
+                         : 'That login link has expired. Enter your email below to get a new code.', 'err');
+      history.replaceState(null,'',location.pathname);
+    }
+  }catch(_){}
+})();
+
 // Auto-enter dashboard if already signed in
 if(localStorage.getItem(TOKEN_KEY)) showDashboard();
 </script>

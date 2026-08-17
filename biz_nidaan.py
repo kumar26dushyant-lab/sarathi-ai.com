@@ -2264,6 +2264,36 @@ def verify_branch_token(token: str) -> Optional[str]:
         return None
 
 
+def create_branch_magic_token(branch_code: str, email: str, minutes: int = 20) -> str:
+    """Short-lived, single-use-feel one-click login token for a branch (emailed as a link).
+    Bound to BOTH the branch_code and the login email; the landing endpoint re-checks the
+    branch is still active before issuing a real session. Kept separate typ so it can never
+    be used as a session token."""
+    payload = {
+        "typ": "nidaan_branch_magic",
+        "sub": (branch_code or "").strip().upper(),
+        "email": (email or "").strip().lower(),
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int((datetime.utcnow() + timedelta(minutes=max(1, int(minutes)))).timestamp()),
+    }
+    return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
+
+
+def verify_branch_magic_token(token: str) -> Optional[dict]:
+    """Decode a branch magic-login token → {branch_code, email}, or None."""
+    try:
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        if payload.get("typ") != "nidaan_branch_magic":
+            return None
+        code = (payload.get("sub") or "").strip().upper()
+        email = (payload.get("email") or "").strip().lower()
+        if not code:
+            return None
+        return {"branch_code": code, "email": email}
+    except Exception:
+        return None
+
+
 async def get_branch_by_email(email: str) -> Optional[dict]:
     """Find an ACTIVE branch by its login/contact email (the @nidaanpartner.com address).
     Disabled branches cannot log in."""

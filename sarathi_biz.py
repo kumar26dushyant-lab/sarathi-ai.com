@@ -624,6 +624,12 @@ def _branch_bearer(request: Request) -> Optional[str]:
     return None
 
 
+def _nidaan_origin(request: Request) -> str:
+    """Public origin for building Nidaan email links (works on prod + staging)."""
+    host = (request.headers.get("host") or "nidaanpartner.com").split(",")[0].strip()
+    return f"https://{host}"
+
+
 class BranchOtpReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str
@@ -652,8 +658,36 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
     result = auth.generate_email_otp(email)
     if "error" in result:
         return JSONResponse({"detail": result["error"]}, status_code=429)  # OTP cooldown
-    await email_svc.send_nidaan_otp_email(email, result["otp"], branch.get("name") or "")
+    # One-click login link (magic token, 20 min) alongside the code — mobile-friendly.
+    magic = nidaan.create_branch_magic_token(branch["branch_code"], email, minutes=20)
+    magic_url = f"{_nidaan_origin(request)}/nidaan/branch/magic?token={magic}"
+    await email_svc.send_nidaan_branch_login_email(
+        email, magic_url, otp=result["otp"], name=branch.get("name") or "", welcome=False)
     return generic
+
+
+@app.get("/nidaan/branch/magic")
+@limiter.limit("12/minute")
+async def nidaan_branch_magic(request: Request, token: str = ""):
+    """One-click branch login. Verifies the emailed magic token, re-checks the branch is still
+    ACTIVE, mints a normal branch session, and hands it to the portal via a URL fragment
+    (fragments aren't sent to the server, and the portal clears it immediately)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    data = nidaan.verify_branch_magic_token(token or "")
+    if not data:
+        return RedirectResponse(url="/nidaan/branch?e=expired", status_code=303)
+    # Prefer the email binding; fall back to the code — either way, ACTIVE-only.
+    branch = await nidaan.get_branch_by_email(data["email"]) if data.get("email") else None
+    if not branch:
+        for b in await nidaan.list_branches(include_disabled=False):
+            if b["branch_code"] == data["branch_code"]:
+                branch = b
+                break
+    if not branch:
+        return RedirectResponse(url="/nidaan/branch?e=inactive", status_code=303)
+    session = nidaan.create_branch_token(branch["branch_code"])
+    return RedirectResponse(url=f"/nidaan/branch#t={session}", status_code=303)
 
 
 @app.post("/nidaan/branch/api/verify-otp")
@@ -5441,6 +5475,17 @@ async def ops_create_branch(body: OpsBranchCreate, request: Request):
     res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
+    # Welcome the branch with a one-click login email (magic link valid 72h for first login).
+    _bemail = (body.contact_email or "").strip().lower()
+    if _bemail and "@" in _bemail:
+        try:
+            _magic = nidaan.create_branch_magic_token(res["branch_code"], _bemail, minutes=72 * 60)
+            _magic_url = f"{_nidaan_origin(request)}/nidaan/branch/magic?token={_magic}"
+            import asyncio as _aio_bw
+            _aio_bw.create_task(email_svc.send_nidaan_branch_login_email(
+                _bemail, _magic_url, otp="", name=(body.name or ""), welcome=True))
+        except Exception as _bwe:
+            logger.error("branch welcome email failed %s: %s", res["branch_code"], _bwe)
     await _ops_audit(request, "branch.create", "branch", body.branch_code.strip().upper(),
                      f"{body.city} {('('+body.contact_email+')') if body.contact_email else ''}".strip())
     return res

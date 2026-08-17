@@ -456,6 +456,55 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
     )
 
 
+async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str = "",
+                                         name: str = "", welcome: bool = False) -> bool:
+    """Branch-portal login email: a big one-click login button (magic link) PLUS the OTP code
+    as a fallback. `welcome=True` for the email sent when a branch login is first created.
+    Sent as Nidaan Partner (info@nidaanpartner.com). Mobile-first single-column layout."""
+    greeting = f"Hi {name}," if name else "Hi,"
+    if welcome:
+        title = "Your Nidaan Partner branch login is ready"
+        intro = ("<p>Your branch portal has been set up. Tap the button below to log in "
+                 "instantly — no password needed.</p>")
+    else:
+        title = "Log in to your Nidaan Partner branch portal"
+        intro = ("<p>Tap the button below to log in to your branch portal instantly — "
+                 "no password needed.</p>")
+    button = f"""
+<div style="text-align:center;margin:1.6rem 0">
+  <a href="{magic_url}" style="display:inline-block;background:#0d9488;color:#ffffff;
+    text-decoration:none;font-weight:700;font-size:1.05rem;padding:15px 36px;border-radius:12px">
+    🔓 Log in to Branch Portal</a>
+</div>
+<p style="color:#64748b;font-size:13px;text-align:center;margin-top:-6px">
+  This one-click link is valid for a short time and only for your branch.</p>"""
+    otp_block = ""
+    if otp:
+        otp_block = f"""
+<p style="margin-top:24px">Prefer to type it? Enter this one-time code on the login page:</p>
+<div style="background:#0e4863;color:#7dd3fc;letter-spacing:.35em;font-size:2rem;
+  text-align:center;padding:1.2rem 1rem;border-radius:12px;font-weight:800;margin:1rem 0;
+  font-family:monospace">{otp}</div>
+<p style="color:#64748b;font-size:13px">This code expires in <strong>10 minutes</strong>. Never share it.</p>"""
+    content = f"""
+<h2>{title}</h2>
+<p>{greeting}</p>
+{intro}
+{button}
+{otp_block}
+<p style="color:#64748b;font-size:13px;margin-top:24px">
+  You can always log in later at <strong>nidaanpartner.com/nidaan/branch</strong> using this email address.
+  If you did not expect this email, you can safely ignore it.</p>"""
+    subject = title if welcome else (f"Nidaan Partner Branch Login Code: {otp}" if otp else title)
+    return await send_email(
+        to_email,
+        subject,
+        _wrap_nidaan_template(title, content),
+        from_name="Nidaan Partner",
+        from_email=NIDAAN_FROM or None,
+    )
+
+
 PLAN_FEATURES = {
     "silver":   {"label": "Silver",   "quota": "10 claims / quarter", "support": "Basic email support"},
     "gold":     {"label": "Gold",     "quota": "25 claims / quarter", "support": "Priority support"},
