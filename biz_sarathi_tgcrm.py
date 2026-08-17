@@ -463,6 +463,7 @@ def _menu_kb(role: str) -> list:
             [{"text": "📋 Leads", "callback_data": "leads"}],
             [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
             [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
+            [{"text": "🤖 Ask AI", "callback_data": "ask"}],
             [{"text": "📅 Daily summary", "callback_data": "digest"}],
             [{"text": "❓ Help", "callback_data": "help"}],
         ]
@@ -470,6 +471,7 @@ def _menu_kb(role: str) -> list:
         [{"text": "📋 My Leads", "callback_data": "leads"}],
         [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
         [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
+        [{"text": "🤖 Ask AI", "callback_data": "ask"}],
         [{"text": "❓ Help", "callback_data": "help"}],
     ]
 
@@ -792,7 +794,7 @@ async def _parse_intent(text: str) -> dict:
     prompt = (
         "Convert an insurance advisor's short note/voice message into a CRM action as STRICT JSON.\n"
         f"Today (IST) is {today}. Shape:\n"
-        '{"action":"log_note|set_followup|move_stage|create_lead|none","lead_name":"","summary":"",'
+        '{"action":"log_note|set_followup|move_stage|create_lead|ask|none","lead_name":"","summary":"",'
         '"followup_date":"YYYY-MM-DD","followup_time":"HH:MM","stage":"","phone":"","need_type":""}\n'
         "- 'set_followup' = schedule a future call/meeting/reminder for a lead (has a date).\n"
         "- 'log_note' = record something that happened (a call/update) with no future date.\n"
@@ -801,7 +803,9 @@ async def _parse_intent(text: str) -> dict:
         "(map 'won'->closed_won, 'lost'->closed_lost, 'quoted'/'proposal'->proposal_sent).\n"
         "- 'create_lead' = add a NEW lead/customer. phone = digits only if spoken; "
         "need_type = product if said (health/life/term/motor/etc).\n"
-        "- 'none' = greeting/question/not a specific lead action.\n"
+        "- 'ask' = a QUESTION about their CRM (leads, pipeline, follow-ups, renewals, "
+        "customers, counts, 'what's pending', 'who did I add') to be answered from data.\n"
+        "- 'none' = greeting or small talk, not an action or a data question.\n"
         "- lead_name = the customer name mentioned. summary = concise note.\n"
         "- Resolve relative dates (today/tomorrow/next monday) to YYYY-MM-DD. Empty strings if absent.\n"
         "Output ONLY the JSON.\n\n" f"MESSAGE: {text}")
@@ -814,7 +818,7 @@ async def _parse_intent(text: str) -> dict:
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
         out = _json.loads((parts[0].get("text") or "").strip() or "{}")
-        if out.get("action") not in ("log_note", "set_followup", "move_stage", "create_lead", "none"):
+        if out.get("action") not in ("log_note", "set_followup", "move_stage", "create_lead", "ask", "none"):
             out["action"] = "none"
         return out
     except Exception as e:
@@ -986,12 +990,77 @@ async def _finalize_action(token, chat_id, tg_uid, link, intent, lead) -> None:
     await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
 
 
+async def _ai_context(link) -> dict:
+    """Compact, role-scoped snapshot of the CRM for grounded Q&A (read-only)."""
+    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id")
+    ctx: dict = {}
+    if role in ("owner", "admin"):
+        ctx["stats"] = await _firm_stats(tid)
+        ctx["recent_leads"] = [{"name": l.get("name"), "stage": l.get("stage"),
+                                "need": l.get("need_type")} for l in await _firm_leads(tid, 15)]
+        ctx["renewals"] = [{"name": r.get("client_name"), "date": (r.get("renewal_date") or "")[:10]}
+                           for r in await _firm_renewals(tid, 60, 15)]
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            fu = await (await conn.execute(
+                "SELECT l.name lead_name, i.follow_up_date, i.summary FROM interactions i "
+                "JOIN leads l ON i.lead_id=l.lead_id JOIN agents a ON l.agent_id=a.agent_id "
+                "WHERE a.tenant_id=? AND i.follow_up_date IS NOT NULL "
+                "AND (i.follow_up_status IS NULL OR i.follow_up_status!='done') "
+                "ORDER BY i.follow_up_date ASC LIMIT 20", (tid,))).fetchall()
+        ctx["followups"] = [{"name": r["lead_name"], "date": (r["follow_up_date"] or "")[:10],
+                             "note": r["summary"]} for r in fu]
+    else:
+        leads = (await db.get_leads_by_agent(aid))[:15] if aid else []
+        ctx["recent_leads"] = [{"name": l.get("name"), "stage": l.get("stage"),
+                                "need": l.get("need_type")} for l in leads]
+        rens = (await db.get_upcoming_renewals(aid, 60))[:15] if aid else []
+        ctx["renewals"] = [{"name": r.get("client_name"), "date": (r.get("renewal_date") or "")[:10]}
+                           for r in rens]
+        fus = (await db.get_pending_followups(aid))[:20] if aid else []
+        ctx["followups"] = [{"name": r.get("lead_name"), "date": (r.get("follow_up_date") or "")[:10],
+                             "note": r.get("summary")} for r in fus]
+    return ctx
+
+
+async def _ask_ai(link, question: str) -> str:
+    import os as _os, json as _json
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        return "The AI assistant isn't configured yet."
+    ctx = await _ai_context(link)
+    today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+    prompt = (
+        f"You are a helpful CRM assistant for an insurance advisor. Today (IST) is {today}. "
+        "Answer the user's question ONLY from the DATA below (their own CRM). Be concise "
+        "(1-4 short lines), simple language. If the answer isn't in the data, say you don't have "
+        "that info. Never invent leads, numbers, or dates.\n\n"
+        f"DATA (JSON): {_json.dumps(ctx, ensure_ascii=False)[:6000]}\n\nQUESTION: {question}")
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
+                                        "generationConfig": {"temperature": 0.2}})
+            data = r.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        return (parts[0].get("text") or "").strip() or "I couldn't find an answer to that."
+    except Exception as e:
+        logger.info("tgcrm ask_ai failed: %s", e)
+        return "Sorry, I couldn't process that right now."
+
+
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
     """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
     intent = await _parse_intent(text)
     act = intent.get("action", "none")
     if act == "none":
         await _send_menu(token, chat_id, link)
+        return
+    if act == "ask":
+        await send_message(token, chat_id, "🤔 Let me check…")
+        ans = await _ask_ai(link, text)
+        await send_message(token, chat_id, ans, [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
         return
     intent["summary"] = (intent.get("summary") or text).strip()
 
@@ -1072,6 +1141,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         await _followups_view(token, chat_id, link)
     elif data == "renewals":
         await _renewals_view(token, chat_id, link)
+    elif data == "ask":
+        await send_message(token, chat_id,
+                           "🤖 Ask me anything about your leads, follow-ups, renewals or customers — "
+                           "just type or send a voice note.\n\nE.g. <i>“what's pending this week?”</i>",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
     elif data in ("digest", "digest_on", "digest_off", "digest_now"):
         if link["role"] not in ("owner", "admin"):
             await _send_menu(token, chat_id, link)
