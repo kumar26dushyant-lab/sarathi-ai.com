@@ -4069,8 +4069,36 @@ function closeSidebar() {
 // ── Tab Switching ────
 // Under-construction locks. To UNLOCK: set the tab false here AND delete its .uc-banner div.
 const UC_LOCKED = { whatsapp: true, marketing: true };
+
+// Live reflection: re-load the active tab periodically + on window focus, so changes
+// made elsewhere (e.g. the Telegram CRM bot) show up without a manual refresh.
+var _currentTab = 'overview';
+function _refreshCurrentTab(){
+  var t = _currentTab || 'overview';
+  try{
+    if (t==='overview') { if (typeof loadOverview==='function') loadOverview(); }
+    else if (t==='leads') {
+      var st = document.querySelector('#leads-sub-tabs .sub-tab.active');
+      if (st && st.dataset.subtab==='customers') { if (typeof loadCustomers==='function') loadCustomers(); }
+      else if (typeof loadLeads==='function') loadLeads();
+    }
+    else if (t==='tasks') { if (typeof loadTasks==='function') loadTasks(); }
+    else if (t==='policies') { if (typeof loadPolicies==='function') loadPolicies(); }
+    else if (t==='lapse') { if (typeof loadLapse==='function') loadLapse(); }
+  }catch(e){}
+}
+try{
+  setInterval(function(){
+    if (document.visibilityState==='visible' && localStorage.getItem('sarathi_token')) _refreshCurrentTab();
+  }, 45000);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState==='visible') _refreshCurrentTab();
+  });
+}catch(e){}
+
 function switchTab(tab) {
     closeSidebar();
+    _currentTab = tab;
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-item[data-tab]').forEach(n=>n.classList.remove('active'));
     const panel = document.getElementById('tab-'+tab);

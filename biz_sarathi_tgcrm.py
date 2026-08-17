@@ -177,6 +177,11 @@ async def ensure_schema() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_tg_digest_due ON tg_digest_prefs(enabled, hour_ist);
         """)
+        # Migration: "paused draft" slot for context-switching nudges (existing rows).
+        try:
+            await conn.execute("ALTER TABLE tg_context ADD COLUMN prev_pending TEXT")
+        except Exception:
+            pass
         await conn.commit()
 
 
@@ -817,15 +822,89 @@ async def _parse_intent(text: str) -> dict:
         return {"action": "none"}
 
 
+_ACTIONABLE = {"log_note", "set_followup", "move_stage", "create_lead"}
+
+
 async def _set_pending(tg_uid: int, tenant_id: int, payload: Optional[dict]) -> None:
     import json as _json
     async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            "INSERT INTO tg_context (telegram_user_id, tenant_id, pending, updated_at) "
-            "VALUES (?,?,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET "
-            "tenant_id=excluded.tenant_id, pending=excluded.pending, updated_at=excluded.updated_at",
-            (tg_uid, tenant_id, _json.dumps(payload) if payload else "", _now()))
+        if payload is None:
+            # Save/cancel → clear the current draft AND any paused draft.
+            await conn.execute(
+                "INSERT INTO tg_context (telegram_user_id, tenant_id, pending, prev_pending, updated_at) "
+                "VALUES (?,?, '', '', ?) ON CONFLICT(telegram_user_id) DO UPDATE SET "
+                "pending='', prev_pending='', updated_at=excluded.updated_at",
+                (tg_uid, tenant_id, _now()))
+        else:
+            await conn.execute(
+                "INSERT INTO tg_context (telegram_user_id, tenant_id, pending, updated_at) "
+                "VALUES (?,?,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET "
+                "tenant_id=excluded.tenant_id, pending=excluded.pending, updated_at=excluded.updated_at",
+                (tg_uid, tenant_id, _json.dumps(payload), _now()))
         await conn.commit()
+
+
+async def _stash_current_as_prev(tg_uid: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE tg_context SET prev_pending=pending WHERE telegram_user_id=?", (tg_uid,))
+        await conn.commit()
+
+
+async def _get_prev(tg_uid: int) -> Optional[dict]:
+    import json as _json
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT prev_pending FROM tg_context WHERE telegram_user_id=?", (tg_uid,))).fetchone()
+    if not r or not r["prev_pending"]:
+        return None
+    try:
+        return _json.loads(r["prev_pending"])
+    except Exception:
+        return None
+
+
+async def _clear_prev(tg_uid: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE tg_context SET prev_pending='' WHERE telegram_user_id=?", (tg_uid,))
+        await conn.commit()
+
+
+def _describe_pending(p: dict) -> str:
+    a = (p or {}).get("action"); nm = (p or {}).get("lead_name", "")
+    if a == "create_lead":
+        return f"add lead {nm}"
+    if a == "set_followup":
+        return f"follow-up for {nm}"
+    if a == "move_stage":
+        return f"move {nm} to {(p.get('stage') or '').replace('_',' ')}"
+    if a == "log_note":
+        return f"note for {nm}"
+    return "your draft"
+
+
+async def _render_confirm(token, chat_id, p: dict) -> None:
+    a = p.get("action")
+    if a == "create_lead":
+        card = f"➕ <b>New lead</b>\n👤 {p.get('lead_name','')}\n📞 {p.get('phone') or '—'}\n🩺 {p.get('need','health')}"
+    elif a == "set_followup":
+        when = ((p.get('fud') or '') + ((' ' + p.get('fut')) if p.get('fut') else '')) or "the given date"
+        card = f"📇 <b>{p.get('lead_name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {p.get('summary','')}"
+    elif a == "move_stage":
+        card = f"📇 <b>{p.get('lead_name','')}</b>\n📊 Move stage to: <b>{(p.get('stage') or '').replace('_',' ')}</b>"
+    else:
+        card = f"📇 <b>{p.get('lead_name','')}</b>\n📝 Note: {p.get('summary','')}"
+    await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+
+
+async def _nudge_prev(token, chat_id, tg_uid) -> None:
+    prev = await _get_prev(tg_uid)
+    if not prev:
+        return
+    await send_message(token, chat_id,
+                       f"↩️ You have a paused draft: <b>{_describe_pending(prev)}</b>.",
+                       [[{"text": "↩️ Resume it", "callback_data": "resume"},
+                         {"text": "🗑 Discard", "callback_data": "discard_prev"}]])
 
 
 async def _get_pending(tg_uid: int) -> Optional[dict]:
@@ -916,6 +995,11 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
         return
     intent["summary"] = (intent.get("summary") or text).strip()
 
+    # Context-switch: a new command supersedes any unconfirmed draft, which we pause
+    # (stash) and nudge so the user can Resume or Discard it.
+    had = await _get_pending(tg_uid)
+    had_actionable = bool(had and had.get("action") in _ACTIONABLE)
+
     if act == "create_lead":
         if link["role"] not in ("owner", "admin"):
             await send_message(token, chat_id, "Only your admin can add new leads.",
@@ -928,10 +1012,14 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
             return
         phone = "".join(ch for ch in (intent.get("phone") or "") if ch.isdigit())
         need = (intent.get("need_type") or "").strip() or "health"
+        if had_actionable:
+            await _stash_current_as_prev(tg_uid)
         await _set_pending(tg_uid, int(link["tenant_id"]),
                            {"action": "create_lead", "lead_name": name, "phone": phone, "need": need})
         card = f"➕ <b>New lead</b>\n👤 {name}\n📞 {phone or '—'}\n🩺 {need}"
         await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+        if had_actionable:
+            await _nudge_prev(token, chat_id, tg_uid)
         return
 
     leads = await _find_lead(link, intent.get("lead_name", ""))
@@ -942,13 +1030,19 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
                            _menu_kb(link["role"]))
         return
     if len(leads) > 1:
+        if had_actionable:
+            await _stash_current_as_prev(tg_uid)
         await _set_pending(tg_uid, int(link["tenant_id"]), {"action": "pick", "intent": intent})
         kb = [[{"text": f"👤 {(l.get('name') or '')[:24]} · {l.get('phone') or l.get('stage','')}",
                 "callback_data": f"pick:{l['lead_id']}"}] for l in leads]
         kb.append([{"text": "❌ Cancel", "callback_data": "cfm:cancel"}])
         await send_message(token, chat_id, f"Found {len(leads)} matching leads — which one?", kb)
         return
+    if had_actionable:
+        await _stash_current_as_prev(tg_uid)
     await _finalize_action(token, chat_id, tg_uid, link, intent, leads[0])
+    if had_actionable:
+        await _nudge_prev(token, chat_id, tg_uid)
 
 
 async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
@@ -1066,6 +1160,19 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     elif data == "cfm:cancel":
         await _set_pending(tg_uid, tenant_id, None)
         await send_message(token, chat_id, "Cancelled.",
+                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    elif data == "resume":
+        prev = await _get_prev(tg_uid)
+        if prev:
+            await _set_pending(tg_uid, tenant_id, prev)
+            await _clear_prev(tg_uid)
+            await _render_confirm(token, chat_id, prev)
+        else:
+            await send_message(token, chat_id, "No paused draft to resume.",
+                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    elif data == "discard_prev":
+        await _clear_prev(tg_uid)
+        await send_message(token, chat_id, "Paused draft discarded.",
                            [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
     elif data.startswith("lead:"):
         try:
