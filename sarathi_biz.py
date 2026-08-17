@@ -928,6 +928,45 @@ async def _create_rzp_payment_link(amount_paise: int, description: str, *,
     return data
 
 
+def _nidaan_retry_email_html(kind: str, rupees: int, url: str, why_html: str) -> str:
+    return (f'<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;'
+            f'padding:24px;color:#111">'
+            f'<h2 style="color:#0d9488;margin:0 0 8px">Your payment didn\'t go through</h2>'
+            f'<p style="font-size:15px;line-height:1.6">Your recent payment of <b>₹{rupees}</b> for '
+            f'<b>{kind}</b> could not be completed.{why_html}</p>'
+            f'<p style="font-size:15px;line-height:1.6">No worries — you can complete it securely here:</p>'
+            f'<p style="text-align:center;margin:24px 0"><a href="{url}" '
+            f'style="background:#0d9488;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;'
+            f'font-weight:700;display:inline-block">Complete Payment — ₹{rupees}</a></p>'
+            f'<p style="font-size:13px;color:#6b7280">This is a secure Razorpay link. If you\'ve already '
+            f'paid, please ignore this email.</p>'
+            f'<p style="font-size:13px;color:#6b7280">— Team Nidaan Partner</p></div>')
+
+
+async def _send_customer_retry_link(*, email: str, phone: str, name: str,
+                                    amount_paise: int, kind: str, notes: dict, reason: str) -> None:
+    """On a failed payment, email the customer a fresh Razorpay link to try again (all types)."""
+    email = (email or "").strip()
+    if not email or int(amount_paise or 0) < 100:
+        return
+    try:
+        _rn = dict(notes or {}); _rn["retry"] = "1"
+        link = await _create_rzp_payment_link(
+            int(amount_paise), f"Retry payment — {kind}",
+            customer_name=name, customer_phone=phone, customer_email=email, notes=_rn)
+        url = link.get("short_url") or link.get("url") or ""
+        if not url:
+            return
+        rupees = int(amount_paise) // 100
+        why = (f"<br><span style='color:#6b7280;font-size:13px'>Reason: {reason}</span>") if reason else ""
+        await email_svc.send_email(
+            email, f"Complete your Nidaan payment — ₹{rupees}",
+            _nidaan_retry_email_html(kind, rupees, url, why), from_name="Nidaan Partner")
+        logger.info("💳 retry link emailed to %s (₹%d, %s)", email, rupees, kind)
+    except Exception as e:
+        logger.warning("send_customer_retry_link failed: %s", e)
+
+
 @app.post("/nidaan/branch/api/claims/{claim_id}/l2-payment-link")
 @limiter.limit("10/minute")
 async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
@@ -3899,6 +3938,26 @@ async def nidaan_razorpay_webhook(request: Request):
                 reason=_reason, contact=_contact, meta=_pe.get("id", "")))
         except Exception as _ve:
             logger.warning("record_event(payment_failed) dispatch failed: %s", _ve)
+        # ── Customer retry link — email the customer a fresh link to try again (all types).
+        try:
+            _cust_email = (_pe.get("email") or "").strip()
+            _cust_name = ""
+            if not _cust_email:
+                _aid = _notes.get("account_id") or _notes.get("acct_id") or ""
+                if _aid:
+                    try:
+                        _acct = await nidaan.get_account_by_id(int(_aid))
+                        _cust_email = ((_acct or {}).get("email") or "").strip()
+                        _cust_name = (_acct or {}).get("owner_name", "") or ""
+                    except Exception:
+                        pass
+            if _cust_email:
+                _asyncio.create_task(_send_customer_retry_link(
+                    email=_cust_email, phone=(_pe.get("contact") or ""), name=_cust_name,
+                    amount_paise=int(_pe.get("amount", 0) or 0), kind=_kind,
+                    notes=_notes, reason=_reason))
+        except Exception as _rle:
+            logger.warning("payment.failed customer retry link failed: %s", _rle)
         return {"status": "ok", "event": event}
 
     # ── Refund events (refund.processed / refund.failed) ─────────────────────────
