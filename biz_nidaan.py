@@ -4761,14 +4761,23 @@ async def create_nidaan_recurring_subscription(
     if not info:
         return {"error": f"Unknown plan: {plan}"}
 
+    # Base price = the SUPER-ADMIN-configured price (single source of truth:
+    # nidaan_plans_config.price_paise — the same number shown on the pricing page). Falls back
+    # to the hardcoded seed only if the plan has no DB config row yet. This is what makes a
+    # price edited in the plans cockpit apply to EVERY new subscriber's autopay.
+    _cfg = await get_plan_cfg(plan)
+    _base_paise = int(_cfg.get("price_paise") or info["amount_paise"])
+
     # GST-versioned plan: when GST is on, use a DISTINCT Razorpay plan at the GST-inclusive
-    # amount (tag suffixed _gst<rate>) so existing non-GST autopay mandates are grandfathered.
+    # amount so existing non-GST autopay mandates are grandfathered.
     _gcfg = await gst_config()
-    _amt_paise = (await charge_with_gst(info["amount_paise"] / 100))["total_paise"]
+    _amt_paise = (await charge_with_gst(_base_paise / 100))["total_paise"]
     _gsuf = ("_gst" + str(int(_gcfg["rate"]))) if _gcfg["enabled"] else ""
-    # Ensure Razorpay plan exists for this plan key (matched by the versioned tag).
-    tag = info.get("tag", plan) + _gsuf
-    _cache_key = plan + _gsuf
+    # Version the Razorpay plan by the ACTUAL charged amount (…_a<paise>) so a price change
+    # spins up a NEW Razorpay plan; existing subscribers stay on their old plan_id and keep
+    # the amount their mandate authorised → automatic grandfathering.
+    tag = info.get("tag", plan) + _gsuf + f"_a{_amt_paise}"
+    _cache_key = plan + _gsuf + f"_a{_amt_paise}"
     razorpay_plan_id = _nidaan_plan_ids.get(_cache_key)
     if not razorpay_plan_id:
         try:
@@ -4845,11 +4854,11 @@ async def create_nidaan_recurring_subscription(
             return {
                 "subscription_id": result["id"],
                 "plan": plan,
-                "amount_display": (f"₹{_amt_paise // 100:,} (incl. {int(_gcfg['rate'])}% GST)" if _gsuf else info["display"]),
+                "amount_display": (f"₹{_amt_paise // 100:,} (incl. {int(_gcfg['rate'])}% GST)" if _gsuf else f"₹{_base_paise // 100:,}"),
                 "razorpay_key_id": rzp_key_id,
                 "gst": {"enabled": _gcfg["enabled"], "rate": _gcfg["rate"],
-                        "base": info["amount_paise"] // 100,
-                        "gst": (_amt_paise - info["amount_paise"]) // 100,
+                        "base": _base_paise // 100,
+                        "gst": (_amt_paise - _base_paise) // 100,
                         "total": _amt_paise // 100},
             }
     except Exception as e:
