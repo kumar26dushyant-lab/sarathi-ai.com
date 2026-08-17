@@ -2953,7 +2953,7 @@ if ('serviceWorker' in navigator) {
 })();
 </script>
 <!-- Self-onboarding voice+readable user guide (Hindi default, account-aware, mic in top menu) -->
-<script src="/static/nidaan_guide.js?v=3" defer></script>
+<script src="/static/nidaan_guide.js?v=4" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   if (!window.NidaanGuide) return;
@@ -2962,7 +2962,7 @@ document.addEventListener('DOMContentLoaded', function(){
     window.setLang = function(l){ _s(l); try{ window.NidaanGuide && NidaanGuide.setLang(l); }catch(e){} };
     window.setLang.__ngWrapped = true; } })();
   var _curLang = 'hi'; try{ _curLang = localStorage.getItem('nidaan_lang') || 'hi'; }catch(e){}
-  var _opts = { mount: '#guideMic', lang: _curLang,
+  var _opts = { mount: '#guideMic', lang: 'hi',
     onLangChange: function(l){ try{ window.setLang && window.setLang(l); }catch(e){} } };
   function _cap(s){ return s ? (s.charAt(0).toUpperCase() + s.slice(1)) : ''; }
   // Substitute {plan} in the server-provided content with the account's plan name.

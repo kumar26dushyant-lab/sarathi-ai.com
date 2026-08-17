@@ -29,12 +29,20 @@
     }
     return null;
   }
-  function splitSentences(t){ return String(t||'').replace(/\s+/g,' ').trim().split(/(?<=[.!?।])\s+/).filter(Boolean); }
+  function splitSentences(t){
+    // No look-behind (older mobile Safari/webviews don't support it) — grab runs ending at
+    // sentence punctuation instead.
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    if (!t) return [];
+    var m = t.match(/[^.!?।]+[.!?।]*\s*/g);
+    return m ? m.map(function(x){ return x.trim(); }).filter(Boolean) : [t];
+  }
 
   function stopSpeech(){ G.playing=false; G.paused=false; try{ window.speechSynthesis.cancel(); }catch(e){} updateControls(); clearHighlight(); }
 
   function play(){
     if (!window.speechSynthesis){ openPanel(); return; }
+    if (!G.queue.length) buildQueue();   // safety: the mic can start voice without opening the panel
     G.playing=true; G.paused=false;
     var voice = pickVoice(G.lang), chunks=[];
     for (var i=0;i<G.queue.length;i++){ var seg=G.queue[i], ss=splitSentences(seg.text);
@@ -47,7 +55,7 @@
       u.lang=(G.lang==='hi'?'hi-IN':'en-IN'); if (voice) u.voice=voice; u.rate=0.96; u.pitch=1.0;
       u.onend=function(){ if (G.playing && !G.paused) next(); };
       u.onerror=function(){ if (G.playing && !G.paused) next(); };
-      try{ window.speechSynthesis.speak(u); }catch(e){ next(); }
+      try{ window.speechSynthesis.speak(u); window.speechSynthesis.resume(); }catch(e){ next(); }
     }
     try{ window.speechSynthesis.cancel(); }catch(e){}
     next(); updateControls();
@@ -96,10 +104,11 @@
       G.panel.querySelector('#ngHi').classList.toggle('on',G.lang==='hi');
       G.panel.querySelector('#ngEn').classList.toggle('on',G.lang==='en');
       G.panel.querySelector('#ngHint').textContent=(G.lang==='hi'
-        ? '🎧 बटन से सुनें, या नीचे पढ़ें। भाषा बदलने पर डैशबोर्ड भी उसी भाषा में हो जाता है।'
-        : 'Tap 🎧 to listen, or read below. Changing the language also switches the dashboard.');
-      buildQueue(); renderSteps();
+        ? '🎧 बटन से सुनें, या नीचे पढ़ें।'
+        : 'Tap 🎧 to listen, or read below.');
+      renderSteps();
     }
+    buildQueue();   // ALWAYS build the voice queue (independent of the panel) so the mic works
     updateControls();
   }
 
