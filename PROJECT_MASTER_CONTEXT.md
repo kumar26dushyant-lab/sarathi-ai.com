@@ -6006,5 +6006,17 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
 
 ---
 
+## A75 — Sarathi public-site mobile audit (Aug 17 2026)
+
+**Method:** drove headless Edge over the DevTools Protocol with true mobile device emulation (`Emulation.setDeviceMetricsOverride` 390×900, `mobile:true`) and measured `documentElement.scrollWidth` vs the 390px viewport per page — the objective "does the page scroll horizontally" signal. (Plain `--window-size` headless screenshots WITHOUT emulation are misleading — they don't apply the viewport meta and falsely show right-clipping; always emulate.) Tool: `scratchpad/overflow.js`.
+
+**Result — 13 pages measured; the public site is mobile-clean at 390px** (`scrollWidth=390`): `/`, `/about`, `/features`, `/calculators`, `/support`, `/telegram-guide`, `/getting-started`, `/demo`, `/partner`, `/login`, `/onboarding`, plus `customer_portfolio.html` and `invite.html` (both fluid, hold at 390 despite 0 media queries). Elements flagged as "overflowing" on `/` (a comparison `<table>`) and `/demo` sit inside `overflow-x:auto` wrappers and scroll internally — page width stays 390 (acceptable).
+
+**One real bug found + fixed (commit 77c409d, deployed + prod-verified):** `/help` measured `scrollWidth=546`. Cause: header nav (Home/Help/Privacy/Terms + EN/हिं lang toggle + theme toggle) in a single non-wrapping flex row + an 80px logo. Fix scoped to `@media(max-width:640px)`: navbar `flex-wrap`, nav drops to a full-width wrapping second row (removed per-link left-margins), logo image → 44px. Re-measured 390 / 0 overflow.
+
+**Still pending — authenticated dashboard mobile pass:** `dashboard.html` has the viewport meta + 15 media queries (well-adapted on paper) but wasn't rendered logged-in (CDP needs a test session). `admin.html`/`superadmin.html` have only 2 media queries each (staff tools, lower priority). Next mobile sub-task = a real logged-in dashboard render.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
