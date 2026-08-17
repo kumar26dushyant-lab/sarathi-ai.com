@@ -787,9 +787,15 @@ async def _parse_intent(text: str) -> dict:
     prompt = (
         "Convert an insurance advisor's short note/voice message into a CRM action as STRICT JSON.\n"
         f"Today (IST) is {today}. Shape:\n"
-        '{"action":"log_note|set_followup|none","lead_name":"","summary":"","followup_date":"YYYY-MM-DD","followup_time":"HH:MM"}\n'
+        '{"action":"log_note|set_followup|move_stage|create_lead|none","lead_name":"","summary":"",'
+        '"followup_date":"YYYY-MM-DD","followup_time":"HH:MM","stage":"","phone":"","need_type":""}\n'
         "- 'set_followup' = schedule a future call/meeting/reminder for a lead (has a date).\n"
         "- 'log_note' = record something that happened (a call/update) with no future date.\n"
+        "- 'move_stage' = change a lead's pipeline stage. 'stage' MUST be one of: "
+        "prospect, contacted, proposal_sent, negotiation, closed_won, closed_lost "
+        "(map 'won'->closed_won, 'lost'->closed_lost, 'quoted'/'proposal'->proposal_sent).\n"
+        "- 'create_lead' = add a NEW lead/customer. phone = digits only if spoken; "
+        "need_type = product if said (health/life/term/motor/etc).\n"
         "- 'none' = greeting/question/not a specific lead action.\n"
         "- lead_name = the customer name mentioned. summary = concise note.\n"
         "- Resolve relative dates (today/tomorrow/next monday) to YYYY-MM-DD. Empty strings if absent.\n"
@@ -803,7 +809,7 @@ async def _parse_intent(text: str) -> dict:
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
         out = _json.loads((parts[0].get("text") or "").strip() or "{}")
-        if out.get("action") not in ("log_note", "set_followup", "none"):
+        if out.get("action") not in ("log_note", "set_followup", "move_stage", "create_lead", "none"):
             out["action"] = "none"
         return out
     except Exception as e:
@@ -852,13 +858,82 @@ async def _find_lead(link, name: str) -> list:
     return (await db.search_leads(aid, name))[:5] if aid else []
 
 
+_STAGES = {"prospect", "contacted", "proposal_sent", "negotiation", "closed_won", "closed_lost"}
+_STAGE_ALIASES = {
+    "won": "closed_won", "closed won": "closed_won", "proposal": "proposal_sent",
+    "proposal sent": "proposal_sent", "quoted": "proposal_sent", "quote": "proposal_sent",
+    "lost": "closed_lost", "closed lost": "closed_lost", "negotiating": "negotiation",
+    "called": "contacted", "interested": "contacted", "new": "prospect",
+}
+_SAVE_KB = [[{"text": "✅ Save", "callback_data": "cfm:save"},
+             {"text": "❌ Cancel", "callback_data": "cfm:cancel"}]]
+
+
+def _canon_stage(s: str) -> str:
+    s = (s or "").strip().lower().replace("-", " ")
+    if s in _STAGES:
+        return s
+    if s.replace(" ", "_") in _STAGES:
+        return s.replace(" ", "_")
+    return _STAGE_ALIASES.get(s, "")
+
+
+async def _finalize_action(token, chat_id, tg_uid, link, intent, lead) -> None:
+    """Build the confirm card for an existing-lead action and store the pending write."""
+    act = intent.get("action")
+    tid = int(link["tenant_id"])
+    summary = (intent.get("summary") or "").strip()
+    base = {"lead_id": lead["lead_id"], "lead_name": lead.get("name", ""),
+            "lead_agent": lead.get("agent_id")}
+    if act == "move_stage":
+        stage = _canon_stage(intent.get("stage", ""))
+        if stage not in _STAGES:
+            await send_message(token, chat_id,
+                               "Which stage? Say e.g. contacted, proposal, negotiation, won, or lost.",
+                               _menu_kb(link["role"]))
+            return
+        await _set_pending(tg_uid, tid, {**base, "action": "move_stage", "stage": stage})
+        card = f"📇 <b>{lead.get('name','')}</b>\n📊 Move stage to: <b>{stage.replace('_',' ')}</b>"
+    elif act == "set_followup":
+        fud = (intent.get("followup_date") or "").strip()
+        fut = (intent.get("followup_time") or "").strip()
+        await _set_pending(tg_uid, tid, {**base, "action": "set_followup",
+                                         "summary": summary or "Follow-up", "fud": fud, "fut": fut})
+        when = (fud + ((" " + fut) if fut else "")) or "the given date"
+        card = f"📇 <b>{lead.get('name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary or 'Follow-up'}"
+    else:  # log_note
+        await _set_pending(tg_uid, tid, {**base, "action": "log_note", "summary": summary or "Note"})
+        card = f"📇 <b>{lead.get('name','')}</b>\n📝 Note: {summary or 'Note'}"
+    await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+
+
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
-    """Parse a note (typed or transcribed) → confirm card → (on Save) write."""
+    """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
     intent = await _parse_intent(text)
     act = intent.get("action", "none")
     if act == "none":
         await _send_menu(token, chat_id, link)
         return
+    intent["summary"] = (intent.get("summary") or text).strip()
+
+    if act == "create_lead":
+        if link["role"] not in ("owner", "admin"):
+            await send_message(token, chat_id, "Only your admin can add new leads.",
+                               _menu_kb(link["role"]))
+            return
+        name = (intent.get("lead_name") or "").strip()
+        if not name:
+            await send_message(token, chat_id, "Please include the person's name to add them.",
+                               _menu_kb(link["role"]))
+            return
+        phone = "".join(ch for ch in (intent.get("phone") or "") if ch.isdigit())
+        need = (intent.get("need_type") or "").strip() or "health"
+        await _set_pending(tg_uid, int(link["tenant_id"]),
+                           {"action": "create_lead", "lead_name": name, "phone": phone, "need": need})
+        card = f"➕ <b>New lead</b>\n👤 {name}\n📞 {phone or '—'}\n🩺 {need}"
+        await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+        return
+
     leads = await _find_lead(link, intent.get("lead_name", ""))
     if not leads:
         await send_message(token, chat_id,
@@ -866,23 +941,14 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
                            f"Add them on the web dashboard, or try the exact name.",
                            _menu_kb(link["role"]))
         return
-    lead = leads[0]
-    summary = (intent.get("summary") or text).strip()
-    fud = (intent.get("followup_date") or "").strip()
-    fut = (intent.get("followup_time") or "").strip()
-    await _set_pending(tg_uid, int(link["tenant_id"]), {
-        "action": act, "lead_id": lead["lead_id"], "lead_name": lead.get("name", ""),
-        "lead_agent": lead.get("agent_id"), "summary": summary, "fud": fud, "fut": fut})
-    if act == "set_followup":
-        when = (fud + ((" " + fut) if fut else "")) or "the given date"
-        card = f"📇 <b>{lead.get('name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary}"
-    else:
-        card = f"📇 <b>{lead.get('name','')}</b>\n📝 Note: {summary}"
     if len(leads) > 1:
-        card += f"\n\n<i>(Matched {len(leads)} leads — using the most recent; cancel if wrong.)</i>"
-    await send_message(token, chat_id, "Please confirm:\n\n" + card,
-                       [[{"text": "✅ Save", "callback_data": "cfm:save"},
-                         {"text": "❌ Cancel", "callback_data": "cfm:cancel"}]])
+        await _set_pending(tg_uid, int(link["tenant_id"]), {"action": "pick", "intent": intent})
+        kb = [[{"text": f"👤 {(l.get('name') or '')[:24]} · {l.get('phone') or l.get('stage','')}",
+                "callback_data": f"pick:{l['lead_id']}"}] for l in leads]
+        kb.append([{"text": "❌ Cancel", "callback_data": "cfm:cancel"}])
+        await send_message(token, chat_id, f"Found {len(leads)} matching leads — which one?", kb)
+        return
+    await _finalize_action(token, chat_id, tg_uid, link, intent, leads[0])
 
 
 async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
@@ -931,12 +997,44 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
     elif data == "cfm:save":
         p = await _get_pending(tg_uid)
-        if not p:
-            await send_message(token, chat_id, "Nothing to save.",
-                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        _menu_only = [[{"text": "⬅️ Menu", "callback_data": "menu"}]]
+        if not p or p.get("action") == "pick":
+            await send_message(token, chat_id, "Nothing to save.", _menu_only)
+        elif p.get("action") == "create_lead":
+            if link["role"] not in ("owner", "admin"):
+                await send_message(token, chat_id, "Only your admin can add new leads.")
+            else:
+                try:
+                    async with aiosqlite.connect(DB_PATH) as conn:
+                        await conn.execute(
+                            "INSERT INTO leads (agent_id, name, phone, need_type, stage, source) "
+                            "VALUES (?,?,?,?, 'prospect', 'telegram')",
+                            (link.get("agent_id"), p.get("lead_name", ""),
+                             p.get("phone", ""), p.get("need", "health")))
+                        await conn.commit()
+                    await _set_pending(tg_uid, tenant_id, None)
+                    await send_message(token, chat_id, f"✅ Lead <b>{p.get('lead_name','')}</b> added.", _menu_only)
+                except Exception as e:
+                    logger.warning("tgcrm create_lead failed: %s", e)
+                    await send_message(token, chat_id, "⚠️ Couldn't add the lead — please try again.")
         elif link["role"] not in ("owner", "admin") and p.get("lead_agent") != link.get("agent_id"):
             await send_message(token, chat_id, "You can only update your assigned leads.")
-        else:
+        elif p.get("action") == "move_stage":
+            try:
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    await conn.execute(
+                        "UPDATE leads SET stage=?, updated_at=datetime('now') WHERE lead_id=? "
+                        "AND agent_id IN (SELECT agent_id FROM agents WHERE tenant_id=?)",
+                        (p.get("stage"), int(p["lead_id"]), tenant_id))
+                    await conn.commit()
+                await _set_pending(tg_uid, tenant_id, None)
+                await send_message(token, chat_id,
+                                   f"✅ <b>{p.get('lead_name','')}</b> moved to "
+                                   f"<b>{(p.get('stage') or '').replace('_',' ')}</b>.", _menu_only)
+            except Exception as e:
+                logger.warning("tgcrm move_stage failed: %s", e)
+                await send_message(token, chat_id, "⚠️ Couldn't update the stage — please try again.")
+        else:  # log_note / set_followup
             itype = "followup" if p.get("action") == "set_followup" else "note"
             try:
                 await db.log_interaction(
@@ -945,11 +1043,26 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                     p.get("fud") or None, p.get("fut") or None, link.get("agent_id"))
                 await _set_pending(tg_uid, tenant_id, None)
                 done = "🔔 Follow-up set" if itype == "followup" else "📝 Note saved"
-                await send_message(token, chat_id, f"✅ {done} for <b>{p.get('lead_name','')}</b>.",
-                                   [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+                await send_message(token, chat_id, f"✅ {done} for <b>{p.get('lead_name','')}</b>.", _menu_only)
             except Exception as e:
                 logger.warning("tgcrm save failed: %s", e)
                 await send_message(token, chat_id, "⚠️ Couldn't save — please try again.")
+    elif data.startswith("pick:"):
+        p = await _get_pending(tg_uid)
+        if p and p.get("action") == "pick":
+            try:
+                lead_id = int(data.split(":", 1)[1])
+            except (ValueError, IndexError):
+                lead_id = 0
+            lead = await db.get_lead(lead_id, tenant_id) if lead_id else None
+            if lead and (link["role"] in ("owner", "admin") or lead.get("agent_id") == link.get("agent_id")):
+                await _finalize_action(token, chat_id, tg_uid, link, p.get("intent", {}), lead)
+            else:
+                await send_message(token, chat_id, "Lead not found.",
+                                   [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        else:
+            await send_message(token, chat_id, "This selection expired — please try again.",
+                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
     elif data == "cfm:cancel":
         await _set_pending(tg_uid, tenant_id, None)
         await send_message(token, chat_id, "Cancelled.",
