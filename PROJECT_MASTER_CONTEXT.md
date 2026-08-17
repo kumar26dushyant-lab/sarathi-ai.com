@@ -6055,6 +6055,15 @@ Four more founder-reported items after A77:
 2. **Light-mode invisible text.** Two ops info boxes hardcoded `color:#bae6fd` (light blue) on low-opacity tint backgrounds → invisible on the light-mode near-white bg (branch-login help box + `#tgLoginBox`). Switched to `var(--nd-text-secondary)` (theme-adaptive). Boxes on SOLID dark backgrounds (toast `#065f46`, SUB badge `#1e3a8a`) were left — readable in both themes.
 3. **Suhana Jain staff-vs-branch.** Confirmed model: **staff do everything from "My Business"** (refer subscribers, refer ₹499 one-time review customers, raise retail claims) — no need to also make them a Branch. Suhana (staff #12, code `SP-EE53CU`) had a mistaken **branch IND-02** (already `disabled`) with ONE orphan claim (#31 Vinay Solanki, unpaid lead, on IND-02 house #50). Migrated #31 → her staff attribution (account→SP-EE53CU house #63, branch_code→`SP-EE53CU`, name capped) so it shows on her My Business (**claims_raised 2→3**); IND-02 house now has 0 claims (orphan-free). **Left the disabled IND-02 row in place per founder ("remove later").** Note: **PUN-02 "Pawan Branch"** (disabled, personal name) is the same staff-as-branch pattern — flag for the same cleanup.
 
+## A80 — Sarathi homepage AI guide chatbot (Aug 17 2026, commit 99c37d4)
+
+Shipped the agreed **homepage chatbot** for sarathi-ai.com — an anonymous, sales-aware product guide.
+- **`biz_ai.sarathi_guide_reply(message, history, lang, facts_block)`** — Sarathi-specific KB (`_SARATHI_GUIDE_KB`: what it is, ₹199/mo + 7-day free trial, Telegram voice CRM, SOLO/Team/Enterprise, Nidaan bundle) + prompt, reusing the shared Gemini plumbing (`_ask_gemini`/`_clean_json`/`_SUPPORT_LANG_RULE`). Bilingual EN/HI/Hinglish (matches the visitor). Returns `{answer, cta, escalate}` where `cta ∈ trial|human`. Anonymous only — no account/Nidaan data.
+- **`POST /api/guide/ask`** — **Sarathi host-gated** (404 on the Nidaan host, keeps the app boundary), rate-limited 20/min, stateless (client holds history, capped 8 turns), safe fallback text on AI failure.
+- **`static/sarathi_guide_widget.js`** — self-contained, mobile-first (full-width bottom sheet <480px), Sarathi-teal skin, typing indicator, greeting, and CTA buttons: **"🎉 Start Free Trial"** (→ `/#pricing`) on buying intent, **"💬 Talk to our team"** (→ `/support`) on human/escalate. Mounted on `index.html` (defer).
+- **Verified live:** pricing Q → correct answer + `cta:trial`; billing/refund Q → refuses account data + `cta:human` + `escalate:true`; Hinglish Q → replies in Hinglish + nudges trial; Nidaan host → 404; widget button + panel render on the mobile homepage.
+- **V2 ideas (not built):** DB-backed pricing facts (currently KB-embedded ₹199), thread persistence + human-handoff into a Sarathi support ticket, richer KB, chat analytics.
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
