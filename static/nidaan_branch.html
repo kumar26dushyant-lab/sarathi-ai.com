@@ -64,6 +64,7 @@
   <a class="brand" href="/"><img src="/static/nidaan_logo.png" alt="" onerror="this.style.display='none'">Nidaan Partner</a>
   <div style="display:flex;align-items:center;gap:.7rem">
     <span style="font-size:.8rem;color:var(--nd-text-muted)">Branch Portal</span>
+    <span id="guideMic" style="display:inline-flex;align-items:center"></span>
     <button class="nd-theme-toggle" style="font-size:.78rem;background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary);border-radius:6px;padding:.25rem .55rem;cursor:pointer"></button>
   </div>
 </nav>
@@ -401,8 +402,8 @@ if(localStorage.getItem(TOKEN_KEY)) showDashboard();
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>window.NSW_CHANNEL='branch';</script>
 <script src="/static/nidaan_support_widget.js?v=22" defer></script>
-<!-- Self-onboarding voice+readable branch guide (Hindi default) -->
-<script src="/static/nidaan_guide.js?v=2" defer></script>
+<!-- Self-onboarding voice+readable branch guide (mic in top menu, Hindi default) -->
+<script src="/static/nidaan_guide.js?v=3" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   if (!window.NidaanGuide) return;
@@ -411,6 +412,8 @@ document.addEventListener('DOMContentLoaded', function(){
   if (!loggedIn) return;
   NidaanGuide.init({
     key: 'branch',
+    mount: '#guideMic',
+    lang: 'hi',
     title: { hi: 'ब्रांच गाइड', en: 'Branch Guide' },
     greeting: {
       hi: "नमस्ते! यह आपका Nidaan ब्रांच डैशबोर्ड है। यहाँ से आप ग्राहकों के क्लेम दर्ज कर सकते हैं, एडवाइज़र जोड़ सकते हैं और अपनी कमाई देख सकते हैं। आइए समझते हैं।",
