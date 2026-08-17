@@ -6040,6 +6040,15 @@ Founder spotted a branch (BIAORA-01) showing 0/0/0 signups despite an existing c
 
 **Backfilled the reported account:** #72 → `MANISH RATHORE`, `branch_code=SP-GADPB2`, `source_channel=staff` → now shows on Avi's "Your Business" (signups 1 / paid 1 / ₹590). New signups are correct going forward.
 
+## A78 — Nidaan ops attribution UX follow-ups (Aug 17 2026, commit 0706837)
+
+Four more founder-reported items after A77:
+
+1. **Accounts BRANCH column showed a bare code.** `get_all_accounts_admin` now LEFT-JOINs `nidaan_staff.referral_code` + `nidaan_branches.branch_code` and derives `ref_kind` (staff|branch) + `ref_name`; the ops accounts table renders "Name / 👤 staff|🏢 branch · CODE" (Manish → *Avi · 👤 staff · SP-GADPB2*).
+2. **Staff "My Business" showed a count, not WHO.** New `nidaan.get_referred_accounts(code)` + `referrals[]` on `/nidaan/ops/api/my-business`; the view lists each referred subscriber (name, plan, Subscribed✓/unpaid, joined). Avi → Manish (silver, paid).
+3. **Phone field accepted non-phone values.** The branch **house account** (`get_or_create_branch_house_account`) seeded `phone="HOUSE-<code>"`, which leaked into the visible profile phone when a super-admin used **↪ Enter** (impersonate → the house account's subscriber dashboard). Fixed: house phone is now BLANK (safe — the phone unique index is `WHERE phone != ''`), and **7 existing** house phones were backfilled to ''. `/nidaan/api/profile` now requires phone to be blank or a real 10-digit number (digits-only), so no code/label can land in the phone field again.
+4. **Pricing ₹500+GST=₹590 vs the ₹499 the founder expected — NOT a bug, a config choice.** Silver subscription base = **₹500** (`PLAN_LIMITS.silver.price=500`, `NIDAAN_RAZORPAY_PLANS.silver.amount_paise=50000`); GST 18% is added on top by Razorpay → **₹590** (what Manish paid). The **₹499 is the per-claim REVIEW fee** (D2C one-time), a different product. Plans are super-admin editable (DB config): to make Silver read ₹499-base it'd become ₹588.82 incl-GST (ugly); cleaner to pick a round customer-facing number (e.g. keep ₹590, or set a GST-inclusive round price) and back-calc. **Left to founder — no money math changed.**
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
