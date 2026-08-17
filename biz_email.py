@@ -168,7 +168,13 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # are set — Sarathi mail never touches this branch, so its path is unchanged. On failure it falls
     # through to the existing transports as backup.
     _is_nidaan_sender = (sender_email or "").lower().endswith("@nidaanpartner.com")
-    if _is_nidaan_sender and NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
+    # The Nidaan Workspace SMTP creds (info@nidaanpartner.com) are currently rejected by
+    # Gmail (535 BadCredentials), which spammed the error log while Brevo silently delivered.
+    # Brevo is DKIM-authenticated for nidaanpartner.com → inbox, so we default to Brevo-first
+    # and only use this SMTP path when explicitly re-enabled (NIDAAN_SMTP_ENABLED=1) after the
+    # Gmail app password is regenerated.
+    _nidaan_smtp_on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+    if _is_nidaan_sender and _nidaan_smtp_on and NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
         if await _smtp_send(NIDAAN_SMTP_USER, NIDAAN_SMTP_PASSWORD, NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT):
             return True
 
