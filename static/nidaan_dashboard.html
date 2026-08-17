@@ -335,6 +335,7 @@
       <div id="notifMenu" style="display:none;position:fixed;right:12px;top:60px;background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:10px;min-width:230px;max-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:9999;overflow:hidden"></div>
     </div>
     <span class="plan-badge" id="planBadge">—</span>
+    <span id="guideMic" style="display:inline-flex;align-items:center"></span>
     <div class="lang-toggle">
       <button class="lang-btn active" onclick="setLang('en')">EN</button>
       <button class="lang-btn" onclick="setLang('hi')">हिं</button>
@@ -2751,7 +2752,7 @@ function setLang(l) {
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
 }
-const _lang = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
+const _lang = localStorage.getItem('nidaan_lang') || 'hi';   // default HINDI (matches the voice guide)
 setLang(_lang);
 
 // ── Pending payment recovery ──────────────────────────────────────────────────
@@ -2951,11 +2952,18 @@ if ('serviceWorker' in navigator) {
   PWABack.registerEl('waVcardModalBg');
 })();
 </script>
-<!-- Self-onboarding voice+readable user guide (Hindi default, account-aware) -->
-<script src="/static/nidaan_guide.js?v=2" defer></script>
+<!-- Self-onboarding voice+readable user guide (Hindi default, account-aware, mic in top menu) -->
+<script src="/static/nidaan_guide.js?v=3" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   if (!window.NidaanGuide) return;
+  // Keep the guide's language in sync when the dashboard's own EN/हिं toggle is used.
+  (function(){ var _s = window.setLang; if (typeof _s === 'function' && !_s.__ngWrapped){
+    window.setLang = function(l){ _s(l); try{ window.NidaanGuide && NidaanGuide.setLang(l); }catch(e){} };
+    window.setLang.__ngWrapped = true; } })();
+  var _curLang = 'hi'; try{ _curLang = localStorage.getItem('nidaan_lang') || 'hi'; }catch(e){}
+  var _opts = { mount: '#guideMic', lang: _curLang,
+    onLangChange: function(l){ try{ window.setLang && window.setLang(l); }catch(e){} } };
 
   // Steps for a PAID SUBSCRIBER (active plan → claims included; NO per-review ₹499).
   function subscriberSteps(planLabel){
@@ -3007,7 +3015,7 @@ document.addEventListener('DOMContentLoaded', function(){
     var isSub = state && state.type === 'subscriber';
     var plan = cap((state && state.plan) || '');
     if (isSub){
-      NidaanGuide.init({
+      NidaanGuide.init(Object.assign({}, _opts, {
         key: 'subscriber',
         title: { hi: 'आपका गाइड', en: 'Your Guide' },
         greeting: {
@@ -3015,9 +3023,9 @@ document.addEventListener('DOMContentLoaded', function(){
           en: "Hello! This is your Nidaan dashboard. You have an active " + (plan || '') + " plan. Let me show you how to make the most of it — from submitting claims to your free CRM."
         },
         steps: subscriberSteps(plan)
-      });
+      }));
     } else {
-      NidaanGuide.init({
+      NidaanGuide.init(Object.assign({}, _opts, {
         key: 'review',
         title: { hi: 'आपका गाइड', en: 'Your Guide' },
         greeting: {
@@ -3025,7 +3033,7 @@ document.addEventListener('DOMContentLoaded', function(){
           en: "Hello! This is your Nidaan dashboard. Here you can get an expert review of your rejected or underpaid insurance claim. Let's begin."
         },
         steps: reviewSteps
-      });
+      }));
     }
   }
 
