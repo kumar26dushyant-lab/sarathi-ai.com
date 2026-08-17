@@ -407,7 +407,7 @@ function setLang(l) {
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
 }
-const saved = localStorage.getItem('nidaan_lang') || (navigator.language.startsWith('hi') ? 'hi' : 'en');
+const saved = localStorage.getItem('nidaan_lang') || 'hi';
 setLang(saved);
 </script>
 </body>

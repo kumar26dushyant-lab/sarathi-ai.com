@@ -180,8 +180,7 @@ function setLang(l){
 }
 (function(){
   let saved = null; try { saved = localStorage.getItem('nidaan_lang'); } catch(e){}
-  const sys = (navigator.language || '').toLowerCase().startsWith('hi') ? 'hi' : 'en';
-  document.addEventListener('DOMContentLoaded', () => setLang(saved || sys));
+  document.addEventListener('DOMContentLoaded', () => setLang(saved || 'hi'));   // default HINDI
   // also apply ASAP for placeholders already in the DOM
   if (document.readyState !== 'loading') setLang(saved || sys);
 })();
@@ -1296,7 +1295,7 @@ async function submitFreeClaim() {
   // Documents are OPTIONAL — no upload is required to submit. Users can add the
   // rejection letter now or later from the dashboard.
 
-  const _ll = (localStorage.getItem('nidaan_lang') || 'en');
+  const _ll = (localStorage.getItem('nidaan_lang') || 'hi');
   const comm_lang = ['en', 'hi', 'mr'].includes(_ll) ? _ll : 'en';
 
   // Body MUST match NidaanClaimReq exactly (extra="forbid").
