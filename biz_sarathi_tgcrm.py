@@ -730,8 +730,36 @@ async def _digest_view(token, chat_id, tg_uid, link) -> None:
     else:
         kb.append([{"text": "Turn ON (9 AM)", "callback_data": "digest_on"}])
     kb.append([{"text": "📤 Send me one now", "callback_data": "digest_now"}])
+    kb.append([{"text": "👥 Team digests", "callback_data": "digest_team"}])
     kb.append([{"text": "⬅️ Menu", "callback_data": "menu"}])
     await send_message(token, chat_id, txt, kb)
+
+
+async def _digest_team_view(token, chat_id, tenant_id: int) -> None:
+    """Admin: toggle the daily summary on/off per linked team member."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT l.telegram_user_id AS tguid, a.name AS name, d.enabled AS enabled "
+            "FROM tg_links l LEFT JOIN agents a ON a.agent_id=l.agent_id "
+            "LEFT JOIN tg_digest_prefs d ON d.telegram_user_id=l.telegram_user_id "
+            "WHERE l.tenant_id=? AND l.status='active' AND l.role NOT IN ('owner','admin')",
+            (tenant_id,))).fetchall()
+    if not rows:
+        await send_message(token, chat_id,
+                           "No team members are linked yet. Invite them from the 🤖 Telegram CRM "
+                           "section of your web dashboard.",
+                           [[{"text": "⬅️ Back", "callback_data": "digest"}]])
+        return
+    kb = []
+    for r in rows:
+        on = bool(r["enabled"])
+        nm = r["name"] or "Member"
+        kb.append([{"text": f"{'🟢' if on else '⚪'} {nm} — {'turn OFF' if on else 'turn ON'}",
+                    "callback_data": f"digmem:{r['tguid']}:{'off' if on else 'on'}"}])
+    kb.append([{"text": "⬅️ Back", "callback_data": "digest"}])
+    await send_message(token, chat_id,
+                       "👥 <b>Team daily summaries</b>\nTap a name to turn their daily summary on/off:", kb)
 
 
 # ── P3: voice + text WRITE flows (log note / set follow-up) ──────────────────
@@ -1211,7 +1239,7 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                            "🎫 <b>Support</b>\nDescribe your issue in a message or voice note and I'll "
                            "raise a ticket for you.",
                            [[{"text": "❌ Cancel", "callback_data": "cfm:cancel"}]])
-    elif data in ("digest", "digest_on", "digest_off", "digest_now"):
+    elif data in ("digest", "digest_on", "digest_off", "digest_now", "digest_team"):
         if link["role"] not in ("owner", "admin"):
             await _send_menu(token, chat_id, link)
         elif data == "digest_on":
@@ -1224,8 +1252,26 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
             await _digest_view(token, chat_id, tg_uid, link)
         elif data == "digest_now":
             await send_message(token, chat_id, await compose_digest(tenant_id))
+        elif data == "digest_team":
+            await _digest_team_view(token, chat_id, tenant_id)
         else:
             await _digest_view(token, chat_id, tg_uid, link)
+    elif data.startswith("digmem:"):
+        if link["role"] in ("owner", "admin"):
+            parts = data.split(":")
+            try:
+                muid = int(parts[1]); act = parts[2]
+            except (IndexError, ValueError):
+                muid, act = 0, ""
+            if muid:
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    conn.row_factory = aiosqlite.Row
+                    ok = await (await conn.execute(
+                        "SELECT 1 FROM tg_links WHERE telegram_user_id=? AND tenant_id=? AND status='active'",
+                        (muid, tenant_id))).fetchone()
+                if ok:
+                    await set_digest_pref(muid, tenant_id, act == "on", 9, link.get("agent_id"))
+            await _digest_team_view(token, chat_id, tenant_id)
     elif data == "help":
         await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
     elif data == "cfm:save":
