@@ -131,6 +131,13 @@ html[data-theme="dark"] .audio-btn.playing{background:linear-gradient(135deg,#f5
   .hero h1{font-size:1.5em}
   .container{padding:24px 16px}
   .audio-tooltip{white-space:normal;min-width:180px}
+  /* Mobile header: let the bar wrap so the nav never runs off-screen (fixes h-scroll). */
+  .navbar{flex-wrap:wrap;padding:10px 14px;gap:4px}
+  .navbar .logo img{height:44px !important}
+  .navbar .logo{font-size:1.05em}
+  .navbar nav{width:100%;flex-wrap:wrap;justify-content:flex-start;gap:6px 12px;margin-top:4px}
+  .navbar nav a{margin-left:0;font-size:0.95em}
+  .lang-toggle{margin-left:auto}
 }
 </style>
 </head>
