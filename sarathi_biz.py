@@ -2882,6 +2882,12 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
             (purchase_id,),
         )
         await _conn.commit()
+    # Materialise a claim so this paid review shows in All Claims + search (not just the
+    # reviews widget). Guarded — a claim-creation hiccup must never fail payment confirmation.
+    try:
+        await nidaan.ensure_claim_for_paid_purchase(purchase_id)
+    except Exception as _ecp:
+        logger.error("ensure_claim_for_paid_purchase failed (verify) purchase=%s: %s", purchase_id, _ecp)
     # Email ops team
     admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
     if admin_email:
@@ -4059,6 +4065,13 @@ async def nidaan_razorpay_webhook(request: Request):
                             "reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=? AND status='pending_payment'",
                             (_pid_purchase,))
                         await _c.commit()
+                    # Same as the client verify path: surface this paid review in the
+                    # claims workspace. Idempotent + guarded (never fail the webhook).
+                    try:
+                        await nidaan.ensure_claim_for_paid_purchase(_pid_purchase)
+                    except Exception as _ecpw:
+                        logger.error("ensure_claim_for_paid_purchase failed (webhook) purchase=%s: %s",
+                                     _pid_purchase, _ecpw)
                     logger.info("Nidaan webhook payment.captured review_999: purchase=%s finalized", _pid_purchase)
                 except Exception as _rpe:
                     logger.error("Nidaan webhook review_999 finalize failed purchase=%s: %s", _pid_purchase, _rpe)

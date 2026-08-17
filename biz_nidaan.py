@@ -1907,6 +1907,72 @@ async def submit_claim(
     return claim_id, "ok"
 
 
+async def ensure_claim_for_paid_purchase(purchase_id: int) -> Optional[int]:
+    """Idempotently materialise a nidaan_claims row for a PAID D2C ₹499 review purchase.
+
+    The D2C ₹499 funnel (product 'nidaan_review_999') only ever wrote a
+    nidaan_per_claim_purchase row, so those paid reviews were visible in the
+    "Pending Reviews" widget but NOT in the main claims workspace (All Claims /
+    search / filters / assignment) — which read nidaan_claims. This converts a
+    paid purchase into a real claim so BOTH ₹499 funnels land in one place.
+
+    Safe to call repeatedly and from any payment path:
+      • no-op if the purchase isn't paid,
+      • no-op for a bare credit (super-admin grant with no intake details),
+      • no-op if it was already converted (returns the existing claim_id).
+    Returns the linked claim_id (existing or new), or None when nothing to do.
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_per_claim_purchase WHERE purchase_id=?", (purchase_id,))).fetchone()
+    if not row:
+        return None
+    p = dict(row)
+    if p.get("status") != "paid":
+        return None
+    if p.get("linked_claim_id"):
+        return p["linked_claim_id"]                     # already converted — idempotent
+    # Bare credit (no intake details captured) → leave as an unconsumed entitlement.
+    if not (p.get("claim_type") or p.get("insurer_name") or p.get("insured_name")):
+        return None
+    account_id = p.get("account_id")
+    if not account_id:
+        return None
+    claim_id, msg = await submit_claim(
+        account_id=account_id,
+        user_id=None,
+        claim_type=(p.get("claim_type") or "other"),
+        insured_name=(p.get("insured_name") or p.get("advisor_name") or ""),
+        insured_phone=(p.get("insured_phone") or p.get("advisor_phone") or ""),
+        insured_email=(p.get("insured_email") or p.get("advisor_email") or ""),
+        insurer_name=(p.get("insurer_name") or ""),
+        policy_no=(p.get("policy_no") or ""),
+        disputed_amount=p.get("disputed_amount"),
+        notes_from_agent=(p.get("brief_description") or ""),
+        intermediary_code=(p.get("intermediary_code") or ""),
+        intermediary_name=(p.get("intermediary_name") or ""),
+        payment_status="paid",
+        skip_eligibility=True,                          # already paid — never gate on quota
+        origin="d2c_review",
+    )
+    if not claim_id:
+        logger.error("ensure_claim_for_paid_purchase: submit_claim failed purchase=%s msg=%s",
+                     purchase_id, msg)
+        return None
+    # Pin the link to THIS purchase explicitly (submit_claim auto-links the most-recent
+    # paid purchase; make it deterministic and record the conversion).
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_per_claim_purchase "
+            "SET linked_claim_id=?, converted_to_claim_id=? WHERE purchase_id=?",
+            (claim_id, claim_id, purchase_id))
+        await conn.commit()
+    logger.info("ensure_claim_for_paid_purchase: purchase=%s → claim=%s (account=%s)",
+                purchase_id, claim_id, account_id)
+    return claim_id
+
+
 async def update_claim_status(
     claim_id: int,
     new_status: str,
