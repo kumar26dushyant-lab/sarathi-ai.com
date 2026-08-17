@@ -6014,7 +6014,19 @@ ClaimShield; ClaimShield works the case and pushes customer-safe status back to 
 
 **One real bug found + fixed (commit 77c409d, deployed + prod-verified):** `/help` measured `scrollWidth=546`. Cause: header nav (Home/Help/Privacy/Terms + EN/हिं lang toggle + theme toggle) in a single non-wrapping flex row + an 80px logo. Fix scoped to `@media(max-width:640px)`: navbar `flex-wrap`, nav drops to a full-width wrapping second row (removed per-link left-margins), logo image → 44px. Re-measured 390 / 0 overflow.
 
-**Still pending — authenticated dashboard mobile pass:** `dashboard.html` has the viewport meta + 15 media queries (well-adapted on paper) but wasn't rendered logged-in (CDP needs a test session). `admin.html`/`superadmin.html` have only 2 media queries each (staff tools, lower priority). Next mobile sub-task = a real logged-in dashboard render.
+**Still pending — authenticated dashboard mobile pass:** `dashboard.html` has the viewport meta + 15 media queries (well-adapted on paper) but wasn't rendered logged-in (CDP needs a test session). `admin.html`/`superadmin.html` have only 2 media queries each (staff tools, lower priority). Next mobile sub-task = a real logged-in dashboard render. **Test login provided by founder: `dushyant@nidaanpartner.com` (a Sarathi account).**
+
+---
+
+## A76 — Branch one-click login + Google sign-in UX (Aug 17 2026)
+
+**Nidaan branch login — one-click link + emails (commits c50722d, 31a035b; prod-verified).** Previously the branch portal emailed only an OTP code (no link) and creating a branch sent no email at all.
+- New magic-link token `create_branch_magic_token`/`verify_branch_magic_token` (typ=`nidaan_branch_magic`, bound to branch_code+email, short-lived) + `GET /nidaan/branch/magic` landing → re-checks branch ACTIVE → mints a normal `nidaan_branch` session → hands it to the portal via URL fragment `#t=…` (never hits server logs; page stores it + `history.replaceState` clears it). Expired/inactive → `/nidaan/branch?e=expired|inactive` with a clear message.
+- `email_svc.send_nidaan_branch_login_email()` — big one-click "Log in" button + OTP code fallback, mobile-first, sent as **Nidaan Partner → info@nidaanpartner.com** (from_name starting "Nidaan" selects `NIDAAN_FROM`).
+- Wired: **branch create** (`ops_create_branch`) emails a welcome/login email (72h magic link); **branch request-otp** now sends OTP **plus** a 20-min one-click link.
+- **Bug caught in verification + fixed:** `datetime.utcnow().timestamp()` is naive-local → shifts the epoch by the server's TZ offset (Europe/Berlin **+0200 CEST**). Long-lived session tokens absorbed it; the 20-min magic token was born ~100 min **pre-expired** → one-click login always failed. Fixed to `int(time.time())`. (The other token helpers still use the old pattern but their multi-day lifetimes absorb the 2h shift — noted for future short-token work.) Verified: valid token → 303 → `#t=<session>`; bad → `?e=expired`.
+
+**Sarathi Google sign-in UX (commit 5de6aa4; client-side, needs a live human try).** Users clicking "Sign in with Google" got no feedback until after picking an account, and clicking the page closed Google's popup silently. Now: the instant focus moves **into the Google button iframe** (`window.blur` + `document.activeElement` is the `accounts.google.com` iframe — distinguishes a real click from an alt-tab), a **blocking** wait overlay appears ("Waiting for Google… don't close it") with a **Cancel** escape hatch. A focus-return watchdog (2.5s grace) clears the overlay and shows "Google sign-in didn't finish — tap to try again" instead of a silent dead-end. `onGoogleCredential` cancels the watchdog and proceeds. Success path unchanged. `login.html` still measures clean at 390px.
 
 ---
 
