@@ -739,6 +739,25 @@ async def _staff_business_row(conn, r: dict) -> dict:
     return out
 
 
+async def get_referred_accounts(ref_code: str) -> list[dict]:
+    """Accounts that joined via a referral code (staff SP-code OR branch code) — for the
+    'My Business' subscriber list + branch reconciliation drill-down. Name + plan + paid + date."""
+    code = (ref_code or "").strip().upper()
+    if not code:
+        return []
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            f"""SELECT a.account_id, a.owner_name, a.created_at, s.plan AS plan,
+                       CASE WHEN {_BRANCH_PAID_EXISTS} THEN 1 ELSE 0 END AS paid
+                FROM nidaan_accounts a
+                LEFT JOIN nidaan_subscriptions s ON s.account_id=a.account_id AND s.status='active'
+                WHERE UPPER(a.branch_code)=? AND COALESCE(a.status,'')<>'deleted'
+                ORDER BY a.created_at DESC""",
+            (code,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def get_staff_business(staff_id: int) -> Optional[dict]:
     """One staffer's own referral business (for the 'Your Business' dashboard tab)."""
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -1640,7 +1659,10 @@ async def get_or_create_branch_house_account(branch_code: str) -> int:
     affiliate signup/earnings stats (the CLAIM itself carries branch_code + origin='branch')."""
     code = (branch_code or "").strip().upper()
     house_email = f"branch.{code.lower()}@house.nidaanpartner.internal"
-    house_phone = f"HOUSE-{code}"
+    # Phone is left BLANK — it's a phone field, not a label. The house account is keyed by
+    # its synthetic email; the phone unique-index only applies WHERE phone != '' so blanks
+    # never collide. (Earlier a "HOUSE-<code>" marker leaked into the visible phone field.)
+    house_phone = ""
     async with aiosqlite.connect(DB_PATH) as conn:
         row = await (await conn.execute(
             "SELECT account_id FROM nidaan_accounts WHERE email=?", (house_email,))).fetchone()
@@ -2876,6 +2898,7 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
         cur = await conn.execute(
             """SELECT a.*, s.plan, s.status AS sub_status, s.current_period_end,
                       q.claims_this_window, q.current_window_start,
+                      rst.name AS ref_staff_name, rbr.name AS ref_branch_name,
                       (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
                         WHERE p.account_id = a.account_id AND p.status = 'paid') AS per_claim_total,
                       (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
@@ -2891,6 +2914,10 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
                LEFT JOIN nidaan_subscriptions s ON s.account_id = a.account_id
                    AND s.status = 'active'
                LEFT JOIN nidaan_plan_quota q ON q.account_id = a.account_id
+               LEFT JOIN nidaan_staff rst ON UPPER(rst.referral_code)=UPPER(a.branch_code)
+                   AND COALESCE(a.branch_code,'')<>''
+               LEFT JOIN nidaan_branches rbr ON UPPER(rbr.branch_code)=UPPER(a.branch_code)
+                   AND COALESCE(a.branch_code,'')<>''
                ORDER BY a.created_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         )
@@ -2930,6 +2957,18 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
             r["pay_status"] = "attempted"
         else:
             r["pay_status"] = "none"
+        # Who referred this account? The code in branch_code is either a staff personal
+        # code (SP-xxxxxx) or a real city branch — resolve to a human name so the ops
+        # accounts list can show "Avi (SP-…)" / "BIAORA BRANCH (BIAORA-01)", not a bare code.
+        if r.get("ref_staff_name"):
+            r["ref_kind"] = "staff"
+            r["ref_name"] = r["ref_staff_name"]
+        elif r.get("branch_code") and r.get("ref_branch_name") is not None:
+            r["ref_kind"] = "branch"
+            r["ref_name"] = r["ref_branch_name"] or ""
+        else:
+            r["ref_kind"] = ""      # no code, or a legacy/unknown code
+            r["ref_name"] = ""
     return rows
 
 

@@ -3722,6 +3722,29 @@ async function loadMyBusiness() {
   const link = b.referral_link || '';
   const signups = b.signups||0, paid = b.paid||0, revenue = b.revenue||0,
         commission = b.commission||0, claims = b.claims||0, pct = b.commission_pct||0;
+  // Who actually joined via this code — names, not just a count.
+  const refs = b.referrals || [];
+  const refList = refs.length ? `
+    <div class="section-hdr" style="margin-top:.4rem"><div>
+      <div class="section-title" style="font-size:1rem">👥 ${hi?'आपके रेफ़र किए सब्सक्राइबर':'Your referred subscribers'}</div>
+      <div class="section-sub">${hi?'आपके कोड से जुड़े लोग':'People who joined with your code'}</div>
+    </div></div>
+    <div style="overflow-x:auto;margin-bottom:1.3rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead><tr style="text-align:left;color:var(--nd-text-muted)">
+          <th style="padding:.6rem .8rem">${hi?'नाम':'Name'}</th>
+          <th style="padding:.6rem .8rem">${hi?'प्लान':'Plan'}</th>
+          <th style="padding:.6rem .8rem">${hi?'स्थिति':'Status'}</th>
+          <th style="padding:.6rem .8rem">${hi?'जुड़े':'Joined'}</th>
+        </tr></thead>
+        <tbody>${refs.map(a=>`<tr style="border-top:1px solid var(--nd-border)">
+          <td style="padding:.55rem .8rem;font-weight:600">${esc(a.owner_name||'—')}</td>
+          <td style="padding:.55rem .8rem">${a.plan?esc(String(a.plan).toUpperCase()):'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
+          <td style="padding:.55rem .8rem">${a.paid?`<span style="color:var(--nd-success-text);font-weight:700">${hi?'सब्सक्राइब्ड ✓':'Subscribed ✓'}</span>`:`<span style="color:var(--nd-warning-text)">${hi?'साइन अप (भुगतान बाकी)':'Signed up · unpaid'}</span>`}</td>
+          <td style="padding:.55rem .8rem;color:var(--nd-text-faint)">${fmtDate(a.created_at)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
   // Motivational nudge based on where they are.
   let nudge;
   if (signups===0) nudge = hi ? 'शुरुआत करें — अपना लिंक 5 लोगों को भेजें जिन्हें बीमा क्लेम में मदद चाहिए। हर सफल सब्सक्रिप्शन पर आपको कमीशन मिलता है।'
@@ -3788,6 +3811,8 @@ async function loadMyBusiness() {
     <div style="font-size:.74rem;color:var(--nd-text-faint);margin-bottom:1.4rem">
       ${hi?`<b>आपका कमीशन कैसे बनता है:</b> आपके कोड से जुड़े लोगों की सब्सक्रिप्शन राशि का ${pct}%। यह हिसाब का आंकड़ा है — अपने-आप भुगतान नहीं होता। कमीशन % सुपर-एडमिन तय करते हैं।`:`<b>How your commission works:</b> ${pct}% of the subscription revenue from people who joined using your code. This is a reconciliation figure — not auto-paid. Commission % is set by the super-admin.`}
     </div>
+
+    ${refList}
 
     <!-- Claim desk: raise claims like a branch, from this same login -->
     <div class="section-hdr" style="margin-top:.4rem"><div>
@@ -4651,7 +4676,9 @@ function renderAccounts(accounts) {
       <td>${esc(a.firm_name||'—')}</td>
       <td>${esc(a.email||'—')}</td>
       <td>${esc(a.phone||'—')}</td>
-      <td>${a.branch_code?`<span style="font-size:.72rem;color:var(--nd-purple-text);font-weight:700">${esc(a.branch_code)}</span>`:'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
+      <td>${a.branch_code
+            ? `<span style="font-size:.72rem;color:var(--nd-purple-text);font-weight:700">${a.ref_name?esc(a.ref_name):(a.ref_kind==='staff'?'Staff':a.ref_kind==='branch'?'Branch':'')}</span>${a.ref_kind?`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${a.ref_kind==='staff'?'👤 staff':'🏢 branch'} · ${esc(a.branch_code)}</span>`:`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${esc(a.branch_code)}</span>`}`
+            : '<span style="color:var(--nd-text-disabled)">—</span>'}</td>
       <td>${accTypeBadge(a)} ${accPayBadge(a)}</td>
       <td>${accUsageCell(a)}</td>
       <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>

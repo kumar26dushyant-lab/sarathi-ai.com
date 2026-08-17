@@ -4760,11 +4760,19 @@ async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    # Phone is optional, but if given it must be a real 10-digit mobile — never a code/label.
+    # (This blocks values like a branch code ever landing in the phone field.)
+    _phone = body.phone
+    if _phone is not None:
+        _digits = "".join(ch for ch in _phone if ch.isdigit())
+        if _digits and len(_digits) != 10:
+            raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number, or leave it blank.")
+        _phone = _digits  # store digits only (or "" to clear)
     await nidaan.update_account_profile(
         account["account_id"],
         owner_name=body.owner_name,
         firm_name=body.firm_name,
-        phone=body.phone,
+        phone=_phone,
     )
     return {"status": "updated"}
 
@@ -5529,6 +5537,7 @@ async def ops_my_business(request: Request):
     # Same entry path branches use (/nidaan/start reads ?ref= and carries it into signup).
     biz["referral_link"] = (f"{base}/nidaan/start?ref={biz['referral_code']}"
                             if biz.get("referral_code") else "")
+    biz["referrals"] = await nidaan.get_referred_accounts(biz.get("referral_code") or "")
     return biz
 
 
