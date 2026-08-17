@@ -33,8 +33,9 @@ Team, here's everything new that makes your day easier 🎉
 • Your **"My Business"** now **lists the actual subscribers you referred** (name, plan, subscribed/unpaid) — not just a count.
 • **Creating a branch now auto-emails them** a one-click login link; the login-code email also carries a **direct login button**.
 
-🎧 **New: voice user-guide for customers & branches**
-• Customer and branch dashboards now have a **"गाइड / Guide" mic in the top menu** — they can **listen** to a step-by-step walkthrough in **Hindi** (or read it), and self-onboard without calling us. *(A staff guide is coming next.)*
+🎧 **New: voice user-guide on every dashboard + smarter support chat**
+• Customer, branch **AND staff** dashboards now have a **"गाइड / Guide" mic in the top menu** — **listen** to a step-by-step walkthrough in **Hindi** (or read it) and self-onboard, no call needed. Your **staff guide** covers Overview → Claims → ₹499 reviews → Tasks → Accounts/payments → Support → My Business → Branches.
+• Our **support chat now answers "how do I…" product questions** from the same guide, so customers get consistent help instantly.
 
 🎨 **Fixes**
 • **Support chat** messages are now **readable in Light mode** (were nearly invisible before).
@@ -64,8 +65,9 @@ Team, here's everything new that makes your day easier 🎉
 • आपके **"My Business"** में अब **आपके रेफ़र किए सब्सक्राइबर की सूची** दिखती है (नाम, प्लान, सब्सक्राइब्ड/बाकी) — सिर्फ़ संख्या नहीं।
 • **ब्रांच बनाते ही उन्हें अपने-आप** एक-क्लिक लॉगिन लिंक ईमेल हो जाता है; लॉगिन-कोड ईमेल में भी **सीधा लॉगिन बटन** होता है।
 
-🎧 **नया: ग्राहक और ब्रांच के लिए वॉइस गाइड**
-• ग्राहक और ब्रांच डैशबोर्ड पर अब ऊपर मेन्यू में **"गाइड / Guide" माइक** है — वे **हिंदी** में स्टेप-बाय-स्टेप गाइड **सुन** सकते हैं (या पढ़ सकते हैं), और बिना कॉल किए खुद समझ सकते हैं। *(स्टाफ़ गाइड अगली बार।)*
+🎧 **नया: हर डैशबोर्ड पर वॉइस गाइड + स्मार्ट सपोर्ट चैट**
+• ग्राहक, ब्रांच **और स्टाफ़** — हर डैशबोर्ड पर अब ऊपर मेन्यू में **"गाइड / Guide" माइक** है — **हिंदी** में स्टेप-बाय-स्टेप गाइड **सुनें** (या पढ़ें) और बिना कॉल किए खुद समझें। आपका **स्टाफ़ गाइड** शामिल करता है: Overview → Claims → ₹499 रिव्यू → Tasks → Accounts/भुगतान → Support → My Business → Branches।
+• हमारी **सपोर्ट चैट अब "यह कैसे करें" जैसे सवालों** का जवाब उसी गाइड से देती है — ग्राहकों को तुरंत एक जैसी सही मदद मिलती है।
 
 🎨 **सुधार (Fixes)**
 • **सपोर्ट चैट** के मैसेज अब **लाइट मोड में साफ़ पढ़े** जा सकते हैं (पहले लगभग अदृश्य थे)।
