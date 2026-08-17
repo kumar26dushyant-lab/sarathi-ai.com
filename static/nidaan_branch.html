@@ -401,5 +401,39 @@ if(localStorage.getItem(TOKEN_KEY)) showDashboard();
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>window.NSW_CHANNEL='branch';</script>
 <script src="/static/nidaan_support_widget.js?v=22" defer></script>
+<!-- Self-onboarding voice+readable branch guide (Hindi default) -->
+<script src="/static/nidaan_guide.js?v=2" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  if (!window.NidaanGuide) return;
+  // Only show once the branch is signed in (guide is for using the dashboard, not the login screen).
+  var loggedIn = false; try{ loggedIn = !!localStorage.getItem('nidaan_branch_token'); }catch(e){}
+  if (!loggedIn) return;
+  NidaanGuide.init({
+    key: 'branch',
+    title: { hi: 'ब्रांच गाइड', en: 'Branch Guide' },
+    greeting: {
+      hi: "नमस्ते! यह आपका Nidaan ब्रांच डैशबोर्ड है। यहाँ से आप ग्राहकों के क्लेम दर्ज कर सकते हैं, एडवाइज़र जोड़ सकते हैं और अपनी कमाई देख सकते हैं। आइए समझते हैं।",
+      en: "Hello! This is your Nidaan branch dashboard. From here you can file customers' claims, bring in advisors, and see your earnings. Let me walk you through it."
+    },
+    steps: [
+      { hi: { t: "ग्राहक के लिए क्लेम दर्ज करें", b: "किसी वॉक-इन ग्राहक का रिजेक्ट या कम भुगतान वाला क्लेम यहाँ दर्ज करें। समीक्षा मुफ़्त है — शुल्क तभी लगता है जब केस Level-2 पर जाए।" },
+        en: { t: "File a claim for a customer", b: "Enter a walk-in customer's rejected or underpaid claim here. The review is free — a fee applies only if the case goes to Level-2." } },
+      { hi: { t: "ज़रूरी दस्तावेज़ अपलोड करें", b: "पॉलिसी और रिजेक्शन लेटर लगाएँ ताकि समीक्षा सही और तेज़ हो।" },
+        en: { t: "Upload documents", b: "Attach the policy and rejection letter so the review is accurate and fast." } },
+      { hi: { t: "अपने दर्ज क्लेम और उनकी स्थिति देखें", b: "आपने जो क्लेम दर्ज किए हैं, उनकी स्थिति और अगला कदम यहीं ट्रैक करें।" },
+        en: { t: "Track your filed claims", b: "Track the status and next step of the claims you've filed, right here." } },
+      { hi: { t: "एडवाइज़र जोड़ें — अपना रेफ़रल लिंक शेयर करें", b: "अपना रेफ़रल लिंक एडवाइज़र्स को भेजें। जब वे आपके लिंक से जुड़ते हैं और प्लान लेते हैं, तो आपको कमीशन मिलता है।" },
+        en: { t: "Bring in advisors — share your referral link", b: "Send your referral link to advisors. When they join through your link and take a plan, you earn commission." } },
+      { hi: { t: "मुफ़्त Sarathi-AI CRM की पिच करें", b: "जब आप किसी एडवाइज़र को Nidaan समझाएँ, यह ज़रूर बताएँ कि उन्हें मुफ़्त Sarathi-AI.com CRM भी मिलता है — जिससे वे अपने लीड्स, फॉलो-अप और क्लाइंट्स सिर्फ़ वॉइस से मैनेज करें। इससे ज़्यादा एडवाइज़र जुड़ेंगे, और आगे उन्हें Sarathi-AI के प्रीमियम AI फ़ीचर्स भी बेच पाएँगे।" },
+        en: { t: "Pitch the free Sarathi-AI CRM", b: "When you explain Nidaan to an advisor, always mention they also get the Sarathi-AI.com CRM free — to manage their leads, follow-ups and clients by voice. More advisors join, and later we can sell them Sarathi-AI's premium AI features too." } },
+      { hi: { t: "अपनी कमाई और रिपोर्ट देखें", b: "आपके जोड़े गए सब्सक्राइबर, दर्ज किए क्लेम और कमीशन का पूरा हिसाब यहाँ दिखता है।" },
+        en: { t: "See your earnings and report", b: "Your referred subscribers, filed claims and commission are all shown here." } },
+      { hi: { t: "मदद चाहिए? हमसे बात करें", b: "कोई भी सवाल हो तो सहायता से पूछें। हम आपकी मदद के लिए यहाँ हैं।" },
+        en: { t: "Need help? Talk to us", b: "For any question, use support. We're here to help you." } }
+    ]
+  });
+});
+</script>
 </body>
 </html>
