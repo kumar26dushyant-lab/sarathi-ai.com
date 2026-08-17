@@ -182,11 +182,174 @@ async def ensure_schema() -> None:
             await conn.execute("ALTER TABLE tg_context ADD COLUMN prev_pending TEXT")
         except Exception:
             pass
+        # Migration: per-user bot language (existing rows).
+        try:
+            await conn.execute("ALTER TABLE tg_links ADD COLUMN lang TEXT DEFAULT 'en'")
+        except Exception:
+            pass
         await conn.commit()
 
 
 def _now() -> str:
     return datetime.now().isoformat()
+
+
+# ── i18n (EN/HI) ─────────────────────────────────────────────────────────────
+STRINGS = {
+    # buttons
+    "b_today": {"en": "📊 Today", "hi": "📊 आज"},
+    "b_leads": {"en": "📋 Leads", "hi": "📋 लीड्स"},
+    "b_myleads": {"en": "📋 My Leads", "hi": "📋 मेरी लीड्स"},
+    "b_followups": {"en": "🔔 Follow-ups due", "hi": "🔔 बकाया फ़ॉलो-अप"},
+    "b_renewals": {"en": "🔄 Renewals due", "hi": "🔄 बकाया रिन्यूअल"},
+    "b_ask": {"en": "🤖 Ask AI", "hi": "🤖 AI से पूछें"},
+    "b_digest": {"en": "📅 Daily summary", "hi": "📅 दैनिक सारांश"},
+    "b_support": {"en": "🎫 Support", "hi": "🎫 सहायता"},
+    "b_help": {"en": "❓ Help", "hi": "❓ मदद"},
+    "b_lang": {"en": "🌐 भाषा / Language", "hi": "🌐 भाषा / Language"},
+    "b_menu": {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
+    "b_back": {"en": "⬅️ Back", "hi": "⬅️ वापस"},
+    "b_back_leads": {"en": "⬅️ Back to leads", "hi": "⬅️ लीड्स पर वापस"},
+    "b_save": {"en": "✅ Save", "hi": "✅ सेव करें"},
+    "b_cancel": {"en": "❌ Cancel", "hi": "❌ रद्द करें"},
+    "b_resume": {"en": "↩️ Resume it", "hi": "↩️ जारी रखें"},
+    "b_discard": {"en": "🗑 Discard", "hi": "🗑 हटाएँ"},
+    "b_team_digests": {"en": "👥 Team digests", "hi": "👥 टीम के सारांश"},
+    "b_send_now": {"en": "📤 Send me one now", "hi": "📤 अभी एक भेजें"},
+    "b_turn_off": {"en": "Turn OFF", "hi": "बंद करें"},
+    "b_turn_on": {"en": "Turn ON (9 AM)", "hi": "चालू करें (सुबह 9 बजे)"},
+    # menu + greetings
+    "menu_hdr": {"en": "🙏 <b>{firm}</b> — what would you like to do?",
+                 "hi": "🙏 <b>{firm}</b> — आप क्या करना चाहेंगे?"},
+    "greet_owner": {"en": "✅ Welcome! You're connected as <b>{role}</b> of <b>{firm}</b>.",
+                    "hi": "✅ स्वागत है! आप <b>{firm}</b> के <b>{role}</b> के रूप में जुड़ गए हैं।"},
+    "greet_member": {"en": "✅ Welcome to <b>{firm}</b>'s CRM! You can manage your assigned leads here.",
+                     "hi": "✅ <b>{firm}</b> के CRM में स्वागत है! आप यहाँ अपनी सौंपी गई लीड्स संभाल सकते हैं।"},
+    "not_linked": {"en": "You're not linked to this CRM. Please ask your firm admin for an invite link.",
+                   "hi": "आप इस CRM से जुड़े नहीं हैं। कृपया अपने एडमिन से इनवाइट लिंक माँगें।"},
+    "ask_admin_invite": {"en": "This bot runs a Sarathi-AI CRM. Ask your firm admin for an invite link to join.",
+                         "hi": "यह बॉट Sarathi-AI CRM चलाता है। जुड़ने के लिए अपने एडमिन से इनवाइट लिंक माँगें।"},
+    "inv_other_firm": {"en": "You're already part of another firm on Sarathi. Ask them to remove you first — your data stays secure — then you can join a new firm.",
+                       "hi": "आप पहले से किसी अन्य फर्म से जुड़े हैं। पहले उनसे हटवाएँ — आपका डेटा सुरक्षित रहता है — फिर नई फर्म से जुड़ सकते हैं।"},
+    "inv_seats": {"en": "Your firm's plan has no free team seats right now. Please ask your admin to upgrade.",
+                  "hi": "आपकी फर्म के प्लान में अभी टीम सीट खाली नहीं है। कृपया एडमिन से अपग्रेड कराएँ।"},
+    "inv_bad": {"en": "This invite link is invalid or has expired. Please ask your firm admin for a new one.",
+                "hi": "यह इनवाइट लिंक अमान्य या समाप्त हो चुका है। कृपया एडमिन से नया लिंक लें।"},
+    # views
+    "leads_show": {"en": "📋 Showing {n} lead(s) — tap for details:",
+                   "hi": "📋 {n} लीड्स — विवरण के लिए टैप करें:"},
+    "leads_none": {"en": "No leads yet. Add leads from your web dashboard and they'll appear here.",
+                   "hi": "अभी कोई लीड नहीं। वेब डैशबोर्ड से लीड जोड़ें, वे यहाँ दिखेंगी।"},
+    "only_assigned": {"en": "You can only view your assigned leads.",
+                      "hi": "आप केवल अपनी सौंपी गई लीड्स देख सकते हैं।"},
+    "lead_notfound": {"en": "Lead not found.", "hi": "लीड नहीं मिली।"},
+    "fu_hdr": {"en": "🔔 <b>Pending follow-ups</b>:", "hi": "🔔 <b>बकाया फ़ॉलो-अप</b>:"},
+    "fu_none": {"en": "No pending follow-ups 🎉", "hi": "कोई बकाया फ़ॉलो-अप नहीं 🎉"},
+    "ren_hdr": {"en": "🔄 <b>Renewals due (next 60 days)</b> — {n}:",
+                "hi": "🔄 <b>बकाया रिन्यूअल (अगले 60 दिन)</b> — {n}:"},
+    "ren_none": {"en": "No renewals due in the next 60 days 🎉",
+                 "hi": "अगले 60 दिनों में कोई रिन्यूअल नहीं 🎉"},
+    "today": {"en": "📊 <b>{firm} — Today</b>\n\n🆕 New leads today: <b>{nl}</b>\n📋 Active leads: <b>{ac}</b>\n🔔 Follow-ups due: <b>{fu}</b>\n🔄 Renewals (next 30 days): <b>{rn}</b>",
+              "hi": "📊 <b>{firm} — आज</b>\n\n🆕 आज नई लीड्स: <b>{nl}</b>\n📋 सक्रिय लीड्स: <b>{ac}</b>\n🔔 बकाया फ़ॉलो-अप: <b>{fu}</b>\n🔄 रिन्यूअल (अगले 30 दिन): <b>{rn}</b>"},
+    # help
+    "help_admin": {"en": "<b>Sarathi CRM — quick help</b>\n• 📋 Leads — your firm's leads; tap one for details\n• 🔔 Follow-ups due — what needs action\n• 🔄 Renewals due — policies renewing soon\n• 🤖 Ask AI — ask about your pipeline\n• 📅 Daily summary — a daily progress digest\n• 🎫 Support — raise a ticket\n\n🎤 Tip: send a voice note like “log a call with Ramesh, follow up tomorrow”.",
+                   "hi": "<b>Sarathi CRM — त्वरित मदद</b>\n• 📋 लीड्स — आपकी फर्म की लीड्स; विवरण हेतु टैप करें\n• 🔔 बकाया फ़ॉलो-अप — जिन पर काम बाकी है\n• 🔄 बकाया रिन्यूअल — जल्द रिन्यू होने वाली पॉलिसी\n• 🤖 AI से पूछें — अपनी पाइपलाइन के बारे में पूछें\n• 📅 दैनिक सारांश — रोज़ की प्रगति\n• 🎫 सहायता — टिकट बनाएँ\n\n🎤 सुझाव: वॉइस नोट भेजें जैसे “रमेश से कॉल लॉग करो, कल फ़ॉलो-अप”।"},
+    "help_member": {"en": "<b>Sarathi CRM — quick help</b>\n• 📋 My Leads — your assigned leads; tap one for details\n• 🔔 Follow-ups due — what needs action\n• 🔄 Renewals due — policies renewing soon\n• 🤖 Ask AI — ask about your leads\n\n🎤 Tip: send a voice note like “log a call with Ramesh, follow up tomorrow”.",
+                    "hi": "<b>Sarathi CRM — त्वरित मदद</b>\n• 📋 मेरी लीड्स — आपकी सौंपी गई लीड्स\n• 🔔 बकाया फ़ॉलो-अप — जिन पर काम बाकी है\n• 🔄 बकाया रिन्यूअल — जल्द रिन्यू होने वाली पॉलिसी\n• 🤖 AI से पूछें — अपनी लीड्स के बारे में पूछें\n\n🎤 सुझाव: वॉइस नोट भेजें जैसे “रमेश से कॉल लॉग करो, कल फ़ॉलो-अप”।"},
+    # ask / support
+    "ask_prompt": {"en": "🤖 Ask me anything about your leads, follow-ups, renewals or customers — just type or send a voice note.\n\nE.g. <i>“what's pending this week?”</i>",
+                   "hi": "🤖 अपनी लीड्स, फ़ॉलो-अप, रिन्यूअल या ग्राहकों के बारे में कुछ भी पूछें — टाइप करें या वॉइस नोट भेजें।\n\nजैसे <i>“इस हफ़्ते क्या बकाया है?”</i>"},
+    "ask_thinking": {"en": "🤔 Let me check…", "hi": "🤔 देख रहा हूँ…"},
+    "support_prompt": {"en": "🎫 <b>Support</b>\nDescribe your issue in a message or voice note and I'll raise a ticket for you.",
+                       "hi": "🎫 <b>सहायता</b>\nअपनी समस्या मैसेज या वॉइस नोट में बताएँ, मैं आपके लिए टिकट बना दूँगा।"},
+    "ticket_ok": {"en": "🎫 Ticket <b>#{id}</b> raised. Our team will get back to you.",
+                  "hi": "🎫 टिकट <b>#{id}</b> बन गया। हमारी टीम आपसे संपर्क करेगी।"},
+    "ticket_fail": {"en": "⚠️ Couldn't raise the ticket — please try again.",
+                    "hi": "⚠️ टिकट नहीं बन सका — कृपया फिर कोशिश करें।"},
+    # confirm + writes
+    "confirm_hdr": {"en": "Please confirm:", "hi": "कृपया पुष्टि करें:"},
+    "c_note": {"en": "📇 <b>{name}</b>\n📝 Note: {summary}", "hi": "📇 <b>{name}</b>\n📝 नोट: {summary}"},
+    "c_fu": {"en": "📇 <b>{name}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary}",
+             "hi": "📇 <b>{name}</b>\n🔔 फ़ॉलो-अप: <b>{when}</b>\n📝 {summary}"},
+    "c_move": {"en": "📇 <b>{name}</b>\n📊 Move stage to: <b>{stage}</b>",
+               "hi": "📇 <b>{name}</b>\n📊 स्टेज बदलें: <b>{stage}</b>"},
+    "c_assign": {"en": "📇 <b>{name}</b>\n👥 Assign to: <b>{who}</b>",
+                 "hi": "📇 <b>{name}</b>\n👥 सौंपें: <b>{who}</b>"},
+    "c_newlead": {"en": "➕ <b>New lead</b>\n👤 {name}\n📞 {phone}\n🩺 {need}",
+                  "hi": "➕ <b>नई लीड</b>\n👤 {name}\n📞 {phone}\n🩺 {need}"},
+    "saved_note": {"en": "✅ 📝 Note saved for <b>{name}</b>.", "hi": "✅ 📝 <b>{name}</b> के लिए नोट सेव हुआ।"},
+    "saved_fu": {"en": "✅ 🔔 Follow-up set for <b>{name}</b>.", "hi": "✅ 🔔 <b>{name}</b> के लिए फ़ॉलो-अप सेट हुआ।"},
+    "saved_move": {"en": "✅ <b>{name}</b> moved to <b>{stage}</b>.", "hi": "✅ <b>{name}</b> को <b>{stage}</b> में ले गए।"},
+    "saved_assign": {"en": "✅ <b>{name}</b> assigned to <b>{who}</b>.", "hi": "✅ <b>{name}</b> को <b>{who}</b> को सौंपा।"},
+    "saved_lead": {"en": "✅ Lead <b>{name}</b> added.", "hi": "✅ लीड <b>{name}</b> जोड़ी गई।"},
+    "save_fail": {"en": "⚠️ Couldn't save — please try again.", "hi": "⚠️ सेव नहीं हुआ — कृपया फिर कोशिश करें।"},
+    "nothing_save": {"en": "Nothing to save.", "hi": "सेव करने के लिए कुछ नहीं।"},
+    "cancelled": {"en": "Cancelled.", "hi": "रद्द किया गया।"},
+    "only_admin_add": {"en": "Only your admin can add new leads.", "hi": "केवल आपका एडमिन नई लीड जोड़ सकता है।"},
+    "only_admin_assign": {"en": "Only your admin can assign leads.", "hi": "केवल आपका एडमिन लीड सौंप सकता है।"},
+    "need_name": {"en": "Please include the person's name to add them.", "hi": "जोड़ने के लिए कृपया व्यक्ति का नाम बताएँ।"},
+    "no_member": {"en": "I couldn't find a team member named “{name}”.", "hi": "“{name}” नाम का टीम सदस्य नहीं मिला।"},
+    "no_lead": {"en": "I couldn't find a lead named “{name}”. Add them on the web dashboard, or try the exact name.",
+                "hi": "“{name}” नाम की लीड नहीं मिली। वेब डैशबोर्ड पर जोड़ें, या सही नाम आज़माएँ।"},
+    "pick_hdr": {"en": "Found {n} matching leads — which one?", "hi": "{n} मिलती-जुलती लीड्स मिलीं — कौन सी?"},
+    "which_stage": {"en": "Which stage? Say e.g. contacted, proposal, negotiation, won, or lost.",
+                    "hi": "कौन सा स्टेज? जैसे contacted, proposal, negotiation, won, या lost।"},
+    "member_only_own": {"en": "You can only update your assigned leads.", "hi": "आप केवल अपनी सौंपी गई लीड्स अपडेट कर सकते हैं।"},
+    # nudge
+    "nudge": {"en": "↩️ You have a paused draft: <b>{desc}</b>.", "hi": "↩️ आपका एक रुका हुआ ड्राफ्ट है: <b>{desc}</b>।"},
+    "prev_discarded": {"en": "Paused draft discarded.", "hi": "रुका हुआ ड्राफ्ट हटाया गया।"},
+    "no_prev": {"en": "No paused draft to resume.", "hi": "जारी रखने के लिए कोई ड्राफ्ट नहीं।"},
+    # voice
+    "v_listen": {"en": "🎧 Listening…", "hi": "🎧 सुन रहा हूँ…"},
+    "v_heard": {"en": "🗣️ I heard: “{text}”", "hi": "🗣️ मैंने सुना: “{text}”"},
+    "v_long": {"en": "⏱️ Please keep voice notes under ~2 minutes and try again.",
+               "hi": "⏱️ कृपया वॉइस नोट ~2 मिनट से कम रखें और फिर कोशिश करें।"},
+    "v_silent": {"en": "🤫 I didn't hear any speech.", "hi": "🤫 कोई आवाज़ नहीं सुनाई दी।"},
+    "v_noisy": {"en": "🔊 Too much background noise.", "hi": "🔊 बहुत शोर है।"},
+    "v_unclear": {"en": "🙉 I couldn't catch that clearly.", "hi": "🙉 साफ़ सुनाई नहीं दिया।"},
+    "v_abusive": {"en": "🙏 Let's keep it professional.", "hi": "🙏 कृपया शालीन भाषा रखें।"},
+    "v_nonsense": {"en": "🤔 I couldn't make out a request.", "hi": "🤔 अनुरोध समझ नहीं आया।"},
+    "v_retry": {"en": " Please try again or type it.", "hi": " कृपया फिर कोशिश करें या टाइप करें।"},
+    # digest UI
+    "dig_hdr": {"en": "📅 <b>Daily Summary</b>\nStatus: {status}\n\nA once-a-day snapshot of your firm's progress — new leads, follow-ups, renewals and new policies.",
+                "hi": "📅 <b>दैनिक सारांश</b>\nस्थिति: {status}\n\nरोज़ एक बार आपकी फर्म की प्रगति — नई लीड्स, फ़ॉलो-अप, रिन्यूअल और नई पॉलिसी।"},
+    "dig_on": {"en": "🟢 ON — every day around {hr}:00 IST", "hi": "🟢 चालू — रोज़ लगभग {hr}:00 IST"},
+    "dig_off": {"en": "⚪ OFF", "hi": "⚪ बंद"},
+    "dig_team_hdr": {"en": "👥 <b>Team daily summaries</b>\nTap a name to turn their daily summary on/off:",
+                     "hi": "👥 <b>टीम के दैनिक सारांश</b>\nचालू/बंद करने के लिए नाम पर टैप करें:"},
+    "dig_team_none": {"en": "No team members are linked yet. Invite them from the 🤖 Telegram CRM section of your web dashboard.",
+                      "hi": "अभी कोई टीम सदस्य नहीं जुड़ा। वेब डैशबोर्ड के 🤖 Telegram CRM सेक्शन से इनवाइट करें।"},
+    "lang_set": {"en": "✅ Language set to English.", "hi": "✅ भाषा हिंदी सेट कर दी गई।"},
+    "no_longer_linked": {"en": "You're no longer linked to this CRM.", "hi": "आप अब इस CRM से जुड़े नहीं हैं।"},
+    "ai_off": {"en": "The AI assistant isn't configured yet.", "hi": "AI सहायक अभी सेट नहीं है।"},
+    "ai_err": {"en": "Sorry, I couldn't process that right now.", "hi": "क्षमा करें, अभी यह नहीं हो सका।"},
+    "ai_none": {"en": "I couldn't find an answer to that.", "hi": "इसका उत्तर नहीं मिला।"},
+    "digest_body": {"en": "📅 <b>{firm} — Daily Summary</b>\n<i>{date}</i>\n\n🆕 New leads today: <b>{nl}</b>\n📋 Active leads: <b>{ac}</b>\n🔔 Follow-ups due: <b>{fu}</b>\n🔄 Renewals (next 30 days): <b>{rn}</b>\n📄 New policies today: <b>{np}</b>\n\nHave a productive day! 🙏",
+                    "hi": "📅 <b>{firm} — दैनिक सारांश</b>\n<i>{date}</i>\n\n🆕 आज नई लीड्स: <b>{nl}</b>\n📋 सक्रिय लीड्स: <b>{ac}</b>\n🔔 बकाया फ़ॉलो-अप: <b>{fu}</b>\n🔄 रिन्यूअल (अगले 30 दिन): <b>{rn}</b>\n📄 आज नई पॉलिसी: <b>{np}</b>\n\nआपका दिन शुभ हो! 🙏"},
+}
+
+
+def T(lang: str, key: str, **kw) -> str:
+    d = STRINGS.get(key, {})
+    s = d.get(lang if lang in ("en", "hi") else "en") or d.get("en") or key
+    if kw:
+        try:
+            s = s.format(**kw)
+        except Exception:
+            pass
+    return s
+
+
+async def set_user_lang(tg_uid: int, lang: str) -> None:
+    lang = lang if lang in ("en", "hi") else "en"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE tg_links SET lang=? WHERE telegram_user_id=?", (lang, tg_uid))
+        await conn.commit()
+
+
+def _lang(link) -> str:
+    l = (link or {}).get("lang") or "en"
+    return l if l in ("en", "hi") else "en"
 
 
 # ── Connect / disconnect (admin) ─────────────────────────────────────────────
@@ -456,25 +619,27 @@ async def _redeem_invite(code: str, tg_uid: int, tg_name: str, bot_tenant: int) 
 
 
 # ── P2: menu + read flows ────────────────────────────────────────────────────
-def _menu_kb(role: str) -> list:
+def _menu_kb(role: str, lang: str = "en") -> list:
     if role in ("owner", "admin"):
         return [
-            [{"text": "📊 Today", "callback_data": "today"}],
-            [{"text": "📋 Leads", "callback_data": "leads"}],
-            [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
-            [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
-            [{"text": "🤖 Ask AI", "callback_data": "ask"}],
-            [{"text": "📅 Daily summary", "callback_data": "digest"}],
-            [{"text": "🎫 Support", "callback_data": "support"}],
-            [{"text": "❓ Help", "callback_data": "help"}],
+            [{"text": T(lang, "b_today"), "callback_data": "today"}],
+            [{"text": T(lang, "b_leads"), "callback_data": "leads"}],
+            [{"text": T(lang, "b_followups"), "callback_data": "followups"}],
+            [{"text": T(lang, "b_renewals"), "callback_data": "renewals"}],
+            [{"text": T(lang, "b_ask"), "callback_data": "ask"}],
+            [{"text": T(lang, "b_digest"), "callback_data": "digest"}],
+            [{"text": T(lang, "b_support"), "callback_data": "support"}],
+            [{"text": T(lang, "b_help"), "callback_data": "help"},
+             {"text": T(lang, "b_lang"), "callback_data": "lang"}],
         ]
     return [
-        [{"text": "📋 My Leads", "callback_data": "leads"}],
-        [{"text": "🔔 Follow-ups due", "callback_data": "followups"}],
-        [{"text": "🔄 Renewals due", "callback_data": "renewals"}],
-        [{"text": "🤖 Ask AI", "callback_data": "ask"}],
-        [{"text": "🎫 Support", "callback_data": "support"}],
-        [{"text": "❓ Help", "callback_data": "help"}],
+        [{"text": T(lang, "b_myleads"), "callback_data": "leads"}],
+        [{"text": T(lang, "b_followups"), "callback_data": "followups"}],
+        [{"text": T(lang, "b_renewals"), "callback_data": "renewals"}],
+        [{"text": T(lang, "b_ask"), "callback_data": "ask"}],
+        [{"text": T(lang, "b_support"), "callback_data": "support"}],
+        [{"text": T(lang, "b_help"), "callback_data": "help"},
+         {"text": T(lang, "b_lang"), "callback_data": "lang"}],
     ]
 
 
@@ -493,14 +658,14 @@ async def _firm_renewals(tenant_id: int, days: int = 60, limit: int = 15) -> lis
 
 
 async def _renewals_view(token, chat_id, link) -> None:
-    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id")
+    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id"); lang = _lang(link)
     if role in ("owner", "admin"):
         rows = await _firm_renewals(tid, 60, 15)
     else:
         rows = (await db.get_upcoming_renewals(aid, 60))[:15] if aid else []
     if not rows:
-        await send_message(token, chat_id, "No renewals due in the next 60 days 🎉",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "ren_none"),
+                           [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
         return
     lines = []
     for r in rows:
@@ -508,9 +673,8 @@ async def _renewals_view(token, chat_id, link) -> None:
         nm = r.get("client_name", "?")
         ins = r.get("insurer") or r.get("plan_name") or ""
         lines.append(f"• <b>{nm}</b> — {d}{(' · ' + ins) if ins else ''}")
-    await send_message(token, chat_id,
-                       f"🔄 <b>Renewals due (next 60 days)</b> — {len(rows)}:\n" + "\n".join(lines),
-                       [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    await send_message(token, chat_id, T(lang, "ren_hdr", n=len(rows)) + "\n" + "\n".join(lines),
+                       [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
 
 
 async def _firm_stats(tenant_id: int) -> dict:
@@ -541,35 +705,22 @@ async def _firm_stats(tenant_id: int) -> dict:
 
 
 async def _today_view(token, chat_id, link) -> None:
-    tid = int(link["tenant_id"])
+    tid = int(link["tenant_id"]); lang = _lang(link)
     firm = await _tenant_firm(tid)
     s = await _firm_stats(tid)
-    txt = (f"📊 <b>{firm} — Today</b>\n\n"
-           f"🆕 New leads today: <b>{s['new_leads']}</b>\n"
-           f"📋 Active leads: <b>{s['active']}</b>\n"
-           f"🔔 Follow-ups due: <b>{s['followups']}</b>\n"
-           f"🔄 Renewals (next 30 days): <b>{s['renewals']}</b>")
-    await send_message(token, chat_id, txt, [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    txt = T(lang, "today", firm=firm, nl=s['new_leads'], ac=s['active'],
+            fu=s['followups'], rn=s['renewals'])
+    await send_message(token, chat_id, txt, [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
 
 
-def _help_text(role: str) -> str:
-    if role in ("owner", "admin"):
-        return ("<b>Sarathi CRM — quick help</b>\n"
-                "• 📋 Leads — your firm's leads; tap one for details\n"
-                "• 🔔 Follow-ups due — what needs action\n"
-                "• ➕ Add team members from your web dashboard\n"
-                "🎤 Voice commands (log calls, set follow-ups) are rolling out next.")
-    return ("<b>Sarathi CRM — quick help</b>\n"
-            "• 📋 My Leads — your assigned leads; tap one for details\n"
-            "• 🔔 Follow-ups due — what needs action\n"
-            "🎤 Voice commands are rolling out next.")
+def _help_text(role: str, lang: str = "en") -> str:
+    return T(lang, "help_admin" if role in ("owner", "admin") else "help_member")
 
 
 async def _send_menu(token, chat_id, link) -> None:
     firm = await _tenant_firm(int(link["tenant_id"]))
-    await send_message(token, chat_id,
-                       f"🙏 <b>{firm}</b> — what would you like to do?",
-                       _menu_kb(link["role"]))
+    lang = _lang(link)
+    await send_message(token, chat_id, T(lang, "menu_hdr", firm=firm), _menu_kb(link["role"], lang))
 
 
 async def _firm_leads(tenant_id: int, limit: int = 8) -> list:
@@ -583,56 +734,56 @@ async def _firm_leads(tenant_id: int, limit: int = 8) -> list:
 
 
 async def _leads_view(token, chat_id, link) -> None:
-    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id")
+    role = link["role"]; tid = int(link["tenant_id"]); aid = link.get("agent_id"); lang = _lang(link)
     if role in ("owner", "admin"):
         rows = await _firm_leads(tid, 8)
     else:
         rows = (await db.get_leads_by_agent(aid))[:8] if aid else []
     if not rows:
-        await send_message(token, chat_id,
-                           "No leads yet. Add leads from your web dashboard and they'll appear here.",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "leads_none"),
+                           [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
         return
     kb = [[{"text": f"👤 {(r.get('name') or '—')[:28]} · {r.get('stage','')}",
             "callback_data": f"lead:{r['lead_id']}"}] for r in rows]
-    kb.append([{"text": "⬅️ Menu", "callback_data": "menu"}])
-    await send_message(token, chat_id, f"📋 Showing {len(rows)} lead(s) — tap for details:", kb)
+    kb.append([{"text": T(lang, "b_menu"), "callback_data": "menu"}])
+    await send_message(token, chat_id, T(lang, "leads_show", n=len(rows)), kb)
 
 
 async def _lead_detail(token, chat_id, link, lead_id: int) -> None:
     lead = await db.get_lead(lead_id, int(link["tenant_id"]))
+    lang = _lang(link)
     if not lead:
-        await send_message(token, chat_id, "Lead not found.",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "lead_notfound"),
+                           [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
         return
     if link["role"] not in ("owner", "admin") and lead.get("agent_id") != link.get("agent_id"):
-        await send_message(token, chat_id, "You can only view your assigned leads.",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "only_assigned"),
+                           [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
         return
     txt = (f"👤 <b>{lead.get('name','—')}</b>\n"
            f"📞 {lead.get('phone') or '—'}\n"
-           f"📊 Stage: {lead.get('stage') or '—'}\n"
-           f"🩺 Need: {lead.get('need_type') or '—'}\n"
+           f"📊 {lead.get('stage') or '—'}\n"
+           f"🩺 {lead.get('need_type') or '—'}\n"
            f"🏙 {lead.get('city') or '—'}\n"
            f"📝 {lead.get('notes') or '—'}")
-    kb = [[{"text": "⬅️ Back to leads", "callback_data": "leads"}],
-          [{"text": "⬅️ Menu", "callback_data": "menu"}]]
+    kb = [[{"text": T(lang, "b_back_leads"), "callback_data": "leads"}],
+          [{"text": T(lang, "b_menu"), "callback_data": "menu"}]]
     await send_message(token, chat_id, txt, kb)
 
 
 async def _followups_view(token, chat_id, link) -> None:
-    aid = link.get("agent_id")
+    aid = link.get("agent_id"); lang = _lang(link)
     rows = await db.get_pending_followups(aid) if aid else []
     if not rows:
-        await send_message(token, chat_id, "No pending follow-ups 🎉",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "fu_none"),
+                           [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
         return
     lines = []
     for r in rows[:10]:
         d = (r.get("follow_up_date") or "")[:10]
         lines.append(f"• <b>{r.get('lead_name','?')}</b> — {d} {(r.get('summary') or '')}".rstrip())
-    await send_message(token, chat_id, "🔔 <b>Pending follow-ups</b>:\n" + "\n".join(lines),
-                       [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+    await send_message(token, chat_id, T(lang, "fu_hdr") + "\n" + "\n".join(lines),
+                       [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]])
 
 
 # ── Daily digest ─────────────────────────────────────────────────────────────
@@ -656,7 +807,7 @@ async def set_digest_pref(tg_uid: int, tenant_id: int, enabled: bool,
         await conn.commit()
 
 
-async def compose_digest(tenant_id: int) -> str:
+async def compose_digest(tenant_id: int, lang: str = "en") -> str:
     firm = await _tenant_firm(tenant_id)
     s = await _firm_stats(tenant_id)
     IST = "'+5 hours','+30 minutes'"
@@ -666,14 +817,8 @@ async def compose_digest(tenant_id: int) -> str:
             "SELECT COUNT(*) c FROM policies p JOIN agents a ON p.agent_id=a.agent_id "
             f"WHERE a.tenant_id=? AND date(p.created_at)=date('now',{IST})", (tenant_id,))).fetchone()
     new_pol = pol["c"] if pol else 0
-    return (f"📅 <b>{firm} — Daily Summary</b>\n"
-            f"<i>{datetime.now().strftime('%d %b %Y')}</i>\n\n"
-            f"🆕 New leads today: <b>{s['new_leads']}</b>\n"
-            f"📋 Active leads: <b>{s['active']}</b>\n"
-            f"🔔 Follow-ups due: <b>{s['followups']}</b>\n"
-            f"🔄 Renewals (next 30 days): <b>{s['renewals']}</b>\n"
-            f"📄 New policies today: <b>{new_pol}</b>\n\n"
-            f"Have a productive day! 🙏")
+    return T(lang, "digest_body", firm=firm, date=datetime.now().strftime('%d %b %Y'),
+             nl=s['new_leads'], ac=s['active'], fu=s['followups'], rn=s['renewals'], np=new_pol)
 
 
 async def run_digests() -> int:
@@ -703,7 +848,7 @@ async def run_digests() -> int:
             continue
         try:
             token = decrypt_token(b["bot_token_enc"])
-            await send_message(token, tg_uid, await compose_digest(tid))
+            await send_message(token, tg_uid, await compose_digest(tid, _lang(link)))
             sent += 1
         except Exception as e:
             logger.warning("digest send failed tenant %s: %s", tid, str(e)[:120])
@@ -717,25 +862,24 @@ async def run_digests() -> int:
 
 
 async def _digest_view(token, chat_id, tg_uid, link) -> None:
+    lang = _lang(link)
     pref = await get_digest_pref(tg_uid)
     on = bool(pref and pref.get("enabled"))
     hr = (pref or {}).get("hour_ist", 9)
-    status = f"🟢 ON — every day around {hr}:00 IST" if on else "⚪ OFF"
-    txt = (f"📅 <b>Daily Summary</b>\nStatus: {status}\n\n"
-           f"A once-a-day snapshot of your firm's progress — new leads, follow-ups, "
-           f"renewals and new policies.")
+    status = T(lang, "dig_on", hr=hr) if on else T(lang, "dig_off")
+    txt = T(lang, "dig_hdr", status=status)
     kb = []
     if on:
-        kb.append([{"text": "Turn OFF", "callback_data": "digest_off"}])
+        kb.append([{"text": T(lang, "b_turn_off"), "callback_data": "digest_off"}])
     else:
-        kb.append([{"text": "Turn ON (9 AM)", "callback_data": "digest_on"}])
-    kb.append([{"text": "📤 Send me one now", "callback_data": "digest_now"}])
-    kb.append([{"text": "👥 Team digests", "callback_data": "digest_team"}])
-    kb.append([{"text": "⬅️ Menu", "callback_data": "menu"}])
+        kb.append([{"text": T(lang, "b_turn_on"), "callback_data": "digest_on"}])
+    kb.append([{"text": T(lang, "b_send_now"), "callback_data": "digest_now"}])
+    kb.append([{"text": T(lang, "b_team_digests"), "callback_data": "digest_team"}])
+    kb.append([{"text": T(lang, "b_menu"), "callback_data": "menu"}])
     await send_message(token, chat_id, txt, kb)
 
 
-async def _digest_team_view(token, chat_id, tenant_id: int) -> None:
+async def _digest_team_view(token, chat_id, tenant_id: int, lang: str = "en") -> None:
     """Admin: toggle the daily summary on/off per linked team member."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -746,20 +890,17 @@ async def _digest_team_view(token, chat_id, tenant_id: int) -> None:
             "WHERE l.tenant_id=? AND l.status='active' AND l.role NOT IN ('owner','admin')",
             (tenant_id,))).fetchall()
     if not rows:
-        await send_message(token, chat_id,
-                           "No team members are linked yet. Invite them from the 🤖 Telegram CRM "
-                           "section of your web dashboard.",
-                           [[{"text": "⬅️ Back", "callback_data": "digest"}]])
+        await send_message(token, chat_id, T(lang, "dig_team_none"),
+                           [[{"text": T(lang, "b_back"), "callback_data": "digest"}]])
         return
     kb = []
     for r in rows:
         on = bool(r["enabled"])
         nm = r["name"] or "Member"
-        kb.append([{"text": f"{'🟢' if on else '⚪'} {nm} — {'turn OFF' if on else 'turn ON'}",
+        kb.append([{"text": f"{'🟢' if on else '⚪'} {nm}",
                     "callback_data": f"digmem:{r['tguid']}:{'off' if on else 'on'}"}])
-    kb.append([{"text": "⬅️ Back", "callback_data": "digest"}])
-    await send_message(token, chat_id,
-                       "👥 <b>Team daily summaries</b>\nTap a name to turn their daily summary on/off:", kb)
+    kb.append([{"text": T(lang, "b_back"), "callback_data": "digest"}])
+    await send_message(token, chat_id, T(lang, "dig_team_hdr"), kb)
 
 
 # ── P3: voice + text WRITE flows (log note / set follow-up) ──────────────────
@@ -922,30 +1063,30 @@ def _describe_pending(p: dict) -> str:
     return "your draft"
 
 
-async def _render_confirm(token, chat_id, p: dict) -> None:
+async def _render_confirm(token, chat_id, p: dict, lang: str = "en") -> None:
     a = p.get("action")
     if a == "create_lead":
-        card = f"➕ <b>New lead</b>\n👤 {p.get('lead_name','')}\n📞 {p.get('phone') or '—'}\n🩺 {p.get('need','health')}"
+        card = T(lang, "c_newlead", name=p.get('lead_name', ''), phone=p.get('phone') or '—',
+                 need=p.get('need', 'health'))
     elif a == "set_followup":
-        when = ((p.get('fud') or '') + ((' ' + p.get('fut')) if p.get('fut') else '')) or "the given date"
-        card = f"📇 <b>{p.get('lead_name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {p.get('summary','')}"
+        when = ((p.get('fud') or '') + ((' ' + p.get('fut')) if p.get('fut') else '')) or "-"
+        card = T(lang, "c_fu", name=p.get('lead_name', ''), when=when, summary=p.get('summary', ''))
     elif a == "move_stage":
-        card = f"📇 <b>{p.get('lead_name','')}</b>\n📊 Move stage to: <b>{(p.get('stage') or '').replace('_',' ')}</b>"
+        card = T(lang, "c_move", name=p.get('lead_name', ''), stage=(p.get('stage') or '').replace('_', ' '))
     elif a == "assign":
-        card = f"📇 <b>{p.get('lead_name','')}</b>\n👥 Assign to: <b>{p.get('assignee_name','')}</b>"
+        card = T(lang, "c_assign", name=p.get('lead_name', ''), who=p.get('assignee_name', ''))
     else:
-        card = f"📇 <b>{p.get('lead_name','')}</b>\n📝 Note: {p.get('summary','')}"
-    await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+        card = T(lang, "c_note", name=p.get('lead_name', ''), summary=p.get('summary', ''))
+    await send_message(token, chat_id, T(lang, "confirm_hdr") + "\n\n" + card, _save_kb(lang))
 
 
-async def _nudge_prev(token, chat_id, tg_uid) -> None:
+async def _nudge_prev(token, chat_id, tg_uid, lang: str = "en") -> None:
     prev = await _get_prev(tg_uid)
     if not prev:
         return
-    await send_message(token, chat_id,
-                       f"↩️ You have a paused draft: <b>{_describe_pending(prev)}</b>.",
-                       [[{"text": "↩️ Resume it", "callback_data": "resume"},
-                         {"text": "🗑 Discard", "callback_data": "discard_prev"}]])
+    await send_message(token, chat_id, T(lang, "nudge", desc=_describe_pending(prev)),
+                       [[{"text": T(lang, "b_resume"), "callback_data": "resume"},
+                         {"text": T(lang, "b_discard"), "callback_data": "discard_prev"}]])
 
 
 async def _get_pending(tg_uid: int) -> Optional[dict]:
@@ -985,8 +1126,9 @@ _STAGE_ALIASES = {
     "lost": "closed_lost", "closed lost": "closed_lost", "negotiating": "negotiation",
     "called": "contacted", "interested": "contacted", "new": "prospect",
 }
-_SAVE_KB = [[{"text": "✅ Save", "callback_data": "cfm:save"},
-             {"text": "❌ Cancel", "callback_data": "cfm:cancel"}]]
+def _save_kb(lang: str = "en") -> list:
+    return [[{"text": T(lang, "b_save"), "callback_data": "cfm:save"},
+             {"text": T(lang, "b_cancel"), "callback_data": "cfm:cancel"}]]
 
 
 def _canon_stage(s: str) -> str:
@@ -1001,35 +1143,33 @@ def _canon_stage(s: str) -> str:
 async def _finalize_action(token, chat_id, tg_uid, link, intent, lead) -> None:
     """Build the confirm card for an existing-lead action and store the pending write."""
     act = intent.get("action")
-    tid = int(link["tenant_id"])
+    tid = int(link["tenant_id"]); lang = _lang(link)
     summary = (intent.get("summary") or "").strip()
     base = {"lead_id": lead["lead_id"], "lead_name": lead.get("name", ""),
             "lead_agent": lead.get("agent_id")}
     if act == "move_stage":
         stage = _canon_stage(intent.get("stage", ""))
         if stage not in _STAGES:
-            await send_message(token, chat_id,
-                               "Which stage? Say e.g. contacted, proposal, negotiation, won, or lost.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "which_stage"), _menu_kb(link["role"], lang))
             return
         await _set_pending(tg_uid, tid, {**base, "action": "move_stage", "stage": stage})
-        card = f"📇 <b>{lead.get('name','')}</b>\n📊 Move stage to: <b>{stage.replace('_',' ')}</b>"
+        card = T(lang, "c_move", name=lead.get('name', ''), stage=stage.replace('_', ' '))
     elif act == "set_followup":
         fud = (intent.get("followup_date") or "").strip()
         fut = (intent.get("followup_time") or "").strip()
         await _set_pending(tg_uid, tid, {**base, "action": "set_followup",
                                          "summary": summary or "Follow-up", "fud": fud, "fut": fut})
-        when = (fud + ((" " + fut) if fut else "")) or "the given date"
-        card = f"📇 <b>{lead.get('name','')}</b>\n🔔 Follow-up: <b>{when}</b>\n📝 {summary or 'Follow-up'}"
+        when = (fud + ((" " + fut) if fut else "")) or "-"
+        card = T(lang, "c_fu", name=lead.get('name', ''), when=when, summary=summary or "")
     elif act == "assign":
         await _set_pending(tg_uid, tid, {**base, "action": "assign",
                                          "assignee_agent": intent.get("assignee_agent"),
                                          "assignee_name": intent.get("assignee_name", "")})
-        card = f"📇 <b>{lead.get('name','')}</b>\n👥 Assign to: <b>{intent.get('assignee_name','')}</b>"
+        card = T(lang, "c_assign", name=lead.get('name', ''), who=intent.get('assignee_name', ''))
     else:  # log_note
         await _set_pending(tg_uid, tid, {**base, "action": "log_note", "summary": summary or "Note"})
-        card = f"📇 <b>{lead.get('name','')}</b>\n📝 Note: {summary or 'Note'}"
-    await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+        card = T(lang, "c_note", name=lead.get('name', ''), summary=summary or "")
+    await send_message(token, chat_id, T(lang, "confirm_hdr") + "\n\n" + card, _save_kb(lang))
 
 
 async def _find_member(tenant_id: int, name: str) -> Optional[dict]:
@@ -1079,16 +1219,18 @@ async def _ai_context(link) -> dict:
 
 async def _ask_ai(link, question: str) -> str:
     import os as _os, json as _json
+    lang = _lang(link)
     key = _os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        return "The AI assistant isn't configured yet."
+        return T(lang, "ai_off")
     ctx = await _ai_context(link)
     today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+    langname = "Hindi (Devanagari script)" if lang == "hi" else "English"
     prompt = (
         f"You are a helpful CRM assistant for an insurance advisor. Today (IST) is {today}. "
-        "Answer the user's question ONLY from the DATA below (their own CRM). Be concise "
-        "(1-4 short lines), simple language. If the answer isn't in the data, say you don't have "
-        "that info. Never invent leads, numbers, or dates.\n\n"
+        f"Reply in {langname}. Answer the user's question ONLY from the DATA below (their own CRM). "
+        "Be concise (1-4 short lines), simple language. If the answer isn't in the data, say you don't "
+        "have that info. Never invent leads, numbers, or dates. Keep names/numbers/dates verbatim.\n\n"
         f"DATA (JSON): {_json.dumps(ctx, ensure_ascii=False)[:6000]}\n\nQUESTION: {question}")
     model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
@@ -1098,14 +1240,16 @@ async def _ask_ai(link, question: str) -> str:
                                         "generationConfig": {"temperature": 0.2}})
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
-        return (parts[0].get("text") or "").strip() or "I couldn't find an answer to that."
+        return (parts[0].get("text") or "").strip() or T(lang, "ai_none")
     except Exception as e:
         logger.info("tgcrm ask_ai failed: %s", e)
-        return "Sorry, I couldn't process that right now."
+        return T(lang, "ai_err")
 
 
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
     """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
+    lang = _lang(link)
+    mkb = [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]]
     # Support capture mode: the next message becomes a support ticket.
     _pend = await _get_pending(tg_uid)
     if _pend and _pend.get("action") == "support_capture":
@@ -1116,13 +1260,10 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
                 tenant_id=int(link["tenant_id"]), agent_id=link.get("agent_id"),
                 subject=(body[:60] or "Support request (Telegram)"),
                 description=body, category="general", priority="normal")
-            await send_message(token, chat_id,
-                               f"🎫 Ticket <b>#{tkt}</b> raised. Our team will get back to you.",
-                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+            await send_message(token, chat_id, T(lang, "ticket_ok", id=tkt), mkb)
         except Exception as e:
             logger.warning("tgcrm support ticket failed: %s", e)
-            await send_message(token, chat_id, "⚠️ Couldn't raise the ticket — please try again.",
-                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+            await send_message(token, chat_id, T(lang, "ticket_fail"), mkb)
         return
     intent = await _parse_intent(text)
     act = intent.get("action", "none")
@@ -1130,9 +1271,9 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
         await _send_menu(token, chat_id, link)
         return
     if act == "ask":
-        await send_message(token, chat_id, "🤔 Let me check…")
+        await send_message(token, chat_id, T(lang, "ask_thinking"))
         ans = await _ask_ai(link, text)
-        await send_message(token, chat_id, ans, [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, ans, mkb)
         return
     intent["summary"] = (intent.get("summary") or text).strip()
 
@@ -1143,13 +1284,11 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
 
     if act == "create_lead":
         if link["role"] not in ("owner", "admin"):
-            await send_message(token, chat_id, "Only your admin can add new leads.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "only_admin_add"), _menu_kb(link["role"], lang))
             return
         name = (intent.get("lead_name") or "").strip()
         if not name:
-            await send_message(token, chat_id, "Please include the person's name to add them.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "need_name"), _menu_kb(link["role"], lang))
             return
         phone = "".join(ch for ch in (intent.get("phone") or "") if ch.isdigit())
         need = (intent.get("need_type") or "").strip() or "health"
@@ -1157,22 +1296,20 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
             await _stash_current_as_prev(tg_uid)
         await _set_pending(tg_uid, int(link["tenant_id"]),
                            {"action": "create_lead", "lead_name": name, "phone": phone, "need": need})
-        card = f"➕ <b>New lead</b>\n👤 {name}\n📞 {phone or '—'}\n🩺 {need}"
-        await send_message(token, chat_id, "Please confirm:\n\n" + card, _SAVE_KB)
+        card = T(lang, "c_newlead", name=name, phone=phone or '—', need=need)
+        await send_message(token, chat_id, T(lang, "confirm_hdr") + "\n\n" + card, _save_kb(lang))
         if had_actionable:
-            await _nudge_prev(token, chat_id, tg_uid)
+            await _nudge_prev(token, chat_id, tg_uid, lang)
         return
 
     if act == "assign":
         if link["role"] not in ("owner", "admin"):
-            await send_message(token, chat_id, "Only your admin can assign leads.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "only_admin_assign"), _menu_kb(link["role"], lang))
             return
         member = await _find_member(int(link["tenant_id"]), intent.get("assignee_name", ""))
         if not member:
-            await send_message(token, chat_id,
-                               f"I couldn't find a team member named “{intent.get('assignee_name','')}”.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "no_member", name=intent.get('assignee_name', '')),
+                               _menu_kb(link["role"], lang))
             return
         intent["assignee_agent"] = member["agent_id"]
         intent["assignee_name"] = member.get("name", "")
@@ -1180,10 +1317,8 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
 
     leads = await _find_lead(link, intent.get("lead_name", ""))
     if not leads:
-        await send_message(token, chat_id,
-                           f"I couldn't find a lead named “{intent.get('lead_name','')}”. "
-                           f"Add them on the web dashboard, or try the exact name.",
-                           _menu_kb(link["role"]))
+        await send_message(token, chat_id, T(lang, "no_lead", name=intent.get('lead_name', '')),
+                           _menu_kb(link["role"], lang))
         return
     if len(leads) > 1:
         if had_actionable:
@@ -1191,14 +1326,14 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
         await _set_pending(tg_uid, int(link["tenant_id"]), {"action": "pick", "intent": intent})
         kb = [[{"text": f"👤 {(l.get('name') or '')[:24]} · {l.get('phone') or l.get('stage','')}",
                 "callback_data": f"pick:{l['lead_id']}"}] for l in leads]
-        kb.append([{"text": "❌ Cancel", "callback_data": "cfm:cancel"}])
-        await send_message(token, chat_id, f"Found {len(leads)} matching leads — which one?", kb)
+        kb.append([{"text": T(lang, "b_cancel"), "callback_data": "cfm:cancel"}])
+        await send_message(token, chat_id, T(lang, "pick_hdr", n=len(leads)), kb)
         return
     if had_actionable:
         await _stash_current_as_prev(tg_uid)
     await _finalize_action(token, chat_id, tg_uid, link, intent, leads[0])
     if had_actionable:
-        await _nudge_prev(token, chat_id, tg_uid)
+        await _nudge_prev(token, chat_id, tg_uid, lang)
 
 
 async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
@@ -1211,11 +1346,19 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     link = await _active_link(tg_uid) if tg_uid else None
     if not (link and int(link["tenant_id"]) == tenant_id):
         if chat_id:
-            await send_message(token, chat_id, "You're no longer linked to this CRM.")
+            await send_message(token, chat_id, T("en", "no_longer_linked"))
         return {"ok": True}
     if not chat_id:
         return {"ok": True}
+    lang = _lang(link)
+    mkb = [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]]
     if data == "menu":
+        await _send_menu(token, chat_id, link)
+    elif data == "lang":
+        newlang = "hi" if lang == "en" else "en"
+        await set_user_lang(tg_uid, newlang)
+        link["lang"] = newlang
+        await send_message(token, chat_id, T(newlang, "lang_set"))
         await _send_menu(token, chat_id, link)
     elif data == "today":
         if link["role"] in ("owner", "admin"):
@@ -1229,16 +1372,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     elif data == "renewals":
         await _renewals_view(token, chat_id, link)
     elif data == "ask":
-        await send_message(token, chat_id,
-                           "🤖 Ask me anything about your leads, follow-ups, renewals or customers — "
-                           "just type or send a voice note.\n\nE.g. <i>“what's pending this week?”</i>",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "ask_prompt"), mkb)
     elif data == "support":
         await _set_pending(tg_uid, tenant_id, {"action": "support_capture"})
-        await send_message(token, chat_id,
-                           "🎫 <b>Support</b>\nDescribe your issue in a message or voice note and I'll "
-                           "raise a ticket for you.",
-                           [[{"text": "❌ Cancel", "callback_data": "cfm:cancel"}]])
+        await send_message(token, chat_id, T(lang, "support_prompt"),
+                           [[{"text": T(lang, "b_cancel"), "callback_data": "cfm:cancel"}]])
     elif data in ("digest", "digest_on", "digest_off", "digest_now", "digest_team"):
         if link["role"] not in ("owner", "admin"):
             await _send_menu(token, chat_id, link)
@@ -1251,9 +1389,9 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                                   (_cur or {}).get("hour_ist", 9), link.get("agent_id"))
             await _digest_view(token, chat_id, tg_uid, link)
         elif data == "digest_now":
-            await send_message(token, chat_id, await compose_digest(tenant_id))
+            await send_message(token, chat_id, await compose_digest(tenant_id, lang))
         elif data == "digest_team":
-            await _digest_team_view(token, chat_id, tenant_id)
+            await _digest_team_view(token, chat_id, tenant_id, lang)
         else:
             await _digest_view(token, chat_id, tg_uid, link)
     elif data.startswith("digmem:"):
@@ -1271,17 +1409,16 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                         (muid, tenant_id))).fetchone()
                 if ok:
                     await set_digest_pref(muid, tenant_id, act == "on", 9, link.get("agent_id"))
-            await _digest_team_view(token, chat_id, tenant_id)
+            await _digest_team_view(token, chat_id, tenant_id, lang)
     elif data == "help":
-        await send_message(token, chat_id, _help_text(link["role"]), _menu_kb(link["role"]))
+        await send_message(token, chat_id, _help_text(link["role"], lang), _menu_kb(link["role"], lang))
     elif data == "cfm:save":
         p = await _get_pending(tg_uid)
-        _menu_only = [[{"text": "⬅️ Menu", "callback_data": "menu"}]]
         if not p or p.get("action") == "pick":
-            await send_message(token, chat_id, "Nothing to save.", _menu_only)
+            await send_message(token, chat_id, T(lang, "nothing_save"), mkb)
         elif p.get("action") == "create_lead":
             if link["role"] not in ("owner", "admin"):
-                await send_message(token, chat_id, "Only your admin can add new leads.")
+                await send_message(token, chat_id, T(lang, "only_admin_add"))
             else:
                 try:
                     async with aiosqlite.connect(DB_PATH) as conn:
@@ -1292,12 +1429,12 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                              p.get("phone", ""), p.get("need", "health")))
                         await conn.commit()
                     await _set_pending(tg_uid, tenant_id, None)
-                    await send_message(token, chat_id, f"✅ Lead <b>{p.get('lead_name','')}</b> added.", _menu_only)
+                    await send_message(token, chat_id, T(lang, "saved_lead", name=p.get('lead_name', '')), mkb)
                 except Exception as e:
                     logger.warning("tgcrm create_lead failed: %s", e)
-                    await send_message(token, chat_id, "⚠️ Couldn't add the lead — please try again.")
+                    await send_message(token, chat_id, T(lang, "save_fail"))
         elif link["role"] not in ("owner", "admin") and p.get("lead_agent") != link.get("agent_id"):
-            await send_message(token, chat_id, "You can only update your assigned leads.")
+            await send_message(token, chat_id, T(lang, "member_only_own"))
         elif p.get("action") == "move_stage":
             try:
                 async with aiosqlite.connect(DB_PATH) as conn:
@@ -1308,11 +1445,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                     await conn.commit()
                 await _set_pending(tg_uid, tenant_id, None)
                 await send_message(token, chat_id,
-                                   f"✅ <b>{p.get('lead_name','')}</b> moved to "
-                                   f"<b>{(p.get('stage') or '').replace('_',' ')}</b>.", _menu_only)
+                                   T(lang, "saved_move", name=p.get('lead_name', ''),
+                                     stage=(p.get('stage') or '').replace('_', ' ')), mkb)
             except Exception as e:
                 logger.warning("tgcrm move_stage failed: %s", e)
-                await send_message(token, chat_id, "⚠️ Couldn't update the stage — please try again.")
+                await send_message(token, chat_id, T(lang, "save_fail"))
         elif p.get("action") == "assign":
             try:
                 async with aiosqlite.connect(DB_PATH) as conn:
@@ -1323,11 +1460,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                     await conn.commit()
                 await _set_pending(tg_uid, tenant_id, None)
                 await send_message(token, chat_id,
-                                   f"✅ <b>{p.get('lead_name','')}</b> assigned to "
-                                   f"<b>{p.get('assignee_name','')}</b>.", _menu_only)
+                                   T(lang, "saved_assign", name=p.get('lead_name', ''),
+                                     who=p.get('assignee_name', '')), mkb)
             except Exception as e:
                 logger.warning("tgcrm assign failed: %s", e)
-                await send_message(token, chat_id, "⚠️ Couldn't assign — please try again.")
+                await send_message(token, chat_id, T(lang, "save_fail"))
         else:  # log_note / set_followup
             itype = "followup" if p.get("action") == "set_followup" else "note"
             try:
@@ -1336,11 +1473,11 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
                     itype, "telegram", p.get("summary", ""),
                     p.get("fud") or None, p.get("fut") or None, link.get("agent_id"))
                 await _set_pending(tg_uid, tenant_id, None)
-                done = "🔔 Follow-up set" if itype == "followup" else "📝 Note saved"
-                await send_message(token, chat_id, f"✅ {done} for <b>{p.get('lead_name','')}</b>.", _menu_only)
+                msg = T(lang, "saved_fu" if itype == "followup" else "saved_note", name=p.get('lead_name', ''))
+                await send_message(token, chat_id, msg, mkb)
             except Exception as e:
                 logger.warning("tgcrm save failed: %s", e)
-                await send_message(token, chat_id, "⚠️ Couldn't save — please try again.")
+                await send_message(token, chat_id, T(lang, "save_fail"))
     elif data.startswith("pick:"):
         p = await _get_pending(tg_uid)
         if p and p.get("action") == "pick":
@@ -1352,28 +1489,23 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
             if lead and (link["role"] in ("owner", "admin") or lead.get("agent_id") == link.get("agent_id")):
                 await _finalize_action(token, chat_id, tg_uid, link, p.get("intent", {}), lead)
             else:
-                await send_message(token, chat_id, "Lead not found.",
-                                   [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+                await send_message(token, chat_id, T(lang, "lead_notfound"), mkb)
         else:
-            await send_message(token, chat_id, "This selection expired — please try again.",
-                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+            await send_message(token, chat_id, T(lang, "lead_notfound"), mkb)
     elif data == "cfm:cancel":
         await _set_pending(tg_uid, tenant_id, None)
-        await send_message(token, chat_id, "Cancelled.",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "cancelled"), mkb)
     elif data == "resume":
         prev = await _get_prev(tg_uid)
         if prev:
             await _set_pending(tg_uid, tenant_id, prev)
             await _clear_prev(tg_uid)
-            await _render_confirm(token, chat_id, prev)
+            await _render_confirm(token, chat_id, prev, lang)
         else:
-            await send_message(token, chat_id, "No paused draft to resume.",
-                               [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+            await send_message(token, chat_id, T(lang, "no_prev"), mkb)
     elif data == "discard_prev":
         await _clear_prev(tg_uid)
-        await send_message(token, chat_id, "Paused draft discarded.",
-                           [[{"text": "⬅️ Menu", "callback_data": "menu"}]])
+        await send_message(token, chat_id, T(lang, "prev_discarded"), mkb)
     elif data.startswith("lead:"):
         try:
             await _lead_detail(token, chat_id, link, int(data.split(":", 1)[1]))
@@ -1415,6 +1547,9 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
     text = msg.get("text", "") or ""
     is_voice = bool(msg.get("voice") or msg.get("audio"))
 
+    # Language for pre-link onboarding messages (from Telegram's client locale).
+    ulang = "hi" if (from_user.get("language_code", "") or "").lower().startswith("hi") else "en"
+
     # /start [invite_code] → onboarding (then show the menu).
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
@@ -1428,53 +1563,45 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
             res = await _redeem_invite(code, tg_uid, nm, tenant_id)
             if res.get("ok"):
                 firm = res.get("firm", "your firm"); role = res.get("role", "member")
-                greet = (f"✅ Welcome! You're connected as <b>{role}</b> of <b>{firm}</b>."
-                         if role in ("owner", "admin")
-                         else f"✅ Welcome to <b>{firm}</b>'s CRM! You can manage your assigned leads here.")
-                await send_message(token, chat_id, greet)
                 newlink = await _active_link(tg_uid)
+                glang = _lang(newlink) if newlink else ulang
+                greet = (T(glang, "greet_owner", role=role, firm=firm) if role in ("owner", "admin")
+                         else T(glang, "greet_member", firm=firm))
+                await send_message(token, chat_id, greet)
                 if newlink:
                     await _send_menu(token, chat_id, newlink)
             elif res.get("error") == "other_firm":
-                await send_message(token, chat_id,
-                                   "You're already part of another firm on Sarathi. Ask them to remove you "
-                                   "first — your data stays secure — then you can join a new firm.")
+                await send_message(token, chat_id, T(ulang, "inv_other_firm"))
             elif res.get("error") == "seats_full":
-                await send_message(token, chat_id,
-                                   "Your firm's plan has no free team seats right now. Please ask your admin to upgrade.")
+                await send_message(token, chat_id, T(ulang, "inv_seats"))
             else:
-                await send_message(token, chat_id,
-                                   "This invite link is invalid or has expired. Please ask your firm admin for a new one.")
+                await send_message(token, chat_id, T(ulang, "inv_bad"))
             return {"ok": True}
-        await send_message(token, chat_id,
-                           "This bot runs a Sarathi-AI CRM. Ask your firm admin for an invite link to join.")
+        await send_message(token, chat_id, T(ulang, "ask_admin_invite"))
         return {"ok": True}
 
     # Non-/start messages — only ACTIVE, LINKED members of THIS firm get a response.
     link = await _active_link(tg_uid)
     if not (link and int(link["tenant_id"]) == tenant_id):
-        await send_message(token, chat_id,
-                           "You're not linked to this CRM. Please ask your firm admin for an invite link.")
+        await send_message(token, chat_id, T(ulang, "not_linked"))
         return {"ok": True}
+    lang = _lang(link)
     if is_voice:
         v = msg.get("voice") or msg.get("audio") or {}
         if int(v.get("duration") or 0) > 150:
-            await send_message(token, chat_id, "⏱️ Please keep voice notes under ~2 minutes and try again.",
-                               _menu_kb(link["role"]))
+            await send_message(token, chat_id, T(lang, "v_long"), _menu_kb(link["role"], lang))
             return {"ok": True}
-        await send_message(token, chat_id, "🎧 Listening…")
+        await send_message(token, chat_id, T(lang, "v_listen"))
         audio = await _download_file(token, v.get("file_id"))
         tr = await _transcribe(audio, v.get("mime_type") or "audio/ogg") if audio else None
         if not tr or tr.get("status") != "clear" or not (tr.get("transcript") or "").strip():
             st = (tr or {}).get("status", "unclear")
-            emap = {"silent": "🤫 I didn't hear any speech.", "noisy": "🔊 Too much background noise.",
-                    "unclear": "🙉 I couldn't catch that clearly.", "abusive": "🙏 Let's keep it professional.",
-                    "nonsense": "🤔 I couldn't make out a request."}
-            await send_message(token, chat_id,
-                               emap.get(st, "⚠️ Couldn't process that audio.") + " Please try again or type it.",
-                               _menu_kb(link["role"]))
+            emap = {"silent": "v_silent", "noisy": "v_noisy", "unclear": "v_unclear",
+                    "abusive": "v_abusive", "nonsense": "v_nonsense"}
+            await send_message(token, chat_id, T(lang, emap.get(st, "v_unclear")) + T(lang, "v_retry"),
+                               _menu_kb(link["role"], lang))
             return {"ok": True}
-        await send_message(token, chat_id, f"🗣️ I heard: “{tr['transcript']}”")
+        await send_message(token, chat_id, T(lang, "v_heard", text=tr['transcript']))
         await _process_command(token, chat_id, tg_uid, link, tr["transcript"])
         return {"ok": True}
     # Typed message → try a CRM command; falls back to the menu if it's not one.
