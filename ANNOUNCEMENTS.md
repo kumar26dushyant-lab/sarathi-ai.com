@@ -8,6 +8,76 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-18 — Big set of upgrades: payments, claims, branches & a new voice guide — READY TO SEND
+
+> Consolidated round-up of everything shipped in the last day. Supersedes the individual Aug-17 drafts below for sending purposes (send this one).
+
+**Title (EN):**
+🚀 Lots of upgrades this week — payments, claims, branches & a new voice guide (please 👍)
+
+**Details (EN):**
+Team, here's everything new that makes your day easier 🎉
+
+💳 **Payments**
+• Accounts now show a **payment flag** — 🟡 payment pending / 🔴 auto-pay failed — so you can spot at a glance who hasn't paid.
+• New **💰 Mark-paid** button (super-admins) for offline/QR payments — activates the plan instantly.
+• If a customer's payment **fails**, they now automatically get a **fresh payment link by email** to try again.
+• Subscriptions now charge **exactly the price set in the super-admin Plans** — one place controls pricing.
+
+📋 **Claims**
+• **Paid ₹499 reviews now always appear in All Claims + Search** (earlier some showed only in the "Pending Reviews" box).
+
+🏢 **Branches & 👤 Your Business**
+• Branch stats now **count the claims a branch files** — no more 0/0/0 when a branch has raised claims.
+• The Accounts "Branch" column now shows **WHO referred the customer** — staff name or branch name **+ code**, not just a bare code.
+• Your **"My Business"** now **lists the actual subscribers you referred** (name, plan, subscribed/unpaid) — not just a count.
+• **Creating a branch now auto-emails them** a one-click login link; the login-code email also carries a **direct login button**.
+
+🎧 **New: voice user-guide for customers & branches**
+• Customer and branch dashboards now have a **"गाइड / Guide" mic in the top menu** — they can **listen** to a step-by-step walkthrough in **Hindi** (or read it), and self-onboard without calling us. *(A staff guide is coming next.)*
+
+🎨 **Fixes**
+• **Support chat** messages are now **readable in Light mode** (were nearly invisible before).
+• **Phone field** now accepts only a real phone number.
+• Branch-section text fixed in Light mode.
+
+**How to use this update:** react **👍** to confirm you've **read and understood**. Anything unclear? Please reach out to our **office IT SPOC** — they'll walk you through it. 🙏
+
+**Title (HI):**
+🚀 इस हफ़्ते कई सुधार — भुगतान, क्लेम, ब्रांच और नया वॉइस गाइड (कृपया 👍)
+
+**Details (HI):**
+टीम, कुछ नए सुधार जो आपका काम आसान बनाते हैं 🎉
+
+💳 **भुगतान (Payments)**
+• अकाउंट पर अब **भुगतान का निशान** दिखता है — 🟡 भुगतान बाकी / 🔴 ऑटो-पे फेल — ताकि एक नज़र में पता चले किसने भुगतान नहीं किया।
+• ऑफ़लाइन/QR भुगतान के लिए नया **💰 Mark-paid** बटन (सुपर-एडमिन) — प्लान तुरंत चालू।
+• किसी ग्राहक का भुगतान **फेल** होने पर उसे अपने-आप **ईमेल पर नया पेमेंट लिंक** मिल जाता है।
+• सब्सक्रिप्शन अब **सुपर-एडमिन Plans में तय कीमत** ही चार्ज करता है — कीमत एक ही जगह से नियंत्रित।
+
+📋 **क्लेम (Claims)**
+• **भुगतान किए गए ₹499 रिव्यू अब हमेशा All Claims और Search में दिखते हैं** (पहले कुछ सिर्फ़ "Pending Reviews" बॉक्स में दिखते थे)।
+
+🏢 **ब्रांच और 👤 आपका बिज़नेस**
+• ब्रांच के आँकड़े अब **ब्रांच द्वारा दर्ज किए क्लेम** भी गिनते हैं — दर्ज क्लेम होने पर अब 0/0/0 नहीं दिखेगा।
+• Accounts के "Branch" कॉलम में अब दिखता है कि ग्राहक को **किसने रेफ़र किया** — स्टाफ़ या ब्रांच का **नाम + कोड**, सिर्फ़ कोड नहीं।
+• आपके **"My Business"** में अब **आपके रेफ़र किए सब्सक्राइबर की सूची** दिखती है (नाम, प्लान, सब्सक्राइब्ड/बाकी) — सिर्फ़ संख्या नहीं।
+• **ब्रांच बनाते ही उन्हें अपने-आप** एक-क्लिक लॉगिन लिंक ईमेल हो जाता है; लॉगिन-कोड ईमेल में भी **सीधा लॉगिन बटन** होता है।
+
+🎧 **नया: ग्राहक और ब्रांच के लिए वॉइस गाइड**
+• ग्राहक और ब्रांच डैशबोर्ड पर अब ऊपर मेन्यू में **"गाइड / Guide" माइक** है — वे **हिंदी** में स्टेप-बाय-स्टेप गाइड **सुन** सकते हैं (या पढ़ सकते हैं), और बिना कॉल किए खुद समझ सकते हैं। *(स्टाफ़ गाइड अगली बार।)*
+
+🎨 **सुधार (Fixes)**
+• **सपोर्ट चैट** के मैसेज अब **लाइट मोड में साफ़ पढ़े** जा सकते हैं (पहले लगभग अदृश्य थे)।
+• **फ़ोन फ़ील्ड** अब सिर्फ़ असली फ़ोन नंबर स्वीकार करता है।
+• ब्रांच सेक्शन का टेक्स्ट लाइट मोड में ठीक किया।
+
+**इस अपडेट का उपयोग:** नीचे **👍** करके पुष्टि करें कि आपने इसे **पढ़ा और समझ लिया**। कुछ भी अस्पष्ट हो तो कृपया ऑफ़िस के **IT SPOC** से संपर्क करें। 🙏
+
+*Suggested roles: all Nidaan ops staff (super-admins, sub-super-admins, team members).*
+
+---
+
 ## 2026-08-17 — Every paid ₹499 review now shows in your Claims list — READY TO SEND
 
 **Title (EN):**
