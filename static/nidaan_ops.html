@@ -4337,7 +4337,7 @@ async function opsLoadMessages(claimId){
       const who = staff ? (m.staff_name||'You') : 'Subscriber';
       const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
       const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
-      return `<div style="align-self:${staff?'flex-end':'flex-start'};max-width:82%;background:${staff?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${staff?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
+      return `<div style="align-self:${staff?'flex-end':'flex-start'};max-width:82%;background:${staff?'rgba(8,145,178,.22)':'var(--nd-bg-surface-2)'};border:1px solid ${staff?'rgba(34,211,238,.3)':'var(--nd-border)'};border-radius:12px;padding:.5rem .7rem">
         <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}</div>
         ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
     }).join('') : '<div style="color:var(--nd-text-faint);text-align:center;padding:.5rem">No messages yet</div>';
@@ -6314,8 +6314,8 @@ async function openSupportThread(id){
   const bubbles = msgs.map(m=>{
     const mine = (m.sender_type==='staff');
     const ai = (m.sender_type==='ai');
-    const bg = mine?'linear-gradient(135deg,#06b6d4,#0891b2)':(ai?'rgba(34,211,238,.12)':'rgba(255,255,255,.06)');
-    const col = mine?'#fff':'#e2e8f0';
+    const bg = mine?'linear-gradient(135deg,#06b6d4,#0891b2)':(ai?'rgba(34,211,238,.12)':'var(--nd-bg-surface-2)');
+    const col = mine?'#fff':'var(--nd-text-primary)';   // theme-aware (was #e2e8f0 → invisible in light mode)
     const who = mine?'You (staff)':(ai?'NidaanMitra':esc(custName));
     const align = (mine||ai)?'flex-end':'flex-start';
     // customer left, ai+staff right
@@ -6323,7 +6323,7 @@ async function openSupportThread(id){
     const ts = fmtDateTime(m.created_at);
     return `<div style="display:flex;justify-content:${side};margin:.35rem 0">
       <div style="max-width:80%;background:${bg};color:${col};padding:.55rem .8rem;border-radius:14px;${side==='flex-end'?'border-bottom-right-radius:5px':'border-bottom-left-radius:5px'};font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18)">
-        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'var(--nd-text-secondary)':(ai?'#67e8f9':'#a5b4fc')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}</div>`:''}</div></div>`;
+        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'var(--nd-cyan-text)':'var(--nd-purple-text)')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}</div>`:''}</div></div>`;
   }).join('');
   const ov = document.createElement('div');
   ov.id='supModal';
