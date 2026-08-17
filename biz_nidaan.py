@@ -2762,7 +2762,10 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
                           AND p.linked_claim_id IS NULL) AS per_claim_balance,
                       (SELECT COUNT(*) FROM nidaan_claims c
                         WHERE c.account_id = a.account_id AND c.payment_status = 'paid')
-                        AS direct_paid_reviews
+                        AS direct_paid_reviews,
+                      (SELECT COUNT(*) FROM nidaan_payment_links pl
+                        WHERE pl.account_id = a.account_id AND pl.status != 'paid')
+                        AS unpaid_links
                FROM nidaan_accounts a
                LEFT JOIN nidaan_subscriptions s ON s.account_id = a.account_id
                    AND s.status = 'active'
@@ -2793,6 +2796,19 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
             r["claims_cap"] = None
             r["disputed_cap"] = None
             r["claims_used"] = 0
+        # Payment-status flag for the ops accounts list:
+        #   paid       — has an active sub / paid review
+        #   attempted  — a payment link was sent but not completed (red-flag)
+        #   halted     — a recurring subscription charge failed (retries exhausted)
+        #   none       — a lead with no payment attempt
+        if r["account_type"] in ("subscriber", "per_claim"):
+            r["pay_status"] = "paid"
+        elif str(r.get("sub_status") or "") == "halted":
+            r["pay_status"] = "halted"
+        elif (r.get("unpaid_links") or 0) > 0:
+            r["pay_status"] = "attempted"
+        else:
+            r["pay_status"] = "none"
     return rows
 
 

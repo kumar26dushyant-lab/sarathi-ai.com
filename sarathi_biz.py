@@ -4866,6 +4866,50 @@ async def nidaan_api_admin_accounts(
     return {"accounts": accounts, "count": len(accounts)}
 
 
+class NidaanMarkPaidReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan: str
+    amount: int              # rupees actually received
+    ref: str = ""            # UTR / QR ref / note
+    period_days: int = 90
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/mark-paid")
+@limiter.limit("20/minute")
+async def nidaan_ops_mark_paid(account_id: int, body: NidaanMarkPaidReq, request: Request):
+    """Super-admin: record an offline/QR payment for an account and activate its plan."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    acct = await nidaan.get_account_by_id(account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="Account not found")
+    plan = (body.plan or "").strip().lower()
+    cfg = await nidaan.get_plans_config()
+    if plan not in (cfg or {}):
+        raise HTTPException(status_code=400, detail="Unknown plan")
+    amt = int(body.amount or 0)
+    if amt < 1:
+        raise HTTPException(status_code=400, detail="Enter the amount received")
+    ref = (body.ref or "").strip()[:60]
+    days = int(body.period_days or 90)
+    # Activate the Nidaan subscription (offline/QR — no Razorpay event).
+    await nidaan.create_subscription(account_id, plan, amt,
+                                     razorpay_payment_id=(f"MANUAL:{ref}" if ref else "MANUAL"),
+                                     period_days=days)
+    # SANCTIONED bundle coupling only: if this plan includes the Sarathi bundle, provision it.
+    try:
+        if nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+            await nidaan._provision_sarathi_bundle(account_id, plan, days)
+    except Exception as _be:
+        logger.warning("mark-paid bundle provision failed for account %d: %s", account_id, _be)
+    await _ops_audit(request, "account.mark_paid", "account", str(account_id),
+                     f"{plan} ₹{amt} (manual/QR ref={ref or '-'})")
+    logger.info("💳 Nidaan account %d marked paid by %s: %s ₹%d ref=%s",
+                account_id, _actor_label(caller), plan, amt, ref or "-")
+    return {"ok": True, "plan": plan, "amount": amt}
+
+
 @app.get("/nidaan/api/admin/review-requests")
 async def nidaan_api_admin_reviews(
     request: Request,

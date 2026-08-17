@@ -4628,6 +4628,13 @@ function accTypeBadge(a){
   if(a.account_type==='per_claim') return '<span class="pill-status" style="background:rgba(168,85,247,.18);color:var(--nd-purple-text)">₹499</span>';
   return '<span class="pill-status" style="background:rgba(148,163,184,.18);color:var(--nd-text-secondary)">Lead</span>';
 }
+// Payment red-flag: only shows when there's something to flag (link sent-not-paid, or auto-pay failed).
+function accPayBadge(a){
+  const ps=a.pay_status||'';
+  if(ps==='attempted') return '<span class="pill-status" title="A payment link was sent but not completed" style="background:rgba(251,191,36,.18);color:var(--nd-warning-text)">🟡 payment pending</span>';
+  if(ps==='halted') return '<span class="pill-status" title="Recurring auto-pay failed (retries exhausted)" style="background:rgba(239,68,68,.18);color:var(--nd-danger-text)">🔴 auto-pay failed</span>';
+  return '';
+}
 
 function renderAccounts(accounts) {
   if (!accounts.length) {
@@ -4645,7 +4652,7 @@ function renderAccounts(accounts) {
       <td>${esc(a.email||'—')}</td>
       <td>${esc(a.phone||'—')}</td>
       <td>${a.branch_code?`<span style="font-size:.72rem;color:var(--nd-purple-text);font-weight:700">${esc(a.branch_code)}</span>`:'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
-      <td>${accTypeBadge(a)}</td>
+      <td>${accTypeBadge(a)} ${accPayBadge(a)}</td>
       <td>${accUsageCell(a)}</td>
       <td><span class="pill-status s-${a.status||'active'}">${a.status||'active'}</span></td>
       <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(a.created_at)}</td>
@@ -4654,6 +4661,7 @@ function renderAccounts(accounts) {
         <button class="btn-icon" onclick="openEditAccountModal(${a.account_id})" title="Edit">✏️</button>
         <button class="btn-icon" onclick="doImpersonate(${a.account_id})" title="Login as Advisor">🔑</button>
         <button class="btn-icon" onclick="showSarathiLink(${a.account_id})" title="Sarathi CRM Link">🔗</button>
+        ${deleted?'':`<button class="btn-icon" onclick="openMarkPaidModal(${a.account_id})" title="Mark paid (offline / QR)" style="color:var(--nd-success-text)">💰</button>`}
         ${deleted?'':`<button class="btn-icon" onclick="confirmDeleteAccounts([${a.account_id}])" title="Delete account" style="color:var(--nd-danger-text)">🗑️</button>`}`:''}
       </td>
     </tr>`;}).join('');
@@ -4666,6 +4674,46 @@ function renderAccounts(accounts) {
       </table>
     </div>`;
   updateAccBulkBar();
+}
+
+// ── Mark paid (offline / QR) — super-admin only ────────────────────────────────
+function openMarkPaidModal(id){
+  const acct=(window._allAccounts||[]).find(a=>a.account_id===id)||{};
+  const plans=[...new Set([...(window._allAccounts||[]).map(a=>a.plan).filter(Boolean),'silver','gold','platinum'])];
+  const opts=plans.map(p=>`<option value="${p}"${p===acct.plan?' selected':''}>${p}</option>`).join('');
+  const ov=document.createElement('div'); ov.id='mpOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid rgba(34,197,94,.4);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
+    <div style="font-size:1.1rem;font-weight:800;color:var(--nd-success-text);margin-bottom:.3rem">💰 Mark paid — #${id} ${esc(acct.owner_name||'')}</div>
+    <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Record an offline / QR payment and activate the plan. This is logged with your name.</div>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Plan</label>
+    <select id="mpPlan" style="width:100%;margin-bottom:.7rem">${opts}</select>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Amount received (₹)</label>
+    <input id="mpAmt" type="number" min="1" placeholder="e.g. 999" style="width:100%;margin-bottom:.7rem">
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">UTR / reference (optional)</label>
+    <input id="mpRef" autocomplete="off" placeholder="UTR / QR ref / note" style="width:100%;margin-bottom:1rem">
+    <div id="mpMsg" style="font-size:.82rem;color:var(--nd-danger-text);margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('mpOv').remove()">Cancel</button>
+      <button id="mpBtn" class="btn" style="background:#16a34a;color:#fff" onclick="doMarkPaid(${id})">Mark paid & activate</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{const el=document.getElementById('mpAmt'); if(el)el.focus();},50);
+}
+async function doMarkPaid(id){
+  const plan=(document.getElementById('mpPlan')||{}).value||'';
+  const amt=parseInt((document.getElementById('mpAmt')||{}).value||'0',10);
+  const ref=((document.getElementById('mpRef')||{}).value||'').trim();
+  const msg=document.getElementById('mpMsg'), btn=document.getElementById('mpBtn');
+  if(!plan){ if(msg)msg.textContent='Choose a plan.'; return; }
+  if(!amt||amt<1){ if(msg)msg.textContent='Enter the amount received.'; return; }
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const r=await API('/accounts/'+id+'/mark-paid',{method:'POST',body:JSON.stringify({plan:plan,amount:amt,ref:ref})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok){ const o=document.getElementById('mpOv'); if(o)o.remove(); if(typeof loadAccounts==='function') loadAccounts(); }
+    else { if(msg)msg.textContent=d.detail||'Could not mark paid'; if(btn){btn.disabled=false;btn.textContent='Mark paid & activate';} }
+  }catch(e){ if(msg)msg.textContent='Network error'; if(btn){btn.disabled=false;btn.textContent='Mark paid & activate';} }
 }
 
 // ── Account delete (single + bulk) with a 2-step type-to-confirm guard ─────────
