@@ -32,6 +32,7 @@ Team, here's everything new that makes your day easier 🎉
 • The Accounts "Branch" column now shows **WHO referred the customer** — staff name or branch name **+ code**, not just a bare code.
 • Your **"My Business"** now **lists the actual subscribers you referred** (name, plan, subscribed/unpaid) — not just a count.
 • **NEW — you're now alerted if a payment from your referral fails:** if someone you referred has a payment fail (or their auto-pay stops), **you get a heads-up** (staff: on your dashboard; branches: by email) so you can help them retry. Only you and the office see it.
+• **NEW — tap any referred subscriber to see their progress:** in "My Business" / "Your referrals", **click a name** to open their claims, claim statuses, and plan/payment status — so you can track how your referrals are doing. (Customer phone stays masked for privacy.)
 • **Creating a branch now auto-emails them** a one-click login link; the login-code email also carries a **direct login button**.
 
 🎧 **New: voice user-guide on every dashboard + smarter support chat**
