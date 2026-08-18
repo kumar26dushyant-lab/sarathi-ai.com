@@ -698,6 +698,11 @@ async function openTenant(id){
 
 async function tenantAction(id,action){
   let url,method='POST',body=null;
+  // Impersonation opens a new tab. Open it SYNCHRONOUSLY here (inside the click gesture) —
+  // if we call window.open() after the await below, browsers treat it as a pop-up and BLOCK it,
+  // which is why "impersonate" appeared to do nothing.
+  let _impWin=null;
+  if(action==='impersonate'){ _impWin=window.open('/dashboard','_blank'); }
   switch(action){
     case 'extend':const days=prompt('Extend trial by how many days?','7');if(!days)return;url=`${API}/tenant/${id}/extend`;body={days:parseInt(days)};break;
     case 'activate':const plan=prompt('Plan (trial / individual / team / enterprise):','individual');if(!plan)return;url=`${API}/tenant/${id}/activate?plan=${encodeURIComponent(plan)}`;break;
@@ -715,13 +720,15 @@ async function tenantAction(id,action){
       if(action==='impersonate' && d.token){
         const imp=encodeURIComponent(d.token);
         const firm=encodeURIComponent(d.firm_name||'');
-        window.open(`/dashboard?_imp_token=${imp}&_imp_firm=${firm}`,'_blank');
+        const _u=`/dashboard?_imp_token=${imp}&_imp_firm=${firm}`;
+        if(_impWin){ _impWin.location.href=_u; } else { window.open(_u,'_blank'); }
         toast('👁️ Impersonating '+esc(d.firm_name||'Tenant'));
         return;
       }
+      if(_impWin){ try{ _impWin.close(); }catch(e){} }   // non-impersonate success → close the blank tab
       toast('✅ '+action+' done');loadTenants();openTenant(id)
-    }else{toast('❌ '+_extractErr(d,'Failed'))}
-  }catch(e){toast('❌ Network error')}
+    }else{ if(_impWin){ try{ _impWin.close(); }catch(e){} } toast('❌ '+_extractErr(d,'Failed'))}
+  }catch(e){ if(_impWin){ try{ _impWin.close(); }catch(e){} } toast('❌ Network error')}
 }
 
 /* ── Events / Alerts ──────────────────────────────────────────── */

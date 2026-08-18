@@ -12423,11 +12423,14 @@ async def sa_impersonate_tenant(tenant_id: int, request: Request, sa=Depends(aut
     tenant = await db.get_tenant(tenant_id)
     if not tenant:
         return JSONResponse({"detail": "Tenant not found"}, status_code=404)
-    # Find the owner agent
+    # Find the owner agent — fall back to any active agent (older tenants may predate the
+    # 'owner' role convention; ~1/3 of tenants had no owner-role agent, which 404'd here).
     agents = await db.get_agents_by_tenant(tenant_id)
-    owner = next((a for a in agents if a.get('role') == 'owner'), None)
+    owner = (next((a for a in agents if a.get('role') == 'owner'), None)
+             or next((a for a in agents if a.get('is_active', 1)), None)
+             or (agents[0] if agents else None))
     if not owner:
-        return JSONResponse({"detail": "No owner agent found"}, status_code=404)
+        return JSONResponse({"detail": "No agent found for this firm"}, status_code=404)
     # Create a short-lived impersonation token (1 hour, imp:true marked)
     token = auth.create_impersonation_token(
         tenant_id=tenant_id,
