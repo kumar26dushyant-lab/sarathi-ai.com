@@ -4019,8 +4019,12 @@ async function loadRadar(){
     ]);
     _radarItems = it.items||[]; _radarStats = it.stats||{}; _radarMailboxes = mb.mailboxes||[]; _radarConfig = cf||{}; _radarMetrics = mx||{};
   } catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p></div>'; return; }
+  // First time in this session: if no mailboxes are connected yet, open the Mailboxes tab
+  // (that's where you add them) so nobody lands on an empty Radar wondering what to do.
+  if(!_radarInit){ _radarView = _radarMailboxes.length ? 'radar' : 'mailboxes'; _radarInit = true; }
   renderRadar();
 }
+let _radarInit = false;
 function _radarStatusPill(s){
   const map = { ok:['var(--nd-success-text)','Connected ✓'], auth_failed:['var(--nd-danger-text)','Auth failed'], error:['var(--nd-danger-text)','Error'], pending:['var(--nd-text-faint)','Not tested'] };
   const m = map[s] || map.pending;
@@ -4048,7 +4052,13 @@ function _renderRadarItems(){
   const fTab=(v,lbl)=>`<div class="tab-pill ${_radarFlag===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
   const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled, no human')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('New today',(mx.today||0),'')}${_mTile('Deadlines',(mx.with_deadline||0),'')}</div>`;
   const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('','All ('+(s.total||0)+')')}${fTab('red','🔴 Act now ('+(s.red||0)+')')}${fTab('amber','🟡 Review ('+(s.amber||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}</div>`;
-  if(!items.length) return metricStrip+filters+`<div class="empty"><div class="ei">🛰️</div><p>No updates in this view yet. New authority/insurer replies land here automatically once mailboxes are connected.</p></div>`;
+  if(!items.length){
+    const noMb = !_radarMailboxes.length;
+    const empty = noMb
+      ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails will appear here, flagged and assigned automatically.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
+      : `<div class="empty"><div class="ei">🛰️</div><p>All clear — no updates in this view.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">New emails from insurers/authorities will appear here automatically. Or hit <b>🔄 Check now</b> above.</p></div>`;
+    return metricStrip+filters+empty;
+  }
   const rows=items.map(i=>{
     const mid=String(i.message_id||'').replace(/[<>]/g,'');
     const dl = mid ? ('https://mail.google.com/mail/u/0/#search/'+encodeURIComponent('rfc822msgid:'+mid)) : '';
@@ -4074,21 +4084,31 @@ function _renderRadarMailboxes(){
     <td style="padding:.55rem .7rem">${_radarStatusPill(m.last_sync_status)}${m.last_sync_error?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${esc(m.last_sync_error)}</span>`:''}</td>
     <td style="padding:.55rem .7rem;font-size:.75rem;color:var(--nd-text-faint)">${m.last_synced_at?fmtDateTime(m.last_synced_at):'—'}</td>
     <td style="padding:.55rem .7rem;white-space:nowrap">
-      <button class="btn-sm btn-ghost" onclick="radarTest(${m.mailbox_id},this)">Test</button>
+      <button class="btn-sm btn-ghost" onclick="radarTest(${m.mailbox_id},this)" title="Check this mailbox connects">Test</button>
       <button class="btn-sm btn-ghost" onclick="radarEdit(${m.mailbox_id})">Edit</button>
-      <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="radarDelete(${m.mailbox_id})">Delete</button>
+      <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="radarDelete(${m.mailbox_id})">Remove</button>
     </td></tr>`).join('');
-  return `<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.8rem;color:var(--nd-text-muted)">
-      <b>Setup, once per customer:</b> 1) customer creates a dedicated Gmail &amp; turns on 2-step verification. 2) they generate a 16-character <b>App Password</b> (Google → Security → App passwords). 3) enter the email + app-password here and click <b>Test Connection</b>.
+  const none = !_radarMailboxes.length;
+  // Guided walkthrough — open by default until at least one mailbox exists.
+  const guide = `<details ${none?'open':''} style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;margin-bottom:1rem">
+    <summary style="cursor:pointer;padding:.85rem 1rem;font-weight:700;font-size:.9rem;list-style:none">📖 How to connect a customer's mailbox <span style="font-weight:400;color:var(--nd-text-muted);font-size:.8rem">(tap to open/close)</span></summary>
+    <div style="padding:0 1rem 1rem;font-size:.84rem;color:var(--nd-text-secondary);line-height:1.6">
+      <div style="color:var(--nd-text-muted);margin-bottom:.7rem">This lets the team watch all your customers' claim mailboxes from one screen instead of logging into each Gmail. Do this once per customer:</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">1️⃣</div><div><b>In the customer's dedicated Gmail:</b> turn on <b>2-Step Verification</b> (Google Account → Security). Google needs this before the next step is possible.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">2️⃣</div><div><b>Create an "App Password":</b> Google Account → Security → <b>App passwords</b> → create one. Google shows a <b>16-character code</b> — copy it. (This is a safe, revocable key — NOT the Gmail login password.)</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">3️⃣</div><div><b>Add it here:</b> click <b>＋ Connect a customer mailbox</b> below → type the customer's name + their Gmail → paste the 16-character code → choose who handles this case → click <b>Test Connection</b> (should turn green) → <b>Save</b>.</div></div>
+      <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.6rem .8rem;color:var(--nd-text-muted)">✅ Done. New emails from insurers/authorities will start showing in the <b>🚨 Radar</b> tab — automatically flagged and assigned to the handler you picked. Old mail is never pulled in; only new emails from now on.</div>
     </div>
-    <button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem">＋ Add mailbox</button>
-    ${_radarMailboxes.length?`<div style="overflow-x:auto;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px">
+  </details>`;
+  const addBtn = `<button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem;font-size:.95rem;padding:.6rem 1.1rem">＋ Connect a customer mailbox</button>`;
+  const table = _radarMailboxes.length ? `<div style="overflow-x:auto;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px">
       <table style="width:100%;border-collapse:collapse;font-size:.85rem">
         <thead><tr style="text-align:left;color:var(--nd-text-muted)">
           <th style="padding:.6rem .7rem">Customer</th><th style="padding:.6rem .7rem">Mailbox</th>
           <th style="padding:.6rem .7rem">Status</th><th style="padding:.6rem .7rem">Last checked</th><th style="padding:.6rem .7rem">Actions</th>
         </tr></thead><tbody>${rows}</tbody></table></div>`
-      : `<div class="empty"><div class="ei">📭</div><p>No mailboxes yet. Add your first customer mailbox to start.</p></div>`}`;
+    : `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted)">Follow the 3 steps above, then click <b>“＋ Connect a customer mailbox”</b> to add your first one.</p></div>`;
+  return guide + addBtn + table;
 }
 function _renderRadarSettings(){
   const c=_radarConfig||{};
@@ -4122,17 +4142,20 @@ async function radarEdit(id){
   const others = new Set(pod.slice(1));
   const primaryOpts = '<option value="">— unassigned —</option>'+staff.map(s=>`<option value="${s.staff_id}" ${s.staff_id===primary?'selected':''}>${esc(s.name||('#'+s.staff_id))}</option>`).join('');
   const podChecks = staff.map(s=>`<label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;margin:.15rem .6rem .15rem 0"><input type="checkbox" class="rmPod" value="${s.staff_id}" ${others.has(s.staff_id)?'checked':''}> ${esc(s.name||('#'+s.staff_id))}</label>`).join('');
-  const body = `<div style="display:flex;flex-direction:column;gap:.7rem">
-      <label style="font-size:.8rem">Customer / case name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. Ramesh Kumar" style="${_rmInp()}"></label>
-      <label style="font-size:.8rem">Customer's dedicated Gmail<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="customer.case@gmail.com" style="${_rmInp()}"></label>
-      <label style="font-size:.8rem">App password (16 chars)<span style="display:flex;gap:.4rem;margin-top:.2rem"><input id="rmPass" type="password" placeholder="${m?'•••• (leave blank to keep current)':'xxxx xxxx xxxx xxxx'}" style="${_rmInp()};margin-top:0;flex:1"><button type="button" class="btn-sm btn-ghost" onclick="var p=document.getElementById('rmPass');p.type=p.type==='password'?'text':'password'">👁</button></span></label>
-      <label style="font-size:.8rem">Primary handler (gets the task + all-channel alerts)<select id="rmPrimary" style="${_rmInp()}">${primaryOpts}</select></label>
-      <label style="font-size:.8rem">Pod — others who also get notified &amp; can act
-        <div style="display:flex;flex-wrap:wrap;margin-top:.3rem;max-height:120px;overflow-y:auto;border:1px solid var(--nd-border);border-radius:8px;padding:.4rem .5rem">${podChecks||'<span style="color:var(--nd-text-muted);font-size:.78rem">No staff found</span>'}</div></label>
-      <div style="display:flex;gap:.6rem">
-        <label style="font-size:.8rem;flex:1">IMAP host<input id="rmHost" value="${m?esc(m.imap_host||'imap.gmail.com'):'imap.gmail.com'}" style="${_rmInp()}"></label>
-        <label style="font-size:.8rem;width:110px">Port<input id="rmPort" type="number" value="${m?(m.imap_port||993):993}" style="${_rmInp()}"></label>
-      </div>
+  const hint = t=>`<div style="font-size:.7rem;color:var(--nd-text-muted);font-weight:400;margin-top:.1rem">${t}</div>`;
+  const body = `<div style="display:flex;flex-direction:column;gap:.85rem">
+      <label style="font-size:.82rem;font-weight:600">Customer / case name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. Ramesh Kumar" style="${_rmInp()}">${hint('A name you will recognise on the radar — usually the customer name.')}</label>
+      <label style="font-size:.82rem;font-weight:600">Customer's dedicated email (Gmail)<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="customer.case@gmail.com" style="${_rmInp()}">${hint('The dedicated Gmail this customer set up for their case.')}</label>
+      <label style="font-size:.82rem;font-weight:600">App password (16 characters)<span style="display:flex;gap:.4rem;margin-top:.2rem"><input id="rmPass" type="password" placeholder="${m?'•••• (leave blank to keep current)':'xxxx xxxx xxxx xxxx'}" style="${_rmInp()};margin-top:0;flex:1"><button type="button" class="btn-sm btn-ghost" onclick="var p=document.getElementById('rmPass');p.type=p.type==='password'?'text':'password'" title="show / hide">👁</button></span>${hint('The 16-character code from Google → Security → App passwords. NOT the normal Gmail password. (See the “How to connect” steps.)')}</label>
+      <label style="font-size:.82rem;font-weight:600">Who handles this case? (primary)<select id="rmPrimary" style="${_rmInp()}">${primaryOpts}</select>${hint('This person gets the task and is alerted on every new update, on all channels.')}</label>
+      <label style="font-size:.82rem;font-weight:600">Also notify (optional pod)
+        <div style="display:flex;flex-wrap:wrap;margin-top:.3rem;max-height:120px;overflow-y:auto;border:1px solid var(--nd-border);border-radius:8px;padding:.4rem .5rem">${podChecks||'<span style="color:var(--nd-text-muted);font-size:.78rem">No staff found</span>'}</div>${hint('Extra teammates who should also see this case and can act on it.')}</label>
+      <details style="border:1px solid var(--nd-border);border-radius:8px;padding:.2rem .3rem">
+        <summary style="cursor:pointer;font-size:.78rem;color:var(--nd-text-muted);padding:.4rem .5rem;list-style:none">⚙️ Advanced (Gmail defaults — usually no change needed)</summary>
+        <div style="display:flex;gap:.6rem;padding:.2rem .5rem .5rem">
+          <label style="font-size:.78rem;flex:1">Mail server (IMAP)<input id="rmHost" value="${m?esc(m.imap_host||'imap.gmail.com'):'imap.gmail.com'}" style="${_rmInp()}"></label>
+          <label style="font-size:.78rem;width:100px">Port<input id="rmPort" type="number" value="${m?(m.imap_port||993):993}" style="${_rmInp()}"></label>
+        </div></details>
       <div id="rmTestResult" style="font-size:.82rem;min-height:1.1rem"></div>
     </div>`;
   openModal(m?'Edit mailbox':'Add mailbox', body, [
