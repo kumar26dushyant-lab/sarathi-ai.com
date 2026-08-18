@@ -1520,7 +1520,9 @@ async def init_db():
                 last_sync_error  TEXT DEFAULT '',
                 last_synced_at   TIMESTAMP,
                 last_uid         INTEGER DEFAULT 0,         -- highest IMAP UID seen (incremental poll)
-                pod              TEXT DEFAULT '',           -- pod assignment (later phase)
+                pod              TEXT DEFAULT '',           -- free-text pod label (optional)
+                pod_staff_ids    TEXT DEFAULT '',           -- comma list of staff_ids on this mailbox
+                open_task_id     INTEGER,                   -- current open radar-task for this case
                 created_by       INTEGER,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1546,6 +1548,7 @@ async def init_db():
                 ai_reason       TEXT DEFAULT '',
                 ai_summary      TEXT DEFAULT '',
                 status          TEXT DEFAULT 'new',         -- new | ack | responded | closed (P3)
+                quick_task_id   INTEGER,                    -- linked Tasks-module task (P3)
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(mailbox_id, uid)
             );
@@ -2061,6 +2064,19 @@ async def init_db():
             pass
         try:
             await conn.execute("ALTER TABLE retail_chat_threads ADD COLUMN intent TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Radar P3 — Tasks integration: mailbox pod (assignee list) + its current open task; item→task link.
+        try:
+            await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN pod_staff_ids TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN open_task_id INTEGER")
+        except Exception:
+            pass
+        try:
+            await conn.execute("ALTER TABLE nidaan_radar_items ADD COLUMN quick_task_id INTEGER")
         except Exception:
             pass
         # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a

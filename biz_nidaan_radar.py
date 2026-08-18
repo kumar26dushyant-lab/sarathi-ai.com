@@ -13,6 +13,7 @@ in a founder-managed "priority senders" config.
 from __future__ import annotations
 
 import os
+import re
 import base64
 import hashlib
 import asyncio
@@ -100,7 +101,8 @@ async def list_mailboxes() -> list[dict]:
         conn.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await conn.execute(
             """SELECT mailbox_id, label, account_id, email_address, imap_host, imap_port,
-                      is_active, last_sync_status, last_sync_error, last_synced_at, pod, created_at
+                      is_active, last_sync_status, last_sync_error, last_synced_at, pod,
+                      pod_staff_ids, created_at
                FROM nidaan_radar_mailboxes ORDER BY label, email_address""")).fetchall()]
     for r in rows:
         r["email_masked"] = _mask_email(r.get("email_address"))
@@ -123,10 +125,12 @@ async def get_mailbox(mailbox_id: int, *, with_secret: bool = False) -> Optional
 async def upsert_mailbox(*, mailbox_id: Optional[int], label: str, email_address: str,
                          app_password: str, imap_host: str, imap_port: int,
                          account_id: Optional[int], is_active: bool, pod: str,
-                         created_by: Optional[int]) -> int:
+                         pod_staff_ids: str, created_by: Optional[int]) -> int:
     """Create or update a mailbox. If app_password is blank on an update, the stored one is kept
-    (so editing other fields doesn't require re-entering the secret)."""
+    (so editing other fields doesn't require re-entering the secret). pod_staff_ids = comma list of
+    staff_ids assigned to this case (first = primary assignee, rest = watchers)."""
     email_address = (email_address or "").strip().lower()
+    pod_ids = ",".join(str(i) for i in _parse_ids(pod_staff_ids or ""))
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         if mailbox_id:
@@ -134,9 +138,11 @@ async def upsert_mailbox(*, mailbox_id: Optional[int], label: str, email_address
             if (app_password or "").strip():
                 enc = encrypt_secret(app_password.strip())
             sets = ["label=?", "email_address=?", "imap_host=?", "imap_port=?",
-                    "account_id=?", "is_active=?", "pod=?", "updated_at=CURRENT_TIMESTAMP"]
+                    "account_id=?", "is_active=?", "pod=?", "pod_staff_ids=?",
+                    "updated_at=CURRENT_TIMESTAMP"]
             params: list = [label, email_address, imap_host or DEFAULT_IMAP_HOST,
-                            int(imap_port or DEFAULT_IMAP_PORT), account_id, 1 if is_active else 0, pod]
+                            int(imap_port or DEFAULT_IMAP_PORT), account_id,
+                            1 if is_active else 0, pod, pod_ids]
             if enc is not None:
                 sets.append("enc_password=?")
                 params.append(enc)
@@ -149,10 +155,11 @@ async def upsert_mailbox(*, mailbox_id: Optional[int], label: str, email_address
         cur = await conn.execute(
             """INSERT INTO nidaan_radar_mailboxes
                  (label, email_address, enc_password, imap_host, imap_port, account_id,
-                  is_active, pod, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                  is_active, pod, pod_staff_ids, created_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (label, email_address, enc, imap_host or DEFAULT_IMAP_HOST,
-             int(imap_port or DEFAULT_IMAP_PORT), account_id, 1 if is_active else 0, pod, created_by))
+             int(imap_port or DEFAULT_IMAP_PORT), account_id, 1 if is_active else 0,
+             pod, pod_ids, created_by))
         await conn.commit()
         return cur.lastrowid
 
@@ -349,6 +356,7 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
         await set_sync_status(mid, status.split(":")[0], status)
         return 0
     created = 0
+    pending_tasks = []   # (item_id, flag, subject, summary, deeplink) for red/amber → Tasks module
     async with aiosqlite.connect(DB_PATH) as conn:
         for m in msgs:
             ps = _is_priority_sender(m["from_addr"], senders)
@@ -367,6 +375,9 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
                      triage["reason"], triage["summary"]))
                 if cur.rowcount:
                     created += 1
+                    if flag in ("red", "amber"):
+                        pending_tasks.append((cur.lastrowid, flag, m["subject"] or "",
+                                              triage["summary"] or "", gmail_deeplink(m["message_id"])))
             except Exception:
                 pass
         await conn.execute(
@@ -374,6 +385,10 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
             "last_sync_error='', last_synced_at=CURRENT_TIMESTAMP WHERE mailbox_id=?",
             (high_uid, mid))
         await conn.commit()
+    # Create/append Tasks OUTSIDE the write connection (fresh conns + notifications). Sequential so
+    # multiple new emails on one mailbox fold into a single open task.
+    for (item_id, flag, subject, summary, deeplink) in pending_tasks:
+        await ensure_task_for_item(mid, item_id, flag, subject, summary, deeplink)
     return created
 
 
@@ -428,3 +443,109 @@ async def radar_stats() -> dict:
             "COALESCE(SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END),0) AS today "
             "FROM nidaan_radar_items")).fetchone()
     return dict(row) if row else {"total": 0, "red": 0, "amber": 0, "today": 0}
+
+
+# ── P3: Tasks integration ────────────────────────────────────────────────────
+_TASK_CLOSED = ("done", "cancelled")
+
+
+def _parse_ids(blob: str) -> list[int]:
+    out = []
+    for x in re.split(r"[,\s]+", blob or ""):
+        x = x.strip()
+        if x.isdigit():
+            out.append(int(x))
+    return out
+
+
+def gmail_deeplink(message_id: str) -> str:
+    mid = (message_id or "").strip().strip("<>")
+    if not mid:
+        return ""
+    from urllib.parse import quote
+    return "https://mail.google.com/mail/u/0/#search/" + quote("rfc822msgid:" + mid)
+
+
+async def _link_item_task(item_id: int, task_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE nidaan_radar_items SET quick_task_id=? WHERE item_id=?",
+                           (task_id, item_id))
+        await conn.commit()
+
+
+async def _set_open_task(mailbox_id: int, task_id: Optional[int]) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE nidaan_radar_mailboxes SET open_task_id=? WHERE mailbox_id=?",
+                           (task_id, mailbox_id))
+        await conn.commit()
+
+
+async def ensure_task_for_item(mailbox_id: int, item_id: int, flag: str, subject: str,
+                               summary: str, deeplink: str) -> None:
+    """Create or update the mailbox's OPEN radar-task (Tasks module) for a red/amber item.
+    One open task per mailbox = one per case: a new email on the same case appends a note + re-notifies
+    (red pings all channels); once the task is done/cancelled the next email opens a fresh one
+    (auto-reopen). Unassigned mailbox → no task (item still shows in the Radar view). Never raises."""
+    try:
+        import biz_nidaan as _nid
+        import biz_nidaan_notifications as _nnot
+        mb = await get_mailbox(mailbox_id)
+        if not mb:
+            return
+        pod = _parse_ids(mb.get("pod_staff_ids") or "")
+        if not pod:
+            return  # unassigned — nothing to notify; item stays visible in Radar
+        primary = pod[0]
+        creator = mb.get("created_by") or primary
+        prio = "high" if flag == "red" else "normal"
+        # Is the mailbox's existing task still open?
+        open_task_id = mb.get("open_task_id")
+        task_open = False
+        if open_task_id:
+            try:
+                qt = await _nid.get_quick_task(open_task_id)
+                task_open = bool(qt and (qt.get("status") or "").lower() not in _TASK_CLOSED)
+            except Exception:
+                task_open = False
+        if task_open:
+            try:
+                await _nid.add_quick_task_note(
+                    quick_task_id=open_task_id, staff_id=creator,
+                    note=f"📨 New update: {subject}\n{summary}" + (f"\nOpen in Gmail: {deeplink}" if deeplink else ""))
+            except Exception:
+                pass
+            await _link_item_task(item_id, open_task_id)
+            if flag == "red":   # re-ping the assignee on a fresh act-now update
+                try:
+                    qt = await _nid.get_quick_task(open_task_id)
+                    if qt:
+                        await _nnot.on_quick_task_assigned(qt)
+                except Exception:
+                    pass
+            return
+        # No open task → create one for this case.
+        title = f"📨 {(mb.get('label') or _mask_email(mb.get('email_address')))}: {(subject or '(no subject)')[:80]}"
+        desc = ((summary + "\n\n") if summary else "") + (f"Open in Gmail: {deeplink}" if deeplink else "")
+        try:
+            qid = await _nid.create_quick_task(
+                title=title, description=desc, created_by_staff_id=creator,
+                assigned_to_staff_id=primary, priority=prio, source="radar")
+        except Exception as e:
+            logger.warning("radar task create failed: %s", e)
+            return
+        rest = [s for s in pod[1:] if s and s != primary]
+        if rest:
+            try:
+                await _nid.add_task_watchers(qid, rest, added_by=creator)
+            except Exception:
+                pass
+        await _set_open_task(mailbox_id, qid)
+        await _link_item_task(item_id, qid)
+        try:
+            qt = await _nid.get_quick_task(qid)
+            if qt:
+                await _nnot.on_quick_task_assigned(qt)
+        except Exception as e:
+            logger.warning("radar task notify failed: %s", e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ensure_task_for_item error: %s", e)

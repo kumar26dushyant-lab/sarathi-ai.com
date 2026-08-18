@@ -5726,6 +5726,7 @@ class _RadarMailboxReq(BaseModel):
     account_id: Optional[int] = None
     is_active: bool = True
     pod: str = Field("", max_length=60)
+    pod_staff_ids: str = Field("", max_length=200)   # comma list of assigned staff_ids
 
 
 class _RadarTestReq(BaseModel):
@@ -5758,6 +5759,7 @@ async def ops_radar_mailbox_save(body: _RadarMailboxReq, request: Request):
             mailbox_id=body.mailbox_id, label=body.label, email_address=body.email_address,
             app_password=body.app_password, imap_host=body.imap_host, imap_port=body.imap_port,
             account_id=body.account_id, is_active=body.is_active, pod=body.pod,
+            pod_staff_ids=body.pod_staff_ids,
             created_by=(staff.get("staff_id") or staff.get("sub")))
     except Exception as e:
         raise HTTPException(status_code=400, detail="Could not save (duplicate email?): " + str(e)[:100])

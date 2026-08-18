@@ -904,7 +904,7 @@ function buildSidebar() {
     {id:'tasks',      label:'✅ Tasks',         minRank:0},
     {id:'overview',   label:'📊 Claims Dashboard', minRank:0},
     {id:'support',    label:'💬 Support',      minRank:0},
-    {id:'radar',      label:'📨 Updates',      minRank:1},
+    {id:'radar',      label:'📨 Email Updates', minRank:1},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'l2claims',   label:'⚖️ L2 Claims',    minRank:1},
     {id:'archived',   label:'🗄️ Archived',     minRank:1},
@@ -4052,7 +4052,7 @@ function _renderRadarItems(){
       <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start">
         <div style="min-width:0;flex:1">
           <div style="font-weight:700;font-size:.86rem">${_radarFlagDot(i.flag)} ${esc(i.subject||'(no subject)')}${i.priority_sender?' <span style="font-size:.66rem;color:var(--nd-danger-text)">priority sender</span>':''}</div>
-          <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${esc(i.from_name||i.from_addr||'')} · ${i.received_at?fmtDateTime(i.received_at):''}</div>
+          <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${esc(i.from_name||i.from_addr||'')} · ${i.received_at?fmtDateTime(i.received_at):''}${i.quick_task_id?' · <span style="color:var(--nd-cyan-text)">📋 Task #'+i.quick_task_id+'</span>':''}</div>
           ${i.ai_summary?`<div style="font-size:.78rem;margin-top:.3rem">🤖 ${esc(i.ai_summary)}</div>`:''}
           ${i.deadline?`<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.2rem">⏰ ${esc(i.deadline)}</div>`:''}
           ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
@@ -4109,12 +4109,21 @@ async function radarPollNow(btn){
   catch(e){} finally { if(btn){btn.disabled=false;btn.textContent='🔄 Check now';} }
 }
 function _rmInp(){ return 'width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;margin-top:.2rem'; }
-function radarEdit(id){
+async function radarEdit(id){
   const m = id ? _radarMailboxes.find(x=>x.mailbox_id===id) : null;
+  let staff=[]; try{ staff=await _loadAssigneesOnce(); }catch(e){}
+  const pod = (m&&m.pod_staff_ids?String(m.pod_staff_ids).split(','):[]).map(s=>parseInt(s,10)).filter(Boolean);
+  const primary = pod.length?pod[0]:'';
+  const others = new Set(pod.slice(1));
+  const primaryOpts = '<option value="">— unassigned —</option>'+staff.map(s=>`<option value="${s.staff_id}" ${s.staff_id===primary?'selected':''}>${esc(s.name||('#'+s.staff_id))}</option>`).join('');
+  const podChecks = staff.map(s=>`<label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;margin:.15rem .6rem .15rem 0"><input type="checkbox" class="rmPod" value="${s.staff_id}" ${others.has(s.staff_id)?'checked':''}> ${esc(s.name||('#'+s.staff_id))}</label>`).join('');
   const body = `<div style="display:flex;flex-direction:column;gap:.7rem">
       <label style="font-size:.8rem">Customer / case name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. Ramesh Kumar" style="${_rmInp()}"></label>
       <label style="font-size:.8rem">Customer's dedicated Gmail<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="customer.case@gmail.com" style="${_rmInp()}"></label>
       <label style="font-size:.8rem">App password (16 chars)<span style="display:flex;gap:.4rem;margin-top:.2rem"><input id="rmPass" type="password" placeholder="${m?'•••• (leave blank to keep current)':'xxxx xxxx xxxx xxxx'}" style="${_rmInp()};margin-top:0;flex:1"><button type="button" class="btn-sm btn-ghost" onclick="var p=document.getElementById('rmPass');p.type=p.type==='password'?'text':'password'">👁</button></span></label>
+      <label style="font-size:.8rem">Primary handler (gets the task + all-channel alerts)<select id="rmPrimary" style="${_rmInp()}">${primaryOpts}</select></label>
+      <label style="font-size:.8rem">Pod — others who also get notified &amp; can act
+        <div style="display:flex;flex-wrap:wrap;margin-top:.3rem;max-height:120px;overflow-y:auto;border:1px solid var(--nd-border);border-radius:8px;padding:.4rem .5rem">${podChecks||'<span style="color:var(--nd-text-muted);font-size:.78rem">No staff found</span>'}</div></label>
       <div style="display:flex;gap:.6rem">
         <label style="font-size:.8rem;flex:1">IMAP host<input id="rmHost" value="${m?esc(m.imap_host||'imap.gmail.com'):'imap.gmail.com'}" style="${_rmInp()}"></label>
         <label style="font-size:.8rem;width:110px">Port<input id="rmPort" type="number" value="${m?(m.imap_port||993):993}" style="${_rmInp()}"></label>
@@ -4126,18 +4135,24 @@ function radarEdit(id){
     {label:'Save', cls:'btn-primary', fn:()=>radarSave(id)},
   ]);
 }
-function _rmForm(){ return {
-  label: document.getElementById('rmLabel').value.trim(),
-  email_address: document.getElementById('rmEmail').value.trim(),
-  app_password: document.getElementById('rmPass').value,
-  imap_host: document.getElementById('rmHost').value.trim()||'imap.gmail.com',
-  imap_port: parseInt(document.getElementById('rmPort').value,10)||993 }; }
+function _rmForm(){
+  const primary = (document.getElementById('rmPrimary')||{}).value || '';
+  const others = Array.from(document.querySelectorAll('.rmPod:checked')).map(c=>c.value).filter(v=>v!==primary);
+  const pod = (primary?[primary]:[]).concat(others).join(',');
+  return {
+    label: document.getElementById('rmLabel').value.trim(),
+    email_address: document.getElementById('rmEmail').value.trim(),
+    app_password: document.getElementById('rmPass').value,
+    imap_host: document.getElementById('rmHost').value.trim()||'imap.gmail.com',
+    imap_port: parseInt(document.getElementById('rmPort').value,10)||993,
+    pod_staff_ids: pod }; }
 async function radarTestDrawer(){
   const f = _rmForm(); const out = document.getElementById('rmTestResult');
   if(!f.email_address || !f.app_password){ out.innerHTML='<span style="color:var(--nd-warning-text)">Enter the email and app-password first.</span>'; return; }
   out.innerHTML='<span style="color:var(--nd-text-muted)">Testing…</span>';
+  const t = {email_address:f.email_address, app_password:f.app_password, imap_host:f.imap_host, imap_port:f.imap_port};
   try {
-    const r = await API('/radar/mailboxes/test', {method:'POST', body:JSON.stringify(f)});
+    const r = await API('/radar/mailboxes/test', {method:'POST', body:JSON.stringify(t)});
     const d = await r.json();
     out.innerHTML = d.ok ? '<span style="color:var(--nd-success-text)">✓ Connected — mailbox reachable.</span>'
       : '<span style="color:var(--nd-danger-text)">✗ '+(d.status==='auth_failed'?'Wrong email/app-password, or IMAP is off in that Gmail.':esc(d.status||'Could not connect.'))+'</span>';
