@@ -188,3 +188,243 @@ async def test_mailbox(mailbox_id: int) -> tuple[bool, str]:
                                        mb.get("email_address"), pw)
     await set_sync_status(mailbox_id, "ok" if ok else status.split(":")[0], "" if ok else status)
     return (ok, status)
+
+
+# ── Radar config (priority senders + silence threshold) ──────────────────────
+async def get_config() -> dict:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT priority_senders, silence_days FROM nidaan_radar_config WHERE id=1")).fetchone()
+        if not row:
+            await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_radar_config (id, priority_senders, silence_days) "
+                "VALUES (1,'',5)")
+            await conn.commit()
+            return {"priority_senders": "", "silence_days": 5}
+        return dict(row)
+
+
+async def set_config(priority_senders: str, silence_days: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_radar_config (id, priority_senders, silence_days, updated_at) "
+            "VALUES (1,?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(id) DO UPDATE SET priority_senders=excluded.priority_senders, "
+            "silence_days=excluded.silence_days, updated_at=CURRENT_TIMESTAMP",
+            ((priority_senders or "")[:4000], max(1, min(int(silence_days or 5), 60))))
+        await conn.commit()
+
+
+def _parse_senders(blob: str) -> list[str]:
+    import re as _re
+    return [s.strip().lower() for s in _re.split(r"[,\n;]+", blob or "") if s.strip()]
+
+
+def _is_priority_sender(from_addr: str, senders: list[str]) -> bool:
+    fa = (from_addr or "").strip().lower()
+    dom = fa.split("@")[-1] if "@" in fa else fa
+    for s in senders:
+        s = s.lstrip("@").strip()
+        if not s:
+            continue
+        if fa == s or dom == s or dom.endswith("." + s):
+            return True
+    return False
+
+
+def _decide_flag(triage: dict, priority_sender: bool) -> str:
+    """🔴 red = act now · 🟡 amber = review · ⚪ green = auto-clear. Fail-safe: anything not clearly
+    noise defaults to amber (a human looks) — never auto-clear on doubt."""
+    cat = (triage.get("category") or "other").lower()
+    pri = (triage.get("priority") or "normal").lower()
+    if priority_sender or cat in ("authority", "legal", "court") or pri == "high":
+        return "red"
+    if cat in ("receipt", "marketing", "spam"):
+        return "green"
+    return "amber"
+
+
+# ── Incremental IMAP fetch (blocking; call via asyncio.to_thread) ────────────
+def _imap_fetch_new(host: str, port: int, email: str, password: str,
+                    last_uid: int, limit: int = 25) -> tuple[list, int, str, bool]:
+    """Fetch envelope + short snippet for messages with UID > last_uid. Returns
+    (messages, highest_uid, status, is_baseline). On the FIRST poll (last_uid<=0) we only record the
+    baseline UID and create NO items (don't flag years of pre-existing mail). Blocking; never raises."""
+    import re as _re
+    import imaplib
+    import email as _email
+    from email.utils import parsedate_to_datetime, parseaddr
+    from email.header import make_header, decode_header
+    M = None
+    out: list = []
+    try:
+        M = imaplib.IMAP4_SSL(host or DEFAULT_IMAP_HOST, int(port or DEFAULT_IMAP_PORT), timeout=25)
+        M.login(email, password)
+        typ, _ = M.select("INBOX", readonly=True)
+        if typ != "OK":
+            return ([], last_uid, "error:inbox", False)
+        typ, data = M.uid("search", None, "ALL")
+        if typ != "OK":
+            return ([], last_uid, "error:search", False)
+        uids = [int(x) for x in (data[0].split() if data and data[0] else [])]
+        if not uids:
+            return ([], last_uid, "ok", False)
+        high = max(uids)
+        if last_uid <= 0:
+            return ([], high, "ok", True)   # baseline only
+        new_uids = sorted(u for u in uids if u > last_uid)[-limit:]
+        for u in new_uids:
+            try:
+                typ, fdata = M.uid("fetch", str(u),
+                                   "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)] BODY.PEEK[1]<0.700>)")
+                if typ != "OK" or not fdata:
+                    continue
+                hdr_bytes, body_bytes = b"", b""
+                for part in fdata:
+                    if isinstance(part, tuple) and len(part) >= 2:
+                        marker = (part[0] or b"").upper()
+                        payload = part[1] or b""
+                        if b"HEADER" in marker:
+                            hdr_bytes = payload
+                        elif b"BODY[1]" in marker:
+                            body_bytes = payload
+                        elif not hdr_bytes:
+                            hdr_bytes = payload
+                msg = _email.message_from_bytes(hdr_bytes)
+                try:
+                    subj = str(make_header(decode_header(msg.get("Subject", "") or "")))[:300]
+                except Exception:
+                    subj = (msg.get("Subject", "") or "")[:300]
+                fname, faddr = parseaddr(msg.get("From", "") or "")
+                try:
+                    fname = str(make_header(decode_header(fname or "")))[:120]
+                except Exception:
+                    fname = (fname or "")[:120]
+                mid = (msg.get("Message-ID", "") or "").strip()[:300]
+                recv = None
+                try:
+                    dt = parsedate_to_datetime(msg.get("Date", ""))
+                    if dt:
+                        recv = dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    recv = None
+                try:
+                    snip = body_bytes.decode("utf-8", "ignore")
+                except Exception:
+                    snip = ""
+                snip = _re.sub(r"<[^>]+>", " ", snip)
+                snip = _re.sub(r"\s+", " ", snip).strip()[:400]
+                out.append({"uid": u, "message_id": mid, "from_addr": (faddr or "")[:160],
+                            "from_name": fname, "subject": subj, "snippet": snip, "received_at": recv})
+            except Exception:
+                continue
+        return (out, high, "ok", False)
+    except imaplib.IMAP4.error:
+        return ([], last_uid, "auth_failed", False)
+    except Exception as e:  # noqa: BLE001
+        return ([], last_uid, "error:" + str(e)[:150], False)
+    finally:
+        try:
+            if M is not None:
+                M.logout()
+        except Exception:
+            pass
+
+
+# ── Poll: fetch → AI triage → store as radar items ───────────────────────────
+async def poll_mailbox(mb: dict, senders: list[str]) -> int:
+    """Poll ONE mailbox: fetch new mail, AI-triage each, store flagged items, advance last_uid."""
+    import biz_ai as _ai
+    mid = mb["mailbox_id"]
+    try:
+        pw = decrypt_secret(mb.get("enc_password") or "")
+    except Exception:
+        await set_sync_status(mid, "error", "decrypt_failed")
+        return 0
+    msgs, high_uid, status, _baseline = await asyncio.to_thread(
+        _imap_fetch_new, mb.get("imap_host"), mb.get("imap_port"),
+        mb.get("email_address"), pw, int(mb.get("last_uid") or 0), 25)
+    if status != "ok":
+        await set_sync_status(mid, status.split(":")[0], status)
+        return 0
+    created = 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for m in msgs:
+            ps = _is_priority_sender(m["from_addr"], senders)
+            triage = await _ai.radar_triage_email(m["from_addr"], m["subject"], m["snippet"])
+            flag = _decide_flag(triage, ps)
+            try:
+                cur = await conn.execute(
+                    """INSERT OR IGNORE INTO nidaan_radar_items
+                         (mailbox_id, uid, message_id, from_addr, from_name, subject, snippet,
+                          received_at, flag, category, priority_sender, deadline, needs_action,
+                          ai_reason, ai_summary)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (mid, m["uid"], m["message_id"], m["from_addr"], m["from_name"], m["subject"],
+                     m["snippet"], m["received_at"], flag, triage["category"], 1 if ps else 0,
+                     triage["deadline"], 1 if triage["needs_response"] else 0,
+                     triage["reason"], triage["summary"]))
+                if cur.rowcount:
+                    created += 1
+            except Exception:
+                pass
+        await conn.execute(
+            "UPDATE nidaan_radar_mailboxes SET last_uid=?, last_sync_status='ok', "
+            "last_sync_error='', last_synced_at=CURRENT_TIMESTAMP WHERE mailbox_id=?",
+            (high_uid, mid))
+        await conn.commit()
+    return created
+
+
+async def poll_all_mailboxes() -> int:
+    """Worker entry point: poll every active mailbox (staggered), triage + store new items."""
+    cfg = await get_config()
+    senders = _parse_senders(cfg.get("priority_senders") or "")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        mbs = [dict(r) for r in await (await conn.execute(
+            "SELECT * FROM nidaan_radar_mailboxes WHERE is_active=1")).fetchall()]
+    total = 0
+    for mb in mbs:
+        try:
+            total += await poll_mailbox(mb, senders)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("radar poll_mailbox %s failed: %s", mb.get("mailbox_id"), e)
+        await asyncio.sleep(2)   # stagger — don't hammer Gmail
+    if mbs:
+        logger.info("Radar poll: %d mailbox(es), %d new item(s)", len(mbs), total)
+    return total
+
+
+# ── Read side (for the ops radar view) ───────────────────────────────────────
+async def list_items(flag: str = "", limit: int = 120) -> list[dict]:
+    where, params = [], []
+    if flag in ("red", "amber", "green"):
+        where.append("i.flag=?")
+        params.append(flag)
+    q = ("SELECT i.*, m.label AS mailbox_label, m.email_address AS mailbox_email "
+         "FROM nidaan_radar_items i JOIN nidaan_radar_mailboxes m ON m.mailbox_id=i.mailbox_id")
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += (" ORDER BY CASE i.flag WHEN 'red' THEN 0 WHEN 'amber' THEN 1 ELSE 2 END, "
+          "i.received_at DESC, i.item_id DESC LIMIT ?")
+    params.append(max(1, min(int(limit), 300)))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(q, params)).fetchall()]
+    for r in rows:
+        r["mailbox_email_masked"] = _mask_email(r.pop("mailbox_email", ""))
+    return rows
+
+
+async def radar_stats() -> dict:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "COALESCE(SUM(CASE WHEN flag='red' THEN 1 ELSE 0 END),0) AS red, "
+            "COALESCE(SUM(CASE WHEN flag='amber' THEN 1 ELSE 0 END),0) AS amber, "
+            "COALESCE(SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END),0) AS today "
+            "FROM nidaan_radar_items")).fetchone()
+    return dict(row) if row else {"total": 0, "red": 0, "amber": 0, "today": 0}

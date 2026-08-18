@@ -4005,16 +4005,19 @@ async function mbOpenRef(accountId){
 }
 window.mbOpenRef = mbOpenRef;
 
-// ══════════ EMAIL UPDATE RADAR — P1: mailbox config (admin+) ══════════
-let _radarMailboxes = [];
+// ══════════ EMAIL UPDATE RADAR (admin+) ══════════
+let _radarMailboxes = [], _radarItems = [], _radarStats = {}, _radarConfig = {}, _radarView = 'radar', _radarFlag = '';
 async function loadRadar(){
   const el = document.getElementById('panel-radar');
   el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>`;
-  let r;
-  try { r = await API('/radar/mailboxes'); } catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p></div>'; return; }
-  if(!r.ok){ el.innerHTML = `<div class="empty"><div class="ei">🔒</div><p>Not available for your role.</p></div>`; return; }
-  const d = await r.json();
-  _radarMailboxes = d.mailboxes || [];
+  try {
+    const [it, mb, cf] = await Promise.all([
+      API('/radar/items').then(r=>r.ok?r.json():{items:[],stats:{}}),
+      API('/radar/mailboxes').then(r=>r.ok?r.json():{mailboxes:[]}),
+      API('/radar/config').then(r=>r.ok?r.json():{})
+    ]);
+    _radarItems = it.items||[]; _radarStats = it.stats||{}; _radarMailboxes = mb.mailboxes||[]; _radarConfig = cf||{};
+  } catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p></div>'; return; }
   renderRadar();
 }
 function _radarStatusPill(s){
@@ -4022,8 +4025,44 @@ function _radarStatusPill(s){
   const m = map[s] || map.pending;
   return `<span style="color:${m[0]};font-weight:700;font-size:.75rem">${m[1]}</span>`;
 }
+function radarSetView(v){ _radarView=v; renderRadar(); }
+function radarSetFlag(f){ _radarFlag=f; renderRadar(); }
 function renderRadar(){
   const el = document.getElementById('panel-radar');
+  const tab=(v,lbl)=>`<div class="tab-pill ${_radarView===v?'active':''}" onclick="radarSetView('${v}')">${lbl}</div>`;
+  const head = `<div class="section-hdr"><div>
+      <div class="section-title">📨 Email Updates — Radar</div>
+      <div class="section-sub">Every customer mailbox watched in one place, so nobody opens them one by one. 🔴 act now · 🟡 review · ⚪ auto-cleared.</div>
+    </div><button class="btn-sm btn-ghost" onclick="radarPollNow(this)">🔄 Check now</button></div>
+    <div class="tab-row" style="margin-bottom:1rem">${tab('radar','🚨 Radar')}${tab('mailboxes','📮 Mailboxes')}${tab('settings','⚙️ Settings')}</div>`;
+  el.innerHTML = head + (_radarView==='mailboxes'?_renderRadarMailboxes():_radarView==='settings'?_renderRadarSettings():_renderRadarItems());
+}
+function _radarFlagDot(f){ return f==='red'?'🔴':(f==='green'?'⚪':'🟡'); }
+function _renderRadarItems(){
+  const s=_radarStats;
+  let items=_radarItems; if(_radarFlag) items=items.filter(i=>i.flag===_radarFlag);
+  const fTab=(v,lbl)=>`<div class="tab-pill ${_radarFlag===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('','All ('+(s.total||0)+')')}${fTab('red','🔴 Act now ('+(s.red||0)+')')}${fTab('amber','🟡 Review ('+(s.amber||0)+')')}</div>`;
+  if(!items.length) return filters+`<div class="empty"><div class="ei">🛰️</div><p>No updates in this view yet. New authority/insurer replies land here automatically once mailboxes are connected.</p></div>`;
+  const rows=items.map(i=>{
+    const mid=String(i.message_id||'').replace(/[<>]/g,'');
+    const dl = mid ? ('https://mail.google.com/mail/u/0/#search/'+encodeURIComponent('rfc822msgid:'+mid)) : '';
+    const bc = i.flag==='red'?'#f87171':(i.flag==='green'?'#94a3b8':'#fbbf24');
+    return `<div class="nd-card" style="padding:.7rem .9rem;margin-bottom:.55rem;border-left:3px solid ${bc}">
+      <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;font-size:.86rem">${_radarFlagDot(i.flag)} ${esc(i.subject||'(no subject)')}${i.priority_sender?' <span style="font-size:.66rem;color:var(--nd-danger-text)">priority sender</span>':''}</div>
+          <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${esc(i.from_name||i.from_addr||'')} · ${i.received_at?fmtDateTime(i.received_at):''}</div>
+          ${i.ai_summary?`<div style="font-size:.78rem;margin-top:.3rem">🤖 ${esc(i.ai_summary)}</div>`:''}
+          ${i.deadline?`<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.2rem">⏰ ${esc(i.deadline)}</div>`:''}
+          ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
+        </div>
+        ${dl?`<a href="${dl}" target="_blank" rel="noopener" class="btn-sm btn-ghost" style="white-space:nowrap;text-decoration:none">Open in Gmail →</a>`:''}
+      </div></div>`;
+  }).join('');
+  return filters+rows;
+}
+function _renderRadarMailboxes(){
   const rows = _radarMailboxes.map(m=>`<tr style="border-top:1px solid var(--nd-border)">
     <td style="padding:.55rem .7rem;font-weight:600">${esc(m.label||'—')}</td>
     <td style="padding:.55rem .7rem;font-size:.82rem">${esc(m.email_masked||m.email_address||'')}</td>
@@ -4034,12 +4073,7 @@ function renderRadar(){
       <button class="btn-sm btn-ghost" onclick="radarEdit(${m.mailbox_id})">Edit</button>
       <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="radarDelete(${m.mailbox_id})">Delete</button>
     </td></tr>`).join('');
-  el.innerHTML = `
-    <div class="section-hdr"><div>
-      <div class="section-title">📨 Email Updates — Radar</div>
-      <div class="section-sub">One place that watches every customer mailbox so nobody has to open them one by one. Add each customer's dedicated mailbox below — passwords are stored encrypted. Live triage &amp; flags arrive in the next update; this step sets the mailboxes up securely.</div>
-    </div></div>
-    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.8rem;color:var(--nd-text-muted)">
+  return `<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.8rem;color:var(--nd-text-muted)">
       <b>Setup, once per customer:</b> 1) customer creates a dedicated Gmail &amp; turns on 2-step verification. 2) they generate a 16-character <b>App Password</b> (Google → Security → App passwords). 3) enter the email + app-password here and click <b>Test Connection</b>.
     </div>
     <button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem">＋ Add mailbox</button>
@@ -4050,6 +4084,29 @@ function renderRadar(){
           <th style="padding:.6rem .7rem">Status</th><th style="padding:.6rem .7rem">Last checked</th><th style="padding:.6rem .7rem">Actions</th>
         </tr></thead><tbody>${rows}</tbody></table></div>`
       : `<div class="empty"><div class="ei">📭</div><p>No mailboxes yet. Add your first customer mailbox to start.</p></div>`}`;
+}
+function _renderRadarSettings(){
+  const c=_radarConfig||{};
+  return `<div class="nd-card" style="padding:1rem;max-width:660px">
+    <div style="font-weight:700;margin-bottom:.6rem">⚙️ Radar settings</div>
+    <label style="font-size:.82rem;display:block;margin-bottom:1rem">Priority senders — always flagged 🔴 no matter what the AI thinks. One per line: a domain (e.g. <code>example.gov.in</code>) or a full email address.
+      <textarea id="rsSenders" rows="5" style="${_rmInp()};font-family:monospace;font-size:.82rem">${esc(c.priority_senders||'')}</textarea></label>
+    <label style="font-size:.82rem;display:block;margin-bottom:.35rem">Silence threshold (days)
+      <input id="rsSilence" type="number" min="1" max="60" value="${c.silence_days||5}" style="${_rmInp()};max-width:120px"></label>
+    <div style="font-size:.74rem;color:var(--nd-text-muted);margin:.3rem 0 1rem">If an open case gets no priority-sender reply for this many days, the radar will raise a 🟡 "Chase" flag so a quiet case never slips through. (Chase flags activate in a later update.)</div>
+    <button class="btn btn-primary" onclick="radarSaveConfig(this)">Save settings</button>
+  </div>`;
+}
+async function radarSaveConfig(btn){
+  const payload={priority_senders:document.getElementById('rsSenders').value, silence_days:parseInt(document.getElementById('rsSilence').value,10)||5};
+  if(btn)btn.disabled=true;
+  try{ const r=await API('/radar/config',{method:'POST',body:JSON.stringify(payload)}); if(!r.ok){alert('Could not save.');} else {_radarConfig=payload; alert('Settings saved.');} }
+  catch(e){ alert('Could not save.'); } finally { if(btn)btn.disabled=false; }
+}
+async function radarPollNow(btn){
+  if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  try{ await API('/radar/poll',{method:'POST'}); await loadRadar(); }
+  catch(e){} finally { if(btn){btn.disabled=false;btn.textContent='🔄 Check now';} }
 }
 function _rmInp(){ return 'width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;margin-top:.2rem'; }
 function radarEdit(id){

@@ -1526,6 +1526,40 @@ async def init_db():
                 updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- Radar items: one row per NEW inbound email the poll captured + AI-triaged.
+            -- We keep envelope + a short snippet only (full body is read via the Gmail deep-link).
+            CREATE TABLE IF NOT EXISTS nidaan_radar_items (
+                item_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                mailbox_id      INTEGER NOT NULL,
+                uid             INTEGER,                    -- IMAP UID within the mailbox
+                message_id      TEXT DEFAULT '',            -- RFC822 Message-ID (Gmail deep-link)
+                from_addr       TEXT DEFAULT '',
+                from_name       TEXT DEFAULT '',
+                subject         TEXT DEFAULT '',
+                snippet         TEXT DEFAULT '',
+                received_at     TIMESTAMP,
+                flag            TEXT DEFAULT 'amber',       -- red | amber | green
+                category        TEXT DEFAULT '',
+                priority_sender INTEGER DEFAULT 0,
+                deadline        TEXT DEFAULT '',
+                needs_action    INTEGER DEFAULT 0,
+                ai_reason       TEXT DEFAULT '',
+                ai_summary      TEXT DEFAULT '',
+                status          TEXT DEFAULT 'new',         -- new | ack | responded | closed (P3)
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(mailbox_id, uid)
+            );
+            CREATE INDEX IF NOT EXISTS idx_radar_items_flag ON nidaan_radar_items(flag, created_at);
+            CREATE INDEX IF NOT EXISTS idx_radar_items_mailbox ON nidaan_radar_items(mailbox_id);
+
+            -- Radar config (single row): founder-managed priority senders + silence threshold.
+            CREATE TABLE IF NOT EXISTS nidaan_radar_config (
+                id               INTEGER PRIMARY KEY CHECK (id=1),
+                priority_senders TEXT DEFAULT '',           -- newline/comma domains+emails = always RED
+                silence_days     INTEGER DEFAULT 5,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Support-rep duty roster: a staffer is "on duty" when today is within [start,end].
             CREATE TABLE IF NOT EXISTS nidaan_support_reps (
                 rep_id      INTEGER PRIMARY KEY AUTOINCREMENT,

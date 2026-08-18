@@ -1468,6 +1468,61 @@ Respond with JSON ONLY:
 {{"answer": "<reply in the visitor's language>", "cta": "<trial|human|>", "escalate": <true|false>, "lead_name": "<name|>", "lead_contact": "<phone/email|>", "intent": "<cold|curious|hot|support>", "story_id": "<id|>"}}"""
 
 
+_RADAR_TRIAGE_PROMPT = """You triage ONE inbound email in a customer's insurance-claim mailbox for an
+Indian legal-consultancy ops team. The team fights rejected/underpaid insurance claims and corresponds
+with insurers and government grievance/ombudsman authorities on the customer's behalf.
+
+Decide, from the sender + subject + snippet, whether a HUMAN on the team must act — and how urgently.
+
+EMAIL
+From: {from_addr}
+Subject: {subject}
+Snippet: {snippet}
+
+Return JSON ONLY:
+{{"category":"<authority|insurer|legal|court|receipt|marketing|spam|other>",
+  "priority":"<high|normal|low>",
+  "needs_response": <true|false>,
+  "deadline":"<any date/hearing/deadline mentioned, else empty>",
+  "reason":"<one short sentence: why this classification>",
+  "summary":"<one short sentence: what this email is + what to do>"}}
+
+Rules:
+• A reply/notice/order from a government grievance/ombudsman authority, insurer claims dept, legal
+  notice, or court = high priority, needs_response usually true.
+• Receipts, delivery/read receipts, OTPs, promotions, newsletters, no-reply automated marketing = low,
+  needs_response false.
+• Pull out any explicit date/hearing/deadline into "deadline".
+• If genuinely unsure, lean toward needs_response true (a human should look)."""
+
+
+async def radar_triage_email(from_addr: str, subject: str, snippet: str) -> dict:
+    """Triage one customer-mailbox email → {category, priority, needs_response, deadline, reason,
+    summary}. FAIL-SAFE: on any error returns a 'needs a human' verdict (never silently clears)."""
+    prompt = _RADAR_TRIAGE_PROMPT.format(
+        from_addr=(from_addr or "")[:160], subject=(subject or "")[:200],
+        snippet=(snippet or "")[:600])
+    try:
+        raw = await _ask_gemini(prompt, json_mode=True)
+        data = _clean_json(raw)
+        cat = (data.get("category") or "other").strip().lower()
+        if cat not in ("authority", "insurer", "legal", "court", "receipt", "marketing", "spam", "other"):
+            cat = "other"
+        pri = (data.get("priority") or "normal").strip().lower()
+        if pri not in ("high", "normal", "low"):
+            pri = "normal"
+        return {"category": cat, "priority": pri,
+                "needs_response": bool(data.get("needs_response", False)),
+                "deadline": (data.get("deadline") or "").strip()[:120],
+                "reason": (data.get("reason") or "").strip()[:300],
+                "summary": (data.get("summary") or "").strip()[:300]}
+    except Exception as e:
+        logger.warning("Radar triage failed (%s): %s", (subject or "")[:40], e)
+        return {"category": "other", "priority": "normal", "needs_response": True,
+                "deadline": "", "reason": "Could not auto-classify — please review.",
+                "summary": "Needs a human to review."}
+
+
 async def sarathi_guide_reply(message: str, history: Optional[list] = None, lang: str = "",
                               facts_block: str = "", seen_stories: Optional[list] = None) -> dict:
     """Anonymous homepage guide for Sarathi-AI.com — bilingual, sales+support-aware. Answers product/

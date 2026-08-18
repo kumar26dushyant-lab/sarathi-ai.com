@@ -5798,6 +5798,50 @@ async def ops_radar_mailbox_delete(mailbox_id: int, request: Request):
     return {"ok": True}
 
 
+@app.get("/nidaan/ops/api/radar/items")
+async def ops_radar_items(request: Request, flag: str = "", limit: int = 120):
+    """Flagged radar items (newest, red-first) + counts. Admin+ (P3 adds staff-scoped views)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"items": await radar.list_items(flag, limit), "stats": await radar.radar_stats()}
+
+
+class _RadarConfigReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    priority_senders: str = Field("", max_length=4000)
+    silence_days: int = Field(5, ge=1, le=60)
+
+
+@app.get("/nidaan/ops/api/radar/config")
+async def ops_radar_config_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.get_config()
+
+
+@app.post("/nidaan/ops/api/radar/config")
+async def ops_radar_config_set(body: _RadarConfigReq, request: Request):
+    """Set priority-sender list (always-🔴 domains) + silence threshold. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    await radar.set_config(body.priority_senders, body.silence_days)
+    await _ops_audit(request, "radar.config", "radar", "1", f"silence_days={body.silence_days}")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/radar/poll")
+async def ops_radar_poll_now(request: Request):
+    """Manually trigger a poll of all mailboxes (for testing without waiting for the 15-min loop)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    created = await radar.poll_all_mailboxes()
+    return {"ok": True, "new_items": created}
+
+
 @app.get("/nidaan/ops/api/staff-business")
 async def ops_staff_business(request: Request):
     """Super-admin reconciliation: every staffer's referral business + commission owed."""
@@ -23341,6 +23385,20 @@ async def main():
                     logger.error("Branch unpaid sweep error: %s", e)
                 await asyncio.sleep(12 * 3600)  # twice daily
         asyncio.create_task(branch_unpaid_loop())
+
+        # Step 6g1b: Email Update Radar — poll customer mailboxes, AI-triage new mail into flagged
+        # radar items. Worker-only singleton; internally staggered; every 15 min.
+        async def radar_poll_loop():
+            await asyncio.sleep(360)  # let startup settle
+            while True:
+                try:
+                    await radar.poll_all_mailboxes()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar poll error: %s", e)
+                await asyncio.sleep(900)  # every 15 min
+        asyncio.create_task(radar_poll_loop())
 
         # Step 6g2: Support SLA — escalate to super-admins any human-requested support chat left
         # unanswered > 30 min during office hours (dashboard + push + email + Telegram). Idempotent
