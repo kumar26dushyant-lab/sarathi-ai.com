@@ -4216,18 +4216,19 @@ async function openClaimDrawer(claimId) {
       <div class="tl">${tlHtml}</div>
     </div>`;
 
-  // Load staff into the multi-select assign box (current assignees pre-checked)
+  // Load staff into the multi-select assign box (current assignees pre-checked).
+  // Use the all-staff /assignees list (via _loadAssigneesOnce) — NOT /staff, which is
+  // super_admin-only and used to leave admins (sub_super_admin) with an empty box, so they
+  // could see the assign UI but couldn't pick anyone. Now admins can assign claims like tasks.
   if (canAssign) {
-    const sr = await API('/staff');
-    if (sr.ok) {
-      const sd = await sr.json();
-      const box = document.getElementById('assignBox_'+c.claim_id);
-      const assigned = new Set((c.assignees||[]).map(a=>a.staff_id));
-      if (!assigned.size && c.assigned_to_staff_id) assigned.add(c.assigned_to_staff_id);
-      if (box) box.innerHTML = (sd.staff||[]).filter(s=>!s.deleted_at).map(s=>
-        `<label style="display:flex;align-items:center;gap:.45rem;font-size:.85rem;cursor:pointer;padding:.15rem 0"><input type="checkbox" class="assignChk_${c.claim_id}" value="${s.staff_id}" ${assigned.has(s.staff_id)?'checked':''}> ${esc(s.name)} <span style="font-size:.7rem;color:var(--nd-text-faint)">(${(s.role||'').replace(/_/g,' ')})</span></label>`).join('')
-        || '<span style="color:var(--nd-text-faint);font-size:.8rem">No staff found</span>';
-    }
+    let staffList = [];
+    try { staffList = await _loadAssigneesOnce(); } catch(e){}
+    const box = document.getElementById('assignBox_'+c.claim_id);
+    const assigned = new Set((c.assignees||[]).map(a=>a.staff_id));
+    if (!assigned.size && c.assigned_to_staff_id) assigned.add(c.assigned_to_staff_id);
+    if (box) box.innerHTML = (staffList||[]).filter(s=>!s.deleted_at).map(s=>
+      `<label style="display:flex;align-items:center;gap:.45rem;font-size:.85rem;cursor:pointer;padding:.15rem 0"><input type="checkbox" class="assignChk_${c.claim_id}" value="${s.staff_id}" ${assigned.has(s.staff_id)?'checked':''}> ${esc(s.name)} <span style="font-size:.7rem;color:var(--nd-text-faint)">(${(s.role||'').replace(/_/g,' ')})</span></label>`).join('')
+      || '<span style="color:var(--nd-text-faint);font-size:.8rem">No staff found</span>';
   }
 
   // Load tasks for this claim (Phase 5 — Tasks under Claims)
