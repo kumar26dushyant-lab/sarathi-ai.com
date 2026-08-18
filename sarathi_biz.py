@@ -9855,7 +9855,7 @@ async def sarathi_guide_ask(req: GuideAskReq, request: Request):
     # Capture the exchange so the team can read it in /superadmin → Support (was stateless before).
     # Best-effort: a persistence hiccup must never break the visitor's reply.
     try:
-        _asyncio.create_task(_persist_retail_chat(
+        asyncio.create_task(_persist_retail_chat(
             session_key=(req.session_key or "").strip(), user_msg=req.message,
             ai_answer=answer, escalate=escalate, lang=lang))
     except Exception as _pe:
