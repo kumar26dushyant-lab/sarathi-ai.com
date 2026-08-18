@@ -4006,17 +4006,18 @@ async function mbOpenRef(accountId){
 window.mbOpenRef = mbOpenRef;
 
 // ══════════ EMAIL UPDATE RADAR (admin+) ══════════
-let _radarMailboxes = [], _radarItems = [], _radarStats = {}, _radarConfig = {}, _radarView = 'radar', _radarFlag = '';
+let _radarMailboxes = [], _radarItems = [], _radarStats = {}, _radarConfig = {}, _radarMetrics = {}, _radarView = 'radar', _radarFlag = '';
 async function loadRadar(){
   const el = document.getElementById('panel-radar');
   el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>`;
   try {
-    const [it, mb, cf] = await Promise.all([
+    const [it, mb, cf, mx] = await Promise.all([
       API('/radar/items').then(r=>r.ok?r.json():{items:[],stats:{}}),
       API('/radar/mailboxes').then(r=>r.ok?r.json():{mailboxes:[]}),
-      API('/radar/config').then(r=>r.ok?r.json():{})
+      API('/radar/config').then(r=>r.ok?r.json():{}),
+      API('/radar/metrics').then(r=>r.ok?r.json():{})
     ]);
-    _radarItems = it.items||[]; _radarStats = it.stats||{}; _radarMailboxes = mb.mailboxes||[]; _radarConfig = cf||{};
+    _radarItems = it.items||[]; _radarStats = it.stats||{}; _radarMailboxes = mb.mailboxes||[]; _radarConfig = cf||{}; _radarMetrics = mx||{};
   } catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p></div>'; return; }
   renderRadar();
 }
@@ -4038,12 +4039,16 @@ function renderRadar(){
   el.innerHTML = head + (_radarView==='mailboxes'?_renderRadarMailboxes():_radarView==='settings'?_renderRadarSettings():_renderRadarItems());
 }
 function _radarFlagDot(f){ return f==='red'?'🔴':(f==='green'?'⚪':'🟡'); }
+function _mTile(label,val,sub){ return `<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.6rem .8rem"><div style="font-size:1.3rem;font-weight:800">${val}</div><div style="font-size:.72rem;color:var(--nd-text-muted)">${label}${sub?' · '+sub:''}</div></div>`; }
 function _renderRadarItems(){
-  const s=_radarStats;
-  let items=_radarItems; if(_radarFlag) items=items.filter(i=>i.flag===_radarFlag);
+  const s=_radarStats, mx=_radarMetrics;
+  let items=_radarItems;
+  if(_radarFlag==='deadline') items=items.filter(i=>i.deadline);
+  else if(_radarFlag) items=items.filter(i=>i.flag===_radarFlag);
   const fTab=(v,lbl)=>`<div class="tab-pill ${_radarFlag===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
-  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('','All ('+(s.total||0)+')')}${fTab('red','🔴 Act now ('+(s.red||0)+')')}${fTab('amber','🟡 Review ('+(s.amber||0)+')')}</div>`;
-  if(!items.length) return filters+`<div class="empty"><div class="ei">🛰️</div><p>No updates in this view yet. New authority/insurer replies land here automatically once mailboxes are connected.</p></div>`;
+  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled, no human')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('New today',(mx.today||0),'')}${_mTile('Deadlines',(mx.with_deadline||0),'')}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('','All ('+(s.total||0)+')')}${fTab('red','🔴 Act now ('+(s.red||0)+')')}${fTab('amber','🟡 Review ('+(s.amber||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}</div>`;
+  if(!items.length) return metricStrip+filters+`<div class="empty"><div class="ei">🛰️</div><p>No updates in this view yet. New authority/insurer replies land here automatically once mailboxes are connected.</p></div>`;
   const rows=items.map(i=>{
     const mid=String(i.message_id||'').replace(/[<>]/g,'');
     const dl = mid ? ('https://mail.google.com/mail/u/0/#search/'+encodeURIComponent('rfc822msgid:'+mid)) : '';
@@ -4060,7 +4065,7 @@ function _renderRadarItems(){
         ${dl?`<a href="${dl}" target="_blank" rel="noopener" class="btn-sm btn-ghost" style="white-space:nowrap;text-decoration:none">Open in Gmail →</a>`:''}
       </div></div>`;
   }).join('');
-  return filters+rows;
+  return metricStrip+filters+rows;
 }
 function _renderRadarMailboxes(){
   const rows = _radarMailboxes.map(m=>`<tr style="border-top:1px solid var(--nd-border)">

@@ -1523,6 +1523,7 @@ async def init_db():
                 pod              TEXT DEFAULT '',           -- free-text pod label (optional)
                 pod_staff_ids    TEXT DEFAULT '',           -- comma list of staff_ids on this mailbox
                 open_task_id     INTEGER,                   -- current open radar-task for this case
+                last_chase_at    TIMESTAMP,                 -- last silence 'Chase' nudge (idempotency)
                 created_by       INTEGER,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -2077,6 +2078,11 @@ async def init_db():
             pass
         try:
             await conn.execute("ALTER TABLE nidaan_radar_items ADD COLUMN quick_task_id INTEGER")
+        except Exception:
+            pass
+        # Radar P4 — silence 'Chase' idempotency: when we last nudged this quiet case.
+        try:
+            await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN last_chase_at TIMESTAMP")
         except Exception:
             pass
         # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a

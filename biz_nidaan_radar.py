@@ -549,3 +549,103 @@ async def ensure_task_for_item(mailbox_id: int, item_id: int, flag: str, subject
             logger.warning("radar task notify failed: %s", e)
     except Exception as e:  # noqa: BLE001
         logger.warning("ensure_task_for_item error: %s", e)
+
+
+# ── P4: silence 'Chase' detection + efficiency metrics ───────────────────────
+def _older_than_days(ts, days: int, default: bool = False) -> bool:
+    if not ts:
+        return default
+    from datetime import datetime, timedelta
+    dt = None
+    s = str(ts).replace("T", " ").split(".")[0]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(s[:19] if fmt.endswith("%S") else s[:10], fmt)
+            break
+        except Exception:
+            continue
+    if dt is None:
+        return default
+    return (datetime.utcnow() - dt) >= timedelta(days=int(days))
+
+
+async def run_silence_sweep() -> int:
+    """For each active mailbox with an OPEN case, if no inbound update for silence_days days,
+    raise a 🟡 'Chase' note on its task + re-notify (once per silence window). Never raises."""
+    try:
+        cfg = await get_config()
+        days = int(cfg.get("silence_days") or 5)
+        import biz_nidaan as _nid
+        import biz_nidaan_notifications as _nnot
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            mbs = [dict(r) for r in await (await conn.execute(
+                "SELECT * FROM nidaan_radar_mailboxes "
+                "WHERE is_active=1 AND open_task_id IS NOT NULL")).fetchall()]
+        chased = 0
+        for mb in mbs:
+            try:
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    conn.row_factory = aiosqlite.Row
+                    row = await (await conn.execute(
+                        "SELECT MAX(received_at) AS last_in, MAX(created_at) AS last_seen "
+                        "FROM nidaan_radar_items WHERE mailbox_id=?", (mb["mailbox_id"],))).fetchone()
+                last = (row["last_in"] or row["last_seen"]) if row else None
+                # only chase a case that's still open AND genuinely quiet AND not chased recently
+                if not _older_than_days(last, days, default=False):
+                    continue
+                allow = (not mb.get("last_chase_at")) or _older_than_days(mb.get("last_chase_at"), days, default=True)
+                if not allow:
+                    continue
+                qt = await _nid.get_quick_task(mb["open_task_id"])
+                if not qt or (qt.get("status") or "").lower() in _TASK_CLOSED:
+                    continue
+                actor = mb.get("created_by") or qt.get("assigned_to_staff_id")
+                try:
+                    await _nid.add_quick_task_note(
+                        quick_task_id=mb["open_task_id"], staff_id=actor,
+                        note=f"🟡 Chase: no reply on this case for {days}+ days — consider following up.")
+                except Exception:
+                    pass
+                try:
+                    await _nnot.on_quick_task_assigned(qt)
+                except Exception:
+                    pass
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    await conn.execute(
+                        "UPDATE nidaan_radar_mailboxes SET last_chase_at=CURRENT_TIMESTAMP "
+                        "WHERE mailbox_id=?", (mb["mailbox_id"],))
+                    await conn.commit()
+                chased += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning("silence sweep mailbox %s: %s", mb.get("mailbox_id"), e)
+        if chased:
+            logger.info("Radar silence sweep: %d chase(s)", chased)
+        return chased
+    except Exception as e:  # noqa: BLE001
+        logger.warning("run_silence_sweep error: %s", e)
+        return 0
+
+
+async def radar_metrics() -> dict:
+    """Efficiency metrics — auto-triage rate is the 5→1 proof (share of mail auto-cleared)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        mb = dict(await (await conn.execute(
+            "SELECT COUNT(*) AS active, "
+            "COALESCE(SUM(CASE WHEN last_sync_status='ok' THEN 1 ELSE 0 END),0) AS ok "
+            "FROM nidaan_radar_mailboxes WHERE is_active=1")).fetchone())
+        it = dict(await (await conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "COALESCE(SUM(CASE WHEN flag='red' THEN 1 ELSE 0 END),0) AS red, "
+            "COALESCE(SUM(CASE WHEN flag='amber' THEN 1 ELSE 0 END),0) AS amber, "
+            "COALESCE(SUM(CASE WHEN flag='green' THEN 1 ELSE 0 END),0) AS green, "
+            "COALESCE(SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END),0) AS today, "
+            "COALESCE(SUM(CASE WHEN COALESCE(deadline,'')<>'' THEN 1 ELSE 0 END),0) AS with_deadline "
+            "FROM nidaan_radar_items")).fetchone())
+    total = it["total"] or 0
+    return {"mailboxes_active": mb["active"], "mailboxes_ok": mb["ok"],
+            "coverage_pct": round(mb["ok"] / mb["active"] * 100) if mb["active"] else 0,
+            "total": total, "red": it["red"], "amber": it["amber"], "green": it["green"],
+            "today": it["today"], "with_deadline": it["with_deadline"],
+            "auto_triage_pct": round(it["green"] / total * 100) if total else 0}

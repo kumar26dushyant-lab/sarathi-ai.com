@@ -5844,6 +5844,15 @@ async def ops_radar_poll_now(request: Request):
     return {"ok": True, "new_items": created}
 
 
+@app.get("/nidaan/ops/api/radar/metrics")
+async def ops_radar_metrics(request: Request):
+    """Efficiency metrics (auto-triage rate = the 5→1 proof, coverage, backlog). Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.radar_metrics()
+
+
 @app.get("/nidaan/ops/api/staff-business")
 async def ops_staff_business(request: Request):
     """Super-admin reconciliation: every staffer's referral business + commission owed."""
@@ -23401,6 +23410,20 @@ async def main():
                     logger.error("Radar poll error: %s", e)
                 await asyncio.sleep(900)  # every 15 min
         asyncio.create_task(radar_poll_loop())
+
+        # Step 6g1c: Email Radar — silence 'Chase' sweep: nudge open cases that have gone quiet past
+        # the superadmin-set threshold. Worker-only singleton, every 6h.
+        async def radar_silence_loop():
+            await asyncio.sleep(1800)  # let startup settle
+            while True:
+                try:
+                    await radar.run_silence_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar silence sweep error: %s", e)
+                await asyncio.sleep(6 * 3600)  # every 6h
+        asyncio.create_task(radar_silence_loop())
 
         # Step 6g2: Support SLA — escalate to super-admins any human-requested support chat left
         # unanswered > 30 min during office hours (dashboard + push + email + Telegram). Idempotent
