@@ -32,6 +32,13 @@ a{color:var(--nd-cyan-text);text-decoration:none}
 button{cursor:pointer;font-family:inherit}
 input,select,textarea{font-family:inherit}
 
+/* ── Pill tabs (radar views, flag filters, etc.) — clearly clickable ── */
+.tab-row{display:flex;flex-wrap:wrap;gap:.4rem}
+.tab-pill{cursor:pointer;user-select:none;padding:.42rem .85rem;border-radius:999px;font-size:.82rem;font-weight:600;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);color:var(--nd-text-secondary);transition:background .15s,border-color .15s,color .15s;white-space:nowrap;line-height:1.2}
+.tab-pill:hover{background:var(--nd-bg-surface-3);border-color:var(--nd-border-strong);color:var(--nd-text-primary)}
+.tab-pill.active{background:linear-gradient(135deg,#7c3aed,#22d3ee);border-color:transparent;color:#fff}
+details>summary{cursor:pointer}
+
 /* ── TOPBAR ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1.5rem;background:var(--nd-bg-elev-blur);border-bottom:1px solid var(--nd-border);position:sticky;top:0;z-index:80;gap:.75rem}
 /* App feel: when installed, keep the top bar clear of the notch/status bar and the
