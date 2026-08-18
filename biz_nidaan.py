@@ -5984,6 +5984,7 @@ async def get_claims_ops(
                     COALESCE(NULLIF(c.branch_code,''), a.branch_code) AS branch_code,
                     sub.plan AS account_plan,
                     s.name AS assigned_staff_name,
+                    rst.name AS ref_staff_name, rbr.name AS ref_branch_name,
                     (SELECT COUNT(*) FROM nidaan_followups f
                      WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks,
                     (SELECT COUNT(*) FROM nidaan_claim_notes cn
@@ -5994,12 +5995,26 @@ async def get_claims_ops(
                JOIN nidaan_accounts a ON a.account_id = c.account_id
                LEFT JOIN nidaan_subscriptions sub ON sub.account_id = a.account_id AND sub.status = 'active'
                LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
+               LEFT JOIN nidaan_staff rst ON UPPER(rst.referral_code)=UPPER(COALESCE(NULLIF(c.branch_code,''), a.branch_code))
+                   AND COALESCE(NULLIF(c.branch_code,''), a.branch_code) <> ''
+               LEFT JOIN nidaan_branches rbr ON UPPER(rbr.branch_code)=UPPER(COALESCE(NULLIF(c.branch_code,''), a.branch_code))
+                   AND COALESCE(NULLIF(c.branch_code,''), a.branch_code) <> ''
                {where}
                ORDER BY (c.payment_status='unpaid_lead') ASC, c.created_at DESC
                LIMIT ? OFFSET ?""",
             [staff_id, staff_id] + params + [limit, offset],
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+        # Resolve the attribution code → a human referrer (staff name / branch name), so the
+        # L2 (and other) lists can show WHO brought/raised the claim, not just a code.
+        for r in rows:
+            if r.get("ref_staff_name"):
+                r["ref_kind"], r["ref_name"] = "staff", r["ref_staff_name"]
+            elif r.get("branch_code") and r.get("ref_branch_name") is not None:
+                r["ref_kind"], r["ref_name"] = "branch", (r["ref_branch_name"] or "")
+            else:
+                r["ref_kind"], r["ref_name"] = "", ""
+        return rows
 
 
 async def assign_claim_to_staff(

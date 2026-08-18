@@ -3372,7 +3372,7 @@ async function loadOutcomeClaims(key, outcome, title, sub){
   const el = document.getElementById('panel-'+key);
   const isL2 = key==='l2claims';
   el.innerHTML = `<div class="section-hdr"><div><div class="section-title">${title}</div><div class="section-sub">${sub}</div></div>
-      ${isL2?`<button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_reloadL2()">🔄 Refresh</button>`:''}</div>
+      ${isL2?`<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="exportL2CSV()">⬇ CSV</button><button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_reloadL2()">🔄 Refresh</button></div>`:''}</div>
     ${isL2?'<div id="oc_l2claims_metrics" style="margin:.2rem 0 .7rem"></div>':''}
     <div class="filter-bar" style="flex-wrap:wrap;gap:.4rem">
       <input id="oc_${key}_s" placeholder="🔍 Search name / phone / policy / claim #…" oninput="_renderOutcome('${key}')" style="flex:1;min-width:170px">
@@ -3427,7 +3427,7 @@ function _renderOutcome(key){
   }
   if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims match.</p></div>'; return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Advisor / Branch</th><th>Delivered</th></tr></thead><tbody>'
+    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Subscriber / Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
         if(isL2){
@@ -3448,7 +3448,9 @@ function _renderOutcome(key){
         + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
              + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
              + csCell:'')
-        + `<td>${c.origin==='branch'?('🏢 Branch '+esc(c.branch_code||'')):esc(c.owner_name||'—')}</td>
+        + `<td style="font-size:.78rem">${c.origin==='branch'
+            ? `<span style="color:var(--nd-purple-text);font-weight:700">${c.ref_kind==='staff'?'👤':'🏢'} ${esc(c.ref_name||('Branch '+(c.branch_code||'')))}</span><br><span style="font-size:.66rem;color:var(--nd-text-faint)">raised · ${esc(c.branch_code||'—')}</span>`
+            : `<span style="font-weight:600">${esc(c.owner_name||'—')}</span>${(c.ref_name||c.branch_code)?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${c.ref_kind==='staff'?'👤 staff':(c.ref_kind==='branch'?'🏢 branch':'ref')}: ${esc(c.ref_name||c.branch_code)}${c.branch_code?(' · '+esc(c.branch_code)):''}</span>`:''}`}</td>
         <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
       </tr>`;}).join('') + '</tbody></table></div>';
 }
@@ -4591,7 +4593,10 @@ async function loadAccounts() {
   el.innerHTML = `
     <div class="section-hdr">
       <div><div class="section-title">Advisor Accounts</div><div class="section-sub">Subscribers, ₹499 one-time &amp; leads — with plan usage &amp; caps</div></div>
-      ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="exportAccountsCSV()">⬇ CSV</button>
+        ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
+      </div>
     </div>
     ${_role==='super_admin'?`<div id="accBulkBar" style="display:none;align-items:center;gap:.75rem;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.35);border-radius:10px;padding:.5rem .85rem;margin-bottom:.75rem">
       <span style="font-size:.85rem;color:var(--nd-danger-text)"><b id="accSelCount">0</b> selected</span>
@@ -4630,7 +4635,43 @@ function renderAccSegBar(){
   }).join('');
 }
 function segAccounts(seg){ window._accSeg = seg; renderAccSegBar(); applyAccFilters(); }
-function filterAccounts(q){ window._accQuery = q; applyAccFilters(); }
+let _accSearchTimer;
+function filterAccounts(q){
+  window._accQuery = q;
+  // Debounce — re-filtering 500 rows on EVERY keystroke made the box feel like it
+  // accepted one letter at a time. Wait until typing pauses, then filter once.
+  clearTimeout(_accSearchTimer);
+  _accSearchTimer = setTimeout(applyAccFilters, 250);
+}
+// ── CSV export (client-side; no server round-trip) ──────────────────────────
+function _csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function opsDownloadCSV(filename, rows){
+  const data = rows.map(r=>r.map(_csvCell).join(',')).join('\n');
+  const blob = new Blob(['﻿'+data], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+function exportAccountsCSV(){
+  const list = window._allAccounts||[];
+  const rows = [['#','Name','Firm','Email','Phone','Referred by','Ref code','Type','Status','Joined']]
+    .concat(list.map(a=>[a.account_id, a.owner_name, a.firm_name||'', a.email||'', a.phone||'',
+      a.ref_name||'', a.branch_code||'', a.account_type||'', a.status||'active', a.created_at||'']));
+  opsDownloadCSV('nidaan-accounts_'+new Date().toISOString().slice(0,10)+'.csv', rows);
+}
+function exportL2CSV(){
+  const list = _outcomeCache['l2claims']||[];
+  const rows = [['Claim #','Insured','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber / Referred by','Ref code','Delivered']]
+    .concat(list.map(c=>{
+      const who = c.origin==='branch' ? (c.ref_name||('Branch '+(c.branch_code||'')))
+                : ((c.owner_name||'') + (c.ref_name?(' (ref: '+c.ref_name+')'):''));
+      const paid = (c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription')?'Paid':'Due';
+      return [c.claim_id, c.insured_name||'', c.insured_phone||'', c.claim_type||'', c.disputed_amount||0,
+        paid, c.status||'', c.claimshield_case_id||'', who, c.branch_code||'',
+        (c.review_delivered_at||c.last_status_at||c.created_at||'')];
+    }));
+  opsDownloadCSV('nidaan-L2-claims_'+new Date().toISOString().slice(0,10)+'.csv', rows);
+}
 function applyAccFilters(){
   const q = (window._accQuery||'').toLowerCase();
   const seg = window._accSeg||'all';
