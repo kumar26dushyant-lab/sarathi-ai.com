@@ -1504,6 +1504,28 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_retail_chat_threads_last
                 ON retail_chat_threads(status, last_at);
 
+            -- Email Update Radar (NidaanPartner) — per-customer Gmail mailbox vault.
+            -- App-password is Fernet-encrypted at rest; never returned by any API.
+            -- Forward-compatible columns (last_uid, pod) power later poll/assignment phases.
+            CREATE TABLE IF NOT EXISTS nidaan_radar_mailboxes (
+                mailbox_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                label            TEXT DEFAULT '',            -- customer/case name shown in UI
+                account_id       INTEGER,                   -- optional link to nidaan_accounts
+                email_address    TEXT NOT NULL UNIQUE,
+                enc_password     TEXT NOT NULL,             -- Fernet-encrypted app password
+                imap_host        TEXT DEFAULT 'imap.gmail.com',
+                imap_port        INTEGER DEFAULT 993,
+                is_active        INTEGER DEFAULT 1,
+                last_sync_status TEXT DEFAULT 'pending',    -- pending | ok | auth_failed | error
+                last_sync_error  TEXT DEFAULT '',
+                last_synced_at   TIMESTAMP,
+                last_uid         INTEGER DEFAULT 0,         -- highest IMAP UID seen (incremental poll)
+                pod              TEXT DEFAULT '',           -- pod assignment (later phase)
+                created_by       INTEGER,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Support-rep duty roster: a staffer is "on duty" when today is within [start,end].
             CREATE TABLE IF NOT EXISTS nidaan_support_reps (
                 rep_id      INTEGER PRIMARY KEY AUTOINCREMENT,

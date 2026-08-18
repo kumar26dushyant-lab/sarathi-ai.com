@@ -411,6 +411,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
+      <div id="panel-radar" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
       <div id="panel-l2claims" class="panel" style="display:none"></div>
       <div id="panel-archived" class="panel" style="display:none"></div>
@@ -598,7 +599,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','support','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','overview','support','radar','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -903,6 +904,7 @@ function buildSidebar() {
     {id:'tasks',      label:'✅ Tasks',         minRank:0},
     {id:'overview',   label:'📊 Claims Dashboard', minRank:0},
     {id:'support',    label:'💬 Support',      minRank:0},
+    {id:'radar',      label:'📨 Updates',      minRank:1},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'l2claims',   label:'⚖️ L2 Claims',    minRank:1},
     {id:'archived',   label:'🗄️ Archived',     minRank:1},
@@ -959,6 +961,7 @@ function showPanel(id, fromHistory) {
     overview: loadOverview,
     tasks: loadTasks,
     support: loadSupport,
+    radar: loadRadar,
     claims: loadClaims,
     l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
@@ -4001,6 +4004,117 @@ async function mbOpenRef(accountId){
     <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.6rem">${hi?'गोपनीयता के लिए ग्राहक का फ़ोन छिपाया गया है।':'Customer phone is masked for privacy.'}</div>`;
 }
 window.mbOpenRef = mbOpenRef;
+
+// ══════════ EMAIL UPDATE RADAR — P1: mailbox config (admin+) ══════════
+let _radarMailboxes = [];
+async function loadRadar(){
+  const el = document.getElementById('panel-radar');
+  el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>`;
+  let r;
+  try { r = await API('/radar/mailboxes'); } catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p></div>'; return; }
+  if(!r.ok){ el.innerHTML = `<div class="empty"><div class="ei">🔒</div><p>Not available for your role.</p></div>`; return; }
+  const d = await r.json();
+  _radarMailboxes = d.mailboxes || [];
+  renderRadar();
+}
+function _radarStatusPill(s){
+  const map = { ok:['var(--nd-success-text)','Connected ✓'], auth_failed:['var(--nd-danger-text)','Auth failed'], error:['var(--nd-danger-text)','Error'], pending:['var(--nd-text-faint)','Not tested'] };
+  const m = map[s] || map.pending;
+  return `<span style="color:${m[0]};font-weight:700;font-size:.75rem">${m[1]}</span>`;
+}
+function renderRadar(){
+  const el = document.getElementById('panel-radar');
+  const rows = _radarMailboxes.map(m=>`<tr style="border-top:1px solid var(--nd-border)">
+    <td style="padding:.55rem .7rem;font-weight:600">${esc(m.label||'—')}</td>
+    <td style="padding:.55rem .7rem;font-size:.82rem">${esc(m.email_masked||m.email_address||'')}</td>
+    <td style="padding:.55rem .7rem">${_radarStatusPill(m.last_sync_status)}${m.last_sync_error?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${esc(m.last_sync_error)}</span>`:''}</td>
+    <td style="padding:.55rem .7rem;font-size:.75rem;color:var(--nd-text-faint)">${m.last_synced_at?fmtDateTime(m.last_synced_at):'—'}</td>
+    <td style="padding:.55rem .7rem;white-space:nowrap">
+      <button class="btn-sm btn-ghost" onclick="radarTest(${m.mailbox_id},this)">Test</button>
+      <button class="btn-sm btn-ghost" onclick="radarEdit(${m.mailbox_id})">Edit</button>
+      <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="radarDelete(${m.mailbox_id})">Delete</button>
+    </td></tr>`).join('');
+  el.innerHTML = `
+    <div class="section-hdr"><div>
+      <div class="section-title">📨 Email Updates — Radar</div>
+      <div class="section-sub">One place that watches every customer mailbox so nobody has to open them one by one. Add each customer's dedicated mailbox below — passwords are stored encrypted. Live triage &amp; flags arrive in the next update; this step sets the mailboxes up securely.</div>
+    </div></div>
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.8rem;color:var(--nd-text-muted)">
+      <b>Setup, once per customer:</b> 1) customer creates a dedicated Gmail &amp; turns on 2-step verification. 2) they generate a 16-character <b>App Password</b> (Google → Security → App passwords). 3) enter the email + app-password here and click <b>Test Connection</b>.
+    </div>
+    <button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem">＋ Add mailbox</button>
+    ${_radarMailboxes.length?`<div style="overflow-x:auto;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px">
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="text-align:left;color:var(--nd-text-muted)">
+          <th style="padding:.6rem .7rem">Customer</th><th style="padding:.6rem .7rem">Mailbox</th>
+          <th style="padding:.6rem .7rem">Status</th><th style="padding:.6rem .7rem">Last checked</th><th style="padding:.6rem .7rem">Actions</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="empty"><div class="ei">📭</div><p>No mailboxes yet. Add your first customer mailbox to start.</p></div>`}`;
+}
+function _rmInp(){ return 'width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;margin-top:.2rem'; }
+function radarEdit(id){
+  const m = id ? _radarMailboxes.find(x=>x.mailbox_id===id) : null;
+  const body = `<div style="display:flex;flex-direction:column;gap:.7rem">
+      <label style="font-size:.8rem">Customer / case name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. Ramesh Kumar" style="${_rmInp()}"></label>
+      <label style="font-size:.8rem">Customer's dedicated Gmail<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="customer.case@gmail.com" style="${_rmInp()}"></label>
+      <label style="font-size:.8rem">App password (16 chars)<span style="display:flex;gap:.4rem;margin-top:.2rem"><input id="rmPass" type="password" placeholder="${m?'•••• (leave blank to keep current)':'xxxx xxxx xxxx xxxx'}" style="${_rmInp()};margin-top:0;flex:1"><button type="button" class="btn-sm btn-ghost" onclick="var p=document.getElementById('rmPass');p.type=p.type==='password'?'text':'password'">👁</button></span></label>
+      <div style="display:flex;gap:.6rem">
+        <label style="font-size:.8rem;flex:1">IMAP host<input id="rmHost" value="${m?esc(m.imap_host||'imap.gmail.com'):'imap.gmail.com'}" style="${_rmInp()}"></label>
+        <label style="font-size:.8rem;width:110px">Port<input id="rmPort" type="number" value="${m?(m.imap_port||993):993}" style="${_rmInp()}"></label>
+      </div>
+      <div id="rmTestResult" style="font-size:.82rem;min-height:1.1rem"></div>
+    </div>`;
+  openModal(m?'Edit mailbox':'Add mailbox', body, [
+    {label:'Test Connection', cls:'btn-ghost', fn:radarTestDrawer},
+    {label:'Save', cls:'btn-primary', fn:()=>radarSave(id)},
+  ]);
+}
+function _rmForm(){ return {
+  label: document.getElementById('rmLabel').value.trim(),
+  email_address: document.getElementById('rmEmail').value.trim(),
+  app_password: document.getElementById('rmPass').value,
+  imap_host: document.getElementById('rmHost').value.trim()||'imap.gmail.com',
+  imap_port: parseInt(document.getElementById('rmPort').value,10)||993 }; }
+async function radarTestDrawer(){
+  const f = _rmForm(); const out = document.getElementById('rmTestResult');
+  if(!f.email_address || !f.app_password){ out.innerHTML='<span style="color:var(--nd-warning-text)">Enter the email and app-password first.</span>'; return; }
+  out.innerHTML='<span style="color:var(--nd-text-muted)">Testing…</span>';
+  try {
+    const r = await API('/radar/mailboxes/test', {method:'POST', body:JSON.stringify(f)});
+    const d = await r.json();
+    out.innerHTML = d.ok ? '<span style="color:var(--nd-success-text)">✓ Connected — mailbox reachable.</span>'
+      : '<span style="color:var(--nd-danger-text)">✗ '+(d.status==='auth_failed'?'Wrong email/app-password, or IMAP is off in that Gmail.':esc(d.status||'Could not connect.'))+'</span>';
+  } catch(e){ out.innerHTML='<span style="color:var(--nd-danger-text)">Test failed.</span>'; }
+}
+async function radarSave(id){
+  const f = _rmForm();
+  if(!f.email_address){ alert('Customer email is required.'); return; }
+  if(!id && !f.app_password){ alert('App password is required for a new mailbox.'); return; }
+  const payload = Object.assign({mailbox_id: id||null, is_active:true, pod:''}, f);
+  try {
+    const r = await API('/radar/mailboxes', {method:'POST', body:JSON.stringify(payload)});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert(e.detail||'Could not save.'); return; }
+    closeModal(); loadRadar();
+  } catch(e){ alert('Could not save.'); }
+}
+async function radarTest(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='Testing…'; }
+  try {
+    const r = await API('/radar/mailboxes/'+id+'/test', {method:'POST'});
+    const d = await r.json(); loadRadar();
+    if(!d.ok) alert(d.status==='auth_failed'?'Auth failed — the app-password may be wrong or expired.':(d.status||'Could not connect.'));
+  } catch(e){ if(btn){ btn.disabled=false; btn.textContent='Test'; } }
+}
+async function radarDelete(id){
+  const m = _radarMailboxes.find(x=>x.mailbox_id===id);
+  if(!confirm('Remove '+((m&&m.label)||'this mailbox')+' from the radar? This deletes its stored credentials.')) return;
+  try {
+    const r = await API('/radar/mailboxes/'+id, {method:'DELETE'});
+    if(!r.ok){ alert('Could not delete.'); return; }
+    loadRadar();
+  } catch(e){ alert('Could not delete.'); }
+}
+window.loadRadar=loadRadar; window.radarEdit=radarEdit; window.radarSave=radarSave; window.radarTest=radarTest; window.radarDelete=radarDelete; window.radarTestDrawer=radarTestDrawer;
 
 async function mbLoadTeam(){
   const wrap = document.getElementById('mbTeamWrap');

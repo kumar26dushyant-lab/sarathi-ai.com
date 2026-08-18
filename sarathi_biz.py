@@ -62,6 +62,7 @@ import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
+import biz_nidaan_radar as radar
 import biz_nidaan_telegram as tg
 import biz_sarathi_tgcrm as tgcrm
 import biz_wa_agent as wa_agent
@@ -5711,6 +5712,90 @@ async def ops_my_business_account(account_id: int, request: Request):
                WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')
                ORDER BY created_at DESC""", (account_id,))).fetchall()]
     return {"account": account, "claims": claims, "reviews": reviews}
+
+
+# ══════════ EMAIL UPDATE RADAR — P1: mailbox vault + Test-Connection ══════════
+class _RadarMailboxReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mailbox_id: Optional[int] = None
+    label: str = Field("", max_length=120)
+    email_address: str = Field(..., min_length=3, max_length=160)
+    app_password: str = Field("", max_length=200)   # blank on edit = keep the stored secret
+    imap_host: str = Field("imap.gmail.com", max_length=120)
+    imap_port: int = Field(993, ge=1, le=65535)
+    account_id: Optional[int] = None
+    is_active: bool = True
+    pod: str = Field("", max_length=60)
+
+
+class _RadarTestReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email_address: str = Field(..., min_length=3, max_length=160)
+    app_password: str = Field(..., min_length=1, max_length=200)
+    imap_host: str = Field("imap.gmail.com", max_length=120)
+    imap_port: int = Field(993, ge=1, le=65535)
+
+
+@app.get("/nidaan/ops/api/radar/mailboxes")
+async def ops_radar_mailboxes(request: Request):
+    """Email Radar config table — every mailbox (the app-password is NEVER returned). Admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"mailboxes": await radar.list_mailboxes()}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes")
+async def ops_radar_mailbox_save(body: _RadarMailboxReq, request: Request):
+    """Create/update a mailbox. App-password is encrypted at rest; blank on edit keeps the stored one."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    if not body.mailbox_id and not (body.app_password or "").strip():
+        raise HTTPException(status_code=400, detail="App password is required for a new mailbox")
+    try:
+        mid = await radar.upsert_mailbox(
+            mailbox_id=body.mailbox_id, label=body.label, email_address=body.email_address,
+            app_password=body.app_password, imap_host=body.imap_host, imap_port=body.imap_port,
+            account_id=body.account_id, is_active=body.is_active, pod=body.pod,
+            created_by=(staff.get("staff_id") or staff.get("sub")))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Could not save (duplicate email?): " + str(e)[:100])
+    await _ops_audit(request, "radar.mailbox_save", "radar", str(mid), body.email_address)
+    return {"ok": True, "mailbox_id": mid}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/test")
+async def ops_radar_test_adhoc(body: _RadarTestReq, request: Request):
+    """Test IMAP credentials BEFORE saving — the config drawer's 'Test Connection' button."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    ok, status = await radar.test_connection(body.imap_host, body.imap_port,
+                                             body.email_address, body.app_password)
+    return {"ok": ok, "status": status}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/{mailbox_id}/test")
+async def ops_radar_test_saved(mailbox_id: int, request: Request):
+    """Test a SAVED mailbox (decrypts its secret in-memory) and record the result."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    ok, status = await radar.test_mailbox(mailbox_id)
+    return {"ok": ok, "status": status}
+
+
+@app.delete("/nidaan/ops/api/radar/mailboxes/{mailbox_id}")
+async def ops_radar_mailbox_delete(mailbox_id: int, request: Request):
+    """Remove a mailbox from the radar (confirmed in the UI)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    if not await radar.delete_mailbox(mailbox_id):
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+    await _ops_audit(request, "radar.mailbox_delete", "radar", str(mailbox_id), "")
+    return {"ok": True}
 
 
 @app.get("/nidaan/ops/api/staff-business")
