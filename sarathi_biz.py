@@ -4035,7 +4035,8 @@ async def nidaan_razorpay_webhook(request: Request):
         _detail = f"Method: {_pe.get('method','')}  ·  Payment: {_pe.get('id','')}"
         try:
             import biz_nidaan_notifications as _nf
-            _asyncio.create_task(_nf.on_payment_failed(_kind, _amt, _detail, _reason, _contact))
+            _asyncio.create_task(_nf.on_payment_failed(_kind, _amt, _detail, _reason, _contact,
+                                                       ref_code=(_notes.get("ref", "") or "")))
         except Exception as _fe:
             logger.warning("payment.failed alert dispatch failed: %s", _fe)
         # Persist for the analytics dashboard (failures-by-channel + trend). Best-effort.
@@ -4285,10 +4286,17 @@ async def nidaan_razorpay_webhook(request: Request):
         if event == "subscription.halted":
             try:
                 import biz_nidaan_notifications as _nf2
+                # Resolve who referred this subscriber so the halt reaches them too (locked model).
+                _href = ""
+                try:
+                    _hacct = await nidaan.get_account_by_id(account_id)
+                    _href = ((_hacct or {}).get("branch_code") or "").strip()
+                except Exception:
+                    _href = ""
                 _asyncio.create_task(_nf2.on_payment_failed(
                     f"Recurring subscription HALTED ({plan})", 0,
                     f"Account #{account_id} · sub {rzp_sub_id} — autopay stopped after failed retries.",
-                    reason="Recurring charge failed (retries exhausted)"))
+                    reason="Recurring charge failed (retries exhausted)", ref_code=_href))
             except Exception:
                 pass
             # Persist for analytics (recurring failure).

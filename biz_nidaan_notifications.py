@@ -1696,11 +1696,15 @@ async def on_moved_to_l2(claim_id: int):
 
 
 async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
-                            reason: str = "", contact: str = ""):
+                            reason: str = "", contact: str = "", ref_code: str = ""):
     """A payment attempt FAILED (new/recurring subscription, ₹499/₹2000 review, L2, or a
     payment link). Alert EVERY super-admin on ALL channels — dashboard (must-acknowledge,
     top-priority popup) + email + Telegram + push — so it's never missed. (notify_staff_inapp
-    with require_ack drives the red 'Updates for you' popup and mirrors to Telegram/push.)"""
+    with require_ack drives the red 'Updates for you' popup and mirrors to Telegram/push.)
+
+    Locked business-visibility model: the failure ALSO reaches the single referrer who brought
+    this customer — a staff member (in-app nudge, no ack) or a branch (email to contact_email) —
+    and nobody else. ref_code is the referral/branch code captured on the payment."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         ids = [r["staff_id"] for r in await (await conn.execute(
@@ -1721,6 +1725,49 @@ async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
                                  email=True, require_ack=True)
     except Exception as e:
         logger.warning("on_payment_failed alert failed: %s", e)
+
+    # ── Also alert the RELATED referrer (staff → in-app nudge; branch → email) ──
+    # Best-effort and non-blocking: never let a referrer lookup break the admin alert above.
+    rc = (ref_code or "").strip()
+    if not rc:
+        return
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            srow = await (await conn.execute(
+                "SELECT staff_id, name FROM nidaan_staff "
+                "WHERE UPPER(referral_code)=UPPER(?) AND status='active' AND deleted_at IS NULL",
+                (rc,))).fetchone()
+            brow = None
+            if not srow:
+                brow = await (await conn.execute(
+                    "SELECT name, contact_email FROM nidaan_branches "
+                    "WHERE UPPER(branch_code)=UPPER(?) AND status='active'", (rc,))).fetchone()
+        if srow and srow["staff_id"] not in ids:
+            _rsubj = "⚠️ A payment from your referral failed" + (f" — ₹{amount_rupees}" if amount_rupees else "")
+            _rbody = ("A payment from someone you referred has FAILED.\n\n"
+                      f"Type: {kind}\n"
+                      + (f"Amount: ₹{amount_rupees}\n" if amount_rupees else "")
+                      + (f"Customer: {contact}\n" if contact else "")
+                      + (f"Reason: {reason}\n" if reason else "")
+                      + "\nPlease reach out and help them update their payment.\nOpen: /nidaan/ops")
+            await notify_staff_inapp([srow["staff_id"]], _rsubj, _rbody,
+                                     event_key="payment.failed.ref", email=True, require_ack=False)
+        elif brow and (brow["contact_email"] or "").strip():
+            import biz_email as _email_svc
+            _bname = brow["name"] or rc
+            _bsubj = "⚠️ A payment from your branch failed" + (f" — ₹{amount_rupees}" if amount_rupees else "")
+            _bhtml = (f"<p>A payment from a customer attributed to your branch <b>{_bname}</b> "
+                      "has <b>failed</b>.</p><p>"
+                      f"Type: {kind}<br>"
+                      + (f"Amount: ₹{amount_rupees}<br>" if amount_rupees else "")
+                      + (f"Customer: {contact}<br>" if contact else "")
+                      + (f"Reason: {reason}" if reason else "")
+                      + "</p><p>Please help them retry their payment. "
+                      "Log in to your branch dashboard for details.</p>")
+            await _email_svc.send_email((brow["contact_email"]).strip(), _bsubj, _bhtml)
+    except Exception as _re:
+        logger.warning("on_payment_failed referrer alert failed (ref=%s): %s", rc, _re)
 
 
 async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", contact: str = "",
