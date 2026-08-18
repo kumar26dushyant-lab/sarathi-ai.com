@@ -104,10 +104,13 @@
     var typing = document.createElement('div');
     typing.className = 'sg-typing'; typing.textContent = 'Sarathi is typing…';
     body.appendChild(typing); scrollDown();
+    // Stable per-visitor id (invisible) so the team can read the chat as one thread in Support.
+    var _sk = '';
+    try { _sk = localStorage.getItem('sg_sess') || ''; if (!_sk) { _sk = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('sg_sess', _sk); } } catch (e) {}
     try {
       var res = await fetch('/api/guide/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: history.slice(-8), lang: '' })
+        body: JSON.stringify({ message: msg, history: history.slice(-8), lang: '', session_key: _sk })
       });
       var data = await res.json();
       typing.remove();

@@ -1475,6 +1475,33 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_nidaan_support_threads_status
                 ON nidaan_support_threads(status, last_at);
 
+            -- Sarathi-AI.com homepage/retail AI chats (anonymous visitors) — captured so the
+            -- team can READ them in /superadmin → Support (they were stateless before).
+            CREATE TABLE IF NOT EXISTS retail_chat_threads (
+                thread_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_key   TEXT UNIQUE,             -- stable client id (invisible to visitor)
+                first_message TEXT DEFAULT '',
+                msg_count     INTEGER DEFAULT 0,
+                escalated     INTEGER DEFAULT 0,       -- AI flagged needs-human at any point
+                contact       TEXT DEFAULT '',         -- phone/email if the visitor left one
+                status        TEXT DEFAULT 'open',     -- open | closed
+                lang          TEXT DEFAULT '',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS retail_chat_messages (
+                msg_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id  INTEGER NOT NULL,
+                sender     TEXT NOT NULL,               -- visitor | ai
+                body       TEXT NOT NULL,
+                escalate   INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_retail_chat_msg_thread
+                ON retail_chat_messages(thread_id);
+            CREATE INDEX IF NOT EXISTS idx_retail_chat_threads_last
+                ON retail_chat_threads(status, last_at);
+
             -- Support-rep duty roster: a staffer is "on duty" when today is within [start,end].
             CREATE TABLE IF NOT EXISTS nidaan_support_reps (
                 rep_id      INTEGER PRIMARY KEY AUTOINCREMENT,

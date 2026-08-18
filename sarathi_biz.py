@@ -9829,6 +9829,7 @@ class GuideAskReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=1500)
     history: list = Field(default_factory=list)   # [{role:'user'|'bot', text:str}]
     lang: str = Field("", max_length=10)
+    session_key: str = Field("", max_length=64)   # stable client id (invisible) for inbox threading
 
 
 @app.post("/api/guide/ask")
@@ -9850,7 +9851,52 @@ async def sarathi_guide_ask(req: GuideAskReq, request: Request):
         # Safe fallback — never leave the visitor hanging.
         answer = ("I couldn't process that just now. You can start a 7-day free trial (no card) from "
                   "the homepage, or ask me about pricing, features, or the Telegram CRM.")
-    return {"answer": answer, "cta": res.get("cta", ""), "escalate": bool(res.get("escalate", False))}
+    escalate = bool(res.get("escalate", False))
+    # Capture the exchange so the team can read it in /superadmin → Support (was stateless before).
+    # Best-effort: a persistence hiccup must never break the visitor's reply.
+    try:
+        _asyncio.create_task(_persist_retail_chat(
+            session_key=(req.session_key or "").strip(), user_msg=req.message,
+            ai_answer=answer, escalate=escalate, lang=lang))
+    except Exception as _pe:
+        logger.warning("retail chat persist dispatch failed: %s", _pe)
+    return {"answer": answer, "cta": res.get("cta", ""), "escalate": escalate}
+
+
+async def _persist_retail_chat(session_key: str, user_msg: str, ai_answer: str,
+                               escalate: bool, lang: str = ""):
+    """Persist one homepage/retail AI exchange into retail_chat_threads/messages so the team can
+    read it in /superadmin. Threads by the client's stable session_key; if none, each exchange
+    becomes its own single-message thread. Never raises."""
+    try:
+        import aiosqlite as _aio
+        sk = (session_key or "").strip()[:64]
+        async with _aio.connect(db.DB_PATH) as conn:
+            conn.row_factory = _aio.Row
+            tid = None
+            if sk:
+                row = await (await conn.execute(
+                    "SELECT thread_id FROM retail_chat_threads WHERE session_key=?", (sk,))).fetchone()
+                tid = row["thread_id"] if row else None
+            if tid is None:
+                cur = await conn.execute(
+                    "INSERT INTO retail_chat_threads (session_key, first_message, lang, escalated) "
+                    "VALUES (?,?,?,?)",
+                    (sk or None, (user_msg or "")[:300], (lang or "")[:10], 1 if escalate else 0))
+                tid = cur.lastrowid
+            await conn.execute(
+                "INSERT INTO retail_chat_messages (thread_id, sender, body, escalate) VALUES (?,?,?,?)",
+                (tid, "visitor", (user_msg or "")[:1500], 1 if escalate else 0))
+            await conn.execute(
+                "INSERT INTO retail_chat_messages (thread_id, sender, body, escalate) VALUES (?,?,?,?)",
+                (tid, "ai", (ai_answer or "")[:4000], 0))
+            await conn.execute(
+                "UPDATE retail_chat_threads SET msg_count=msg_count+2, "
+                "escalated=MAX(escalated, ?), last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
+                (1 if escalate else 0, tid))
+            await conn.commit()
+    except Exception as e:
+        logger.warning("retail chat persist failed: %s", e)
 
 
 @app.post("/api/auth/send-otp")
@@ -12864,6 +12910,45 @@ async def sa_list_tickets(status: str = Query(None),
 async def sa_ticket_stats(sa=Depends(auth.require_superadmin)):
     """SA: Ticket statistics."""
     return await db.get_ticket_stats()
+
+
+@app.get("/api/sa/retail-chats")
+async def sa_retail_chats(limit: int = Query(100, ge=1, le=300),
+                          escalated: int = Query(0),
+                          sa=Depends(auth.require_superadmin)):
+    """SA: Homepage/retail AI chats captured from sarathi-ai.com (were stateless before) —
+    newest first. escalated=1 filters to chats the AI flagged for a human."""
+    import aiosqlite as _aio
+    where = "WHERE escalated=1" if escalated else ""
+    async with _aio.connect(db.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            f"""SELECT thread_id, session_key, first_message, msg_count, escalated, contact,
+                       status, lang, created_at, last_at
+                FROM retail_chat_threads {where}
+                ORDER BY last_at DESC LIMIT ?""", (limit,))).fetchall()]
+        stats = dict(await (await conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "COALESCE(SUM(CASE WHEN escalated=1 THEN 1 ELSE 0 END),0) AS escalated, "
+            "COALESCE(SUM(CASE WHEN date(last_at)=date('now') THEN 1 ELSE 0 END),0) AS today "
+            "FROM retail_chat_threads")).fetchone())
+    return {"threads": rows, "stats": stats}
+
+
+@app.get("/api/sa/retail-chats/{thread_id}")
+async def sa_retail_chat_detail(thread_id: int, sa=Depends(auth.require_superadmin)):
+    """SA: Full transcript of one captured retail chat thread."""
+    import aiosqlite as _aio
+    async with _aio.connect(db.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        thread = await (await conn.execute(
+            "SELECT * FROM retail_chat_threads WHERE thread_id=?", (thread_id,))).fetchone()
+        if not thread:
+            return JSONResponse({"detail": "Thread not found"}, status_code=404)
+        msgs = [dict(r) for r in await (await conn.execute(
+            "SELECT sender, body, escalate, created_at FROM retail_chat_messages "
+            "WHERE thread_id=? ORDER BY msg_id ASC", (thread_id,))).fetchall()]
+    return {"thread": dict(thread), "messages": msgs}
 
 
 @app.get("/api/sa/ai-costs")
