@@ -731,6 +731,46 @@ async def nidaan_branch_accounts(request: Request):
     return {"accounts": await nidaan.get_branch_attributed_accounts(code)}
 
 
+@app.get("/nidaan/branch/api/account/{account_id}")
+async def nidaan_branch_account_detail(account_id: int, request: Request):
+    """Branch drill-down into ONE of its referred accounts — claims + statuses + plan/payment,
+    so a branch can track its referrals' progress. Strictly scoped to the token's branch;
+    customer phone MASKED and internal legal notes omitted (mirrors the staff drill-down)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        cur = await conn.execute(
+            """SELECT a.account_id, a.owner_name, a.phone, a.branch_code, a.created_at,
+                      COALESCE(s.plan,'free') AS plan, s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s ON s.account_id=a.account_id AND s.status='active'
+               WHERE a.account_id=?""", (account_id,))
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if (account.get("branch_code") or "").strip().upper() != (code or "").strip().upper():
+            raise HTTPException(status_code=403, detail="Not your referral")
+        _ph = str(account.get("phone") or "")
+        account["phone_masked"] = ("•••••" + _ph[-4:]) if len(_ph) >= 4 else ""
+        account.pop("phone", None)
+        claims = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_id, claim_type, insurer_name, disputed_amount, status,
+                      created_at, last_status_at
+               FROM nidaan_claims WHERE account_id=? ORDER BY created_at DESC""",
+            (account_id,))).fetchall()]
+        reviews = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_type, amount_paid, status, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')
+               ORDER BY created_at DESC""", (account_id,))).fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
+
+
 # ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
 class _BranchClaimReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -5618,6 +5658,59 @@ async def ops_my_business(request: Request):
                             if biz.get("referral_code") else "")
     biz["referrals"] = await nidaan.get_referred_accounts(biz.get("referral_code") or "")
     return biz
+
+
+@app.get("/nidaan/ops/api/my-business/account/{account_id}")
+async def ops_my_business_account(account_id: int, request: Request):
+    """A referrer's SCOPED drill-down into ONE account they referred — claims + statuses +
+    plan/payment status, so staff/branch can track their referrals' progress (locked model).
+    Strictly limited: a non-admin staffer may open ONLY accounts that joined via their own
+    referral code (admins may open any). Customer phone is MASKED and internal legal notes are
+    omitted — enough to see progress, no raw PII."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    _is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        # The caller's own referral code (from DB, not the token).
+        _sc = await (await conn.execute(
+            "SELECT referral_code FROM nidaan_staff WHERE staff_id=?",
+            (staff.get("staff_id") or staff.get("sub"),))).fetchone()
+        my_code = ((_sc["referral_code"] if _sc else "") or "").strip().upper()
+        # Account + active subscription.
+        cur = await conn.execute(
+            """SELECT a.account_id, a.owner_name, a.phone, a.branch_code, a.created_at,
+                      COALESCE(s.plan,'free') AS plan, s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s ON s.account_id=a.account_id AND s.status='active'
+               WHERE a.account_id=?""", (account_id,))
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        # Ownership gate: must be the referrer, unless admin.
+        if not _is_admin:
+            acct_code = (account.get("branch_code") or "").strip().upper()
+            if not my_code or acct_code != my_code:
+                raise HTTPException(status_code=403, detail="Not your referral")
+        # Mask the phone — a referrer sees progress, not raw contact details.
+        _ph = str(account.get("phone") or "")
+        account["phone_masked"] = ("•••••" + _ph[-4:]) if len(_ph) >= 4 else ""
+        account.pop("phone", None)
+        # Claims — status-focused (no policy_no / full phone / legal findings).
+        claims = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_id, claim_type, insurer_name, disputed_amount, status,
+                      created_at, last_status_at
+               FROM nidaan_claims WHERE account_id=? ORDER BY created_at DESC""",
+            (account_id,))).fetchall()]
+        # ₹499 reviews — status only, no findings_note.
+        reviews = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_type, amount_paid, status, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')
+               ORDER BY created_at DESC""", (account_id,))).fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
 
 
 @app.get("/nidaan/ops/api/staff-business")

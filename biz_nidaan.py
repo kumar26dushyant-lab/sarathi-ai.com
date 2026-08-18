@@ -2373,7 +2373,7 @@ async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
-            f"""SELECT a.owner_name, a.phone, a.created_at, s.plan AS plan,
+            f"""SELECT a.account_id, a.owner_name, a.phone, a.created_at, s.plan AS plan,
                        {_BRANCH_PAID_EXISTS} AS is_paid
                 FROM nidaan_accounts a
                 LEFT JOIN nidaan_subscriptions s
@@ -2387,6 +2387,7 @@ async def get_branch_attributed_accounts(branch_code: str) -> list[dict]:
         ph = (r.get("phone") or "").strip()
         masked = ("•••• " + ph[-4:]) if len(ph) >= 4 else "—"
         out.append({
+            "account_id": r.get("account_id"),
             "owner_name": r.get("owner_name") or "—",
             "mobile_masked": masked,
             "created_at": r.get("created_at"),

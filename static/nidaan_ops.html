@@ -3740,8 +3740,8 @@ async function loadMyBusiness() {
           <th style="padding:.6rem .8rem">${hi?'स्थिति':'Status'}</th>
           <th style="padding:.6rem .8rem">${hi?'जुड़े':'Joined'}</th>
         </tr></thead>
-        <tbody>${refs.map(a=>`<tr style="border-top:1px solid var(--nd-border)">
-          <td style="padding:.55rem .8rem;font-weight:600">${esc(a.owner_name||'—')}</td>
+        <tbody>${refs.map(a=>`<tr onclick="mbOpenRef(${a.account_id})" style="border-top:1px solid var(--nd-border);cursor:pointer" title="${hi?'विवरण देखें':'View details'}">
+          <td style="padding:.55rem .8rem;font-weight:600">${esc(a.owner_name||'—')} <span style="color:var(--nd-text-faint);font-size:.72rem">›</span></td>
           <td style="padding:.55rem .8rem">${a.plan?esc(String(a.plan).toUpperCase()):'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
           <td style="padding:.55rem .8rem">${a.paid?`<span style="color:var(--nd-success-text);font-weight:700">${hi?'सब्सक्राइब्ड ✓':'Subscribed ✓'}</span>`:`<span style="color:var(--nd-warning-text)">${hi?'साइन अप (भुगतान बाकी)':'Signed up · unpaid'}</span>`}</td>
           <td style="padding:.55rem .8rem;color:var(--nd-text-faint)">${fmtDate(a.created_at)}</td>
@@ -3947,6 +3947,60 @@ function mbShare(link){
                  : `Resolve your stuck insurance claim with NidaanPartner. Start here: ${link}`;
   window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
 }
+
+// Scoped drill-down: a referrer taps one of their referred subscribers → progress + statuses
+// (customer phone masked, no internal legal notes — see /my-business/account/{id}).
+async function mbOpenRef(accountId){
+  const hi = _mbHi();
+  openModal(hi?'रेफ़रल विवरण':'Referral details',
+    `<div class="empty"><div class="ei">⏳</div><p>${hi?'लोड हो रहा है…':'Loading…'}</p></div>`);
+  const r = await API('/my-business/account/'+accountId);
+  if(!r.ok){ document.getElementById('modalBody').innerHTML =
+    `<div class="empty"><div class="ei">🔒</div><p>${hi?'विवरण उपलब्ध नहीं।':'Details not available.'}</p></div>`; return; }
+  const d = await r.json(), a = d.account||{}, claims = d.claims||[], reviews = d.reviews||[];
+  const subBadge = a.sub_status==='active'
+     ? `<span style="color:var(--nd-success-text);font-weight:700">${hi?'सब्सक्राइब्ड ✓':'Subscribed ✓'} · ${esc(String(a.plan||'').toUpperCase())}</span>`
+     : `<span style="color:var(--nd-warning-text)">${hi?'कोई सक्रिय प्लान नहीं':'No active plan'}</span>`;
+  const claimRows = claims.length ? claims.map(c=>`<tr style="border-top:1px solid var(--nd-border)">
+      <td style="padding:.4rem .6rem">#${esc(String(c.claim_id))}</td>
+      <td style="padding:.4rem .6rem">${esc(c.claim_type||'—')}</td>
+      <td style="padding:.4rem .6rem">${esc(c.insurer_name||'—')}</td>
+      <td style="padding:.4rem .6rem">₹${fmt(c.disputed_amount||0)}</td>
+      <td style="padding:.4rem .6rem">${esc((c.status||'').replace(/_/g,' '))}</td>
+      <td style="padding:.4rem .6rem;color:var(--nd-text-faint)">${fmtDate(c.last_status_at||c.created_at)}</td>
+    </tr>`).join('') : `<tr><td colspan="6" style="padding:.6rem;color:var(--nd-text-muted)">${hi?'अभी कोई क्लेम नहीं':'No claims yet'}</td></tr>`;
+  const revRows = reviews.map(v=>`<tr style="border-top:1px solid var(--nd-border)">
+      <td style="padding:.4rem .6rem">${esc(v.claim_type||'—')}</td>
+      <td style="padding:.4rem .6rem">₹${fmt(v.amount_paid||0)}</td>
+      <td style="padding:.4rem .6rem">${esc(v.status||'')}</td>
+      <td style="padding:.4rem .6rem;color:var(--nd-text-faint)">${fmtDate(v.created_at)}</td>
+    </tr>`).join('');
+  document.getElementById('modalBody').innerHTML = `
+    <div style="margin-bottom:.7rem">
+      <div style="font-size:1.05rem;font-weight:700">${esc(a.owner_name||'—')}</div>
+      <div style="font-size:.8rem;color:var(--nd-text-muted)">${esc(a.phone_masked||'')} · ${hi?'जुड़े':'Joined'} ${fmtDate(a.created_at)}</div>
+      <div style="margin-top:.35rem">${subBadge}</div>
+    </div>
+    <div style="font-size:.82rem;font-weight:700;margin:.6rem 0 .3rem">${hi?'क्लेम':'Claims'}</div>
+    <div style="overflow-x:auto;border:1px solid var(--nd-border);border-radius:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead><tr style="text-align:left;color:var(--nd-text-muted)">
+          <th style="padding:.4rem .6rem">#</th><th style="padding:.4rem .6rem">${hi?'प्रकार':'Type'}</th>
+          <th style="padding:.4rem .6rem">${hi?'बीमाकर्ता':'Insurer'}</th><th style="padding:.4rem .6rem">${hi?'राशि':'Amount'}</th>
+          <th style="padding:.4rem .6rem">${hi?'स्थिति':'Status'}</th><th style="padding:.4rem .6rem">${hi?'अपडेट':'Updated'}</th>
+        </tr></thead><tbody>${claimRows}</tbody></table>
+    </div>
+    ${reviews.length?`<div style="font-size:.82rem;font-weight:700;margin:.7rem 0 .3rem">${hi?'₹499 रिव्यू':'₹499 Reviews'}</div>
+    <div style="overflow-x:auto;border:1px solid var(--nd-border);border-radius:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead><tr style="text-align:left;color:var(--nd-text-muted)">
+          <th style="padding:.4rem .6rem">${hi?'प्रकार':'Type'}</th><th style="padding:.4rem .6rem">${hi?'राशि':'Amount'}</th>
+          <th style="padding:.4rem .6rem">${hi?'स्थिति':'Status'}</th><th style="padding:.4rem .6rem">${hi?'तारीख़':'Date'}</th>
+        </tr></thead><tbody>${revRows}</tbody></table>
+    </div>`:''}
+    <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.6rem">${hi?'गोपनीयता के लिए ग्राहक का फ़ोन छिपाया गया है।':'Customer phone is masked for privacy.'}</div>`;
+}
+window.mbOpenRef = mbOpenRef;
 
 async function mbLoadTeam(){
   const wrap = document.getElementById('mbTeamWrap');
