@@ -3777,12 +3777,18 @@ async function loadMyBusiness() {
         ${code?`<button class="btn-sm btn-ghost" onclick="mbCopy('${esc(code)}',this)" style="color:var(--nd-cyan-text)">${hi?'कोड कॉपी करें':'Copy code'}</button>`:''}
       </div>
       ${link?`
-      <div style="margin-top:.8rem;font-size:.78rem;color:var(--nd-text-secondary);margin-bottom:.3rem">${hi?'आपका शेयर करने लायक लिंक':'Your shareable link'}</div>
+      <div style="margin-top:.8rem;font-size:.72rem;color:var(--nd-success-text);font-weight:800;margin-bottom:.25rem">${hi?'👤 एडवाइज़र / सब्सक्रिप्शन लिंक — इस पर आपको कमीशन मिलता है':'👤 Advisor / Subscription link — you earn commission'}</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">
+        <input id="mbLinkSub" readonly value="${esc(link)}&plan=silver" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
+        <button class="btn btn-primary" onclick="mbCopy(document.getElementById('mbLinkSub').value,this)">${hi?'कॉपी':'Copy'}</button>
+        <button class="btn-sm btn-ghost" onclick="mbShare(document.getElementById('mbLinkSub').value)" style="color:var(--nd-success-text)">WhatsApp</button>
+      </div>
+      <div style="font-size:.72rem;color:var(--nd-purple-text);font-weight:800;margin-bottom:.25rem">${hi?'📄 एक-बार ₹499 रिव्यू लिंक — ग्राहक के एकल क्लेम के लिए':'📄 One-time ₹499 review link — for a single customer claim'}</div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <input id="mbLink" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
-        <button class="btn btn-primary" onclick="mbCopy('${esc(link)}',this)">${hi?'लिंक कॉपी करें':'Copy link'}</button>
-        <button class="btn-sm btn-ghost" onclick="mbShare('${esc(link)}')" style="color:var(--nd-success-text)">${hi?'WhatsApp पर भेजें':'Share on WhatsApp'}</button>
-      </div>`:''}
+        <input id="mbLinkRev" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
+        <button class="btn btn-primary" onclick="mbCopy(document.getElementById('mbLinkRev').value,this)">${hi?'कॉपी':'Copy'}</button>
+      </div>
+      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.45rem">${hi?'सही लिंक भेजें — एडवाइज़र (सब्सक्रिप्शन) बनाम एक-बार क्लेम रिव्यू। गलत लिंक से ग्राहक सब्सक्राइब करने के बजाय रिव्यू में चला जाता है।':'Send the RIGHT link — advisor (subscription) vs one-time claim review. The wrong link is why a customer lands on review instead of subscribing.'}</div>`:''}
     </div>
 
     <!-- Walk-through: how sharing works -->

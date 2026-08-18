@@ -115,10 +115,16 @@
 
   <div class="card" id="shareCard" style="display:none">
     <div style="font-weight:700;margin-bottom:.4rem;color:var(--nd-text-primary)">🔗 Refer advisors &amp; earn</div>
-    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.7rem">Share this link or QR with insurance advisors in your area. When an advisor subscribes under your branch code, they're tracked to your branch — you'll see their status here and <b style="color:var(--nd-success-text)">earn commission on their subscription</b>.</div>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
-      <input id="refLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
-      <button class="btn btn-cyan" onclick="copyRefLink()">📋 Copy</button>
+    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.7rem">Use the RIGHT link. The first is for <b>advisors who will subscribe</b> (you earn commission on their plan). The second is for <b>customers who just want a one-time ₹499 claim review</b>. Sharing the wrong link is why a customer sometimes lands on the review flow instead of subscribing.</div>
+    <div style="font-size:.72rem;color:var(--nd-success-text);font-weight:800;margin-bottom:.2rem">👤 Advisor / Subscription link — you earn commission</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.7rem">
+      <input id="refLinkSub" readonly onclick="this.select()" style="flex:1;min-width:200px;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
+      <button class="btn btn-cyan" onclick="copyLink('refLinkSub',this)">📋 Copy</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--nd-purple-text);font-weight:800;margin-bottom:.2rem">📄 One-time ₹499 review link — for a customer's single claim</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.4rem">
+      <input id="refLinkRev" readonly onclick="this.select()" style="flex:1;min-width:200px;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
+      <button class="btn btn-cyan" onclick="copyLink('refLinkRev',this)">📋 Copy</button>
     </div>
     <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.35rem">Send directly to an advisor:</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
@@ -227,22 +233,27 @@ async function verifyOtp(){
 function logout(){ localStorage.removeItem(TOKEN_KEY); location.reload(); }
 
 // ── Refer & share ────────────────────────────────────────────────────────────
-let _refLink = '';
+let _subLink = '', _revLink = '';
 function renderShareCard(code){
-  _refLink = location.origin + '/nidaan/start?ref=' + encodeURIComponent(code);
-  const el = $('refLink'); if (el) el.value = _refLink;
+  const c = encodeURIComponent(code);
+  // Two DISTINCT links so the recipient lands on the right flow:
+  //   subscribe (advisor → plan) carries &plan=silver → dashboard opens the subscribe modal.
+  //   review (customer → one-time ₹499) is the plain ref link.
+  _subLink = location.origin + '/nidaan/start?ref=' + c + '&plan=silver';
+  _revLink = location.origin + '/nidaan/start?ref=' + c;
+  const a = $('refLinkSub'); if (a) a.value = _subLink;
+  const b = $('refLinkRev'); if (b) b.value = _revLink;
   const card = $('shareCard'); if (card) card.style.display = '';
-  renderQR(_refLink);
+  renderQR(_subLink);   // QR = the advisor/subscription link (the commission target)
 }
 function _shareMsg(){
-  return 'Namaste! Nidaan Partner ke saath judiye — apne clients ke reject/underpaid insurance claims ka expert review aur Level-2 legal support offer karein, aur zyada sell + retain karein. Subscribe yahan se: ' + _refLink;
+  return 'Namaste! Nidaan Partner ke saath judiye — apne clients ke reject/underpaid insurance claims ka expert review aur Level-2 legal support offer karein, aur zyada sell + retain karein. Subscribe yahan se: ' + _subLink;
 }
-function copyRefLink(){
-  const el = $('refLink'); if(!el) return;
+function copyLink(id, btn){
+  const el = $(id); if(!el) return;
   el.select();
-  try{ navigator.clipboard.writeText(_refLink); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
-  el.style.borderColor = '#22d3ee';
-  setTimeout(()=>{ el.style.borderColor = 'rgba(255,255,255,.14)'; }, 900);
+  try{ navigator.clipboard.writeText(el.value); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
+  if(btn){ const t=btn.textContent; btn.textContent='✓ Copied'; setTimeout(()=>{ btn.textContent=t; }, 1200); }
 }
 function _custNum(){
   const m = ((($('custMobile')||{}).value)||'').replace(/\D/g,'');
