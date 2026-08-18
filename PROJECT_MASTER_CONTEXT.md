@@ -6090,6 +6090,39 @@ Shipped the agreed **homepage chatbot** for sarathi-ai.com — an anonymous, sal
 - **Sarathi homepage chatbot is STATELESS** (`/api/guide/ask`) — retail chats do NOT create tickets/threads or land in a staff inbox. Sarathi has form-based `/api/support/tickets`, but a live homepage/retail **support-chat inbox** (persist thread + staff reply, like Nidaan's `nidaan_support_*`) is **yet to build**.
 - **Business-visibility money model LOCKED (founder, Aug 18):** commission stays **%-based (recurring, NOT per-claim** — subscription auto-pays monthly), with the **₹ amount + calculation shown** on the staff/branch dashboard; **per-staff / per-branch overrides from /superadmin**; payment-failure/auto-pay events **trigger only the superadmins + the related staff/branch** (all channels), not everyone; staff/branch see **everything** about whomever they referred. To build phased.
 
+## A83 — Sarathi retail support inbox + AI salesman upgrade (Aug 18 2026, commits 3eacf94/c980cb9/c2a329e/33e5eed)
+
+Supersedes A82's "homepage chatbot is stateless" gap.
+
+- **Capture (v1).** `/api/guide/ask` was stateless → chats vanished. Now every exchange persists to `retail_chat_threads` + `retail_chat_messages` (threaded by an **invisible client `session_key`**; >30 min idle → fresh session = new card). Surfaced in **/superadmin → Support → "💬 Homepage / Retail Chats"** (All / 🔥 Hot leads / ⚠️ Needs-human filters + Total/Today/Hot/Needs-human stats + transcript viewer). Best-effort persist never blocks the reply. **Live two-way reply into the widget = deferred v2.**
+- **Threading bug fix.** Widget include was `?v=1` (CF caches `/static` immutably) → browsers ran the old build without `session_key` → one-thread-per-message. Bumped `?v=3`. RULE: bump the widget `?v=` on every `sarathi_guide_widget.js` change.
+- **AI upgrade (biz_ai.`sarathi_guide_reply`).** Persona = warm salesman + genuine support. Qualifies (asks name / daily struggle), mirrors visitor language (Hinglish), nudges the free trial. Weaves in **at most one** relatable example from `_SARATHI_STORIES` (S1–S7, tagged "use when") — **never in the first reply, never a fabricated named testimonial**; anti-repeat via `seen_stories` (client-held in localStorage, sent each call; returns `story_id`). Captures **lead_name / lead_contact** + scores **intent** (cold|curious|hot|support) → stored on the thread (`name`, `intent` cols; contact). Inbox shows 📇 name/number + 🔥 hot badge. Verified live: "Rajesh…forgetting follow-ups" → name=Rajesh, intent=curious, story=S1, cta=trial.
+- **Honesty guardrail (kept):** stories are illustrative "how advisors use it", not real named customers or invented figures.
+
+## A84 — [NIDAAN] EMAIL UPDATE RADAR — build plan (owner Aug 18-19; design LOCKED, to build)
+
+**Problem.** ~100 escalation customers each hand over a dedicated Gmail (email + app-password). Today **4–5 staff manually open all ~100 inboxes daily** just to detect whether a competent authority replied. Goal: **collapse 5→1** via a flag system + proactive AI monitoring + efficiency metrics, so the team focuses on sales/marketing. **HARD RULE: the UI never shows "IRDA/IRDAI/Lokpal" by name** — those are generic "priority senders" in a founder-managed config. See memory `project_nidaan_email_radar`.
+
+**Locked decisions (founder).**
+- **Scope = Option B**: radar (poll + AI triage + flags + dashboard) **+ one-click deep-link** into the exact Gmail thread to act. **NOT** send-as-customer (that's a later Phase C).
+- **Cadence = tiered/adaptive**: open/active cases ~15 min, quiet mailboxes ~30–45 min; graceful back-off on Gmail rate-limits.
+- **Silence threshold = superadmin-configurable** (N days of no priority reply on an open case → 🟡 "Chase" flag), with an in-app explainer.
+- **Assignment = small PODS** (2–3 staff share a mailbox set; survives leave).
+- **Working hours = reuse Nidaan support-hours config** (govt authorities don't respond off-hours → don't page staff then; 🔴 may override).
+- **Lives in nidaanpartner.com ops**; superadmin/sub-superadmin assign; **modelled EXACTLY on the Tasks module.**
+
+**Architecture (native stack — no Cloudflare/Hetzner).** Poll job in `sarathi-worker` (APScheduler, staggered) → IMAP (imaplib/aioimaplib) fetch envelope + short snippet only (data-minimisation; full body read via deep-link, not hoarded) → Gemini (`biz_ai`) triage → SQLite → new "📨 Updates" ops panel. App-passwords **encrypted at rest** (AES-GCM, key in biz.env, super-admin-only), decrypted in-memory by the worker only. (Migration path to Google OAuth later if founder prefers not to custodian passwords.)
+
+**Flag system.** 🔴 Act-now (priority-sender / deadline detected / asks response) · 🟡 Review or Chase (needs human, or silence-timer fired) · ⚪ Auto-cleared (receipts/marketing/no-reply, collapsed). Two safety nets: (1) **priority-sender list** (founder-managed) = always 🔴 regardless of AI; (2) **silence detection** = the thing manual checking can't do. **Fail-safe: AI unsure/unavailable → 🟡 for a human, never auto-clear on doubt.**
+
+**Tasks-module mechanics (reuse existing Tasks rails).** A 🔴/🟡 flag **auto-creates a radar-item (specialised Task)** assigned to the mailbox's pod (superadmin can reassign). **One item per CASE, not per email** — new emails append + re-notify only on material new activity (no task spam). Lifecycle New→Assigned→**Acknowledged**→**Responded** (deep-link jump to Gmail)→Closed; **auto-reopen** on a new authority email to a closed case. Notifications = Tasks' all-channel triggers to assignee + pod + superadmin, **severity + working-hours gated**. In-thread comments + ack-nudge reuse Tasks. Appears in each assignee's dashboard; superadmin monitors an ops-wide radar board.
+
+**AI at every step:** each item pre-filled with triage verdict + one-line summary + extracted deadline + suggested next action.
+
+**Efficiency metrics:** auto-triage rate (the 5→1 proof), mailboxes auto-checked/day, time-to-first-touch on 🔴, open backlog + aging, coverage (% polled OK / auth-health), flags cleared/person/day, AI cost/day.
+
+**Phases:** P1 mailbox config + encryption + Test-Connection; P2 poll + AI triage + flags (radar read-only); P3 Tasks-integration (auto-create/assign/notify/ack) + deep-link; P4 silence detection + deadline board + metrics; (Phase C later = send-as-customer + AI drafts, needs consent/audit). **Open before P1: confirm mailbox-config UX + where the "📨 Updates" board sits in ops nav.**
+
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
