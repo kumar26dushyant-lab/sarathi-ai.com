@@ -8870,5 +8870,21 @@ document.addEventListener('DOMContentLoaded', function(){
     .catch(function(){ /* guide content unavailable — skip silently */ });
 });
 </script>
+
+<!-- ══ Back-to-top: tames long-list scrolling on mobile (bottom-right, clears the centered PWA pill) ══ -->
+<button id="backToTop" aria-label="Back to top" title="Back to top"
+  style="position:fixed;right:14px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:9998;display:none;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;font-size:1.35rem;line-height:1;box-shadow:0 8px 22px rgba(0,0,0,.4);cursor:pointer">↑</button>
+<script>
+(function(){
+  var btn=document.getElementById('backToTop'); if(!btn) return;
+  // The ops content scrolls inside a container on desktop and on <body> on mobile — watch both.
+  function scroller(){ var m=document.querySelector('.nd-main,.nd-content,main'); return (m && m.scrollHeight>m.clientHeight+40)?m:(document.scrollingElement||document.documentElement); }
+  function onScroll(){ var s=scroller(); btn.style.display=(s.scrollTop>320)?'block':'none'; }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  document.addEventListener('scroll', onScroll, {passive:true, capture:true});
+  btn.addEventListener('click', function(){ var s=scroller(); try{ s.scrollTo({top:0,behavior:'smooth'}); }catch(e){ s.scrollTop=0; } });
+  onScroll();
+})();
+</script>
 </body>
 </html>
