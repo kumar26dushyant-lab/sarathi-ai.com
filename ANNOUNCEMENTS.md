@@ -31,6 +31,7 @@ Team, here's everything new that makes your day easier 🎉
 • Branch stats now **count the claims a branch files** — no more 0/0/0 when a branch has raised claims.
 • The Accounts "Branch" column now shows **WHO referred the customer** — staff name or branch name **+ code**, not just a bare code.
 • Your **"My Business"** now **lists the actual subscribers you referred** (name, plan, subscribed/unpaid) — not just a count.
+• **NEW — you're now alerted if a payment from your referral fails:** if someone you referred has a payment fail (or their auto-pay stops), **you get a heads-up** (staff: on your dashboard; branches: by email) so you can help them retry. Only you and the office see it.
 • **Creating a branch now auto-emails them** a one-click login link; the login-code email also carries a **direct login button**.
 
 🎧 **New: voice user-guide on every dashboard + smarter support chat**
@@ -41,6 +42,8 @@ Team, here's everything new that makes your day easier 🎉
 • **Support chat** messages are now **readable in Light mode** (were nearly invisible before).
 • **Phone field** now accepts only a real phone number.
 • Branch-section text fixed in Light mode.
+• Ops logs (payments, reviews, refund requests, uploads) now show the **date AND time**, not just the date.
+• A **"↑ back to top"** button appears on long lists so you don't have to scroll all the way up.
 
 **How to use this update:** react **👍** to confirm you've **read and understood**. Anything unclear? Please reach out to our **office IT SPOC** — they'll walk you through it. 🙏
 
@@ -63,6 +66,7 @@ Team, here's everything new that makes your day easier 🎉
 • ब्रांच के आँकड़े अब **ब्रांच द्वारा दर्ज किए क्लेम** भी गिनते हैं — दर्ज क्लेम होने पर अब 0/0/0 नहीं दिखेगा।
 • Accounts के "Branch" कॉलम में अब दिखता है कि ग्राहक को **किसने रेफ़र किया** — स्टाफ़ या ब्रांच का **नाम + कोड**, सिर्फ़ कोड नहीं।
 • आपके **"My Business"** में अब **आपके रेफ़र किए सब्सक्राइबर की सूची** दिखती है (नाम, प्लान, सब्सक्राइब्ड/बाकी) — सिर्फ़ संख्या नहीं।
+• **नया — आपके रेफ़रल का भुगतान फेल होने पर अब आपको सूचना मिलती है:** आपके रेफ़र किए किसी व्यक्ति का भुगतान फेल हो (या ऑटो-पे रुक जाए) तो **आपको सूचना मिलती है** (स्टाफ़: डैशबोर्ड पर; ब्रांच: ईमेल पर) ताकि आप उन्हें दोबारा भुगतान में मदद कर सकें। यह सिर्फ़ आपको और ऑफ़िस को दिखती है।
 • **ब्रांच बनाते ही उन्हें अपने-आप** एक-क्लिक लॉगिन लिंक ईमेल हो जाता है; लॉगिन-कोड ईमेल में भी **सीधा लॉगिन बटन** होता है।
 
 🎧 **नया: हर डैशबोर्ड पर वॉइस गाइड + स्मार्ट सपोर्ट चैट**
@@ -73,6 +77,8 @@ Team, here's everything new that makes your day easier 🎉
 • **सपोर्ट चैट** के मैसेज अब **लाइट मोड में साफ़ पढ़े** जा सकते हैं (पहले लगभग अदृश्य थे)।
 • **फ़ोन फ़ील्ड** अब सिर्फ़ असली फ़ोन नंबर स्वीकार करता है।
 • ब्रांच सेक्शन का टेक्स्ट लाइट मोड में ठीक किया।
+• ऑप्स लॉग (भुगतान, रिव्यू, रिफ़ंड अनुरोध, अपलोड) अब सिर्फ़ तारीख़ नहीं, **तारीख़ और समय दोनों** दिखाते हैं।
+• लंबी सूचियों में **"↑ ऊपर जाएँ"** बटन आता है ताकि पूरा स्क्रॉल न करना पड़े।
 
 **इस अपडेट का उपयोग:** नीचे **👍** करके पुष्टि करें कि आपने इसे **पढ़ा और समझ लिया**। कुछ भी अस्पष्ट हो तो कृपया ऑफ़िस के **IT SPOC** से संपर्क करें। 🙏
 
