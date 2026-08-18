@@ -3787,6 +3787,7 @@ async function loadMyBusiness() {
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
         <input id="mbLinkRev" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
         <button class="btn btn-primary" onclick="mbCopy(document.getElementById('mbLinkRev').value,this)">${hi?'कॉपी':'Copy'}</button>
+        <button class="btn-sm btn-ghost" onclick="mbShare(document.getElementById('mbLinkRev').value)" style="color:var(--nd-success-text)">WhatsApp</button>
       </div>
       <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.45rem">${hi?'सही लिंक भेजें — एडवाइज़र (सब्सक्रिप्शन) बनाम एक-बार क्लेम रिव्यू। गलत लिंक से ग्राहक सब्सक्राइब करने के बजाय रिव्यू में चला जाता है।':'Send the RIGHT link — advisor (subscription) vs one-time claim review. The wrong link is why a customer lands on review instead of subscribing.'}</div>`:''}
     </div>

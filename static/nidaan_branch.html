@@ -120,11 +120,13 @@
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.7rem">
       <input id="refLinkSub" readonly onclick="this.select()" style="flex:1;min-width:200px;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
       <button class="btn btn-cyan" onclick="copyLink('refLinkSub',this)">📋 Copy</button>
+      <button class="btn" style="background:#25D366;color:#053b1e;font-weight:700" onclick="shareWA(_subLink,false)">💬 WhatsApp</button>
     </div>
     <div style="font-size:.72rem;color:var(--nd-purple-text);font-weight:800;margin-bottom:.2rem">📄 One-time ₹499 review link — for a customer's single claim</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.4rem">
       <input id="refLinkRev" readonly onclick="this.select()" style="flex:1;min-width:200px;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.82rem">
       <button class="btn btn-cyan" onclick="copyLink('refLinkRev',this)">📋 Copy</button>
+      <button class="btn" style="background:#25D366;color:#053b1e;font-weight:700" onclick="shareWA(_revLink,true)">💬 WhatsApp</button>
     </div>
     <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.35rem">Send directly to an advisor:</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
@@ -254,6 +256,15 @@ function copyLink(id, btn){
   el.select();
   try{ navigator.clipboard.writeText(el.value); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
   if(btn){ const t=btn.textContent; btn.textContent='✓ Copied'; setTimeout(()=>{ btn.textContent=t; }, 1200); }
+}
+// WhatsApp-share a specific link with the matching message (review vs subscribe).
+function shareWA(link, isReview){
+  const num = _custNum();
+  const msg = isReview
+    ? ('Namaste! Apna reject ya kam bhugtan wala insurance claim ka expert review karayein — yahan se shuru karein: ' + link)
+    : ('Namaste! Nidaan Partner ke saath judiye — apne clients ke reject/underpaid claims ka review + Level-2 legal support offer karein. Subscribe yahan se: ' + link);
+  const url = (num ? 'https://wa.me/'+num : 'https://wa.me/') + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
 }
 function _custNum(){
   const m = ((($('custMobile')||{}).value)||'').replace(/\D/g,'');
