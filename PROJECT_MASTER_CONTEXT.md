@@ -6121,7 +6121,14 @@ Supersedes A82's "homepage chatbot is stateless" gap.
 
 **Efficiency metrics:** auto-triage rate (the 5→1 proof), mailboxes auto-checked/day, time-to-first-touch on 🔴, open backlog + aging, coverage (% polled OK / auth-health), flags cleared/person/day, AI cost/day.
 
-**Phases:** P1 mailbox config + encryption + Test-Connection; P2 poll + AI triage + flags (radar read-only); P3 Tasks-integration (auto-create/assign/notify/ack) + deep-link; P4 silence detection + deadline board + metrics; (Phase C later = send-as-customer + AI drafts, needs consent/audit). **Open before P1: confirm mailbox-config UX + where the "📨 Updates" board sits in ops nav.**
+**Phases:** P1 mailbox config + encryption + Test-Connection; P2 poll + AI triage + flags (radar read-only); P3 Tasks-integration (auto-create/assign/notify/ack) + deep-link; P4 silence detection + deadline board + metrics; (Phase C later = send-as-customer + AI drafts, needs consent/audit).
+
+**BUILD STATUS (Aug 19 2026): P1+P2+P3 SHIPPED & verified** (commits bcf70e5 / 7014086 / 8d841d6). Module `biz_nidaan_radar.py`; tables `nidaan_radar_mailboxes` / `nidaan_radar_items` / `nidaan_radar_config`. Ops panel **"📨 Email Updates"** (rank-1, near top) with **Radar / Mailboxes / Settings** tabs.
+- **P1**: Fernet-encrypted app-password vault (`EMAIL_VAULT_KEY` or JWT_SECRET-derived), IMAP Test-Connection, mailbox CRUD, endpoints `/nidaan/ops/api/radar/*` (admin+). Verified enc round-trip + IMAP path.
+- **P2**: worker poll loop `radar_poll_loop` (RUN_SINGLETONS, 15 min, 2s stagger) → incremental IMAP fetch (envelope+snippet, **first poll = baseline only, no backfill**) → `biz_ai.radar_triage_email` (Gemini) → flag (`_decide_flag`: red=priority-sender/authority/legal/court/high; green=receipt/marketing/spam; else amber fail-safe) → `nidaan_radar_items`. Radar view = red-first cards w/ AI summary + deadline + **Open-in-Gmail deep-link** (`rfc822msgid:`). Settings = priority-sender list (always-🔴) + silence-days. Verified: authority→red+deadline, marketing→green.
+- **P3**: mailbox `pod_staff_ids` (primary + watchers) + `open_task_id`; item `quick_task_id`. `ensure_task_for_item`: a red/amber item **auto-creates the mailbox's open radar-task in the existing Tasks module** (assigned to primary, pod as watchers, `on_quick_task_assigned` all-channel notify, red→high/amber→normal). **One open task per mailbox = one per case**: further emails append a note + re-notify (red); when the task is done/cancelled the next email **auto-reopens** a fresh one. Config drawer has Primary-handler dropdown + pod checkboxes (from `/assignees`). Verified: red+amber folded into the SAME task, primary-assigned, high priority.
+- **P4 (next)**: silence "Chase" detection using `nidaan_radar_config.silence_days` + deadline board + efficiency metrics (auto-triage rate = the 5→1 proof).
+- **[OWNER]** optionally set `EMAIL_VAULT_KEY` in biz.env; add a real customer mailbox + assign a pod + "🔄 Check now".
 
 ---
 
