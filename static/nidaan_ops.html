@@ -4614,27 +4614,33 @@ async function loadAccounts() {
 }
 
 // Segment filter (subscribers / ₹499 / leads) + search, combined.
-const _ACC_SEGS = [['all','All'],['subscriber','Subscribers'],['per_claim','₹499 one-time'],['lead','Leads']];
+const _ACC_SEGS = [['all','All'],['subscriber','Subscribers'],['per_claim','₹499 one-time'],['lead','Leads'],['deleted','🗑️ Deleted']];
+const _accDeleted = a => (a.status||'')==='deleted';
 function renderAccSegBar(){
   const all = window._allAccounts||[];
-  const cnt = t => t==='all' ? all.length : all.filter(a=>a.account_type===t).length;
+  // Deleted/archived accounts live ONLY in the Deleted segment — excluded from All + type tabs.
+  const cnt = t => t==='deleted' ? all.filter(_accDeleted).length
+                 : t==='all'    ? all.filter(a=>!_accDeleted(a)).length
+                 :                 all.filter(a=>!_accDeleted(a) && a.account_type===t).length;
   const bar = document.getElementById('accSegBar'); if(!bar) return;
-  bar.innerHTML = _ACC_SEGS.map(([k,label])=>
-    `<button class="btn ${(window._accSeg||'all')===k?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="segAccounts('${k}')">${label} (${cnt(k)})</button>`
-  ).join('');
+  bar.innerHTML = _ACC_SEGS.map(([k,label])=>{
+    const c = cnt(k); if(k==='deleted' && !c) return '';   // hide the Deleted tab when there are none
+    return `<button class="btn ${(window._accSeg||'all')===k?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem${k==='deleted'?';color:var(--nd-danger-text)':''}" onclick="segAccounts('${k}')">${label} (${c})</button>`;
+  }).join('');
 }
 function segAccounts(seg){ window._accSeg = seg; renderAccSegBar(); applyAccFilters(); }
 function filterAccounts(q){ window._accQuery = q; applyAccFilters(); }
 function applyAccFilters(){
   const q = (window._accQuery||'').toLowerCase();
   const seg = window._accSeg||'all';
-  const list = (window._allAccounts||[]).filter(a=>
-    (seg==='all' || a.account_type===seg) &&
-    (!q || (a.owner_name||'').toLowerCase().includes(q) ||
+  const list = (window._allAccounts||[]).filter(a=>{
+    const segOk = seg==='deleted' ? _accDeleted(a) : (!_accDeleted(a) && (seg==='all' || a.account_type===seg));
+    if(!segOk) return false;
+    return (!q || (a.owner_name||'').toLowerCase().includes(q) ||
       (a.email||'').toLowerCase().includes(q) ||
       (a.firm_name||'').toLowerCase().includes(q) ||
-      (a.branch_code||'').toLowerCase().includes(q))
-  );
+      (a.branch_code||'').toLowerCase().includes(q));
+  });
   renderAccounts(list);
 }
 // Usage/entitlement cell per account type.
