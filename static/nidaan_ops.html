@@ -1339,7 +1339,7 @@ function _lhRender(){
     <td style="padding:.5rem">${pill(r.status)}</td>
     <td style="padding:.5rem;max-width:220px">${esc(r.reason||'')}</td>
     <td style="padding:.5rem">${esc(r.decided_by_name||'—')}</td>
-    <td style="padding:.5rem;font-size:.75rem;color:var(--nd-text-muted)">${r.created_at?esc(String(r.created_at).slice(0,10)):''}</td>
+    <td style="padding:.5rem;font-size:.75rem;color:var(--nd-text-muted)">${fmtDateTime(r.created_at)}</td>
   </tr>`).join('');
   box.innerHTML = totalsHtml + `
     <div class="nd-card" style="padding:1rem">
@@ -3045,7 +3045,7 @@ function _widgetPendingReviews(reviews) {
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:.78rem;font-weight:700;color:var(--nd-success-text)">₹${rv.amount_paid||499}</div>
-          <div style="font-size:.7rem;color:var(--nd-text-faint)">${(rv.created_at||'').split('T')[0]}</div>
+          <div style="font-size:.7rem;color:var(--nd-text-faint)">${fmtDateTime(rv.created_at)}</div>
         </div>
       </div>
     </div>`).join('');
@@ -4262,7 +4262,7 @@ async function openClaimDrawer(claimId) {
         if (dd.docs && dd.docs.length > 0) {
           docEl.innerHTML = dd.docs.map(d =>
             `<div style="margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem">📄 <a href="${d.url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.original_name)}</a>
-             <span style="opacity:.4;font-size:.78rem;white-space:nowrap">(${(d.file_size/1024).toFixed(0)} KB · ${d.uploaded_at ? d.uploaded_at.split('T')[0] : ''})</span>${d.doc_id?`<button onclick="opsDeleteClaimDoc(${c.claim_id},${d.doc_id},this)" title="Delete this document" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
+             <span style="opacity:.4;font-size:.78rem;white-space:nowrap">(${(d.file_size/1024).toFixed(0)} KB · ${fmtDateTime(d.uploaded_at)})</span>${d.doc_id?`<button onclick="opsDeleteClaimDoc(${c.claim_id},${d.doc_id},this)" title="Delete this document" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.9rem;padding:0 .2rem">🗑</button>`:''}</div>`
           ).join('');
         } else {
           docEl.textContent = 'No documents uploaded by advisor yet.';
@@ -5166,7 +5166,7 @@ function _acctTabPurchases(d) {
       <td>₹${fmt(p.disputed_amount||0)}</td>
       <td>₹${fmt(p.amount_paid||0)}</td>
       <td><span class="pill-status s-${p.status}" style="font-size:.7rem">${esc(p.status)}</span></td>
-      <td style="font-size:.75rem">${esc((p.created_at||'').split('T')[0])}</td>
+      <td style="font-size:.75rem">${fmtDateTime(p.created_at)}</td>
     </tr>`).join('');
   const refundRows = refunds.map(r => `
     <tr>
@@ -5175,7 +5175,7 @@ function _acctTabPurchases(d) {
       <td>₹${fmt(r.amount||0)}</td>
       <td><span class="pill-status s-${r.status}" style="font-size:.7rem">${esc(r.status)}</span></td>
       <td style="font-size:.75rem">${esc(r.reason||'—')}</td>
-      <td style="font-size:.75rem">${esc((r.requested_at||'').split('T')[0])}</td>
+      <td style="font-size:.75rem">${fmtDateTime(r.requested_at)}</td>
     </tr>`).join('');
   return `
     <div style="font-weight:700;font-size:.95rem;margin-bottom:.5rem">Subscriptions (${subs.length})</div>
@@ -8705,7 +8705,7 @@ async function loadRefunds(containerId){
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.45rem">
           ${statusPill(rf.status)}
-          <div style="font-size:.72rem;color:var(--nd-text-faint)">${rf.requested_at ? rf.requested_at.split('T')[0] : ''}</div>
+          <div style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDateTime(rf.requested_at)}</div>
           ${(rf.status==='failed' || rf.status==='pending') ? `<button class="nd-btn nd-btn-sm nd-btn-primary" onclick="retryRefund(${rf.refund_id})">🔁 Retry</button>` : ''}
           ${rf.razorpay_refund_id ? `<div style="font-size:.7rem;color:var(--nd-text-faint);font-family:monospace">${esc(rf.razorpay_refund_id)}</div>` : ''}
         </div>
