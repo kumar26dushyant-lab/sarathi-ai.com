@@ -5985,6 +5985,7 @@ async def get_claims_ops(
                     sub.plan AS account_plan,
                     s.name AS assigned_staff_name,
                     rst.name AS ref_staff_name, rbr.name AS ref_branch_name,
+                    COALESCE(NULLIF(c.branch_code,''), a.branch_code) AS ref_code,
                     (SELECT COUNT(*) FROM nidaan_followups f
                      WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks,
                     (SELECT COUNT(*) FROM nidaan_claim_notes cn
@@ -6010,8 +6011,8 @@ async def get_claims_ops(
         for r in rows:
             if r.get("ref_staff_name"):
                 r["ref_kind"], r["ref_name"] = "staff", r["ref_staff_name"]
-            elif r.get("branch_code") and r.get("ref_branch_name") is not None:
-                r["ref_kind"], r["ref_name"] = "branch", (r["ref_branch_name"] or "")
+            elif r.get("ref_branch_name"):
+                r["ref_kind"], r["ref_name"] = "branch", r["ref_branch_name"]
             else:
                 r["ref_kind"], r["ref_name"] = "", ""
         return rows

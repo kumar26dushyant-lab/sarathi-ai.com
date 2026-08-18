@@ -3449,8 +3449,8 @@ function _renderOutcome(key){
              + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
              + csCell:'')
         + `<td style="font-size:.78rem">${c.origin==='branch'
-            ? `<span style="color:var(--nd-purple-text);font-weight:700">${c.ref_kind==='staff'?'👤':'🏢'} ${esc(c.ref_name||('Branch '+(c.branch_code||'')))}</span><br><span style="font-size:.66rem;color:var(--nd-text-faint)">raised · ${esc(c.branch_code||'—')}</span>`
-            : `<span style="font-weight:600">${esc(c.owner_name||'—')}</span>${(c.ref_name||c.branch_code)?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${c.ref_kind==='staff'?'👤 staff':(c.ref_kind==='branch'?'🏢 branch':'ref')}: ${esc(c.ref_name||c.branch_code)}${c.branch_code?(' · '+esc(c.branch_code)):''}</span>`:''}`}</td>
+            ? `<span style="color:var(--nd-purple-text);font-weight:700">${c.ref_kind==='staff'?'👤':'🏢'} ${esc(c.ref_name||('Branch '+(c.ref_code||'')))}</span><br><span style="font-size:.66rem;color:var(--nd-text-faint)">raised · ${esc(c.ref_code||'—')}</span>`
+            : `<span style="font-weight:600">${esc(c.owner_name||'—')}</span>${(c.ref_name||c.ref_code)?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${c.ref_kind==='staff'?'👤 staff':(c.ref_kind==='branch'?'🏢 branch':'ref')}: ${esc(c.ref_name||c.ref_code)}${c.ref_code?(' · '+esc(c.ref_code)):''}</span>`:''}`}</td>
         <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
       </tr>`;}).join('') + '</tbody></table></div>';
 }
@@ -4663,11 +4663,11 @@ function exportL2CSV(){
   const list = _outcomeCache['l2claims']||[];
   const rows = [['Claim #','Insured','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber / Referred by','Ref code','Delivered']]
     .concat(list.map(c=>{
-      const who = c.origin==='branch' ? (c.ref_name||('Branch '+(c.branch_code||'')))
+      const who = c.origin==='branch' ? (c.ref_name||('Branch '+(c.ref_code||'')))
                 : ((c.owner_name||'') + (c.ref_name?(' (ref: '+c.ref_name+')'):''));
       const paid = (c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription')?'Paid':'Due';
       return [c.claim_id, c.insured_name||'', c.insured_phone||'', c.claim_type||'', c.disputed_amount||0,
-        paid, c.status||'', c.claimshield_case_id||'', who, c.branch_code||'',
+        paid, c.status||'', c.claimshield_case_id||'', who, c.ref_code||'',
         (c.review_delivered_at||c.last_status_at||c.created_at||'')];
     }));
   opsDownloadCSV('nidaan-L2-claims_'+new Date().toISOString().slice(0,10)+'.csv', rows);
