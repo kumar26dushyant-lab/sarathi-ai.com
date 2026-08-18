@@ -3910,6 +3910,64 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     return result
 
 
+@app.get("/nidaan/api/claimshield/case/{claim_id}/documents")
+@limiter.limit("60/minute")
+async def claimshield_case_documents(claim_id: int, request: Request):
+    """INBOUND API for ClaimShield.in to fetch an L2 claim's documents after the case has been
+    created there. This is how documents move from NidaanPartner → ClaimShield, safely:
+
+      Auth      : dedicated shared secret in the `x-api-key` header (env CLAIMSHIELD_PULL_KEY) —
+                  a SEPARATE key from the outbound CLAIMSHIELD_API_KEY, constant-time compared.
+      Scope     : only claims ALREADY SENT to ClaimShield (a case exists) — so ClaimShield can
+                  fetch its own cases' docs, never enumerate arbitrary Nidaan claims.
+      Transport : returns short-lived HMAC-SIGNED, expiring download URLs (the files stay behind
+                  the signed-URL guard; the key never grants blanket file access).
+      Audit     : every pull is recorded (who=ClaimShield, which claim, how many docs).
+
+    ClaimShield calls it with the case number it already holds (Nidaanpartnercasenumber = claim_id).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import hmac as _hm
+    key = (os.getenv("CLAIMSHIELD_PULL_KEY", "") or "").strip()
+    provided = (request.headers.get("x-api-key", "") or "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="Document API not configured")
+    if not provided or not _hm.compare_digest(key, provided):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_claimshield as _cs
+    if not await _cs.already_sent(claim_id):
+        raise HTTPException(status_code=404, detail="No ClaimShield case exists for this claim")
+    cs_state = await _cs.get_claimshield_state(claim_id)
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    origin = _nidaan_origin(request)
+    out = []
+    for d in docs:
+        if not d.get("stored_name"):
+            continue
+        out.append({
+            "original_name": d.get("original_name") or d.get("stored_name"),
+            "size": d.get("file_size"),
+            "uploaded_at": d.get("uploaded_at"),
+            # Signed, expiring URL — ClaimShield downloads each within the validity window.
+            "download_url": origin + _nidaan_doc_url(d["stored_name"]),
+        })
+    try:
+        await nidaan.log_activity(
+            action="claimshield.docs_pull", actor_type="system", actor_id=None,
+            actor_name="ClaimShield", actor_role="integration", target_type="claim",
+            target_id=str(claim_id), detail=f"{len(out)} document(s) fetched by ClaimShield",
+            ip=(request.client.host if request.client else ""))
+    except Exception:
+        pass
+    return {
+        "nidaan_claim_id": claim_id,
+        "claimshield_case_id": (cs_state or {}).get("claimshield_case_id", ""),
+        "document_count": len(out),
+        "documents": out,
+    }
+
+
 @app.post("/nidaan/api/webhook")
 @limiter.limit("60/minute")
 async def nidaan_razorpay_webhook(request: Request):
