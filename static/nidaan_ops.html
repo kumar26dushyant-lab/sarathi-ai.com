@@ -6661,7 +6661,9 @@ function fmtDate(s){
   try{
     const d = (window.ndUI && ndUI.parseServerTime) ? ndUI.parseServerTime(s) : new Date(s);
     if(!d) return s;
-    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    // Show date + TIME (IST) everywhere — logs/history read clearer with when-it-happened.
+    return d.toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',
+                                     hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'Asia/Kolkata'});
   }catch{return s;}
 }
 function togglePasswordVisibility() {
