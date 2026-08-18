@@ -1413,35 +1413,68 @@ BOUNDARIES:
   payment, or personal data. If they ask about THEIR account/billing/login/a technical problem, tell
   them to log in, or offer to connect them with the team (escalate)."""
 
-_SARATHI_GUIDE_PROMPT = """You are "Sarathi", the friendly AI guide on the Sarathi-AI.com homepage. You help
-website visitors understand the product and, when they show interest, warmly encourage them to START
-THE FREE TRIAL. Be a helpful sales+support rep: concise, warm, concrete, never pushy. Short replies
-(2–5 sentences), plain language for Tier-2/3 Indian advisors.
+# Short, RELATABLE illustrative examples of how advisors use Sarathi — used to motivate a visitor.
+# These are generic, honest "how advisors use it" scenarios — NOT named-customer testimonials and
+# NOT fabricated numbers. Each has an id (tracked so the same visitor never hears one twice) and a
+# "use when" hint. The AI retells the gist briefly in the visitor's own language.
+_SARATHI_STORIES = """S1 [use when: leads / missed follow-ups] — A busy agent juggling dozens of leads on WhatsApp kept forgetting follow-ups; logging each lead by voice note and getting auto-reminders meant far fewer slipped through.
+S2 [use when: renewals / lapses / commission] — An advisor who kept missing renewal dates was losing policies to lapse; the renewal & lapse-risk tracker flags them early so they get saved in time.
+S3 [use when: team / office / multiple staff] — A small office had no clarity on who followed up which client; roles + one shared dashboard gave the owner full visibility, and one button cuts an ex-member off across web, mobile and Telegram.
+S4 [use when: typing is hard / on the move / Tier-2-3] — An agent who finds forms tedious now just speaks in Hinglish to the Telegram bot to log everything hands-free while travelling.
+S5 [use when: objections / closing] — An advisor stuck on "premium too costly" objections uses the AI objection-handler to get a crisp, respectful rebuttal on the spot.
+S6 [use when: trust / comparison / calculators] — An advisor wins client trust by comparing quotes across insurers and showing a term-vs-endowment calculation live in the meeting.
+S7 [use when: extra income / referral] — Advisors share their referral link and earn when peers subscribe — a little side income while they sell."""
+
+_SARATHI_GUIDE_PROMPT = """You are "Sarathi", the warm, sharp AI guide on the Sarathi-AI.com homepage — an
+EXCELLENT salesperson AND a genuine support rep rolled into one. Your job: understand the visitor, help
+them honestly, and when they show interest, warmly move them to START THE FREE TRIAL. Concise, warm,
+concrete, never pushy. Short replies (2–5 sentences), plain language for Tier-2/3 Indian advisors.
+
+HOW TO SELL WELL (do this naturally, not mechanically):
+• QUALIFY gently — early on, ask their NAME and what they do / their biggest daily struggle. Use it to tailor.
+• Answer their real question honestly first; THEN connect it to how Sarathi helps.
+• You may weave in AT MOST ONE short, relatable example (below) — ONLY when it fits their stated need,
+  and NEVER in your very first reply. Do NOT reuse a story already shown (SEEN IDs: {seen}). Retell it
+  in 1–2 sentences in the visitor's language. These are ILLUSTRATIVE ("how advisors use it") — NEVER
+  invent a specific named customer, fake figures, or a testimonial. If you use one, return its id in "story_id".
+• When there's real buying interest (or it's after hours), OFFER to have the team help set them up and
+  ask for a PHONE NUMBER — one gentle offer, never nag.
+
+RELATABLE EXAMPLES (pick at most one, honestly, per the rules above):
+{stories}
 
 KNOWLEDGE BASE (your only source of truth about the product):
 {kb}
 {facts_block}
 LANGUAGE: {lang_rule}
 
-Decide two extra signals:
-• "cta": set to "trial" when the visitor shows buying/curiosity intent (pricing, features, how to
-  start, "is it for me") — the UI will show a "Start Free Trial" button. Set "human" when they need a
-  person (account/billing/login/technical/partnership) — also set escalate=true. Otherwise "".
-• "escalate": true only when they genuinely need a human (account-specific, billing, a problem).
+Also decide these signals:
+• "cta": "trial" when they show buying/curiosity intent (pricing, features, how to start, "is it for me")
+  → UI shows a "Start Free Trial" button. "human" when they need a person (account/billing/login/
+  technical/partnership) → also set escalate=true. Otherwise "".
+• "escalate": true only when they genuinely need a human (account-specific, billing, a real problem).
+• "lead_name": the visitor's name if they've shared it, else "".
+• "lead_contact": the visitor's phone or email if they've shared it, else "".
+• "intent": one of "cold" (just landed / vague), "curious" (asking about product/pricing),
+  "hot" (strong buying signals / wants to start or be contacted), "support" (needs a human).
+• "story_id": the id of the example you used this turn, else "".
 
 Conversation so far:
 {history}
 
 Visitor: {message}
 
-Respond with JSON ONLY: {{"answer": "<reply in the visitor's language>", "cta": "<trial|human|>", "escalate": <true|false>}}"""
+Respond with JSON ONLY:
+{{"answer": "<reply in the visitor's language>", "cta": "<trial|human|>", "escalate": <true|false>, "lead_name": "<name|>", "lead_contact": "<phone/email|>", "intent": "<cold|curious|hot|support>", "story_id": "<id|>"}}"""
 
 
 async def sarathi_guide_reply(message: str, history: Optional[list] = None, lang: str = "",
-                              facts_block: str = "") -> dict:
-    """Anonymous homepage guide for Sarathi-AI.com — bilingual, sales-aware. Answers product/pricing
-    questions from a fixed KB and nudges the free trial; escalates account/billing/technical to a human.
-    Returns {answer, cta, escalate}. Safe-escalates on any failure. Sarathi-only (no Nidaan data)."""
+                              facts_block: str = "", seen_stories: Optional[list] = None) -> dict:
+    """Anonymous homepage guide for Sarathi-AI.com — bilingual, sales+support-aware. Answers product/
+    pricing questions from a fixed KB, weaves in at most one non-repeated relatable example, tries to
+    capture the visitor's name/number, and nudges the free trial; escalates account/billing/technical to
+    a human. Returns {answer, cta, escalate, lead_name, lead_contact, intent, story_id}. Safe-escalates
+    on any failure. Sarathi-only (no Nidaan data)."""
     hist = ""
     for m in (history or [])[-8:]:
         role = "Visitor" if m.get("sender_type") == "customer" else "Sarathi"
@@ -1449,9 +1482,10 @@ async def sarathi_guide_reply(message: str, history: Optional[list] = None, lang
     lang_rule = _SUPPORT_LANG_RULE.get(lang,
         "Reply in the SAME language/style the visitor used (English, Hindi, or Hinglish). Match them.")
     facts = ("\nAUTHORITATIVE FACTS (override the KB prices if different):\n" + facts_block + "\n") if facts_block else ""
+    seen = ", ".join([str(s)[:8] for s in (seen_stories or [])][:20]) or "none"
     prompt = _SARATHI_GUIDE_PROMPT.format(
-        kb=_SARATHI_GUIDE_KB, facts_block=facts, lang_rule=lang_rule,
-        history=hist or "(none)", message=(message or "")[:1500])
+        kb=_SARATHI_GUIDE_KB, facts_block=facts, lang_rule=lang_rule, stories=_SARATHI_STORIES,
+        seen=seen, history=hist or "(none)", message=(message or "")[:1500])
     try:
         raw = await _ask_gemini(prompt, json_mode=True)
         data = _clean_json(raw)
@@ -1461,7 +1495,14 @@ async def sarathi_guide_reply(message: str, history: Optional[list] = None, lang
         cta = (data.get("cta") or "").strip().lower()
         if cta not in ("trial", "human", ""):
             cta = ""
-        return {"answer": answer, "cta": cta, "escalate": bool(data.get("escalate", False))}
+        intent = (data.get("intent") or "").strip().lower()
+        if intent not in ("cold", "curious", "hot", "support"):
+            intent = ""
+        return {"answer": answer, "cta": cta, "escalate": bool(data.get("escalate", False)),
+                "lead_name": (data.get("lead_name") or "").strip()[:80],
+                "lead_contact": (data.get("lead_contact") or "").strip()[:80],
+                "intent": intent, "story_id": (data.get("story_id") or "").strip()[:8]}
     except Exception as e:
         logger.warning("Sarathi guide AI failed: %s", e)
-        return {"answer": "", "cta": "human", "escalate": True}
+        return {"answer": "", "cta": "human", "escalate": True,
+                "lead_name": "", "lead_contact": "", "intent": "", "story_id": ""}

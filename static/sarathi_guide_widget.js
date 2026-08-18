@@ -104,15 +104,24 @@
     var typing = document.createElement('div');
     typing.className = 'sg-typing'; typing.textContent = 'Sarathi is typing…';
     body.appendChild(typing); scrollDown();
-    // Stable per-visitor id (invisible) so the team can read the chat as one thread in Support.
-    var _sk = '';
-    try { _sk = localStorage.getItem('sg_sess') || ''; if (!_sk) { _sk = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('sg_sess', _sk); } } catch (e) {}
+    // Stable per-visitor id (invisible) so the team reads the chat as ONE thread in Support.
+    // A gap of > 30 min starts a fresh session — a new visit becomes a new conversation card.
+    var _sk = '', _seen = [];
+    try {
+      var _now = Date.now(), _ts = parseInt(localStorage.getItem('sg_sess_ts') || '0', 10);
+      _sk = localStorage.getItem('sg_sess') || '';
+      if (!_sk || !_ts || (_now - _ts) > 1800000) { _sk = 'r' + _now.toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('sg_sess', _sk); }
+      localStorage.setItem('sg_sess_ts', String(_now));
+      try { _seen = JSON.parse(localStorage.getItem('sg_seen_stories') || '[]') || []; } catch (e) { _seen = []; }
+    } catch (e) {}
     try {
       var res = await fetch('/api/guide/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: history.slice(-8), lang: '', session_key: _sk })
+        body: JSON.stringify({ message: msg, history: history.slice(-8), lang: '', session_key: _sk, seen_stories: _seen })
       });
       var data = await res.json();
+      // Remember any example we were told, so the same one is never repeated to this visitor.
+      try { if (data && data.story_id) { if (_seen.indexOf(data.story_id) < 0) _seen.push(data.story_id); localStorage.setItem('sg_seen_stories', JSON.stringify(_seen.slice(-40))); } } catch (e) {}
       typing.remove();
       var ans = (data && data.answer) || "Sorry, I couldn't answer that. Please try again.";
       addMsg('bot', ans);

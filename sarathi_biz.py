@@ -9830,6 +9830,7 @@ class GuideAskReq(BaseModel):
     history: list = Field(default_factory=list)   # [{role:'user'|'bot', text:str}]
     lang: str = Field("", max_length=10)
     session_key: str = Field("", max_length=64)   # stable client id (invisible) for inbox threading
+    seen_stories: list = Field(default_factory=list)  # story ids already shown (client-held, anti-repeat)
 
 
 @app.post("/api/guide/ask")
@@ -9845,32 +9846,42 @@ async def sarathi_guide_ask(req: GuideAskReq, request: Request):
              "body": str((m or {}).get("text") or "")[:600]}
             for m in (req.history or [])][-8:]
     lang = req.lang if req.lang in ("en", "hi", "hinglish") else ""
-    res = await ai_mod.sarathi_guide_reply(req.message, history=hist, lang=lang)
+    _seen = [str(s)[:8] for s in (req.seen_stories or []) if s][:20]
+    res = await ai_mod.sarathi_guide_reply(req.message, history=hist, lang=lang, seen_stories=_seen)
     answer = res.get("answer") or ""
     if not answer:
         # Safe fallback — never leave the visitor hanging.
         answer = ("I couldn't process that just now. You can start a 7-day free trial (no card) from "
                   "the homepage, or ask me about pricing, features, or the Telegram CRM.")
     escalate = bool(res.get("escalate", False))
-    # Capture the exchange so the team can read it in /superadmin → Support (was stateless before).
-    # Best-effort: a persistence hiccup must never break the visitor's reply.
+    story_id = (res.get("story_id") or "").strip()[:8]
+    # Capture the exchange (+ any lead name/number the AI picked up) so the team can read & follow up
+    # in /superadmin → Support. Best-effort: a persistence hiccup must never break the visitor's reply.
     try:
         asyncio.create_task(_persist_retail_chat(
             session_key=(req.session_key or "").strip(), user_msg=req.message,
-            ai_answer=answer, escalate=escalate, lang=lang))
+            ai_answer=answer, escalate=escalate, lang=lang,
+            lead_name=(res.get("lead_name") or "").strip(),
+            lead_contact=(res.get("lead_contact") or "").strip(),
+            intent=(res.get("intent") or "").strip()))
     except Exception as _pe:
         logger.warning("retail chat persist dispatch failed: %s", _pe)
-    return {"answer": answer, "cta": res.get("cta", ""), "escalate": escalate}
+    return {"answer": answer, "cta": res.get("cta", ""), "escalate": escalate, "story_id": story_id}
 
 
 async def _persist_retail_chat(session_key: str, user_msg: str, ai_answer: str,
-                               escalate: bool, lang: str = ""):
+                               escalate: bool, lang: str = "", lead_name: str = "",
+                               lead_contact: str = "", intent: str = ""):
     """Persist one homepage/retail AI exchange into retail_chat_threads/messages so the team can
     read it in /superadmin. Threads by the client's stable session_key; if none, each exchange
-    becomes its own single-message thread. Never raises."""
+    becomes its own single-message thread. Captures any AI-detected lead name/number + latest intent
+    onto the thread (name/contact are only ever OVERWRITTEN with a non-empty value). Never raises."""
     try:
         import aiosqlite as _aio
         sk = (session_key or "").strip()[:64]
+        nm = (lead_name or "").strip()[:80]
+        ct = (lead_contact or "").strip()[:80]
+        it = (intent or "").strip()[:10]
         async with _aio.connect(db.DB_PATH) as conn:
             conn.row_factory = _aio.Row
             tid = None
@@ -9880,9 +9891,10 @@ async def _persist_retail_chat(session_key: str, user_msg: str, ai_answer: str,
                 tid = row["thread_id"] if row else None
             if tid is None:
                 cur = await conn.execute(
-                    "INSERT INTO retail_chat_threads (session_key, first_message, lang, escalated) "
-                    "VALUES (?,?,?,?)",
-                    (sk or None, (user_msg or "")[:300], (lang or "")[:10], 1 if escalate else 0))
+                    "INSERT INTO retail_chat_threads (session_key, first_message, lang, escalated, "
+                    "name, contact, intent) VALUES (?,?,?,?,?,?,?)",
+                    (sk or None, (user_msg or "")[:300], (lang or "")[:10], 1 if escalate else 0,
+                     nm, ct, it))
                 tid = cur.lastrowid
             await conn.execute(
                 "INSERT INTO retail_chat_messages (thread_id, sender, body, escalate) VALUES (?,?,?,?)",
@@ -9890,10 +9902,15 @@ async def _persist_retail_chat(session_key: str, user_msg: str, ai_answer: str,
             await conn.execute(
                 "INSERT INTO retail_chat_messages (thread_id, sender, body, escalate) VALUES (?,?,?,?)",
                 (tid, "ai", (ai_answer or "")[:4000], 0))
+            # Keep a captured name/contact once set; always refresh the latest intent.
             await conn.execute(
                 "UPDATE retail_chat_threads SET msg_count=msg_count+2, "
-                "escalated=MAX(escalated, ?), last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
-                (1 if escalate else 0, tid))
+                "escalated=MAX(escalated, ?), "
+                "name=CASE WHEN ?<>'' THEN ? ELSE name END, "
+                "contact=CASE WHEN ?<>'' THEN ? ELSE contact END, "
+                "intent=CASE WHEN ?<>'' THEN ? ELSE intent END, "
+                "last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
+                (1 if escalate else 0, nm, nm, ct, ct, it, it, tid))
             await conn.commit()
     except Exception as e:
         logger.warning("retail chat persist failed: %s", e)
@@ -12923,8 +12940,8 @@ async def sa_retail_chats(limit: int = Query(100, ge=1, le=300),
     async with _aio.connect(db.DB_PATH) as conn:
         conn.row_factory = _aio.Row
         rows = [dict(r) for r in await (await conn.execute(
-            f"""SELECT thread_id, session_key, first_message, msg_count, escalated, contact,
-                       status, lang, created_at, last_at
+            f"""SELECT thread_id, session_key, first_message, msg_count, escalated, name, contact,
+                       intent, status, lang, created_at, last_at
                 FROM retail_chat_threads {where}
                 ORDER BY last_at DESC LIMIT ?""", (limit,))).fetchall()]
         stats = dict(await (await conn.execute(

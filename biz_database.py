@@ -1483,7 +1483,9 @@ async def init_db():
                 first_message TEXT DEFAULT '',
                 msg_count     INTEGER DEFAULT 0,
                 escalated     INTEGER DEFAULT 0,       -- AI flagged needs-human at any point
+                name          TEXT DEFAULT '',         -- visitor name if the AI captured it
                 contact       TEXT DEFAULT '',         -- phone/email if the visitor left one
+                intent        TEXT DEFAULT '',         -- cold | curious | hot | support (latest)
                 status        TEXT DEFAULT 'open',     -- open | closed
                 lang          TEXT DEFAULT '',
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1994,6 +1996,15 @@ async def init_db():
         # (msg_id > this) drive the bell. Updated whenever the customer's widget loads the thread.
         try:
             await conn.execute("ALTER TABLE nidaan_support_threads ADD COLUMN sub_last_seen_msg_id INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        # Retail-chat lead capture (Sarathi homepage): AI-captured name + latest intent on the thread.
+        try:
+            await conn.execute("ALTER TABLE retail_chat_threads ADD COLUMN name TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            await conn.execute("ALTER TABLE retail_chat_threads ADD COLUMN intent TEXT DEFAULT ''")
         except Exception:
             pass
         # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a

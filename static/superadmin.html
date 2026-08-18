@@ -340,6 +340,7 @@ z-index:999;opacity:0;transition:.3s;pointer-events:none;max-width:90%;text-alig
 <div class="stat-chips" id="retailStats"></div>
 <div class="tab-row">
 <div class="tab-pill active" data-rf="all" onclick="setRetailFilter(this)">All</div>
+<div class="tab-pill" data-rf="hot" onclick="setRetailFilter(this)">🔥 Hot leads</div>
 <div class="tab-pill" data-rf="escalated" onclick="setRetailFilter(this)">⚠️ Needs human</div>
 </div>
 <div id="retailList"><div class="loading-center"><div class="spinner"></div></div></div>
@@ -797,22 +798,30 @@ function setTicketFilter(el){el.parentElement.querySelectorAll('.tab-pill').forE
 let _retailChats=[], _retailFilter='all';
 async function loadRetailChats(){
   try{
-    const r=await fetch(API+'/retail-chats?limit=150'+(_retailFilter==='escalated'?'&escalated=1':''),{headers:hdrs()});
+    const r=await fetch(API+'/retail-chats?limit=200',{headers:hdrs()});
     const d=await r.json();
     _retailChats=d.threads||[];
     const s=d.stats||{};
-    $('retailStats').innerHTML=`<div class="stat-chip">Total: <b>${s.total||0}</b></div><div class="stat-chip">Today: <b>${s.today||0}</b></div><div class="stat-chip">⚠️ Needs human: <b>${s.escalated||0}</b></div>`;
+    const hot=_retailChats.filter(t=>t.intent==='hot').length;
+    $('retailStats').innerHTML=`<div class="stat-chip">Total: <b>${s.total||0}</b></div><div class="stat-chip">Today: <b>${s.today||0}</b></div><div class="stat-chip">🔥 Hot: <b>${hot}</b></div><div class="stat-chip">⚠️ Needs human: <b>${s.escalated||0}</b></div>`;
     renderRetailChats();
   }catch(e){ $('retailList').innerHTML='<div class="card"><div class="empty">Could not load</div></div>'; }
 }
 function renderRetailChats(){
-  const list=_retailChats;
-  if(!list.length){$('retailList').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">💬</div>No retail chats yet</div></div>';return}
-  $('retailList').innerHTML=list.map(t=>`<div class="card" style="margin-bottom:8px;cursor:pointer${t.escalated?';border-left:3px solid #f59e0b':''}" onclick="openRetailChat(${t.thread_id})">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-size:13px">${esc((t.first_message||'(no message)').slice(0,64))}</b>${t.escalated?'<span class="tkt-priority high">needs human</span>':''}</div>
-    <div style="font-size:12px;color:var(--text2)">${t.msg_count||0} msgs · ${timeAgo(t.last_at)}${t.contact?(' · '+esc(t.contact)):''}</div></div>`).join('');
+  let list=_retailChats;
+  if(_retailFilter==='hot')list=list.filter(t=>t.intent==='hot');
+  else if(_retailFilter==='escalated')list=list.filter(t=>t.escalated);
+  if(!list.length){$('retailList').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">💬</div>No chats in this view yet</div></div>';return}
+  $('retailList').innerHTML=list.map(t=>{
+    const hot=(t.intent==='hot');
+    const badge=hot?'<span class="tkt-priority high">🔥 hot lead</span>':(t.escalated?'<span class="tkt-priority high">needs human</span>':'');
+    const who=[t.name,t.contact].filter(Boolean).map(esc).join(' · ');
+    return`<div class="card" style="margin-bottom:8px;cursor:pointer${(hot||t.escalated)?';border-left:3px solid #f59e0b':''}" onclick="openRetailChat(${t.thread_id})">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><b style="font-size:13px">${esc((t.first_message||'(no message)').slice(0,60))}</b>${badge}</div>
+    <div style="font-size:12px;color:var(--text2)">${t.msg_count||0} msgs · ${timeAgo(t.last_at)}${who?(' · 📇 '+who):''}</div></div>`;
+  }).join('');
 }
-function setRetailFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_retailFilter=el.dataset.rf;loadRetailChats()}
+function setRetailFilter(el){el.parentElement.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');_retailFilter=el.dataset.rf;renderRetailChats()}
 async function openRetailChat(id){
   $('ovTicketTitle').textContent='Loading…';$('ovTicketBody').innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
   openOverlay('ticketOverlay');
@@ -820,7 +829,7 @@ async function openRetailChat(id){
     const r=await fetch(API+'/retail-chats/'+id,{headers:hdrs()});const d=await r.json();
     const t=d.thread||{};const msgs=d.messages||[];
     $('ovTicketTitle').textContent='💬 Retail chat #'+id;
-    let h=`<div class="stat-chips"><div class="stat-chip">${msgs.length} messages</div><div class="stat-chip">${timeAgo(t.created_at)}</div>${t.escalated?'<div class="stat-chip tkt-priority high">needs human</div>':''}${t.contact?('<div class="stat-chip">'+esc(t.contact)+'</div>'):''}</div>`;
+    let h=`<div class="stat-chips"><div class="stat-chip">${msgs.length} messages</div><div class="stat-chip">${timeAgo(t.created_at)}</div>${t.intent==='hot'?'<div class="stat-chip tkt-priority high">🔥 hot lead</div>':(t.intent?('<div class="stat-chip">'+esc(t.intent)+'</div>'):'')}${t.escalated?'<div class="stat-chip tkt-priority high">needs human</div>':''}${t.name?('<div class="stat-chip">📇 '+esc(t.name)+'</div>'):''}${t.contact?('<div class="stat-chip">'+esc(t.contact)+'</div>'):''}</div>`;
     h+=msgs.map(m=>{const isV=m.sender==='visitor';return`<div class="card" style="margin:0 0 8px;${isV?'background:var(--bg);border-left:3px solid var(--indigo)':'background:var(--teal-bg,#f0fdfa);border-left:3px solid var(--teal)'}"><div style="font-size:11px;font-weight:700;color:${isV?'var(--indigo)':'var(--teal)'};margin-bottom:2px">${isV?'👤 Visitor':'🤖 Sarathi AI'}</div><div style="font-size:13px;white-space:pre-wrap">${esc(m.body||'')}</div><div class="event-time">${timeAgo(m.created_at)}</div></div>`}).join('');
     h+=`<div style="font-size:12px;color:var(--text2);margin-top:10px">This is a captured transcript of an anonymous homepage visitor. Live two-way reply is planned for a later version.</div>`;
     $('ovTicketBody').innerHTML=h;
