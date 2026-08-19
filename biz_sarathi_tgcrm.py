@@ -1306,6 +1306,47 @@ async def _ask_ai(link, question: str, tg_uid=None) -> str:
     return ans
 
 
+async def _ask_opener(link) -> str:
+    """A short, data-grounded proactive line shown when the advisor opens Ask AI — so it feels
+    smart and personal from the first tap. Falls back to the static prompt on any error."""
+    lang = _lang(link)
+    try:
+        ctx = await _ai_context(link)
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        today = now.strftime("%Y-%m-%d")
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        due_today = sum(1 for f in (ctx.get("followups") or []) if (f.get("date") or "")[:10] == today)
+        soon = 0
+        for r in (ctx.get("renewals") or []):
+            try:
+                dt = datetime.strptime((r.get("date") or "")[:10], "%Y-%m-%d")
+                if 0 <= (dt - midnight).days <= 7:
+                    soon += 1
+            except Exception:
+                pass
+    except Exception:
+        return T(lang, "ask_prompt")
+    if lang == "hi":
+        bits = []
+        if due_today:
+            bits.append(f"आज {due_today} फ़ॉलो-अप बाकी")
+        if soon:
+            bits.append(f"अगले 7 दिन में {soon} रिन्यूअल")
+        head = ("🤖 " + " · ".join(bits) + "।\n\n") if bits else "🤖 "
+        return head + ("मुझसे कुछ भी पूछें — जैसे <i>“आज क्या पेंडिंग है?”</i> या "
+                       "<i>“इस हफ़्ते किसके रिन्यूअल हैं?”</i>। फ़ॉलो-अप सवाल भी पूछ सकते हैं — "
+                       "मैं हमारी बातचीत याद रखता हूँ।")
+    bits = []
+    if due_today:
+        bits.append(f"{due_today} follow-up{'s' if due_today != 1 else ''} due today")
+    if soon:
+        bits.append(f"{soon} renewal{'s' if soon != 1 else ''} in the next 7 days")
+    head = ("🤖 " + " · ".join(bits) + ".\n\n") if bits else "🤖 "
+    return head + ("Ask me anything — e.g. <i>“what's pending today?”</i> or "
+                   "<i>“whose renewals this week?”</i>. Follow-up questions are fine too — "
+                   "I remember our chat.")
+
+
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
     """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
     lang = _lang(link)
@@ -1453,7 +1494,7 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     elif data == "ask":
         # Enter conversation mode so the next message (and follow-ups) are treated as questions.
         await _set_pending(tg_uid, tenant_id, {"action": "ask_mode"})
-        await send_message(token, chat_id, T(lang, "ask_prompt"), mkb)
+        await send_message(token, chat_id, await _ask_opener(link), mkb)
     elif data == "support":
         await _set_pending(tg_uid, tenant_id, {"action": "support_capture"})
         await send_message(token, chat_id, T(lang, "support_prompt"),
