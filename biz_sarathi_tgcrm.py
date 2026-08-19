@@ -163,6 +163,7 @@ async def ensure_schema() -> None:
             tenant_id        INTEGER,
             last_intent      TEXT DEFAULT '',
             pending          TEXT DEFAULT '',
+            ai_history       TEXT DEFAULT '',
             updated_at       TEXT
         );
 
@@ -180,6 +181,11 @@ async def ensure_schema() -> None:
         # Migration: "paused draft" slot for context-switching nudges (existing rows).
         try:
             await conn.execute("ALTER TABLE tg_context ADD COLUMN prev_pending TEXT")
+        except Exception:
+            pass
+        # Migration: rolling AI conversation memory (existing rows).
+        try:
+            await conn.execute("ALTER TABLE tg_context ADD COLUMN ai_history TEXT DEFAULT ''")
         except Exception:
             pass
         # Migration: per-user bot language (existing rows).
@@ -1217,7 +1223,45 @@ async def _ai_context(link) -> dict:
     return ctx
 
 
-async def _ask_ai(link, question: str) -> str:
+# ── AI conversation memory (rolling, per Telegram user) ──────────────────────
+_AI_TURNS = 8            # keep the last N exchanges (user+assistant pairs)
+_AI_TTL_MIN = 30        # a gap longer than this starts a fresh conversation
+
+
+async def _load_ai_history(tg_uid) -> list:
+    """Recent conversation turns [{role,text}], or [] if none/stale (>30 min)."""
+    import json as _json, time as _time
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            row = await (await conn.execute(
+                "SELECT ai_history FROM tg_context WHERE telegram_user_id=?", (tg_uid,))).fetchone()
+        if not row or not row["ai_history"]:
+            return []
+        blob = _json.loads(row["ai_history"]) or {}
+        if _time.time() - float(blob.get("ts", 0)) > _AI_TTL_MIN * 60:
+            return []
+        return (blob.get("turns") or [])[-_AI_TURNS * 2:]
+    except Exception:
+        return []
+
+
+async def _save_ai_history(tg_uid, tid, turns) -> None:
+    import json as _json, time as _time
+    try:
+        blob = _json.dumps({"ts": _time.time(), "turns": turns[-_AI_TURNS * 2:]}, ensure_ascii=False)
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "INSERT OR IGNORE INTO tg_context (telegram_user_id, tenant_id, updated_at) "
+                "VALUES (?,?,CURRENT_TIMESTAMP)", (tg_uid, tid))
+            await conn.execute("UPDATE tg_context SET ai_history=? WHERE telegram_user_id=?",
+                               (blob, tg_uid))
+            await conn.commit()
+    except Exception as e:
+        logger.info("tgcrm save_ai_history failed: %s", e)
+
+
+async def _ask_ai(link, question: str, tg_uid=None) -> str:
     import os as _os, json as _json
     lang = _lang(link)
     key = _os.getenv("GEMINI_API_KEY", "").strip()
@@ -1226,24 +1270,40 @@ async def _ask_ai(link, question: str) -> str:
     ctx = await _ai_context(link)
     today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
     langname = "Hindi (Devanagari script)" if lang == "hi" else "English"
+    history = await _load_ai_history(tg_uid) if tg_uid else []
+    hist_txt = "\n".join(
+        ("User: " if h.get("role") == "user" else "Sarathi: ") + (h.get("text") or "")
+        for h in history) or "(this is the start of the conversation)"
     prompt = (
-        f"You are a helpful CRM assistant for an insurance advisor. Today (IST) is {today}. "
-        f"Reply in {langname}. Answer the user's question ONLY from the DATA below (their own CRM). "
-        "Be concise (1-4 short lines), simple language. If the answer isn't in the data, say you don't "
-        "have that info. Never invent leads, numbers, or dates. Keep names/numbers/dates verbatim.\n\n"
-        f"DATA (JSON): {_json.dumps(ctx, ensure_ascii=False)[:6000]}\n\nQUESTION: {question}")
+        "You are Sarathi — a warm, sharp CRM assistant for an insurance advisor, chatting on Telegram. "
+        f"Today (IST) is {today}. Reply in {langname}, in simple, friendly language.\n"
+        "Hold a NATURAL, CONTINUOUS conversation. The user often asks follow-ups that refer to what you "
+        'just said ("those", "the second one", "him", "and health?", "call him tomorrow") — use the '
+        "conversation so far to understand exactly what they mean.\n"
+        "Ground every fact ONLY in the DATA below (their own CRM). Never invent leads, numbers or dates; "
+        "keep names/numbers/dates exactly as given. If something isn't in the data, say so briefly and "
+        "offer what you CAN do.\n"
+        "Be concise but human (2-5 short lines) — don't re-list everything each time, just answer what was "
+        "asked, and when it helps, proactively suggest the next step (e.g. offer to note a follow-up).\n\n"
+        f"DATA (JSON): {_json.dumps(ctx, ensure_ascii=False)[:6000]}\n\n"
+        f"Conversation so far:\n{hist_txt}\n\nUser: {question}")
     model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
             r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
-                                        "generationConfig": {"temperature": 0.2}})
+                                        "generationConfig": {"temperature": 0.45}})
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
-        return (parts[0].get("text") or "").strip() or T(lang, "ai_none")
+        ans = (parts[0].get("text") or "").strip() or T(lang, "ai_none")
     except Exception as e:
         logger.info("tgcrm ask_ai failed: %s", e)
         return T(lang, "ai_err")
+    if tg_uid:
+        history.append({"role": "user", "text": (question or "")[:800]})
+        history.append({"role": "assistant", "text": ans[:800]})
+        await _save_ai_history(tg_uid, int(link["tenant_id"]), history)
+    return ans
 
 
 async def _process_command(token, chat_id, tg_uid, link, text) -> None:
@@ -1265,16 +1325,26 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
             logger.warning("tgcrm support ticket failed: %s", e)
             await send_message(token, chat_id, T(lang, "ticket_fail"), mkb)
         return
+    # Are we mid-conversation with the AI? Then keep vague/greeting follow-ups in the chat
+    # (a stateless intent-parse would bounce "and health?" to the menu).
+    _in_ask = bool(_pend and _pend.get("action") == "ask_mode")
     intent = await _parse_intent(text)
     act = intent.get("action", "none")
+    if _in_ask and act == "none":
+        act = "ask"
     if act == "none":
         await _send_menu(token, chat_id, link)
         return
     if act == "ask":
         await send_message(token, chat_id, T(lang, "ask_thinking"))
-        ans = await _ask_ai(link, text)
+        ans = await _ask_ai(link, text, tg_uid)
+        # Stay in the conversation so the NEXT message is understood as a follow-up.
+        await _set_pending(tg_uid, int(link["tenant_id"]), {"action": "ask_mode"})
         await send_message(token, chat_id, ans, mkb)
         return
+    # A real command (log a note, add a lead, …) breaks out of the AI chat.
+    if _in_ask:
+        await _set_pending(tg_uid, int(link["tenant_id"]), None)
     intent["summary"] = (intent.get("summary") or text).strip()
 
     # Context-switch: a new command supersedes any unconfirmed draft, which we pause
@@ -1352,6 +1422,15 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         return {"ok": True}
     lang = _lang(link)
     mkb = [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]]
+    # Tapping any button other than "Ask AI" leaves the AI conversation — drop ask-mode so later
+    # typing isn't mistaken for a follow-up question. (Only clears ask-mode, never a real draft.)
+    if data != "ask":
+        try:
+            _p = await _get_pending(tg_uid)
+            if _p and _p.get("action") == "ask_mode":
+                await _set_pending(tg_uid, tenant_id, None)
+        except Exception:
+            pass
     if data == "menu":
         await _send_menu(token, chat_id, link)
     elif data == "lang":
@@ -1372,6 +1451,8 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
     elif data == "renewals":
         await _renewals_view(token, chat_id, link)
     elif data == "ask":
+        # Enter conversation mode so the next message (and follow-ups) are treated as questions.
+        await _set_pending(tg_uid, tenant_id, {"action": "ask_mode"})
         await send_message(token, chat_id, T(lang, "ask_prompt"), mkb)
     elif data == "support":
         await _set_pending(tg_uid, tenant_id, {"action": "support_capture"})
