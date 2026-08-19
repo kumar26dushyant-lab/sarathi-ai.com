@@ -8,6 +8,54 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-19 — NEW: 📨 Email Updates radar — never miss a reply again — READY TO SEND
+
+> Send to admins / sub-admins (they set up mailboxes + assign). Handlers get their items as normal Tasks, so all staff benefit.
+
+**Title (EN):**
+📨 New: "Email Updates" — one screen watches every customer mailbox (please 👍)
+
+**Details (EN):**
+Team, checking 100+ customer Gmails by hand, every day, is now a thing of the past. 🎉
+
+A new **📨 Email Updates** section in the ops menu watches all your customers' claim mailboxes for you and tells you the moment something important arrives.
+
+**What it does**
+• Watches every connected customer mailbox around the clock and **flags each new email**: 🔴 act now (a reply from an insurer/authority, or a deadline) · 🟡 review · ⚪ ignore (receipts/marketing — cleared for you).
+• Every 🔴/🟡 update **automatically becomes a Task**, assigned to the handler you picked — so you get pinged on all your usual channels and it shows in your dashboard like any other task.
+• **One task per customer** — follow-ups on the same case stay together, not scattered.
+• Tap **"Open in Gmail"** to jump straight to that exact email and reply.
+• If a case goes **quiet** for too long, it nudges you to follow up. And any **deadline** the email mentions is pulled out for you.
+
+**How to set it up (admins/sub-admins)**
+Ops → **📨 Email Updates** → **📮 Mailboxes** → follow the on-screen 3-step guide → **＋ Connect a customer mailbox** (name + the customer's Gmail + a 16-char Google App Password) → pick who handles it → **Test Connection** → **Save**. Old mail is never pulled in — only new emails from then on.
+
+**How to use this update:** react **👍** to confirm you've **read and understood**. Anything unclear? Please reach out to our **office IT SPOC**. 🙏
+
+**Title (HI):**
+📨 नया: "Email Updates" — एक ही स्क्रीन हर ग्राहक का मेलबॉक्स देखती है (कृपया 👍)
+
+**Details (HI):**
+टीम, अब रोज़ 100+ ग्राहकों के Gmail हाथ से चेक करने की ज़रूरत नहीं। 🎉
+
+ऑप्स मेन्यू में नया **📨 Email Updates** सेक्शन आपके सभी ग्राहकों के क्लेम मेलबॉक्स खुद देखता रहता है और कोई ज़रूरी मेल आते ही आपको बता देता है।
+
+**यह क्या करता है**
+• हर जुड़े मेलबॉक्स पर लगातार नज़र रखता है और हर नई मेल को **फ़्लैग** करता है: 🔴 तुरंत ध्यान दें (बीमाकर्ता/अथॉरिटी का जवाब या कोई डेडलाइन) · 🟡 देखें · ⚪ छोड़ें (रसीद/मार्केटिंग — अपने-आप साफ़)।
+• हर 🔴/🟡 अपडेट **अपने-आप एक Task बन जाता है**, आपके चुने हुए हैंडलर को असाइन — तो आपको सभी सामान्य चैनलों पर सूचना मिलती है और यह डैशबोर्ड में दिखता है।
+• **हर ग्राहक के लिए एक ही टास्क** — एक ही केस के फ़ॉलो-अप एक साथ रहते हैं, बिखरते नहीं।
+• **"Open in Gmail"** दबाकर सीधे उसी मेल पर जाकर जवाब दें।
+• कोई केस बहुत देर तक **शांत** रहे तो यह फ़ॉलो-अप के लिए याद दिलाता है। और मेल में लिखी कोई भी **डेडलाइन** निकालकर दिखाता है।
+
+**सेटअप कैसे करें (admins/sub-admins)**
+Ops → **📨 Email Updates** → **📮 Mailboxes** → स्क्रीन पर दिए 3 चरण देखें → **＋ Connect a customer mailbox** (नाम + ग्राहक का Gmail + 16-अंकों का Google App Password) → हैंडलर चुनें → **Test Connection** → **Save**। पुरानी मेल कभी नहीं आती — सिर्फ़ उसके बाद की नई मेल।
+
+**इस अपडेट का उपयोग:** नीचे **👍** करके पुष्टि करें कि आपने **पढ़ा और समझ लिया**। कुछ भी अस्पष्ट हो तो कृपया ऑफ़िस के **IT SPOC** से संपर्क करें। 🙏
+
+*Suggested roles: super-admins + sub-super-admins (they configure). Handlers see their items in Tasks automatically.*
+
+---
+
 ## 2026-08-18 — Big set of upgrades: payments, claims, branches & a new voice guide — READY TO SEND
 
 > Consolidated round-up of everything shipped in the last day. Supersedes the individual Aug-17 drafts below for sending purposes (send this one).
