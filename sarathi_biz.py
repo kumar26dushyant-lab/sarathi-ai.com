@@ -10056,6 +10056,35 @@ async def _persist_retail_chat(session_key: str, user_msg: str, ai_answer: str,
         logger.warning("retail chat persist failed: %s", e)
 
 
+@app.get("/api/guide/thread")
+@limiter.limit("60/minute")
+async def sarathi_guide_thread(request: Request, session_key: str = "", after: int = 0):
+    """Public: the homepage widget polls this for live STAFF replies on ITS OWN session thread.
+    Sarathi-only; scoped strictly by the client's random session_key; returns only staff messages
+    newer than `after` (the widget already shows its own visitor + AI messages locally)."""
+    if _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    sk = (session_key or "").strip()[:64]
+    if not sk:
+        return {"messages": []}
+    try:
+        import aiosqlite as _aio
+        async with _aio.connect(db.DB_PATH) as conn:
+            conn.row_factory = _aio.Row
+            row = await (await conn.execute(
+                "SELECT thread_id FROM retail_chat_threads WHERE session_key=?", (sk,))).fetchone()
+            if not row:
+                return {"messages": []}
+            msgs = [dict(r) for r in await (await conn.execute(
+                "SELECT msg_id, body FROM retail_chat_messages "
+                "WHERE thread_id=? AND sender='staff' AND msg_id>? ORDER BY msg_id ASC",
+                (row["thread_id"], int(after or 0)))).fetchall()]
+        return {"messages": msgs}
+    except Exception as e:
+        logger.warning("retail thread poll failed: %s", e)
+        return {"messages": []}
+
+
 @app.post("/api/auth/send-otp")
 @limiter.limit("5/minute")
 async def api_send_otp(req: SendOTPRequest, request: Request):
@@ -13106,6 +13135,38 @@ async def sa_retail_chat_detail(thread_id: int, sa=Depends(auth.require_superadm
             "SELECT sender, body, escalate, created_at FROM retail_chat_messages "
             "WHERE thread_id=? ORDER BY msg_id ASC", (thread_id,))).fetchall()]
     return {"thread": dict(thread), "messages": msgs}
+
+
+class _RetailReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/api/sa/retail-chats/{thread_id}/reply")
+async def sa_retail_chat_reply(thread_id: int, body: _RetailReplyReq,
+                               sa=Depends(auth.require_superadmin)):
+    """Staff reply to a homepage/retail chat — stored as a 'staff' message; the visitor's widget
+    polls /api/guide/thread and shows it live while their chat is open."""
+    import aiosqlite as _aio
+    sid = None
+    try:
+        sid = (sa.get("staff_id") or sa.get("sub") or sa.get("id")) if isinstance(sa, dict) else None
+    except Exception:
+        sid = None
+    async with _aio.connect(db.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        t = await (await conn.execute(
+            "SELECT thread_id FROM retail_chat_threads WHERE thread_id=?", (thread_id,))).fetchone()
+        if not t:
+            return JSONResponse({"detail": "Thread not found"}, status_code=404)
+        await conn.execute(
+            "INSERT INTO retail_chat_messages (thread_id, sender, body, staff_id) VALUES (?,?,?,?)",
+            (thread_id, "staff", body.message.strip()[:4000], sid))
+        await conn.execute(
+            "UPDATE retail_chat_threads SET msg_count=msg_count+1, last_at=CURRENT_TIMESTAMP "
+            "WHERE thread_id=?", (thread_id,))
+        await conn.commit()
+    return {"ok": True}
 
 
 @app.get("/api/sa/ai-costs")

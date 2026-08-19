@@ -66,12 +66,58 @@
   function scrollDown(){ body.scrollTop = body.scrollHeight; }
 
   function addMsg(role, text){
+    if (role === 'staff'){
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'align-self:flex-start;max-width:82%;display:flex;flex-direction:column';
+      var lbl = document.createElement('div');
+      lbl.textContent = '👤 Sarathi Team';
+      lbl.style.cssText = 'font-size:11px;color:' + TEAL2 + ';font-weight:700;margin-bottom:2px';
+      var sd = document.createElement('div');
+      sd.className = 'sg-msg sg-bot'; sd.style.maxWidth = '100%'; sd.textContent = text;
+      wrap.appendChild(lbl); wrap.appendChild(sd);
+      body.appendChild(wrap); scrollDown();
+      return sd;
+    }
     var d = document.createElement('div');
     d.className = 'sg-msg ' + (role === 'user' ? 'sg-user' : 'sg-bot');
     d.textContent = text;
     body.appendChild(d); scrollDown();
     return d;
   }
+
+  // Stable per-visitor session (invisible). A >30 min gap starts a fresh one (new visit = new card),
+  // which also resets the "last staff message seen" marker.
+  function getSession(){
+    var sk = '', now = Date.now();
+    try {
+      var ts = parseInt(localStorage.getItem('sg_sess_ts') || '0', 10);
+      sk = localStorage.getItem('sg_sess') || '';
+      if (!sk || !ts || (now - ts) > 1800000) {
+        sk = 'r' + now.toString(36) + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem('sg_sess', sk); localStorage.setItem('sg_last_staff', '0');
+      }
+      localStorage.setItem('sg_sess_ts', String(now));
+    } catch (e) {}
+    return sk;
+  }
+  // Live two-way: poll for staff replies while the chat is open and show them as they arrive.
+  var pollTimer = null;
+  async function pollStaff(){
+    var sk = ''; try { sk = localStorage.getItem('sg_sess') || ''; } catch (e) {}
+    if (!sk) return;
+    var after = 0; try { after = parseInt(localStorage.getItem('sg_last_staff') || '0', 10) || 0; } catch (e) {}
+    try {
+      var r = await fetch('/api/guide/thread?session_key=' + encodeURIComponent(sk) + '&after=' + after);
+      if (!r.ok) return;
+      var d = await r.json();
+      (d.messages || []).forEach(function(m){
+        addMsg('staff', m.body);
+        try { localStorage.setItem('sg_last_staff', String(m.msg_id)); } catch (e) {}
+      });
+    } catch (e) {}
+  }
+  function startPolling(){ if (!pollTimer) pollTimer = setInterval(pollStaff, 5000); }
+  function stopPolling(){ if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
   function addCta(kind){
     var a = document.createElement('a');
     a.className = 'sg-cta' + (kind === 'human' ? ' human' : '');
@@ -87,9 +133,9 @@
 
   function openPanel(){
     panel.classList.add('open'); btn.style.display = 'none'; opened = true;
-    greet(); setTimeout(function(){ inp.focus(); }, 100);
+    greet(); startPolling(); pollStaff(); setTimeout(function(){ inp.focus(); }, 100);
   }
-  function closePanel(){ panel.classList.remove('open'); btn.style.display = ''; }
+  function closePanel(){ panel.classList.remove('open'); btn.style.display = ''; stopPolling(); }
 
   btn.addEventListener('click', openPanel);
   panel.querySelector('.sg-x').addEventListener('click', closePanel);
@@ -105,15 +151,8 @@
     typing.className = 'sg-typing'; typing.textContent = 'Sarathi is typing…';
     body.appendChild(typing); scrollDown();
     // Stable per-visitor id (invisible) so the team reads the chat as ONE thread in Support.
-    // A gap of > 30 min starts a fresh session — a new visit becomes a new conversation card.
-    var _sk = '', _seen = [];
-    try {
-      var _now = Date.now(), _ts = parseInt(localStorage.getItem('sg_sess_ts') || '0', 10);
-      _sk = localStorage.getItem('sg_sess') || '';
-      if (!_sk || !_ts || (_now - _ts) > 1800000) { _sk = 'r' + _now.toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('sg_sess', _sk); }
-      localStorage.setItem('sg_sess_ts', String(_now));
-      try { _seen = JSON.parse(localStorage.getItem('sg_seen_stories') || '[]') || []; } catch (e) { _seen = []; }
-    } catch (e) {}
+    var _sk = getSession(), _seen = [];
+    try { _seen = JSON.parse(localStorage.getItem('sg_seen_stories') || '[]') || []; } catch (e) { _seen = []; }
     try {
       var res = await fetch('/api/guide/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

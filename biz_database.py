@@ -1494,9 +1494,10 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS retail_chat_messages (
                 msg_id     INTEGER PRIMARY KEY AUTOINCREMENT,
                 thread_id  INTEGER NOT NULL,
-                sender     TEXT NOT NULL,               -- visitor | ai
+                sender     TEXT NOT NULL,               -- visitor | ai | staff
                 body       TEXT NOT NULL,
                 escalate   INTEGER DEFAULT 0,
+                staff_id   INTEGER,                     -- who replied (staff messages)
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_retail_chat_msg_thread
@@ -2083,6 +2084,11 @@ async def init_db():
         # Radar P4 — silence 'Chase' idempotency: when we last nudged this quiet case.
         try:
             await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN last_chase_at TIMESTAMP")
+        except Exception:
+            pass
+        # Retail chat v2 — staff live reply: who sent a staff message.
+        try:
+            await conn.execute("ALTER TABLE retail_chat_messages ADD COLUMN staff_id INTEGER")
         except Exception:
             pass
         # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a

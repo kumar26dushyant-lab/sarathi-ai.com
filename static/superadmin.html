@@ -830,10 +830,21 @@ async function openRetailChat(id){
     const t=d.thread||{};const msgs=d.messages||[];
     $('ovTicketTitle').textContent='💬 Retail chat #'+id;
     let h=`<div class="stat-chips"><div class="stat-chip">${msgs.length} messages</div><div class="stat-chip">${timeAgo(t.created_at)}</div>${t.intent==='hot'?'<div class="stat-chip tkt-priority high">🔥 hot lead</div>':(t.intent?('<div class="stat-chip">'+esc(t.intent)+'</div>'):'')}${t.escalated?'<div class="stat-chip tkt-priority high">needs human</div>':''}${t.name?('<div class="stat-chip">📇 '+esc(t.name)+'</div>'):''}${t.contact?('<div class="stat-chip">'+esc(t.contact)+'</div>'):''}</div>`;
-    h+=msgs.map(m=>{const isV=m.sender==='visitor';return`<div class="card" style="margin:0 0 8px;${isV?'background:var(--bg);border-left:3px solid var(--indigo)':'background:var(--teal-bg,#f0fdfa);border-left:3px solid var(--teal)'}"><div style="font-size:11px;font-weight:700;color:${isV?'var(--indigo)':'var(--teal)'};margin-bottom:2px">${isV?'👤 Visitor':'🤖 Sarathi AI'}</div><div style="font-size:13px;white-space:pre-wrap">${esc(m.body||'')}</div><div class="event-time">${timeAgo(m.created_at)}</div></div>`}).join('');
-    h+=`<div style="font-size:12px;color:var(--text2);margin-top:10px">This is a captured transcript of an anonymous homepage visitor. Live two-way reply is planned for a later version.</div>`;
+    h+=msgs.map(m=>{
+      const w = m.sender==='visitor' ? {l:'👤 Visitor',c:'var(--indigo)',b:'var(--bg)'} : m.sender==='staff' ? {l:'🛡️ Team',c:'var(--teal)',b:'var(--teal-bg,#f0fdfa)'} : {l:'🤖 Sarathi AI',c:'var(--teal)',b:'var(--teal-bg,#f0fdfa)'};
+      return`<div class="card" style="margin:0 0 8px;background:${w.b};border-left:3px solid ${w.c}"><div style="font-size:11px;font-weight:700;color:${w.c};margin-bottom:2px">${w.l}</div><div style="font-size:13px;white-space:pre-wrap">${esc(m.body||'')}</div><div class="event-time">${timeAgo(m.created_at)}</div></div>`;
+    }).join('');
+    h+=`<div style="margin-top:12px"><textarea id="retailReply" rows="3" placeholder="Reply to this visitor… (shows live in their chat)" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;resize:vertical"></textarea><div class="action-bar"><button class="act-btn primary" onclick="retailReply(${id})">💬 Send reply</button></div><div style="font-size:11px;color:var(--text2);margin-top:4px">Your reply appears in the visitor's chat live while it's open (they check every few seconds); if they've left, they'll see it on their next visit within 30 min.</div></div>`;
     $('ovTicketBody').innerHTML=h;
   }catch(e){$('ovTicketBody').innerHTML='<div class="empty">Error loading chat</div>'}
+}
+async function retailReply(id){
+  const el=document.getElementById('retailReply'); const msg=(el&&el.value||'').trim(); if(!msg)return;
+  try{
+    const r=await fetch(API+'/retail-chats/'+id+'/reply',{method:'POST',headers:hdrs(),body:JSON.stringify({message:msg})});
+    if(!r.ok){toast('❌ Failed to send');return;}
+    toast('✅ Reply sent'); openRetailChat(id);
+  }catch(e){ toast('❌ Failed to send'); }
 }
 
 async function openTicket(id){
