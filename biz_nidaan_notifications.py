@@ -1903,32 +1903,46 @@ async def on_claim_assigned(claim_id: int, staff_ids: list, assigned_by_id: int 
 
 async def notify_claim_watchers(claim_id: int, subject: str, body: str,
                                 exclude_ids=None):
-    """Ping every non-muted 'involved' watcher of a claim on the dashboard bell
-    (auto-mirrored to Telegram), excluding the given staff_ids (actor + anyone
-    already alerted). This is how involved staff stay in the loop on claim activity
-    until they mute. (Assignment + status also email; per-message email is
-    intentionally omitted to avoid inbox spam — the mute toggle is the control.)"""
+    """Ping EVERYONE involved in a claim — non-muted watchers (tagged/@mentioned/involved) PLUS the
+    current assignee(s) — on ALL channels: dashboard bell + web push + Telegram mirror + EMAIL, with a
+    must-acknowledge popup. So tagged/involved/assigned staff never miss claim activity. Excludes the
+    actor + anyone already alerted."""
     excl = set(int(x) for x in (exclude_ids or []) if x)
+    ids: set = set()
     try:
         async with aiosqlite.connect(db.DB_PATH) as conn:
-            rows = await (await conn.execute(
-                "SELECT staff_id FROM nidaan_claim_watchers WHERE claim_id=? AND muted=0",
-                (claim_id,))).fetchall()
+            conn.row_factory = aiosqlite.Row
+            for r in await (await conn.execute(
+                    "SELECT staff_id FROM nidaan_claim_watchers WHERE claim_id=? AND muted=0",
+                    (claim_id,))).fetchall():
+                if r["staff_id"]:
+                    ids.add(int(r["staff_id"]))
+            # Include the primary assignee even if they never explicitly "watched" the claim.
+            ar = await (await conn.execute(
+                "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?",
+                (claim_id,))).fetchone()
+            if ar and ar["assigned_to_staff_id"]:
+                ids.add(int(ar["assigned_to_staff_id"]))
+            # …and any co-assignees, if the multi-assignee table exists.
+            try:
+                for r in await (await conn.execute(
+                        "SELECT staff_id FROM nidaan_claim_assignees WHERE claim_id=?",
+                        (claim_id,))).fetchall():
+                    if r["staff_id"]:
+                        ids.add(int(r["staff_id"]))
+            except Exception:
+                pass
     except Exception:
         return
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    for r in rows:
-        if r[0] in excl:
-            continue
-        try:
-            await _record_notification(
-                event_key="claim.watch", priority=PRIORITY_P2,
-                recipient_type=RECIPIENT_STAFF, recipient_id=r[0],
-                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
-                status="sent", sent_at=now, claim_id=claim_id,
-                require_ack=True)   # Item #3: involved staff must acknowledge claim activity
-        except Exception:
-            pass
+    ids -= excl
+    if not ids:
+        return
+    try:
+        # All channels + email + must-acknowledge popup (notify_staff_inapp mirrors to Telegram/push).
+        await notify_staff_inapp(list(ids), subject, body, event_key="claim.watch",
+                                 email=True, require_ack=True, claim_id=claim_id)
+    except Exception as e:
+        logger.warning("notify_claim_watchers failed: %s", e)
 
 
 async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, preview: str,

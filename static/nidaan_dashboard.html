@@ -1720,6 +1720,9 @@ async function openClaimDrawer(claim_id) {
   if (!res) return;
   const c = await res.json();
   const isHi = document.body.classList.contains('hi');
+  // Once a claim moves to Level-2 (reviewed "can fight" / sent to legal-ClaimShield), the legal team
+  // owns the file — the customer's attachment options are disabled (they can still message the team).
+  const isL2 = (c.review_outcome === 'can_fight') || !!c.claimshield_sent_at || !!c.claimshield_case_id;
 
   const fields = [
     ['Claim No.', `#${fmtClaimNum(claim_id)}`],
@@ -1783,7 +1786,8 @@ async function openClaimDrawer(claim_id) {
     <div class="drawer-section">
       <h4>${isHi ? 'दस्तावेज़' : 'Documents'}</h4>
       <div id="drawerDocList" style="font-size:.84rem;margin-bottom:.6rem;color:var(--nd-text-muted)">Loading documents…</div>
-      <div style="background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
+      ${isL2 ? `<div style="background:rgba(148,163,184,.08);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem .9rem;font-size:.82rem;color:var(--nd-text-muted);line-height:1.55">⚖️ ${isHi ? 'आपका क्लेम कानूनी एस्केलेशन (Level-2) में चला गया है — अब दस्तावेज़ हमारी कानूनी टीम संभालती है। कुछ नया साझा करना हो तो नीचे मैसेज बॉक्स में हमसे बात करें।' : 'Your claim has moved to legal escalation (Level-2) — documents are now handled by our legal team. To share anything new, please message us below.'}</div>`
+      : `<div style="background:rgba(59,130,246,.04);border:2px dashed rgba(59,130,246,.3);border-radius:8px;padding:.85rem">
         <label for="drawerDocInput" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.4);border-radius:6px;cursor:pointer;font-size:.85rem;color:var(--nd-info-text);font-weight:700">📂 ${isHi ? 'दस्तावेज़ चुनें' : 'Select Files to Upload'}</label>
         <input type="file" id="drawerDocInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="previewDrawerDocs()">
         <p style="text-align:center;color:var(--nd-info-text);opacity:.7;font-size:.75rem;margin:.35rem 0 .1rem;font-weight:600">💡 ${isHi ? 'एक साथ कई फ़ाइलें चुनें' : 'You can select multiple files at once from the file picker'}</p>
@@ -1791,7 +1795,7 @@ async function openClaimDrawer(claim_id) {
         <p style="opacity:.35;font-size:.72rem;margin:.4rem 0 .5rem;text-align:center">PDF / JPG / PNG / DOCX &nbsp;·&nbsp; max 10 MB each &nbsp;·&nbsp; up to 5 files</p>
         <button id="drawerUploadBtn" onclick="uploadDrawerDocs(${claim_id})" style="display:none;width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer">⬆ Upload Selected Files</button>
         <div id="drawerUploadMsg" style="font-size:.8rem;margin-top:.35rem"></div>
-      </div>
+      </div>`}
     </div>
     <div class="drawer-section">
       <h4>${isHi ? 'स्थिति इतिहास' : 'Status History'}</h4>
@@ -1802,7 +1806,7 @@ async function openClaimDrawer(claim_id) {
       <div id="msgThread" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">${isHi ? 'लोड हो रहा है…' : 'Loading…'}</div>
       <div style="display:flex;gap:.5rem;align-items:center">
         <input type="file" id="msgFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="msgFilePicked()">
-        <button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>
+        ${isL2 ? '' : `<button type="button" title="${isHi ? 'फ़ाइल जोड़ें' : 'Attach a file'}" onclick="document.getElementById('msgFile').click()" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.6rem .7rem;cursor:pointer">📎</button>`}
         <input id="msgInput" type="text" autocomplete="off" placeholder="${isHi ? 'अपना संदेश लिखें…' : 'Type a message…'}" style="flex:1;padding:.6rem .7rem;border-radius:8px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);font-size:.9rem" onkeydown="if(event.key==='Enter')sendClaimMessage(${claim_id})">
         <button id="msgSendBtn" onclick="sendClaimMessage(${claim_id})" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-weight:700;cursor:pointer">${isHi ? 'भेजें' : 'Send'}</button>
       </div>

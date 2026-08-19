@@ -3136,11 +3136,21 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
         _conn.row_factory = __import__("aiosqlite").Row
         _cur = await _conn.execute(
-            "SELECT claim_id FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            "SELECT review_outcome, claimshield_sent_at, claimshield_case_id "
+            "FROM nidaan_claims WHERE claim_id=? AND account_id=?",
             (claim_id, account_id),
         )
-        if not await _cur.fetchone():
+        _crow = await _cur.fetchone()
+        if not _crow:
             raise HTTPException(status_code=404, detail="Claim not found")
+        # Once a claim moves to Level-2 (legal escalation), the customer can no longer add documents —
+        # the legal team owns the file. (Server-side guard so it holds even if the UI is bypassed.)
+        if (_crow["review_outcome"] == "can_fight" or _crow["claimshield_sent_at"]
+                or _crow["claimshield_case_id"]):
+            raise HTTPException(
+                status_code=403,
+                detail="This claim has moved to legal escalation (Level-2); documents are now handled "
+                       "by our legal team. Please message the team to share anything new.")
         # Storage-DoS guard: cap total documents per claim (free leads can upload).
         _dc = await (await _conn.execute(
             "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=?", (claim_id,))).fetchone()
@@ -3970,11 +3980,18 @@ async def claimshield_case_documents(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     import hmac as _hm
+    # Accept EITHER the dedicated doc-pull key (x-api-key: CLAIMSHIELD_PULL_KEY) OR — per ClaimShield's
+    # request to use one token everywhere — the same status-webhook token (X-ClaimShield-Token:
+    # CLAIMSHIELD_WEBHOOK_SECRET). Both are constant-time compared.
     key = (os.getenv("CLAIMSHIELD_PULL_KEY", "") or "").strip()
-    provided = (request.headers.get("x-api-key", "") or "").strip()
-    if not key:
+    webhook_secret = _claimshield_webhook_secret()
+    prov_apikey = (request.headers.get("x-api-key", "") or "").strip()
+    prov_token = (request.headers.get("X-ClaimShield-Token", "") or "").strip()
+    if not (key or webhook_secret):
         raise HTTPException(status_code=503, detail="Document API not configured")
-    if not provided or not _hm.compare_digest(key, provided):
+    _ok = ((key and prov_apikey and _hm.compare_digest(key, prov_apikey)) or
+           (webhook_secret and prov_token and _hm.compare_digest(webhook_secret, prov_token)))
+    if not _ok:
         raise HTTPException(status_code=401, detail="Unauthorized")
     import biz_claimshield as _cs
     if not await _cs.already_sent(claim_id):
@@ -6533,6 +6550,12 @@ async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request
         # so assignees are notified on all three channels.
         import biz_nidaan_notifications as _nnot_asg
         _ae3.ensure_future(_nnot_asg.on_claim_assigned(claim_id, ids, caller["staff_id"]))
+        # Make assignees "watchers" too, so they keep getting ALL ongoing claim activity
+        # (notes/messages/status) on every channel — not just this one assignment ping.
+        try:
+            await nidaan.add_claim_watchers(claim_id, ids, caller["staff_id"], relation="assignee")
+        except Exception:
+            pass
     except Exception:
         pass
     await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to {len(ids)} staff: {ids}")
