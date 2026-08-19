@@ -132,10 +132,13 @@ def parse_case_ref(case_ref) -> Optional[int]:
 
 
 # ── INBOUND: record a status pushed by ClaimShield ────────────────────────────
-async def record_status_update(case_ref, raw_status: str, source: str = "claimshield") -> dict:
+async def record_status_update(case_ref, raw_status: str, source: str = "claimshield",
+                               cs_case_ref: str = "") -> dict:
     """Persist a status ClaimShield pushed for our case. ClaimShield maps to customer-safe
     statuses on THEIR side, so we display their text AS-IS (the bucket map is only a
-    best-effort category/fallback). Matches by our claim id OR their caseReferenceNumber.
+    best-effort category/fallback). Matches by our claim id (Nidaanpartnercasenumber) OR their
+    caseReferenceNumber. If ClaimShield includes their caseReferenceNumber (cs_case_ref), we
+    STORE/correct it on the claim — so a stale reference self-heals from their own status pushes.
     Idempotent: a repeat of the same status just refreshes the timestamp."""
     m = map_status(raw_status)
     bucket = m["bucket"]
@@ -158,6 +161,12 @@ async def record_status_update(case_ref, raw_status: str, source: str = "claimsh
         claim_id = row["claim_id"]
         prev_raw = (row["claimshield_status_raw"] or "")
         changed = (prev_raw.strip().lower() != (raw_status or "").strip().lower())
+        # Self-heal the ClaimShield reference from their own push (only overwrite with a real value).
+        _csref = (str(cs_case_ref).strip() if cs_case_ref else "")
+        if _csref:
+            await conn.execute(
+                "UPDATE nidaan_claims SET claimshield_case_id=? WHERE claim_id=?",
+                (_csref, claim_id))
         await conn.execute(
             "UPDATE nidaan_claims SET claimshield_status_raw=?, claimshield_bucket=?, "
             "claimshield_status_at=CURRENT_TIMESTAMP WHERE claim_id=?",

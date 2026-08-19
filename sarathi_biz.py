@@ -3919,8 +3919,14 @@ async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Reques
     raw_status = (body.status or body.case_status or "").strip()
     if not case_ref or not raw_status:
         raise HTTPException(status_code=400, detail="Missing case reference or status")
+    # ClaimShield's OWN reference (if they include it) — stored so our L2 column self-heals to their
+    # real number. Prefer caseReferenceNumber; only treat case_id as their ref if it isn't our claim no.
+    cs_case_ref = (body.caseReferenceNumber or "").strip()
+    if not cs_case_ref and body.case_id and str(body.case_id).strip() != str(case_ref).strip():
+        cs_case_ref = str(body.case_id).strip()
     import biz_claimshield as _cs
-    result = await _cs.record_status_update(case_ref, raw_status, source="claimshield")
+    result = await _cs.record_status_update(case_ref, raw_status, source="claimshield",
+                                            cs_case_ref=cs_case_ref)
     if not result.get("ok"):
         if result.get("error") == "claim_not_found":
             raise HTTPException(status_code=404, detail="Case not found")
@@ -4020,7 +4026,7 @@ async def claimshield_case_documents(claim_id: int, request: Request):
         pass
     return {
         "nidaan_claim_id": claim_id,
-        "claimshield_case_id": (cs_state or {}).get("claimshield_case_id", ""),
+        "claimshield_case_id": (cs_state or {}).get("case_id", ""),
         "document_count": len(out),
         "documents": out,
     }
