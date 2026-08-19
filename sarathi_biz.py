@@ -14354,6 +14354,23 @@ async def dashboard_page(request: Request):
         except Exception:
             pass
 
+    # SA impersonation: accept ?_imp_token=, plant the cookie, and redirect to a clean /dashboard —
+    # so the dashboard SPA's OWN API calls carry auth. (A query param alone authenticates only this
+    # one HTML request; the SPA then had no token → bounced to /login. THIS was the impersonation bug.)
+    imp_token_q = request.query_params.get("_imp_token")
+    if imp_token_q and not request.cookies.get("sarathi_token"):
+        try:
+            payload = auth.verify_access_token(imp_token_q)
+            if payload and payload.get("sub"):
+                response = RedirectResponse("/dashboard", status_code=302)
+                response.set_cookie(
+                    "sarathi_token", imp_token_q,
+                    max_age=3600, samesite="lax", httponly=False,
+                    secure=request.url.scheme == "https")
+                return response
+        except Exception:
+            pass
+
     tenant = await auth.get_optional_tenant(request)
 
     # If no cookie/header auth, check for SA impersonation token in query param
