@@ -6032,6 +6032,131 @@ async def get_claims_ops(
         return rows
 
 
+# ── Account de-duplication (detect + human-confirmed merge) ──────────────────
+def _dedup_phone(p: str) -> str:
+    d = "".join(ch for ch in (p or "") if ch.isdigit())
+    return d[-10:] if len(d) >= 10 else ""
+
+
+def _dedup_email(e: str) -> str:
+    e = (e or "").strip().lower()
+    return e if "@" in e and "." in e else ""
+
+
+def _dedup_name(n: str) -> str:
+    import re as _re
+    s = _re.sub(r'\b(mr|mrs|ms|dr|shri|smt|m/s|the)\b', ' ', (n or '').lower())
+    return _re.sub(r'[^a-z0-9]+', ' ', s).strip()
+
+
+async def find_duplicate_accounts(limit_groups: int = 100) -> list[dict]:
+    """Groups of accounts that MIGHT be the same person. STRONG = a shared phone (last-10) or email;
+    WEAK = same normalized name only (different phone & email). Never merges — only flags for review.
+    Each account row carries claim_count + active plan so a human can judge which to keep."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        accts = [dict(r) for r in await (await conn.execute(
+            "SELECT a.account_id, a.owner_name, a.firm_name, a.phone, a.email, a.branch_code, "
+            "a.status, a.created_at, "
+            "(SELECT COUNT(*) FROM nidaan_claims c WHERE c.account_id=a.account_id) AS claim_count, "
+            "(SELECT s.plan FROM nidaan_subscriptions s "
+            " WHERE s.account_id=a.account_id AND s.status='active' LIMIT 1) AS plan "
+            "FROM nidaan_accounts a "
+            "WHERE COALESCE(a.status,'') NOT IN ('merged','deleted')")).fetchall()]
+    parent = {a["account_id"]: a["account_id"] for a in accts}
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(x, y):
+        parent[_find(x)] = _find(y)
+
+    phone_map, email_map = {}, {}
+    for a in accts:
+        aid = a["account_id"]
+        ph, em = _dedup_phone(a["phone"]), _dedup_email(a["email"])
+        if ph:
+            if ph in phone_map:
+                _union(aid, phone_map[ph])
+            else:
+                phone_map[ph] = aid
+        if em:
+            if em in email_map:
+                _union(aid, email_map[em])
+            else:
+                email_map[em] = aid
+    strong_groups, seen_strong = {}, set()
+    for a in accts:
+        strong_groups.setdefault(_find(a["account_id"]), []).append(a)
+    out = []
+    for members in strong_groups.values():
+        if len(members) < 2:
+            continue
+        phones = [_dedup_phone(m["phone"]) for m in members if _dedup_phone(m["phone"])]
+        emails = [_dedup_email(m["email"]) for m in members if _dedup_email(m["email"])]
+        rs = []
+        if any(phones.count(p) > 1 for p in set(phones)):
+            rs.append("phone")
+        if any(emails.count(e) > 1 for e in set(emails)):
+            rs.append("email")
+        out.append({"confidence": "strong", "reason": " + ".join(rs) or "phone/email",
+                    "accounts": members})
+        seen_strong.update(m["account_id"] for m in members)
+    # Weak: same-name-only (accounts not already in a strong group).
+    name_map = {}
+    for a in accts:
+        if a["account_id"] in seen_strong:
+            continue
+        nn = _dedup_name(a["owner_name"])
+        if len(nn) >= 4:
+            name_map.setdefault(nn, []).append(a)
+    for members in name_map.values():
+        if len(members) > 1:
+            out.append({"confidence": "weak", "reason": "same name", "accounts": members})
+    out.sort(key=lambda g: (0 if g["confidence"] == "strong" else 1, -len(g["accounts"])))
+    return out[:limit_groups]
+
+
+async def merge_accounts(keeper_id: int, duplicate_id: int) -> dict:
+    """Human-confirmed merge: move the DUPLICATE's claims (+ ₹499 purchases) to the KEEPER and archive
+    the duplicate (status='merged', merged_into=keeper). NEVER hard-deletes. Blocked if the duplicate
+    has an active subscription (money-sensitive — handle those by hand). Returns {ok, moved_claims|error}."""
+    if int(keeper_id) == int(duplicate_id):
+        return {"ok": False, "error": "same_account"}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        k = await (await conn.execute(
+            "SELECT account_id, status FROM nidaan_accounts WHERE account_id=?", (keeper_id,))).fetchone()
+        d = await (await conn.execute(
+            "SELECT account_id, status FROM nidaan_accounts WHERE account_id=?", (duplicate_id,))).fetchone()
+        if not k or not d:
+            return {"ok": False, "error": "not_found"}
+        if (d["status"] or "") == "merged":
+            return {"ok": False, "error": "already_merged"}
+        dsub = await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_subscriptions WHERE account_id=? AND status='active'",
+            (duplicate_id,))).fetchone()
+        if dsub and dsub[0]:
+            return {"ok": False, "error": "duplicate_has_active_subscription"}
+        moved = (await conn.execute(
+            "UPDATE nidaan_claims SET account_id=? WHERE account_id=?",
+            (keeper_id, duplicate_id))).rowcount
+        for _tbl in ("nidaan_per_claim_purchase",):
+            try:
+                await conn.execute(f"UPDATE {_tbl} SET account_id=? WHERE account_id=?",
+                                   (keeper_id, duplicate_id))
+            except Exception:
+                pass
+        await conn.execute(
+            "UPDATE nidaan_accounts SET status='merged', merged_into=? WHERE account_id=?",
+            (keeper_id, duplicate_id))
+        await conn.commit()
+    return {"ok": True, "moved_claims": moved}
+
+
 async def assign_claim_to_staff(
     claim_id: int, staff_id: int, assigned_by_id: int, assigned_by_role: str
 ) -> bool:

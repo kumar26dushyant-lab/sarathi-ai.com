@@ -2091,6 +2091,11 @@ async def init_db():
             await conn.execute("ALTER TABLE retail_chat_messages ADD COLUMN staff_id INTEGER")
         except Exception:
             pass
+        # Account de-dup: when a duplicate account is merged, point it at the keeper (archived, not deleted).
+        try:
+            await conn.execute("ALTER TABLE nidaan_accounts ADD COLUMN merged_into INTEGER")
+        except Exception:
+            pass
         # Visitor-fallback nudge idempotency: the staff msg_id we last nudged the visitor about, so a
         # left-the-chat visitor is emailed a reopen link at most once per reply.
         try:

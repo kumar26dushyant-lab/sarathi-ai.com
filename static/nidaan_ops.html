@@ -4878,6 +4878,7 @@ async function loadAccounts() {
       <div><div class="section-title">Advisor Accounts</div><div class="section-sub">Subscribers, ₹499 one-time &amp; leads — with plan usage &amp; caps</div></div>
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="exportAccountsCSV()">⬇ CSV</button>
+        <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="openDuplicatesModal()">🔀 Duplicates</button>
         ${_role==='super_admin'?'<button class="btn btn-primary" onclick="openCreateAccountModal()">+ New Account</button>':''}
       </div>
     </div>
@@ -4904,7 +4905,7 @@ async function loadAccounts() {
 
 // Segment filter (subscribers / ₹499 / leads) + search, combined.
 const _ACC_SEGS = [['all','All'],['subscriber','Subscribers'],['per_claim','₹499 one-time'],['lead','Leads'],['deleted','🗑️ Deleted']];
-const _accDeleted = a => (a.status||'')==='deleted';
+const _accDeleted = a => ['deleted','merged'].includes(a.status||'');   // archived (deleted OR merged) — hidden from All/type tabs
 function renderAccSegBar(){
   const all = window._allAccounts||[];
   // Deleted/archived accounts live ONLY in the Deleted segment — excluded from All + type tabs.
@@ -4918,6 +4919,51 @@ function renderAccSegBar(){
   }).join('');
 }
 function segAccounts(seg){ window._accSeg = seg; renderAccSegBar(); applyAccFilters(); }
+
+// ── Possible-duplicate accounts: review + (super-admin) merge ─────────────────
+async function openDuplicatesModal(){
+  openModal('🔀 Possible duplicate accounts', '<div class="empty"><div class="ei">⏳</div><p>Scanning…</p></div>', [], true);
+  let r; try{ r = await API('/accounts/duplicates'); }catch(e){ document.getElementById('modalBody').innerHTML='<div class="empty"><p>Could not load.</p></div>'; return; }
+  if(!r.ok){ document.getElementById('modalBody').innerHTML='<div class="empty"><p>Not available for your role.</p></div>'; return; }
+  window._dupGroups = (await r.json()).groups || [];
+  renderDuplicates();
+}
+function renderDuplicates(){
+  const groups = window._dupGroups||[]; const body = document.getElementById('modalBody');
+  const canMerge = (_role==='super_admin');
+  if(!groups.length){ body.innerHTML='<div class="empty"><div class="ei">✅</div><p>No possible duplicates found.</p></div>'; return; }
+  body.innerHTML = `<div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.8rem">Accounts that MIGHT be the same person. 🔴 <b>Strong</b> = shared phone/email. 🟡 <b>Name only</b> = same name but different contact — verify carefully. Nothing merges automatically.${canMerge?'':' <i>(Merging is super-admin only.)</i>'}</div>`
+    + groups.map((g,gi)=>{
+      const strong = g.confidence==='strong';
+      const rows = g.accounts.map(a=>`<label style="display:flex;gap:.5rem;align-items:flex-start;padding:.5rem .6rem;border:1px solid var(--nd-border);border-radius:8px;margin-bottom:.35rem;cursor:${canMerge?'pointer':'default'}">
+        ${canMerge?`<input type="radio" name="dupkeep_${gi}" value="${a.account_id}" style="margin-top:.2rem">`:''}
+        <div style="flex:1;font-size:.8rem"><b>${esc(a.owner_name||'—')}</b> <span style="color:var(--nd-text-faint)">#${a.account_id}</span>${a.plan?`<span style="color:var(--nd-success-text);font-weight:700"> · ⭐ ${esc(String(a.plan).toUpperCase())}</span>`:''}
+          <br><span style="color:var(--nd-text-muted)">${esc(a.phone||'—')} · ${esc(a.email||'—')}</span>
+          <br><span style="color:var(--nd-text-faint);font-size:.72rem">${a.claim_count||0} claim(s) · created ${a.created_at?fmtDate(a.created_at):'—'}${a.branch_code?(' · '+esc(a.branch_code)):''}</span></div></label>`).join('');
+      return `<div class="nd-card" style="padding:.7rem .85rem;margin-bottom:.7rem;border-left:3px solid ${strong?'#f87171':'#fbbf24'}">
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:.5rem">${strong?'🔴 Strong':'🟡 Name only'} — <span style="color:var(--nd-text-muted);font-weight:400">${esc(g.reason)}</span></div>${rows}
+        ${canMerge?`<div style="margin-top:.4rem"><button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="mergeGroup(${gi})">Merge others → keeper</button><span style="font-size:.7rem;color:var(--nd-text-faint);margin-left:.5rem">Pick the account to KEEP; the rest are archived and their claims moved to it.</span></div>`:''}
+      </div>`;
+    }).join('');
+}
+async function mergeGroup(gi){
+  const g = (window._dupGroups||[])[gi]; if(!g) return;
+  const sel = document.querySelector(`input[name="dupkeep_${gi}"]:checked`);
+  if(!sel){ alert('Pick the account to KEEP first.'); return; }
+  const keeper = parseInt(sel.value,10);
+  const others = g.accounts.map(a=>a.account_id).filter(id=>id!==keeper);
+  if(!others.length){ alert('Nothing to merge — pick a different keeper.'); return; }
+  if(!confirm(`Merge ${others.length} account(s) INTO #${keeper}?\n\nTheir claims move to #${keeper}; the duplicates are archived (not deleted).`)) return;
+  let okc=0, errs=[];
+  for(const dup of others){
+    try{ const r = await API('/accounts/merge', {method:'POST', body:JSON.stringify({keeper_id:keeper, duplicate_id:dup})});
+      if(r.ok) okc++; else { const e=await r.json().catch(()=>({})); errs.push(`#${dup}: ${e.detail||'failed'}`); }
+    }catch(e){ errs.push(`#${dup}: error`); }
+  }
+  alert(`Merged ${okc} account(s) into #${keeper}.${errs.length?'\n\nSkipped:\n'+errs.join('\n'):''}`);
+  openDuplicatesModal(); loadAccounts();
+}
+window.openDuplicatesModal=openDuplicatesModal; window.mergeGroup=mergeGroup;
 let _accSearchTimer;
 function filterAccounts(q){
   window._accQuery = q;

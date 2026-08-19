@@ -7098,6 +7098,43 @@ async def ops_list_accounts(request: Request, limit: int = 200, offset: int = 0)
     return {"accounts": accounts, "count": len(accounts)}
 
 
+@app.get("/nidaan/ops/api/accounts/duplicates")
+async def ops_account_duplicates(request: Request):
+    """Possible-duplicate account groups — strong (shared phone/email) + weak (same name). Admin+.
+    Read-only; the merge is a separate, super-admin, human-confirmed action."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"groups": await nidaan.find_duplicate_accounts()}
+
+
+class _MergeAccountsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    keeper_id: int
+    duplicate_id: int
+
+
+@app.post("/nidaan/ops/api/accounts/merge")
+async def ops_account_merge(body: _MergeAccountsReq, request: Request):
+    """Merge a DUPLICATE account into a KEEPER — moves the duplicate's claims to the keeper and archives
+    the duplicate (status='merged', never hard-deleted). super_admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    res = await nidaan.merge_accounts(body.keeper_id, body.duplicate_id)
+    if not res.get("ok"):
+        _emap = {"same_account": "Keeper and duplicate are the same account",
+                 "not_found": "Account not found",
+                 "already_merged": "That account is already merged",
+                 "duplicate_has_active_subscription":
+                     "The duplicate has an ACTIVE subscription — cancel or transfer it first, then merge"}
+        raise HTTPException(status_code=400,
+                            detail=_emap.get(res.get("error"), res.get("error") or "Merge failed"))
+    await _ops_audit(request, "account.merge", "account", str(body.duplicate_id),
+                     f"merged into {body.keeper_id}; moved {res.get('moved_claims', 0)} claim(s)")
+    return res
+
+
 @app.get("/nidaan/ops/api/accounts/{account_id}/detail")
 async def ops_account_detail(account_id: int, request: Request):
     """Sub-admin+: full account detail — account info + claims + review purchases."""
