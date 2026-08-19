@@ -6002,7 +6002,7 @@ async def get_claims_ops(
                LEFT JOIN nidaan_branches rbr ON UPPER(rbr.branch_code)=UPPER(COALESCE(NULLIF(c.branch_code,''), a.branch_code))
                    AND COALESCE(NULLIF(c.branch_code,''), a.branch_code) <> ''
                {where}
-               ORDER BY (c.payment_status='unpaid_lead') ASC, c.created_at DESC
+               ORDER BY c.created_at DESC, c.claim_id DESC
                LIMIT ? OFFSET ?""",
             [staff_id, staff_id] + params + [limit, offset],
         )
@@ -6016,6 +6016,19 @@ async def get_claims_ops(
                 r["ref_kind"], r["ref_name"] = "branch", r["ref_branch_name"]
             else:
                 r["ref_kind"], r["ref_name"] = "", ""
+            # Universal SOURCE label — how every claim came in + who's behind it (no blank trail).
+            _origin = (r.get("origin") or "").strip()
+            _pay = (r.get("payment_status") or "").strip()
+            if r["ref_kind"] == "branch" or _origin == "branch":
+                r["source_kind"] = "branch"
+            elif r["ref_kind"] == "staff":
+                r["source_kind"] = "staff"
+            elif r.get("account_plan"):
+                r["source_kind"] = "subscriber"
+            elif _origin == "d2c_review" or _pay == "paid":
+                r["source_kind"] = "review"
+            else:
+                r["source_kind"] = "direct"
         return rows
 
 

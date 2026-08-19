@@ -3572,6 +3572,16 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
     return;
   }
 
+  // Universal "how the claim came in + who's behind it" badge (source_kind from the backend).
+  window._sourceBadge = window._sourceBadge || function(c){
+    const k = c.source_kind || '';
+    if (k==='branch') return `🏢 <span style="color:var(--nd-purple-text);font-weight:700">${esc(c.ref_name||('Branch '+(c.ref_code||'')))}</span>${c.ref_code?`<br><span style="font-size:.68rem;color:var(--nd-text-faint)">${esc(c.ref_code)}</span>`:''}`;
+    if (k==='staff') return `👤 <span style="color:var(--nd-cyan-text);font-weight:700">${esc(c.ref_name||'Staff')}</span><br><span style="font-size:.68rem;color:var(--nd-text-faint)">staff referral · ${esc(c.ref_code||'')}</span>`;
+    if (k==='subscriber') return `⭐ <span style="font-weight:700">${esc(c.owner_name||'—')}</span><br><span style="font-size:.68rem;color:var(--nd-success-text)">Subscriber${c.account_plan?' · '+esc(String(c.account_plan).toUpperCase()):''}</span>`;
+    if (k==='review') return `📄 <span style="font-weight:700">${esc(c.owner_name||'—')}</span><br><span style="font-size:.68rem;color:var(--nd-text-faint)">₹499 review (direct)</span>`;
+    return `🌐 <span style="font-weight:700">${esc(c.owner_name||'—')}</span><br><span style="font-size:.68rem;color:var(--nd-warning-text)">Direct lead</span>`;
+  };
+  const _sourceBadge = window._sourceBadge;
   const payPill = (c)=>{
     const p = (typeof c==='object') ? c.payment_status : c;
     const map = {unpaid_lead:['var(--nd-warning-text)','Lead'], paid:['var(--nd-success-text)','Paid'], subscription:['var(--nd-cyan-text)','Sub']};
@@ -3590,9 +3600,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td>${payPill(c)}</td>
-      <td>${c.origin==='branch'
-            ? `🏢 <span style="color:var(--nd-purple-text);font-weight:700">Branch ${esc(c.branch_code||'')}</span><br><span style="font-size:.72rem;color:var(--nd-text-faint)">raised on behalf</span>`
-            : `${esc(c.owner_name||'—')}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.firm_name||'')}</span>`}</td>
+      <td style="font-size:.8rem">${_sourceBadge(c)}</td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
       <td style="text-align:center">${(c.pending_tasks||0)>0?`<span style="background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;padding:.1rem .45rem;font-size:.72rem;font-weight:700">${c.pending_tasks}</span>`:'<span style="color:var(--nd-text-disabled)">0</span>'}</td>
       <td>${c.branch_code?`<span style="font-size:.7rem;color:var(--nd-purple-text);font-weight:700">${c.origin==='branch'?'🏢 ':''}${esc(c.branch_code)}</span>`:'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
@@ -3602,7 +3610,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   document.getElementById('claimTableWrap').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Advisor / Account</th><th>Assigned To</th><th>Tasks</th><th>Branch</th><th>Date</th></tr></thead>
+        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Assigned To</th><th>Tasks</th><th>Branch</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
