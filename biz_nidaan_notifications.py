@@ -743,6 +743,9 @@ async def _record_notification(**kw) -> int:
                     {"text": "🎉", "callback_data": f"annr:{_aid}:2"},
                     {"text": "🙏", "callback_data": f"annr:{_aid}:3"},
                 ]]
+            elif kw.get("event_key") == "claim.reply" and cid:
+                # Customer replied on a claim → let the staffer reply straight from Telegram.
+                _tg_btns = [[{"text": "💬 Reply to customer", "callback_data": f"creply:{cid}"}]]
             asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
                                                  NIDAAN_BASE_URL + url, _tg_btns))
         except Exception:
@@ -1902,7 +1905,7 @@ async def on_claim_assigned(claim_id: int, staff_ids: list, assigned_by_id: int 
 
 
 async def notify_claim_watchers(claim_id: int, subject: str, body: str,
-                                exclude_ids=None):
+                                exclude_ids=None, event_key: str = "claim.watch"):
     """Ping EVERYONE involved in a claim — non-muted watchers (tagged/@mentioned/involved) PLUS the
     current assignee(s) — on ALL channels: dashboard bell + web push + Telegram mirror + EMAIL, with a
     must-acknowledge popup. So tagged/involved/assigned staff never miss claim activity. Excludes the
@@ -1939,7 +1942,7 @@ async def notify_claim_watchers(claim_id: int, subject: str, body: str,
         return
     try:
         # All channels + email + must-acknowledge popup (notify_staff_inapp mirrors to Telegram/push).
-        await notify_staff_inapp(list(ids), subject, body, event_key="claim.watch",
+        await notify_staff_inapp(list(ids), subject, body, event_key=event_key,
                                  email=True, require_ack=True, claim_id=claim_id)
     except Exception as e:
         logger.warning("notify_claim_watchers failed: %s", e)
@@ -1988,12 +1991,18 @@ async def on_new_claim_message(claim_id: int, account_id: int, from_type: str, p
                   f"\"{(preview or '')[:200]}\"\n\nOpen your dashboard to view & reply."),
             claim_id=claim_id)
     # Keep 'involved' watchers in the loop on any message (dashboard + Telegram), minus the actor.
+    # A CUSTOMER reply uses event_key 'claim.reply' → staff get a "💬 Reply" button right in Telegram
+    # so they can respond to the customer from anywhere, immediately.
     try:
+        _is_cust = (from_type == "subscriber")
+        _wsubj = (f"💬 Customer replied — claim #{_cn(claim_id)} · {claim.get('insured_name','')}"
+                  if _is_cust else
+                  f"💬 Activity on claim #{_cn(claim_id)} — {claim.get('insured_name','')}")
         await notify_claim_watchers(
-            claim_id,
-            f"💬 Activity on claim #{_cn(claim_id)} — {claim.get('insured_name','')}",
+            claim_id, _wsubj,
             f"New message on claim #{_cn(claim_id)}:\n\"{(preview or '')[:140]}\"\n\nOpen: /admin?claim={claim_id}",
-            exclude_ids=[actor_staff_id] if actor_staff_id else [])
+            exclude_ids=[actor_staff_id] if actor_staff_id else [],
+            event_key=("claim.reply" if _is_cust else "claim.watch"))
     except Exception:
         pass
 

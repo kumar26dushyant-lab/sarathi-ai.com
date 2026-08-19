@@ -616,6 +616,13 @@ _BOT_TXT: dict = {
                        "hi": "यह कमेंट *#{id} — {title}* में जोड़ें?\n\n“{text}”"},
     "b_confirm_yes":{"en": "✅ Yes, add", "hi": "✅ हाँ, जोड़ें"},
     "b_confirm_no": {"en": "✕ Cancel", "hi": "✕ रद्द करें"},
+    "ask_claim_reply":{"en": "💬 Type your reply to the customer for claim #{id} — or send a 🎤 voice note. You'll confirm before it's sent.",
+                       "hi": "💬 क्लेम #{id} के ग्राहक को अपना जवाब लिखें — या 🎤 वॉइस नोट भेजें। भेजने से पहले पुष्टि करेंगे।"},
+    "confirm_claim_reply":{"en": "Send this reply to the customer on claim #{id}?\n\n“{text}”",
+                       "hi": "क्लेम #{id} पर ग्राहक को यह जवाब भेजें?\n\n“{text}”"},
+    "b_send_yes":   {"en": "✅ Yes, send", "hi": "✅ हाँ, भेजें"},
+    "claim_reply_ok":{"en": "✅ Reply sent to the customer on claim #{id}.", "hi": "✅ क्लेम #{id} पर ग्राहक को जवाब भेज दिया गया।"},
+    "claim_reply_fail":{"en": "⚠️ Could not send the reply. Please try from the dashboard.", "hi": "⚠️ जवाब नहीं भेजा जा सका। कृपया डैशबोर्ड से भेजें।"},
     "cancelled":    {"en": "Cancelled — nothing was saved.", "hi": "रद्द — कुछ सेव नहीं हुआ।"},
     "voice_listening":{"en": "🎧 Listening to your voice note…", "hi": "🎧 आपका वॉइस नोट सुन रहा हूँ…"},
     "voice_heard":  {"en": "🗣️ I heard: “{text}”", "hi": "🗣️ मैंने सुना: “{text}”"},
@@ -1117,6 +1124,15 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
             _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"cc:yes:{qid}"},
                   {"text": T(lang, "b_confirm_no"), "callback_data": "cc:no"}]]))
         return
+    if act == "claim_reply" and pending.get("claim_id"):
+        # Confirm before the reply reaches the customer (also lets the sender verify a voice transcript).
+        cid = int(pending["claim_id"])
+        await _set_pending(staff["staff_id"], {"a": "claim_reply_confirm", "claim_id": cid, "text": text})
+        await send_message(str(chat_id),
+            T(lang, "confirm_claim_reply", id=cid, text=text[:250]),
+            _kb([[{"text": T(lang, "b_send_yes"), "callback_data": f"crc:yes:{cid}"},
+                  {"text": T(lang, "b_confirm_no"), "callback_data": "crc:no"}]]))
+        return
     if act == "ai":
         await _set_pending(staff["staff_id"], None)
         await send_message(str(chat_id), T(lang, "thinking"))
@@ -1354,6 +1370,37 @@ async def _handle_callback(cq: dict) -> None:
             t, kb = await _approvals_view(staff)
             await _edit(chat_id, message_id, t, kb); return
 
+        if data.startswith("creply:"):
+            # Customer replied on a claim → start a reply-from-Telegram flow.
+            try:
+                cid = int(data.split(":")[1])
+            except Exception:
+                cid = 0
+            if cid:
+                await _set_pending(staff["staff_id"], {"a": "claim_reply", "claim_id": cid})
+                await send_message(str(chat_id), T(lang, "ask_claim_reply", id=cid))
+            await ack(); return
+
+        if data.startswith("crc:"):
+            # Confirm/cancel a pending claim reply (guard before it reaches the customer).
+            import json as _json
+            try:
+                pend = _json.loads(staff.get("telegram_pending") or "{}")
+            except Exception:
+                pend = {}
+            await _set_pending(staff["staff_id"], None)
+            if data.startswith("crc:yes") and pend.get("a") == "claim_reply_confirm" and pend.get("claim_id"):
+                await _do_claim_reply(staff, int(pend["claim_id"]), pend.get("text", ""), chat_id)
+                await ack(T(lang, "done_ok"))
+                try:
+                    await _call("editMessageReplyMarkup", {"chat_id": str(chat_id),
+                        "message_id": message_id, "reply_markup": {"inline_keyboard": []}})
+                except Exception:
+                    pass
+            else:
+                await ack(T(lang, "cancelled"))
+            return
+
         if data.startswith("cc:"):
             # Confirm/cancel a pending comment (wrong-task safeguard).
             import json as _json
@@ -1450,6 +1497,39 @@ async def _do_status(staff: dict, qid: int, new_status: str) -> bool:
     except Exception:
         pass
     return True
+
+
+async def _do_claim_reply(staff: dict, claim_id: int, text: str, chat_id) -> None:
+    """Post a staffer's reply (typed or voice) to a claim's customer thread — reaches the customer
+    (dashboard + WhatsApp/email if opted in), keeps the sender a watcher, and pings the other involved."""
+    import biz_nidaan as nidaan
+    import biz_nidaan_notifications as nnot
+    import aiosqlite
+    import asyncio as _aio
+    lang = _lang(staff)
+    text = (text or "").strip()[:4000]
+    if not text:
+        await send_message(str(chat_id), T(lang, "claim_reply_fail")); return
+    try:
+        async with aiosqlite.connect(nidaan.DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not r:
+            await send_message(str(chat_id), T(lang, "claim_reply_fail")); return
+        account_id = r["account_id"]
+        await nidaan.add_claim_message(claim_id, "staff", text, staff_id=staff["staff_id"])
+        try:
+            await nidaan.add_claim_watchers(claim_id, [staff["staff_id"]], staff["staff_id"],
+                                            relation="messaged")
+        except Exception:
+            pass
+        _aio.create_task(nnot.on_new_claim_message(claim_id, account_id, "staff", text[:140],
+                                                   actor_staff_id=staff["staff_id"]))
+        await send_message(str(chat_id), T(lang, "claim_reply_ok", id=claim_id))
+    except Exception as e:
+        logger.warning("tg claim reply failed (claim %s): %s", claim_id, e)
+        await send_message(str(chat_id), T(lang, "claim_reply_fail"))
 
 
 async def _do_comment(staff: dict, qid: int, text: str, chat_id) -> None:

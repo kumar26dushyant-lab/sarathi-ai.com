@@ -3454,6 +3454,13 @@ async def ops_claim_message_send(claim_id: int, request: Request,
         raise HTTPException(400, "Type a message or attach a file")
     await nidaan.add_claim_message(claim_id, "staff", content,
                                    staff_id=staff["staff_id"], attachment_doc_id=doc_id)
+    # The staffer who messaged the customer becomes a "watcher" — so when the customer REPLIES they
+    # get it on every channel (dashboard popup + web push + Telegram + email) and can attend at once.
+    try:
+        await nidaan.add_claim_watchers(claim_id, [staff["staff_id"]], staff["staff_id"],
+                                        relation="messaged")
+    except Exception:
+        pass
     try:
         import biz_nidaan_notifications as _nnot
         preview = content or "📎 sent an attachment"
