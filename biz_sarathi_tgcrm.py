@@ -1261,12 +1261,36 @@ async def _save_ai_history(tg_uid, tid, turns) -> None:
         logger.info("tgcrm save_ai_history failed: %s", e)
 
 
-async def _ask_ai(link, question: str, tg_uid=None) -> str:
+# Short affirmations that confirm an action the assistant just offered (EN + Hindi/Hinglish).
+_AFFIRM_EXACT = {"yes", "yeah", "yep", "ya", "yup", "ok", "okay", "k", "sure", "please", "yes please",
+                 "do it", "go ahead", "haan", "haanji", "haan ji", "ha", "ji", "ji haan", "kar do",
+                 "kardo", "karo", "kr do", "krdo", "theek", "thik", "theek hai", "thik hai", "done",
+                 "great", "perfect", "yes do it", "haan karo", "ok do it", "yes please do", "bilkul"}
+
+
+def _is_affirmation(text: str) -> bool:
+    """True if the message is a short 'yes, do it' — used only to confirm a pending AI action proposal."""
+    t = (text or "").strip().lower()
+    if "👍" in t and len(t) <= 4:
+        return True
+    t = "".join(ch for ch in t if ch.isalnum() or ch == " ").strip()
+    if not t or len(t) > 22:
+        return False
+    if t in _AFFIRM_EXACT:
+        return True
+    return any(t.startswith(p) for p in
+               ("yes", "haan", "kar do", "kardo", "ok do", "sure do", "please do", "go ahead", "ji haan"))
+
+
+async def _ask_ai(link, question: str, tg_uid=None) -> dict:
+    """Conversational CRM answer + an OPTIONAL structured action proposal the user can confirm.
+    Returns {"answer": <text>, "action": None | {action, lead_name, …}} (same shape the intent parser
+    uses, so a confirmed proposal flows through the normal Save-confirm card)."""
     import os as _os, json as _json
     lang = _lang(link)
     key = _os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        return T(lang, "ai_off")
+        return {"answer": T(lang, "ai_off"), "action": None}
     ctx = await _ai_context(link)
     today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
     langname = "Hindi (Devanagari script)" if lang == "hi" else "English"
@@ -1281,29 +1305,47 @@ async def _ask_ai(link, question: str, tg_uid=None) -> str:
         'just said ("those", "the second one", "him", "and health?", "call him tomorrow") — use the '
         "conversation so far to understand exactly what they mean.\n"
         "Ground every fact ONLY in the DATA below (their own CRM). Never invent leads, numbers or dates; "
-        "keep names/numbers/dates exactly as given. If something isn't in the data, say so briefly and "
-        "offer what you CAN do.\n"
-        "Be concise but human (2-5 short lines) — don't re-list everything each time, just answer what was "
-        "asked, and when it helps, proactively suggest the next step (e.g. offer to note a follow-up).\n\n"
+        "keep names/numbers/dates exactly as given. If something isn't in the data, say so briefly.\n"
+        "Be concise but human (2-5 short lines); when it helps, proactively OFFER a next step.\n"
+        "If — and ONLY if — you offer to DO a concrete action the user can confirm (set a reminder/"
+        "follow-up, add a new lead, log a call note, or move a lead's stage) AND you have enough detail "
+        "(a lead name; a date for reminders), include it as \"action\"; otherwise action=null. NEVER act "
+        "on your own — the user confirms next.\n\n"
         f"DATA (JSON): {_json.dumps(ctx, ensure_ascii=False)[:6000]}\n\n"
-        f"Conversation so far:\n{hist_txt}\n\nUser: {question}")
+        f"Conversation so far:\n{hist_txt}\n\nUser: {question}\n\n"
+        "Respond with JSON ONLY: {\"answer\":\"<reply in the user's language>\", \"action\": null or "
+        "{\"action\":\"set_followup|create_lead|log_note|move_stage\",\"lead_name\":\"\",\"summary\":\"\","
+        "\"followup_date\":\"YYYY-MM-DD\",\"followup_time\":\"HH:MM\",\"phone\":\"\",\"need_type\":\"\","
+        "\"stage\":\"\"}}")
     model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
             r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
-                                        "generationConfig": {"temperature": 0.45}})
+                                        "generationConfig": {"temperature": 0.45,
+                                                             "responseMimeType": "application/json"}})
             data = r.json()
         parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
-        ans = (parts[0].get("text") or "").strip() or T(lang, "ai_none")
+        raw = (parts[0].get("text") or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            raw = raw[4:] if raw[:4].lower() == "json" else raw
+        parsed = _json.loads(raw)
+        answer = (parsed.get("answer") or "").strip() or T(lang, "ai_none")
+        action = parsed.get("action")
+        # Only keep a well-formed, actionable proposal (a known action + a lead name).
+        if not (isinstance(action, dict)
+                and action.get("action") in ("set_followup", "create_lead", "log_note", "move_stage")
+                and (action.get("lead_name") or "").strip()):
+            action = None
     except Exception as e:
         logger.info("tgcrm ask_ai failed: %s", e)
-        return T(lang, "ai_err")
+        return {"answer": T(lang, "ai_err"), "action": None}
     if tg_uid:
         history.append({"role": "user", "text": (question or "")[:800]})
-        history.append({"role": "assistant", "text": ans[:800]})
+        history.append({"role": "assistant", "text": answer[:800]})
         await _save_ai_history(tg_uid, int(link["tenant_id"]), history)
-    return ans
+    return {"answer": answer, "action": action}
 
 
 async def _ask_opener(link) -> str:
@@ -1369,23 +1411,35 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
     # Are we mid-conversation with the AI? Then keep vague/greeting follow-ups in the chat
     # (a stateless intent-parse would bounce "and health?" to the menu).
     _in_ask = bool(_pend and _pend.get("action") == "ask_mode")
-    intent = await _parse_intent(text)
-    act = intent.get("action", "none")
-    if _in_ask and act == "none":
-        act = "ask"
+    _proposal = (_pend or {}).get("proposal")
+    if _in_ask and isinstance(_proposal, dict) and _is_affirmation(text):
+        # confirm-to-act: user said "yes" to an action Sarathi just offered → run it through the
+        # normal Save-confirm card (we NEVER auto-save — the user still taps Save).
+        await _set_pending(tg_uid, int(link["tenant_id"]), None)
+        _in_ask = False
+        intent = dict(_proposal)
+        act = intent.get("action", "none")
+    else:
+        intent = await _parse_intent(text)
+        act = intent.get("action", "none")
+        if _in_ask and act == "none":
+            act = "ask"
+        if act == "ask":
+            await send_message(token, chat_id, T(lang, "ask_thinking"))
+            _res = await _ask_ai(link, text, tg_uid)
+            # Stay in the conversation; remember any action Sarathi proposed so a "yes" can confirm it.
+            _pd = {"action": "ask_mode"}
+            if _res.get("action"):
+                _pd["proposal"] = _res["action"]
+            await _set_pending(tg_uid, int(link["tenant_id"]), _pd)
+            await send_message(token, chat_id, _res["answer"], mkb)
+            return
+        # A real command (log a note, add a lead, …) breaks out of the AI chat.
+        if _in_ask:
+            await _set_pending(tg_uid, int(link["tenant_id"]), None)
     if act == "none":
         await _send_menu(token, chat_id, link)
         return
-    if act == "ask":
-        await send_message(token, chat_id, T(lang, "ask_thinking"))
-        ans = await _ask_ai(link, text, tg_uid)
-        # Stay in the conversation so the NEXT message is understood as a follow-up.
-        await _set_pending(tg_uid, int(link["tenant_id"]), {"action": "ask_mode"})
-        await send_message(token, chat_id, ans, mkb)
-        return
-    # A real command (log a note, add a lead, …) breaks out of the AI chat.
-    if _in_ask:
-        await _set_pending(tg_uid, int(link["tenant_id"]), None)
     intent["summary"] = (intent.get("summary") or text).strip()
 
     # Context-switch: a new command supersedes any unconfirmed draft, which we pause
