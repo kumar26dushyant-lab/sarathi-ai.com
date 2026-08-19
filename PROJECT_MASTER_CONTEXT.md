@@ -2,9 +2,32 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** June 17, 2026 (Section 40 covers June 11–17 — ₹499 value-first funnel end-to-end, WhatsApp/email parity, ops lead pipeline, DPDP lead-retention + account-erasure, recurring-billing fix, SMTP :465 + Brevo, zero-downtime blue-green deploy + path-unit deploy-automation fix, Sprint F security/DR with encrypted AWS S3 Mumbai offsite, dashboard bug fixes. Section 38 covers June 10. Section 37 covers Phase B, June 7–9.)
+> **Last Updated:** Aug 19, 2026. Newest work is at the BOTTOM in sections **A74–A85** (read those first for what's current). Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
+
+---
+
+## ★ START HERE — the whole project in 2 minutes (for a new agent)
+
+**What this is:** ONE FastAPI app + ONE SQLite DB serving **TWO products**, chosen per request by host: `_is_nidaan_host(request)` → NidaanPartner; else Sarathi.
+
+1. **Sarathi-AI.com** — a **voice-first CRM for Indian insurance advisors**. Advisor runs their day by **voice note on a private Telegram bot** (+ web app + mobile web). Leads, follow-ups, renewals, tasks, quotes, calculators, AI tools. Plans from ₹199/mo, 7-day free trial. Admin = **`/superadmin`**.
+2. **NidaanPartner.com** — **insurance claim-dispute resolution** ("Nidaan · The Legal Consultants LLP"). Policyholders/advisors submit rejected/underpaid claims; Nidaan reviews (₹499 one-time or subscription); "can-fight" claims escalate to **Level-2 (L2) legal** via the **ClaimShield.in** integration. Surfaces: customer dashboard (`nidaan_dashboard.html`), **ops portal `/nidaan/ops`** (`nidaan_ops.html`), branch portal (`nidaan_branch.html`), homepage (`nidaan_index.html`).
+
+**Key modules (all backend routes live in `sarathi_biz.py`, ~23k lines):**
+- `biz_database.py` — schema + migrations (all `CREATE TABLE` + `ALTER` here). DB = `/opt/sarathi/sarathi_biz.db` (SQLite WAL).
+- `biz_auth.py` — JWT/tenant/staff auth. `biz_ai.py` — all Gemini calls. `biz_email.py` — email (Resend/SMTP).
+- **Nidaan:** `biz_nidaan.py` (data/claims/branches/tasks), `biz_nidaan_notifications.py` (all-channel staff/subscriber notifs), `biz_claimshield.py` (L2 integration), `biz_nidaan_radar.py` (**Email Update Radar** — watches customer Gmails, AI-triages, auto-creates Tasks; see §A84).
+- **Sarathi:** `biz_sarathi_tgcrm.py` (Telegram voice CRM bot — conversational AI with memory + confirm-to-act; see §A83/A85). `static/sarathi_guide_widget.js` (homepage AI sales chat → persists to retail inbox).
+- **Roles (Nidaan staff):** `super_admin` > `sub_super_admin` > `team_member`, via `_require_staff(request, min_role)`.
+
+**Infra & deploy** (full detail §19/§30 + memory `infra_*`):
+- Server **84.247.172.252** (Contabo, `ssh -i ~/.ssh/id_ed25519 root@…`). **Blue-green web** on ports 8001+8002 (nginx upstream) + **one `sarathi-worker`** (Telegram bots + APScheduler singletons, guarded by `if RUN_SINGLETONS:`).
+- **Deploy:** `git push origin master` → `ssh … "sudo -n systemctl start sarathi-deploy.service"` (does `git reset --hard origin/master` + rolling restart). **Validate before push:** `C:/Windows/py.exe -m py_compile <files>` + `node` vm-check inline `<script>` JS. **Cloudflare caches `/static` immutably → bump `?v=N`** on JS/CSS changes.
+- `/opt/sarathi/biz.env` (secrets, `sarathi:sarathi 600`, NOT in git). Env changes need chown+chmod + health-curl.
+
+**Ground rules (from founder — memory `feedback_*`):** mobile-first (verify phone viewport); Tier-II/III plain language (words over icons); **total-language i18n** (everything switches with the selector); **additive + backward-compatible, never break the live path**; **confirm before any delete**; **endpoint uniformity** (a shared-concept change applies at ALL sibling endpoints); draft a **bilingual EN+HI staff announcement** in `ANNOUNCEMENTS.md` per ship (founder sends); keep **this doc live**.
 
 ---
 
@@ -6131,6 +6154,19 @@ Supersedes A82's "homepage chatbot is stateless" gap.
 - **P4 (SHIPPED, commit f1fe1ea)**: `run_silence_sweep` (worker every 6h) — open case with no inbound past `silence_days` → 🟡 Chase note on its task + re-notify, once per window (`last_chase_at` idempotency). `radar_metrics` → auto-triage rate (5→1 proof) + coverage + flag counts + deadlines; endpoint `/radar/metrics`; UI metrics strip + **⏰ Deadlines** filter tab. Verified: metrics/sweep/date-logic clean on empty data.
 - **RADAR P1–P4 COMPLETE & verified.** Remaining = Phase C (send-as-customer + AI drafts) only, deferred (needs consent/audit).
 - **[OWNER]** optionally set `EMAIL_VAULT_KEY` in biz.env; add a real customer mailbox + assign a pod + "🔄 Check now" to see it flow with live mail.
+
+## A85 — Sarathi conversational voice CRM + Nidaan urgent fixes (Aug 18–19 2026)
+
+**Sarathi-AI.com**
+- **Retail homepage chat (commits 3eacf94→95a35aa).** `/api/guide/ask` now persists to `retail_chat_threads`/`_messages` (invisible client `session_key`; >30 min idle = fresh thread). `/superadmin → Support → 💬 Homepage/Retail Chats` (All / 🔥 Hot / ⚠️ Needs-human + transcript). **AI upgrade:** salesman+support persona, honest anti-repeat stories (`_SARATHI_STORIES`, `seen_stories` in localStorage), lead name/number capture, intent scoring. **v2 live two-way reply:** superadmin composer `POST /api/sa/retail-chats/{id}/reply` → widget polls `GET /api/guide/thread` every 5s → 👤 Sarathi Team bubbles. Widget `?v=4`.
+- **Impersonation fixed (859c898).** `/dashboard?_imp_token=` only authed the HTML request → SPA had no token → bounced to /login. Now plants the `sarathi_token` cookie + redirects clean (like the magic-link path).
+- **Telegram voice CRM — now conversational (afff2ce, 9e393ab, 603499a).** `biz_sarathi_tgcrm.py` `_ask_ai` was stateless one-shot. Added: **rolling memory** (`tg_context.ai_history`, last 8 turns, 30-min TTL) so follow-ups ("and health?", "the second one") are understood; **sticky ask-mode** (a "yes"-type follow-up stays in the chat instead of bouncing to menu; a real command breaks out; nav buttons exit); warmer persona; **proactive data-grounded Ask-AI opener**; **confirm-to-act** — `_ask_ai` returns `{answer, action}`; an offered action is stashed; a short affirmation (`_is_affirmation`, EN+Hinglish) synthesizes the intent and flows through the **existing Save-confirm card** (never auto-saves). Applies to typed AND voice.
+
+**NidaanPartner.com urgent (f6df8a2, 4ff9dab)**
+- **ClaimShield key unified.** Doc-pull `GET /nidaan/api/claimshield/case/{id}/documents` now accepts **`X-ClaimShield-Token`** (= `CLAIMSHIELD_WEBHOOK_SECRET`, the status-webhook token) OR the old `x-api-key`. Dev uses ONE token for both APIs. Verified.
+- **L2 ClaimShield reference self-heal.** Stored `claimshield_case_id` (from create_case's `caseReferenceNumber`) was wrong (Garvit claim#39 stored 804203, real **804188** — corrected in DB). `record_status_update` now **stores ClaimShield's caseReferenceNumber from every status push** (matched by our claim no) → stale refs auto-correct. **[OWNER/dev]** to fully resync the ~14 others: dev should either send a status webhook per case (Nidaanpartnercasenumber + caseReferenceNumber) or hand over the mapping for a one-time update.
+- **Claim-activity notifications to ALL involved.** `notify_claim_watchers` now routes via `notify_staff_inapp` = dashboard bell + web push + Telegram mirror + **EMAIL** + must-ack popup (email was previously omitted), and includes the **current assignee(s)**; the assign flow now **adds assignees as watchers** so they get ongoing activity, not just the first ping.
+- **Customer attachments disabled at L2.** Once a claim is `can_fight` / sent-to-ClaimShield, the customer claim drawer shows a note instead of the uploader + hides the 📎 message-attach; backed by a **server 403 guard** on the upload endpoint.
 
 ---
 
