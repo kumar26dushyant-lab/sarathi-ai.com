@@ -193,6 +193,11 @@ async def ensure_schema() -> None:
             await conn.execute("ALTER TABLE tg_links ADD COLUMN lang TEXT DEFAULT 'en'")
         except Exception:
             pass
+        # Migration: per-user voice-reply preference — auto (speak when you spoke) | on | off.
+        try:
+            await conn.execute("ALTER TABLE tg_links ADD COLUMN voice_reply TEXT DEFAULT 'auto'")
+        except Exception:
+            pass
         await conn.commit()
 
 
@@ -213,6 +218,13 @@ STRINGS = {
     "b_support": {"en": "🎫 Support", "hi": "🎫 सहायता"},
     "b_help": {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang": {"en": "🌐 भाषा / Language", "hi": "🌐 भाषा / Language"},
+    "b_voice": {"en": "🔊 Voice", "hi": "🔊 आवाज़"},
+    "voice_menu": {"en": "🔊 <b>Voice replies</b>\nShould I speak my answers back as a voice note?\n\n• <b>Auto</b> — I speak when you send a voice note, else I text (recommended)\n• <b>Always</b> — I speak every reply\n• <b>Off</b> — text only",
+                   "hi": "🔊 <b>आवाज़ में जवाब</b>\nक्या मैं अपने जवाब वॉइस नोट में बोलकर दूँ?\n\n• <b>ऑटो</b> — जब आप वॉइस नोट भेजें तब बोलूँ, वरना टेक्स्ट (अनुशंसित)\n• <b>हमेशा</b> — हर जवाब बोलूँ\n• <b>बंद</b> — सिर्फ़ टेक्स्ट"},
+    "b_v_auto": {"en": "🎙️ Auto", "hi": "🎙️ ऑटो"},
+    "b_v_on":   {"en": "🔊 Always", "hi": "🔊 हमेशा"},
+    "b_v_off":  {"en": "🔇 Off", "hi": "🔇 बंद"},
+    "voice_set": {"en": "✅ Voice replies: {mode}", "hi": "✅ आवाज़ में जवाब: {mode}"},
     "b_menu": {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
     "b_back": {"en": "⬅️ Back", "hi": "⬅️ वापस"},
     "b_back_leads": {"en": "⬅️ Back to leads", "hi": "⬅️ लीड्स पर वापस"},
@@ -356,6 +368,114 @@ async def set_user_lang(tg_uid: int, lang: str) -> None:
 def _lang(link) -> str:
     l = (link or {}).get("lang") or "en"
     return l if l in ("en", "hi") else "en"
+
+
+# ── Voice replies (assistant speaks its answer back) ─────────────────────────
+async def set_user_voice(tg_uid: int, mode: str) -> None:
+    mode = mode if mode in ("auto", "on", "off") else "auto"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("UPDATE tg_links SET voice_reply=? WHERE telegram_user_id=?", (mode, tg_uid))
+        await conn.commit()
+
+
+def _voice_mode(link) -> str:
+    m = (link or {}).get("voice_reply") or "auto"
+    return m if m in ("auto", "on", "off") else "auto"
+
+
+def _should_voice_reply(link, is_voice: bool) -> bool:
+    """auto = speak when the advisor spoke; on = always speak; off = never."""
+    m = _voice_mode(link)
+    return m == "on" or (m == "auto" and bool(is_voice))
+
+
+def _pcm_to_wav(pcm: bytes, rate: int = 24000, ch: int = 1, bits: int = 16) -> bytes:
+    import struct as _s
+    br = rate * ch * bits // 8
+    ba = ch * bits // 8
+    ds = len(pcm)
+    return (b"RIFF" + _s.pack("<I", 36 + ds) + b"WAVE" + b"fmt "
+            + _s.pack("<IHHIIHH", 16, 1, ch, rate, br, ba, bits)
+            + b"data" + _s.pack("<I", ds) + pcm)
+
+
+async def _tts_voice(text: str, lang: str = "en") -> Optional[bytes]:
+    """Gemini TTS → OGG/Opus voice-note bytes (via ffmpeg). Returns None on any failure so the
+    caller silently falls back to a text reply. Kept short — long replies are truncated for speech."""
+    import os as _os
+    import base64 as _b64
+    import asyncio as _aio
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    say = (text or "").strip()
+    if not key or not say:
+        return None
+    voice = _os.getenv("TGCRM_TTS_VOICE", "Kore")
+    model = _os.getenv("TGCRM_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    prompt = ("Say warmly and naturally, like a helpful human assistant: " + say)[:1400]
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as c:
+            r = await c.post(url, json=body)
+        d = r.json()
+        part = d["candidates"][0]["content"]["parts"][0]["inlineData"]
+        rate = 24000
+        mt = part.get("mimeType", "")
+        if "rate=" in mt:
+            try:
+                rate = int(mt.split("rate=")[1].split(";")[0])
+            except Exception:
+                pass
+        pcm = _b64.b64decode(part["data"])
+    except Exception as e:
+        logger.info("tgcrm tts failed: %s", e)
+        return None
+    wav = _pcm_to_wav(pcm, rate)
+    try:
+        proc = await _aio.create_subprocess_exec(
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0",
+            "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", "pipe:1",
+            stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE, stderr=_aio.subprocess.PIPE)
+        out, err = await proc.communicate(input=wav)
+        if proc.returncode != 0 or not out:
+            logger.info("ffmpeg ogg convert failed: %s", (err or b"")[:150])
+            return None
+        return out
+    except Exception as e:
+        logger.info("ffmpeg error: %s", e)
+        return None
+
+
+async def _send_voice(token: str, chat_id, ogg_bytes: bytes, caption: str = "",
+                      buttons: Optional[list] = None) -> bool:
+    """Send an OGG/Opus voice note (with the text as caption + optional buttons). Best-effort."""
+    import json as _json
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption[:1024]
+        data["parse_mode"] = "HTML"
+    if buttons:
+        data["reply_markup"] = _json.dumps({"inline_keyboard": buttons})
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as c:
+            r = await c.post(API_BASE.format(token=token, method="sendVoice"),
+                             data=data, files={"voice": ("reply.ogg", ogg_bytes, "audio/ogg")})
+        return r.status_code == 200
+    except Exception as e:
+        logger.info("sendVoice failed: %s", e)
+        return False
+
+
+async def _reply(token, chat_id, text, link, is_voice, buttons=None) -> None:
+    """Deliver an assistant reply: as a VOICE note (with the text as caption) when voice is warranted,
+    else as text. Voice failure always falls back to text — the answer is never lost."""
+    if _should_voice_reply(link, is_voice):
+        audio = await _tts_voice(text, _lang(link))
+        if audio and await _send_voice(token, chat_id, audio, caption=text, buttons=buttons):
+            return
+    await send_message(token, chat_id, text, buttons)
 
 
 # ── Connect / disconnect (admin) ─────────────────────────────────────────────
@@ -645,7 +765,8 @@ def _menu_kb(role: str, lang: str = "en") -> list:
         [{"text": T(lang, "b_ask"), "callback_data": "ask"}],
         [{"text": T(lang, "b_support"), "callback_data": "support"}],
         [{"text": T(lang, "b_help"), "callback_data": "help"},
-         {"text": T(lang, "b_lang"), "callback_data": "lang"}],
+         {"text": T(lang, "b_lang"), "callback_data": "lang"},
+         {"text": T(lang, "b_voice"), "callback_data": "voice"}],
     ]
 
 
@@ -1389,8 +1510,9 @@ async def _ask_opener(link) -> str:
                    "I remember our chat.")
 
 
-async def _process_command(token, chat_id, tg_uid, link, text) -> None:
-    """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save."""
+async def _process_command(token, chat_id, tg_uid, link, text, is_voice=False) -> None:
+    """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save.
+    is_voice: whether the source was a voice note (drives voice-vs-text replies for AI answers)."""
     lang = _lang(link)
     mkb = [[{"text": T(lang, "b_menu"), "callback_data": "menu"}]]
     # Support capture mode: the next message becomes a support ticket.
@@ -1432,7 +1554,7 @@ async def _process_command(token, chat_id, tg_uid, link, text) -> None:
             if _res.get("action"):
                 _pd["proposal"] = _res["action"]
             await _set_pending(tg_uid, int(link["tenant_id"]), _pd)
-            await send_message(token, chat_id, _res["answer"], mkb)
+            await _reply(token, chat_id, _res["answer"], link, is_voice, mkb)
             return
         # A real command (log a note, add a lead, …) breaks out of the AI chat.
         if _in_ask:
@@ -1533,6 +1655,21 @@ async def _handle_callback(token, tenant_id: int, cb: dict) -> dict:
         await set_user_lang(tg_uid, newlang)
         link["lang"] = newlang
         await send_message(token, chat_id, T(newlang, "lang_set"))
+        await _send_menu(token, chat_id, link)
+    elif data == "voice":
+        cur = _voice_mode(link)
+        def _mk(m, key):
+            return {"text": T(lang, key) + (" ✓" if cur == m else ""), "callback_data": "voice:" + m}
+        await send_message(token, chat_id, T(lang, "voice_menu"),
+                           [[_mk("auto", "b_v_auto"), _mk("on", "b_v_on"), _mk("off", "b_v_off")]])
+    elif data.startswith("voice:"):
+        mode = data.split(":", 1)[1]
+        if mode not in ("auto", "on", "off"):
+            mode = "auto"
+        await set_user_voice(tg_uid, mode)
+        link["voice_reply"] = mode
+        _lbl = {"auto": T(lang, "b_v_auto"), "on": T(lang, "b_v_on"), "off": T(lang, "b_v_off")}[mode]
+        await send_message(token, chat_id, T(lang, "voice_set", mode=_lbl))
         await _send_menu(token, chat_id, link)
     elif data == "today":
         if link["role"] in ("owner", "admin"):
@@ -1778,8 +1915,8 @@ async def handle_update(bot_id: str, secret_header: str, update: dict) -> dict:
                                _menu_kb(link["role"], lang))
             return {"ok": True}
         await send_message(token, chat_id, T(lang, "v_heard", text=tr['transcript']))
-        await _process_command(token, chat_id, tg_uid, link, tr["transcript"])
+        await _process_command(token, chat_id, tg_uid, link, tr["transcript"], is_voice=True)
         return {"ok": True}
     # Typed message → try a CRM command; falls back to the menu if it's not one.
-    await _process_command(token, chat_id, tg_uid, link, text)
+    await _process_command(token, chat_id, tg_uid, link, text, is_voice=False)
     return {"ok": True}
