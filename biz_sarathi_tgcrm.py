@@ -468,12 +468,42 @@ async def _send_voice(token: str, chat_id, ogg_bytes: bytes, caption: str = "",
         return False
 
 
+async def _hinglish_for_voice(text: str) -> str:
+    """Render an answer as ONE natural SPOKEN Hinglish line (Roman Hindi-English mix) for the voice
+    note — so the assistant sounds like a warm Indian advisor, not an English reader. Names/numbers/
+    dates kept verbatim. Returns the original text on any failure."""
+    import os as _os
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    t = (text or "").strip()
+    if not key or not t:
+        return t
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    prompt = ("Rewrite the message below as ONE short, natural SPOKEN line in HINGLISH (Hindi-English "
+              "mix in Roman script) — the way a warm Indian insurance-advisor's assistant would say it "
+              "out loud. Keep all names, numbers, amounts and dates EXACTLY. Keep it concise and "
+              "friendly. Return ONLY the spoken line.\n\nMessage: " + t)
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
+                                        "generationConfig": {"temperature": 0.3}})
+        d = r.json()
+        parts = ((d.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+        s = (parts[0].get("text") or "").strip()
+        return s or t
+    except Exception as e:
+        logger.info("hinglish_for_voice failed: %s", e)
+        return t
+
+
 async def _reply(token, chat_id, text, link, is_voice, buttons=None) -> None:
-    """Deliver an assistant reply: as a VOICE note (with the text as caption) when voice is warranted,
-    else as text. Voice failure always falls back to text — the answer is never lost."""
+    """Deliver an assistant reply: as a VOICE note in natural Hinglish (with that same line as the
+    caption) when voice is warranted, else as text. Voice failure always falls back to the text answer
+    so nothing is ever lost."""
     if _should_voice_reply(link, is_voice):
-        audio = await _tts_voice(text, _lang(link))
-        if audio and await _send_voice(token, chat_id, audio, caption=text, buttons=buttons):
+        spoken = await _hinglish_for_voice(text)
+        audio = await _tts_voice(spoken, _lang(link))
+        if audio and await _send_voice(token, chat_id, audio, caption=spoken, buttons=buttons):
             return
     await send_message(token, chat_id, text, buttons)
 
