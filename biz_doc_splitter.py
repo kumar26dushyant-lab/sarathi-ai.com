@@ -27,7 +27,12 @@ import fitz  # PyMuPDF
 
 logger = logging.getLogger("sarathi.docsplit")
 
-TMP_ROOT = os.getenv("DOCSPLIT_TMP", os.path.join(tempfile.gettempdir(), "nidaan_docsplit"))
+# Job files must live where EVERY web worker can read them. The systemd units run with
+# PrivateTmp=true (each worker gets its own /tmp) AND nginx load-balances across workers, so
+# /tmp would let one worker save a job the next worker can't find ("Job expired"). Store under
+# the app dir instead (shared; covered by ReadWritePaths=/opt/sarathi; not isolated by PrivateTmp).
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_ROOT = os.getenv("DOCSPLIT_TMP") or os.path.join(_BASE_DIR, "var", "docsplit")
 MAX_PAGES = 80          # safety cap for a single job
 IMAGE_EXTS = ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff")
 

@@ -70,3 +70,6 @@ prelaunch_run*.txt
 
 # runtime deploy trigger (watched by sarathi-deploy.path)
 .deploy-trigger
+
+# Doc Splitter working job files (shared across workers, runtime only)
+var/
