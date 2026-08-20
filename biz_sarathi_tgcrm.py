@@ -278,6 +278,7 @@ STRINGS = {
     "ask_prompt": {"en": "🤖 Ask me anything about your leads, follow-ups, renewals or customers — just type or send a voice note.\n\nE.g. <i>“what's pending this week?”</i>",
                    "hi": "🤖 अपनी लीड्स, फ़ॉलो-अप, रिन्यूअल या ग्राहकों के बारे में कुछ भी पूछें — टाइप करें या वॉइस नोट भेजें।\n\nजैसे <i>“इस हफ़्ते क्या बकाया है?”</i>"},
     "ask_thinking": {"en": "🤔 Let me check…", "hi": "🤔 देख रहा हूँ…"},
+    "calc_thinking": {"en": "🧮 Calculating…", "hi": "🧮 हिसाब लगा रहा हूँ…"},
     "support_prompt": {"en": "🎫 <b>Support</b>\nDescribe your issue in a message or voice note and I'll raise a ticket for you.",
                        "hi": "🎫 <b>सहायता</b>\nअपनी समस्या मैसेज या वॉइस नोट में बताएँ, मैं आपके लिए टिकट बना दूँगा।"},
     "ticket_ok": {"en": "🎫 Ticket <b>#{id}</b> raised. Our team will get back to you.",
@@ -1122,7 +1123,7 @@ async def _parse_intent(text: str) -> dict:
     prompt = (
         "Convert an insurance advisor's short note/voice message into a CRM action as STRICT JSON.\n"
         f"Today (IST) is {today}. Shape:\n"
-        '{"action":"log_note|set_followup|move_stage|create_lead|assign|ask|none","lead_name":"","summary":"",'
+        '{"action":"log_note|set_followup|move_stage|create_lead|assign|ask|calculate|none","lead_name":"","summary":"",'
         '"followup_date":"YYYY-MM-DD","followup_time":"HH:MM","stage":"","phone":"","need_type":"","assignee_name":""}\n'
         "- 'set_followup' = schedule a future call/meeting/reminder for a lead (has a date).\n"
         "- 'log_note' = record something that happened (a call/update) with no future date.\n"
@@ -1135,6 +1136,10 @@ async def _parse_intent(text: str) -> dict:
         "assignee_name = the team member's name.\n"
         "- 'ask' = a QUESTION about their CRM (leads, pipeline, follow-ups, renewals, "
         "customers, counts, 'what's pending', 'who did I add') to be answered from data.\n"
+        "- 'calculate' = a FINANCIAL CALCULATION request: premium/EMI, SIP for a goal, retirement "
+        "corpus, how much life/term/health cover is needed, NPS, SWP, inflation, ULIP-vs-MF. "
+        "e.g. '40 saal, 1 crore term ka premium', '10000 SIP 15 saal mein kitna banega', "
+        "'retirement ke liye kitna corpus chahiye'.\n"
         "- 'none' = greeting or small talk, not an action or a data question.\n"
         "- lead_name = the customer name mentioned. summary = concise note.\n"
         "- Resolve relative dates (today/tomorrow/next monday) to YYYY-MM-DD. Empty strings if absent.\n"
@@ -1540,6 +1545,94 @@ async def _ask_opener(link) -> str:
                    "I remember our chat.")
 
 
+# ── Voice/text financial calculators (advisor asks → we compute with the real calculators) ──
+_CALC_SPEC = """- retirement_planner: corpus needed to retire. params: current_age, retirement_age, monthly_expense, inflation_rate, current_savings
+- hlv_calculator: how much LIFE / TERM cover a person needs. params: monthly_expense, outstanding_loans, child_education, current_savings, existing_cover, current_age
+- emi_calculator: split an insurance PREMIUM into EMIs. params: annual_premium, years
+- health_cover_estimator: health-insurance cover needed. params: age, family_size, city_tier
+- mf_sip_planner: monthly SIP needed to reach a goal. params: goal_amount, years, annual_return, existing_savings
+- sip_vs_lumpsum: compare SIP vs lumpsum. params: total_amount, years, annual_return
+- stepup_sip_planner: SIP with a yearly step-up. params: initial_sip, years, annual_return
+- swp_calculator: monthly withdrawal from a corpus. params: initial_corpus, years, annual_return
+- nps_planner: NPS corpus + pension. params: monthly_contribution, current_age, retirement_age
+- ulip_vs_mf: compare ULIP vs mutual fund. params: annual_investment, years
+- delay_cost_calculator: cost of delaying an SIP. params: monthly_sip, years, annual_return
+- inflation_eraser: what an amount is worth after inflation. params: current_amount, inflation_rate, years"""
+
+
+async def _handle_calc(link, query: str) -> Optional[str]:
+    """Map an advisor's calculation request → the right calculator + params → compute with the REAL
+    biz_calculators functions → a short conversational answer. Returns None if it isn't a calc query."""
+    import os as _os, json as _json, inspect as _inspect, dataclasses as _dc
+    key = _os.getenv("GEMINI_API_KEY", "").strip()
+    if not key or not (query or "").strip():
+        return None
+    import biz_calculators as _calc
+    funcs = {n: getattr(_calc, n) for n in (
+        "retirement_planner", "hlv_calculator", "emi_calculator", "health_cover_estimator",
+        "mf_sip_planner", "sip_vs_lumpsum", "stepup_sip_planner", "swp_calculator",
+        "nps_planner", "ulip_vs_mf", "delay_cost_calculator", "inflation_eraser") if hasattr(_calc, n)}
+    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+
+    async def _gem(prompt, js=True):
+        cfg = {"temperature": 0.2}
+        if js:
+            cfg["responseMimeType"] = "application/json"
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            r = await c.post(url, json={"contents": [{"parts": [{"text": prompt}]}],
+                                        "generationConfig": cfg})
+        d = r.json()
+        return (((d.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}])[0].get("text", "")
+
+    # 1) Which calculator + params? (Indian number words → digits.)
+    xp = ("An insurance advisor asked a CALCULATION question. Pick ONE calculator and extract its params "
+          "as JSON. Convert spoken numbers: '1 crore'=10000000, '50 lakh'=5000000, '5 lakh'=500000, "
+          "'40 saal'/'40 years old'→ an age param, '15 saal'/'15 years'→ a years param, '12%'→12. Omit "
+          "params not stated (defaults apply). If it is NOT a financial calculation, return {\"calc\":\"\"}.\n\n"
+          f"CALCULATORS:\n{_CALC_SPEC}\n\nReturn JSON: {{\"calc\":\"<name|>\",\"params\":{{...}}}}\n\nRequest: " + query)
+    try:
+        data = _json.loads((await _gem(xp)).strip().strip("`").lstrip("json").strip())
+    except Exception:
+        return None
+    name = (data.get("calc") or "").strip()
+    fn = funcs.get(name)
+    if not fn:
+        return None
+    # 2) Compute with the REAL function (filter to its signature; coerce numeric strings).
+    sig = _inspect.signature(fn)
+    kwargs = {}
+    for k, v in (data.get("params") or {}).items():
+        if k not in sig.parameters:
+            continue
+        try:
+            kwargs[k] = float(v) if isinstance(v, str) and v.replace(".", "", 1).replace("-", "", 1).isdigit() else v
+        except Exception:
+            kwargs[k] = v
+    try:
+        result = fn(**kwargs)
+        rd = _dc.asdict(result) if _dc.is_dataclass(result) else dict(vars(result))
+    except Exception as e:
+        logger.info("calc %s failed: %s", name, e)
+        return None
+    # 3) Phrase a short, friendly answer from the computed numbers ONLY.
+    pp = ("Answer the advisor's question in 2-3 short, friendly lines using ONLY these computed numbers "
+          "(don't invent any). Keep money in ₹ with lakh/crore where natural, and note the main assumption "
+          "briefly. Simple language.\n\nQuestion: " + query + "\nComputed: " + _json.dumps(rd, default=str)[:1600])
+    try:
+        ans = (await _gem(pp, js=False)).strip()
+    except Exception:
+        ans = ""
+    if not ans:
+        # Fallback: use the module's own formatter if available.
+        f = getattr(_calc, "format_" + name.replace("_calculator", "").replace("_planner", ""), None)
+        try:
+            ans = f(result) if f else str(rd)[:400]
+        except Exception:
+            ans = str(rd)[:400]
+    return ans
+
+
 async def _process_command(token, chat_id, tg_uid, link, text, is_voice=False) -> None:
     """Parse a note (typed or transcribed) → (pick lead if needed) → confirm card → save.
     is_voice: whether the source was a voice note (drives voice-vs-text replies for AI answers)."""
@@ -1585,6 +1678,22 @@ async def _process_command(token, chat_id, tg_uid, link, text, is_voice=False) -
                 _pd["proposal"] = _res["action"]
             await _set_pending(tg_uid, int(link["tenant_id"]), _pd)
             await _reply(token, chat_id, _res["answer"], link, is_voice, mkb)
+            return
+        if act == "calculate":
+            if _in_ask:
+                await _set_pending(tg_uid, int(link["tenant_id"]), None)
+            await send_message(token, chat_id, T(lang, "calc_thinking"))
+            ans = await _handle_calc(link, text)
+            if ans:
+                await _reply(token, chat_id, ans, link, is_voice, mkb)
+            else:
+                # Not actually a calculation we could run → answer it as a normal question.
+                _res = await _ask_ai(link, text, tg_uid)
+                _pd = {"action": "ask_mode"}
+                if _res.get("action"):
+                    _pd["proposal"] = _res["action"]
+                await _set_pending(tg_uid, int(link["tenant_id"]), _pd)
+                await _reply(token, chat_id, _res["answer"], link, is_voice, mkb)
             return
         # A real command (log a note, add a lead, …) breaks out of the AI chat.
         if _in_ask:
