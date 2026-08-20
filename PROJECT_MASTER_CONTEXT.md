@@ -6155,6 +6155,10 @@ Supersedes A82's "homepage chatbot is stateless" gap.
 - **RADAR P1–P4 COMPLETE & verified.** Remaining = Phase C (send-as-customer + AI drafts) only, deferred (needs consent/audit).
 - **[OWNER]** optionally set `EMAIL_VAULT_KEY` in biz.env; add a real customer mailbox + assign a pod + "🔄 Check now" to see it flow with live mail.
 
+## A86 — Nidaan Document Splitter (standalone ops tool) (Aug 20 2026, commit 2a48ac7)
+
+Customers send a big MIXED file (discharge summary + bills + lab reports + policy copy…) as 1–3 PDFs/images; the team must send each document SEPARATELY to authorities (was manual). New standalone tool `biz_doc_splitter.py` + ops panel **"📄 Doc Splitter"** (all staff, `minRank:0`, NOT tied to a claim): upload PDF/JPG/PNG/WebP (≤12 files, 30 MB each, ≤80 pages) → `normalize_to_pdf` merges into one PDF (fitz/PyMuPDF) → `segment` = **Gemini multimodal** (`Part.from_bytes` PDF) returns each distinct document + contiguous page range → **human review** (page thumbnails via `/docsplit/{job}/thumb/{n}` + editable name/start/end list, add/remove) → `extract` splits per document (fitz) → **zip download** (`/docsplit/{job}/export`, audited). Short-lived job storage in `DOCSPLIT_TMP`. Verified: 5-page mix → 3 docs correctly (discharge p1-2, bill p3, lab p4-5). **DOC/DOCX = later (needs LibreOffice, not installed).** P2 (later) = attach separated docs straight to a claim.
+
 ## A85 — Sarathi conversational voice CRM + Nidaan urgent fixes (Aug 18–19 2026)
 
 **Sarathi-AI.com**
