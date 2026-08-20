@@ -5832,12 +5832,67 @@ async def ops_radar_mailbox_delete(mailbox_id: int, request: Request):
 
 
 @app.get("/nidaan/ops/api/radar/items")
-async def ops_radar_items(request: Request, flag: str = "", limit: int = 120):
-    """Flagged radar items (newest, red-first) + counts. Admin+ (P3 adds staff-scoped views)."""
+async def ops_radar_items(request: Request, flag: str = "", limit: int = 120, bucket: str = ""):
+    """Radar items by lifecycle bucket (act|waiting|resolved) or flag, + counts. Admin+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    return {"items": await radar.list_items(flag, limit), "stats": await radar.radar_stats()}
+    return {"items": await radar.list_items(flag, limit, bucket=bucket),
+            "stats": await radar.radar_stats()}
+
+
+@app.get("/nidaan/ops/api/radar/items/{item_id}/email")
+async def ops_radar_read_email(item_id: int, request: Request):
+    """Read the FULL email for a radar item, live from the mailbox — so staff never open Gmail. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.read_full_email(item_id)
+
+
+class _RadarReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=8000)
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/reply")
+async def ops_radar_reply(item_id: int, body: _RadarReplyReq, request: Request):
+    """Reply to the sender FROM the customer's mailbox (SMTP). Moves the item to 'Waiting'. Audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    res = await radar.send_reply(item_id, body.message, staff.get("staff_id"))
+    if not res.get("ok"):
+        _m = {"not_found": "Update not found", "no_recipient": "No sender address to reply to",
+              "auth_failed": "Mailbox login failed — the app-password may be wrong/expired",
+              "decrypt_failed": "Could not read the stored credential"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not send: " + str(res.get("error"))))
+    await _ops_audit(request, "radar.reply", "radar_item", str(item_id), "replied from mailbox")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/resolve")
+async def ops_radar_resolve(item_id: int, request: Request):
+    """Mark a radar update resolved (case handled) → moves to the Resolved bucket. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    if not await radar.set_item_status(item_id, "resolved"):
+        raise HTTPException(status_code=404, detail="Update not found")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/{mailbox_id}/purge")
+async def ops_radar_purge(mailbox_id: int, request: Request):
+    """Disconnect + PURGE a mailbox once its case is decided — removes creds + all its data (nothing
+    retained). Super-admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await radar.purge_mailbox(mailbox_id):
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+    await _ops_audit(request, "radar.purge", "radar_mailbox", str(mailbox_id), "disconnected + purged")
+    return {"ok": True}
 
 
 class _RadarConfigReq(BaseModel):

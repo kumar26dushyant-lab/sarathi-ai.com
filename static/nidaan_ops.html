@@ -4024,7 +4024,7 @@ async function mbOpenRef(accountId){
 window.mbOpenRef = mbOpenRef;
 
 // ══════════ EMAIL UPDATE RADAR (admin+) ══════════
-let _radarMailboxes = [], _radarItems = [], _radarStats = {}, _radarConfig = {}, _radarMetrics = {}, _radarView = 'radar', _radarFlag = '';
+let _radarMailboxes = [], _radarItems = [], _radarStats = {}, _radarConfig = {}, _radarMetrics = {}, _radarView = 'radar', _radarFlag = 'act';
 async function loadRadar(){
   const el = document.getElementById('panel-radar');
   el.innerHTML = `<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>`;
@@ -4062,39 +4062,93 @@ function renderRadar(){
 }
 function _radarFlagDot(f){ return f==='red'?'🔴':(f==='green'?'⚪':'🟡'); }
 function _mTile(label,val,sub){ return `<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.6rem .8rem"><div style="font-size:1.3rem;font-weight:800">${val}</div><div style="font-size:.72rem;color:var(--nd-text-muted)">${label}${sub?' · '+sub:''}</div></div>`; }
+function _radarInBucket(i,b){
+  if(b==='act') return i.status==='new' && (i.flag==='red'||i.flag==='amber');
+  if(b==='waiting') return i.status==='responded';
+  if(b==='resolved') return i.status==='resolved'||i.status==='closed';
+  if(b==='cleared') return i.flag==='green';
+  if(b==='deadline') return !!i.deadline;
+  return true;
+}
 function _renderRadarItems(){
   const s=_radarStats, mx=_radarMetrics;
-  let items=_radarItems;
-  if(_radarFlag==='deadline') items=items.filter(i=>i.deadline);
-  else if(_radarFlag) items=items.filter(i=>i.flag===_radarFlag);
-  const fTab=(v,lbl)=>`<div class="tab-pill ${_radarFlag===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
-  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled, no human')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('New today',(mx.today||0),'')}${_mTile('Deadlines',(mx.with_deadline||0),'')}</div>`;
-  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('','All ('+(s.total||0)+')')}${fTab('red','🔴 Act now ('+(s.red||0)+')')}${fTab('amber','🟡 Review ('+(s.amber||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}</div>`;
+  const b=_radarFlag||'act';
+  const items=_radarItems.filter(i=>_radarInBucket(i,b));
+  const fTab=(v,lbl)=>`<div class="tab-pill ${b===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
+  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need a reply')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}</div>`;
   if(!items.length){
     const noMb = !_radarMailboxes.length;
     const empty = noMb
-      ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails will appear here, flagged and assigned automatically.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
-      : `<div class="empty"><div class="ei">🛰️</div><p>All clear — no updates in this view.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">New emails from insurers/authorities will appear here automatically. Or hit <b>🔄 Check now</b> above.</p></div>`;
+      ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails appear here; you read &amp; reply without opening Gmail.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
+      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='act'?'All caught up — no updates waiting on a reply.':'New emails appear here automatically. Or hit 🔄 Check now.'}</p></div>`;
     return metricStrip+filters+empty;
   }
   const rows=items.map(i=>{
     const mid=String(i.message_id||'').replace(/[<>]/g,'');
     const dl = mid ? ('https://mail.google.com/mail/u/0/#search/'+encodeURIComponent('rfc822msgid:'+mid)) : '';
     const bc = i.flag==='red'?'#f87171':(i.flag==='green'?'#94a3b8':'#fbbf24');
-    return `<div class="nd-card" style="padding:.7rem .9rem;margin-bottom:.55rem;border-left:3px solid ${bc}">
+    const st = i.status==='responded'?'<span style="font-size:.66rem;color:var(--nd-cyan-text)">🕓 replied</span>':((i.status==='resolved'||i.status==='closed')?'<span style="font-size:.66rem;color:var(--nd-success-text)">✅ resolved</span>':'');
+    return `<div class="nd-card" onclick="openRadarEmail(${i.item_id})" style="padding:.7rem .9rem;margin-bottom:.55rem;border-left:3px solid ${bc};cursor:pointer">
       <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start">
         <div style="min-width:0;flex:1">
-          <div style="font-weight:700;font-size:.86rem">${_radarFlagDot(i.flag)} ${esc(i.subject||'(no subject)')}${i.priority_sender?' <span style="font-size:.66rem;color:var(--nd-danger-text)">priority sender</span>':''}</div>
+          <div style="font-weight:700;font-size:.86rem">${_radarFlagDot(i.flag)} ${esc(i.subject||'(no subject)')} ${st}${i.priority_sender?' <span style="font-size:.66rem;color:var(--nd-danger-text)">priority</span>':''}</div>
           <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${esc(i.from_name||i.from_addr||'')} · ${i.received_at?fmtDateTime(i.received_at):''}${i.quick_task_id?' · <span style="color:var(--nd-cyan-text)">📋 Task #'+i.quick_task_id+'</span>':''}</div>
           ${i.ai_summary?`<div style="font-size:.78rem;margin-top:.3rem">🤖 ${esc(i.ai_summary)}</div>`:''}
           ${i.deadline?`<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.2rem">⏰ ${esc(i.deadline)}</div>`:''}
           ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
         </div>
-        ${dl?`<a href="${dl}" target="_blank" rel="noopener" class="btn-sm btn-ghost" style="white-space:nowrap;text-decoration:none">Open in Gmail →</a>`:''}
+        <div style="display:flex;flex-direction:column;gap:.3rem;align-items:flex-end">
+          <button class="btn-sm btn-primary" style="white-space:nowrap" onclick="event.stopPropagation();openRadarEmail(${i.item_id})">Read &amp; reply</button>
+          ${dl?`<a href="${dl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:.66rem;color:var(--nd-text-faint);text-decoration:none">Gmail ↗</a>`:''}
+        </div>
       </div></div>`;
   }).join('');
   return metricStrip+filters+rows;
 }
+async function openRadarEmail(id){
+  const it=(_radarItems||[]).find(x=>x.item_id===id)||{};
+  openModal('📨 '+(it.subject?esc(it.subject):'Email'), '<div class="empty"><div class="ei">⏳</div><p>Opening the email…</p></div>', [], true);
+  let r; try{ r=await API('/radar/items/'+id+'/email'); }catch(e){ document.getElementById('modalBody').innerHTML='<div class="empty"><p>Could not open.</p></div>'; return; }
+  const d = r.ok? await r.json():{error:'failed'};
+  const body=document.getElementById('modalBody');
+  if(d.error){ body.innerHTML=`<div class="empty"><div class="ei">⚠️</div><p>Couldn't read the email (${esc(d.error)}). You can still open it in Gmail from the list.</p></div>`; return; }
+  const emailBody=(d.body||'').trim()||'(no text content)';
+  const resolved=(it.status==='resolved'||it.status==='closed');
+  body.innerHTML=`
+    <div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.5rem;line-height:1.6">
+      <div><b>From:</b> ${esc(d.from||'')}</div>
+      <div><b>Mailbox:</b> ${esc(it.mailbox_label||it.mailbox_email_masked||'')}${it.deadline?` · <span style="color:var(--nd-warning-text)">⏰ ${esc(it.deadline)}</span>`:''}</div>
+      <div><b>Date:</b> ${esc(d.date||'')}</div>
+    </div>
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:.84rem;line-height:1.55">${esc(emailBody)}</div>
+    <div style="margin-top:.9rem">
+      <div style="font-size:.8rem;font-weight:700;margin-bottom:.35rem">✍️ Reply <span style="font-weight:400;color:var(--nd-text-muted)">— sent from ${esc(it.mailbox_email_masked||'the customer mailbox')} on their behalf</span></div>
+      <textarea id="radarReplyBox" rows="5" placeholder="Type your reply to ${esc(d.from||'the sender')}…" style="width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);border-radius:8px;padding:.6rem;font-size:.9rem"></textarea>
+      <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="radarSendReply(${id},this)">📤 Send reply</button>
+        ${resolved?'<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ Resolved</span>':`<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="radarResolve(${id})">✅ Mark resolved</button>`}
+      </div>
+    </div>`;
+}
+async function radarSendReply(id,btn){
+  const t=document.getElementById('radarReplyBox'); const msg=(t&&t.value||'').trim(); if(!msg){alert('Type a reply first.');return;}
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Sending…';
+  try{
+    const r=await API('/radar/items/'+id+'/reply',{method:'POST',body:JSON.stringify({message:msg})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert(e.detail||'Could not send.'); btn.disabled=false; btn.textContent=orig; return; }
+    closeModal(); loadRadar();
+  }catch(e){ alert('Could not send.'); btn.disabled=false; btn.textContent=orig; }
+}
+async function radarResolve(id){
+  if(!confirm('Mark this update as resolved? It moves to the Resolved bucket.'))return;
+  try{ const r=await API('/radar/items/'+id+'/resolve',{method:'POST'}); if(r.ok){ closeModal(); loadRadar(); } else alert('Could not update.'); }catch(e){ alert('Could not update.'); }
+}
+async function radarPurge(id,label){
+  if(!confirm('Disconnect & PURGE '+(label||'this mailbox')+'?\n\nThis stops watching it and DELETES its stored emails, replies and credentials — nothing is kept. Use this once the case is decided/awarded.'))return;
+  try{ const r=await API('/radar/mailboxes/'+id+'/purge',{method:'POST'}); if(r.ok){ loadRadar(); } else { const e=await r.json().catch(()=>({})); alert(e.detail||'Could not purge.'); } }catch(e){ alert('Could not purge.'); }
+}
+window.openRadarEmail=openRadarEmail; window.radarSendReply=radarSendReply; window.radarResolve=radarResolve; window.radarPurge=radarPurge;
 function _renderRadarMailboxes(){
   const rows = _radarMailboxes.map(m=>`<tr style="border-top:1px solid var(--nd-border)">
     <td style="padding:.55rem .7rem;font-weight:600">${esc(m.label||'—')}</td>
@@ -4104,7 +4158,7 @@ function _renderRadarMailboxes(){
     <td style="padding:.55rem .7rem;white-space:nowrap">
       <button class="btn-sm btn-ghost" onclick="radarTest(${m.mailbox_id},this)" title="Check this mailbox connects">Test</button>
       <button class="btn-sm btn-ghost" onclick="radarEdit(${m.mailbox_id})">Edit</button>
-      <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="radarDelete(${m.mailbox_id})">Remove</button>
+      <button class="btn-sm btn-ghost" style="color:var(--nd-warning-text)" onclick="radarPurge(${m.mailbox_id},'${esc((m.label||m.email_masked||'').replace(/'/g,''))}')" title="Case decided — stop watching &amp; delete everything">Disconnect &amp; purge</button>
     </td></tr>`).join('');
   const none = !_radarMailboxes.length;
   // Guided walkthrough — open by default until at least one mailbox exists.

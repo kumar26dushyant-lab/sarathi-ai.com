@@ -155,8 +155,8 @@ async def upsert_mailbox(*, mailbox_id: Optional[int], label: str, email_address
         cur = await conn.execute(
             """INSERT INTO nidaan_radar_mailboxes
                  (label, email_address, enc_password, imap_host, imap_port, account_id,
-                  is_active, pod, pod_staff_ids, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                  is_active, pod, pod_staff_ids, created_by, consent_ack_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
             (label, email_address, enc, imap_host or DEFAULT_IMAP_HOST,
              int(imap_port or DEFAULT_IMAP_PORT), account_id, 1 if is_active else 0,
              pod, pod_ids, created_by))
@@ -413,9 +413,17 @@ async def poll_all_mailboxes() -> int:
 
 
 # ── Read side (for the ops radar view) ───────────────────────────────────────
-async def list_items(flag: str = "", limit: int = 120) -> list[dict]:
+async def list_items(flag: str = "", limit: int = 120, bucket: str = "") -> list[dict]:
     where, params = [], []
-    if flag in ("red", "amber", "green"):
+    # Lifecycle buckets (the clean, non-messy view): act = unaddressed inbound needing a reply;
+    # waiting = we replied, awaiting them; resolved = case marked done.
+    if bucket == "act":
+        where.append("i.status='new' AND i.flag IN ('red','amber')")
+    elif bucket == "waiting":
+        where.append("i.status='responded'")
+    elif bucket == "resolved":
+        where.append("i.status IN ('resolved','closed')")
+    elif flag in ("red", "amber", "green"):
         where.append("i.flag=?")
         params.append(flag)
     q = ("SELECT i.*, m.label AS mailbox_label, m.email_address AS mailbox_email "
@@ -640,6 +648,9 @@ async def radar_metrics() -> dict:
             "COALESCE(SUM(CASE WHEN flag='red' THEN 1 ELSE 0 END),0) AS red, "
             "COALESCE(SUM(CASE WHEN flag='amber' THEN 1 ELSE 0 END),0) AS amber, "
             "COALESCE(SUM(CASE WHEN flag='green' THEN 1 ELSE 0 END),0) AS green, "
+            "COALESCE(SUM(CASE WHEN status='new' AND flag IN ('red','amber') THEN 1 ELSE 0 END),0) AS act, "
+            "COALESCE(SUM(CASE WHEN status='responded' THEN 1 ELSE 0 END),0) AS waiting, "
+            "COALESCE(SUM(CASE WHEN status IN ('resolved','closed') THEN 1 ELSE 0 END),0) AS resolved, "
             "COALESCE(SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END),0) AS today, "
             "COALESCE(SUM(CASE WHEN COALESCE(deadline,'')<>'' THEN 1 ELSE 0 END),0) AS with_deadline "
             "FROM nidaan_radar_items")).fetchone())
@@ -647,5 +658,184 @@ async def radar_metrics() -> dict:
     return {"mailboxes_active": mb["active"], "mailboxes_ok": mb["ok"],
             "coverage_pct": round(mb["ok"] / mb["active"] * 100) if mb["active"] else 0,
             "total": total, "red": it["red"], "amber": it["amber"], "green": it["green"],
+            "act": it["act"], "waiting": it["waiting"], "resolved": it["resolved"],
             "today": it["today"], "with_deadline": it["with_deadline"],
             "auto_triage_pct": round(it["green"] / total * 100) if total else 0}
+
+
+# ── P5: read full email + reply-as-customer (SMTP) + lifecycle + purge ────────
+def _smtp_host(imap_host: str) -> str:
+    h = (imap_host or DEFAULT_IMAP_HOST).strip()
+    return h.replace("imap.", "smtp.") if h.startswith("imap.") else h.replace("imap", "smtp")
+
+
+def _imap_fetch_full(host: str, port: int, email: str, password: str, uid: int) -> Optional[dict]:
+    """Fetch ONE full email by UID → {from, subject, date, message_id, body}. Blocking; never raises."""
+    import imaplib
+    import email as _email
+    from email.header import make_header, decode_header
+    M = None
+    try:
+        M = imaplib.IMAP4_SSL(host or DEFAULT_IMAP_HOST, int(port or DEFAULT_IMAP_PORT), timeout=25)
+        M.login(email, password)
+        M.select("INBOX", readonly=True)
+        typ, data = M.uid("fetch", str(uid), "(RFC822)")
+        if typ != "OK" or not data or not data[0]:
+            return {"error": "not_found"}
+        msg = _email.message_from_bytes(data[0][1])
+        try:
+            subj = str(make_header(decode_header(msg.get("Subject", "") or "")))
+        except Exception:
+            subj = msg.get("Subject", "") or ""
+        body = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain" and "attachment" not in str(part.get("Content-Disposition") or ""):
+                    try:
+                        body = (part.get_payload(decode=True) or b"").decode(part.get_content_charset() or "utf-8", "ignore")
+                        break
+                    except Exception:
+                        pass
+            if not body:
+                for part in msg.walk():
+                    if part.get_content_type() == "text/html":
+                        try:
+                            html = (part.get_payload(decode=True) or b"").decode(part.get_content_charset() or "utf-8", "ignore")
+                            body = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+                            break
+                        except Exception:
+                            pass
+        else:
+            try:
+                body = (msg.get_payload(decode=True) or b"").decode(msg.get_content_charset() or "utf-8", "ignore")
+            except Exception:
+                body = str(msg.get_payload())
+        return {"from": msg.get("From", ""), "subject": subj, "date": msg.get("Date", ""),
+                "message_id": (msg.get("Message-ID", "") or "").strip(), "body": (body or "").strip()[:20000]}
+    except imaplib.IMAP4.error:
+        return {"error": "auth_failed"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:150]}
+    finally:
+        try:
+            if M is not None:
+                M.logout()
+        except Exception:
+            pass
+
+
+def _smtp_send(host: str, port: int, email: str, password: str, to_addr: str,
+               subject: str, body: str, in_reply_to: str = "") -> tuple:
+    """Send a reply FROM the customer's mailbox via SMTP. Blocking; returns (ok, err|message_id)."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.utils import make_msgid, formatdate
+    try:
+        msg = MIMEText(body or "", "plain", "utf-8")
+        msg["From"] = email
+        msg["To"] = to_addr
+        msg["Subject"] = subject
+        msg["Date"] = formatdate(localtime=True)
+        mid = make_msgid()
+        msg["Message-ID"] = mid
+        if in_reply_to:
+            msg["In-Reply-To"] = in_reply_to
+            msg["References"] = in_reply_to
+        s = smtplib.SMTP(host, int(port), timeout=25)
+        s.starttls()
+        s.login(email, password)
+        s.sendmail(email, [to_addr], msg.as_string())
+        s.quit()
+        return (True, mid)
+    except smtplib.SMTPAuthenticationError:
+        return (False, "auth_failed")
+    except Exception as e:  # noqa: BLE001
+        return (False, str(e)[:150])
+
+
+async def get_item(item_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT i.*, m.email_address, m.imap_host, m.imap_port, m.enc_password "
+            "FROM nidaan_radar_items i JOIN nidaan_radar_mailboxes m ON m.mailbox_id=i.mailbox_id "
+            "WHERE i.item_id=?", (item_id,))).fetchone()
+    return dict(row) if row else None
+
+
+async def read_full_email(item_id: int) -> dict:
+    """Fetch the full email body for a radar item (live from the mailbox) — so staff read it in ops."""
+    it = await get_item(item_id)
+    if not it:
+        return {"error": "not_found"}
+    try:
+        pw = decrypt_secret(it.get("enc_password") or "")
+    except Exception:
+        return {"error": "decrypt_failed"}
+    res = await asyncio.to_thread(_imap_fetch_full, it.get("imap_host"), it.get("imap_port"),
+                                  it.get("email_address"), pw, int(it.get("uid") or 0))
+    return res or {"error": "fetch_failed"}
+
+
+async def send_reply(item_id: int, body: str, staff_id: Optional[int]) -> dict:
+    """Reply to the sender of a radar item, FROM the customer's mailbox (SMTP). Records the send,
+    moves the item to 'responded' (→ Waiting bucket). Returns {ok} or {error}."""
+    it = await get_item(item_id)
+    if not it:
+        return {"ok": False, "error": "not_found"}
+    to_addr = (it.get("from_addr") or "").strip()
+    if not to_addr:
+        return {"ok": False, "error": "no_recipient"}
+    try:
+        pw = decrypt_secret(it.get("enc_password") or "")
+    except Exception:
+        return {"ok": False, "error": "decrypt_failed"}
+    subj = (it.get("subject") or "").strip()
+    if subj and not subj.lower().startswith("re:"):
+        subj = "Re: " + subj
+    ok, info = await asyncio.to_thread(
+        _smtp_send, _smtp_host(it.get("imap_host")), 587, it.get("email_address"), pw,
+        to_addr, subj or "(no subject)", body or "", (it.get("message_id") or ""))
+    if not ok:
+        return {"ok": False, "error": info}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_radar_sent (mailbox_id, item_id, to_addr, subject, body, message_id, sent_by) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (it["mailbox_id"], item_id, to_addr, subj, (body or "")[:8000], info, staff_id))
+        await conn.execute("UPDATE nidaan_radar_items SET status='responded' WHERE item_id=?", (item_id,))
+        await conn.commit()
+    return {"ok": True}
+
+
+async def set_item_status(item_id: int, status: str) -> bool:
+    if status not in ("new", "responded", "resolved", "closed"):
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute("UPDATE nidaan_radar_items SET status=? WHERE item_id=?",
+                                 (status, item_id))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+async def list_sent(mailbox_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        return [dict(r) for r in await (await conn.execute(
+            "SELECT sent_id, item_id, to_addr, subject, body, created_at FROM nidaan_radar_sent "
+            "WHERE mailbox_id=? ORDER BY sent_id ASC", (mailbox_id,))).fetchall()]
+
+
+async def purge_mailbox(mailbox_id: int) -> bool:
+    """Disconnect + PURGE a mailbox once its case is decided — removes the mailbox (creds), all its
+    radar items, and sent-reply records. Nothing is retained (founder's policy)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT mailbox_id FROM nidaan_radar_mailboxes WHERE mailbox_id=?", (mailbox_id,))).fetchone()
+        if not row:
+            return False
+        await conn.execute("DELETE FROM nidaan_radar_items WHERE mailbox_id=?", (mailbox_id,))
+        await conn.execute("DELETE FROM nidaan_radar_sent WHERE mailbox_id=?", (mailbox_id,))
+        await conn.execute("DELETE FROM nidaan_radar_mailboxes WHERE mailbox_id=?", (mailbox_id,))
+        await conn.commit()
+    return True

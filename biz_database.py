@@ -1557,6 +1557,21 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_radar_items_flag ON nidaan_radar_items(flag, created_at);
             CREATE INDEX IF NOT EXISTS idx_radar_items_mailbox ON nidaan_radar_items(mailbox_id);
 
+            -- Radar SENT replies (outbound, from the customer's mailbox via SMTP) — for the
+            -- conversation view + audit. The customer's app-password enables both IMAP + SMTP.
+            CREATE TABLE IF NOT EXISTS nidaan_radar_sent (
+                sent_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                mailbox_id   INTEGER NOT NULL,
+                item_id      INTEGER,
+                to_addr      TEXT DEFAULT '',
+                subject      TEXT DEFAULT '',
+                body         TEXT DEFAULT '',
+                message_id   TEXT DEFAULT '',
+                sent_by      INTEGER,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_radar_sent_mailbox ON nidaan_radar_sent(mailbox_id);
+
             -- Radar config (single row): founder-managed priority senders + silence threshold.
             CREATE TABLE IF NOT EXISTS nidaan_radar_config (
                 id               INTEGER PRIMARY KEY CHECK (id=1),
@@ -2084,6 +2099,11 @@ async def init_db():
         # Radar P4 — silence 'Chase' idempotency: when we last nudged this quiet case.
         try:
             await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN last_chase_at TIMESTAMP")
+        except Exception:
+            pass
+        # Radar P5 — soft consent stamp (customer authorized NidaanPartner to correspond on their behalf).
+        try:
+            await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN consent_ack_at TIMESTAMP")
         except Exception:
             pass
         # Retail chat v2 — staff live reply: who sent a staff message.
