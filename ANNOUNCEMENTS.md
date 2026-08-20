@@ -8,6 +8,58 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-21 — 🤖 Your office in your pocket: run NidaanPartner from Telegram — READY TO SEND
+
+> Send to all staff. Goal: get everyone using the Telegram bot as their daily assistant + collect what they want next.
+
+**Title (EN):**
+🤖 Meet your personal work assistant on Telegram — run the office from your phone (please 👍)
+
+**Details (EN):**
+Team — your **@NidaanOpsBot on Telegram is your personal AI work assistant.** 📱 You don't need to be at a computer to get things done. Just chat with it — by **typing or by voice note** — like you'd message a colleague.
+
+**What it can already do for you today**
+• 🎙️ **Talk to it in Hindi/Hinglish or English** — ask a question, it answers back (even in voice).
+• ✅ **Your tasks** — see what's on your plate, create a task, get pinged the moment something's assigned to you.
+• 💬 **Claims** — when there's activity on a claim you're on, it tells you — and **you can reply to the customer right from Telegram.**
+• 🌴 **Leave & requests** — apply for leave or raise a request without opening the portal.
+• 🧮 **Quick calculators** — premium, returns, EMI and more, on the spot.
+• 📢 **Announcements** — you get them here, and confirm with a 👍.
+
+**Why use it:** it's the fastest way to stay on top of work when you're on the move — no login, no laptop, everything in one chat.
+
+**Coming soon (and this is where YOU come in) 🚀**
+We're making it do even more — look up a claim and move its stage, read & reply to customer emails, ask "how many claims today / what are my numbers", create a ₹499 payment link, and more — **all from Telegram.**
+
+👉 **Tell us: what would YOU most like to do from Telegram?** Reply to this announcement (or message the bot) with your wish — we're building around what actually helps you. The more you use it, the smarter it gets for you.
+
+**How to use this update:** open **@NidaanOpsBot**, say hi (or send a voice note), and react **👍** here to confirm you've read this. Stuck? Message our **office IT SPOC**. 🙏
+
+**Title (HI):**
+🤖 आपका दफ़्तर अब आपकी जेब में — Telegram से ऑफिस चलाइए (कृपया 👍)
+
+**Details (HI):**
+टीम — आपका **@NidaanOpsBot Telegram पर आपका निजी AI असिस्टेंट है।** 📱 काम करने के लिए अब कंप्यूटर पर होना ज़रूरी नहीं। बस उससे बात कीजिए — **टाइप करके या वॉइस नोट से** — जैसे किसी साथी को मैसेज करते हैं।
+
+**अभी क्या-क्या कर सकता है**
+• 🎙️ **हिंदी/हिंग्लिश या इंग्लिश में बात कीजिए** — सवाल पूछिए, यह जवाब देगा (वॉइस में भी)।
+• ✅ **आपके काम (Tasks)** — क्या करना है देखिए, नया task बनाइए, कुछ assign होते ही तुरंत सूचना पाइए।
+• 💬 **Claims** — जिस claim पर आप हैं उसमें कुछ हुआ तो यह बताएगा — और **आप ग्राहक को सीधे Telegram से जवाब दे सकते हैं।**
+• 🌴 **छुट्टी व अनुरोध** — पोर्टल खोले बिना leave लगाइए या request डालिए।
+• 🧮 **झटपट कैलकुलेटर** — प्रीमियम, रिटर्न, EMI वगैरह, तुरंत।
+• 📢 **घोषणाएँ** — यहीं मिलेंगी, 👍 से पुष्टि कीजिए।
+
+**क्यों इस्तेमाल करें:** चलते-फिरते काम पर नज़र रखने का सबसे तेज़ तरीका — न लॉगिन, न लैपटॉप, सब एक ही चैट में।
+
+**जल्द आ रहा है (और यहाँ आपकी बात मायने रखती है) 🚀**
+इसे और दमदार बना रहे हैं — claim देखना व उसका stage बदलना, ग्राहक के ईमेल पढ़ना व जवाब देना, "आज कितने claim / मेरे आँकड़े क्या हैं" पूछना, ₹499 का payment link बनाना, और बहुत कुछ — **सब Telegram से।**
+
+👉 **बताइए: आप Telegram से सबसे पहले क्या करना चाहेंगे?** इस घोषणा का जवाब दीजिए (या बॉट को मैसेज कीजिए) — हम वही बना रहे हैं जो सच में आपके काम आए। जितना इस्तेमाल करेंगे, उतना यह आपके लिए स्मार्ट होगा।
+
+**इस अपडेट को कैसे इस्तेमाल करें:** **@NidaanOpsBot** खोलिए, नमस्ते कहिए (या वॉइस नोट भेजिए), और पढ़ लेने की पुष्टि के लिए **👍** करें। दिक्कत हो तो **ऑफिस IT SPOC** से संपर्क करें। 🙏
+
+---
+
 ## 2026-08-21 — UPGRADE: 📨 Email Updates — now read & reply right here (no Gmail) — READY TO SEND
 
 > Send to admins / sub-admins (they run the mailboxes). Big time-saver: the whole email is handled inside ops now.
