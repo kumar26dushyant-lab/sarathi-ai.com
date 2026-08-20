@@ -63,6 +63,7 @@ import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
 import biz_nidaan_radar as radar
+import biz_doc_splitter as docsplit
 import biz_nidaan_telegram as tg
 import biz_sarathi_tgcrm as tgcrm
 import biz_wa_agent as wa_agent
@@ -7133,6 +7134,81 @@ async def ops_account_merge(body: _MergeAccountsReq, request: Request):
     await _ops_audit(request, "account.merge", "account", str(body.duplicate_id),
                      f"merged into {body.keeper_id}; moved {res.get('moved_claims', 0)} claim(s)")
     return res
+
+
+# ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════
+@app.post("/nidaan/ops/api/docsplit/upload")
+@limiter.limit("20/minute")
+async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(...)):
+    """Upload one or more mixed files (PDF / JPEG / PNG / …) → merge → AI-detect the distinct documents
+    + page ranges → return them for human review. Any staff."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    raw = []
+    for f in (files or [])[:12]:
+        b = await f.read()
+        if not b or len(b) > 30 * 1024 * 1024:   # 30 MB per file cap
+            continue
+        raw.append((f.filename or "file", b))
+    if not raw:
+        raise HTTPException(status_code=400, detail="No readable files (max 30 MB each)")
+    pdf, n, skipped = docsplit.normalize_to_pdf(raw)
+    if n == 0:
+        raise HTTPException(status_code=400,
+                            detail="Couldn't read any pages. Supported: PDF, JPG, PNG (DOC/DOCX not yet).")
+    if n > docsplit.MAX_PAGES:
+        raise HTTPException(status_code=400,
+                            detail=f"Too many pages ({n}). Please split into batches of ≤{docsplit.MAX_PAGES}.")
+    job = docsplit.save_job(pdf)
+    documents = await docsplit.segment(pdf, n)
+    return {"job_id": job, "page_count": n, "documents": documents, "skipped": skipped}
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/thumb/{page}")
+async def ops_docsplit_thumb(job: str, page: int, request: Request):
+    """A page thumbnail (PNG) for the review grid."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    png = docsplit.render_thumb(pdf, page)
+    if not png:
+        raise HTTPException(status_code=404, detail="No such page")
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+class _DocSplitDoc(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("Document", max_length=100)
+    start: int = Field(..., ge=1)
+    end: int = Field(..., ge=1)
+
+
+class _DocSplitExportReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    documents: list[_DocSplitDoc]
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/export")
+async def ops_docsplit_export(job: str, body: _DocSplitExportReq, request: Request):
+    """Reviewer confirmed the split → export one PDF per document, as a zip."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    docs = docsplit.extract(pdf, [d.model_dump() for d in body.documents])
+    if not docs:
+        raise HTTPException(status_code=400, detail="No valid documents to export")
+    zbytes = docsplit.zip_docs(docs)
+    await _ops_audit(request, "docsplit.export", "docsplit", job, f"{len(docs)} document(s)")
+    return Response(content=zbytes, media_type="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=segregated_documents.zip"})
 
 
 @app.get("/nidaan/ops/api/accounts/{account_id}/detail")

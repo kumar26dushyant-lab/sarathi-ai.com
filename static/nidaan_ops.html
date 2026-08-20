@@ -419,6 +419,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
       <div id="panel-radar" class="panel" style="display:none"></div>
+      <div id="panel-docsplit" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
       <div id="panel-l2claims" class="panel" style="display:none"></div>
       <div id="panel-archived" class="panel" style="display:none"></div>
@@ -606,7 +607,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','support','radar','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','overview','support','docsplit','radar','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -911,6 +912,7 @@ function buildSidebar() {
     {id:'tasks',      label:'✅ Tasks',         minRank:0},
     {id:'overview',   label:'📊 Claims Dashboard', minRank:0},
     {id:'support',    label:'💬 Support',      minRank:0},
+    {id:'docsplit',   label:'📄 Doc Splitter', minRank:0},
     {id:'radar',      label:'📨 Email Updates', minRank:1},
     {id:'claims',     label:'📋 All Claims',   minRank:1},
     {id:'l2claims',   label:'⚖️ L2 Claims',    minRank:1},
@@ -968,6 +970,7 @@ function showPanel(id, fromHistory) {
     overview: loadOverview,
     tasks: loadTasks,
     support: loadSupport,
+    docsplit: loadDocSplit,
     radar: loadRadar,
     claims: loadClaims,
     l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
@@ -4230,6 +4233,85 @@ async function radarDelete(id){
   } catch(e){ alert('Could not delete.'); }
 }
 window.loadRadar=loadRadar; window.radarEdit=radarEdit; window.radarSave=radarSave; window.radarTest=radarTest; window.radarDelete=radarDelete; window.radarTestDrawer=radarTestDrawer;
+
+// ══════════ DOCUMENT SPLITTER (all staff) ══════════
+let _dsJob=null, _dsPages=0, _dsDocs=[];
+function loadDocSplit(){
+  _dsJob=null; _dsPages=0; _dsDocs=[];
+  const el=document.getElementById('panel-docsplit');
+  el.innerHTML=`
+    <div class="section-hdr"><div>
+      <div class="section-title">📄 Document Splitter</div>
+      <div class="section-sub">Upload a customer's mixed file(s) — the AI separates the different documents (discharge summary, bills, reports, policy…) into individual PDFs so you can send each to the authorities. You review before exporting.</div>
+    </div></div>
+    <div style="background:var(--nd-bg-surface);border:2px dashed var(--nd-border-strong);border-radius:12px;padding:1.6rem;text-align:center">
+      <div style="font-size:2rem;margin-bottom:.5rem">📤</div>
+      <label class="btn btn-primary" style="cursor:pointer">Choose file(s)<input id="dsFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="dsUpload()"></label>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · JPG · PNG · WebP &nbsp;·&nbsp; up to 12 files &nbsp;·&nbsp; 30 MB each &nbsp;·&nbsp; <i>(DOC/DOCX support coming)</i></div>
+    </div>
+    <div id="dsResult" style="margin-top:1rem"></div>`;
+}
+async function dsUpload(){
+  const inp=document.getElementById('dsFiles'); if(!inp||!inp.files.length) return;
+  const res=document.getElementById('dsResult');
+  res.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Uploading &amp; reading the documents… this can take a few seconds.</p></div>';
+  const fd=new FormData(); for(const f of inp.files) fd.append('files', f);
+  let r; try{ r=await fetch('/nidaan/ops/api/docsplit/upload',{method:'POST',headers:{'Authorization':'Bearer '+_token},body:fd}); }
+  catch(e){ res.innerHTML='<div class="empty"><p>Upload failed. Please try again.</p></div>'; return; }
+  if(!r.ok){ const e=await r.json().catch(()=>({})); res.innerHTML=`<div class="empty"><div class="ei">⚠️</div><p>${esc(e.detail||'Could not process the file(s).')}</p></div>`; return; }
+  const d=await r.json();
+  _dsJob=d.job_id; _dsPages=d.page_count;
+  _dsDocs=(d.documents||[]).map(x=>({name:x.name,start:x.start,end:x.end,summary:x.summary||''}));
+  dsRenderReview(d.skipped||[]);
+}
+function dsRenderReview(skipped){
+  const res=document.getElementById('dsResult');
+  const thumbs=Array.from({length:_dsPages},(_,i)=>{const p=i+1;return `<div style="text-align:center;flex:0 0 auto"><img id="dsThumb_${p}" alt="page ${p}" style="width:104px;height:142px;object-fit:contain;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:6px"><div style="font-size:.66rem;color:var(--nd-text-muted)">Page ${p}</div></div>`;}).join('');
+  res.innerHTML=`
+    ${skipped&&skipped.length?`<div style="color:var(--nd-warning-text);font-size:.8rem;margin-bottom:.6rem">⚠️ Skipped (unsupported): ${skipped.map(esc).join(', ')}</div>`:''}
+    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.5rem">📑 ${_dsPages} page(s) read. The AI split it into the documents below — <b>check the page ranges against the page previews</b>, adjust anything, then export.</div>
+    <div style="display:flex;gap:.5rem;overflow-x:auto;padding:.3rem 0 .7rem;margin-bottom:.6rem">${thumbs}</div>
+    <div id="dsDocList"></div>
+    <div style="display:flex;gap:.6rem;margin-top:.9rem;flex-wrap:wrap">
+      <button class="btn-sm btn-ghost" onclick="dsAddDoc()">＋ Add a document</button>
+      <button class="btn btn-primary" onclick="dsExport(this)">⬇ Export separated PDFs (zip)</button>
+      <button class="btn-sm btn-ghost" onclick="loadDocSplit()">↻ Start over</button>
+    </div>`;
+  dsRenderDocs();
+  dsLoadThumbs();
+}
+async function dsLoadThumbs(){
+  for(let p=1;p<=_dsPages;p++){
+    try{
+      const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/thumb/${p}`,{headers:{'Authorization':'Bearer '+_token}});
+      if(r.ok){ const el=document.getElementById('dsThumb_'+p); if(el) el.src=URL.createObjectURL(await r.blob()); }
+    }catch(e){}
+  }
+}
+function dsRenderDocs(){
+  const wrap=document.getElementById('dsDocList'); if(!wrap) return;
+  const inp='background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);border-radius:6px';
+  wrap.innerHTML=_dsDocs.map((d,i)=>`
+    <div class="nd-card" style="padding:.55rem .8rem;margin-bottom:.5rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px"><input value="${esc(d.name)}" oninput="_dsDocs[${i}].name=this.value" style="width:100%;${inp};padding:.4rem .55rem;font-weight:600">${d.summary?`<div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">${esc(d.summary)}</div>`:''}</div>
+      <div style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--nd-text-muted)">pages <input type="number" min="1" max="${_dsPages}" value="${d.start}" oninput="_dsDocs[${i}].start=parseInt(this.value)||1" style="width:56px;${inp};padding:.35rem;text-align:center"> – <input type="number" min="1" max="${_dsPages}" value="${d.end}" oninput="_dsDocs[${i}].end=parseInt(this.value)||1" style="width:56px;${inp};padding:.35rem;text-align:center"></div>
+      <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="_dsDocs.splice(${i},1);dsRenderDocs()" title="Remove">✕</button>
+    </div>`).join('') || '<div style="color:var(--nd-text-muted);font-size:.82rem">No documents yet — click “＋ Add a document”.</div>';
+}
+function dsAddDoc(){ _dsDocs.push({name:'Document '+(_dsDocs.length+1),start:1,end:_dsPages,summary:''}); dsRenderDocs(); }
+async function dsExport(btn){
+  if(!_dsDocs.length){ alert('Add at least one document first.'); return; }
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Exporting…';
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/export`,{method:'POST',headers:{'Authorization':'Bearer '+_token,'Content-Type':'application/json'},body:JSON.stringify({documents:_dsDocs.map(d=>({name:d.name||'Document',start:d.start,end:d.end}))})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert(e.detail||'Export failed.'); return; }
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement('a'); a.href=url; a.download='segregated_documents.zip'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  }catch(e){ alert('Export failed.'); }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport;
 
 async function mbLoadTeam(){
   const wrap = document.getElementById('mbTeamWrap');
