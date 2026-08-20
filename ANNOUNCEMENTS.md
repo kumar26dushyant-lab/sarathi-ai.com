@@ -8,6 +8,52 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-21 — UPGRADE: 📨 Email Updates — now read & reply right here (no Gmail) — READY TO SEND
+
+> Send to admins / sub-admins (they run the mailboxes). Big time-saver: the whole email is handled inside ops now.
+
+**Title (EN):**
+📨 Email Updates upgrade — read the email AND reply, right here (please 👍)
+
+**Details (EN):**
+Team, **📨 Email Updates** just got much stronger. You no longer need to open Gmail at all. 🎉
+
+**What's new**
+• **Read the full email inside ops** — tap any update → **Read & reply**. The complete message opens right there.
+• **Reply on the spot** — type your reply and send. It goes out **from that customer's own mailbox**, on their behalf (we're their authorized consultant). Every reply is saved for the record.
+• **A clean, tidy flow** with three simple tabs so nothing feels messy:
+   – **🔴 Act now** — needs a reply from us.
+   – **🕓 Waiting on them** — you've replied; we're waiting for their answer.
+   – **✅ Resolved** — case handled.
+   When the other side replies again, that case **jumps back to 🔴 Act now** automatically — so it can never be forgotten.
+• **Case decided? Disconnect & purge.** Once a claim is awarded/closed, hit **Disconnect & purge** on the mailbox — we stop watching it and **delete everything stored** (emails, replies, the login). Nothing is kept. (Super-admin action.)
+
+**Nothing else changes** — setup (App Password), flags and auto-Tasks all work exactly as before. This just means the reading and replying now happen in one place.
+
+**How to use this update:** react **👍** to confirm you've **read and understood**. Anything unclear? Please reach out to our **office IT SPOC**. 🙏
+
+**Title (HI):**
+📨 Email Updates अपग्रेड — अब ईमेल यहीं पढ़ें और जवाब भी दें (कृपया 👍)
+
+**Details (HI):**
+टीम, **📨 Email Updates** अब और भी दमदार हो गया है। अब Gmail खोलने की ज़रूरत ही नहीं। 🎉
+
+**क्या नया है**
+• **पूरा ईमेल ops में ही पढ़ें** — किसी भी अपडेट पर टैप करें → **Read & reply**। पूरा मैसेज वहीं खुल जाएगा।
+• **वहीं से जवाब दें** — अपना जवाब लिखें और भेजें। यह **उसी ग्राहक के मेलबॉक्स से**, उनकी ओर से जाता है (हम उनके अधिकृत सलाहकार हैं)। हर जवाब रिकॉर्ड के लिए सेव होता है।
+• **साफ़-सुथरा फ़्लो**, तीन आसान टैब ताकि कुछ भी उलझा हुआ न लगे:
+   – **🔴 Act now** — हमारी ओर से जवाब देना है।
+   – **🕓 Waiting on them** — आपने जवाब दे दिया; उनके उत्तर का इंतज़ार है।
+   – **✅ Resolved** — केस निपट गया।
+   जब सामने से दोबारा जवाब आता है, वह केस **अपने-आप 🔴 Act now में वापस** आ जाता है — ताकि कभी छूटे नहीं।
+• **केस का फ़ैसला हो गया? Disconnect & purge.** क्लेम अवॉर्ड/बंद होने पर मेलबॉक्स पर **Disconnect & purge** दबाएँ — हम उसे देखना बंद कर देते हैं और **सब कुछ डिलीट** कर देते हैं (ईमेल, जवाब, लॉगिन)। कुछ नहीं रखा जाता। (सुपर-एडमिन का काम।)
+
+**बाकी सब वैसा ही है** — सेटअप (App Password), फ़्लैग और ऑटो-Task पहले जैसे ही चलते हैं। बस पढ़ना और जवाब देना अब एक ही जगह होता है।
+
+**इस अपडेट को कैसे इस्तेमाल करें:** पढ़कर समझ लेने की पुष्टि के लिए **👍** करें। कुछ भी समझ न आए तो कृपया **ऑफिस IT SPOC** से संपर्क करें। 🙏
+
+---
+
 ## 2026-08-19 — NEW: 📨 Email Updates radar — never miss a reply again — READY TO SEND
 
 > Send to admins / sub-admins (they set up mailboxes + assign). Handlers get their items as normal Tasks, so all staff benefit.
