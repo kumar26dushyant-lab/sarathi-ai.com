@@ -1104,6 +1104,51 @@ async def nidaan_claim_portal_page(request: Request):
     return _nidaan_page("nidaan_claim_portal.html")
 
 
+@app.get("/nidaan/claim/manifest.webmanifest")
+async def nidaan_claim_manifest(request: Request):
+    """PWA manifest so the claimant can install the dashboard to their home screen."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    m = {
+        "name": "My Claim · NidaanPartner", "short_name": "My Claim",
+        "start_url": "/nidaan/claim", "scope": "/nidaan/claim",
+        "display": "standalone", "orientation": "portrait",
+        "background_color": "#f4f7f6", "theme_color": "#0b5c4f",
+        "icons": [
+            {"src": "/nidaan/claim/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"},
+        ],
+    }
+    return JSONResponse(m, media_type="application/manifest+json")
+
+
+@app.get("/nidaan/claim/icon.svg")
+async def nidaan_claim_icon(request: Request):
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
+        '<rect width="512" height="512" rx="96" fill="#0b5c4f"/>'
+        '<path d="M256 96l128 48v104c0 84-56 140-128 168-72-28-128-84-128-168V144z" fill="#0d7a68"/>'
+        '<path d="M212 268l32 32 68-72" fill="none" stroke="#fff" stroke-width="26" '
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+    return Response(content=svg, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/nidaan/claim/sw.js")
+async def nidaan_claim_sw(request: Request):
+    """Minimal service worker — enables install + an offline shell. (Background push is a later add.)"""
+    js = (
+        "const C='nidaan-claim-v1';\n"
+        "self.addEventListener('install',e=>{self.skipWaiting();});\n"
+        "self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});\n"
+        "self.addEventListener('fetch',e=>{\n"
+        "  if(e.request.method!=='GET')return;\n"
+        "  e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));\n"
+        "});\n")
+    return Response(content=js, media_type="application/javascript",
+                    headers={"Service-Worker-Allowed": "/nidaan/claim",
+                             "Cache-Control": "no-cache"})
+
+
 @app.get("/nidaan/claim/magic")
 @limiter.limit("20/minute")
 async def nidaan_claim_magic(request: Request, token: str = ""):
@@ -1160,7 +1205,54 @@ async def nidaan_claim_me(request: Request):
             "terms_html": cfg["terms_html"],
             "illustration": illustration,
         },
+        "timeline": await claimant.claim_timeline(ctx["claim_id"]),
+        "documents": [
+            {"doc_id": d["doc_id"], "name": d["original_name"],
+             "size": d.get("file_size") or 0, "uploaded_at": d.get("uploaded_at"),
+             "url": _nidaan_doc_url(d["stored_name"])}
+            for d in await claimant.list_claimant_docs(ctx["claim_id"])
+        ],
     }
+
+
+@app.post("/nidaan/claim/api/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = File(...)):
+    """The claimant uploads documents for their own claim (marked source='claimant' so it never
+    mixes with internal files). Reuses the standard nidaan-docs storage + validation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    claim_id = ctx["claim_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    account_id = r["account_id"]
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413, detail=f"{f.filename} exceeds the 10 MB limit")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=f"{f.filename} does not look like a valid document.")
+        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id,
+            source="claimant")
+        saved.append({"doc_id": doc_id, "name": f.filename or stored})
+    return {"ok": True, "saved": saved}
 
 
 @app.post("/nidaan/claim/api/consent")

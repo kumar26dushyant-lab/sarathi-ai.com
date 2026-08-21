@@ -7022,6 +7022,12 @@ async def ensure_claim_documents_table() -> None:
                 uploaded_at   TEXT DEFAULT CURRENT_TIMESTAMP
             )"""
         )
+        # Who uploaded it: '' (legacy/staff/subscriber) | 'claimant' (policyholder via their portal).
+        # Lets the claimant portal show ONLY the claimant's own uploads, never internal files.
+        try:
+            await conn.execute("ALTER TABLE nidaan_claim_documents ADD COLUMN source TEXT DEFAULT ''")
+        except Exception:
+            pass
         await conn.commit()
 
 
@@ -7033,15 +7039,17 @@ async def save_claim_document(
     mime_type: str,
     purchase_id: Optional[int] = None,
     claim_id: Optional[int] = None,
+    source: str = "",
 ) -> int:
-    """Record a newly uploaded document. Returns doc_id."""
+    """Record a newly uploaded document. Returns doc_id. `source`='claimant' marks a policyholder
+    upload (via the claimant portal); default '' = legacy/staff/subscriber."""
     await ensure_claim_documents_table()
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             """INSERT INTO nidaan_claim_documents
-               (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type),
+               (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type, source or ""),
         )
         await conn.commit()
         return cur.lastrowid

@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0b5c4f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="My Claim">
+<link rel="manifest" href="/nidaan/claim/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/nidaan/claim/icon.svg">
 <title>My Claim · NidaanPartner</title>
 <style>
   :root{ --brand:#0b5c4f; --brand-2:#0d7a68; --bg:#f4f7f6; --card:#ffffff; --ink:#12211d;
@@ -41,6 +43,12 @@
   .loading,.err{ text-align:center; padding:3rem 1rem; color:var(--muted); }
   .err b{ color:var(--ink); }
   .illust-tag{ font-size:.72rem; color:var(--warn); font-weight:700; margin-top:.4rem; }
+  .tl{ margin-top:.3rem; }
+  .tl-row{ display:flex; gap:.7rem; align-items:flex-start; padding:.35rem 0; }
+  .tl-dot{ width:11px; height:11px; border-radius:50%; background:var(--brand); margin-top:.35rem; flex:0 0 auto; box-shadow:0 0 0 3px #e7f4f0; }
+  .tl-lbl{ font-weight:700; font-size:.92rem; }
+  .tl-at{ font-size:.76rem; color:var(--muted); }
+  .doc{ display:block; background:#f8fbfa; border:1px solid var(--line); border-radius:9px; padding:.55rem .7rem; margin-bottom:.4rem; text-decoration:none; color:var(--brand); font-weight:600; font-size:.88rem; }
 </style>
 </head>
 <body>
@@ -69,10 +77,12 @@ var T = {
     recovered:"If recovered (example)", ourFee:"Our fee", gst:"GST", totalFee:"Total our fee", netYou:"You receive",
     illust:"Example only — based on your disputed amount. Actual fee applies to whatever is recovered.",
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
-    accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Documents", docsSoon:"You will be able to share documents here soon. For now, our team will contact you if anything is needed.",
+    accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Your documents", docsHint:"Upload documents related to your claim (PDF, photo). Up to 5 files, 10 MB each.",
+    upload:"📎 Upload documents", uploading:"Uploading…", noDocs:"No documents uploaded yet.",
+    timelineTitle:"Progress", updateTitle:"Latest update",
     reassure:"Rest assured — our legal team is working on your claim. You will see updates here.",
     expired:"This link is invalid or has expired. Please contact NidaanPartner for a fresh link.",
-    sending:"Saving…"
+    sending:"Saving…", ok:"OK"
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
@@ -81,10 +91,12 @@ var T = {
     recovered:"वसूली होने पर (उदाहरण)", ourFee:"हमारी फीस", gst:"जीएसटी", totalFee:"कुल हमारी फीस", netYou:"आपको मिलेंगे",
     illust:"केवल उदाहरण — आपकी विवादित राशि पर आधारित। वास्तविक फीस वसूल की गई राशि पर लगेगी।",
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
-    accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"दस्तावेज़", docsSoon:"आप जल्द ही यहाँ दस्तावेज़ साझा कर पाएँगे। फ़िलहाल, कुछ भी ज़रूरत होने पर हमारी टीम आपसे संपर्क करेगी।",
+    accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"आपके दस्तावेज़", docsHint:"अपने दावे से जुड़े दस्तावेज़ अपलोड करें (PDF, फ़ोटो)। अधिकतम 5 फ़ाइलें, हर एक 10 MB तक।",
+    upload:"📎 दस्तावेज़ अपलोड करें", uploading:"अपलोड हो रहा है…", noDocs:"अभी तक कोई दस्तावेज़ अपलोड नहीं हुआ।",
+    timelineTitle:"प्रगति", updateTitle:"ताज़ा अपडेट",
     reassure:"निश्चिंत रहें — हमारी कानूनी टीम आपके दावे पर काम कर रही है। अपडेट आपको यहाँ दिखेंगे।",
     expired:"यह लिंक अमान्य है या समाप्त हो गया है। कृपया नए लिंक के लिए NidaanPartner से संपर्क करें।",
-    sending:"सहेजा जा रहा है…"
+    sending:"सहेजा जा रहा है…", ok:"ठीक है"
   }
 };
 function t(k){ return (T[LANG]||T.en)[k] || T.en[k] || k; }
@@ -162,10 +174,69 @@ function render(){
     '</div>';
   }
 
-  var docsCard = '<div class="card"><h2>'+esc(t("docsTitle"))+'</h2><p class="note">'+esc(t("docsSoon"))+'</p></div>';
+  // Progress timeline (friendly, internal-note-free)
+  var tl = DATA.timeline || [];
+  var tlCard = "";
+  if(tl.length){
+    var items = tl.slice().reverse().map(function(s){
+      return '<div class="tl-row"><span class="tl-dot"></span><div><div class="tl-lbl">'+esc(s.label)+'</div>'+
+             (s.at?'<div class="tl-at">'+esc(String(s.at).slice(0,10))+'</div>':'')+'</div></div>';
+    }).join('');
+    tlCard = '<div class="card"><h2>'+esc(t("timelineTitle"))+'</h2><div class="tl">'+items+'</div></div>';
+  }
 
-  document.getElementById("content").innerHTML = statusCard + feeCard + docsCard;
+  // Documents (claimant's own uploads) + upload
+  var docs = DATA.documents || [];
+  var docList = docs.length
+    ? docs.map(function(d){ return '<a class="doc" href="'+esc(d.url)+'" target="_blank" rel="noopener">📄 '+esc(d.name)+'</a>'; }).join('')
+    : '<div class="note">'+esc(t("noDocs"))+'</div>';
+  var docsCard = '<div class="card"><h2>'+esc(t("docsTitle"))+'</h2>'+
+    '<p class="note">'+esc(t("docsHint"))+'</p>'+
+    '<div id="docList" style="margin:.6rem 0">'+docList+'</div>'+
+    '<input type="file" id="docFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadDocs(this)">'+
+    '<button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById(\'docFiles\').click()">'+esc(t("upload"))+'</button></div>';
+
+  document.getElementById("content").innerHTML = statusCard + feeCard + tlCard + docsCard;
   document.getElementById("reassure").textContent = t("reassure");
+  maybeShowUpdate(tl);
+}
+
+async function uploadDocs(input){
+  if(!input.files || !input.files.length) return;
+  var btn = document.getElementById("uploadBtn");
+  btn.disabled = true; btn.textContent = t("uploading");
+  var fd = new FormData();
+  for(var i=0;i<input.files.length;i++){ fd.append("files", input.files[i]); }
+  try{
+    var r = await fetch("/nidaan/claim/api/documents/upload", { method:"POST", headers:{ "Authorization":"Bearer "+TOKEN }, body:fd });
+    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers:{"Authorization":"Bearer "+TOKEN}}); DATA = await me.json(); render(); }
+    else { btn.disabled=false; btn.textContent=t("upload"); }
+  }catch(e){ btn.disabled=false; btn.textContent=t("upload"); }
+}
+
+// Heavy "new update" popup — shows the latest status if it changed since last visit.
+function maybeShowUpdate(tl){
+  if(!tl || !tl.length) return;
+  var latest = tl[tl.length-1];
+  var key = "claim_seen_" + (DATA.claim ? DATA.claim.claim_id : "x");
+  var sig = (latest.label||"") + "|" + (latest.at||"");
+  if(localStorage.getItem(key) === sig) return;         // already seen this update
+  localStorage.setItem(key, sig);
+  var ov = document.createElement("div");
+  ov.id = "updOv";
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(6,30,24,.55);display:flex;align-items:center;justify-content:center;padding:1.2rem;z-index:50";
+  ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:1.3rem;text-align:center">'+
+    '<div style="font-size:2rem">🔔</div><div style="font-weight:800;margin:.3rem 0;color:#0b5c4f">'+esc(t("updateTitle"))+'</div>'+
+    '<div style="font-size:1.05rem;font-weight:700">'+esc(latest.label)+'</div>'+
+    (latest.at?'<div style="color:#5b6b66;font-size:.85rem;margin-top:.2rem">'+esc(String(latest.at).slice(0,10))+'</div>':'')+
+    '<button class="btn btn-primary" style="margin-top:1rem" onclick="var o=document.getElementById(\'updOv\');if(o)o.remove()">'+esc(t("ok"))+'</button></div>';
+  document.body.appendChild(ov);
+}
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("/nidaan/claim/sw.js", { scope:"/nidaan/claim" }).catch(function(){});
+  });
 }
 
 async function accept(btn){

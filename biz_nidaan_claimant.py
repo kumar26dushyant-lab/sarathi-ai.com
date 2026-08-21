@@ -171,6 +171,48 @@ async def record_consent(claim_id: int, ip: str = "") -> dict:
     return {"ok": True, "already": False, "portal": await get_portal(claim_id)}
 
 
+# ── Claimant-facing status timeline + their own documents ────────────────────
+# Customer-friendly labels (internal statuses are never shown raw to the policyholder).
+_CLAIMANT_STATUS_LABELS = {
+    "intimated": "Claim received", "assigned": "Assigned to our team",
+    "in_review": "Under review", "in_negotiation": "In negotiation with the insurer",
+    "resolved_won": "Resolved in your favour", "resolved_lost": "Closed",
+    "closed": "Closed", "withdrawn": "Withdrawn",
+    "review_delivered": "Assessment shared",
+}
+
+
+def claimant_status_label(status: str) -> str:
+    s = (status or "").strip().lower()
+    return _CLAIMANT_STATUS_LABELS.get(s, (s or "In progress").replace("_", " ").title())
+
+
+async def claim_timeline(claim_id: int) -> list[dict]:
+    """The claim's status progression as a friendly, INTERNAL-NOTE-FREE timeline for the claimant.
+    (Notes on status changes are staff-facing and deliberately omitted here.)"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT to_status, changed_at FROM nidaan_claim_status_log "
+            "WHERE claim_id=? AND COALESCE(to_status,'')<>'' ORDER BY changed_at ASC, log_id ASC",
+            (claim_id,))).fetchall()
+    out = []
+    for r in rows:
+        out.append({"label": claimant_status_label(r["to_status"]), "at": r["changed_at"]})
+    return out
+
+
+async def list_claimant_docs(claim_id: int) -> list[dict]:
+    """Documents the CLAIMANT uploaded via their portal (never internal files)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT doc_id, stored_name, original_name, file_size, uploaded_at "
+            "FROM nidaan_claim_documents WHERE claim_id=? AND source='claimant' "
+            "ORDER BY doc_id DESC", (claim_id,))).fetchall()
+    return [dict(r) for r in rows]
+
+
 async def portal_state(claim_id: int) -> dict:
     """Consolidated state for the ops L2 claim view: does a portal exist, has the claimant opened
     it, have they accepted the fee terms, how many times we sent the link. Never raises."""
