@@ -2566,6 +2566,37 @@ async def init_db():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_nmsg_claim ON nidaan_messages(claim_id, created_at DESC)")
 
+        # ── nidaan_claimant_portal: the POLICYHOLDER's direct portal per claim.
+        # Mediators (branch/staff/subscriber) raise a claim, but the insured/claimant owns the
+        # information. Once a claim reaches L2 (ClaimShield), the claimant gets a dashboard to
+        # track status, share documents, and give digital consent to the success-fee terms.
+        # ONE dashboard, TWO entry paths (endpoint uniformity):
+        #   • mediated claim  → access_token magic-link provisions the dashboard on first click,
+        #   • direct ₹499 claimant → already has an account/dashboard; access_token stays NULL,
+        #     the consent simply appears as an action-card in their existing dashboard.
+        # consent_* columns are the DIGITAL ACCEPTANCE record (timestamp + snapshot of the % that
+        # applied + T&C version + IP) — the enforceable proof the claimant accepted 15% + GST.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claimant_portal (
+                portal_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id              INTEGER NOT NULL UNIQUE REFERENCES nidaan_claims(claim_id),
+                access_token          TEXT UNIQUE,
+                token_created_at      TIMESTAMP,
+                activated_at          TIMESTAMP,
+                consent_accepted_at   TIMESTAMP,
+                consent_terms_version TEXT DEFAULT '',
+                consent_fee_pct       REAL,
+                consent_gst_pct       REAL,
+                consent_ip            TEXT DEFAULT '',
+                link_sent_at          TIMESTAMP,
+                link_sent_count       INTEGER DEFAULT 0,
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_claimant_portal_token "
+            "ON nidaan_claimant_portal(access_token)")
+
         # nidaan_claim_watchers: "involved" staff on a claim (mirrors the task
         # watcher model). Added by @mention in a claim note (or explicit involve);
         # each can mute their own notifications once their part is done.

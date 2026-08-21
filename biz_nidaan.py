@@ -5450,6 +5450,14 @@ OPS_SETTING_DEFAULTS = {
     "gst_enabled": "0",
     "gst_rate": "18",
     "gst_home_state": "",
+    # ── Claimant success fee (Nidaan The Legal Consultant) — super-admin editable ─
+    # % of the amount RECOVERED from the insurer that we retain as our fee. Shown to the
+    # claimant in the L2 consent card (dispute vs recovered, fee, + GST per gst_config)
+    # and SNAPSHOT onto nidaan_claimant_portal at the moment of digital acceptance, so a
+    # later % change never rewrites an already-accepted agreement (grandfathered).
+    # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
+    "claimant_success_fee_pct": "15",
+    "claimant_terms_version": "v1-draft",
 }
 
 
