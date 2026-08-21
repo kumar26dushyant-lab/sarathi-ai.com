@@ -46,14 +46,16 @@ async def fee_config() -> dict:
     except (TypeError, ValueError):
         fee_pct = 15.0
     gst = await _nidaan.gst_config()
-    version = (await _nidaan.get_ops_setting("claimant_terms_version", "v1-draft") or "v1-draft").strip()
+    version = (await _nidaan.get_ops_setting("claimant_terms_version", "v1") or "v1").strip()
     terms_html = await _nidaan.get_ops_setting("claimant_terms_html", "") or ""
+    terms_html_hi = await _nidaan.get_ops_setting("claimant_terms_html_hi", "") or ""
     return {
         "fee_pct": fee_pct,
         "gst_enabled": bool(gst.get("enabled")),
         "gst_pct": float(gst.get("rate") or 18.0) if gst.get("enabled") else 0.0,
         "terms_version": version,
         "terms_html": terms_html,
+        "terms_html_hi": terms_html_hi,
     }
 
 

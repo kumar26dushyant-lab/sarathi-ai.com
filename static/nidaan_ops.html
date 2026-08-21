@@ -6620,8 +6620,10 @@ async function loadClaimantTermsEditor(){
           <input id="ctVersion" class="form-input" value="${esc(cfg.terms_version||'v1-draft')}" ${canEdit?'':'disabled'} placeholder="v1"></div>
       </div>
       <div style="font-size:.72rem;color:var(--nd-text-muted);margin:.5rem 0">${gstNote}</div>
-      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block">Terms &amp; conditions text (shown to the claimant)
-        <textarea id="ctTerms" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="Paste the counsel-approved terms here…">${esc(cfg.terms_html||'')}</textarea></label>
+      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block">Terms &amp; conditions — English (contracting entity: <b>Nidaan The Legal Consultant LLP</b>)
+        <textarea id="ctTerms" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="Paste the counsel-approved English terms here…">${esc(cfg.terms_html||'')}</textarea></label>
+      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-top:.6rem">नियम व शर्तें — हिंदी (claimants are Tier 2/3; Hindi is their default)
+        <textarea id="ctTermsHi" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="काउंसल-अनुमोदित हिंदी शर्तें यहाँ डालें…">${esc(cfg.terms_html_hi||'')}</textarea></label>
       ${(cfg.terms_html||'').indexOf('PLACEHOLDER')===0?'<div style="font-size:.76rem;color:var(--nd-warning-text);margin-top:.4rem">⚠️ Placeholder text — replace with counsel-approved terms before enabling live consent.</div>':''}
       ${canEdit?`<div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;margin-top:.6rem"><span id="ctMsg" style="font-size:.8rem"></span><button class="btn btn-primary" style="font-size:.85rem" onclick="saveClaimantTerms(this)">💾 Save fee &amp; terms</button></div>`:'<div style="font-size:.76rem;color:var(--nd-text-faint);margin-top:.4rem">Super-admin only.</div>'}
     </div>`;
@@ -6631,12 +6633,13 @@ async function saveClaimantTerms(btn){
   const fee_pct = parseFloat(document.getElementById('ctFeePct').value);
   const terms_version = (document.getElementById('ctVersion').value||'').trim();
   const terms_html = (document.getElementById('ctTerms').value||'').trim();
+  const terms_html_hi = (document.getElementById('ctTermsHi').value||'').trim();
   if(isNaN(fee_pct) || fee_pct<0 || fee_pct>100){ if(msg){msg.style.color='#f87171';msg.textContent='Enter a valid fee %';} return; }
   if(!terms_version){ if(msg){msg.style.color='#f87171';msg.textContent='Version required';} return; }
-  if(!terms_html){ if(msg){msg.style.color='#f87171';msg.textContent='Terms text required';} return; }
+  if(!terms_html){ if(msg){msg.style.color='#f87171';msg.textContent='English terms required';} return; }
   if(btn) btn.disabled = true; if(msg){ msg.style.color='var(--nd-text-muted)'; msg.textContent='Saving…'; }
   try{
-    const r = await API('/claimant-terms',{method:'PUT', body:JSON.stringify({fee_pct, terms_version, terms_html})});
+    const r = await API('/claimant-terms',{method:'PUT', body:JSON.stringify({fee_pct, terms_version, terms_html, terms_html_hi})});
     if(r.ok){ if(msg){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — new claimants see this'; } }
     else { const d=await r.json().catch(()=>({})); if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); } }
   }catch(e){ if(msg){ msg.style.color='#f87171'; msg.textContent='Network error'; } }

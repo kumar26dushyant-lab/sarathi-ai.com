@@ -1203,6 +1203,7 @@ async def nidaan_claim_me(request: Request):
             "gst_enabled": cfg["gst_enabled"],
             "terms_version": cfg["terms_version"],
             "terms_html": cfg["terms_html"],
+            "terms_html_hi": cfg["terms_html_hi"],
             "illustration": illustration,
         },
         "timeline": await claimant.claim_timeline(ctx["claim_id"]),
@@ -1311,12 +1312,14 @@ class _ClaimantTermsReq(BaseModel):
     fee_pct: float = Field(..., ge=0, le=100)
     terms_version: str = Field(..., min_length=1, max_length=60)
     terms_html: str = Field(..., min_length=1, max_length=20000)
+    terms_html_hi: str = Field("", max_length=20000)
 
 
 @app.put("/nidaan/ops/api/claimant-terms")
 async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
-    """Update the success-fee % + the T&C version/text (super-admin / counsel). Existing acceptances
-    keep the version + % they were pinned to — this only changes what NEW claimants will see."""
+    """Update the success-fee % + the T&C version/text (English + Hindi) (super-admin / counsel).
+    Existing acceptances keep the version + % they were pinned to — this only changes what NEW
+    claimants will see."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "super_admin")
@@ -1324,6 +1327,7 @@ async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
     await nidaan.set_ops_setting("claimant_success_fee_pct", str(body.fee_pct), updated_by=sid)
     await nidaan.set_ops_setting("claimant_terms_version", body.terms_version.strip(), updated_by=sid)
     await nidaan.set_ops_setting("claimant_terms_html", body.terms_html, updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_html_hi", body.terms_html_hi or "", updated_by=sid)
     await _ops_audit(request, "claimant_terms.update", "settings", 0,
                      f"fee={body.fee_pct}% ver={body.terms_version}")
     return {"ok": True, **(await claimant.fee_config())}

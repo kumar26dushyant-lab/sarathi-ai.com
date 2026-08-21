@@ -5457,15 +5457,37 @@ OPS_SETTING_DEFAULTS = {
     # later % change never rewrites an already-accepted agreement (grandfathered).
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
-    "claimant_terms_version": "v1-draft",
-    # Full T&C text shown in the claimant consent card. Super-admin / counsel owned — edit it in
-    # the ops Content section; bump claimant_terms_version whenever the wording changes so old
-    # acceptances stay pinned to the version they agreed to. Plain text / simple HTML.
+    "claimant_terms_version": "v1",
+    # T&C shown in the claimant consent card, in BOTH languages (Hindi-default audience). The
+    # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
+    # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel
+    # owned: edit in ops Content; bump claimant_terms_version on any change so old acceptances stay
+    # pinned to the version agreed. Plain text / simple HTML.
     "claimant_terms_html": (
-        "PLACEHOLDER — replace with the counsel-approved terms before enabling live consent. "
-        "NidaanPartner (Nidaan The Legal Consultant) will assist in pursuing your insurance claim. "
-        "On the amount successfully recovered from the insurer, our fee is the percentage shown "
-        "above, plus applicable GST. No recovery, no fee."),
+        "This engagement is between you (the policyholder / claimant) and Nidaan The Legal "
+        "Consultant LLP (\"the Firm\"). The Firm will assist you in pursuing and, where possible, "
+        "recovering your insurance claim.\n\n"
+        "Fee: The Firm works purely on a success basis. A professional fee of 15% of the amount "
+        "actually recovered from the insurer/authority, plus applicable GST, is payable to Nidaan "
+        "The Legal Consultant LLP only upon successful recovery. If nothing is recovered, no fee is "
+        "payable.\n\n"
+        "This fee is payable to Nidaan The Legal Consultant LLP and is separate from any "
+        "subscription or service of NidaanPartner.com.\n\n"
+        "By accepting, you authorise the Firm to act on your behalf in this claim and confirm the "
+        "details provided are correct. You may withdraw by written notice; fees already earned on "
+        "amounts already recovered remain payable. This acceptance is recorded digitally with date "
+        "and time."),
+    "claimant_terms_html_hi": (
+        "यह अनुबंध आपके (पॉलिसीधारक / दावेदार) और Nidaan The Legal Consultant LLP (\"फर्म\") के बीच है। "
+        "फर्म आपके बीमा दावे को आगे बढ़ाने और, जहाँ संभव हो, वसूल कराने में आपकी सहायता करेगी।\n\n"
+        "फीस: फर्म पूरी तरह सफलता के आधार पर काम करती है। बीमा कंपनी/प्राधिकरण से वास्तव में वसूल की गई "
+        "राशि का 15% पेशेवर शुल्क, साथ में लागू GST, केवल सफल वसूली पर Nidaan The Legal Consultant LLP को "
+        "देय होगा। यदि कुछ भी वसूल नहीं होता, तो कोई फीस देय नहीं है।\n\n"
+        "यह फीस Nidaan The Legal Consultant LLP को देय है और NidaanPartner.com की किसी सदस्यता या सेवा से "
+        "अलग है।\n\n"
+        "स्वीकार करके, आप फर्म को इस दावे में अपनी ओर से कार्य करने के लिए अधिकृत करते हैं और पुष्टि करते हैं "
+        "कि दी गई जानकारी सही है। आप लिखित सूचना देकर वापस ले सकते हैं; पहले वसूल हुई राशि पर अर्जित फीस देय "
+        "रहेगी। यह स्वीकृति दिनांक व समय के साथ डिजिटल रूप से दर्ज की जाती है।"),
 }
 
 

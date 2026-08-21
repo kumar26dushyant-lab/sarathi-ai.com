@@ -54,7 +54,7 @@
 <body>
 <header>
   <div class="inner">
-    <div class="brand">NidaanPartner<small>Nidaan The Legal Consultant</small></div>
+    <div class="brand">NidaanPartner<small>Nidaan The Legal Consultant LLP</small></div>
     <button class="lang" id="langBtn" onclick="toggleLang()">हिंदी</button>
   </div>
   <div class="wrap" style="padding:0" id="greetWrap"></div>
@@ -68,12 +68,13 @@
 <script>
 "use strict";
 // ── i18n (Tier II/III friendly; everything switches with the toggle) ──────────
-var LANG = (localStorage.getItem("claim_lang") || "en");
+var LANG = (localStorage.getItem("claim_lang") || "hi");  // Tier 2/3 audience → Hindi default
 var T = {
   en: {
     greet:"Hello", sub:"Here is the status of your insurance claim. We are handling it for you.",
+    safe:"🔒 This is your private, secure page. Nothing here charges you. Read, and tap only when you are ready.",
     statusTitle:"Your claim status", claimRef:"Claim", disputed:"Disputed amount",
-    feeTitle:"Our fee — please review & accept", feeIntro:"NidaanPartner works on a success basis. We only charge when money is recovered from the insurer.",
+    feeTitle:"Our fee — please review & accept", feeIntro:"Nidaan The Legal Consultant LLP works purely on a success basis — a fee applies only when money is recovered from the insurer. This is separate from NidaanPartner.com.",
     recovered:"If recovered (example)", ourFee:"Our fee", gst:"GST", totalFee:"Total our fee", netYou:"You receive",
     illust:"Example only — based on your disputed amount. Actual fee applies to whatever is recovered.",
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
@@ -86,8 +87,9 @@ var T = {
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
+    safe:"🔒 यह आपका निजी, सुरक्षित पेज है। यहाँ आपसे कोई पैसा नहीं लिया जाता। आराम से पढ़ें, और तैयार होने पर ही टैप करें।",
     statusTitle:"आपके दावे की स्थिति", claimRef:"दावा", disputed:"विवादित राशि",
-    feeTitle:"हमारी फीस — कृपया देखें और स्वीकार करें", feeIntro:"NidaanPartner सफलता के आधार पर काम करता है। बीमा कंपनी से राशि वसूल होने पर ही हम फीस लेते हैं।",
+    feeTitle:"हमारी फीस — कृपया देखें और स्वीकार करें", feeIntro:"Nidaan The Legal Consultant LLP पूरी तरह सफलता के आधार पर काम करती है — फीस केवल तब लगती है जब बीमा कंपनी से राशि वसूल होती है। यह NidaanPartner.com से अलग है।",
     recovered:"वसूली होने पर (उदाहरण)", ourFee:"हमारी फीस", gst:"जीएसटी", totalFee:"कुल हमारी फीस", netYou:"आपको मिलेंगे",
     illust:"केवल उदाहरण — आपकी विवादित राशि पर आधारित। वास्तविक फीस वसूल की गई राशि पर लगेगी।",
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
@@ -141,7 +143,8 @@ function showErr(){
 function render(){
   var c = DATA.claim, con = DATA.consent, il = con.illustration;
   document.getElementById("greetWrap").innerHTML =
-    '<div class="greet">'+esc(t("greet"))+', '+esc(c.insured_name||"")+' 👋<small>'+esc(t("sub"))+'</small></div>';
+    '<div class="greet">'+esc(t("greet"))+', '+esc(c.insured_name||"")+' 👋<small>'+esc(t("sub"))+'</small></div>'+
+    '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:.55rem .7rem;margin-top:.7rem;font-size:.82rem;line-height:1.5">'+esc(t("safe"))+'</div>';
 
   var statusCard =
     '<div class="card"><h2>'+esc(t("statusTitle"))+'</h2>'+
@@ -168,7 +171,7 @@ function render(){
       '</div>'+
       '<div class="illust-tag">'+esc(t("illust"))+'</div>'+
       '<div style="font-weight:700;margin-top:.9rem;font-size:.82rem;color:var(--muted)">'+esc(t("terms"))+'</div>'+
-      '<div class="terms">'+esc(con.terms_html||"")+'</div>'+
+      '<div class="terms">'+esc((LANG==="hi" && con.terms_html_hi) ? con.terms_html_hi : (con.terms_html||""))+'</div>'+
       '<label class="chk"><input type="checkbox" id="agree" onchange="document.getElementById(\'acceptBtn\').disabled=!this.checked"> <span>'+esc(t("agree"))+'</span></label>'+
       '<button class="btn btn-primary" id="acceptBtn" disabled onclick="accept(this)">'+esc(t("accept"))+'</button>'+
     '</div>';
