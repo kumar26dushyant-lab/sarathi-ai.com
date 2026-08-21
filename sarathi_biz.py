@@ -64,6 +64,7 @@ import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
 import biz_nidaan_radar as radar
 import biz_doc_splitter as docsplit
+import biz_nidaan_claimant as claimant
 import biz_nidaan_telegram as tg
 import biz_sarathi_tgcrm as tgcrm
 import biz_wa_agent as wa_agent
@@ -1072,6 +1073,168 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
         claim_id=claim_id, branch_code=code, created_by_type="branch", created_by_id=code,
         description=f"L2 fee claim #{claim_id}", expire_by=expire_by)
     return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "fee": fee}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CLAIMANT PORTAL — the policyholder's direct view of their claim (P1).
+# Auth = the opaque per-claim access_token (revocable; doubles as the magic-link).
+# The claimant reads status, sees the success-fee consent card, and gives digital
+# acceptance — without any mediator in between. Dormant until the L2 trigger + link
+# send are wired (deliberately held until the T&C copy is counsel-approved).
+# ═════════════════════════════════════════════════════════════════════════════
+async def _claimant_ctx(request: Request) -> Optional[dict]:
+    """Resolve the claimant's access_token (Bearer or ?token=) → portal+claim row, or None."""
+    tok = ""
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        tok = h[7:]
+    if not tok:
+        tok = request.query_params.get("token", "")
+    if not tok:
+        return None
+    return await claimant.get_portal_by_token(tok)
+
+
+@app.get("/nidaan/claim", response_class=HTMLResponse)
+async def nidaan_claim_portal_page(request: Request):
+    """The claimant's dashboard shell (mobile-first PWA). Auth happens client-side via the token in
+    the URL fragment (never sent to the server) — same pattern as the branch portal."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_claim_portal.html")
+
+
+@app.get("/nidaan/claim/magic")
+@limiter.limit("20/minute")
+async def nidaan_claim_magic(request: Request, token: str = ""):
+    """One-click claimant entry from the emailed link. Validates the token, stamps first-open, then
+    hands the token to the dashboard via a URL fragment (not sent to the server)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await claimant.get_portal_by_token(token or "")
+    if not ctx:
+        return RedirectResponse(url="/nidaan/claim?e=expired", status_code=303)
+    await claimant.mark_activated(ctx["claim_id"])
+    return RedirectResponse(url=f"/nidaan/claim#t={token}", status_code=303)
+
+
+@app.get("/nidaan/claim/api/me")
+async def nidaan_claim_me(request: Request):
+    """Everything the claimant dashboard needs: their claim summary + current status + the
+    success-fee consent card (terms + live line-item calc) + whether they've already accepted."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    cfg = await claimant.fee_config()
+    disputed = ctx.get("disputed_amount") or 0
+    # Pre-recovery, we show the rule + an ILLUSTRATIVE calc on the disputed amount (clearly labelled)
+    # so the claimant understands exactly how our fee works before accepting.
+    illustration = claimant.compute_fee(disputed, cfg["fee_pct"], cfg["gst_pct"])
+    # Friendly status: prefer the ClaimShield customer-facing label if present.
+    status_label = ctx.get("claim_status") or "In progress"
+    try:
+        import biz_claimshield as _cs
+        cs = await _cs.get_claimshield_state(ctx["claim_id"])
+        if cs and cs.get("bucket"):
+            m = _cs.map_status(cs.get("raw_status") or "")
+            status_label = (m.get("labels") or {}).get("en") or status_label
+    except Exception:
+        pass
+    return {
+        "claim": {
+            "claim_id": ctx["claim_id"],
+            "insured_name": ctx.get("insured_name") or "",
+            "claim_type": ctx.get("claim_type") or "",
+            "status_label": status_label,
+            "disputed_amount": disputed,
+        },
+        "consent": {
+            "accepted": bool(ctx.get("consent_accepted_at")),
+            "accepted_at": ctx.get("consent_accepted_at"),
+            "fee_pct": cfg["fee_pct"],
+            "gst_pct": cfg["gst_pct"],
+            "gst_enabled": cfg["gst_enabled"],
+            "terms_version": cfg["terms_version"],
+            "terms_html": cfg["terms_html"],
+            "illustration": illustration,
+        },
+    }
+
+
+@app.post("/nidaan/claim/api/consent")
+@limiter.limit("10/minute")
+async def nidaan_claim_consent(request: Request):
+    """Record the claimant's DIGITAL ACCEPTANCE of the success-fee terms (idempotent). Snapshots the
+    % + GST + T&C version that applied at this moment."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    ip = (request.client.host if request.client else "") or ""
+    res = await claimant.record_consent(ctx["claim_id"], ip=ip)
+    return {"ok": True, "already": res.get("already", False)}
+
+
+# ── Ops side: manage a claim's claimant portal (staff, from the L2 claim view) ──
+@app.get("/nidaan/ops/api/claims/{claim_id}/portal")
+async def ops_claim_portal_state(claim_id: int, request: Request):
+    """Portal status for the L2 claim view: exists? claimant opened it? accepted the fee terms?
+    link sent how many times? Plus the current fee/GST config."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await claimant.portal_state(claim_id)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/ensure")
+async def ops_claim_portal_ensure(claim_id: int, request: Request):
+    """Create the claimant portal + magic-link for this claim (idempotent) and return the link so a
+    staffer can send/re-send it. Does NOT itself email yet (send wiring lands with the L2 trigger)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    p = await claimant.ensure_portal(claim_id, with_token=True)
+    await claimant.mark_link_sent(claim_id)
+    await _ops_audit(request, "claimant_portal.link", "claim", str(claim_id), "portal link issued")
+    url = f"{_nidaan_origin(request)}/nidaan/claim/magic?token={p.get('access_token')}"
+    return {"ok": True, "link": url, "state": await claimant.portal_state(claim_id)}
+
+
+# ── Super-admin: the counsel-owned T&C content + fee % (ops Content section) ──
+@app.get("/nidaan/ops/api/claimant-terms")
+async def ops_claimant_terms_get(request: Request):
+    """Current success-fee %, GST state, T&C version + text. Any staff may read; only SA edits."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    cfg = await claimant.fee_config()
+    return {**cfg, "can_edit": staff.get("role") == "super_admin"}
+
+
+class _ClaimantTermsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fee_pct: float = Field(..., ge=0, le=100)
+    terms_version: str = Field(..., min_length=1, max_length=60)
+    terms_html: str = Field(..., min_length=1, max_length=20000)
+
+
+@app.put("/nidaan/ops/api/claimant-terms")
+async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
+    """Update the success-fee % + the T&C version/text (super-admin / counsel). Existing acceptances
+    keep the version + % they were pinned to — this only changes what NEW claimants will see."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    sid = staff["staff_id"]
+    await nidaan.set_ops_setting("claimant_success_fee_pct", str(body.fee_pct), updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_version", body.terms_version.strip(), updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_html", body.terms_html, updated_by=sid)
+    await _ops_audit(request, "claimant_terms.update", "settings", 0,
+                     f"fee={body.fee_pct}% ver={body.terms_version}")
+    return {"ok": True, **(await claimant.fee_config())}
 
 
 async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:

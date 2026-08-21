@@ -5458,6 +5458,14 @@ OPS_SETTING_DEFAULTS = {
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
     "claimant_terms_version": "v1-draft",
+    # Full T&C text shown in the claimant consent card. Super-admin / counsel owned — edit it in
+    # the ops Content section; bump claimant_terms_version whenever the wording changes so old
+    # acceptances stay pinned to the version they agreed to. Plain text / simple HTML.
+    "claimant_terms_html": (
+        "PLACEHOLDER — replace with the counsel-approved terms before enabling live consent. "
+        "NidaanPartner (Nidaan The Legal Consultant) will assist in pursuing your insurance claim. "
+        "On the amount successfully recovered from the insurer, our fee is the percentage shown "
+        "above, plus applicable GST. No recovery, no fee."),
 }
 
 
