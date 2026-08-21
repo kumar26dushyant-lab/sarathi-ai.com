@@ -8,6 +8,52 @@ Keep the language simple, warm, and motivating. Paste Title + Details, pick role
 
 ---
 
+## 2026-08-22 — 🔗 NEW: Claimant Portal — a direct dashboard for the policyholder — READY TO SEND (founder: test first)
+
+> Send to all staff who handle claims. NOTE: manual "issue link" works now; the auto-email at L2 is coming next (behind a switch). Founder may want to test before sending this.
+
+**Title (EN):**
+🔗 New: give your claimant their own claim dashboard (please 👍)
+
+**Details (EN):**
+Team — a big new tool is here. Every claim now has a **🔗 Claimant Portal** — a simple, private dashboard for the **insured / policyholder** themselves. 🎉
+
+Remember: branches, advisors and subscribers *bring* us the claim, but the **policyholder is the one with the documents and the facts.** This lets us reach them **directly** (while keeping the mediator in the loop) instead of playing a long telephone game.
+
+**What the policyholder can do on it**
+• See their **claim status** in plain language, updated as we work.
+• **Upload documents** we need (photo or PDF) — straight from their phone.
+• Read and **accept the fee terms** (this is with **Nidaan The Legal Consultant LLP**, on a success basis — a fee only if money is recovered).
+• It opens in **Hindi by default** (English toggle) and can be **installed like an app** with pop‑up alerts on new updates — built for our Tier‑2/3 customers.
+
+**How you use it (today)**
+Open any claim → find the **🔗 Claimant Portal** card → tap **Create & copy link** → send that link to the policyholder. When they open it, you'll see it turn to **"opened"**, and when they accept the terms, **"✅ accepted."**
+*(Coming soon: this link will go out automatically by email the moment a claim reaches L2 — you'll also get a manual "re‑send" button.)*
+
+**How to use this update:** react **👍** to confirm you've read &amp; understood. Anything unclear? Message our **office IT SPOC**. 🙏
+
+**Title (HI):**
+🔗 नया: पॉलिसीधारक को उनका अपना दावा डैशबोर्ड दें (कृपया 👍)
+
+**Details (HI):**
+टीम — एक बड़ा नया टूल आ गया है। अब हर दावे के साथ एक **🔗 Claimant Portal** है — यानी **बीमाधारक / पॉलिसीधारक** के लिए एक आसान, निजी डैशबोर्ड। 🎉
+
+याद रखें: ब्रांच, सलाहकार और सब्सक्राइबर दावा हमारे पास *लाते* हैं, पर **दस्तावेज़ और तथ्य पॉलिसीधारक के पास होते हैं।** इससे हम उन तक **सीधे** पहुँच पाते हैं (और बीच वाले भी सूचित रहते हैं), बार‑बार के लंबे संवाद की ज़रूरत नहीं।
+
+**पॉलिसीधारक इस पर क्या कर सकते हैं**
+• अपने **दावे की स्थिति** सरल भाषा में देखें, जैसे‑जैसे हम काम करते हैं।
+• ज़रूरी **दस्तावेज़ अपलोड करें** (फ़ोटो या PDF) — सीधे अपने फ़ोन से।
+• **फीस की शर्तें** पढ़कर स्वीकार करें (यह **Nidaan The Legal Consultant LLP** के साथ है, सफलता के आधार पर — वसूली होने पर ही फीस)।
+• यह **डिफ़ॉल्ट रूप से हिंदी** में खुलता है (इंग्लिश टॉगल), और **ऐप की तरह इंस्टॉल** किया जा सकता है, नए अपडेट पर पॉप‑अप के साथ — हमारे टियर‑2/3 ग्राहकों के लिए बनाया गया।
+
+**आप इसे कैसे इस्तेमाल करें (अभी)**
+कोई भी दावा खोलें → **🔗 Claimant Portal** कार्ड देखें → **Create &amp; copy link** दबाएँ → वह लिंक पॉलिसीधारक को भेजें। जब वे इसे खोलेंगे तो **"opened"** दिखेगा, और शर्तें स्वीकार करने पर **"✅ accepted."**
+*(जल्द आ रहा है: दावा L2 पहुँचते ही यह लिंक ईमेल से अपने‑आप चला जाएगा — साथ में "फिर से भेजें" बटन भी मिलेगा।)*
+
+**इस अपडेट को कैसे इस्तेमाल करें:** पढ़कर समझ लेने की पुष्टि के लिए **👍** करें। कुछ भी समझ न आए तो **ऑफिस IT SPOC** से संपर्क करें। 🙏
+
+---
+
 ## 2026-08-21 — 🤖 Your office in your pocket: run NidaanPartner from Telegram — READY TO SEND
 
 > Send to all staff. Goal: get everyone using the Telegram bot as their daily assistant + collect what they want next.
