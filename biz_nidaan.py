@@ -5458,6 +5458,10 @@ OPS_SETTING_DEFAULTS = {
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
     "claimant_terms_version": "v1",
+    # Master switch for AUTO-emailing the claimant their portal link when a claim reaches L2.
+    # Default OFF — staff can still issue/copy/email a link manually; flip to "1" only when the
+    # founder is happy to auto-contact real policyholders.
+    "claimant_autosend_enabled": "0",
     # T&C shown in the claimant consent card, in BOTH languages (Hindi-default audience). The
     # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel

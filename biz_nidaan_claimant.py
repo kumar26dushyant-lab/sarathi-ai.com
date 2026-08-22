@@ -217,6 +217,99 @@ async def list_claimant_docs(claim_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ── L2 trigger: greet the claimant + open their portal + notify everyone ──────
+def _public_base() -> str:
+    import os
+    return os.getenv("NIDAAN_PUBLIC_BASE", "https://nidaanpartner.com").rstrip("/")
+
+
+async def autosend_enabled() -> bool:
+    v = await _nidaan.get_ops_setting("claimant_autosend_enabled", "0")
+    return str(v).strip().lower() in ("1", "true", "on", "yes")
+
+
+def _greeting_email_html(name: str, link: str) -> str:
+    """Bilingual (Hindi + English), reassuring greeting — NO fee calculation (that lives only on the
+    dashboard). Explains who we are, that it's safe, and EXACTLY what happens when they tap."""
+    nm = (name or "").strip() or "जी"
+    return (
+        f"<p style='color:#e2e8f0;font-size:16px'>नमस्ते {nm},</p>"
+        "<p>NidaanPartner की ओर से — आपके बीमा दावे में आपकी मदद के लिए हमारी टीम काम कर रही है। "
+        "आपके दावे की पूरी जानकारी एक ही जगह देखने के लिए हमने आपके लिए एक <strong>निजी, सुरक्षित पेज</strong> बनाया है।</p>"
+        "<p>नीचे दिए बटन पर टैप करने से <strong>सिर्फ़ आपका दावा डैशबोर्ड खुलेगा</strong> — वहाँ आप अपने दावे की स्थिति देख सकते हैं, "
+        "ज़रूरी दस्तावेज़ भेज सकते हैं, और आगे की बातचीत कर सकते हैं। इससे आपसे कोई पैसा नहीं लिया जाता।</p>"
+        f"<p style='text-align:center;margin:26px 0'><a href='{link}' "
+        "style='background:#0d7a68;color:#fff;padding:14px 26px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px'>"
+        "अपना दावा डैशबोर्ड खोलें / Open my claim dashboard</a></p>"
+        "<hr style='border:none;border-top:1px solid rgba(255,255,255,0.1);margin:22px 0'>"
+        f"<p style='color:#e2e8f0'>Hello {nm},</p>"
+        "<p>This is NidaanPartner — our team is working to help you with your insurance claim. We've created a "
+        "<strong>private, secure page</strong> for you to see everything about your claim in one place.</p>"
+        "<p>Tapping the button above simply <strong>opens your claim dashboard</strong>, where you can track your "
+        "claim status, share the documents we need, and stay in touch. It does not charge you anything.</p>"
+        "<p style='color:#64748b;font-size:13px'>If the button doesn't work, copy this link into your browser:<br>"
+        f"<span style='color:#22d3ee'>{link}</span></p>")
+
+
+async def _claim_contact(claim_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT claim_id, insured_name, insured_email, account_id FROM nidaan_claims "
+            "WHERE claim_id=?", (claim_id,))).fetchone()
+    return dict(row) if row else None
+
+
+async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
+    """Open the claimant portal + email the policyholder their link (bilingual, no calc). Auto path
+    is gated by `claimant_autosend_enabled`; `force=True` (manual staff action) bypasses the gate.
+    Best-effort: never raises. Also pings involved staff on all channels (mediator stays in loop)."""
+    if not force and not await autosend_enabled():
+        return {"ok": False, "reason": "autosend_off"}
+    c = await _claim_contact(claim_id)
+    if not c:
+        return {"ok": False, "reason": "claim_not_found"}
+    email = (c.get("insured_email") or "").strip()
+    if not email:
+        return {"ok": False, "reason": "no_claimant_email"}
+    p = await ensure_portal(claim_id, with_token=True)
+    link = f"{_public_base()}/nidaan/claim/magic?token={p.get('access_token')}"
+    sent = False
+    try:
+        import biz_email as _mail
+        html = _mail._wrap_nidaan_template("Your claim dashboard", _greeting_email_html(c.get("insured_name") or "", link))
+        sent = await _mail.send_email(
+            email, "आपका दावा डैशबोर्ड · Your claim dashboard — NidaanPartner", html,
+            from_name="Nidaan Partner")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("claimant greeting email failed claim=%s: %s", claim_id, e)
+    if sent:
+        await mark_link_sent(claim_id)
+    # All-channel heads-up to involved staff (assignees + watchers) — keeps the mediator's ops team
+    # in the loop. Best-effort; never blocks.
+    try:
+        import biz_nidaan_notifications as _notif
+        await _notif.notify_claim_watchers(
+            claim_id,
+            "Claimant portal link sent",
+            f"The claimant dashboard link was sent to {c.get('insured_name') or 'the policyholder'} "
+            f"({email}) for claim #{claim_id}.",
+            event_key="claim.watch")
+    except Exception as e:  # noqa: BLE001
+        logger.info("claimant portal staff-notify skipped claim=%s: %s", claim_id, e)
+    return {"ok": bool(sent), "sent": sent, "link": link}
+
+
+async def on_claim_reached_l2(claim_id: int) -> dict:
+    """Called (best-effort, fire-and-forget) when a claim enters L2/ClaimShield. Auto path — honours
+    the claimant_autosend_enabled switch."""
+    try:
+        return await send_greeting_email(claim_id, force=False)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("on_claim_reached_l2 failed claim=%s: %s", claim_id, e)
+        return {"ok": False, "reason": "error"}
+
+
 async def portal_state(claim_id: int) -> dict:
     """Consolidated state for the ops L2 claim view: does a portal exist, has the claimant opened
     it, have they accepted the fee terms, how many times we sent the link. Never raises."""

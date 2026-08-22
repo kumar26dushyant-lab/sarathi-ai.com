@@ -1296,6 +1296,22 @@ async def ops_claim_portal_ensure(claim_id: int, request: Request):
     return {"ok": True, "link": url, "state": await claimant.portal_state(claim_id)}
 
 
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/send-email")
+async def ops_claim_portal_send_email(claim_id: int, request: Request):
+    """Manually email the claimant their portal link now (bypasses the auto-send switch). Used for
+    the 'send / re-send link' action + when a policyholder didn't get the auto email."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    res = await claimant.send_greeting_email(claim_id, force=True)
+    if not res.get("ok"):
+        _m = {"no_claimant_email": "This claim has no claimant email on file — add one first.",
+              "claim_not_found": "Claim not found."}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("reason"), "Could not send the email."))
+    await _ops_audit(request, "claimant_portal.email", "claim", str(claim_id), "greeting email sent")
+    return {"ok": True, "state": await claimant.portal_state(claim_id)}
+
+
 # ── Super-admin: the counsel-owned T&C content + fee % (ops Content section) ──
 @app.get("/nidaan/ops/api/claimant-terms")
 async def ops_claimant_terms_get(request: Request):
@@ -1304,7 +1320,8 @@ async def ops_claimant_terms_get(request: Request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
     cfg = await claimant.fee_config()
-    return {**cfg, "can_edit": staff.get("role") == "super_admin"}
+    return {**cfg, "autosend_enabled": await claimant.autosend_enabled(),
+            "can_edit": staff.get("role") == "super_admin"}
 
 
 class _ClaimantTermsReq(BaseModel):
@@ -1313,6 +1330,7 @@ class _ClaimantTermsReq(BaseModel):
     terms_version: str = Field(..., min_length=1, max_length=60)
     terms_html: str = Field(..., min_length=1, max_length=20000)
     terms_html_hi: str = Field("", max_length=20000)
+    autosend_enabled: bool = False
 
 
 @app.put("/nidaan/ops/api/claimant-terms")
@@ -1328,8 +1346,9 @@ async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
     await nidaan.set_ops_setting("claimant_terms_version", body.terms_version.strip(), updated_by=sid)
     await nidaan.set_ops_setting("claimant_terms_html", body.terms_html, updated_by=sid)
     await nidaan.set_ops_setting("claimant_terms_html_hi", body.terms_html_hi or "", updated_by=sid)
+    await nidaan.set_ops_setting("claimant_autosend_enabled", "1" if body.autosend_enabled else "0", updated_by=sid)
     await _ops_audit(request, "claimant_terms.update", "settings", 0,
-                     f"fee={body.fee_pct}% ver={body.terms_version}")
+                     f"fee={body.fee_pct}% ver={body.terms_version} autosend={body.autosend_enabled}")
     return {"ok": True, **(await claimant.fee_config())}
 
 

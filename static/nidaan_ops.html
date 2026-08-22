@@ -4809,7 +4809,7 @@ async function loadClaimPortalCard(claimId, freshLink){
     ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the claimant (auto-email coming). Opening it logs a first-open.</div></div>`
     : '';
   const btn = canIssue
-    ? `<button class="btn-sm btn-primary" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button>`
+    ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn-sm btn-primary" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button><button class="btn-sm btn-ghost" onclick="emailClaimPortalLink(${claimId},this)" title="Email the dashboard link to the policyholder now">✉️ Email to claimant</button></div>`
     : '';
   box.innerHTML = linkHtml + `<div style="margin-bottom:.5rem">${statusLine}${sentBadge}</div>` + btn;
 }
@@ -4820,6 +4820,15 @@ async function issueClaimPortalLink(claimId){
   try { await navigator.clipboard.writeText(d.link); } catch(e){}
   ndUI.toast('Claimant link created & copied','success');
   loadClaimPortalCard(claimId, d.link);
+}
+async function emailClaimPortalLink(claimId, btn){
+  if(!confirm('Email the private dashboard link to the policyholder now?')) return;
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  try{
+    const r = await API('/claims/'+claimId+'/portal/send-email',{method:'POST'});
+    if(r.ok){ ndUI.toast('Emailed to the claimant','success'); loadClaimPortalCard(claimId); }
+    else { const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Could not send','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to claimant'; } }
+  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to claimant'; } }
 }
 
 async function loadClaimWatchers(claimId){
@@ -6625,6 +6634,10 @@ async function loadClaimantTermsEditor(){
       <label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-top:.6rem">नियम व शर्तें — हिंदी (claimants are Tier 2/3; Hindi is their default)
         <textarea id="ctTermsHi" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="काउंसल-अनुमोदित हिंदी शर्तें यहाँ डालें…">${esc(cfg.terms_html_hi||'')}</textarea></label>
       ${(cfg.terms_html||'').indexOf('PLACEHOLDER')===0?'<div style="font-size:.76rem;color:var(--nd-warning-text);margin-top:.4rem">⚠️ Placeholder text — replace with counsel-approved terms before enabling live consent.</div>':''}
+      <label style="display:flex;gap:.55rem;align-items:flex-start;margin-top:.8rem;font-size:.84rem;${canEdit?'':'opacity:.6'}">
+        <input type="checkbox" id="ctAutosend" ${cfg.autosend_enabled?'checked':''} ${canEdit?'':'disabled'} style="margin-top:.15rem;width:17px;height:17px">
+        <span><b>Auto-email the claimant at L2.</b> When ON, the moment a claim reaches Level-2 the policyholder is automatically emailed their private dashboard link (bilingual, no fee calc). When OFF, staff still send the link manually from the claim. <span style="color:var(--nd-warning-text)">Turn ON only when you're ready to auto-contact real policyholders.</span></span>
+      </label>
       ${canEdit?`<div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;margin-top:.6rem"><span id="ctMsg" style="font-size:.8rem"></span><button class="btn btn-primary" style="font-size:.85rem" onclick="saveClaimantTerms(this)">💾 Save fee &amp; terms</button></div>`:'<div style="font-size:.76rem;color:var(--nd-text-faint);margin-top:.4rem">Super-admin only.</div>'}
     </div>`;
 }
@@ -6634,12 +6647,13 @@ async function saveClaimantTerms(btn){
   const terms_version = (document.getElementById('ctVersion').value||'').trim();
   const terms_html = (document.getElementById('ctTerms').value||'').trim();
   const terms_html_hi = (document.getElementById('ctTermsHi').value||'').trim();
+  const autosend_enabled = !!document.getElementById('ctAutosend').checked;
   if(isNaN(fee_pct) || fee_pct<0 || fee_pct>100){ if(msg){msg.style.color='#f87171';msg.textContent='Enter a valid fee %';} return; }
   if(!terms_version){ if(msg){msg.style.color='#f87171';msg.textContent='Version required';} return; }
   if(!terms_html){ if(msg){msg.style.color='#f87171';msg.textContent='English terms required';} return; }
   if(btn) btn.disabled = true; if(msg){ msg.style.color='var(--nd-text-muted)'; msg.textContent='Saving…'; }
   try{
-    const r = await API('/claimant-terms',{method:'PUT', body:JSON.stringify({fee_pct, terms_version, terms_html, terms_html_hi})});
+    const r = await API('/claimant-terms',{method:'PUT', body:JSON.stringify({fee_pct, terms_version, terms_html, terms_html_hi, autosend_enabled})});
     if(r.ok){ if(msg){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — new claimants see this'; } }
     else { const d=await r.json().catch(()=>({})); if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); } }
   }catch(e){ if(msg){ msg.style.color='#f87171'; msg.textContent='Network error'; } }

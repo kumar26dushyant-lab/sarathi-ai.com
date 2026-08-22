@@ -288,6 +288,14 @@ async def create_case(claim_id: int, reason: str = "", sent_by: str = "") -> dic
     if r.status_code == 200 and str(data.get("message", "")).strip().lower() == "success":
         cs_ref = str(data.get("caseReferenceNumber", "") or "")
         await mark_case_sent(claim_id, cs_ref, sent_by=sent_by)
+        # Claim just entered L2 → open the claimant's direct portal + greet them (flag-gated,
+        # best-effort, never blocks the L2 move). Covers both auto and manual-push paths.
+        try:
+            import asyncio as _aio
+            import biz_nidaan_claimant as _cl
+            _aio.create_task(_cl.on_claim_reached_l2(claim_id))
+        except Exception:
+            pass
         _by = (f" by {sent_by.strip()}" if sent_by and sent_by.strip() else "")
         _note = "Sent to ClaimShield" + _by + (f" — {reason.strip()[:400]}" if reason and reason.strip() else "")
         async with aiosqlite.connect(DB_PATH) as conn:
