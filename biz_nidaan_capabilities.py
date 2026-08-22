@@ -224,6 +224,91 @@ CAPABILITIES: list[dict] = [
                "d": "पोर्टल में एक टैप से बॉट आपसे जुड़ जाता है — यह एक बार करना है।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
+    # ── Claims & Level-2 (legal) ─────────────────────────────────────────
+    {
+        "id": "deliver_review",
+        "en": {"t": "Deliver a legal assessment to the customer",
+               "d": "Share whether a claim can be challenged — the customer sees it on their dashboard.",
+               "u": "After reviewing a rejection, pick an outcome, use a template, and send it in one tap."},
+        "hi": {"t": "ग्राहक को कानूनी आकलन भेजें",
+               "d": "बताएँ कि दावे को चुनौती दी जा सकती है या नहीं — ग्राहक को उसके डैशबोर्ड पर दिखता है।",
+               "u": "रिजेक्शन देखने के बाद, नतीजा चुनें, टेम्पलेट लगाएँ और एक टैप में भेजें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "l2_claims",
+        "en": {"t": "Level-2 (L2) Claims dashboard",
+               "d": "All reviewed-GO claims ready for legal action, with fee + ClaimShield status.",
+               "u": "See which claims are paid, send eligible ones to ClaimShield, and track their status."},
+        "hi": {"t": "लेवल-2 (L2) क्लेम डैशबोर्ड",
+               "d": "कानूनी कार्रवाई के लिए तैयार सभी दावे, फीस + ClaimShield स्थिति के साथ।",
+               "u": "देखें कौन-से दावे भुगतान हो चुके हैं, पात्र दावे ClaimShield भेजें, और स्थिति ट्रैक करें।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
+        "id": "views_switch",
+        "en": {"t": "Switch between Table, Board & Cards",
+               "d": "See L2 claims as a table, a Kanban board (by stage), or mobile cards — your choice sticks.",
+               "u": "On the phone, use the Board to drag your eye down stage-by-stage; on desktop, use columns."},
+        "hi": {"t": "टेबल, बोर्ड और कार्ड्स में बदलें",
+               "d": "L2 क्लेम को टेबल, कानबन बोर्ड (चरण अनुसार), या मोबाइल कार्ड्स में देखें — आपकी पसंद याद रहती है।",
+               "u": "फ़ोन पर बोर्ड से चरण-दर-चरण देखें; डेस्कटॉप पर कॉलम इस्तेमाल करें।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
+        "id": "claimant_portal",
+        "en": {"t": "Claimant Portal — the policyholder's own dashboard",
+               "d": "Give the insured a private, Hindi-first page to track status, share documents, and accept fee terms.",
+               "u": "When a claim reaches L2, open its Claimant Portal card and send the link — the customer uploads docs themselves."},
+        "hi": {"t": "क्लेमेंट पोर्टल — पॉलिसीधारक का अपना डैशबोर्ड",
+               "d": "बीमाधारक को एक निजी, हिंदी-प्रथम पेज दें — स्थिति देखें, दस्तावेज़ भेजें, फीस शर्तें स्वीकार करें।",
+               "u": "दावा L2 पहुँचने पर उसका क्लेमेंट पोर्टल कार्ड खोलें और लिंक भेजें — ग्राहक खुद दस्तावेज़ अपलोड करता है।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    # ── Email Updates (radar) ────────────────────────────────────────────
+    {
+        "id": "email_updates",
+        "en": {"t": "Email Updates — watch customer mailboxes",
+               "d": "One screen watches all connected customer mailboxes; important emails are flagged, read & replied here.",
+               "u": "Instead of logging into 100 Gmails, check 'Act now', read the email, and reply — without opening Gmail."},
+        "hi": {"t": "ईमेल अपडेट्स — ग्राहक मेलबॉक्स पर नज़र",
+               "d": "एक स्क्रीन सभी जुड़े ग्राहक मेलबॉक्स देखती है; ज़रूरी ईमेल फ़्लैग होते हैं, यहीं पढ़ें व जवाब दें।",
+               "u": "100 Gmail खोलने के बजाय 'Act now' देखें, ईमेल पढ़ें और जवाब दें — Gmail खोले बिना।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    # ── Document Splitter ────────────────────────────────────────────────
+    {
+        "id": "doc_splitter",
+        "en": {"t": "Document Splitter",
+               "d": "Upload a customer's mixed file; AI separates it into individual documents to send to authorities.",
+               "u": "Got one big PDF of discharge + bills + reports? Upload it, review the split, and export separate PDFs."},
+        "hi": {"t": "डॉक्यूमेंट स्प्लिटर",
+               "d": "ग्राहक की मिली-जुली फ़ाइल अपलोड करें; AI उसे अलग-अलग दस्तावेज़ों में बाँट देता है।",
+               "u": "एक बड़ी PDF में डिस्चार्ज + बिल + रिपोर्ट? अपलोड करें, बँटवारा जाँचें, और अलग PDF एक्सपोर्ट करें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    # ── Business Analytics ───────────────────────────────────────────────
+    {
+        "id": "analytics",
+        "en": {"t": "Business Analytics",
+               "d": "Channel attribution, funnels and where claims/leads drop off.",
+               "u": "See which branches/advisors bring the most business and where customers abandon."},
+        "hi": {"t": "बिज़नेस एनालिटिक्स",
+               "d": "चैनल एट्रिब्यूशन, फ़नल और कहाँ दावे/लीड छूटते हैं।",
+               "u": "देखें कौन-सी ब्रांच/सलाहकार सबसे ज़्यादा बिज़नेस लाते हैं और ग्राहक कहाँ छोड़ते हैं।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    # ── Content ──────────────────────────────────────────────────────────
+    {
+        "id": "content_editor",
+        "en": {"t": "Content & Claimant Terms",
+               "d": "Edit homepage facts, offices, and the claimant fee % + Terms (Nidaan The Legal Consultant LLP).",
+               "u": "Change a business fact once — the website and chat assistant both update. Set the success-fee terms here."},
+        "hi": {"t": "कंटेंट व क्लेमेंट शर्तें",
+               "d": "होमपेज तथ्य, कार्यालय, और क्लेमेंट फीस % + शर्तें (Nidaan The Legal Consultant LLP) संपादित करें।",
+               "u": "एक बार तथ्य बदलें — वेबसाइट और चैट असिस्टेंट दोनों अपडेट। सक्सेस-फीस शर्तें यहीं तय करें।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
 ]
 
 
@@ -237,7 +322,7 @@ def build_guide(role: str, lang: str = "en") -> dict:
     caps = [c for c in CAPABILITIES if _allowed(role, c)]
     def _fmt(c):
         body = c.get(lang) or c["en"]
-        return {"id": c["id"], "title": body["t"], "detail": body["d"]}
+        return {"id": c["id"], "title": body["t"], "detail": body["d"], "use": body.get("u", "")}
     return {
         "role": role,
         "lang": lang,
@@ -261,16 +346,16 @@ def speech_text(role: str, lang: str = "en") -> str:
     if hi:
         parts = [f"नमस्ते। आप {role_label[1]} हैं। सुनिए आप क्या-क्या कर सकते हैं।",
                  "पहले, टेलीग्राम बॉट से आप ये काम कर सकते हैं।"]
-        parts += [f"{i}. {c['title']}। {c['detail']}" for i, c in enumerate(g["telegram"], 1)]
+        parts += [f"{i}. {c['title']}। {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(g["telegram"], 1)]
         parts.append("अब वे काम जो सिर्फ़ वेब पोर्टल या ऐप से होते हैं।")
-        parts += [f"{i}. {c['title']}। {c['detail']}" for i, c in enumerate(g["web_only"], 1)]
+        parts += [f"{i}. {c['title']}। {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(g["web_only"], 1)]
         parts.append("बस इतना ही। कोई भी सवाल हो तो टेलीग्राम पर सीधे पूछ सकते हैं।")
     else:
         parts = [f"Hello. You are a {role_label[0]}. Here is what you can do.",
                  "First, the things you can do from the Telegram bot."]
-        parts += [f"{i}. {c['title']}. {c['detail']}" for i, c in enumerate(g["telegram"], 1)]
+        parts += [f"{i}. {c['title']}. {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(g["telegram"], 1)]
         parts.append("Now, the things that can only be done in the web portal or the installed app.")
-        parts += [f"{i}. {c['title']}. {c['detail']}" for i, c in enumerate(g["web_only"], 1)]
+        parts += [f"{i}. {c['title']}. {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(g["web_only"], 1)]
         parts.append("That's everything. If you have a question, just ask the bot on Telegram.")
     return " ".join(parts)
 

@@ -946,7 +946,7 @@ function buildSidebar() {
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
     {id:'numbers',    label:'📞 Official Numbers', minRank:2},
     {id:'telegram',   label:'✈️ Telegram Bot',     minRank:0},
-    {id:'guide',      label:'📖 How to use',       minRank:0},
+    {id:'guide',      label:'✨ All Features (Listen)', minRank:0},
     null,
     {id:'analytics',  label:'📊 Business Analytics', minRank:2},
     {id:'revenue',    label:'💰 Revenue',       minRank:2, ownerOnly:true},
@@ -8622,6 +8622,7 @@ async function loadGuidePanel(){
       <div style="min-width:0">
         <div style="font-weight:600;font-size:.92rem">${esc(c.title)}</div>
         <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.1rem">${esc(c.detail)}</div>
+        ${c.use?`<div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.25rem"><span style="color:${accent};font-weight:600">${_guideLang==='hi'?'उदाहरण':'Example'}:</span> ${esc(c.use)}</div>`:''}
       </div>
     </div>`).join('');
 
