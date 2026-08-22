@@ -82,6 +82,25 @@ details>summary{cursor:pointer}
 
 /* ── TABLE ── */
 .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid var(--nd-border)}
+/* ── Views engine: responsive Kanban board (columns on desktop, stacked groups on phone) ── */
+.vw-switch{display:inline-flex;border:1px solid var(--nd-border);border-radius:9px;overflow:hidden}
+.vw-switch button{background:var(--nd-bg-surface);color:var(--nd-text-secondary);border:0;padding:.4rem .7rem;font-size:.8rem;cursor:pointer}
+.vw-switch button.active{background:var(--nd-accent,#0d7a68);color:#fff;font-weight:700}
+.board{display:flex;gap:.7rem;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:.5rem;align-items:flex-start}
+.board-col{flex:0 0 250px;min-width:250px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px}
+.board-col>summary{list-style:none;cursor:pointer;padding:.6rem .8rem;font-weight:700;font-size:.82rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+.board-col>summary::-webkit-details-marker{display:none}
+.board-col .board-cards{padding:.2rem .55rem .6rem;display:flex;flex-direction:column;gap:.45rem;max-height:66vh;overflow-y:auto}
+.board-card{background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:10px;padding:.55rem .65rem;cursor:pointer}
+.board-card:hover{border-color:var(--nd-accent,#0d7a68)}
+.vw-count{background:var(--nd-bg-elev);border-radius:20px;padding:.05rem .5rem;font-size:.72rem;color:var(--nd-text-muted)}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem}
+@media(max-width:640px){
+  .board{flex-direction:column;overflow-x:visible}
+  .board-col{flex:1 1 auto;min-width:0;width:100%}
+  .board-col .board-cards{max-height:none}
+  .card-grid{grid-template-columns:1fr}
+}
 table{width:100%;border-collapse:collapse;font-size:.83rem}
 thead tr{background:var(--nd-bg-surface)}
 th{padding:.7rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--nd-text-faint);white-space:nowrap;border-bottom:1px solid var(--nd-border)}
@@ -3376,6 +3395,40 @@ function applyClaimFilters(){
 let _outcomeCache = {};
 let _l2f = {pay:'', cs:'', type:''};   // L2 dashboard filters
 function _setL2f(k,v){ _l2f[k]=v; _renderOutcome('l2claims'); }
+let _l2View = localStorage.getItem('l2_view') || 'table';   // table | board | cards
+function _setL2View(v){ _l2View=v; localStorage.setItem('l2_view',v); _renderOutcome('l2claims'); }
+// Canonical L2 pipeline (board columns), in order, with friendly labels.
+const _L2_STAGES = [
+  ['intimated','Intimated'],['assigned','Assigned'],['in_review','In review'],
+  ['in_negotiation','In negotiation'],['resolved_won','Won'],['resolved_lost','Lost'],
+  ['closed','Closed'],['withdrawn','Withdrawn']];
+function _claimStageLabel(s){ const f=_L2_STAGES.find(x=>x[0]===s); return f?f[1]:((s||'—').replace(/_/g,' ')); }
+function _l2CsBadge(c){
+  if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
+  return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
+}
+function _l2CardInner(c){
+  return `<div style="display:flex;justify-content:space-between;gap:.4rem"><strong style="font-size:.82rem">#${fmtClaimNum(c.claim_id)}</strong>`
+    + `<span style="font-size:.72rem;${_l2Eligible(c)?'color:var(--nd-success-text)':'color:var(--nd-warning-text)'}">${_l2Eligible(c)?'Paid':'Due'}</span></div>`
+    + `<div style="font-weight:600;font-size:.85rem;margin-top:.15rem">${esc(c.insured_name||'—')}</div>`
+    + `<div style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.claim_type||'—')} · ₹${fmt(c.disputed_amount||0)}</div>`
+    + `<div style="font-size:.72rem;margin-top:.25rem">${_l2CsBadge(c)}</div>`;
+}
+function _renderClaimBoard(rows){
+  const byStage = {};
+  rows.forEach(c=>{ (byStage[c.status]=byStage[c.status]||[]).push(c); });
+  // Show canonical stages that have rows, then any unknown statuses.
+  const order = _L2_STAGES.map(x=>x[0]).filter(s=>byStage[s]);
+  Object.keys(byStage).forEach(s=>{ if(!order.includes(s)) order.push(s); });
+  return '<div class="board">'+order.map(s=>{
+    const list=byStage[s]||[];
+    return `<details class="board-col" open><summary>${esc(_claimStageLabel(s))}<span class="vw-count">${list.length}</span></summary>`
+      + `<div class="board-cards">`+list.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')+`</div></details>`;
+  }).join('')+'</div>';
+}
+function _renderClaimCards(rows){
+  return '<div class="card-grid">'+rows.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')+'</div>';
+}
 // Eligible to send to ClaimShield = reviewed-GO (all rows here are) AND paid
 // (L2 fee paid, or review ₹499 paid, or subscriber) — mirrors the backend guard.
 function _l2Eligible(c){ return c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription'; }
@@ -3393,6 +3446,11 @@ async function loadOutcomeClaims(key, outcome, title, sub){
       <select onchange="_setL2f('pay',this.value)" style="min-width:118px"><option value="">L2 fee: All</option><option value="paid">Paid</option><option value="due">Due</option></select>
       <select onchange="_setL2f('cs',this.value)" style="min-width:150px"><option value="">ClaimShield: All</option><option value="sent">Sent</option><option value="notsent">Not sent</option></select>
       <select id="oc_l2claims_type" onchange="_setL2f('type',this.value)" style="min-width:110px"><option value="">Type: All</option></select>
+      <span class="vw-switch" style="margin-left:auto">
+        <button id="vw_table" onclick="_setL2View('table')">☰ Table</button>
+        <button id="vw_board" onclick="_setL2View('board')">▦ Board</button>
+        <button id="vw_cards" onclick="_setL2View('cards')">▤ Cards</button>
+      </span>
       `:''}
     </div>
     <div id="oc_${key}_wrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
@@ -3438,7 +3496,12 @@ function _renderOutcome(key){
     else if(_l2f.cs==='notsent') rows=rows.filter(c=>!c.claimshield_case_id);
     if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
   }
+  // Reflect the active view on the switcher (L2 only).
+  if(isL2){ ['table','board','cards'].forEach(v=>{ const b=document.getElementById('vw_'+v); if(b) b.classList.toggle('active', _l2View===v); }); }
   if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims match.</p></div>'; return; }
+  // Views engine (L2): Board / Cards alternatives to the table.
+  if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows); return; }
+  if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows); return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
     + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Subscriber / Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
