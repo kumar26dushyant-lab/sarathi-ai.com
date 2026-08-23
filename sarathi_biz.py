@@ -709,6 +709,38 @@ async def nidaan_branch_verify_otp(body: BranchVerifyReq, request: Request):
     return {"access_token": token, "branch_code": branch["branch_code"], "name": branch.get("name") or ""}
 
 
+@app.get("/nidaan/branch/api/features")
+async def nidaan_branch_features(request: Request, lang: str = "en"):
+    """Branch/affiliate 'what you can do here' list — bilingual, from the shared registry."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _branch_bearer(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_capabilities as caps
+    return {"lang": ("hi" if str(lang).lower().startswith("hi") else "en"),
+            "features": caps.features_for("branch", lang),
+            "speech": caps.speech_text_for("branch", lang)}
+
+
+@app.get("/nidaan/branch/api/features/audio")
+async def nidaan_branch_features_audio(request: Request, lang: str = "en"):
+    """Cached Gemini narration of the branch feature list (503 → browser voice fallback)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _branch_bearer(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    text = caps.speech_text_for("branch", lang)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.get("/nidaan/branch/api/me")
 async def nidaan_branch_me(request: Request):
     """Branch's own reconciliation summary (revenue, share %, payout, counts)."""
