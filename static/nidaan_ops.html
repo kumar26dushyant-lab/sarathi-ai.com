@@ -4271,6 +4271,16 @@ function _renderRadarMailboxes(){
       <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">2️⃣</div><div><b>Create an "App Password":</b> Google Account → Security → <b>App passwords</b> → create one. Google shows a <b>16-character code</b> — copy it. (This is a safe, revocable key — NOT the Gmail login password.)</div></div>
       <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">3️⃣</div><div><b>Add it here:</b> click <b>＋ Connect a customer mailbox</b> below → type the customer's name + their Gmail → paste the 16-character code → choose who handles this case → click <b>Test Connection</b> (should turn green) → <b>Save</b>.</div></div>
       <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.6rem .8rem;color:var(--nd-text-muted)">✅ Done. New emails from insurers/authorities will start showing in the <b>🚨 Radar</b> tab — automatically flagged and assigned to the handler you picked. Old mail is never pulled in; only new emails from now on.</div>
+
+      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">📧 Yahoo mailbox (two-way)</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">1️⃣</div><div>In the customer's Yahoo account: <b>Account Security</b> → turn on <b>2-Step Verification</b>.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">2️⃣</div><div>Same page → <b>Generate app password</b> → pick "Other app", name it "Nidaan" → copy the code Yahoo shows.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">3️⃣</div><div>Click <b>＋ Connect a customer mailbox</b> → enter the Yahoo address + the app password → open <b>⚙️ Advanced</b> and set <b>Mail server (IMAP)</b> to <code>imap.mail.yahoo.com</code> (port 993) → <b>Test Connection</b> → <b>Save</b>.</div></div>
+
+      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">➡️ Forwarding option (read-only) <span style="font-size:.72rem;color:var(--nd-warning-text)">— being added</span></div>
+      <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Lightest setup: the customer's mailbox simply <b>forwards a copy</b> of incoming mail to our updates inbox — no app password stored. You'll SEE the authority's emails, but to REPLY you open that mailbox. (Two-way reply from ops needs the app-password method above.)</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail:</b> Settings (⚙️) → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → enter our updates address → confirm the code Google sends → choose <b>keep Gmail's copy in the Inbox</b>.</div></div>
+      <div style="display:flex;gap:.7rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add our updates address → verify.</div></div>
     </div>
   </details>`;
   const addBtn = `<button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem;font-size:.95rem;padding:.6rem 1.1rem">＋ Connect a customer mailbox</button>`;
@@ -4324,7 +4334,7 @@ async function radarEdit(id){
       <label style="font-size:.82rem;font-weight:600">Also notify (optional pod)
         <div style="display:flex;flex-wrap:wrap;margin-top:.3rem;max-height:120px;overflow-y:auto;border:1px solid var(--nd-border);border-radius:8px;padding:.4rem .5rem">${podChecks||'<span style="color:var(--nd-text-muted);font-size:.78rem">No staff found</span>'}</div>${hint('Extra teammates who should also see this case and can act on it.')}</label>
       <details style="border:1px solid var(--nd-border);border-radius:8px;padding:.2rem .3rem">
-        <summary style="cursor:pointer;font-size:.78rem;color:var(--nd-text-muted);padding:.4rem .5rem;list-style:none">⚙️ Advanced (Gmail defaults — usually no change needed)</summary>
+        <summary style="cursor:pointer;font-size:.78rem;color:var(--nd-text-muted);padding:.4rem .5rem;list-style:none">⚙️ Advanced (Gmail = no change · Yahoo = set imap.mail.yahoo.com)</summary>
         <div style="display:flex;gap:.6rem;padding:.2rem .5rem .5rem">
           <label style="font-size:.78rem;flex:1">Mail server (IMAP)<input id="rmHost" value="${m?esc(m.imap_host||'imap.gmail.com'):'imap.gmail.com'}" style="${_rmInp()}"></label>
           <label style="font-size:.78rem;width:100px">Port<input id="rmPort" type="number" value="${m?(m.imap_port||993):993}" style="${_rmInp()}"></label>
