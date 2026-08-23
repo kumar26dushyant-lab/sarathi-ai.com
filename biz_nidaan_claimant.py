@@ -402,7 +402,7 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
                 y = margin
             if sub:
                 page.insert_text((margin, y), sub, fontsize=size,
-                                 fontname=("helvb" if bold else "helv"), color=(0.08, 0.13, 0.11))
+                                 fontname=("hebo" if bold else "helv"), color=(0.08, 0.13, 0.11))
             y += size + 5
     out = doc.tobytes()
     doc.close()
