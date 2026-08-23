@@ -1223,6 +1223,8 @@ async def nidaan_claim_me(request: Request):
         "claim": {
             "claim_id": ctx["claim_id"],
             "insured_name": ctx.get("insured_name") or "",
+            "insured_phone": ctx.get("insured_phone") or "",
+            "insured_email": ctx.get("insured_email") or "",
             "claim_type": ctx.get("claim_type") or "",
             "status_label": status_label,
             "disputed_amount": disputed,
@@ -1299,7 +1301,8 @@ async def nidaan_claim_consent(request: Request):
     if not ctx:
         raise HTTPException(status_code=401, detail="This link is invalid or has expired")
     ip = (request.client.host if request.client else "") or ""
-    res = await claimant.record_consent(ctx["claim_id"], ip=ip)
+    ua = request.headers.get("user-agent", "") or ""
+    res = await claimant.record_consent(ctx["claim_id"], ip=ip, user_agent=ua)
     return {"ok": True, "already": res.get("already", False)}
 
 
@@ -1326,6 +1329,20 @@ async def ops_claim_portal_ensure(claim_id: int, request: Request):
     await _ops_audit(request, "claimant_portal.link", "claim", str(claim_id), "portal link issued")
     url = f"{_nidaan_origin(request)}/nidaan/claim/magic?token={p.get('access_token')}"
     return {"ok": True, "link": url, "state": await claimant.portal_state(claim_id)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/consent-proof")
+async def ops_claim_consent_proof(claim_id: int, request: Request):
+    """Download the tamper-evident Digital Consent Record (PDF) for a claim. Super-admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    pdf = await claimant.build_consent_proof_pdf(claim_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="No recorded consent for this claim yet")
+    await _ops_audit(request, "claimant_consent.proof", "claim", str(claim_id), "consent proof downloaded")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="consent-claim-{claim_id}.pdf"'})
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/send-email")

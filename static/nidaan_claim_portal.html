@@ -73,6 +73,7 @@ var T = {
   en: {
     greet:"Hello", sub:"Here is the status of your insurance claim. We are handling it for you.",
     safe:"🔒 This is your private, secure page. Nothing here charges you. Read, and tap only when you are ready.",
+    profileTitle:"Your details", pName:"Name", pPhone:"Phone", pEmail:"Email",
     statusTitle:"Your claim status", claimRef:"Claim", disputed:"Disputed amount",
     feeTitle:"Our fee — please review & accept", feeIntro:"Nidaan The Legal Consultant LLP works purely on a success basis — a fee applies only when money is recovered from the insurer. This is separate from NidaanPartner.com.",
     recovered:"If recovered (example)", ourFee:"Our fee", gst:"GST", totalFee:"Total our fee", netYou:"You receive",
@@ -88,6 +89,7 @@ var T = {
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
     safe:"🔒 यह आपका निजी, सुरक्षित पेज है। यहाँ आपसे कोई पैसा नहीं लिया जाता। आराम से पढ़ें, और तैयार होने पर ही टैप करें।",
+    profileTitle:"आपकी जानकारी", pName:"नाम", pPhone:"फ़ोन", pEmail:"ईमेल",
     statusTitle:"आपके दावे की स्थिति", claimRef:"दावा", disputed:"विवादित राशि",
     feeTitle:"हमारी फीस — कृपया देखें और स्वीकार करें", feeIntro:"Nidaan The Legal Consultant LLP पूरी तरह सफलता के आधार पर काम करती है — फीस केवल तब लगती है जब बीमा कंपनी से राशि वसूल होती है। यह NidaanPartner.com से अलग है।",
     recovered:"वसूली होने पर (उदाहरण)", ourFee:"हमारी फीस", gst:"जीएसटी", totalFee:"कुल हमारी फीस", netYou:"आपको मिलेंगे",
@@ -146,6 +148,13 @@ function render(){
     '<div class="greet">'+esc(t("greet"))+', '+esc(c.insured_name||"")+' 👋<small>'+esc(t("sub"))+'</small></div>'+
     '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:.55rem .7rem;margin-top:.7rem;font-size:.82rem;line-height:1.5">'+esc(t("safe"))+'</div>';
 
+  var profileCard =
+    '<div class="card"><h2>'+esc(t("profileTitle"))+'</h2>'+
+      '<div class="row"><span class="lbl">'+esc(t("pName"))+'</span><span class="val">'+esc(c.insured_name||'—')+'</span></div>'+
+      (c.insured_phone?'<div class="row"><span class="lbl">'+esc(t("pPhone"))+'</span><span class="val">'+esc(c.insured_phone)+'</span></div>':'')+
+      (c.insured_email?'<div class="row"><span class="lbl">'+esc(t("pEmail"))+'</span><span class="val" style="font-size:.82rem">'+esc(c.insured_email)+'</span></div>':'')+
+    '</div>';
+
   var statusCard =
     '<div class="card"><h2>'+esc(t("statusTitle"))+'</h2>'+
       '<span class="status-pill">'+esc(c.status_label||"")+'</span>'+
@@ -199,7 +208,7 @@ function render(){
     '<input type="file" id="docFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadDocs(this)">'+
     '<button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById(\'docFiles\').click()">'+esc(t("upload"))+'</button></div>';
 
-  document.getElementById("content").innerHTML = statusCard + feeCard + tlCard + docsCard;
+  document.getElementById("content").innerHTML = profileCard + statusCard + feeCard + tlCard + docsCard;
   document.getElementById("reassure").textContent = t("reassure");
   maybeShowUpdate(tl);
 }

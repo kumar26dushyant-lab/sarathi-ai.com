@@ -4909,10 +4909,23 @@ async function loadClaimPortalCard(claimId, freshLink){
   const linkHtml = freshLink
     ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the claimant (auto-email coming). Opening it logs a first-open.</div></div>`
     : '';
-  const btn = canIssue
-    ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn-sm btn-primary" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button><button class="btn-sm btn-ghost" onclick="emailClaimPortalLink(${claimId},this)" title="Email the dashboard link to the policyholder now">✉️ Email to claimant</button></div>`
+  const proofBtn = (s.consent_accepted && _role==='super_admin')
+    ? `<button class="btn-sm btn-ghost" onclick="downloadConsentProof(${claimId},this)" title="Download the tamper-evident Digital Consent Record (PDF)">📄 Consent proof</button>` : '';
+  const btn = (canIssue || proofBtn)
+    ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap">${canIssue?`<button class="btn-sm btn-primary" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button><button class="btn-sm btn-ghost" onclick="emailClaimPortalLink(${claimId},this)" title="Email the dashboard link to the policyholder now">✉️ Email to claimant</button>`:''}${proofBtn}</div>`
     : '';
   box.innerHTML = linkHtml + `<div style="margin-bottom:.5rem">${statusLine}${sentBadge}</div>` + btn;
+}
+async function downloadConsentProof(claimId, btn){
+  if(btn){ btn.disabled=true; }
+  try{
+    const r = await fetch('/nidaan/ops/api/claims/'+claimId+'/consent-proof', { headers:{'Authorization':'Bearer '+_token} });
+    if(!r.ok){ const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'No consent record','error'); return; }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a'); a.href=url; a.download='consent-claim-'+claimId+'.pdf';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(e){ ndUI.toast('Download failed','error'); }
+  finally{ if(btn) btn.disabled=false; }
 }
 async function issueClaimPortalLink(claimId){
   let d = null;

@@ -154,24 +154,40 @@ async def mark_link_sent(claim_id: int) -> None:
         await conn.commit()
 
 
-async def record_consent(claim_id: int, ip: str = "") -> dict:
-    """Digital acceptance of the success-fee terms. Snapshots the % + GST + T&C version that apply
-    RIGHT NOW so a later config change never alters an accepted agreement (grandfathered).
+async def record_consent(claim_id: int, ip: str = "", user_agent: str = "") -> dict:
+    """Digital acceptance of the success-fee terms. Snapshots the % + GST + T&C VERSION and the exact
+    TERMS TEXT (EN+HI) that applied RIGHT NOW, plus the device (user-agent), the claimant's name, the
+    IP and a SHA-256 integrity hash over the whole record — so a later config change never alters an
+    accepted agreement (grandfathered) and the downloadable proof is tamper-evident.
     Idempotent: if already accepted, returns the existing record unchanged."""
+    import hashlib
+    from datetime import datetime, timezone, timedelta
     existing = await get_portal(claim_id)
     if existing and existing.get("consent_accepted_at"):
         return {"ok": True, "already": True, "portal": existing}
     cfg = await fee_config()
+    contact = await _claim_contact(claim_id)
+    name = (contact or {}).get("insured_name") or ""
+    # The exact wording shown to the claimant (both languages), pinned for the record.
+    snapshot = (("ENGLISH\n" + (cfg.get("terms_html") or "")).strip()
+                + "\n\n————————————————\n\nहिंदी\n" + (cfg.get("terms_html_hi") or "")).strip()
+    ist = timezone(timedelta(hours=5, minutes=30))
+    accepted_at = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
+    canonical = "|".join([str(claim_id), name, cfg["terms_version"], str(cfg["fee_pct"]),
+                          str(cfg["gst_pct"]), accepted_at, (ip or ""), snapshot])
+    chash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     await ensure_portal(claim_id, with_token=False)  # make sure a row exists
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
-            "UPDATE nidaan_claimant_portal SET consent_accepted_at=CURRENT_TIMESTAMP, "
-            "consent_terms_version=?, consent_fee_pct=?, consent_gst_pct=?, consent_ip=? "
+            "UPDATE nidaan_claimant_portal SET consent_accepted_at=?, "
+            "consent_terms_version=?, consent_fee_pct=?, consent_gst_pct=?, consent_ip=?, "
+            "consent_terms_snapshot=?, consent_user_agent=?, consent_name=?, consent_hash=? "
             "WHERE claim_id=?",
-            (cfg["terms_version"], cfg["fee_pct"], cfg["gst_pct"], (ip or "")[:64], claim_id))
+            (accepted_at, cfg["terms_version"], cfg["fee_pct"], cfg["gst_pct"], (ip or "")[:64],
+             snapshot, (user_agent or "")[:400], name[:120], chash, claim_id))
         await conn.commit()
-    logger.info("Claimant consent recorded: claim=%s fee=%s%% gst=%s%% ver=%s",
-                claim_id, cfg["fee_pct"], cfg["gst_pct"], cfg["terms_version"])
+    logger.info("Claimant consent recorded: claim=%s fee=%s%% gst=%s%% ver=%s hash=%s",
+                claim_id, cfg["fee_pct"], cfg["gst_pct"], cfg["terms_version"], chash[:12])
     return {"ok": True, "already": False, "portal": await get_portal(claim_id)}
 
 
@@ -308,6 +324,89 @@ async def on_claim_reached_l2(claim_id: int) -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("on_claim_reached_l2 failed claim=%s: %s", claim_id, e)
         return {"ok": False, "reason": "error"}
+
+
+def _wrap_lines(text: str, maxchars: int = 92) -> list:
+    out = []
+    for para in (text or "").split("\n"):
+        if not para.strip():
+            out.append("")
+            continue
+        line = ""
+        for w in para.split(" "):
+            if len(line) + len(w) + 1 <= maxchars:
+                line = (line + " " + w).strip()
+            else:
+                out.append(line)
+                line = w
+        out.append(line)
+    return out
+
+
+async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
+    """A downloadable, tamper-evident PDF of the claimant's digital acceptance — for the super-admin
+    to retain as proof (auditable before authorities). English layout (fitz core fonts don't render
+    Devanagari); the FULL bilingual terms text is covered by the integrity hash + kept in the DB.
+    Returns None if there's no recorded consent."""
+    import fitz  # PyMuPDF
+    p = await get_portal(claim_id)
+    if not p or not p.get("consent_accepted_at"):
+        return None
+    contact = await _claim_contact(claim_id) or {}
+    snap = p.get("consent_terms_snapshot") or ""
+    en_terms = snap.split("————")[0].replace("ENGLISH", "", 1).strip() if snap else ""
+    from datetime import datetime, timezone, timedelta
+    gen_at = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S IST")
+    gst = p.get("consent_gst_pct") or 0
+    lines = []
+    lines.append(("DIGITAL CONSENT RECORD", 15, True))
+    lines.append(("Nidaan The Legal Consultant LLP", 11, True))
+    lines.append(("", 10, False))
+    lines.append(("Electronically generated record of the claimant's digital acceptance of the "
+                  "engagement & success-fee terms, produced by NidaanPartner.com.", 9, False))
+    lines.append(("", 10, False))
+    lines.append(("CLAIM", 11, True))
+    lines.append((f"Claim ID: #{claim_id}", 10, False))
+    lines.append((f"Claimant name: {contact.get('insured_name') or p.get('consent_name') or '-'}", 10, False))
+    lines.append((f"Phone: {contact.get('insured_phone') or '-'}    Email: {contact.get('insured_email') or '-'}", 10, False))
+    lines.append(("", 10, False))
+    lines.append(("ACCEPTANCE", 11, True))
+    lines.append((f"Accepted (IST): {p.get('consent_accepted_at')}", 10, False))
+    lines.append((f"Terms version: {p.get('consent_terms_version') or '-'}", 10, False))
+    lines.append((f"Success fee: {p.get('consent_fee_pct')}% of amount recovered"
+                  + (f" + {gst}% GST" if gst else "") + " (payable to Nidaan The Legal Consultant LLP)", 10, False))
+    lines.append((f"IP address: {p.get('consent_ip') or '-'}", 10, False))
+    lines.append((f"Device: {p.get('consent_user_agent') or '-'}", 8, False))
+    lines.append((f"Integrity hash (SHA-256): {p.get('consent_hash') or '-'}", 8, False))
+    lines.append(("", 10, False))
+    lines.append(("TERMS AS PRESENTED AND ACCEPTED", 11, True))
+    lines.append(("(English text of record. The terms were also shown in Hindi on screen; the full "
+                  "bilingual text is covered by the integrity hash above and retained on file.)", 8, False))
+    lines.append(("", 6, False))
+    for ln in _wrap_lines(en_terms, 96):
+        lines.append((ln, 10, False))
+    lines.append(("", 10, False))
+    lines.append(("This record and its SHA-256 hash are retained by NidaanPartner; any change to the "
+                  "recorded fields would change the hash. A certificate under Section 65B of the Indian "
+                  "Evidence Act may be issued on request for evidentiary use.", 8, False))
+    lines.append((f"Generated: {gen_at}", 8, False))
+
+    doc = fitz.open()
+    W, H, margin = 595, 842, 54
+    page = doc.new_page(width=W, height=H)
+    y = margin
+    for text, size, bold in lines:
+        for sub in (_wrap_lines(text, 96) if text else [""]):
+            if y > H - margin:
+                page = doc.new_page(width=W, height=H)
+                y = margin
+            if sub:
+                page.insert_text((margin, y), sub, fontsize=size,
+                                 fontname=("helvb" if bold else "helv"), color=(0.08, 0.13, 0.11))
+            y += size + 5
+    out = doc.tobytes()
+    doc.close()
+    return out
 
 
 async def portal_state(claim_id: int) -> dict:

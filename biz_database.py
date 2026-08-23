@@ -2106,6 +2106,20 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN consent_ack_at TIMESTAMP")
         except Exception:
             pass
+        # Claimant Portal — legally-robust consent proof: snapshot the EXACT terms text agreed, the
+        # device (user-agent), the claimant's confirmed name, and an integrity hash over the record
+        # so the downloadable proof is tamper-evident (admissibility is counsel's call; we capture
+        # the full audit trail an electronic-record certificate would rely on).
+        for _cp_sql in (
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_terms_snapshot TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_user_agent TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_hash TEXT DEFAULT ''",
+        ):
+            try:
+                await conn.execute(_cp_sql)
+            except Exception:
+                pass
         # Retail chat v2 — staff live reply: who sent a staff message.
         try:
             await conn.execute("ALTER TABLE retail_chat_messages ADD COLUMN staff_id INTEGER")
