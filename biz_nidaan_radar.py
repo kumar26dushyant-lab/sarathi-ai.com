@@ -181,6 +181,109 @@ async def set_sync_status(mailbox_id: int, status: str, error: str = "") -> None
         await conn.commit()
 
 
+# A broken mailbox = we silently stop seeing that customer's authority mail. Alert super-admins after
+# this many consecutive failed polls (re-alert at most daily until it recovers).
+FAIL_ALERT_THRESHOLD = 3
+
+
+async def _record_poll_failure(mailbox_id: int, status: str) -> None:
+    """Record a failed poll, bump the consecutive-failure counter, and alert super-admins (all
+    channels) once it crosses the threshold — so a dead mailbox never silently hides authority mail."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute(
+            "UPDATE nidaan_radar_mailboxes SET last_sync_status=?, last_sync_error=?, "
+            "last_synced_at=CURRENT_TIMESTAMP, fail_count=COALESCE(fail_count,0)+1 WHERE mailbox_id=?",
+            (status.split(":")[0][:40], status[:300], mailbox_id))
+        await conn.commit()
+        row = await (await conn.execute(
+            "SELECT label, email_address, fail_count, fail_alert_at FROM nidaan_radar_mailboxes "
+            "WHERE mailbox_id=?", (mailbox_id,))).fetchone()
+    if not row or (row["fail_count"] or 0) < FAIL_ALERT_THRESHOLD:
+        return
+    # Re-alert at most once per 24h until recovery (fail_alert_at is cleared on the next OK poll).
+    import datetime as _dt
+    recent = False
+    if row["fail_alert_at"]:
+        try:
+            last = _dt.datetime.fromisoformat(str(row["fail_alert_at"]).replace("Z", ""))
+            recent = (_dt.datetime.utcnow() - last).total_seconds() < 86400
+        except Exception:
+            recent = False
+    if recent:
+        return
+    await _alert_mailbox_down(mailbox_id, dict(row), status)
+
+
+async def _alert_mailbox_down(mailbox_id: int, row: dict, status: str) -> None:
+    try:
+        import biz_nidaan_notifications as _notif
+        sa = await _notif._super_admin_staff()
+        ids = [s["staff_id"] for s in sa]
+        if not ids:
+            return
+        label = row.get("label") or _mask_email(row.get("email_address", "")) or f"#{mailbox_id}"
+        subject = "📨 Email Updates: a customer mailbox is not syncing"
+        body = (f"The mailbox “{label}” has failed {row.get('fail_count')} checks in a row "
+                f"({(status or '').split(':')[0]}). Authority emails for this customer may be missed. "
+                f"Please re-check its app password in Email Updates → Mailboxes.")
+        await _notif.notify_staff_inapp(ids, subject, body, event_key="radar.mailbox_down", email=True)
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE nidaan_radar_mailboxes SET fail_alert_at=CURRENT_TIMESTAMP WHERE mailbox_id=?",
+                (mailbox_id,))
+            await conn.commit()
+        logger.info("Radar mailbox-down alert sent: mailbox=%s label=%s", mailbox_id, label)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("radar mailbox-down alert failed for %s: %s", mailbox_id, e)
+
+
+async def keepalive_sweep(max_idle_days: int = 20) -> int:
+    """Keep configured mailboxes ALIVE against provider inactivity policies: for each active
+    app-password mailbox not touched in `max_idle_days`, do a light IMAP login (the activity signal
+    Google/Yahoo count) and stamp last_keepalive_at. Healthy mailboxes (polled every ~15 min) never
+    qualify, so this only re-pings dormant/paused ones — and naturally surfaces broken creds too.
+    (Forwarding-only mailboxes have no stored password → we can't keep those alive; the customer must.)"""
+    import datetime as _dt
+    cutoff = (_dt.datetime.utcnow() - _dt.timedelta(days=max_idle_days))
+    done = 0
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT mailbox_id, imap_host, imap_port, email_address, enc_password, "
+            "last_synced_at, last_keepalive_at FROM nidaan_radar_mailboxes "
+            "WHERE is_active=1 AND COALESCE(enc_password,'')<>''")).fetchall()
+    for r in rows:
+        # Skip if polled or kept-alive recently.
+        def _recent(ts):
+            if not ts:
+                return False
+            try:
+                return _dt.datetime.fromisoformat(str(ts).replace("Z", "")) > cutoff
+            except Exception:
+                return False
+        if _recent(r["last_synced_at"]) or _recent(r["last_keepalive_at"]):
+            continue
+        try:
+            pw = decrypt_secret(r["enc_password"] or "")
+        except Exception:
+            continue
+        ok, _msg = await asyncio.to_thread(_imap_login_test, r["imap_host"] or DEFAULT_IMAP_HOST,
+                                           int(r["imap_port"] or DEFAULT_IMAP_PORT),
+                                           r["email_address"], pw)
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE nidaan_radar_mailboxes SET last_keepalive_at=CURRENT_TIMESTAMP WHERE mailbox_id=?",
+                (r["mailbox_id"],))
+            await conn.commit()
+        if not ok:
+            await _record_poll_failure(r["mailbox_id"], "keepalive_login_failed")
+        done += 1
+    if done:
+        logger.info("Radar keepalive: pinged %d dormant mailbox(es)", done)
+    return done
+
+
 async def test_mailbox(mailbox_id: int) -> tuple[bool, str]:
     """Test a STORED mailbox (decrypts its secret in-memory only), and record the result."""
     mb = await get_mailbox(mailbox_id, with_secret=True)
@@ -353,7 +456,7 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
         _imap_fetch_new, mb.get("imap_host"), mb.get("imap_port"),
         mb.get("email_address"), pw, int(mb.get("last_uid") or 0), 25)
     if status != "ok":
-        await set_sync_status(mid, status.split(":")[0], status)
+        await _record_poll_failure(mid, status)
         return 0
     created = 0
     pending_tasks = []   # (item_id, flag, subject, summary, deeplink) for red/amber → Tasks module
@@ -382,7 +485,8 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
                 pass
         await conn.execute(
             "UPDATE nidaan_radar_mailboxes SET last_uid=?, last_sync_status='ok', "
-            "last_sync_error='', last_synced_at=CURRENT_TIMESTAMP WHERE mailbox_id=?",
+            "last_sync_error='', last_synced_at=CURRENT_TIMESTAMP, fail_count=0, fail_alert_at=NULL "
+            "WHERE mailbox_id=?",
             (high_uid, mid))
         await conn.commit()
     # Create/append Tasks OUTSIDE the write connection (fresh conns + notifications). Sequential so

@@ -2106,6 +2106,18 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_radar_mailboxes ADD COLUMN consent_ack_at TIMESTAMP")
         except Exception:
             pass
+        # Radar sustainability — reliability: consecutive-failure counter + last alert time (so a
+        # broken mailbox is surfaced, never silently missing authority mail) + keep-alive stamp
+        # (periodic login keeps the account active against provider inactivity policies).
+        for _rs_sql in (
+            "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN fail_count INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN fail_alert_at TIMESTAMP",
+            "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN last_keepalive_at TIMESTAMP",
+        ):
+            try:
+                await conn.execute(_rs_sql)
+            except Exception:
+                pass
         # Claimant Portal — legally-robust consent proof: snapshot the EXACT terms text agreed, the
         # device (user-agent), the claimant's confirmed name, and an integrity hash over the record
         # so the downloadable proof is tamper-evident (admissibility is counsel's call; we capture

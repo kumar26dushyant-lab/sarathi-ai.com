@@ -24094,6 +24094,20 @@ async def main():
                 await asyncio.sleep(6 * 3600)  # every 6h
         asyncio.create_task(radar_silence_loop())
 
+        # Step 6g1d: Email Radar — keep-alive: light IMAP login on dormant mailboxes so provider
+        # inactivity policies never deactivate a configured account. Worker-only, daily.
+        async def radar_keepalive_loop():
+            await asyncio.sleep(2400)
+            while True:
+                try:
+                    await radar.keepalive_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar keepalive error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily (only touches mailboxes idle >20d)
+        asyncio.create_task(radar_keepalive_loop())
+
         # Step 6g2: Support SLA — escalate to super-admins any human-requested support chat left
         # unanswered > 30 min during office hours (dashboard + push + email + Telegram). Idempotent
         # via nidaan_support_threads.sa_escalated_at. Worker-only singleton, every 5 min.
