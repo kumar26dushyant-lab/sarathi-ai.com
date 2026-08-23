@@ -309,6 +309,68 @@ CAPABILITIES: list[dict] = [
                "u": "एक बार तथ्य बदलें — वेबसाइट और चैट असिस्टेंट दोनों अपडेट। सक्सेस-फीस शर्तें यहीं तय करें।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
+    # ══ SUBSCRIBER / ADVISOR DASHBOARD (nidaanpartner.com/dashboard) ══════════
+    # audience="subscriber" → shown on the advisor's own dashboard, NOT the staff ops guide.
+    {
+        "id": "sub_raise_claim", "audience": ["subscriber"],
+        "en": {"t": "Raise a claim for your client",
+               "d": "Submit a rejected/short-settled insurance claim to our legal team.",
+               "u": "Client's claim was denied? Enter the details here and we take it forward."},
+        "hi": {"t": "अपने ग्राहक का दावा दर्ज करें",
+               "d": "अस्वीकृत/कम-निपटाए बीमा दावे को हमारी कानूनी टीम को भेजें।",
+               "u": "ग्राहक का दावा अस्वीकार हुआ? यहाँ विवरण भरें, आगे हम संभालते हैं।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "sub_track_status", "audience": ["subscriber"],
+        "en": {"t": "Track claim status live",
+               "d": "See each claim's current stage and history, updated as we work.",
+               "u": "Open a claim any time to see exactly where it has reached."},
+        "hi": {"t": "दावे की स्थिति लाइव देखें",
+               "d": "हर दावे का मौजूदा चरण व इतिहास देखें, जैसे-जैसे हम काम करते हैं।",
+               "u": "किसी भी समय दावा खोलकर देखें कि वह कहाँ तक पहुँचा।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "sub_docs", "audience": ["subscriber"],
+        "en": {"t": "Share documents",
+               "d": "Upload policy, rejection letter, bills and reports for a claim.",
+               "u": "Snap a photo or attach a PDF — our team gets it instantly."},
+        "hi": {"t": "दस्तावेज़ साझा करें",
+               "d": "किसी दावे के लिए पॉलिसी, रिजेक्शन लेटर, बिल व रिपोर्ट अपलोड करें।",
+               "u": "फ़ोटो खींचें या PDF लगाएँ — हमारी टीम को तुरंत मिल जाता है।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "sub_review", "audience": ["subscriber"],
+        "en": {"t": "Get a legal assessment (₹499)",
+               "d": "Our legal team reviews whether a claim can be challenged and tells you.",
+               "u": "Unsure if a rejection is worth fighting? Get a paid expert review first."},
+        "hi": {"t": "कानूनी आकलन पाएँ (₹499)",
+               "d": "हमारी कानूनी टीम बताती है कि दावे को चुनौती दी जा सकती है या नहीं।",
+               "u": "पक्का नहीं कि लड़ना ठीक है? पहले विशेषज्ञ समीक्षा लें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "sub_messages", "audience": ["subscriber"],
+        "en": {"t": "Message our team",
+               "d": "Chat with our associates on any claim — replies come to your dashboard.",
+               "u": "Have a question on a case? Send a message right on that claim."},
+        "hi": {"t": "हमारी टीम को संदेश भेजें",
+               "d": "किसी भी दावे पर हमारे सहयोगियों से बात करें — जवाब डैशबोर्ड पर आते हैं।",
+               "u": "किसी केस पर सवाल? उसी दावे पर संदेश भेजें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "sub_notifications", "audience": ["subscriber"],
+        "en": {"t": "Updates on every channel",
+               "d": "Get claim updates by dashboard, email and WhatsApp — never miss a step.",
+               "u": "We reach out the moment something needs you or a claim moves."},
+        "hi": {"t": "हर चैनल पर अपडेट",
+               "d": "दावे के अपडेट डैशबोर्ड, ईमेल व WhatsApp पर पाएँ — कोई कदम न छूटे।",
+               "u": "जैसे ही कुछ ज़रूरी हो या दावा आगे बढ़े, हम आपको बताते हैं।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
 ]
 
 
@@ -316,10 +378,46 @@ def _allowed(role: str, cap: dict) -> bool:
     return ROLE_RANK.get(role, -1) >= ROLE_RANK.get(cap.get("min_role", "team_member"), 99)
 
 
-def build_guide(role: str, lang: str = "en") -> dict:
-    """Role-filtered guide, split by WHERE each thing can be done."""
+def _aud(cap: dict) -> list:
+    """Which dashboards a capability belongs to. Defaults to staff/ops (the original audience)."""
+    return cap.get("audience", ["staff"])
+
+
+def features_for(audience: str, lang: str = "en", plan: str = "") -> list:
+    """Flat feature list for a NON-staff dashboard (subscriber/branch/claimant), plan-gated.
+    Each entry: {id, title, detail, use}. `plan` filters entries that declare a `plans` list."""
     lang = "hi" if str(lang).lower().startswith("hi") else "en"
-    caps = [c for c in CAPABILITIES if _allowed(role, c)]
+    out = []
+    for c in CAPABILITIES:
+        if audience not in _aud(c):
+            continue
+        plans = c.get("plans")
+        if plans and plan and plan not in plans:
+            continue
+        body = c.get(lang) or c["en"]
+        out.append({"id": c["id"], "title": body["t"], "detail": body["d"], "use": body.get("u", "")})
+    return out
+
+
+def speech_text_for(audience: str, lang: str = "en", plan: str = "") -> str:
+    """Narration for a non-staff dashboard's feature list (same entries as features_for)."""
+    feats = features_for(audience, lang, plan)
+    hi = str(lang).lower().startswith("hi")
+    if hi:
+        parts = ["नमस्ते। यहाँ बताया गया है कि आप अपने डैशबोर्ड पर क्या-क्या कर सकते हैं।"]
+        parts += [f"{i}. {c['title']}। {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(feats, 1)]
+        parts.append("कोई भी सवाल हो तो हमारी टीम से संपर्क करें।")
+    else:
+        parts = ["Hello. Here is what you can do on your dashboard."]
+        parts += [f"{i}. {c['title']}. {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(feats, 1)]
+        parts.append("If you have any question, contact our team.")
+    return " ".join(parts)
+
+
+def build_guide(role: str, lang: str = "en") -> dict:
+    """Role-filtered STAFF guide, split by WHERE each thing can be done."""
+    lang = "hi" if str(lang).lower().startswith("hi") else "en"
+    caps = [c for c in CAPABILITIES if "staff" in _aud(c) and _allowed(role, c)]
     def _fmt(c):
         body = c.get(lang) or c["en"]
         return {"id": c["id"], "title": body["t"], "detail": body["d"], "use": body.get("u", "")}

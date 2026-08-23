@@ -367,6 +367,9 @@
     <button class="tab-btn" onclick="showTab('settings')" data-requires-sub="true">
       <span class="en">⚙️ Settings</span><span class="hi">⚙️ सेटिंग्स</span>
     </button>
+    <button class="tab-btn" onclick="showTab('features')">
+      <span class="en">✨ Features</span><span class="hi">✨ सुविधाएँ</span>
+    </button>
   </div>
 
   <!-- ── DASHBOARD TAB ─────────────────────────────────────────────── -->
@@ -738,6 +741,19 @@
     </div>
 
   </div><!-- /tab-settings -->
+
+  <!-- ── FEATURES TAB (what you can do here) ───────────────────────────── -->
+  <div class="tab-panel" id="tab-features">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
+        <div style="font-weight:800;font-size:1.05rem"><span class="en">✨ What you can do here</span><span class="hi">✨ आप यहाँ क्या कर सकते हैं</span></div>
+        <button id="featPlayBtn" class="btn-sm btn-primary" onclick="featuresSpeak()">🔊 <span class="en">Listen</span><span class="hi">सुनें</span></button>
+      </div>
+      <div style="font-size:.85rem;color:var(--nd-text-muted);margin-bottom:.6rem"><span class="en">Your dashboard features, with a simple example for each.</span><span class="hi">आपके डैशबोर्ड की सुविधाएँ, हर एक के लिए एक आसान उदाहरण।</span></div>
+      <div id="featList"><div style="color:var(--nd-text-faint);padding:1rem 0">…</div></div>
+      <div id="featAudioNote" style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.4rem"></div>
+    </div>
+  </div><!-- /tab-features -->
 
 </div><!-- /container -->
 
@@ -1964,7 +1980,7 @@ async function openSarathiCRM(btn) {
 function showTab(id) {
   // Gate: non-subscribers cannot access tabs marked data-requires-sub.
   // EXCEPT active ₹499 (retail) users, who get their account Profile/Settings.
-  if (!_isSubscribed && !window._leadUserAccess && id !== 'dashboard') {
+  if (!_isSubscribed && !window._leadUserAccess && id !== 'dashboard' && id !== 'features') {
     // Show paywall overlay inside the requested tab panel instead of real content
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1996,6 +2012,76 @@ function showTab(id) {
       b.classList.add('active');
   });
   if (id === 'profile') loadProfile();
+  if (id === 'features') loadFeaturesTab();
+}
+
+// ── Features tab: bilingual "what you can do", with cached Gemini Listen ──────
+let _featLoaded = false, _featAudio = null;
+async function loadFeaturesTab(){
+  if (_featLoaded) return;
+  const box = document.getElementById('featList'); if (!box) return;
+  try {
+    const [en, hi] = await Promise.all([
+      api('/features?lang=en').then(r=>r.ok?r.json():{features:[]}),
+      api('/features?lang=hi').then(r=>r.ok?r.json():{features:[]}),
+    ]);
+    const byId = {}; (hi.features||[]).forEach(f=>{ byId[f.id]=f; });
+    box.innerHTML = (en.features||[]).map(f=>{
+      const h = byId[f.id] || f;
+      return `<div style="display:flex;gap:.6rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--nd-border)">
+        <div style="color:var(--nd-accent,#0d7a68);font-size:1rem;line-height:1.3">●</div>
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:.95rem"><span class="en">${_esc(f.title)}</span><span class="hi">${_esc(h.title)}</span></div>
+          <div style="font-size:.84rem;color:var(--nd-text-secondary);margin-top:.1rem"><span class="en">${_esc(f.detail)}</span><span class="hi">${_esc(h.detail)}</span></div>
+          ${(f.use||h.use)?`<div style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"><span class="en"><b>Example:</b> ${_esc(f.use)}</span><span class="hi"><b>उदाहरण:</b> ${_esc(h.use)}</span></div>`:''}
+        </div></div>`;
+    }).join('') || '<div style="color:var(--nd-text-faint)">—</div>';
+    _featLoaded = true;
+  } catch(e){ box.innerHTML = '<div style="color:var(--nd-text-faint)">Could not load.</div>'; }
+}
+function _esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _featStop(){
+  try { if (_featAudio){ _featAudio.pause(); if(_featAudio.src) URL.revokeObjectURL(_featAudio.src); } } catch(e){}
+  _featAudio = null;
+  try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch(e){}
+  const b=document.getElementById('featPlayBtn'); if(b) b.innerHTML = '🔊 <span class="en">Listen</span><span class="hi">सुनें</span>';
+}
+async function featuresSpeak(){
+  const isHi = document.body.classList.contains('hi');
+  const lang = isHi ? 'hi' : 'en';
+  const note = document.getElementById('featAudioNote');
+  const btn = document.getElementById('featPlayBtn');
+  if (_featAudio || (window.speechSynthesis && window.speechSynthesis.speaking)) { _featStop(); return; }
+  if (note) note.textContent = isHi ? 'आवाज़ तैयार हो रही है…' : 'Preparing voice…';
+  // Try cached Gemini voice; fall back to the device's own voice.
+  try {
+    const token = localStorage.getItem('nidaan_token');
+    const r = await fetch('/nidaan/api/features/audio?lang='+lang, { headers:{ 'Authorization':'Bearer '+token }});
+    if (r.ok) {
+      _featAudio = new Audio(URL.createObjectURL(await r.blob()));
+      _featAudio.onended = _featStop;
+      _featAudio.onerror = () => { _featStop(); _featSpeakBrowser(lang); };
+      if (btn) btn.innerHTML = '⏸ <span class="en">Stop</span><span class="hi">रोकें</span>';
+      if (note) note.textContent = isHi ? '🔊 उच्च-गुणवत्ता आवाज़' : '🔊 High-quality voice';
+      _featAudio.play().catch(()=>{ _featStop(); _featSpeakBrowser(lang); });
+      return;
+    }
+  } catch(e){}
+  _featSpeakBrowser(lang);
+}
+async function _featSpeakBrowser(lang){
+  const note = document.getElementById('featAudioNote');
+  if (!('speechSynthesis' in window)) { if(note) note.textContent=''; return; }
+  let speech = '';
+  try { const d = await api('/features?lang='+lang).then(r=>r.json()); speech = d.speech||''; } catch(e){}
+  if (!speech) { _featStop(); return; }
+  const btn = document.getElementById('featPlayBtn');
+  const u = new SpeechSynthesisUtterance(speech);
+  u.lang = (lang==='hi') ? 'hi-IN' : 'en-IN'; u.rate = 0.95;
+  u.onend = _featStop; u.onerror = _featStop;
+  if (btn) btn.innerHTML = '⏸ <span class="en">Stop</span><span class="hi">रोकें</span>';
+  if (note) note.textContent = '';
+  try { window.speechSynthesis.speak(u); } catch(e){ _featStop(); }
 }
 
 // ── Subscribe modal ──────────────────────────────────────────────────────────

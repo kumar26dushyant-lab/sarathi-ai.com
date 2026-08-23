@@ -2498,6 +2498,47 @@ async def nidaan_api_me(request: Request):
     }
 
 
+@app.get("/nidaan/api/features")
+async def nidaan_api_features(request: Request, lang: str = "en"):
+    """The advisor's own 'what you can do here' list — bilingual, from the shared feature registry,
+    scoped to the subscriber audience (+ plan). Powers the dashboard's Features section + Listen."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    import biz_nidaan_capabilities as caps
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = (sub.get("plan") if sub else "") or ""
+    return {"lang": ("hi" if str(lang).lower().startswith("hi") else "en"),
+            "features": caps.features_for("subscriber", lang, plan),
+            "speech": caps.speech_text_for("subscriber", lang, plan)}
+
+
+@app.get("/nidaan/api/features/audio")
+async def nidaan_api_features_audio(request: Request, lang: str = "en"):
+    """Cached Gemini narration of the advisor's feature list (free replays; 503 → browser voice)."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = (sub.get("plan") if sub else "") or ""
+    text = caps.speech_text_for("subscriber", lang, plan)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.get("/nidaan/api/claims")
 async def nidaan_api_claims(request: Request, status: Optional[str] = None, limit: int = 50):
     payload = _nidaan_bearer(request)
