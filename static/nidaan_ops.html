@@ -94,6 +94,8 @@ details>summary{cursor:pointer}
 .board-card{background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:10px;padding:.55rem .65rem;cursor:pointer}
 .board-card:hover{border-color:var(--nd-accent,#0d7a68)}
 .vw-count{background:var(--nd-bg-elev);border-radius:20px;padding:.05rem .5rem;font-size:.72rem;color:var(--nd-text-muted)}
+.vw-chip{display:inline-flex;align-items:center;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:20px;padding:.25rem .7rem;font-size:.78rem;cursor:pointer;color:var(--nd-text-secondary)}
+.vw-chip.active{background:var(--nd-accent,#0d7a68);color:#fff;border-color:var(--nd-accent,#0d7a68);font-weight:700}
 .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem}
 @media(max-width:640px){
   .board{flex-direction:column;overflow-x:visible}
@@ -3397,6 +3399,40 @@ let _l2f = {pay:'', cs:'', type:''};   // L2 dashboard filters
 function _setL2f(k,v){ _l2f[k]=v; _renderOutcome('l2claims'); }
 let _l2View = localStorage.getItem('l2_view') || 'table';   // table | board | cards
 function _setL2View(v){ _l2View=v; localStorage.setItem('l2_view',v); _renderOutcome('l2claims'); }
+// ── Saved Views: named presets of (view + filters + search), per-staff (localStorage) ──
+function _l2Views(){ try{ return JSON.parse(localStorage.getItem('l2_saved_views')||'[]'); }catch(e){ return []; } }
+function _l2SaveView(){
+  const name=(prompt(_guideLang==='hi'?'इस व्यू को नाम दें (जैसे "बिना भेजे · भुगतान")':'Name this view (e.g. "Unsent · paid")')||'').trim();
+  if(!name) return;
+  const q=((document.getElementById('oc_l2claims_s')||{}).value)||'';
+  const views=_l2Views();
+  views.push({id:'v'+Date.now(), name:name.slice(0,40), view:_l2View, pay:_l2f.pay, cs:_l2f.cs, type:_l2f.type, q});
+  localStorage.setItem('l2_saved_views', JSON.stringify(views));
+  _renderL2Views();
+  ndUI.toast('View saved','success');
+}
+function _l2ApplyView(id){
+  const v=_l2Views().find(x=>x.id===id); if(!v) return;
+  _l2f={pay:v.pay||'', cs:v.cs||'', type:v.type||''};
+  _l2View=v.view||'table'; localStorage.setItem('l2_view',_l2View);
+  const s=document.getElementById('oc_l2claims_s'); if(s) s.value=v.q||'';
+  ['pay','cs','type'].forEach(k=>{ const el=document.getElementById('oc_l2claims_'+k); if(el) el.value=v[k]||''; });
+  _renderOutcome('l2claims');
+  _renderL2Views(id);
+}
+function _l2DeleteView(id){
+  if(!confirm('Delete this saved view?')) return;
+  localStorage.setItem('l2_saved_views', JSON.stringify(_l2Views().filter(v=>v.id!==id)));
+  _renderL2Views();
+}
+function _renderL2Views(activeId){
+  const bar=document.getElementById('l2ViewsBar'); if(!bar) return;
+  const views=_l2Views();
+  const chips = views.length
+    ? views.map(v=>`<span class="vw-chip${activeId===v.id?' active':''}" onclick="_l2ApplyView('${v.id}')">${esc(v.name)} <span onclick="event.stopPropagation();_l2DeleteView('${v.id}')" style="opacity:.55;margin-left:.3rem" title="Delete">✕</span></span>`).join('')
+    : `<span style="font-size:.75rem;color:var(--nd-text-faint)">${_guideLang==='hi'?'अभी कोई सेव्ड व्यू नहीं':'none yet'}</span>`;
+  bar.innerHTML = `<span style="font-size:.75rem;color:var(--nd-text-muted)">${_guideLang==='hi'?'सेव्ड व्यू:':'Saved views:'}</span>${chips}<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .6rem" onclick="_l2SaveView()">★ ${_guideLang==='hi'?'वर्तमान सेव करें':'Save current'}</button>`;
+}
 // Canonical L2 pipeline (board columns), in order, with friendly labels.
 const _L2_STAGES = [
   ['intimated','Intimated'],['assigned','Assigned'],['in_review','In review'],
@@ -3440,11 +3476,12 @@ async function loadOutcomeClaims(key, outcome, title, sub){
   el.innerHTML = `<div class="section-hdr"><div><div class="section-title">${title}</div><div class="section-sub">${sub}</div></div>
       ${isL2?`<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="exportL2CSV()">⬇ CSV</button><button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="_reloadL2()">🔄 Refresh</button></div>`:''}</div>
     ${isL2?'<div id="oc_l2claims_metrics" style="margin:.2rem 0 .7rem"></div>':''}
+    ${isL2?'<div id="l2ViewsBar" style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem"></div>':''}
     <div class="filter-bar" style="flex-wrap:wrap;gap:.4rem">
       <input id="oc_${key}_s" placeholder="🔍 Search name / phone / policy / claim #…" oninput="_renderOutcome('${key}')" style="flex:1;min-width:170px">
       ${isL2?`
-      <select onchange="_setL2f('pay',this.value)" style="min-width:118px"><option value="">L2 fee: All</option><option value="paid">Paid</option><option value="due">Due</option></select>
-      <select onchange="_setL2f('cs',this.value)" style="min-width:150px"><option value="">ClaimShield: All</option><option value="sent">Sent</option><option value="notsent">Not sent</option></select>
+      <select id="oc_l2claims_pay" onchange="_setL2f('pay',this.value)" style="min-width:118px"><option value="">L2 fee: All</option><option value="paid">Paid</option><option value="due">Due</option></select>
+      <select id="oc_l2claims_cs" onchange="_setL2f('cs',this.value)" style="min-width:150px"><option value="">ClaimShield: All</option><option value="sent">Sent</option><option value="notsent">Not sent</option></select>
       <select id="oc_l2claims_type" onchange="_setL2f('type',this.value)" style="min-width:110px"><option value="">Type: All</option></select>
       <span class="vw-switch" style="margin-left:auto">
         <button id="vw_table" onclick="_setL2View('table')">☰ Table</button>
@@ -3462,6 +3499,7 @@ async function loadOutcomeClaims(key, outcome, title, sub){
     const sel=document.getElementById('oc_l2claims_type');
     if(sel) sel.innerHTML='<option value="">Type: All</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
   }
+  if(isL2) _renderL2Views();
   _renderOutcome(key);
 }
 function _renderOutcome(key){
