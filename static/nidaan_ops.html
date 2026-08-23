@@ -8605,6 +8605,7 @@ async function qtCatDelete(id, label){
 // ═══════════════════════════════════════════════════════════════
 let _guideLang = 'en';
 let _guideSpeech = '';
+let _guideAudio = null;   // high-quality Gemini audio element (falls back to browser voice)
 
 async function loadGuidePanel(){
   const panel = document.getElementById('panel-guide');
@@ -8705,10 +8706,34 @@ function _guideChunks(text){
 }
 
 async function guideSpeak(){
+  guideStop();
+  _guideStopped = false;
+  const note = document.getElementById('guideAudioNote');
+  const btn = document.getElementById('guidePlayBtn');
+  // Try the high-quality Gemini voice first (cached server-side, so replays are free). This also
+  // rescues Tier-2/3 phones that ship with NO Hindi TTS voice. On any failure → browser voice.
+  if (note) note.textContent = (_guideLang==='hi' ? 'आवाज़ तैयार हो रही है…' : 'Preparing voice…');
+  try {
+    const r = await fetch('/nidaan/ops/api/capabilities/audio?lang='+_guideLang, { headers: hdrs() });
+    if (r.ok) {
+      const url = URL.createObjectURL(await r.blob());
+      _guideAudio = new Audio(url);
+      _guideAudio.onended = () => guideStop();
+      _guideAudio.onerror = () => { guideStop(); _guideSpeakBrowser(); };
+      if (btn) btn.textContent = (_guideLang==='hi' ? '⏸ रोकें' : '⏸ Stop');
+      if (note) note.textContent = (_guideLang==='hi' ? '🔊 उच्च-गुणवत्ता आवाज़' : '🔊 High-quality voice');
+      _guideAudio.play().catch(()=>{ guideStop(); _guideSpeakBrowser(); });
+      return;
+    }
+  } catch(e){}
+  // Fallback: the device's own (free) voice.
+  _guideSpeakBrowser();
+}
+
+async function _guideSpeakBrowser(){
   if (!('speechSynthesis' in window)) {
     ndUI.toast('This browser cannot play audio','error'); return;
   }
-  guideStop();
   _guideStopped = false;
   if (!_guideSpeech) return;
   const note = document.getElementById('guideAudioNote');
@@ -8751,6 +8776,8 @@ async function guideSpeak(){
 
 function guideStop(){
   _guideStopped = true;
+  try { if (_guideAudio) { _guideAudio.pause(); if (_guideAudio.src) URL.revokeObjectURL(_guideAudio.src); } } catch(e){}
+  _guideAudio = null;
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch(e){}
   if (_guideKeepAlive) { clearInterval(_guideKeepAlive); _guideKeepAlive = null; }
   _guideQueue = []; _guideIdx = 0;

@@ -9580,6 +9580,25 @@ async def ops_capabilities(request: Request, lang: str = "en"):
     return guide
 
 
+@app.get("/nidaan/ops/api/capabilities/audio")
+async def ops_capabilities_audio(request: Request, lang: str = "en"):
+    """High-quality Gemini narration of the features guide, CACHED to disk (generated once per
+    role×lang, then free to replay). 503 → the page falls back to the free browser voice."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    role = staff.get("role", "team_member")
+    text = caps.speech_text(role, lang)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.post("/nidaan/ops/api/me/comms-onboarded")
 async def ops_me_comms_onboarded(request: Request):
     """One-time acknowledgement of the comms/Telegram onboarding popup."""
