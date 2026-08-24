@@ -1851,7 +1851,7 @@ async def on_subscriber_signup(account_id: int):
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         acct = await (await conn.execute(
-            "SELECT account_id, owner_name, email, phone, plan FROM nidaan_accounts WHERE account_id=?",
+            "SELECT account_id, owner_name, email, phone FROM nidaan_accounts WHERE account_id=?",
             (account_id,))).fetchone()
         if not acct:
             return

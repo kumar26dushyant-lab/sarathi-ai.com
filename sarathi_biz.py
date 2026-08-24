@@ -4578,7 +4578,11 @@ async def nidaan_razorpay_webhook(request: Request):
     # ── Order payment.captured (one-time order flow for quarterly/annual plans) ─
     if event == "payment.captured":
         payment_entity = payload.get("payment", {}).get("entity", {})
-        notes = payment_entity.get("notes", {})
+        # Razorpay returns EMPTY notes as [] (a list), not {} — calling .get() on it crashed the whole
+        # webhook (→ 500 → payment never activated on our side). Coerce to a dict defensively.
+        notes = payment_entity.get("notes") or {}
+        if not isinstance(notes, dict):
+            notes = {}
         product = notes.get("product", "")
         payment_id_evt = payment_entity.get("id", "")
         # ── ₹499 claim review — SERVER-SIDE SAFETY NET ──────────────────────────
@@ -4688,7 +4692,9 @@ async def nidaan_razorpay_webhook(request: Request):
 
     # ── Legacy subscription events (kept for backward compat) ─────────────────
     sub_entity = payload.get("subscription", {}).get("entity", {})
-    notes = sub_entity.get("notes", {})
+    notes = sub_entity.get("notes") or {}   # empty notes arrive as [] from Razorpay — coerce
+    if not isinstance(notes, dict):
+        notes = {}
     if notes.get("product") != "nidaan":
         return {"status": "ignored", "reason": "not_nidaan"}
     account_id_str = notes.get("nidaan_account_id", "")
