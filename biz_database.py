@@ -2127,6 +2127,10 @@ async def init_db():
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_user_agent TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_hash TEXT DEFAULT ''",
+            # Authorization push: which staffer pushed the fee authorization to the claimant + when
+            # (accountability — staff must verify the dispute amount before pushing).
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_at TIMESTAMP",
         ):
             try:
                 await conn.execute(_cp_sql)

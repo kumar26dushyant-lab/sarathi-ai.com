@@ -1238,6 +1238,7 @@ async def nidaan_claim_me(request: Request):
             "disputed_amount": disputed,
         },
         "consent": {
+            "is_l2": (ctx.get("review_outcome") == "can_fight"),
             "accepted": bool(ctx.get("consent_accepted_at")),
             "accepted_at": ctx.get("consent_accepted_at"),
             "fee_pct": cfg["fee_pct"],
@@ -1351,6 +1352,26 @@ async def ops_claim_consent_proof(claim_id: int, request: Request):
     await _ops_audit(request, "claimant_consent.proof", "claim", str(claim_id), "consent proof downloaded")
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="consent-claim-{claim_id}.pdf"'})
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/push-authorization")
+async def ops_claim_push_authorization(claim_id: int, request: Request):
+    """Push the fee authorization to the claimant: records WHO pushed it + when (accountability),
+    then emails them their dashboard link IF they haven't accepted yet. Staff must have verified the
+    dispute amount first (the UI prompts for that). Sub-admin+; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    staff_name = staff.get("name") or staff.get("email") or f"staff#{staff.get('staff_id')}"
+    state = await claimant.portal_state(claim_id)
+    await claimant.mark_pushed(claim_id, staff_name)
+    emailed = False
+    if not state.get("consent_accepted"):
+        res = await claimant.send_greeting_email(claim_id, force=True)
+        emailed = bool(res.get("ok"))
+    await _ops_audit(request, "claimant_portal.push_auth", "claim", str(claim_id),
+                     f"authorization pushed by {staff_name}; emailed={emailed}")
+    return {"ok": True, "emailed": emailed, "state": await claimant.portal_state(claim_id)}
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/send-email")

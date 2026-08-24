@@ -116,10 +116,30 @@ async def get_portal_by_token(token: str) -> Optional[dict]:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
             "SELECT p.*, c.insured_name, c.insured_email, c.insured_phone, c.claim_type, "
-            "       c.status AS claim_status, c.stage AS claim_stage, c.disputed_amount "
+            "       c.status AS claim_status, c.stage AS claim_stage, c.disputed_amount, "
+            "       c.review_outcome "
             "FROM nidaan_claimant_portal p JOIN nidaan_claims c ON c.claim_id=p.claim_id "
             "WHERE p.access_token=?", (token,))).fetchone()
     return dict(row) if row else None
+
+
+async def claim_is_l2(claim_id: int) -> bool:
+    """A claim is 'at L2' (legal action authorized) once it's reviewed-GO. Until then the claimant
+    dashboard shows NOTHING about fees — only after L2 do we ask for authorization."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        row = await (await conn.execute(
+            "SELECT review_outcome FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    return bool(row and (row[0] == "can_fight"))
+
+
+async def mark_pushed(claim_id: int, staff_name: str) -> None:
+    """Record that a staffer pushed the fee authorization to the claimant (name + timestamp)."""
+    await ensure_portal(claim_id, with_token=True)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_claimant_portal SET consent_pushed_by=?, consent_pushed_at=CURRENT_TIMESTAMP "
+            "WHERE claim_id=?", ((staff_name or "")[:120], claim_id))
+        await conn.commit()
 
 
 async def rotate_token(claim_id: int) -> Optional[str]:
@@ -416,7 +436,8 @@ async def portal_state(claim_id: int) -> dict:
     cfg = await fee_config()
     if not p:
         return {"exists": False, "activated": False, "consent_accepted": False,
-                "link_sent_count": 0, "current_fee_pct": cfg["fee_pct"],
+                "link_sent_count": 0, "is_l2": await claim_is_l2(claim_id),
+                "current_fee_pct": cfg["fee_pct"],
                 "current_gst_pct": cfg["gst_pct"], "terms_version": cfg["terms_version"]}
     return {
         "exists": True,
@@ -428,8 +449,11 @@ async def portal_state(claim_id: int) -> dict:
         "consent_fee_pct": p.get("consent_fee_pct"),
         "consent_gst_pct": p.get("consent_gst_pct"),
         "consent_terms_version": p.get("consent_terms_version"),
+        "pushed_by": p.get("consent_pushed_by") or "",
+        "pushed_at": p.get("consent_pushed_at"),
         "link_sent_count": p.get("link_sent_count") or 0,
         "link_sent_at": p.get("link_sent_at"),
+        "is_l2": await claim_is_l2(claim_id),
         "current_fee_pct": cfg["fee_pct"],
         "current_gst_pct": cfg["gst_pct"],
         "terms_version": cfg["terms_version"],

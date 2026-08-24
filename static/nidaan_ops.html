@@ -4785,7 +4785,7 @@ async function openClaimDrawer(claimId) {
   // Load "involved" watchers + my mute state
   loadClaimWatchers(c.claim_id);
   // Claimant portal state (direct policyholder dashboard)
-  loadClaimPortalCard(c.claim_id);
+  loadClaimPortalCard(c.claim_id, null, c.disputed_amount||0);
   // Claim notes: load @mention candidates + mark notes read (drives seen-receipts)
   loadClaimMentions(c.claim_id);
   claimNotesMarkRead(c.claim_id);
@@ -4899,32 +4899,64 @@ function opsMsgFilePicked(claimId){
   if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
 }
 // ── Claimant Portal card (in the claim drawer) ───────────────────────────────
-async function loadClaimPortalCard(claimId, freshLink){
+async function loadClaimPortalCard(claimId, freshLink, disputed){
   const box = document.getElementById('claimPortalCard_'+claimId); if(!box) return;
+  if(typeof disputed==='number') box.dataset.disputed = disputed;
+  const dv = parseFloat(box.dataset.disputed||'0')||0;
   let s = null;
   try { const r = await API('/claims/'+claimId+'/portal'); if(r.ok) s = await r.json(); } catch(e){}
   if(!s){ box.innerHTML = '<span style="color:var(--nd-text-faint)">Unavailable</span>'; return; }
   const canIssue = (_role==='super_admin' || _role==='sub_super_admin');
+  // ── Portal (status + documents) — available any time ──
   let statusLine;
   if(!s.exists){
-    statusLine = '<span style="color:var(--nd-text-muted)">No portal yet — issue a link to open the claimant\'s dashboard.</span>';
-  } else if(s.consent_accepted){
-    statusLine = `<span style="color:var(--nd-success-text)">✅ Fee terms accepted — ${s.consent_fee_pct}%${s.consent_gst_pct?(' + '+s.consent_gst_pct+'% GST'):''}</span>`;
+    statusLine = '<span style="color:var(--nd-text-muted)">No portal yet — issue a link to open the claimant\'s dashboard (status &amp; documents).</span>';
   } else if(s.activated){
-    statusLine = '<span style="color:var(--nd-cyan-text)">👀 Opened by claimant — awaiting acceptance</span>';
+    statusLine = '<span style="color:var(--nd-cyan-text)">👀 Opened by claimant</span>';
   } else {
     statusLine = '<span style="color:var(--nd-warning-text)">⏳ Link issued — not opened yet</span>';
   }
-  const sentBadge = (s.exists && s.link_sent_count) ? `<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.2rem">Link sent ${s.link_sent_count}×</div>` : '';
+  const sentBadge = (s.exists && s.link_sent_count) ? `<span style="font-size:.72rem;color:var(--nd-text-faint)"> · sent ${s.link_sent_count}×</span>` : '';
   const linkHtml = freshLink
-    ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the claimant (auto-email coming). Opening it logs a first-open.</div></div>`
+    ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the claimant. Opening it logs a first-open.</div></div>`
     : '';
-  const proofBtn = (s.consent_accepted && _role==='super_admin')
-    ? `<button class="btn-sm btn-ghost" onclick="downloadConsentProof(${claimId},this)" title="Download the tamper-evident Digital Consent Record (PDF)">📄 Consent proof</button>` : '';
-  const btn = (canIssue || proofBtn)
-    ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap">${canIssue?`<button class="btn-sm btn-primary" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button><button class="btn-sm btn-ghost" onclick="emailClaimPortalLink(${claimId},this)" title="Email the dashboard link to the policyholder now">✉️ Email to claimant</button>`:''}${proofBtn}</div>`
+  const linkBtns = canIssue
+    ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem"><button class="btn-sm btn-ghost" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button></div>`
     : '';
-  box.innerHTML = linkHtml + `<div style="margin-bottom:.5rem">${statusLine}${sentBadge}</div>` + btn;
+
+  // ── Fee authorization — ONLY once the claim is at L2 (reviewed GO) ──
+  let authHtml;
+  if(!s.is_l2){
+    authHtml = `<div style="border-top:1px solid var(--nd-border);margin-top:.6rem;padding-top:.5rem;font-size:.75rem;color:var(--nd-text-faint)">⚖️ Fee authorization becomes available once this claim reaches <b>L2</b> (reviewed GO).</div>`;
+  } else {
+    const feePct = s.current_fee_pct||15, gstPct = s.current_gst_pct||0;
+    const fee = dv*feePct/100, gst = fee*gstPct/100, total = fee+gst;
+    let authState;
+    if(s.consent_accepted){
+      authState = `<span style="color:var(--nd-success-text)">✅ Authorization accepted by claimant${s.consent_accepted_at?(' · '+fmtDate(s.consent_accepted_at)):''} — ${s.consent_fee_pct}%${s.consent_gst_pct?(' + '+s.consent_gst_pct+'% GST'):''}</span>`;
+    } else if(s.pushed_by){
+      authState = `<span style="color:var(--nd-cyan-text)">📤 Pushed by ${esc(s.pushed_by)}${s.pushed_at?(' · '+fmtDate(s.pushed_at)):''} — awaiting claimant acceptance</span>`;
+    } else {
+      authState = '<span style="color:var(--nd-warning-text)">Not pushed yet</span>';
+    }
+    const calcLine = dv ? `<div style="font-size:.72rem;color:var(--nd-text-muted);margin-top:.25rem">On dispute ₹${fmt(dv)} → ${feePct}% = ₹${fmt(Math.round(fee))}${gstPct?(' + '+gstPct+'% GST ₹'+fmt(Math.round(gst))):''} = <b>₹${fmt(Math.round(total))}</b></div>` : '<div style="font-size:.72rem;color:var(--nd-warning-text);margin-top:.25rem">⚠️ No dispute amount on this claim — set it before pushing.</div>';
+    const pushBtn = (canIssue && !s.consent_accepted)
+      ? `<button class="btn-sm btn-primary" style="margin-top:.4rem" onclick="pushAuthorization(${claimId},${dv},this)">📤 ${s.pushed_by?'Re-push':'Push'} authorization to claimant</button>` : '';
+    const proofBtn = (s.consent_accepted && _role==='super_admin')
+      ? ` <button class="btn-sm btn-ghost" style="margin-top:.4rem" onclick="downloadConsentProof(${claimId},this)" title="Download the tamper-evident Digital Consent Record (PDF)">📄 Consent proof</button>` : '';
+    authHtml = `<div style="border-top:1px solid var(--nd-border);margin-top:.6rem;padding-top:.5rem"><div style="font-size:.75rem;font-weight:700;color:var(--nd-text-secondary)">⚖️ Fee authorization</div><div style="font-size:.8rem;margin-top:.2rem">${authState}</div>${calcLine}${pushBtn}${proofBtn}</div>`;
+  }
+  box.innerHTML = linkHtml + `<div style="font-size:.85rem">${statusLine}${sentBadge}</div>` + linkBtns + authHtml;
+}
+async function pushAuthorization(claimId, disputed, btn){
+  if(!disputed || disputed<=0){ if(!confirm('This claim has NO dispute amount set — the claimant will see ₹0. Push anyway?')) return; }
+  else if(!confirm('⚠️ Verify the dispute amount is correct: ₹'+fmt(disputed)+'\n\nThe claimant will be asked to authorize our fee (15% of the amount recovered + GST). No payment is taken now — only acceptance.\n\nPush authorization to the claimant now?')) return;
+  if(btn){ btn.disabled=true; btn.textContent='Pushing…'; }
+  try{
+    const r = await API('/claims/'+claimId+'/portal/push-authorization',{method:'POST'});
+    if(r.ok){ const d=await r.json(); ndUI.toast(d.emailed?'Authorization pushed + emailed to claimant':'Authorization pushed','success'); loadClaimPortalCard(claimId, null, disputed); }
+    else { const e=await r.json().catch(()=>({})); ndUI.toast(e.detail||'Could not push','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to claimant'; } }
+  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to claimant'; } }
 }
 async function downloadConsentProof(claimId, btn){
   if(btn){ btn.disabled=true; }

@@ -75,7 +75,8 @@ var T = {
     safe:"🔒 This is your private, secure page. Nothing here charges you. Read, and tap only when you are ready.",
     profileTitle:"Your details", pName:"Name", pPhone:"Phone", pEmail:"Email",
     statusTitle:"Your claim status", claimRef:"Claim", disputed:"Disputed amount",
-    feeTitle:"Our fee — please review & accept", feeIntro:"Nidaan The Legal Consultant LLP works purely on a success basis — a fee applies only when money is recovered from the insurer. This is separate from NidaanPartner.com.",
+    feeTitle:"Authorization — please review & accept", noPayNow:"💡 You do NOT need to pay anything now. Just review and tap Accept — payment only ever applies later, and only if money is recovered.",
+    feeIntro:"Nidaan The Legal Consultant LLP works purely on a success basis — a fee applies only when money is recovered from the insurer. This is separate from NidaanPartner.com.",
     recovered:"If recovered (example)", ourFee:"Our fee", gst:"GST", totalFee:"Total our fee", netYou:"You receive",
     illust:"Example only — based on your disputed amount. Actual fee applies to whatever is recovered.",
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
@@ -91,7 +92,8 @@ var T = {
     safe:"🔒 यह आपका निजी, सुरक्षित पेज है। यहाँ आपसे कोई पैसा नहीं लिया जाता। आराम से पढ़ें, और तैयार होने पर ही टैप करें।",
     profileTitle:"आपकी जानकारी", pName:"नाम", pPhone:"फ़ोन", pEmail:"ईमेल",
     statusTitle:"आपके दावे की स्थिति", claimRef:"दावा", disputed:"विवादित राशि",
-    feeTitle:"हमारी फीस — कृपया देखें और स्वीकार करें", feeIntro:"Nidaan The Legal Consultant LLP पूरी तरह सफलता के आधार पर काम करती है — फीस केवल तब लगती है जब बीमा कंपनी से राशि वसूल होती है। यह NidaanPartner.com से अलग है।",
+    feeTitle:"अधिकृति — कृपया देखें और स्वीकार करें", noPayNow:"💡 अभी आपको कुछ भी भुगतान नहीं करना है। बस देखें और Accept दबाएँ — भुगतान केवल बाद में, और तभी लागू होता है जब राशि वसूल होती है।",
+    feeIntro:"Nidaan The Legal Consultant LLP पूरी तरह सफलता के आधार पर काम करती है — फीस केवल तब लगती है जब बीमा कंपनी से राशि वसूल होती है। यह NidaanPartner.com से अलग है।",
     recovered:"वसूली होने पर (उदाहरण)", ourFee:"हमारी फीस", gst:"जीएसटी", totalFee:"कुल हमारी फीस", netYou:"आपको मिलेंगे",
     illust:"केवल उदाहरण — आपकी विवादित राशि पर आधारित। वास्तविक फीस वसूल की गई राशि पर लगेगी।",
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
@@ -162,14 +164,17 @@ function render(){
       (c.disputed_amount ? '<div class="row"><span class="lbl">'+esc(t("disputed"))+'</span><span class="val">'+inr(c.disputed_amount)+'</span></div>' : '')+
     '</div>';
 
-  var feeCard;
-  if(con.accepted){
+  // Fee AUTHORIZATION is shown ONLY once the claim is at L2 (reviewed GO). Before that the claimant
+  // sees nothing about fees.
+  var feeCard = "";
+  if(con.is_l2 && con.accepted){
     var d = con.accepted_at ? String(con.accepted_at).slice(0,10) : "";
     feeCard = '<div class="card"><h2>'+esc(t("feeTitle"))+'</h2>'+
       '<div class="accepted">'+esc(t("accepted"))+(d?(' <br><small>'+esc(t("on"))+' '+esc(d)+'</small>'):'')+'</div></div>';
-  } else {
+  } else if(con.is_l2){
     var gstRow = con.gst_enabled ? '<div class="row"><span class="lbl">'+esc(t("gst"))+' ('+con.gst_pct+'%)</span><span class="val">'+inr(il.gst_amount)+'</span></div>' : '';
     feeCard = '<div class="card"><h2>'+esc(t("feeTitle"))+'</h2>'+
+      '<div style="background:#e7f4f0;border:1px solid #bfe3d9;border-radius:10px;padding:.6rem .7rem;font-size:.86rem;color:#0b5c4f;margin-bottom:.6rem">'+esc(t("noPayNow"))+'</div>'+
       '<p class="note">'+esc(t("feeIntro"))+'</p>'+
       '<div style="margin-top:.6rem">'+
         '<div class="row"><span class="lbl">'+esc(t("recovered"))+'</span><span class="val">'+inr(il.recovered_amount)+'</span></div>'+
