@@ -548,6 +548,15 @@ _BOT_TXT: dict = {
                      "hi": "कोई मिलता-जुलता दावा नहीं मिला। दावा नंबर, नाम या फ़ोन आज़माएँ।"},
     "cl_matches":   {"en": "Found {n} claim(s) — tap to view:", "hi": "{n} दावे मिले — देखने के लिए टैप करें:"},
     "admin_only":   {"en": "This is for admins only.", "hi": "यह केवल एडमिन के लिए है।"},
+    "b_addnote":    {"en": "💬 Add note", "hi": "💬 नोट जोड़ें"},
+    "b_movestage":  {"en": "➡️ Move stage", "hi": "➡️ चरण बदलें"},
+    "cln_ask":      {"en": "💬 Type the note to add to claim #{id}.", "hi": "💬 दावा #{id} के लिए नोट लिखें।"},
+    "cln_confirm":  {"en": "Add this note to claim #{id}?\n\n_{text}_", "hi": "यह नोट दावा #{id} में जोड़ें?\n\n_{text}_"},
+    "cln_saved":    {"en": "✓ Note saved on claim #{id}.", "hi": "✓ दावा #{id} में नोट सहेजा गया।"},
+    "cls_pick":     {"en": "➡️ Move claim #{id} to which stage?", "hi": "➡️ दावा #{id} को किस चरण में ले जाएँ?"},
+    "cls_confirm":  {"en": "Move claim #{id} to *{stage}*?", "hi": "दावा #{id} को *{stage}* में ले जाएँ?"},
+    "cls_done":     {"en": "✓ Claim #{id} moved to {stage}.", "hi": "✓ दावा #{id} को {stage} में ले जाया गया।"},
+    "cancelled":    {"en": "Cancelled.", "hi": "रद्द कर दिया।"},
     "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
     "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
@@ -1141,6 +1150,15 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
             _kb([[{"text": T(lang, "b_send_yes"), "callback_data": f"crc:yes:{cid}"},
                   {"text": T(lang, "b_confirm_no"), "callback_data": "crc:no"}]]))
         return
+    if act == "claim_note" and pending.get("claim_id"):
+        # Confirm before saving (also lets a voice transcript be verified).
+        cid = int(pending["claim_id"])
+        await _set_pending(staff["staff_id"], {"a": "claim_note_confirm", "claim_id": cid, "text": text})
+        await send_message(str(chat_id),
+            T(lang, "cln_confirm", id=cid, text=text[:250]),
+            _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"clnc:yes:{cid}"},
+                  {"text": T(lang, "b_confirm_no"), "callback_data": "clnc:no"}]]))
+        return
     if act == "claim_search":
         await _set_pending(staff["staff_id"], None)
         if not _can(staff, "sub_super_admin"):
@@ -1152,7 +1170,7 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
             return
         if len(matches) == 1:
             await send_message(str(chat_id), _fmt_claim_card(matches[0], lang),
-                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+                _claim_card_kb(matches[0]["claim_id"], lang, True))
             return
         btns = [[{"text": f"#{m['claim_id']} · {(m.get('insured_name') or '')[:28]}",
                   "callback_data": f"cl:v:{m['claim_id']}"}] for m in matches]
@@ -1325,6 +1343,31 @@ async def _claim_detail(claim_id: int) -> Optional[dict]:
             "LEFT JOIN nidaan_staff a ON a.staff_id = c.assigned_to_legal_user_id "
             "WHERE c.claim_id=?", (claim_id,))).fetchone()
     return dict(row) if row else None
+
+
+# Curated stage moves offered from the bot (the meaningful claim pipeline).
+_TG_STAGES = [("assigned", {"en": "Assigned", "hi": "सौंपा गया"}),
+              ("in_review", {"en": "In review", "hi": "समीक्षा में"}),
+              ("in_negotiation", {"en": "In negotiation", "hi": "बातचीत में"}),
+              ("resolved_won", {"en": "Won", "hi": "जीता"}),
+              ("resolved_lost", {"en": "Lost", "hi": "हारा"}),
+              ("closed", {"en": "Closed", "hi": "बंद"})]
+
+
+def _stage_label(status: str, lang: str) -> str:
+    for s, lbl in _TG_STAGES:
+        if s == status:
+            return lbl.get(lang, lbl["en"])
+    return (status or "").replace("_", " ")
+
+
+def _claim_card_kb(claim_id: int, lang: str, admin: bool) -> list:
+    rows = []
+    if admin:
+        rows.append([{"text": T(lang, "b_addnote"), "callback_data": f"cln:{claim_id}"},
+                     {"text": T(lang, "b_movestage"), "callback_data": f"cls:{claim_id}"}])
+    rows.append([{"text": T(lang, "b_menu"), "callback_data": "m:home"}])
+    return _kb(rows)
 
 
 def _fmt_claim_card(c: dict, lang: str) -> str:
@@ -1522,6 +1565,76 @@ async def _handle_callback(cq: dict) -> None:
                 await send_message(str(chat_id), T(lang, "cl_none"))
             else:
                 await send_message(str(chat_id), _fmt_claim_card(c, lang),
+                    _claim_card_kb(_cid, lang, _can(staff, "sub_super_admin")))
+            await ack(); return
+
+        if data.startswith("cln:"):
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            try:
+                _cid = int(data.split(":")[1])
+            except Exception:
+                await ack(); return
+            await _set_pending(staff["staff_id"], {"a": "claim_note", "claim_id": _cid})
+            await send_message(str(chat_id), T(lang, "cln_ask", id=_cid))
+            await ack(); return
+
+        if data.startswith("clnc:"):  # note confirm yes/no
+            import json as _json
+            try:
+                pend = _json.loads(staff.get("telegram_pending") or "{}")
+            except Exception:
+                pend = {}
+            if data.startswith("clnc:yes") and pend.get("a") == "claim_note_confirm" and pend.get("claim_id"):
+                import biz_nidaan as _nid
+                _cid = int(pend["claim_id"])
+                await _nid.add_claim_note(_cid, staff["staff_id"], pend.get("text", ""), source="telegram")
+                await _set_pending(staff["staff_id"], None)
+                await send_message(str(chat_id), T(lang, "cln_saved", id=_cid),
+                    _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            else:
+                await _set_pending(staff["staff_id"], None)
+                await send_message(str(chat_id), T(lang, "cancelled"),
+                    _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            await ack(); return
+
+        if data.startswith("cls:"):  # show stage options
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            try:
+                _cid = int(data.split(":")[1])
+            except Exception:
+                await ack(); return
+            rows = [[{"text": lbl.get(lang, lbl["en"]), "callback_data": f"clsp:{_cid}:{s}"}]
+                    for s, lbl in _TG_STAGES]
+            rows.append([{"text": T(lang, "b_menu"), "callback_data": "m:home"}])
+            await send_message(str(chat_id), T(lang, "cls_pick", id=_cid), _kb(rows))
+            await ack(); return
+
+        if data.startswith("clsp:"):  # a stage picked → confirm
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            _p = data.split(":")
+            _cid, _st = int(_p[1]), _p[2]
+            await send_message(str(chat_id), T(lang, "cls_confirm", id=_cid, stage=_stage_label(_st, lang)),
+                _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"clsc:yes:{_cid}:{_st}"},
+                      {"text": T(lang, "b_confirm_no"), "callback_data": "clsc:no"}]]))
+            await ack(); return
+
+        if data.startswith("clsc:"):  # stage confirm
+            if data.startswith("clsc:yes") and _can(staff, "sub_super_admin"):
+                _p = data.split(":")
+                _cid, _st = int(_p[2]), _p[3]
+                import biz_nidaan as _nid
+                try:
+                    await _nid.update_claim_status(_cid, _st, "staff", staff["staff_id"],
+                                                   note="Stage updated from Telegram")
+                    await send_message(str(chat_id), T(lang, "cls_done", id=_cid, stage=_stage_label(_st, lang)),
+                        _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+                except Exception:
+                    await send_message(str(chat_id), "⚠️ Could not update the stage.")
+            else:
+                await send_message(str(chat_id), T(lang, "cancelled"),
                     _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
             await ack(); return
 
