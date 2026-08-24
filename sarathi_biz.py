@@ -11003,11 +11003,7 @@ async def api_send_signup_otp(req: SendEmailOTPRequest, request: Request):
     otp_code = result["otp"]
     logger.info("📧 Signup OTP for %s***", email[:3])
 
-    sent = await email_svc.send_otp_email(email, otp_code, "")
-    if not sent:
-        return JSONResponse(
-            {"detail": "Failed to send OTP email. Please try again."},
-            status_code=503)
+    asyncio.create_task(email_svc.send_otp_email(email, otp_code, ""))  # background — snappy UI
 
     resp_data = {
         "status": "otp_sent",
@@ -11097,11 +11093,9 @@ async def api_send_email_otp(req: SendEmailOTPRequest, request: Request):
         row = await cur.fetchone()
         if row:
             owner_name = row["owner_name"]
-    sent = await email_svc.send_otp_email(email, otp_code, owner_name)
-    if not sent:
-        return JSONResponse(
-            {"detail": "Failed to send OTP email. Please try again."},
-            status_code=503)
+    # Send in the BACKGROUND so the button returns instantly (Gmail SMTP handshake can take
+    # 10-15s — that was the "OTP not smooth" lag). The OTP is already generated; delivery follows.
+    asyncio.create_task(email_svc.send_otp_email(email, otp_code, owner_name))
 
     resp_data = {
         "status": "otp_sent",
@@ -15004,15 +14998,16 @@ async def dashboard_page(request: Request):
         return RedirectResponse("/login", status_code=302)
 
     is_active = await db.check_subscription_active(tenant["tenant_id"])
+    # Never cache the subscription decision — otherwise a stale "expired" paywall (or a stale
+    # dashboard) can persist in the browser/CDN after a bundle/subscription is (re)activated. This
+    # was the "bundle lands on Subscription Expired" report: a cached old paywall screen.
+    _no_cache = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
     if is_active:
         dash_file = static_dir / "dashboard.html"
         if dash_file.exists():
-            return HTMLResponse(
-                dash_file.read_text(encoding="utf-8"),
-                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
-            )
+            return HTMLResponse(dash_file.read_text(encoding="utf-8"), headers=_no_cache)
         return HTMLResponse("<h1>Dashboard page not found</h1>", status_code=404)
-    return HTMLResponse(SUBSCRIPTION_EXPIRED_HTML, status_code=403)
+    return HTMLResponse(SUBSCRIPTION_EXPIRED_HTML, status_code=403, headers=_no_cache)
 
 
 # =============================================================================
