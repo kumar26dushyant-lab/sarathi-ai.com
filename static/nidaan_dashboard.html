@@ -2271,7 +2271,7 @@ async function doSubscribe() {
               localStorage.setItem(TOKEN_KEY, vd.token);
               localStorage.setItem('nidaan_plan', vd.plan);
             }
-            location.href = '/nidaan/dashboard?payment=success';
+            location.href = '/nidaan/success?type=subscription';
           } catch(e) {
             msg.className = 'msg err';
             msg.textContent = 'Activation error — contact support with Payment ID: ' + response.razorpay_payment_id;
@@ -2354,7 +2354,7 @@ async function doSubscribe() {
             }
             localStorage.removeItem('nidaan_pending_order');
             closeSubscribeModal();
-            location.href = '/nidaan/dashboard?payment=success';
+            location.href = '/nidaan/success?type=subscription';
           } catch(e) {
             msg.className = 'msg err';
             msg.textContent = 'Payment received but activation failed (network error). Retrying… Payment ID: ' + response.razorpay_payment_id;
@@ -2804,7 +2804,7 @@ async function payForReview(purchaseId) {
           });
           const vd = vr ? await vr.json() : {};
           if (vr && vr.ok && vd.status === 'paid') {
-            location.reload();
+            location.href = '/nidaan/success?type=review';
           } else {
             alert('Payment received but verification failed. Contact support with Payment ID: ' + response.razorpay_payment_id);
           }
@@ -2867,7 +2867,7 @@ async function recoverPendingPayment(showFeedback) {
       localStorage.setItem(TOKEN_KEY, d.token);
       localStorage.setItem('nidaan_plan', d.plan);
       localStorage.removeItem('nidaan_pending_order');
-      location.href = '/nidaan/dashboard?payment=success';
+      location.href = '/nidaan/success?type=subscription';
       return;
     }
     // Any non-success state (failed or attempted-but-not-captured)

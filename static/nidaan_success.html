@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b5c4f">
+<title>Payment Successful · NidaanPartner</title>
+<style>
+  :root{ --brand:#0b5c4f; --brand2:#0d7a68; --bg:#f4f7f6; --card:#fff; --ink:#12211d; --muted:#5b6b66; --line:#e2ebe8; }
+  @media (prefers-color-scheme: dark){ :root{ --bg:#0a1512; --card:#12211d; --ink:#eaf3f0; --muted:#9fb3ac; --line:#22332e; } }
+  *{ box-sizing:border-box; } html,body{ height:100%; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+        display:flex; align-items:center; justify-content:center; padding:1.2rem; line-height:1.55; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:20px; max-width:440px; width:100%;
+         padding:2rem 1.5rem; text-align:center; box-shadow:0 10px 40px rgba(10,40,32,.10); }
+  .tick{ width:84px; height:84px; margin:0 auto 1rem; border-radius:50%; background:linear-gradient(135deg,var(--brand),var(--brand2));
+         display:flex; align-items:center; justify-content:center; animation:pop .5s ease; }
+  .tick svg{ width:44px; height:44px; }
+  @keyframes pop{ 0%{ transform:scale(.4); opacity:0 } 60%{ transform:scale(1.1) } 100%{ transform:scale(1); opacity:1 } }
+  h1{ font-size:1.5rem; margin:.2rem 0 .3rem; }
+  .sub{ color:var(--muted); font-size:.95rem; margin-bottom:1.3rem; }
+  .btn{ display:block; width:100%; background:var(--brand); color:#fff; border:0; border-radius:12px;
+        padding:.95rem; font-size:1rem; font-weight:800; text-decoration:none; cursor:pointer; }
+  .redir{ color:var(--muted); font-size:.8rem; margin-top:.8rem; }
+  .lang{ background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:20px; padding:.25rem .7rem; font-size:.78rem; cursor:pointer; float:right; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <button class="lang" id="langBtn" onclick="toggleLang()">हिंदी</button>
+    <div class="tick"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h1 id="title">Payment successful 🎉</h1>
+    <div class="sub" id="msg">Thank you! Your payment is confirmed. You're all set.</div>
+    <a class="btn" id="cta" href="/nidaan/dashboard">Continue</a>
+    <div class="redir" id="redir"></div>
+  </div>
+<script>
+"use strict";
+var LANG = (localStorage.getItem('nidaan_lang') || 'hi');
+var q = new URLSearchParams(location.search);
+var type = q.get('type') || '';
+var next = q.get('next') || '/nidaan/dashboard';
+var T = {
+  en: {
+    title:"Payment successful 🎉",
+    sub:{ subscription:"Thank you! Your subscription is active. Welcome aboard.",
+          review:"Thank you! Your ₹499 legal review is confirmed — our team will assess your claim.",
+          claim:"Thank you! Your payment is confirmed and your claim is moving forward.",
+          l2:"Thank you! The Level-2 legal fee is confirmed — your claim is queued for legal action.",
+          "":"Thank you! Your payment is confirmed. You're all set." },
+    cta:"Continue to my dashboard →", redir:"Taking you there…", lang:"हिंदी" },
+  hi: {
+    title:"भुगतान सफल 🎉",
+    sub:{ subscription:"धन्यवाद! आपकी सदस्यता सक्रिय हो गई है। आपका स्वागत है।",
+          review:"धन्यवाद! आपका ₹499 कानूनी रिव्यू पक्का हो गया — हमारी टीम आपके दावे का आकलन करेगी।",
+          claim:"धन्यवाद! आपका भुगतान पक्का हो गया और आपका दावा आगे बढ़ रहा है।",
+          l2:"धन्यवाद! लेवल-2 कानूनी शुल्क पक्का हो गया — आपका दावा कानूनी कार्रवाई के लिए तैयार है।",
+          "":"धन्यवाद! आपका भुगतान पक्का हो गया। सब तैयार है।" },
+    cta:"मेरे डैशबोर्ड पर जाएँ →", redir:"आपको वहाँ ले जा रहे हैं…", lang:"English" }
+};
+function render(){
+  var t = T[LANG] || T.en;
+  document.getElementById('title').textContent = t.title;
+  document.getElementById('msg').textContent = t.sub[type] || t.sub[""];
+  document.getElementById('cta').textContent = t.cta;
+  document.getElementById('cta').href = next;
+  document.getElementById('redir').textContent = t.redir;
+  document.getElementById('langBtn').textContent = t.lang;
+  document.documentElement.lang = LANG;
+}
+function toggleLang(){ LANG = (LANG==='hi')?'en':'hi'; localStorage.setItem('nidaan_lang', LANG); render(); }
+render();
+// Auto-continue after a few seconds so nobody is stuck on this page.
+setTimeout(function(){ location.href = next; }, 5000);
+</script>
+</body>
+</html>

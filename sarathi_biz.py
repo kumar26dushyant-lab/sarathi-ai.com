@@ -610,6 +610,14 @@ async def nidaan_about_page(request: Request):
     return _nidaan_page("nidaan_about.html")
 
 
+@app.get("/nidaan/success", response_class=HTMLResponse)
+async def nidaan_success_page(request: Request):
+    """Post-payment thank-you page (all payment flows land here, then continue to the dashboard)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_success.html")
+
+
 @app.get("/nidaan/branch", response_class=HTMLResponse)
 async def nidaan_branch_page(request: Request):
     """Affiliate branch self-service portal (login via their @nidaanpartner.com email OTP)."""
