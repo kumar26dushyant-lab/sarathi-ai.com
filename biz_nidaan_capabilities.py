@@ -236,6 +236,16 @@ CAPABILITIES: list[dict] = [
         "telegram": True, "web": True, "min_role": "sub_super_admin",
     },
     {
+        "id": "tg_my_numbers",
+        "en": {"t": "See today's numbers from Telegram",
+               "d": "A quick office snapshot in the bot: new claims today, open claims, L2 claims, your pending tasks.",
+               "u": "Tap 📊 My numbers in the bot to see the day's key counts at a glance."},
+        "hi": {"t": "टेलीग्राम से आज के आँकड़े देखें",
+               "d": "बॉट में झटपट स्नैपशॉट: आज नए दावे, खुले दावे, L2 दावे, आपके पेंडिंग टास्क।",
+               "u": "बॉट में 📊 मेरे आँकड़े दबाएँ और दिन के मुख्य आँकड़े एक नज़र में देखें।"},
+        "telegram": True, "web": False, "min_role": "sub_super_admin",
+    },
+    {
         "id": "tg_claim_actions",
         "en": {"t": "Add a note or move a claim's stage from Telegram",
                "d": "From a claim in the bot, add an internal note or change its stage — with a confirm step.",
