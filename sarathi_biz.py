@@ -14818,8 +14818,8 @@ async function startPayment() {
             body: JSON.stringify({
               tenant_id: _tid, plan: _plan,
               razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_subscription_id: resp.razorpay_subscription_id,
-              razorpay_signature: resp.razorpay_signature
+              razorpay_subscription_id: resp.razorpay_subscription_id || d.subscription_id || '',
+              razorpay_signature: resp.razorpay_signature || ''
             })
           });
           var vd = await vr.json();
@@ -14853,7 +14853,7 @@ function showSuccess(planLabel, paymentId) {
   var n = 3;
   var t = setInterval(function() {
     n--; document.getElementById('countDown').textContent = n;
-    if (n <= 0) { clearInterval(t); window.location.replace('/dashboard'); }
+    if (n <= 0) { clearInterval(t); window.location.replace('/pay-success?type=subscription'); }
   }, 1000);
 }
 
@@ -14934,6 +14934,16 @@ async def calculators_page(request: Request):
             return HTMLResponse(html)
         return HTMLResponse("<h1>Calculators page not found</h1>", status_code=404)
     return HTMLResponse(SUBSCRIPTION_EXPIRED_HTML, status_code=403)
+
+
+@app.get("/pay-success", response_class=HTMLResponse)
+async def sarathi_pay_success_page(request: Request):
+    """Post-payment thank-you page for Sarathi (mirrors nidaanpartner.com's success page)."""
+    f = static_dir / "sarathi_success.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return RedirectResponse(url="/dashboard?payment=success", status_code=303)
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -15321,8 +15331,10 @@ class VerifySubscriptionRequest(BaseModel):
     tenant_id: int
     plan: str = Field(..., pattern=r"^(individual|team|enterprise)$")
     razorpay_payment_id: str
-    razorpay_subscription_id: str
-    razorpay_signature: str
+    # Optional: some subscription/UPI-mandate checkout flows don't return a signature (or an id) to
+    # the client → we verify the payment via the Razorpay API instead. Must not 422 the whole thing.
+    razorpay_subscription_id: str = ""
+    razorpay_signature: str = ""
 
 
 @app.post("/api/payments/create-order")

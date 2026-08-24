@@ -7177,12 +7177,12 @@ async function schedulePlanChange(newPlan) {
                             tenant_id: t.tenant_id,
                             plan: newPlan,
                             razorpay_payment_id: r.razorpay_payment_id,
-                            razorpay_subscription_id: r.razorpay_subscription_id,
-                            razorpay_signature: r.razorpay_signature,
+                            razorpay_subscription_id: r.razorpay_subscription_id || subData.subscription_id || '',
+                            razorpay_signature: r.razorpay_signature || '',
                         })
                     });
                     if (vRes && vRes.ok) {
-                        location.href = '/dashboard?payment=success';
+                        location.href = '/pay-success?type=subscription';
                     } else {
                         const ve = await vRes?.json();
                         showToast('Payment captured (Ref: ' + r.razorpay_payment_id + '). Your plan will activate shortly. Contact support if it doesn\u2019t within 5 minutes.', 'info', 10000);

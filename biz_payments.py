@@ -517,12 +517,16 @@ async def verify_subscription_and_activate(tenant_id: int, plan_key: str,
     Called after the user completes subscription checkout — provides instant activation
     while the async webhook (subscription.activated) serves as a durable safety net.
     """
-    valid = verify_subscription_signature(
+    # Client signature is a fast-path integrity check — but some subscription/UPI-mandate flows
+    # don't return a usable signature to Razorpay Checkout. So a missing/invalid signature is NOT a
+    # hard fail: we fall back to the AUTHORITATIVE Razorpay API check below (payment captured in OUR
+    # account, for THIS authenticated tenant). This is what fixes "paid but Verification failed".
+    valid = bool(razorpay_signature) and verify_subscription_signature(
         razorpay_payment_id, razorpay_subscription_id, razorpay_signature
     )
     if not valid:
-        logger.warning("❌ Invalid subscription signature for tenant %d", tenant_id)
-        return {"error": "Invalid payment signature", "verified": False}
+        logger.warning("⚠️ No/invalid client signature for tenant %d payment %s — verifying via Razorpay API",
+                       tenant_id, razorpay_payment_id)
 
     # Idempotency: skip if already processed (prevents race with webhook)
     if await db.is_payment_processed(razorpay_payment_id):
@@ -555,7 +559,8 @@ async def verify_subscription_and_activate(tenant_id: int, plan_key: str,
             except ValueError:
                 pass
 
-    # Server-side verify: confirm payment status with Razorpay API
+    # Server-side verify: confirm payment status with Razorpay API (the source of truth). This is
+    # the ONLY proof when the client signature is absent/invalid.
     try:
         rz_payment = await _razorpay_request("GET", f"payments/{razorpay_payment_id}")
         rz_status = rz_payment.get("status")
@@ -565,6 +570,10 @@ async def verify_subscription_and_activate(tenant_id: int, plan_key: str,
             return {"error": f"Payment not completed (status: {rz_status})", "verified": False}
     except Exception as e:
         logger.error("Razorpay payment fetch failed for %s: %s", razorpay_payment_id, e)
+        if not valid:
+            # No trustworthy client signature AND we can't reach Razorpay — don't activate on faith.
+            return {"error": "Could not verify payment right now. Please contact support with your Payment ID.",
+                    "verified": False}
         # Signature was valid — proceed with activation (Razorpay API may be momentarily down)
 
     # Record atomically before activating
