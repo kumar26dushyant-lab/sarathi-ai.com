@@ -110,3 +110,39 @@ Integration points:
 - **Sequence (recommended):** Foundations → **Reminders + AI support** → **Voice‑to‑client** → Campaigns (deferred).
 - **Guardrails baked in from line one:** opt‑in provenance, template discipline, per‑subscriber throttles, STOP handling, full audit — because the shared WABA quality rating protects (or sinks) every subscriber at once.
 - **Nothing is built.** On your go‑ahead I start with Phase 0 foundations (mostly Meta account/verification lead time) and draft the templates for your approval.
+
+---
+
+## 9. TWO-APP STRATEGY + NIDAAN BRANCH RESELLER MODEL (discussion, Aug 25 2026)
+
+Founder is set up in Meta Business Manager: Business Portfolio + a WABA ("Dushyant Sharma", ID 1702447731045758) + Meta's **test number** (+1 555-399-1158, "In Review"). Test number = dev only; production needs business verification + a real number.
+
+### The config magic = Meta Embedded Signup (users never touch Meta)
+Users connect their OWN WhatsApp number through a **popup inside our app** ("Connect WhatsApp" → one Facebook login → pick/enter number → done); the number registers under a WABA WE manage and we receive the tokens via callback. This is the whole "easy config from our apps" promise — no Meta navigation for the user.
+
+### Sarathi-ai.com — what WhatsApp means (voice-first CRM → client comms hub)
+- **Voice → client on WhatsApp:** advisor speaks in Telegram → transcribe + clean → advisor reviews → sends to their client on WhatsApp. "Office in your pocket" now reaches the client.
+- **Outbound (utility templates):** renewal due / EMI / policy-lapse / payment-confirmation — automated from CRM data. Highest-value, lowest-risk first ship.
+- **Campaigns:** opt-in broadcasts (festival greetings, offers, birthday) — advisors do this manually today on personal WhatsApp; doing it from the CRM (segmented, logged, compliant) is a big upgrade.
+- **CRM value:** every WhatsApp thread logged against the client record; two-way replies land in the CRM inbox; AI-assist for replies. Turns Sarathi from voice-notes into a real client-comms hub.
+
+### NidaanPartner.com — the BIG opportunity: branch WhatsApp reseller model
+Nidaan has a **branch/affiliate network** (local partners with trust + presence). WhatsApp Business API becomes a **product branches SELL** in their local market:
+- Small Indian businesses (clinics, coaching centres, retailers, real-estate/insurance agents) WANT WhatsApp Business but can't navigate Meta. A **local branch that sets it up + supports it** is the winning distribution.
+- **Wholesale→retail revenue:** we charge branches per-number / per-conversation-pack (wholesale); branches mark up to their local customers (retail). Recurring for both → stickier partners.
+- **Branch dashboard gets a "WhatsApp clients" section:** onboard a client's number (Embedded Signup), manage their templates, see usage/billing.
+- **Cross-pollination:** a branch selling WhatsApp to an insurance advisor → that advisor becomes a Sarathi subscriber too. The two apps feed each other.
+- **Packaging idea:** "WhatsApp Business Starter" (1 number + N utility conversations + a starter template set) at a monthly price with a branch margin; upsell campaign packs.
+
+### Getting the Meta "API key" — step by step (from where you are)
+The "API key" is really a **System User access token (permanent) + Phone Number ID + WABA ID + App Secret**. From the current state:
+1. **Business Verification** — Business Settings → Security Center → verify the business (legal docs). The long pole (days). Needed for production scale.
+2. **Real phone number** — the +1 555 is Meta's *test* number. Add a real number (not currently on WhatsApp) in WhatsApp Manager → verify by OTP. (One-way door: this number is the sender clients see.)
+3. **Meta App** — developers.facebook.com → create App → add the **WhatsApp** product → gives App ID + App Secret.
+4. **System User + permanent token** — Business Settings → Users → **System Users** → create → assign the WABA → **Generate token** with `whatsapp_business_messaging` + `whatsapp_business_management`. **This token is what our server uses.**
+5. **Webhook** — App → WhatsApp → Configuration → set callback URL (our endpoint) + verify token → subscribe to `messages`.
+6. **Templates** — WhatsApp Manager → Message Templates → create + submit for approval (EN/HI utility set).
+7. **Embedded Signup / Tech Provider** (for users to self-connect numbers) — configure later, after the single-number flow works.
+
+### Recommended sequence (unchanged spine, now two-app)
+Verify business → get ONE real number → System User token + IDs → **Sarathi utility reminders on that one number (prove deliverability)** → Embedded Signup multi-number → **Nidaan branch reseller** productization → campaigns. Give me the token + Phone Number ID + WABA ID when ready and I wire Phase 0.
