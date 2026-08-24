@@ -541,6 +541,13 @@ _BOT_TXT: dict = {
     "b_wfh":        {"en": "🏠 Apply WFH", "hi": "🏠 वर्क फ्रॉम होम"},
     "b_ai":         {"en": "🤖 Ask AI", "hi": "🤖 AI से पूछें"},
     "b_broadcast":  {"en": "📣 Broadcast", "hi": "📣 ब्रॉडकास्ट"},
+    "b_findclaim":  {"en": "🔎 Find a claim", "hi": "🔎 दावा खोजें"},
+    "cl_ask":       {"en": "🔎 Type a *claim number*, *customer name*, or *phone* to find a claim.",
+                     "hi": "🔎 दावा खोजने के लिए *दावा नंबर*, *ग्राहक का नाम*, या *फ़ोन* लिखें।"},
+    "cl_none":      {"en": "No matching claim found. Try a claim number, name, or phone.",
+                     "hi": "कोई मिलता-जुलता दावा नहीं मिला। दावा नंबर, नाम या फ़ोन आज़माएँ।"},
+    "cl_matches":   {"en": "Found {n} claim(s) — tap to view:", "hi": "{n} दावे मिले — देखने के लिए टैप करें:"},
+    "admin_only":   {"en": "This is for admins only.", "hi": "यह केवल एडमिन के लिए है।"},
     "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
     "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
@@ -761,6 +768,7 @@ def _main_menu(staff: dict) -> tuple[str, list]:
         [{"text": T(lang, "b_involved"), "callback_data": "t:inv"},
          {"text": T(lang, "b_archived"), "callback_data": "t:arch"}],
         [{"text": T(lang, "b_newtask"), "callback_data": "nt:new"}],
+        [{"text": T(lang, "b_findclaim"), "callback_data": "cl:find"}] if admin else None,
         [{"text": T(lang, "b_approvals"), "callback_data": "ap:list"}] if admin else None,
         [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
          {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
@@ -1133,6 +1141,24 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
             _kb([[{"text": T(lang, "b_send_yes"), "callback_data": f"crc:yes:{cid}"},
                   {"text": T(lang, "b_confirm_no"), "callback_data": "crc:no"}]]))
         return
+    if act == "claim_search":
+        await _set_pending(staff["staff_id"], None)
+        if not _can(staff, "sub_super_admin"):
+            await send_message(str(chat_id), T(lang, "admin_only")); return
+        matches = await _claim_search(text)
+        if not matches:
+            await send_message(str(chat_id), T(lang, "cl_none"),
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            return
+        if len(matches) == 1:
+            await send_message(str(chat_id), _fmt_claim_card(matches[0], lang),
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            return
+        btns = [[{"text": f"#{m['claim_id']} · {(m.get('insured_name') or '')[:28]}",
+                  "callback_data": f"cl:v:{m['claim_id']}"}] for m in matches]
+        btns.append([{"text": T(lang, "b_menu"), "callback_data": "m:home"}])
+        await send_message(str(chat_id), T(lang, "cl_matches", n=len(matches)), _kb(btns))
+        return
     if act == "ai":
         await _set_pending(staff["staff_id"], None)
         await send_message(str(chat_id), T(lang, "thinking"))
@@ -1266,6 +1292,55 @@ async def _after_link(chat_id, linked: dict) -> None:
     t, kb = _main_menu(staff or {"name": linked["name"], "role": "team_member"})
     await send_message(str(chat_id), t, kb)
     logger.info("🔐 Telegram linked staff_id=%s via connect code", linked["staff_id"])
+
+
+async def _claim_search(query: str, limit: int = 6) -> list:
+    """Find claims by claim number, insured name, or phone (read-only). Admin+ only (gated upstream)."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    digits = "".join(ch for ch in q if ch.isdigit())
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        where, params = [], []
+        if digits:
+            where.append("(c.claim_id = ? OR c.insured_phone LIKE ?)")
+            params += [int(digits) if digits.isdigit() else -1, f"%{digits}%"]
+        where.append("c.insured_name LIKE ?")
+        params.append(f"%{q}%")
+        rows = await (await conn.execute(
+            "SELECT c.claim_id, c.insured_name, c.insured_phone, c.claim_type, c.status, "
+            "c.disputed_amount, c.insurer_name, c.review_outcome, c.claimshield_case_id, "
+            "c.claimshield_status_raw FROM nidaan_claims c "
+            "WHERE " + " OR ".join(where) + " ORDER BY c.claim_id DESC LIMIT ?",
+            params + [limit])).fetchall()
+    return [dict(r) for r in rows]
+
+
+async def _claim_detail(claim_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT c.*, a.name AS assignee FROM nidaan_claims c "
+            "LEFT JOIN nidaan_staff a ON a.staff_id = c.assigned_to_legal_user_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+    return dict(row) if row else None
+
+
+def _fmt_claim_card(c: dict, lang: str) -> str:
+    st = (c.get("status") or "").replace("_", " ")
+    hi = lang == "hi"
+    lines = [f"📋 *{'दावा' if hi else 'Claim'} #{c.get('claim_id')}* — {c.get('insured_name') or '—'}"]
+    lines.append(f"{'फ़ोन' if hi else 'Phone'}: {c.get('insured_phone') or '—'}")
+    lines.append(f"{'प्रकार' if hi else 'Type'}: {c.get('claim_type') or '—'} · {'बीमाकर्ता' if hi else 'Insurer'}: {c.get('insurer_name') or '—'}")
+    lines.append(f"{'विवादित' if hi else 'Disputed'}: ₹{int(c.get('disputed_amount') or 0):,}")
+    lines.append(f"{'स्थिति' if hi else 'Status'}: {st or '—'}")
+    if c.get("claimshield_case_id"):
+        lines.append(f"⚖️ ClaimShield #{c.get('claimshield_case_id')}"
+                     + (f" · {c.get('claimshield_status_raw')}" if c.get('claimshield_status_raw') else ""))
+    if c.get("assignee"):
+        lines.append(f"👤 {'सौंपा गया' if hi else 'Handler'}: {c.get('assignee')}")
+    return "\n".join(lines)
 
 
 async def _handle_callback(cq: dict) -> None:
@@ -1426,6 +1501,28 @@ async def _handle_callback(cq: dict) -> None:
         if data == "nt:new":
             await _set_pending(staff["staff_id"], {"a": "create", "step": "title", "data": {}})
             await send_message(str(chat_id), T(lang, "nt_title"))
+            await ack(); return
+
+        if data == "cl:find":
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            await _set_pending(staff["staff_id"], {"a": "claim_search"})
+            await send_message(str(chat_id), T(lang, "cl_ask"))
+            await ack(); return
+
+        if data.startswith("cl:v:"):
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            try:
+                _cid = int(data.split(":")[2])
+            except Exception:
+                await ack(); return
+            c = await _claim_detail(_cid)
+            if not c:
+                await send_message(str(chat_id), T(lang, "cl_none"))
+            else:
+                await send_message(str(chat_id), _fmt_claim_card(c, lang),
+                    _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
             await ack(); return
 
         if data.startswith("cr:"):
