@@ -236,6 +236,16 @@ CAPABILITIES: list[dict] = [
         "telegram": True, "web": True, "min_role": "sub_super_admin",
     },
     {
+        "id": "tg_claim_actions",
+        "en": {"t": "Add a note or move a claim's stage from Telegram",
+               "d": "From a claim in the bot, add an internal note or change its stage — with a confirm step.",
+               "u": "Found a claim in the bot? Tap 💬 Add note or ➡️ Move stage — confirm, done, no laptop needed."},
+        "hi": {"t": "टेलीग्राम से नोट जोड़ें या दावे का चरण बदलें",
+               "d": "बॉट में किसी दावे से आंतरिक नोट जोड़ें या उसका चरण बदलें — पुष्टि के साथ।",
+               "u": "बॉट में दावा मिला? 💬 नोट जोड़ें या ➡️ चरण बदलें दबाएँ — पुष्टि करें, हो गया, लैपटॉप की ज़रूरत नहीं।"},
+        "telegram": True, "web": True, "min_role": "sub_super_admin",
+    },
+    {
         "id": "deliver_review",
         "en": {"t": "Deliver a legal assessment to the customer",
                "d": "Share whether a claim can be challenged — the customer sees it on their dashboard.",
