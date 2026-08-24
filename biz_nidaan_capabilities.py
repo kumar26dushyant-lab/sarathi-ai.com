@@ -226,6 +226,16 @@ CAPABILITIES: list[dict] = [
     },
     # ── Claims & Level-2 (legal) ─────────────────────────────────────────
     {
+        "id": "tg_find_claim",
+        "en": {"t": "Find a claim from Telegram",
+               "d": "Search any claim by number, customer name or phone — right in the bot.",
+               "u": "On the move? Tap 🔎 Find a claim in the bot, type a name, and see its status instantly."},
+        "hi": {"t": "टेलीग्राम से दावा खोजें",
+               "d": "किसी भी दावे को नंबर, ग्राहक के नाम या फ़ोन से खोजें — बॉट में ही।",
+               "u": "बाहर हैं? बॉट में 🔎 दावा खोजें दबाएँ, नाम लिखें, और तुरंत स्थिति देखें।"},
+        "telegram": True, "web": True, "min_role": "sub_super_admin",
+    },
+    {
         "id": "deliver_review",
         "en": {"t": "Deliver a legal assessment to the customer",
                "d": "Share whether a claim can be challenged — the customer sees it on their dashboard.",
