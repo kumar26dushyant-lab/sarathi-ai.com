@@ -557,6 +557,12 @@ _BOT_TXT: dict = {
     "cls_confirm":  {"en": "Move claim #{id} to *{stage}*?", "hi": "दावा #{id} को *{stage}* में ले जाएँ?"},
     "cls_done":     {"en": "✓ Claim #{id} moved to {stage}.", "hi": "✓ दावा #{id} को {stage} में ले जाया गया।"},
     "cancelled":    {"en": "Cancelled.", "hi": "रद्द कर दिया।"},
+    "b_mynumbers":  {"en": "📊 My numbers", "hi": "📊 मेरे आँकड़े"},
+    "stats_title":  {"en": "📊 *Today's numbers*", "hi": "📊 *आज के आँकड़े*"},
+    "st_today":     {"en": "New claims today", "hi": "आज नए दावे"},
+    "st_open":      {"en": "Open claims", "hi": "खुले दावे"},
+    "st_l2":        {"en": "L2 (reviewed-GO) claims", "hi": "L2 (समीक्षा-GO) दावे"},
+    "st_mytasks":   {"en": "Tasks pending with me", "hi": "मेरे पेंडिंग टास्क"},
     "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
     "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
@@ -777,7 +783,8 @@ def _main_menu(staff: dict) -> tuple[str, list]:
         [{"text": T(lang, "b_involved"), "callback_data": "t:inv"},
          {"text": T(lang, "b_archived"), "callback_data": "t:arch"}],
         [{"text": T(lang, "b_newtask"), "callback_data": "nt:new"}],
-        [{"text": T(lang, "b_findclaim"), "callback_data": "cl:find"}] if admin else None,
+        [{"text": T(lang, "b_findclaim"), "callback_data": "cl:find"},
+         {"text": T(lang, "b_mynumbers"), "callback_data": "an:me"}] if admin else None,
         [{"text": T(lang, "b_approvals"), "callback_data": "ap:list"}] if admin else None,
         [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
          {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
@@ -1345,6 +1352,26 @@ async def _claim_detail(claim_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def _bot_stats(staff: dict, lang: str) -> str:
+    """A quick office snapshot for the bot — claims today / open / L2, and my pending tasks."""
+    sid = staff.get("staff_id")
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        async def _c(sql, params=()):
+            r = await (await conn.execute(sql, params)).fetchone()
+            return (r[0] if r else 0) or 0
+        today = await _c("SELECT COUNT(*) FROM nidaan_claims WHERE date(created_at)=date('now')")
+        openc = await _c("SELECT COUNT(*) FROM nidaan_claims WHERE status IN "
+                         "('intimated','assigned','in_review','in_negotiation')")
+        l2 = await _c("SELECT COUNT(*) FROM nidaan_claims WHERE review_outcome='can_fight'")
+        mytasks = await _c("SELECT COUNT(*) FROM nidaan_quick_tasks WHERE assigned_to_staff_id=? "
+                           "AND status NOT IN ('done','cancelled')", (sid,))
+    return (T(lang, "stats_title") + "\n\n"
+            + f"• {T(lang, 'st_today')}: *{today}*\n"
+            + f"• {T(lang, 'st_open')}: *{openc}*\n"
+            + f"• {T(lang, 'st_l2')}: *{l2}*\n"
+            + f"• {T(lang, 'st_mytasks')}: *{mytasks}*")
+
+
 # Curated stage moves offered from the bot (the meaningful claim pipeline).
 _TG_STAGES = [("assigned", {"en": "Assigned", "hi": "सौंपा गया"}),
               ("in_review", {"en": "In review", "hi": "समीक्षा में"}),
@@ -1544,6 +1571,13 @@ async def _handle_callback(cq: dict) -> None:
         if data == "nt:new":
             await _set_pending(staff["staff_id"], {"a": "create", "step": "title", "data": {}})
             await send_message(str(chat_id), T(lang, "nt_title"))
+            await ack(); return
+
+        if data == "an:me":
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
+            await send_message(str(chat_id), await _bot_stats(staff, lang),
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
             await ack(); return
 
         if data == "cl:find":
