@@ -6709,7 +6709,18 @@ async def ops_plans_config(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "super_admin")
-    return {"plans": await nidaan.all_plans_config_full()}
+    # GST-inclusive pricing per plan (base + GST + total) so every surface (mark-paid, checkout)
+    # charges the SAME correct amount — single source of truth for price.
+    gst = await nidaan.gst_config()
+    pricing = {}
+    for key in ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual"):
+        _cfg = await nidaan.get_plan_cfg(key)
+        _base = int(_cfg.get("price_paise") or 0) / 100
+        g = await nidaan.charge_with_gst(_base)
+        pricing[key] = {"base": g["base"], "gst": g["gst"], "total": g["total"]}
+    return {"plans": await nidaan.all_plans_config_full(),
+            "gst": {"enabled": gst["enabled"], "rate": gst["rate"]},
+            "pricing": pricing}
 
 
 class OpsPlanConfigUpdate(BaseModel):

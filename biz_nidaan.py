@@ -1518,6 +1518,8 @@ async def create_subscription(
     if plan not in PLAN_LIMITS:
         raise ValueError(f"Unknown Nidaan plan: {plan}")
     period_end = datetime.utcnow() + timedelta(days=period_days)
+    # We only offer MONTHLY or ANNUAL (no quarterly) — label from the period.
+    _cycle = "annual" if period_days >= 350 else "monthly"
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE nidaan_subscriptions SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP "
@@ -1527,10 +1529,10 @@ async def create_subscription(
         cur = await conn.execute(
             """INSERT INTO nidaan_subscriptions
                (account_id, plan, amount_paid, razorpay_subscription_id, razorpay_payment_id,
-                current_period_end)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                current_period_end, billing_cycle)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (account_id, plan, amount_paid, razorpay_subscription_id, razorpay_payment_id,
-             period_end.isoformat()),
+             period_end.isoformat(), _cycle),
         )
         await conn.commit()
         return cur.lastrowid

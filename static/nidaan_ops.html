@@ -5482,19 +5482,27 @@ function renderAccounts(accounts) {
 }
 
 // ── Mark paid (offline / QR) — super-admin only ────────────────────────────────
-function openMarkPaidModal(id){
+let _mpPricing=null, _mpGst=null;
+async function openMarkPaidModal(id){
   const acct=(window._allAccounts||[]).find(a=>a.account_id===id)||{};
-  const plans=[...new Set([...(window._allAccounts||[]).map(a=>a.plan).filter(Boolean),'silver','gold','platinum'])];
-  const opts=plans.map(p=>`<option value="${p}"${p===acct.plan?' selected':''}>${p}</option>`).join('');
+  // Load GST-inclusive pricing so the amount is pre-filled correctly (single source of truth).
+  try{ const r=await API('/plans-config'); if(r.ok){ const d=await r.json(); _mpPricing=d.pricing||{}; _mpGst=d.gst||{}; } }catch(e){}
+  const baseP=['silver','gold','platinum'];
+  const opts=baseP.map(p=>`<option value="${p}"${p===acct.plan?' selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('');
   const ov=document.createElement('div'); ov.id='mpOv';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid rgba(34,197,94,.4);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
     <div style="font-size:1.1rem;font-weight:800;color:var(--nd-success-text);margin-bottom:.3rem">💰 Mark paid — #${id} ${esc(acct.owner_name||'')}</div>
-    <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Record an offline / QR payment and activate the plan. This is logged with your name.</div>
+    <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Record an offline / QR payment and activate the plan. Amount auto-fills with GST — override only if a different amount was actually received. Logged with your name.</div>
     <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Plan</label>
-    <select id="mpPlan" style="width:100%;margin-bottom:.7rem">${opts}</select>
-    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Amount received (₹)</label>
-    <input id="mpAmt" type="number" min="1" placeholder="e.g. 999" style="width:100%;margin-bottom:.7rem">
+    <select id="mpPlan" onchange="_mpRecalc()" style="width:100%;margin-bottom:.7rem">${opts}</select>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Billing cycle</label>
+    <select id="mpCycle" onchange="_mpRecalc()" style="width:100%;margin-bottom:.7rem">
+      <option value="monthly">Monthly</option><option value="annual">Annual</option>
+    </select>
+    <div id="mpBreak" style="font-size:.78rem;color:var(--nd-text-muted);background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem"></div>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">Amount received (₹, GST-inclusive)</label>
+    <input id="mpAmt" type="number" min="1" step="0.01" style="width:100%;margin-bottom:.7rem">
     <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">UTR / reference (optional)</label>
     <input id="mpRef" autocomplete="off" placeholder="UTR / QR ref / note" style="width:100%;margin-bottom:1rem">
     <div id="mpMsg" style="font-size:.82rem;color:var(--nd-danger-text);margin-bottom:.6rem"></div>
@@ -5503,18 +5511,33 @@ function openMarkPaidModal(id){
       <button id="mpBtn" class="btn" style="background:#16a34a;color:#fff" onclick="doMarkPaid(${id})">Mark paid & activate</button>
     </div></div>`;
   document.body.appendChild(ov);
-  setTimeout(()=>{const el=document.getElementById('mpAmt'); if(el)el.focus();},50);
+  _mpRecalc();
+}
+function _mpPlanKey(){
+  const p=(document.getElementById('mpPlan')||{}).value||'silver';
+  const c=(document.getElementById('mpCycle')||{}).value||'monthly';
+  return c==='annual' ? (p+'_annual') : p;
+}
+function _mpRecalc(){
+  const key=_mpPlanKey();
+  const pr=(_mpPricing||{})[key];
+  const brk=document.getElementById('mpBreak'), amt=document.getElementById('mpAmt');
+  if(pr){
+    if(brk) brk.innerHTML = `Base ₹${fmt(pr.base)}${(_mpGst&&_mpGst.enabled&&pr.gst)?` + ${_mpGst.rate}% GST ₹${fmt(pr.gst)}`:''} = <b style="color:var(--nd-success-text)">₹${fmt(pr.total)}</b>`;
+    if(amt) amt.value = pr.total;
+  } else { if(brk) brk.textContent='No configured price for this plan/cycle.'; }
 }
 async function doMarkPaid(id){
-  const plan=(document.getElementById('mpPlan')||{}).value||'';
-  const amt=parseInt((document.getElementById('mpAmt')||{}).value||'0',10);
+  const plan=_mpPlanKey();
+  const cycle=(document.getElementById('mpCycle')||{}).value||'monthly';
+  const amt=parseFloat((document.getElementById('mpAmt')||{}).value||'0');
   const ref=((document.getElementById('mpRef')||{}).value||'').trim();
   const msg=document.getElementById('mpMsg'), btn=document.getElementById('mpBtn');
   if(!plan){ if(msg)msg.textContent='Choose a plan.'; return; }
   if(!amt||amt<1){ if(msg)msg.textContent='Enter the amount received.'; return; }
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
-    const r=await API('/accounts/'+id+'/mark-paid',{method:'POST',body:JSON.stringify({plan:plan,amount:amt,ref:ref})});
+    const r=await API('/accounts/'+id+'/mark-paid',{method:'POST',body:JSON.stringify({plan:plan,amount:Math.round(amt),ref:ref,period_days:(cycle==='annual'?365:30)})});
     const d=await r.json().catch(()=>({}));
     if(r.ok){ const o=document.getElementById('mpOv'); if(o)o.remove(); if(typeof loadAccounts==='function') loadAccounts(); }
     else { if(msg)msg.textContent=d.detail||'Could not mark paid'; if(btn){btn.disabled=false;btn.textContent='Mark paid & activate';} }
