@@ -2764,6 +2764,20 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
                                 customer_state="", claim_id=claim_id, account_id=account_id)
     except Exception as _ge:
         logger.warning("record_gst failed for claim %s: %s", claim_id, _ge)
+    # Unified ledger: single row per ₹499 claim, from verify / webhook / recovery / reconcile.
+    try:
+        _c499 = (await nidaan.charge_with_gst(int(_fee)))["total_paise"]
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_c499, base_paise=int(_fee) * 100,
+            dedup_key=(razorpay_payment_id or f"claim499:{claim_id}"),
+            razorpay_payment_id=(razorpay_payment_id or ""),
+            account_id=account_id, claim_id=claim_id,
+            verified=bool(razorpay_payment_id),
+            verify_method=("api_fetch" if source in ("recovery", "reconcile") else
+                           ("webhook" if source == "webhook" else "signature")),
+            note=f"₹{_fee} claim review · via {source}")
+    except Exception as _pe:
+        logger.warning("record_payment (review499) failed for claim %s: %s", claim_id, _pe)
     sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
     try:
         _flag = await ntasks.get_flag("auto_create_initial_task", "1")
@@ -3379,6 +3393,24 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
         await nidaan.ensure_claim_for_paid_purchase(purchase_id)
     except Exception as _ecp:
         logger.error("ensure_claim_for_paid_purchase failed (verify) purchase=%s: %s", purchase_id, _ecp)
+    # Unified ledger + GST for the D2C per-claim review (was previously untracked).
+    try:
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _p = await (await _c.execute(
+                "SELECT amount_paid, converted_to_claim_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
+                (purchase_id,))).fetchone()
+        _amt = int((_p["amount_paid"] if _p else 0) or 0)
+        _cid = (_p["converted_to_claim_id"] if _p else None)
+        await nidaan.record_gst(body.razorpay_payment_id, "per_claim_review", _amt,
+                                claim_id=_cid, account_id=payload["sub"])
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_amt * 100,
+            dedup_key=body.razorpay_payment_id, razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_order_id=body.razorpay_order_id, account_id=payload["sub"], claim_id=_cid,
+            verified=True, verify_method="signature", note=f"D2C per-claim review · purchase #{purchase_id}")
+    except Exception as _pe:
+        logger.warning("record_payment (per_claim verify) failed purchase=%s: %s", purchase_id, _pe)
     # Email ops team
     admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
     if admin_email:
@@ -4072,6 +4104,19 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
     )
     # Mark as paid immediately
     await nidaan.update_review_request_status(purchase_id, "paid")
+    # Unified ledger + GST for the review request (was previously untracked).
+    try:
+        _rfee = await nidaan.review_fee_for(body.disputed_amount)
+        _rtot = (await nidaan.charge_with_gst(int(_rfee)))["total_paise"]
+        await nidaan.record_gst(body.razorpay_payment_id, "review_request", _rfee, account_id=account_id)
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_rtot, base_paise=int(_rfee) * 100,
+            dedup_key=body.razorpay_payment_id, razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_order_id=getattr(body, "razorpay_order_id", "") or "",
+            account_id=account_id, verified=True, verify_method="signature",
+            note=f"review request #{purchase_id}")
+    except Exception as _pe:
+        logger.warning("record_payment (review-request) failed purchase=%s: %s", purchase_id, _pe)
     # Notify admin
     admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
     if admin_email:
@@ -5488,7 +5533,7 @@ class NidaanMarkPaidReq(BaseModel):
     plan: str
     amount: int              # rupees actually received
     ref: str = ""            # UTR / QR ref / note
-    period_days: int = 90
+    period_days: int = 30    # monthly default (no quarterly)
 
 
 @app.post("/nidaan/ops/api/accounts/{account_id}/mark-paid")
@@ -5509,11 +5554,16 @@ async def nidaan_ops_mark_paid(account_id: int, body: NidaanMarkPaidReq, request
     if amt < 1:
         raise HTTPException(status_code=400, detail="Enter the amount received")
     ref = (body.ref or "").strip()[:60]
-    days = int(body.period_days or 90)
-    # Activate the Nidaan subscription (offline/QR — no Razorpay event).
-    await nidaan.create_subscription(account_id, plan, amt,
-                                     razorpay_payment_id=(f"MANUAL:{ref}" if ref else "MANUAL"),
-                                     period_days=days)
+    days = int(body.period_days or 30)
+    # Activate the Nidaan subscription (offline/QR — no Razorpay event). The unified ledger
+    # row is stamped with the REAL actor (even under impersonation) for full accountability.
+    _actor = _get_staff_from_request(request) or caller
+    await nidaan.create_subscription(
+        account_id, plan, amt,
+        razorpay_payment_id=(f"MANUAL:{ref}" if ref else f"MANUAL:{account_id}:{int(_time.time())}"),
+        period_days=days, verify_method="manual",
+        actor_id=str((_actor or {}).get("staff_id") or (_actor or {}).get("id") or ""),
+        actor_name=_actor_label(caller))
     # SANCTIONED bundle coupling only: if this plan includes the Sarathi bundle, provision it.
     try:
         if nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):

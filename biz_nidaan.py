@@ -1508,12 +1508,20 @@ async def create_subscription(
     razorpay_subscription_id: str = "",
     period_days: int = 90,
     razorpay_payment_id: str = "",
+    actor_id: str = "",
+    actor_name: str = "",
+    verify_method: str = "",
 ) -> int:
     """Record a new subscription. Returns sub_id.
 
     `razorpay_subscription_id` actually holds the Razorpay ORDER id for one-time
     payments (legacy column name). `razorpay_payment_id` is the actual payment
     id used for refunds via POST /payments/{payment_id}/refund.
+
+    `actor_id`/`actor_name` are the REAL staff who triggered a manual mark-paid (so the
+    unified ledger stays accountable even under impersonation). `verify_method` lets the
+    caller state how the payment was confirmed (signature|api_fetch|webhook|manual); when
+    blank it is inferred from the payment id.
     """
     if plan not in PLAN_LIMITS:
         raise ValueError(f"Unknown Nidaan plan: {plan}")
@@ -1535,7 +1543,37 @@ async def create_subscription(
              period_end.isoformat(), _cycle),
         )
         await conn.commit()
-        return cur.lastrowid
+        sub_id = cur.lastrowid
+    # ── Unified payment ledger (single source of truth for Revenue + trail) ──────
+    # Every subscription activation funnels through here, so one record_payment call
+    # covers order-pay, recurring-verify, webhook and manual mark-paid alike.
+    try:
+        _is_manual = (razorpay_payment_id or "").upper().startswith("MANUAL")
+        _total_paise = int(round(float(amount_paid or 0) * 100))
+        try:
+            _base_paise = int((await get_plan_cfg(plan)).get("price_paise") or 0)
+        except Exception:
+            _base_paise = 0
+        if not _base_paise or _base_paise > _total_paise:
+            _base_paise = _total_paise
+        # For manual there is no gateway payment id → build a stable synthetic dedup key.
+        _dedup = (razorpay_payment_id or razorpay_subscription_id or "").strip()
+        if _is_manual or not _dedup:
+            _dedup = f"sub:{account_id}:{razorpay_payment_id or razorpay_subscription_id or sub_id}"
+        await record_payment(
+            source="subscription", total_paise=_total_paise, base_paise=_base_paise,
+            dedup_key=_dedup, gateway=("manual" if _is_manual else "razorpay"),
+            razorpay_payment_id=("" if _is_manual else (razorpay_payment_id or "")),
+            razorpay_subscription_id=razorpay_subscription_id or "",
+            account_id=account_id, plan=plan,
+            verified=(not _is_manual),
+            verify_method=(verify_method or ("manual" if _is_manual else
+                           ("api_fetch" if razorpay_subscription_id else "signature"))),
+            actor_id=actor_id, actor_name=actor_name,
+            note=(razorpay_payment_id if _is_manual else ""))
+    except Exception as _pe:
+        logger.warning("record_payment (subscription) failed: %s", _pe)
+    return sub_id
 
 
 # =============================================================================
@@ -1793,6 +1831,23 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
             await record_gst(payment_id, "branch_l2", int(fee), claim_id=claim_id)
         except Exception as _ge:
             logger.warning("record_gst (branch_l2) failed: %s", _ge)
+        # Unified ledger: L2 fee funnels through here from every path (branch verify,
+        # ops verify, webhook, reconcile) — record once, idempotent on payment_id.
+        try:
+            _acct = None
+            async with aiosqlite.connect(DB_PATH) as _c:
+                _r = await (await _c.execute(
+                    "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+                _acct = _r[0] if _r else None
+            _l2total = (await charge_with_gst(int(fee)))["total_paise"]
+            await record_payment(
+                source="branch_l2", total_paise=_l2total, base_paise=int(fee) * 100,
+                dedup_key=(payment_id or f"l2:{claim_id}"), razorpay_payment_id=(payment_id or ""),
+                account_id=_acct, claim_id=claim_id, branch_code=code,
+                verified=bool(payment_id), verify_method=("signature" if payment_id else "manual"),
+                note="branch L2 acceptance fee")
+        except Exception as _pe:
+            logger.warning("record_payment (branch_l2) failed: %s", _pe)
     # Branch/staff L2 fee now paid on a reviewed-GO claim → auto-move to ClaimShield.
     try:
         import biz_claimshield as _cs
@@ -1838,13 +1893,30 @@ async def mark_payment_link_paid(plink_id: str, razorpay_payment_id: str = "",
                                  account_id: Optional[int] = None) -> bool:
     """Flip a link to 'paid' (idempotent). Returns True only if THIS call did the flip."""
     async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             "UPDATE nidaan_payment_links SET status='paid', razorpay_payment_id=?, "
             "paid_at=CURRENT_TIMESTAMP, account_id=COALESCE(?, account_id) "
             "WHERE plink_id=? AND status!='paid'",
             (razorpay_payment_id or "", account_id, plink_id))
         await conn.commit()
-        return cur.rowcount > 0
+        flipped = cur.rowcount > 0
+        row = await (await conn.execute(
+            "SELECT purpose, amount_paise, claim_id, account_id, branch_code FROM "
+            "nidaan_payment_links WHERE plink_id=?", (plink_id,))).fetchone()
+    # Unified ledger: record ONLY standalone 'custom' links here. subscription/review499/l2
+    # links materialise a sub/purchase/claim and are recorded via those funnels (no double-count).
+    if flipped and row and (row["purpose"] or "") == "custom":
+        try:
+            await record_payment(
+                source="payment_link", total_paise=int(row["amount_paise"] or 0),
+                dedup_key=(razorpay_payment_id or plink_id), razorpay_payment_id=(razorpay_payment_id or ""),
+                account_id=row["account_id"], claim_id=row["claim_id"],
+                branch_code=(row["branch_code"] or ""), verified=bool(razorpay_payment_id),
+                verify_method="webhook", note=f"custom payment link {plink_id}")
+        except Exception as _pe:
+            logger.warning("record_payment (custom link) failed %s: %s", plink_id, _pe)
+    return flipped
 
 
 async def set_payment_link_account(plink_id: str, account_id: int) -> None:
@@ -5558,6 +5630,79 @@ async def record_gst(razorpay_payment_id: str, purpose: str, base_rupees: float,
             (razorpay_payment_id or "", purpose, claim_id, account_id, bk["base"], bk["gst"],
              bk["total"], bk["cgst"], bk["sgst"], bk["igst"], bk["rate"], customer_state or ""))
         await conn.commit()
+
+
+async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
+                         gateway: str = "razorpay", razorpay_payment_id: str = "",
+                         razorpay_order_id: str = "", razorpay_subscription_id: str = "",
+                         account_id=None, claim_id=None, branch_code: str = "", plan: str = "",
+                         base_paise: int = 0, gst_paise: int = 0, verified: bool = False,
+                         verify_method: str = "", status: str = "captured",
+                         actor_id: str = "", actor_name: str = "", channel: str = "",
+                         ref_code: str = "", note: str = "") -> bool:
+    """Single source of truth for EVERY successful payment, whatever the source.
+
+    Idempotent on dedup_key (defaults to razorpay_payment_id; callers with no gateway id
+    MUST pass a stable synthetic dedup_key so retries/webhooks don't double-count). Returns
+    True if a new ledger row was written, False if this payment was already recorded.
+
+    Safe/additive: never raises into the caller's payment flow — a ledger hiccup must not
+    break activation. base/gst are best-effort; if only total is known they can be 0."""
+    try:
+        _key = (dedup_key or razorpay_payment_id or "").strip()
+        if not _key:
+            # No gateway id and no explicit key → synthesize a stable one so we still
+            # record, but flag it (helps reconciliation catch missing keys).
+            _key = f"{source}:{gateway}:{account_id}:{claim_id}:{plan}:{int(total_paise)}"
+        if base_paise and not gst_paise:
+            gst_paise = max(0, int(total_paise) - int(base_paise))
+        elif not base_paise and not gst_paise:
+            base_paise = int(total_paise)  # unknown split → treat total as base
+        async with aiosqlite.connect(DB_PATH) as conn:
+            ex = await (await conn.execute(
+                "SELECT 1 FROM nidaan_payments WHERE dedup_key=?", (_key,))).fetchone()
+            if ex:
+                return False
+            await conn.execute(
+                """INSERT INTO nidaan_payments
+                   (dedup_key, source, gateway, razorpay_payment_id, razorpay_order_id,
+                    razorpay_subscription_id, account_id, claim_id, branch_code, plan,
+                    base_paise, gst_paise, total_paise, verified, verify_method, status,
+                    actor_id, actor_name, channel, ref_code, note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (_key, source, gateway, razorpay_payment_id or "", razorpay_order_id or "",
+                 razorpay_subscription_id or "", account_id, claim_id, (branch_code or "").upper(),
+                 plan or "", int(base_paise or 0), int(gst_paise or 0), int(total_paise or 0),
+                 1 if verified else 0, verify_method or "", status or "captured",
+                 actor_id or "", actor_name or "", channel or "", (ref_code or "").upper(), note or ""))
+            await conn.commit()
+        return True
+    except Exception as e:
+        try:
+            print(f"[record_payment] WARN could not record {source} {dedup_key or razorpay_payment_id}: {e}")
+        except Exception:
+            pass
+        return False
+
+
+async def get_account_payments(account_id: int) -> list:
+    """Full verified payment trail for one account (newest first) — for the account panel."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            """SELECT * FROM nidaan_payments WHERE account_id=? ORDER BY created_at DESC""",
+            (account_id,))).fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_claim_payments(claim_id: int) -> list:
+    """Full payment trail for one claim (newest first) — for the claim panel."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            """SELECT * FROM nidaan_payments WHERE claim_id=? ORDER BY created_at DESC""",
+            (claim_id,))).fetchall()
+    return [dict(r) for r in rows]
 
 
 def gst_breakup(base_rupees: float, rate: float, home_state: str = "", customer_state: str = "") -> dict:

@@ -1146,6 +1146,45 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_gst_created ON nidaan_gst_ledger(created_at);
 
+            -- UNIFIED PAYMENT LEDGER: exactly ONE row per successful payment, whatever the
+            -- source (recurring subscription, one-time claim review, branch L2 fee, payment
+            -- link, manual offline/QR mark-paid, Sarathi CRM sub). This is the single source of
+            -- truth for Revenue and for the account-level / claim-level payment trail. Every
+            -- verified-success path calls nidaan.record_payment() which writes here idempotently
+            -- (dedup_key = razorpay_payment_id when present, else a stable synthetic key). Amounts
+            -- in PAISE. verified=1 only when Razorpay-confirmed (signature/api/webhook); manual
+            -- mark-paid rows carry the REAL actor (actor_id/actor_name) even under impersonation.
+            CREATE TABLE IF NOT EXISTS nidaan_payments (
+                pay_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                dedup_key           TEXT UNIQUE NOT NULL,  -- rzp payment id, or synthetic for manual
+                source              TEXT NOT NULL,         -- subscription|per_claim_review|branch_l2|payment_link|mark_paid|sarathi_sub|other
+                gateway             TEXT DEFAULT 'razorpay',-- razorpay|manual|qr
+                razorpay_payment_id TEXT DEFAULT '',
+                razorpay_order_id   TEXT DEFAULT '',
+                razorpay_subscription_id TEXT DEFAULT '',
+                account_id          INTEGER,
+                claim_id            INTEGER,
+                branch_code         TEXT DEFAULT '',
+                plan                TEXT DEFAULT '',
+                base_paise          INTEGER NOT NULL DEFAULT 0,
+                gst_paise           INTEGER NOT NULL DEFAULT 0,
+                total_paise         INTEGER NOT NULL DEFAULT 0,
+                currency            TEXT DEFAULT 'INR',
+                verified            INTEGER DEFAULT 0,     -- 1 = Razorpay-confirmed
+                verify_method       TEXT DEFAULT '',       -- signature|api_fetch|webhook|manual
+                status              TEXT DEFAULT 'captured',-- captured|authorized|failed|refunded
+                actor_id            TEXT DEFAULT '',       -- real staff id for manual/mark-paid
+                actor_name          TEXT DEFAULT '',
+                channel             TEXT DEFAULT '',       -- direct|staff|branch|campaign
+                ref_code            TEXT DEFAULT '',
+                note                TEXT DEFAULT '',
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_pay_account ON nidaan_payments(account_id);
+            CREATE INDEX IF NOT EXISTS idx_pay_claim   ON nidaan_payments(claim_id);
+            CREATE INDEX IF NOT EXISTS idx_pay_created ON nidaan_payments(created_at);
+            CREATE INDEX IF NOT EXISTS idx_pay_source  ON nidaan_payments(source);
+
             -- Business-analytics event log. Every meaningful attempt/outcome is appended here so
             -- the super-admin analytics dashboard can segment signups / one-time / subscribers /
             -- failures / abandonment BY CHANNEL in real time. Append-only; never mutated in place.
