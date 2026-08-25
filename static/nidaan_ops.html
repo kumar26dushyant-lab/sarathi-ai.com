@@ -6635,12 +6635,68 @@ async function loadAnalytics() {
     </table></div>`;
 }
 
+// Source labels for the unified payment ledger (Tier II/III plain words, no ambiguous icons).
+const _PAY_SRC = {
+  subscription:'Subscription', per_claim_review:'Claim Review (₹499)',
+  branch_l2:'Level-2 Fee', payment_link:'Payment Link', mark_paid:'Manual/Offline',
+  sarathi_sub:'Sarathi CRM', other:'Other'
+};
+function _revLedgerHTML(pl){
+  if(!pl || !pl.summary){ return ''; }
+  const s = pl.summary;
+  const rec = s.reconciled
+    ? `<span style="color:var(--nd-success-text);font-weight:700">✅ Reconciled</span> — every rupee in the ledger matches the revenue tables (₹${fmt(s.ledger_total)}).`
+    : `<span style="color:var(--nd-danger-text);font-weight:700">⚠️ Check needed</span> — ledger ₹${fmt(s.ledger_total)} vs revenue tables ₹${fmt(s.legacy_total)} (difference ₹${fmt(s.delta)}). Tell the developer.`;
+  const bySrc = (s.by_source||[]).map(x=>
+    `<span class="pill-status" style="margin:.15rem .3rem .15rem 0;background:var(--nd-bg-surface-2);color:var(--nd-text-secondary)">${_PAY_SRC[x.source]||x.source}: ₹${fmt(x.rupees)} <span style="color:var(--nd-text-faint)">(${x.n})</span></span>`
+  ).join('');
+  const rows = (pl.payments||[]).map(p=>{
+    const rs = (Number(p.total_paise||0)/100);
+    const who = p.claim_id ? ('Claim #'+p.claim_id) : (p.account_id ? ('Acct #'+p.account_id) : '—');
+    const vbadge = p.verified
+      ? '<span class="pill-status" style="background:rgba(16,185,129,.15);color:var(--nd-success-text)">Razorpay ✓</span>'
+      : '<span class="pill-status" style="background:rgba(234,179,8,.15);color:#a16207">Manual</span>';
+    const actor = (p.gateway==='manual' && p.actor_name) ? `<div style="font-size:.68rem;color:var(--nd-text-faint)">by ${esc(p.actor_name)}</div>` : '';
+    const rid = esc(p.razorpay_payment_id || p.dedup_key || '');
+    const dt = (p.created_at||'').replace('T',' ').slice(0,16);
+    return `<tr>
+      <td style="white-space:nowrap">${dt}</td>
+      <td>${_PAY_SRC[p.source]||p.source}</td>
+      <td style="white-space:nowrap">${who}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:700">₹${fmt(rs)}</td>
+      <td>${vbadge}${actor}</td>
+      <td style="font-size:.68rem;color:var(--nd-text-faint);max-width:160px;overflow:hidden;text-overflow:ellipsis">${rid}</td>
+    </tr>`;
+  }).join('');
+  const unver = (s.unverified_total>0)
+    ? `<div style="font-size:.76rem;color:#a16207;margin-top:.35rem">Manual/offline (no Razorpay confirmation): ₹${fmt(s.unverified_total)}</div>` : '';
+  return `
+    <div style="margin:1.25rem 0;padding:1rem;border:1px solid var(--nd-border);border-radius:12px;background:var(--nd-bg-surface-2)">
+      <div class="section-title" style="font-size:1rem;margin-bottom:.5rem">🧾 Payment Ledger — every payment, one trail</div>
+      <div style="font-size:.82rem;line-height:1.5;margin-bottom:.5rem">${rec}</div>
+      <div style="margin-bottom:.5rem">${bySrc}</div>
+      ${unver}
+      <div class="table-wrap" style="margin-top:.5rem">
+        <table style="min-width:640px">
+          <thead><tr>
+            <th>When</th><th>Type</th><th>For</th><th style="text-align:right">Amount</th><th>Verified</th><th>Ref</th>
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:var(--nd-text-faint);padding:1rem">No payments yet</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.4rem">Showing latest ${(pl.payments||[]).length}. Trail is also on each account &amp; claim.</div>
+    </div>`;
+}
 async function loadRevenue() {
   const el = document.getElementById('panel-revenue');
   el.innerHTML = '<div class="section-hdr"><div class="section-title">Revenue Dashboard</div><div class="section-sub">All time • Confidential</div></div><div class="empty"><p>Loading…</p></div>';
   const r = await API('/revenue');
   if (!r.ok) { el.innerHTML += '<div class="empty"><p>Failed to load</p></div>'; return; }
   const d = await r.json();
+  // Unified payment ledger (single source of truth) — recent entries + reconciliation.
+  let pl = null;
+  try { const plr = await API('/payments?limit=100'); if (plr.ok) pl = await plr.json(); } catch(e){}
+  const ledgerHTML = _revLedgerHTML(pl);
 
   const byPlanRows = Object.entries(d.by_plan||{}).map(([plan,info])=>`
     <div class="chart-bar-row">
@@ -6669,6 +6725,8 @@ async function loadRevenue() {
       <div class="stat-card"><div class="sv">₹${fmt(d.total_subscription_revenue)}</div><div class="sl">Subscription Revenue</div></div>
       <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">D2C ₹499 Revenue</div></div>
     </div>
+
+    ${ledgerHTML}
 
     <!-- Revenue Split -->
     <div style="margin-bottom:1.25rem">
