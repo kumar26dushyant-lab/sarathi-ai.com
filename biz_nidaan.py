@@ -6043,9 +6043,13 @@ async def get_claims_ops(
                     (SELECT COUNT(*) FROM nidaan_claim_notes cn
                      WHERE cn.claim_id = c.claim_id AND cn.staff_id != ?
                        AND NOT EXISTS(SELECT 1 FROM nidaan_claim_note_reads r
-                                      WHERE r.note_id = cn.note_id AND r.staff_id = ?)) AS unseen_notes
+                                      WHERE r.note_id = cn.note_id AND r.staff_id = ?)) AS unseen_notes,
+                    cp.access_token AS portal_token, cp.activated_at AS portal_activated_at,
+                    cp.consent_accepted_at AS consent_accepted_at, cp.consent_pushed_at AS consent_pushed_at,
+                    CASE WHEN cp.claim_id IS NOT NULL THEN 1 ELSE 0 END AS portal_exists
                FROM nidaan_claims c
                JOIN nidaan_accounts a ON a.account_id = c.account_id
+               LEFT JOIN nidaan_claimant_portal cp ON cp.claim_id = c.claim_id
                LEFT JOIN nidaan_subscriptions sub ON sub.account_id = a.account_id AND sub.status = 'active'
                LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
                LEFT JOIN nidaan_staff rst ON UPPER(rst.referral_code)=UPPER(COALESCE(NULLIF(c.branch_code,''), a.branch_code))
@@ -6080,6 +6084,17 @@ async def get_claims_ops(
                 r["source_kind"] = "review"
             else:
                 r["source_kind"] = "direct"
+            # Claimant portal + authorization trail (so the row shows it without opening the claim).
+            r["portal_created"] = bool(r.get("portal_exists"))
+            r["portal_opened"] = bool(r.get("portal_activated_at"))
+            if r.get("consent_accepted_at"):
+                r["authorization"] = "accepted"
+            elif r.get("consent_pushed_at"):
+                r["authorization"] = "pushed"
+            elif r.get("portal_exists"):
+                r["authorization"] = "portal_ready"
+            else:
+                r["authorization"] = "none"
         return rows
 
 
