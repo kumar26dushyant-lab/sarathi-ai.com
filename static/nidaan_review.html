@@ -259,6 +259,9 @@ async function submitReview(e) {
     notes: document.getElementById('notes').value.trim(),
     intermediary_code: (document.getElementById('intermediaryCode')?.value || '').trim(),
     intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim(),
+    // Carry the referral code (from ?ref= or persisted first-touch attribution) so the ₹499
+    // review is credited to the referrer instead of showing as a "Direct lead".
+    ref_code: (typeof _ref !== 'undefined' && _ref) ? _ref : '',
   };
 
   await sendVerifyOTP(false);

@@ -1325,9 +1325,14 @@ async def create_review_signup(
     notes: str = "",
     intermediary_code: str = "",
     intermediary_name: str = "",
+    ref_code: str = "",
 ) -> dict:
     """Direct-insured signup: find/create account and create a pending_payment purchase.
     Returns dict with account_id, purchase_id, is_new, temp_password (if new account).
+
+    ref_code: branch/staff referral code from the entry link (e.g. SP-XXXXXX). Attributed to the
+    account FIRST-TOUCH (locked) so the ₹499 review is credited to whoever referred it — fixing the
+    leak where review-signups always showed as "Direct lead".
 
     intermediary_code / intermediary_name: as printed on the policy. Recommended
     for legal correspondence; collected at intake per IRDAI guidelines."""
@@ -1349,6 +1354,10 @@ async def create_review_signup(
             password=temp_password,
             firm_name="",
         )
+    # Referral attribution (first-touch, locked): credit the referrer for this ₹499 review.
+    _rc = (ref_code or "").strip().upper()
+    if _rc and await is_valid_ref_code(_rc):
+        await set_account_branch(account_id, _rc)
     _fee = await review_fee_for(disputed_amount)   # Item #4: tiered review fee
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(

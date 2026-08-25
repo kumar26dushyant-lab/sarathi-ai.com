@@ -3195,6 +3195,7 @@ class NidaanReviewSignupReq(BaseModel):
     notes: str = ""
     intermediary_code: str = ""
     intermediary_name: str = ""
+    ref_code: str = ""   # branch/staff referral code from the entry link (?ref=SP-XXXXXX)
 
 
 class NidaanReviewPayByIdReq(BaseModel):
@@ -3238,6 +3239,7 @@ async def nidaan_review_signup(body: NidaanReviewSignupReq, request: Request):
         notes=body.notes,
         intermediary_code=body.intermediary_code,
         intermediary_name=body.intermediary_name,
+        ref_code=body.ref_code,
     )
     token = nidaan.create_nidaan_token(result["account_id"], body.email.strip().lower(), "per_claim")
     import asyncio as _asyncio_rs
