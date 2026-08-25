@@ -5111,12 +5111,15 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
     )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
-    # Send confirmation email
-    plan_info = nidaan.NIDAAN_RAZORPAY_PLANS.get(body.plan, {})
+    # Send confirmation email — with the ACTUAL GST-inclusive amount charged (not the old base).
+    _pc = await nidaan.get_plan_cfg(body.plan)
+    _pi = nidaan.NIDAAN_RAZORPAY_PLANS.get(body.plan, {})
+    _basep = int(_pc.get("price_paise") or _pi.get("amount_paise", 0))
+    _paid = int(round((await nidaan.charge_with_gst(_basep / 100))["total_paise"] / 100))
     import asyncio as _asyncio
     _asyncio.create_task(email_svc.send_nidaan_subscription_email(
         account["email"], account["owner_name"], body.plan,
-        plan_info.get("amount_paise", 0) // 100, result.get("renewal_date", "")
+        _paid, result.get("renewal_date", "")
     ))
     new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], body.plan)
     logger.info("✅ Nidaan recurring sub verified: account=%d plan=%s",

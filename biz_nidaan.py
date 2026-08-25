@@ -4910,13 +4910,17 @@ async def verify_nidaan_subscription_and_activate(
                 "renewal_date": sub["current_period_end"][:10] if sub else ""}
 
     plan_info = NIDAAN_RAZORPAY_PLANS.get(plan, {})
-    period_days = plan_info.get("period_days", 92)
-    amount_paise = plan_info.get("amount_paise", 0)
+    period_days = plan_info.get("period_days", 30)   # monthly/annual only — no quarterly default
+    # Record the ACTUAL amount charged = GST-inclusive total from the SUPER-ADMIN price (single source
+    # of truth), matching the Razorpay plan. Previously recorded the old round base (₹500) → the record
+    # showed less than the customer really paid (₹588.82).
+    _base_paise = int((await get_plan_cfg(plan)).get("price_paise") or plan_info.get("amount_paise", 0))
+    _amt_paise = (await charge_with_gst(_base_paise / 100))["total_paise"]
 
     await create_subscription(
         account_id=account_id,
         plan=plan,
-        amount_paid=amount_paise // 100,
+        amount_paid=int(round(_amt_paise / 100)),
         razorpay_subscription_id=razorpay_subscription_id,
         period_days=period_days,
     )
