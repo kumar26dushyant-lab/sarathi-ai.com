@@ -1199,7 +1199,10 @@ async def nidaan_claim_magic(request: Request, token: str = ""):
     ctx = await claimant.get_portal_by_token(token or "")
     if not ctx:
         return RedirectResponse(url="/nidaan/claim?e=expired", status_code=303)
-    await claimant.mark_activated(ctx["claim_id"])
+    # staff=1 → an ops staffer is opening the claimant's view to inspect it; do NOT stamp first-open
+    # (that signal must mean the CLAIMANT opened it). Real claimant links omit this.
+    if request.query_params.get("staff") != "1":
+        await claimant.mark_activated(ctx["claim_id"])
     return RedirectResponse(url=f"/nidaan/claim#t={token}", status_code=303)
 
 

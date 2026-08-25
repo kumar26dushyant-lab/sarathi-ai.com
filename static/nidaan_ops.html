@@ -3443,12 +3443,45 @@ function _l2CsBadge(c){
   if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
   return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
 }
+// ── Per-claim TRAIL badges (full journey visible without opening the claim) ──
+const _SRC = {branch:'🏢 Branch', staff:'👤 Staff', subscriber:'💳 Subscriber', review:'📋 ₹499', direct:'🌐 Direct'};
+function _srcBadge(c){
+  const k=c.source_kind||'direct';
+  return (_SRC[k]||k) + (c.ref_name?(' · <b>'+esc(c.ref_name)+'</b>'):'');
+}
+function _payBadge(c){
+  const p=(c.payment_status||'');
+  if(p==='subscription') return '<span style="color:var(--nd-success-text)">💳 Subscriber</span>';
+  if(p==='paid') return '<span style="color:var(--nd-success-text)">✅ Paid</span>';
+  if(p==='unpaid_lead') return '<span style="color:var(--nd-warning-text)">🟡 Lead (unpaid)</span>';
+  return esc(p||'—');
+}
+function _authBadge(c){
+  const a=c.authorization||'none';
+  if(a==='accepted') return '<span style="color:var(--nd-success-text)">✅ Auth accepted</span>';
+  if(a==='pushed') return '<span style="color:var(--nd-cyan-text)">📤 Auth pushed</span>';
+  if(a==='portal_ready') return '<span style="color:var(--nd-text-muted)">🔗 Portal ready</span>';
+  return '<span style="color:var(--nd-text-faint)">⚖️ no auth</span>';
+}
+function _portalBadge(c){
+  if(!c.portal_created) return '<span style="color:var(--nd-text-faint)">🖥️ no dashboard</span>';
+  const admin=(_role==='super_admin'||_role==='sub_super_admin');
+  const enter = (admin && c.portal_token) ? ` <a href="/nidaan/claim/magic?token=${encodeURIComponent(c.portal_token)}&staff=1" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--nd-cyan-text)">enter ↗</a>` : '';
+  return `<span>🖥️ ${c.portal_opened?'opened':'not opened'}</span>${enter}`;
+}
+function _claimTrail(c){
+  return `<div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.3rem;line-height:1.6;border-top:1px dashed var(--nd-border);padding-top:.25rem">`
+    + `👤 raised: <b>${esc(c.owner_name||'—')}</b> · ${_srcBadge(c)}<br>`
+    + `${_payBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}`
+    + `</div>`;
+}
 function _l2CardInner(c){
   return `<div style="display:flex;justify-content:space-between;gap:.4rem"><strong style="font-size:.82rem">#${fmtClaimNum(c.claim_id)}</strong>`
     + `<span style="font-size:.72rem;${_l2Eligible(c)?'color:var(--nd-success-text)':'color:var(--nd-warning-text)'}">${_l2Eligible(c)?'Paid':'Due'}</span></div>`
     + `<div style="font-weight:600;font-size:.85rem;margin-top:.15rem">${esc(c.insured_name||'—')}</div>`
     + `<div style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.claim_type||'—')} · ₹${fmt(c.disputed_amount||0)}</div>`
-    + `<div style="font-size:.72rem;margin-top:.25rem">${_l2CsBadge(c)}</div>`;
+    + `<div style="font-size:.72rem;margin-top:.25rem">${_l2CsBadge(c)}</div>`
+    + _claimTrail(c);
 }
 function _renderClaimBoard(rows){
   const byStage = {};
