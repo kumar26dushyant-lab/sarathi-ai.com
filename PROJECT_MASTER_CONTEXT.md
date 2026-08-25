@@ -18,6 +18,8 @@
 
 **PHASE 2 — Claimant mandatory fields (NEW).** Claimant **email (verified) + mobile MANDATORY** at claim creation on **ALL endpoints** (branch/₹499/direct/subscriber). Mobile → later WhatsApp OTP. NOTE: for mediated claims (claimant not present) "verification" = the claimant opening the emailed magic link (that's the natural verify); direct self-signup = OTP at signup. CONFIRM with founder.
 
+**FOUNDER DECISIONS (Aug 25):** (1) **YES — gate ClaimShield on claimant authorization acceptance** (L2 → auth email → accept → PDF filed in L2 → THEN ClaimShield; if never accepted, case waits + we chase/notify). (2) **Email verify = via the L2 magic-link** (no OTP at claim creation): email+mobile MANDATORY to raise any claim; mediated claims verify when the claimant opens the emailed L2 link; direct self-signup still OTP-verifies at signup.
+
 **PHASE 3 — Authorization flow gating + fallbacks (extends built P1).** ⚠️ Changes ClaimShield gating.
 - **Gate ClaimShield send on claimant authorization acceptance:** L2 → email (+WA later) → accept page shows *disputed amount + 15% + GST as EXAMPLE* → accept → generate acceptance PDF → PDF aligned in L2 claims → **THEN move to ClaimShield.** (Currently paid+GO auto-sends to CS — this must now wait for acceptance. CONFIRM.)
 - **Fallbacks:** accepted once → no duplicate record; re-open after accepting → show "you already accepted, contact NidaanPartner" (not the accept page); declined first → later can accept (page visible again).
