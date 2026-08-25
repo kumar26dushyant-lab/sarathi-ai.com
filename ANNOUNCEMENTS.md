@@ -422,3 +422,21 @@ Give it a spin and tell us what you'd like improved next!
 आज़माइए और बताइए आगे क्या बेहतर करें!
 
 _Suggested roles: Team members + Admins + Super admins (everyone)._
+
+---
+
+## 2026-08-26 — Payment Ledger: every payment, one trail (admins/owner)
+
+**Title (EN):**
+🧾 New: one clear payment record for every rupee
+
+**Details (EN):**
+Admins, Revenue now has a **Payment Ledger** — one line for every single payment, wherever it came from (subscription, ₹499 claim review, Level-2 fee, payment link, or a manual/offline entry). Each line shows the type, the account/claim it belongs to, the amount, whether it was **Razorpay-verified** or **manual**, and — for manual/offline entries — **who recorded it** (even if they were viewing as someone else). A banner at the top confirms the ledger **matches the revenue totals** to the rupee, so nothing is missed or double-counted. Manual/offline payments stay super-admin-only and are fully tracked.
+
+**Title (HI):**
+🧾 नया: हर पैसे का एक साफ़ पेमेंट रिकॉर्ड
+
+**Details (HI):**
+एडमिन साथियों, अब Revenue में एक **पेमेंट लेजर** है — हर एक पेमेंट के लिए एक लाइन, चाहे वह कहीं से भी आया हो (सब्सक्रिप्शन, ₹499 क्लेम रिव्यू, लेवल-2 फीस, पेमेंट लिंक, या मैनुअल/ऑफलाइन एंट्री)। हर लाइन दिखाती है — किस तरह का पेमेंट है, किस अकाउंट/क्लेम का है, राशि कितनी है, वह **Razorpay से वेरिफाइड** है या **मैनुअल**, और मैनुअल/ऑफलाइन के लिए **किसने दर्ज किया** (भले ही वे किसी और के रूप में देख रहे हों)। ऊपर एक बैनर पुष्टि करता है कि लेजर **रेवेन्यू के कुल से पूरी तरह मेल खाता है** — कुछ छूटता या दोगुना नहीं गिना जाता। मैनुअल/ऑफलाइन पेमेंट सिर्फ़ सुपर-एडमिन के लिए हैं और पूरी तरह ट्रैक होते हैं।
+
+_Suggested roles: Admins + Super admins only (back-office / money view)._
