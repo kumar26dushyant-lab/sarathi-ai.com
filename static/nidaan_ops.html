@@ -50,7 +50,7 @@ details>summary{cursor:pointer}
 .topbar-brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:.95rem;color:var(--nd-text-primary)}
 .topbar-brand img{height:28px;border-radius:5px}
 .topbar-brand .pill{background:rgba(220,38,38,.18);color:var(--nd-danger-text);border:1px solid rgba(220,38,38,.3);border-radius:6px;font-size:.65rem;font-weight:800;padding:.15rem .45rem;letter-spacing:.04em;text-transform:uppercase}
-.topbar-right{display:flex;align-items:center;gap:.75rem;font-size:.83rem}
+.topbar-right{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:.75rem;row-gap:.4rem;font-size:.83rem;min-width:0}
 .role-badge{background:rgba(6,182,212,.12);color:var(--nd-cyan-text);border:1px solid rgba(6,182,212,.25);border-radius:6px;padding:.2rem .55rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .btn-sm{padding:.35rem .8rem;border-radius:7px;font-size:.8rem;font-weight:600;border:none}
 .btn-ghost{background:var(--nd-bg-surface-2);color:var(--nd-text-secondary);border:1px solid var(--nd-border-strong)}
@@ -320,6 +320,15 @@ select.form-input option{background:#1e293b}
    The whole ops console must behave like a native app — every action reachable
    without horizontal scroll on any phone. On small screens we compact the top
    bar to icons + avatar; full labels return on wider screens. */
+/* Tablet / narrow-desktop (also the impersonation/split viewport): compact the topbar to
+   icon-only buttons + avatar so the logout & bell never get pushed off the right edge. */
+@media(max-width:1024px){
+  html,body{overflow-x:hidden;max-width:100%}
+  .topbar-right .bc-label{display:none}
+  #staffName,#staffRoleBadge{display:none}
+  #quickTaskBtn,#announceBtn,#broadcastBtn{padding:.4rem .55rem}
+  #profileBtn{padding:.24rem}
+}
 @media(max-width:640px){
   html,body{overflow-x:hidden;max-width:100%}
   .topbar{gap:.4rem;padding:.55rem .6rem}
@@ -3738,20 +3747,27 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td>${payPill(c)}</td>
       <td style="font-size:.8rem">${_sourceBadge(c)}</td>
+      <td style="font-size:.72rem;line-height:1.5">${_authBadge(c)}<br>${_portalBadge(c)}</td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
       <td style="text-align:center">${(c.pending_tasks||0)>0?`<span style="background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;padding:.1rem .45rem;font-size:.72rem;font-weight:700">${c.pending_tasks}</span>`:'<span style="color:var(--nd-text-disabled)">0</span>'}</td>
-      <td>${c.branch_code?`<span style="font-size:.7rem;color:var(--nd-purple-text);font-weight:700">${c.origin==='branch'?'🏢 ':''}${esc(c.branch_code)}</span>`:'<span style="color:var(--nd-text-disabled)">—</span>'}</td>
       <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.created_at)}</td>
     </tr>`).join('');
 
-  document.getElementById('claimTableWrap').innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Assigned To</th><th>Tasks</th><th>Branch</th><th>Date</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+  const cv = localStorage.getItem('claims_view') || 'table';
+  const sw = `<div style="display:flex;justify-content:flex-end;margin-bottom:.5rem"><span class="vw-switch">
+      <button class="${cv==='table'?'active':''}" onclick="_setClaimsView('table')">☰ Table</button>
+      <button class="${cv==='board'?'active':''}" onclick="_setClaimsView('board')">▦ Board</button>
+      <button class="${cv==='cards'?'active':''}" onclick="_setClaimsView('cards')">▤ Cards</button>
+    </span></div>`;
+  let bodyHtml;
+  if(cv==='board'){ bodyHtml = _renderClaimBoard(d.claims); }
+  else if(cv==='cards'){ bodyHtml = _renderClaimCards(d.claims); }
+  else bodyHtml = `<div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+  document.getElementById('claimTableWrap').innerHTML = sw + bodyHtml;
 }
+function _setClaimsView(v){ localStorage.setItem('claims_view', v); applyClaimFilters(); }
 
 // ═══ BRANCHES (affiliate city branch codes) ═══
 async function loadBranches() {
