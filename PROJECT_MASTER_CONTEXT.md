@@ -8,6 +8,36 @@
 
 ---
 
+## ⭐ OPEN TO-DOS (Aug 25 2026) — phased backlog (founder-approved priorities)
+
+**PHASE 1 — Referral Transparency & Flow Integrity (HIGHEST PRIORITY, NEW).** Money/incentive depends on this.
+- **1a — FIX referral attribution across ALL claim-creation flows.** BUG: claim #066 raised via a STAFF my-business one-time-review link (`/nidaan/start?ref=SP-EE53CU`, Suhana) recorded as **"Direct lead"** — the ref never attached to the claim. Root cause direction: `nidaan_start.html` captures `?ref=` + `NidaanTrack` persistence and pre-fills it at **signup** (`regBranch`), but the **₹499 one-time-review / lead-claim path doesn't carry the ref onto the CLAIM**. AUDIT every entry: ₹499 one-time review, direct claimant, branch-raise, staff my-business, subscriber signup link. Ensure ref attaches to claim + account.
+- **1b — Referrer dashboards:** staff/branch see their referred claims AND subscriptions as their referral.
+- **1c — Super-admin full visibility everywhere** (All Claims / Accounts / L2): origin, referral (who), insured, claimant — every place.
+- **1d — Fallback/duplicate intelligence:** e.g. an existing subscriber trying to re-subscribe → detect + guide, never error or mis-record. Same for other deviations — GUIDE, don't error.
+
+**PHASE 2 — Claimant mandatory fields (NEW).** Claimant **email (verified) + mobile MANDATORY** at claim creation on **ALL endpoints** (branch/₹499/direct/subscriber). Mobile → later WhatsApp OTP. NOTE: for mediated claims (claimant not present) "verification" = the claimant opening the emailed magic link (that's the natural verify); direct self-signup = OTP at signup. CONFIRM with founder.
+
+**PHASE 3 — Authorization flow gating + fallbacks (extends built P1).** ⚠️ Changes ClaimShield gating.
+- **Gate ClaimShield send on claimant authorization acceptance:** L2 → email (+WA later) → accept page shows *disputed amount + 15% + GST as EXAMPLE* → accept → generate acceptance PDF → PDF aligned in L2 claims → **THEN move to ClaimShield.** (Currently paid+GO auto-sends to CS — this must now wait for acceptance. CONFIRM.)
+- **Fallbacks:** accepted once → no duplicate record; re-open after accepting → show "you already accepted, contact NidaanPartner" (not the accept page); declined first → later can accept (page visible again).
+- **All-channel notify super-admins + admins on every authorization action**; admins/SAs have live visibility into the authorization stage/journey.
+
+**PHASE 4 — WhatsApp Business (foundation LIVE — commit f28822d).**
+- OWNER: submit 3 Utility templates (renewal/EMI/lapse EN+HI) in WhatsApp Manager.
+- Build: `wa_messages` send-log + opt-in tracking; Sarathi manual "send reminder" test UI; data-driven renewal/EMI/lapse sends; later Embedded Signup multi-number + Nidaan branch reseller + two-way webhook. Strategy: WHATSAPP_SUBSCRIBERS_PLAN.md §9.
+
+**PHASE 5 — Old pending (interrupted by WhatsApp config).**
+- Views engine: roll Table/Board/Cards switcher to Tasks/Accounts (proper shared-component refactor).
+- Telegram: radar read/reply in-bot; payment-link create; stage-move customer-notify parity.
+- Claimant Portal P2: two-way messaging (reuse nidaan_messages); doc-requests as Tasks.
+- Radar dual-mode (one-way/two-way/both) + Message-ID dedup + mode badges + Yahoo + auto-forward ingest.
+- Doc Splitter P2: attach split docs to a claim; DOC/DOCX (LibreOffice); custom category list.
+
+**OWNER action items:** submit WA templates · live-test Claimant Portal + flip `claimant_autosend_enabled` ON · CS live doc-pull test + status resync · clean 'T30 G ABHISHEK' test account · send staff announcements (ANNOUNCEMENTS.md) · counsel-vet success-fee T&C (LLP wording drafted).
+
+---
+
 ## ★ START HERE — the whole project in 2 minutes (for a new agent)
 
 **What this is:** ONE FastAPI app + ONE SQLite DB serving **TWO products**, chosen per request by host: `_is_nidaan_host(request)` → NidaanPartner; else Sarathi.
