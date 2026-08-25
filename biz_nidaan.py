@@ -5705,6 +5705,58 @@ async def get_claim_payments(claim_id: int) -> list:
     return [dict(r) for r in rows]
 
 
+async def get_payments_ledger(limit: int = 200, source: str = "", verified_only: bool = False) -> list:
+    """Recent unified-ledger rows (newest first), for the super-admin Payments view."""
+    q = "SELECT * FROM nidaan_payments"
+    conds, args = [], []
+    if source:
+        conds.append("source=?"); args.append(source)
+    if verified_only:
+        conds.append("verified=1")
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY created_at DESC LIMIT ?"; args.append(int(limit))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(q, tuple(args))).fetchall()
+    return [dict(r) for r in rows]
+
+
+async def ledger_revenue_summary() -> dict:
+    """Revenue rolled up from the unified ledger + a reconciliation against the legacy
+    source-table formula, so the super-admin can SEE every rupee is tracked & consistent.
+    Amounts in ₹. Refunded rows excluded from collected totals."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        by_source = [dict(r) for r in await (await conn.execute(
+            """SELECT source, COUNT(*) n,
+                      ROUND(SUM(total_paise)/100.0, 2) rupees,
+                      SUM(verified) verified_n
+               FROM nidaan_payments WHERE status!='refunded'
+               GROUP BY source ORDER BY rupees DESC""")).fetchall()]
+        led_total = (await (await conn.execute(
+            "SELECT ROUND(COALESCE(SUM(total_paise),0)/100.0,2) FROM nidaan_payments "
+            "WHERE status!='refunded'")).fetchone())[0]
+        unverified = (await (await conn.execute(
+            "SELECT ROUND(COALESCE(SUM(total_paise),0)/100.0,2) FROM nidaan_payments "
+            "WHERE status!='refunded' AND verified=0")).fetchone())[0]
+        # Legacy source-table formula (what the Revenue tab historically summed).
+        legacy = (await (await conn.execute(
+            """SELECT ROUND(
+                 (SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_subscriptions WHERE status IN ('active','cancelled'))
+                +(SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_per_claim_purchase WHERE status NOT IN ('failed','refunded','pending_payment'))
+                +(SELECT COALESCE(SUM(amount_paise)/100.0,0) FROM nidaan_payment_links WHERE purpose='custom' AND status='paid')
+               , 2)""")).fetchone())[0]
+    return {
+        "by_source": by_source,
+        "ledger_total": led_total or 0,
+        "unverified_total": unverified or 0,
+        "legacy_total": legacy or 0,
+        "reconciled": abs((led_total or 0) - (legacy or 0)) < 1.0,
+        "delta": round((led_total or 0) - (legacy or 0), 2),
+    }
+
+
 def gst_breakup(base_rupees: float, rate: float, home_state: str = "", customer_state: str = "") -> dict:
     """GST-exclusive breakup: base + GST = total. If home_state is set and matches the
     customer's state → CGST+SGST (half each); else IGST. Amounts in ₹ (2-dp)."""

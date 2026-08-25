@@ -5577,6 +5577,41 @@ async def nidaan_ops_mark_paid(account_id: int, body: NidaanMarkPaidReq, request
     return {"ok": True, "plan": plan, "amount": amt}
 
 
+@app.get("/nidaan/ops/api/accounts/{account_id}/payments")
+async def nidaan_ops_account_payments(account_id: int, request: Request):
+    """Full verified payment trail for one account (unified ledger). Super-admin / admin."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_account_payments(account_id)
+    total = sum(int(r.get("total_paise") or 0) for r in rows if (r.get("status") or "") != "refunded")
+    return {"payments": rows, "count": len(rows), "total_rupees": round(total / 100.0, 2)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/payments")
+async def nidaan_ops_claim_payments(claim_id: int, request: Request):
+    """Full payment trail for one claim (unified ledger). Super-admin / admin."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_claim_payments(claim_id)
+    total = sum(int(r.get("total_paise") or 0) for r in rows if (r.get("status") or "") != "refunded")
+    return {"payments": rows, "count": len(rows), "total_rupees": round(total / 100.0, 2)}
+
+
+@app.get("/nidaan/ops/api/payments")
+async def nidaan_ops_payments_ledger(request: Request, limit: int = 200,
+                                     source: str = "", verified_only: bool = False):
+    """Unified payment ledger (recent) + revenue rollup + reconciliation vs the legacy
+    source-table formula. Super-admin only — this is the money view."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    rows = await nidaan.get_payments_ledger(limit=limit, source=source, verified_only=verified_only)
+    summary = await nidaan.ledger_revenue_summary()
+    return {"payments": rows, "count": len(rows), "summary": summary}
+
+
 @app.get("/nidaan/api/admin/review-requests")
 async def nidaan_api_admin_reviews(
     request: Request,
