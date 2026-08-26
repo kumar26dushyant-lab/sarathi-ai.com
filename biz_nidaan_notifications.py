@@ -1652,6 +1652,47 @@ async def on_claim_filed(claim_id: int, account_id: int):
             claim_id=claim_id, account_id=account_id)
 
 
+async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
+    """A BRANCH or STAFF raised a claim FOR a customer (origin='branch', unpaid lead). Alert
+    every super-admin + sub-admin on ALL channels — dashboard bell + web push + email + Telegram —
+    exactly like a real subscriber lead. (These previously called on_claim_filed, whose subscriber
+    dispatch targets the branch HOUSE account and whose admin fan-out silently no-ops for it, so
+    branch claims reached nobody in ops. This uses the proven notify_staff_inapp + telegram path.)"""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT claim_id, insured_name, insured_phone, claim_type, disputed_amount, "
+            "branch_code FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not row:
+            return
+        c = dict(row)
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+    if not ids:
+        return
+    code = (c.get("branch_code") or "").strip()
+    who = raised_by or (f"Branch/Partner {code}" if code else "A branch/partner")
+    disp = c.get("disputed_amount")
+    subj = f"🆕 New claim raised — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"{who} raised a new claim for a customer.\n\n"
+            f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
+            f"Customer mobile: {c.get('insured_phone','')}\n"
+            + (f"Disputed: ₹{disp}\n" if disp else "")
+            + (f"Raised via: {code}\n" if code else "")
+            + "\nReview it in ops: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="claim.filed.admin", email=True,
+                                 claim_id=claim_id)
+    except Exception as e:
+        logger.warning("on_ops_claim_raised inapp failed for claim %s: %s", claim_id, e)
+    for sid in ids:
+        try:
+            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
+        except Exception:
+            pass
+
+
 async def on_moved_to_l2(claim_id: int):
     """#7: a claim's review was delivered as GO (can_fight) → it moves into the L2 section.
     Alert super-admins + sub-admins + everyone assigned to the claim, on all channels

@@ -864,7 +864,8 @@ async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
         raise HTTPException(400, msg or "Could not raise claim")
     try:
         import biz_nidaan_notifications as _nnot
-        asyncio.create_task(_nnot.on_claim_filed(claim_id, house_account))
+        # Reliable all-channel ops alert (bell + email + Telegram) for branch-raised claims.
+        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"Branch/Partner {code}"))
     except Exception:
         pass
     return {"claim_id": claim_id, "status": "intimated"}
@@ -6640,7 +6641,8 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
         raise HTTPException(400, msg or "Could not raise claim")
     try:
         import biz_nidaan_notifications as _nnot
-        asyncio.create_task(_nnot.on_claim_filed(claim_id, house_account))
+        _rb = (_staff or {}).get("name") or "A staff member"
+        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"{_rb} (staff)"))
     except Exception:
         pass
     try:

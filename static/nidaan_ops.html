@@ -2522,8 +2522,15 @@ let _qtDrawerCurrentId = null;
 
 async function openQuickTaskDrawer(qid){
   _qtDrawerCurrentId = qid;
+  // Reveal the panel IMMEDIATELY with a loading state, so a click ALWAYS opens the side
+  // panel — even if the fetch or render below hiccups (any error then shows INSIDE the
+  // open panel instead of failing silently and leaving the user with nothing).
+  try { document.getElementById('drawerTitle').textContent = '📌 Quick Task #' + qid; } catch(e){}
+  try { document.getElementById('drawerBody').innerHTML = '<div style="padding:2.5rem 1rem;text-align:center;color:var(--nd-text-faint)">Loading…</div>'; } catch(e){}
+  try { document.getElementById('drawerBg').classList.add('open'); } catch(e){}
+  try {
   const r = await fetch('/nidaan/ops/api/quick-tasks/'+qid, { headers: hdrs() });
-  if (!r.ok) { ndUI.toast('Failed to load quick task','error'); return; }
+  if (!r.ok) { document.getElementById('drawerBody').innerHTML = '<div style="padding:2.5rem 1rem;text-align:center;color:var(--nd-danger-text)">Could not load this task (error '+r.status+'). Please try again.</div>'; return; }
   const d = await r.json();
   const qt = d.quick_task;
   const notes = d.notes || [];
@@ -2659,6 +2666,9 @@ async function openQuickTaskDrawer(qid){
       </div>
     </div>`;
   document.getElementById('drawerBg').classList.add('open');
+  } catch(e){
+    try { document.getElementById('drawerBody').innerHTML = '<div style="padding:2.5rem 1rem;text-align:center;color:var(--nd-danger-text)">Something went wrong opening this task.<br><span style="font-size:.72rem;color:var(--nd-text-faint)">'+esc(String((e&&e.message)||e))+'</span></div>'; } catch(_){}
+  }
 }
 
 function _renderQTThread(notes, qid, canComment){
