@@ -440,3 +440,21 @@ Admins, Revenue now has a **Payment Ledger** — one line for every single payme
 एडमिन साथियों, अब Revenue में एक **पेमेंट लेजर** है — हर एक पेमेंट के लिए एक लाइन, चाहे वह कहीं से भी आया हो (सब्सक्रिप्शन, ₹499 क्लेम रिव्यू, लेवल-2 फीस, पेमेंट लिंक, या मैनुअल/ऑफलाइन एंट्री)। हर लाइन दिखाती है — किस तरह का पेमेंट है, किस अकाउंट/क्लेम का है, राशि कितनी है, वह **Razorpay से वेरिफाइड** है या **मैनुअल**, और मैनुअल/ऑफलाइन के लिए **किसने दर्ज किया** (भले ही वे किसी और के रूप में देख रहे हों)। ऊपर एक बैनर पुष्टि करता है कि लेजर **रेवेन्यू के कुल से पूरी तरह मेल खाता है** — कुछ छूटता या दोगुना नहीं गिना जाता। मैनुअल/ऑफलाइन पेमेंट सिर्फ़ सुपर-एडमिन के लिए हैं और पूरी तरह ट्रैक होते हैं।
 
 _Suggested roles: Admins + Super admins only (back-office / money view)._
+
+---
+
+## 2026-08-26 — Claim form: customer EMAIL is now required
+
+**Title (EN):**
+📧 New: add the customer's email when raising a claim
+
+**Details (EN):**
+Team, when you raise a claim for a customer, the form now asks for the customer's **email** (along with their mobile) — and it's required. Why: when a claim is strong enough to go to **Level-2**, we email the customer an **authorization link** to accept the terms. Their email gets **verified automatically** the moment they open that link — no OTP, nothing extra for you to do. Please enter the customer's real, working email. If a claim is for you or a family member, use that person's email.
+
+**Title (HI):**
+📧 नया: क्लेम दर्ज करते समय ग्राहक का ईमेल ज़रूरी
+
+**Details (HI):**
+टीम, जब आप किसी ग्राहक के लिए क्लेम दर्ज करते हैं, तो अब फ़ॉर्म में ग्राहक का **ईमेल** (मोबाइल के साथ) माँगा जाता है — और यह ज़रूरी है। कारण: जब कोई क्लेम **Level-2** तक जाने लायक होता है, तो हम ग्राहक को एक **अधिकार-पत्र लिंक** ईमेल पर भेजते हैं ताकि वे शर्तें स्वीकार कर सकें। जैसे ही वे वह लिंक खोलते हैं, उनका ईमेल **अपने आप वेरिफ़ाई** हो जाता है — कोई OTP नहीं, आपके लिए कुछ अतिरिक्त नहीं। कृपया ग्राहक का सही, चालू ईमेल भरें। अगर क्लेम आपका या परिवार के किसी सदस्य का है, तो उसी व्यक्ति का ईमेल डालें।
+
+_Suggested roles: Team members + Admins + Super admins (anyone who raises claims) + Branches._
