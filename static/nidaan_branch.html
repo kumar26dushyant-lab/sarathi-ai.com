@@ -167,6 +167,7 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem" id="bcGrid">
       <input id="bcName" placeholder="Customer full name" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
       <input id="bcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Customer mobile (10-digit)" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
+      <input id="bcEmail" type="email" placeholder="Customer email (required)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
       <select id="bcType" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
         <option value="">Claim type…</option>
         <option value="health">Health</option><option value="life">Life</option>
@@ -483,16 +484,18 @@ async function raiseBranchClaim(){
   const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'var(--nd-text-muted)'); };
   const name=($('bcName').value||'').trim();
   const phone=($('bcPhone').value||'').replace(/[^0-9]/g,'');
+  const email=($('bcEmail').value||'').trim();
   const type=$('bcType').value;
   const rej=$('bcRejFile').files[0];
   if(!name){ setMsg('Enter the customer name.',false); return; }
   if(phone.length!==10){ setMsg('Enter a valid 10-digit customer mobile.',false); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setMsg('Enter a valid customer email — we email them the authorization link at Level-2.',false); return; }
   if(!type){ setMsg('Select a claim type.',false); return; }
   if(!rej){ setMsg('Attach the rejection letter — it is required.',false); return; }
   btn.disabled=true; setMsg('Submitting…');
   try{
     const r=await fetch('/nidaan/branch/api/claims',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},
-      body:JSON.stringify({insured_name:name,insured_phone:phone,claim_type:type,
+      body:JSON.stringify({insured_name:name,insured_phone:phone,insured_email:email,claim_type:type,
         insurer_name:($('bcInsurer').value||'').trim(),policy_no:($('bcPolicy').value||'').trim(),
         disputed_amount:parseInt($('bcAmount').value)||null,notes:($('bcNotes').value||'').trim()})});
     const d=await r.json().catch(()=>({}));
@@ -500,7 +503,7 @@ async function raiseBranchClaim(){
     try{ const fd=new FormData(); fd.append('files',rej);
       await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',{method:'POST',headers:authHeaders(),body:fd}); }catch(_){}
     setMsg('Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.',true);
-    ['bcName','bcPhone','bcInsurer','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
+    ['bcName','bcPhone','bcEmail','bcInsurer','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
     $('bcType').value=''; $('bcRejFile').value='';
     loadBranchClaims();
   }catch(e){ setMsg(e.message,false); }

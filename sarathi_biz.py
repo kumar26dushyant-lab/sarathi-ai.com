@@ -814,11 +814,29 @@ async def nidaan_branch_account_detail(account_id: int, request: Request):
     return {"account": account, "claims": claims, "reviews": reviews}
 
 
+def _clean_insured_contact(insured_phone: str, insured_email: str):
+    """Phase 2: enforce a valid 10-digit mobile + a valid email for the CLAIMANT (insured) at
+    EVERY claim-creation endpoint. The email is VERIFIED later when the claimant opens the L2
+    authorization magic-link (no OTP at creation for mediated claims). Returns (phone10, email);
+    raises HTTPException(400) with a plain-language message on failure."""
+    phone = "".join(ch for ch in (insured_phone or "") if ch.isdigit())
+    if len(phone) >= 11 and phone.startswith("91"):
+        phone = phone[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit mobile number for the claimant")
+    email = auth.sanitize_email(insured_email or "")
+    if not email:
+        raise HTTPException(400, "Enter a valid email for the claimant — we email them the "
+                                 "authorization link when the claim reaches Level-2")
+    return phone, email
+
+
 # ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
 class _BranchClaimReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     insured_name: str = Field(..., min_length=1, max_length=120)
     insured_phone: str = Field(..., max_length=15)
+    insured_email: str = Field("", max_length=120)
     claim_type: str = Field(..., max_length=40)
     insurer_name: str = Field("", max_length=120)
     policy_no: str = Field("", max_length=80)
@@ -833,14 +851,12 @@ async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     code = _branch_bearer(request)
     if not code: raise HTTPException(401, "Unauthorized")
-    phone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit())
-    if len(phone) != 10:
-        raise HTTPException(400, "Enter a valid 10-digit customer mobile number")
+    phone, email = _clean_insured_contact(body.insured_phone, body.insured_email)
     house_account = await nidaan.get_or_create_branch_house_account(code)
     claim_id, msg = await nidaan.submit_claim(
         account_id=house_account, user_id=None,
         claim_type=(body.claim_type or "").strip(), insured_name=body.insured_name.strip(),
-        insured_phone=phone, insurer_name=(body.insurer_name or "").strip(),
+        insured_phone=phone, insured_email=email, insurer_name=(body.insurer_name or "").strip(),
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
         payment_status="unpaid_lead", skip_eligibility=True, origin="branch")
@@ -3032,6 +3048,8 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if not body.claim_type or not body.insured_name or not body.insured_phone:
         raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
+    # Phase 2: claimant mobile + email mandatory (email verified later via the L2 magic-link).
+    _ins_phone, _ins_email = _clean_insured_contact(body.insured_phone, body.insured_email)
     # ₹499 value-first funnel: determine the payment path.
     #   • Active subscription  → 'subscription' (consumes quota, review starts now)
     #   • Paid ₹499 per-claim  → 'paid'         (review starts now)
@@ -3058,8 +3076,8 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         user_id=None,
         claim_type=body.claim_type,
         insured_name=body.insured_name,
-        insured_phone=body.insured_phone,
-        insured_email=body.insured_email,
+        insured_phone=_ins_phone,
+        insured_email=_ins_email,
         insurer_name=body.insurer_name,
         policy_no=body.policy_no,
         disputed_amount=body.disputed_amount,
@@ -6609,14 +6627,12 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
     exactly like a branch. The L2 fee (if any) is charged later only on a GO review."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     _staff, code = await _staff_claim_code(request)
-    phone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit())
-    if len(phone) != 10:
-        raise HTTPException(400, "Enter a valid 10-digit customer mobile number")
+    phone, email = _clean_insured_contact(body.insured_phone, body.insured_email)
     house_account = await nidaan.get_or_create_branch_house_account(code)
     claim_id, msg = await nidaan.submit_claim(
         account_id=house_account, user_id=None,
         claim_type=(body.claim_type or "").strip(), insured_name=body.insured_name.strip(),
-        insured_phone=phone, insurer_name=(body.insurer_name or "").strip(),
+        insured_phone=phone, insured_email=email, insurer_name=(body.insurer_name or "").strip(),
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
         payment_status="unpaid_lead", skip_eligibility=True, origin="branch")

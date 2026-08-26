@@ -1024,8 +1024,10 @@ async function _prefillClaimForm() {
     const me = await r.json();
     const n = document.getElementById('rv_insured_name');
     const p = document.getElementById('rv_insured_phone');
+    const em = document.getElementById('rv_insured_email');
     if (n && !n.value && me.owner_name) n.value = me.owner_name;
     if (p && !p.value && me.phone) p.value = me.phone;
+    if (em && !em.value && me.email) em.value = me.email;
   } catch (e) {}
 }
 
@@ -1110,6 +1112,9 @@ async function _prefillClaimForm() {
       <div class="rev-row2">
         <div class="field"><label><span class="en">Insured Name *</span><span class="hi">बीमित व्यक्ति का नाम *</span></label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
         <div class="field"><label><span class="en">Contact Phone *</span><span class="hi">संपर्क फ़ोन *</span></label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
+      </div>
+      <div class="rev-row2">
+        <div class="field"><label><span class="en">Contact Email *</span><span class="hi">संपर्क ईमेल *</span></label><input type="email" id="rv_insured_email" placeholder="name@email.com" autocomplete="email"></div>
       </div>
       <p style="font-size:.74rem;color:var(--nd-text-faint);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
     </fieldset>
@@ -1287,10 +1292,12 @@ async function submitFreeClaim() {
 
   const insured_name = document.getElementById('rv_insured_name').value.trim();
   const insured_phone = document.getElementById('rv_insured_phone').value.replace(/\D/g, '');
+  const insured_email = (document.getElementById('rv_insured_email')?.value || '').trim();
   const claim_type = document.getElementById('rv_claim_type').value;
 
   if (!insured_name) { showRevMsg('err', _Lr('Please enter the insured name.', 'कृपया बीमित व्यक्ति का नाम दर्ज करें।')); return; }
   if (insured_phone.length < 10) { showRevMsg('err', _Lr('Please enter a valid 10-digit contact phone.', 'कृपया एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(insured_email)) { showRevMsg('err', _Lr('Please enter a valid contact email (for the Level-2 authorization link).', 'कृपया एक मान्य ईमेल दर्ज करें (Level-2 अधिकार-पत्र लिंक के लिए)।')); return; }
   if (!claim_type) { showRevMsg('err', _Lr('Please select the claim type.', 'कृपया क्लेम का प्रकार चुनें।')); return; }
   // Documents are OPTIONAL — no upload is required to submit. Users can add the
   // rejection letter now or later from the dashboard.
@@ -1300,7 +1307,7 @@ async function submitFreeClaim() {
 
   // Body MUST match NidaanClaimReq exactly (extra="forbid").
   const body = {
-    claim_type, insured_name, insured_phone,
+    claim_type, insured_name, insured_phone, insured_email,
     insurer_name: document.getElementById('rv_insurer_name').value.trim(),
     disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
     notes_from_agent: document.getElementById('rv_notes').value.trim(),

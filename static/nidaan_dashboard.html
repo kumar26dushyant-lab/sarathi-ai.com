@@ -961,6 +961,15 @@
       </div>
       <div class="row2">
         <div class="field">
+          <label class="en">Client / Insured Email *</label>
+          <label class="hi">ग्राहक / बीमाधारक का ईमेल *</label>
+          <input type="email" id="insuredEmail" placeholder="client@email.com" required>
+          <div class="en" style="font-size:.72rem;color:var(--nd-text-faint,#94a3b8);margin-top:.2rem">We email the client the authorization link when the claim reaches Level-2.</div>
+          <div class="hi" style="font-size:.72rem;color:var(--nd-text-faint,#94a3b8);margin-top:.2rem">क्लेम Level-2 पर पहुँचने पर हम ग्राहक को अधिकार-पत्र लिंक इसी ईमेल पर भेजते हैं।</div>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
           <label class="en">Policy Number</label>
           <label class="hi">पॉलिसी नंबर</label>
           <input type="text" id="policyNo" placeholder="Optional">
@@ -1597,6 +1606,13 @@ async function submitClaim(e) {
     msg.textContent = isHi ? 'कृपया 10 अंकों का सही मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.';
     btn.disabled = false; return;
   }
+  // Client email is mandatory — it is where the Level-2 authorization link is sent.
+  const _cemail = (document.getElementById('insuredEmail')?.value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_cemail)) {
+    msg.className = 'msg err';
+    msg.textContent = isHi ? 'कृपया ग्राहक का सही ईमेल दर्ज करें (Level-2 अधिकार-पत्र लिंक के लिए)।' : 'Please enter a valid client email (for the Level-2 authorization link).';
+    btn.disabled = false; return;
+  }
   // Rejection letter is mandatory to raise a claim.
   const _rejFile = document.getElementById('claimRejectionLetter')?.files?.[0];
   if (!_rejFile) {
@@ -1611,6 +1627,7 @@ async function submitClaim(e) {
         claim_type: document.getElementById('claimType').value,
         insured_name: document.getElementById('insuredName').value.trim(),
         insured_phone: document.getElementById('insuredPhone').value.trim(),
+        insured_email: _cemail,
         insurer_name: document.getElementById('insurerName').value.trim(),
         policy_no: document.getElementById('policyNo').value.trim(),
         disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,

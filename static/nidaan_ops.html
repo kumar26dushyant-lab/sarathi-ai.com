@@ -4004,6 +4004,7 @@ async function loadMyBusiness() {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem">
         <input id="mbcName" placeholder="${hi?'ग्राहक का पूरा नाम':'Customer full name'}" style="text-transform:uppercase">
         <input id="mbcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="${hi?'ग्राहक मोबाइल (10 अंक)':'Customer mobile (10-digit)'}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+        <input id="mbcEmail" type="email" placeholder="${hi?'ग्राहक का ईमेल (ज़रूरी)':'Customer email (required)'}">
         <select id="mbcType"><option value="">${hi?'क्लेम प्रकार…':'Claim type…'}</option><option value="health">${hi?'स्वास्थ्य':'Health'}</option><option value="life">${hi?'जीवन':'Life'}</option><option value="motor">${hi?'मोटर':'Motor'}</option><option value="general">${hi?'सामान्य / अन्य':'General / Other'}</option></select>
         <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurer name (optional)'}">
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
@@ -4066,13 +4067,15 @@ async function mbRaiseClaim(){
   const g=id=>document.getElementById(id);
   const name=(g('mbcName').value||'').trim();
   const phone=(g('mbcPhone').value||'').replace(/[^0-9]/g,'');
+  const email=(g('mbcEmail').value||'').trim();
   const type=(g('mbcType').value||'').trim();
   if(!name){ msg.style.color='#f87171'; msg.textContent=hi?'ग्राहक का नाम आवश्यक है।':'Customer name is required.'; return; }
   if(phone.length!==10){ msg.style.color='#f87171'; msg.textContent=hi?'मान्य 10-अंकों का मोबाइल दर्ज करें।':'Enter a valid 10-digit mobile.'; return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ msg.style.color='#f87171'; msg.textContent=hi?'ग्राहक का मान्य ईमेल दर्ज करें (अधिकार-पत्र लिंक भेजने के लिए)।':'Enter a valid customer email (to send the authorization link).'; return; }
   if(!type){ msg.style.color='#f87171'; msg.textContent=hi?'क्लेम प्रकार चुनें।':'Choose a claim type.'; return; }
   const btn=g('mbcSubmit'); btn.disabled=true; const ob=btn.textContent; btn.textContent=hi?'जमा हो रहा है…':'Submitting…';
   msg.style.color='#94a3b8'; msg.textContent=hi?'जमा हो रहा है…':'Submitting…';
-  const body={insured_name:name, insured_phone:phone, claim_type:type,
+  const body={insured_name:name, insured_phone:phone, insured_email:email, claim_type:type,
     insurer_name:(g('mbcInsurer').value||'').trim(), policy_no:(g('mbcPolicy').value||'').trim(),
     disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
     notes:(g('mbcNotes').value||'').trim()};
@@ -4093,7 +4096,7 @@ async function mbRaiseClaim(){
   }
   btn.disabled=false; btn.textContent=ob;
   msg.style.color='#4ade80'; msg.textContent=(hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.')+attachMsg;
-  ['mbcName','mbcPhone','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
+  ['mbcName','mbcPhone','mbcEmail','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
   _mbcFiles=[]; mbcRenderFiles();
   mbLoadClaims(); setTimeout(()=>{msg.textContent='';},5000);
 }
@@ -4671,7 +4674,7 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Status</span><span class="kv-val"><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></span></div>
       <div class="kv"><span class="kv-label">Insured</span><span class="kv-val">${esc(c.insured_name)}</span></div>
       <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.insured_phone)}</span></div>
-      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)}</span></div>`:''}
+      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)} ${c.insured_email_verified?'<span title="Verified when the claimant opened the authorization link" style="background:rgba(16,185,129,.15);color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>':'<span title="Not yet verified — verifies when the claimant opens the Level-2 authorization link" style="background:rgba(234,179,8,.15);color:#a16207;padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'}</span></div>`:''}
       <div class="kv"><span class="kv-label">Insurer</span><span class="kv-val">${esc(c.insurer_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
       <div class="kv"><span class="kv-label">Disputed Amt</span><span class="kv-val">₹${fmt(c.disputed_amount||0)}</span></div>

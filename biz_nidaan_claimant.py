@@ -155,11 +155,19 @@ async def rotate_token(claim_id: int) -> Optional[str]:
 
 
 async def mark_activated(claim_id: int) -> None:
-    """Stamp the first time the claimant actually opened their portal (only sets once)."""
+    """Stamp the first time the claimant actually opened their portal (only sets once).
+
+    Opening the L2 magic-link proves control of the inbox we emailed → this is ALSO how the
+    claimant's email gets VERIFIED (Phase 2: email+mobile mandatory at creation, verified via
+    the magic-link, no OTP for mediated claims). Staff-inspect opens (?staff=1) never call this."""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE nidaan_claimant_portal SET activated_at=CURRENT_TIMESTAMP "
             "WHERE claim_id=? AND activated_at IS NULL", (claim_id,))
+        await conn.execute(
+            "UPDATE nidaan_claims SET insured_email_verified=1, "
+            "insured_email_verified_at=CURRENT_TIMESTAMP "
+            "WHERE claim_id=? AND COALESCE(insured_email_verified,0)=0", (claim_id,))
         await conn.commit()
 
 

@@ -1373,6 +1373,11 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN review_outcome TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_findings TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_delivered_at TIMESTAMP",
+            # Claimant email verification (Aug 2026, Phase 2): insured email+mobile are mandatory
+            # at every claim-creation endpoint; the email is VERIFIED when the claimant opens the
+            # L2 authorization magic-link (no OTP at creation for mediated claims). 0=unverified.
+            "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified_at TIMESTAMP",
             # Affiliate branch attribution (Jun 2026): the offline city branch /
             # local vendor that sold this subscription. Used by superadmin to
             # reconcile commissions later. Empty = direct/online signup.
