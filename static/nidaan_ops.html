@@ -500,6 +500,7 @@ let _token = null, _role = null, _staffId = null, _staffName = null, _staffEmail
 const NIDAAN_OWNER_EMAIL = 'dushyant@nidaanpartner.com';
 let _currentPanel = 'overview';
 let _claimsCache = [];
+let _claimSel = new Set();   // selected claim_ids for bulk archive/restore (admin cleanup)
 
 const API = (path, opts={}) => {
   const headers = {'Content-Type':'application/json'};
@@ -3719,6 +3720,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (plan) params.set('plan', plan);
   if (assigned) params.set('assigned_to', assigned);
   params.set('limit','200');
+  if (window._claimsArchivedView) params.set('archived_only','true');
 
   const r = await API('/claims?' + params);
   if (!r.ok) { document.getElementById('claimTableWrap').innerHTML='<div class="empty"><p>Failed to load claims</p></div>'; return; }
@@ -3749,8 +3751,10 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       ? ` <span title="Level-2 fee paid — queued for legal" style="font-size:.62rem;font-weight:800;color:var(--nd-success-text);background:rgba(52,211,153,.15);border-radius:4px;padding:.05rem .3rem">L2 ✓</span>` : '';
     return `<span style="font-size:.68rem;font-weight:700;color:${col}">${lbl}</span>${l2}`;
   };
+  const _claimAdmin = (_role==='super_admin' || _role==='sub_super_admin');
   const rows = d.claims.map(c=>`
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
+      ${_claimAdmin?`<td onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" ${_claimSel.has(c.claim_id)?'checked':''} onchange="_toggleClaimSel(${c.claim_id},this.checked)"></td>`:''}
       <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
       <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone)}</span></td>
       <td>${esc(c.claim_type||'—')}</td>
@@ -3775,11 +3779,40 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if(cv==='board'){ bodyHtml = _renderClaimBoard(d.claims); }
   else if(cv==='cards'){ bodyHtml = _renderClaimCards(d.claims); }
   else bodyHtml = `<div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
+        <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
-  document.getElementById('claimTableWrap').innerHTML = sw + bodyHtml;
+  // Admin cleanup bar: archive/restore test-garbage claims + toggle the Archived view.
+  const archView = !!window._claimsArchivedView;
+  const toolbar = _claimAdmin ? `
+    <div id="claimBulkBar" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem;font-size:.82rem">
+      <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem${archView?';color:var(--nd-warning-text);border-color:var(--nd-warning-text)':''}" onclick="_toggleClaimsArchivedView()">${archView?'← Back to active claims':'🗄️ Archived claims'}</button>
+      <span id="claimSelCount" style="color:var(--nd-text-faint)">${_claimSel.size?(_claimSel.size+' selected'):''}</span>
+      ${archView
+        ? `<button class="btn" style="font-size:.8rem;padding:.35rem .8rem;background:#22c55e;color:#0a1628;font-weight:700${_claimSel.size?'':';opacity:.5;pointer-events:none'}" onclick="_archiveSelectedClaims(false)">↺ Restore selected</button>`
+        : `<button class="btn" style="font-size:.8rem;padding:.35rem .8rem;background:#a78bfa;color:#0a1628;font-weight:700${_claimSel.size?'':';opacity:.5;pointer-events:none'}" onclick="_archiveSelectedClaims(true)">🗄️ Archive selected</button>`}
+      ${archView?'<span style="color:var(--nd-text-faint);font-size:.74rem">Archived claims are hidden from all working views but never deleted.</span>':''}
+    </div>` : '';
+  document.getElementById('claimTableWrap').innerHTML = sw + toolbar + bodyHtml;
 }
 function _setClaimsView(v){ localStorage.setItem('claims_view', v); applyClaimFilters(); }
+function _toggleClaimSel(id, on){ if(on) _claimSel.add(id); else _claimSel.delete(id);
+  const c=document.getElementById('claimSelCount'); if(c) c.textContent=_claimSel.size?(_claimSel.size+' selected'):'';
+  document.querySelectorAll('#claimBulkBar .btn[onclick^="_archiveSelectedClaims"]').forEach(b=>{ b.style.opacity=_claimSel.size?'1':'.5'; b.style.pointerEvents=_claimSel.size?'auto':'none'; }); }
+function _toggleClaimsArchivedView(){ window._claimsArchivedView=!window._claimsArchivedView; _claimSel.clear(); applyClaimFilters(); }
+async function _archiveSelectedClaims(archive){
+  const ids=[..._claimSel]; if(!ids.length) return;
+  const verb=archive?'Archive':'Restore';
+  if(!confirm(`${verb} ${ids.length} claim(s)?${archive?'\n\nThey will be hidden from all working views (restorable).':''}`)) return;
+  try{
+    const r=await API('/claims/archive',{method:'POST', body:JSON.stringify({claim_ids:ids, archived:archive})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert('Could not '+verb.toLowerCase()+': '+(e.detail||'error')); return; }
+    const d=await r.json();
+    _claimSel.clear();
+    alert(`✅ ${verb}d ${d.updated} claim(s).`);
+    applyClaimFilters();
+  }catch(e){ alert('Network error — try again.'); }
+}
+window._toggleClaimSel=_toggleClaimSel; window._toggleClaimsArchivedView=_toggleClaimsArchivedView; window._archiveSelectedClaims=_archiveSelectedClaims;
 
 // ═══ BRANCHES (affiliate city branch codes) ═══
 async function loadBranches() {

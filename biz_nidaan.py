@@ -6223,6 +6223,8 @@ async def get_claims_ops(
     plan: Optional[str] = None,
     account_id: Optional[int] = None,
     review_outcome: Optional[str] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -6244,6 +6246,12 @@ async def get_claims_ops(
             conditions.append("c.assigned_to_staff_id=?")
             params.append(assigned_to)
 
+        # Manually-archived (test/garbage) claims are hidden from every working view by
+        # default; the Archive view passes archived_only=True to see just them.
+        if archived_only:
+            conditions.append("COALESCE(c.archived,0)=1")
+        elif not include_archived:
+            conditions.append("COALESCE(c.archived,0)=0")
         if status:
             conditions.append("c.status=?")
             params.append(status)
@@ -7336,6 +7344,29 @@ async def ensure_claim_documents_table() -> None:
         except Exception:
             pass
         await conn.commit()
+
+
+async def set_claims_archived(claim_ids: list, archived: bool, actor: str = "") -> int:
+    """Archive (or restore) claims — super-admin/admin cleanup of test/garbage claims. Archived
+    claims are hidden from every working view but never deleted (restorable). Returns the count
+    updated. Idempotent."""
+    ids = [int(c) for c in (claim_ids or []) if str(c).strip().isdigit()]
+    if not ids:
+        return 0
+    ph = ",".join("?" * len(ids))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        if archived:
+            cur = await conn.execute(
+                f"UPDATE nidaan_claims SET archived=1, archived_at=CURRENT_TIMESTAMP, archived_by=? "
+                f"WHERE claim_id IN ({ph}) AND COALESCE(archived,0)=0",
+                tuple([actor or ""] + ids))
+        else:
+            cur = await conn.execute(
+                f"UPDATE nidaan_claims SET archived=0, archived_at=NULL, archived_by='' "
+                f"WHERE claim_id IN ({ph}) AND COALESCE(archived,0)=1",
+                tuple(ids))
+        await conn.commit()
+        return cur.rowcount
 
 
 async def save_claim_document(

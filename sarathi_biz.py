@@ -7164,6 +7164,7 @@ async def ops_list_claims(
     plan: Optional[str] = None,
     account_id: Optional[int] = None,
     review_outcome: Optional[str] = None,
+    archived_only: bool = False,
     limit: int = 100,
     offset: int = 0,
 ):
@@ -7176,7 +7177,7 @@ async def ops_list_claims(
         claim_type=claim_type, search=search,
         payment_status=payment_status,
         branch=branch, plan=plan, account_id=account_id,
-        review_outcome=review_outcome,
+        review_outcome=review_outcome, archived_only=archived_only,
         limit=limit, offset=offset,
     )
     # Pipeline counters (global, independent of the active filter) so the ops UI
@@ -7193,6 +7194,30 @@ async def ops_list_claims(
                 f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
             counts[r["payment_status"] or "paid"] = r["n"]
     return {"claims": claims, "count": len(claims), "pipeline": counts}
+
+
+class OpsClaimArchiveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_ids: list[int]
+    archived: bool = True   # True = archive, False = restore
+
+
+@app.post("/nidaan/ops/api/claims/archive")
+@limiter.limit("30/minute")
+async def ops_archive_claims(body: OpsClaimArchiveReq, request: Request):
+    """Super-admin/admin: move test/garbage claims to the Archive (or restore them). Claims are
+    hidden from every working view but never deleted. Audited with the real actor."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    ids = [int(c) for c in (body.claim_ids or [])][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No claims selected")
+    n = await nidaan.set_claims_archived(ids, body.archived, actor=_actor_label(caller))
+    await _ops_audit(request, "claim.archive" if body.archived else "claim.restore",
+                     "claim", ",".join(str(i) for i in ids[:20]),
+                     f"{'archived' if body.archived else 'restored'} {n} claim(s)")
+    return {"ok": True, "updated": n, "archived": body.archived}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}")

@@ -1378,6 +1378,12 @@ async def init_db():
             # L2 authorization magic-link (no OTP at creation for mediated claims). 0=unverified.
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified INTEGER DEFAULT 0",
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified_at TIMESTAMP",
+            # Manual ARCHIVE (Aug 2026): super-admin/admin can move test/garbage claims out of the
+            # working views without deleting them. 1=archived. Restorable. Distinct from the
+            # computed no_scope auto-archive flag (which is time-based, not stored).
+            "ALTER TABLE nidaan_claims ADD COLUMN archived INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_claims ADD COLUMN archived_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN archived_by TEXT DEFAULT ''",
             # Affiliate branch attribution (Jun 2026): the offline city branch /
             # local vendor that sold this subscription. Used by superadmin to
             # reconcile commissions later. Empty = direct/online signup.
