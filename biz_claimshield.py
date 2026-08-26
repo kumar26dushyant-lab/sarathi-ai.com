@@ -337,5 +337,27 @@ async def auto_send_if_eligible(claim_id: int) -> dict:
             "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not c or c["review_outcome"] != "can_fight" or not _claim_is_paid(c):
         return {"ok": False, "error": "not_eligible_auto"}
-    return await create_case(claim_id, reason="Auto — payment confirmed",
-                             sent_by="Auto (payment confirmed)")
+    # Phase 3 GATE: auto-send waits for the claimant's authorization acceptance (founder
+    # decision). The MANUAL "send to ClaimShield" button calls create_case() directly and
+    # deliberately bypasses this gate, so ops can still push a case without acceptance.
+    try:
+        gate = await _n.get_ops_setting("claimshield_require_acceptance", "1")
+    except Exception:
+        gate = "1"
+    if str(gate).strip().lower() in ("1", "true", "on", "yes"):
+        try:
+            import biz_nidaan_claimant as _cl
+            st = await _cl.portal_state(claim_id)
+            if not st.get("consent_accepted"):
+                # Not accepted yet → don't send. Make sure the claimant has been asked to
+                # authorize (idempotent: ensures the portal + greeting/magic-link email).
+                try:
+                    await _cl.on_claim_reached_l2(claim_id)
+                except Exception:
+                    pass
+                return {"ok": False, "error": "awaiting_acceptance"}
+        except Exception as _ge:
+            # If the acceptance check itself fails, be conservative and do NOT auto-send.
+            return {"ok": False, "error": "acceptance_check_failed"}
+    return await create_case(claim_id, reason="Auto — payment + claimant authorization",
+                             sent_by="Auto (payment + authorization)")

@@ -1693,6 +1693,42 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
             pass
 
 
+async def on_claimant_accepted(claim_id: int):
+    """The claimant DIGITALLY ACCEPTED the success-fee authorization (Phase 3). Alert every
+    super-admin + sub-admin + the assigned handler on ALL channels (bell + push + email +
+    Telegram) — this is the gate that releases the case to ClaimShield."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT insured_name, claim_type, disputed_amount, assigned_to_staff_id "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not c:
+            return
+        c = dict(c)
+        ids = [r["staff_id"] for r in await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()]
+        if c.get("assigned_to_staff_id") and c["assigned_to_staff_id"] not in ids:
+            ids.append(c["assigned_to_staff_id"])
+    if not ids:
+        return
+    subj = f"✅ Claimant AUTHORIZED — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"The claimant accepted the success-fee terms for this case.\n\n"
+            f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
+            f"The signed acceptance is on file (L2) and the case is being released to ClaimShield.\n\n"
+            f"Open: /nidaan/ops")
+    try:
+        await notify_staff_inapp(ids, subj, body, event_key="claimant.accepted", email=True,
+                                 claim_id=claim_id)
+    except Exception as e:
+        logger.warning("on_claimant_accepted inapp failed for claim %s: %s", claim_id, e)
+    for sid in ids:
+        try:
+            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
+        except Exception:
+            pass
+
+
 async def on_moved_to_l2(claim_id: int):
     """#7: a claim's review was delivered as GO (can_fight) → it moves into the L2 section.
     Alert super-admins + sub-admins + everyone assigned to the claim, on all channels

@@ -1319,11 +1319,37 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
     return {"ok": True, "saved": saved}
 
 
+async def _file_consent_pdf(claim_id: int) -> Optional[int]:
+    """Phase 3: persist the tamper-evident acceptance PDF into the claim's L2 documents so the
+    signed authorization is permanently ON FILE (not just generated on demand). Idempotent —
+    skips if an 'authorization' doc already exists for this claim. Returns doc_id or None."""
+    await nidaan.ensure_claim_documents_table()
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        exists = await (await _c.execute(
+            "SELECT 1 FROM nidaan_claim_documents WHERE claim_id=? AND source='authorization' LIMIT 1",
+            (claim_id,))).fetchone()
+        acc = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if exists or not acc:
+        return None
+    pdf = await claimant.build_consent_proof_pdf(claim_id)
+    if not pdf:
+        return None
+    stored = f"{uuid.uuid4().hex}.pdf"
+    (_NIDAAN_DOCS_DIR / stored).write_bytes(pdf)
+    return await nidaan.save_claim_document(
+        account_id=acc["account_id"], stored_name=stored,
+        original_name=f"authorization-acceptance-claim-{claim_id}.pdf",
+        file_size=len(pdf), mime_type="application/pdf", claim_id=claim_id, source="authorization")
+
+
 @app.post("/nidaan/claim/api/consent")
 @limiter.limit("10/minute")
 async def nidaan_claim_consent(request: Request):
     """Record the claimant's DIGITAL ACCEPTANCE of the success-fee terms (idempotent). Snapshots the
-    % + GST + T&C version that applied at this moment."""
+    % + GST + T&C version that applied at this moment. On the FIRST acceptance it also files the
+    acceptance PDF into L2 and (Phase 3) releases the claim to ClaimShield via the gated auto-send."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     ctx = await _claimant_ctx(request)
@@ -1332,6 +1358,26 @@ async def nidaan_claim_consent(request: Request):
     ip = (request.client.host if request.client else "") or ""
     ua = request.headers.get("user-agent", "") or ""
     res = await claimant.record_consent(ctx["claim_id"], ip=ip, user_agent=ua)
+    if not res.get("already"):
+        async def _post_accept(cid):
+            # 1) File the tamper-evident acceptance PDF into the claim's L2 documents (once).
+            try:
+                await _file_consent_pdf(cid)
+            except Exception as _fe:
+                logger.warning("file consent pdf failed claim=%s: %s", cid, _fe)
+            # 2) Claimant has authorized → run the GATED auto-send to ClaimShield.
+            try:
+                import biz_claimshield as _cs
+                await _cs.auto_send_if_eligible(cid)
+            except Exception as _se:
+                logger.warning("post-accept ClaimShield send failed claim=%s: %s", cid, _se)
+            # 3) Alert admins on all channels that the claimant accepted.
+            try:
+                import biz_nidaan_notifications as _nnot
+                await _nnot.on_claimant_accepted(cid)
+            except Exception:
+                pass
+        asyncio.create_task(_post_accept(ctx["claim_id"]))
     return {"ok": True, "already": res.get("already", False)}
 
 
