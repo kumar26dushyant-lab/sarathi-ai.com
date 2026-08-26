@@ -3464,11 +3464,13 @@ function _l2CsBadge(c){
 }
 // ── Per-claim TRAIL badges (full journey visible without opening the claim) ──
 const _SRC = {branch:'🏢 Branch', staff:'👤 Staff', subscriber:'💳 Subscriber', review:'📋 ₹499', direct:'🌐 Direct'};
-function _srcBadge(c){
+function _claimSrcBadge(c){
+  if(!c) return '';
   const k=c.source_kind||'direct';
   return (_SRC[k]||k) + (c.ref_name?(' · <b>'+esc(c.ref_name)+'</b>'):'');
 }
-function _payBadge(c){
+function _claimPayBadge(c){
+  if(!c) return '—';
   const p=(c.payment_status||'');
   if(p==='subscription') return '<span style="color:var(--nd-success-text)">💳 Subscriber</span>';
   if(p==='paid') return '<span style="color:var(--nd-success-text)">✅ Paid</span>';
@@ -3490,8 +3492,8 @@ function _portalBadge(c){
 }
 function _claimTrail(c){
   return `<div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.3rem;line-height:1.6;border-top:1px dashed var(--nd-border);padding-top:.25rem">`
-    + `👤 raised: <b>${esc(c.owner_name||'—')}</b> · ${_srcBadge(c)}<br>`
-    + `${_payBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}`
+    + `👤 raised: <b>${esc(c.owner_name||'—')}</b> · ${_claimSrcBadge(c)}<br>`
+    + `${_claimPayBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}`
     + `</div>`;
 }
 function _l2CardInner(c){
