@@ -1142,6 +1142,55 @@ async def set_account_branch(account_id: int, code: str) -> bool:
         return cur.rowcount > 0
 
 
+async def reattribute_account(account_id: int, new_code: str, *, clear: bool = False) -> dict:
+    """SUPER-ADMIN OVERRIDE of an account's referral attribution — bypasses the first-touch
+    lock (set_account_branch only fills a blank). For CORRECTIONS only; always audited by the
+    caller. `clear=True` resets to Direct (blank). Returns {ok, old_code, new_code, error?}.
+
+    Note: a claim shows COALESCE(claim.branch_code, account.branch_code) — so a branch-origin
+    claim with its OWN stamped code needs reattribute_claim() too; this fixes account-level."""
+    code = "" if clear else (new_code or "").strip().upper()
+    if not clear:
+        if not code:
+            return {"ok": False, "error": "Enter a referral code, or choose Clear (Direct)."}
+        if not await is_valid_ref_code(code):
+            return {"ok": False, "error": f"'{code}' is not a valid staff/branch referral code."}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT branch_code FROM nidaan_accounts WHERE account_id=?", (account_id,))).fetchone()
+        if not row:
+            return {"ok": False, "error": "Account not found."}
+        old_code = (row["branch_code"] or "").strip().upper()
+        await conn.execute("UPDATE nidaan_accounts SET branch_code=? WHERE account_id=?",
+                           (code, account_id))
+        await conn.commit()
+    return {"ok": True, "old_code": old_code, "new_code": code}
+
+
+async def reattribute_claim(claim_id: int, new_code: str, *, clear: bool = False) -> dict:
+    """SUPER-ADMIN OVERRIDE of a single claim's OWN attribution code (nidaan_claims.branch_code),
+    which takes precedence over the account code in the trail. `clear=True` → fall back to the
+    account's attribution. Always audited by the caller. Returns {ok, old_code, new_code, error?}."""
+    code = "" if clear else (new_code or "").strip().upper()
+    if not clear:
+        if not code:
+            return {"ok": False, "error": "Enter a referral code, or choose Clear (use account)."}
+        if not await is_valid_ref_code(code):
+            return {"ok": False, "error": f"'{code}' is not a valid staff/branch referral code."}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT branch_code FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not row:
+            return {"ok": False, "error": "Claim not found."}
+        old_code = (row["branch_code"] or "").strip().upper()
+        await conn.execute("UPDATE nidaan_claims SET branch_code=? WHERE claim_id=?",
+                           (code, claim_id))
+        await conn.commit()
+    return {"ok": True, "old_code": old_code, "new_code": code}
+
+
 # ── Control-center activity trail ─────────────────────────────────────────────
 async def log_activity(action: str, actor_type: str = "staff", actor_id=None,
                        actor_name: str = "", actor_role: str = "",

@@ -4706,6 +4706,11 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Firm</span><span class="kv-val">${esc(c.firm_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
       <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.advisor_phone||'—')}</span></div>
+      <div class="kv"><span class="kv-label">Referred by</span><span class="kv-val">${
+        (c.ref_name||c.ref_code)
+          ? `${c.ref_kind==='staff'?'👤 ':c.ref_kind==='branch'?'🏢 ':''}${esc(c.ref_name||c.ref_code)}${c.ref_code?` <span style="color:var(--nd-text-faint);font-size:.72rem">· ${esc(c.ref_code)}</span>`:''}`
+          : '<span style="color:var(--nd-text-faint)">Direct (no referrer)</span>'
+      }${_role==='super_admin'?` <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;color:var(--nd-cyan-text)" onclick="openClaimReattributeModal(${c.claim_id})" title="Correct who referred this claim">🏷️ Fix</button>`:''}</span></div>
     </div>
     ${canAssign?`<div class="drawer-section">
       <h4>Assign To Staff</h4>
@@ -5467,6 +5472,7 @@ function renderAccounts(accounts) {
         <button class="btn-icon" onclick="doImpersonate(${a.account_id})" title="Login as Advisor">🔑</button>
         <button class="btn-icon" onclick="showSarathiLink(${a.account_id})" title="Sarathi CRM Link">🔗</button>
         ${deleted?'':`<button class="btn-icon" onclick="openMarkPaidModal(${a.account_id})" title="Mark paid (offline / QR)" style="color:var(--nd-success-text)">💰</button>`}
+        ${deleted?'':`<button class="btn-icon" onclick="openReattributeModal(${a.account_id})" title="Fix referral — who referred this account">🏷️</button>`}
         ${deleted?'':`<button class="btn-icon" onclick="confirmDeleteAccounts([${a.account_id}])" title="Delete account" style="color:var(--nd-danger-text)">🗑️</button>`}`:''}
       </td>
     </tr>`;}).join('');
@@ -5480,6 +5486,85 @@ function renderAccounts(accounts) {
     </div>`;
   updateAccBulkBar();
 }
+
+// ── Fix referral attribution (super-admin) — corrects the first-touch-locked code ──
+function openReattributeModal(id){
+  const a=(window._allAccounts||[]).find(x=>x.account_id===id)||{};
+  const curName = a.ref_name || (a.branch_code ? a.branch_code : 'Direct (no referrer)');
+  const curCode = a.branch_code ? esc(a.branch_code) : '—';
+  const ov=document.createElement('div'); ov.id='raOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
+    <div style="font-size:1.1rem;font-weight:800;margin-bottom:.3rem">🏷️ Fix referral — #${id} ${esc(a.owner_name||'')}</div>
+    <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Change who gets credit for referring this account. Use this only to correct a mistake — it is logged with your name.</div>
+    <div style="font-size:.82rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.9rem">
+      Currently credited to: <b>${esc(curName)}</b> <span style="color:var(--nd-text-faint)">(${curCode})</span></div>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or branch code)</label>
+    <input id="raCode" autocomplete="off" placeholder="e.g. SP-EE53CU" style="width:100%;margin-bottom:.7rem;text-transform:uppercase">
+    <label style="display:flex;gap:.5rem;align-items:center;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
+      <input type="checkbox" id="raClear" onchange="const c=this.checked;document.getElementById('raCode').disabled=c;document.getElementById('raCode').style.opacity=c?'.5':'1';">
+      No referrer — mark as <b>Direct</b></label>
+    <div id="raMsg" style="font-size:.82rem;color:var(--nd-danger-text);margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('raOv').remove()">Cancel</button>
+      <button id="raBtn" class="btn btn-primary" onclick="doReattribute(${id})">Save correction</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const c=document.getElementById('raCode'); if(c) c.focus(); }, 50);
+}
+async function doReattribute(id){
+  const clear=(document.getElementById('raClear')||{}).checked;
+  const code=((document.getElementById('raCode')||{}).value||'').trim().toUpperCase();
+  const msg=document.getElementById('raMsg'), btn=document.getElementById('raBtn');
+  if(!clear && !code){ msg.textContent='Enter a referral code, or tick “mark as Direct”.'; return; }
+  btn.disabled=true; btn.textContent='Saving…'; msg.textContent='';
+  try{
+    const r=await API(`/accounts/${id}/reattribute`, {method:'POST', body:JSON.stringify({ref_code:code, clear})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); msg.textContent=e.detail||'Could not save.'; btn.disabled=false; btn.textContent='Save correction'; return; }
+    const d=await r.json();
+    document.getElementById('raOv').remove();
+    alert(`✅ Referral updated → ${d.referrer||'Direct'}`);
+    loadAccounts();
+  }catch(e){ msg.textContent='Network error — try again.'; btn.disabled=false; btn.textContent='Save correction'; }
+}
+window.openReattributeModal=openReattributeModal; window.doReattribute=doReattribute;
+
+// Claim-level attribution override (takes precedence over the account; clear = use account).
+function openClaimReattributeModal(claimId){
+  const ov=document.createElement('div'); ov.id='craOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
+    <div style="font-size:1.1rem;font-weight:800;margin-bottom:.3rem">🏷️ Fix referral — Claim #${claimId}</div>
+    <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Correct who referred <b>this claim</b>. A claim code overrides the account's referrer. Leave blank + tick below to fall back to the account. Logged with your name.</div>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or branch code)</label>
+    <input id="craCode" autocomplete="off" placeholder="e.g. SP-EE53CU" style="width:100%;margin-bottom:.7rem;text-transform:uppercase">
+    <label style="display:flex;gap:.5rem;align-items:center;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
+      <input type="checkbox" id="craClear" onchange="const c=this.checked;document.getElementById('craCode').disabled=c;document.getElementById('craCode').style.opacity=c?'.5':'1';">
+      Use the account's referrer (clear this claim's own code)</label>
+    <div id="craMsg" style="font-size:.82rem;color:var(--nd-danger-text);margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('craOv').remove()">Cancel</button>
+      <button id="craBtn" class="btn btn-primary" onclick="doClaimReattribute(${claimId})">Save correction</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const c=document.getElementById('craCode'); if(c) c.focus(); }, 50);
+}
+async function doClaimReattribute(claimId){
+  const clear=(document.getElementById('craClear')||{}).checked;
+  const code=((document.getElementById('craCode')||{}).value||'').trim().toUpperCase();
+  const msg=document.getElementById('craMsg'), btn=document.getElementById('craBtn');
+  if(!clear && !code){ msg.textContent='Enter a referral code, or tick “use the account’s referrer”.'; return; }
+  btn.disabled=true; btn.textContent='Saving…'; msg.textContent='';
+  try{
+    const r=await API(`/claims/${claimId}/reattribute`, {method:'POST', body:JSON.stringify({ref_code:code, clear})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); msg.textContent=e.detail||'Could not save.'; btn.disabled=false; btn.textContent='Save correction'; return; }
+    const d=await r.json();
+    document.getElementById('craOv').remove();
+    alert(`✅ Claim referral updated → ${d.referrer||'Account default'}`);
+    if(typeof loadClaims==='function') loadClaims();
+  }catch(e){ msg.textContent='Network error — try again.'; btn.disabled=false; btn.textContent='Save correction'; }
+}
+window.openClaimReattributeModal=openClaimReattributeModal; window.doClaimReattribute=doClaimReattribute;
 
 // ── Mark paid (offline / QR) — super-admin only ────────────────────────────────
 let _mpPricing=null, _mpGst=null;

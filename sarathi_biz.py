@@ -5599,6 +5599,50 @@ async def nidaan_ops_claim_payments(claim_id: int, request: Request):
     return {"payments": rows, "count": len(rows), "total_rupees": round(total / 100.0, 2)}
 
 
+class NidaanReattributeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ref_code: str = ""
+    clear: bool = False
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/reattribute")
+@limiter.limit("30/minute")
+async def nidaan_ops_reattribute_account(account_id: int, body: NidaanReattributeReq, request: Request):
+    """Super-admin: CORRECT an account's referral attribution (bypasses first-touch lock)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    res = await nidaan.reattribute_account(account_id, body.ref_code, clear=body.clear)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Could not update"))
+    new_info = await nidaan.resolve_ref_info(res["new_code"]) if res["new_code"] else {"name": "Direct"}
+    await _ops_audit(request, "account.reattribute", "account", str(account_id),
+                     f"{res['old_code'] or 'Direct'} → {res['new_code'] or 'Direct'} "
+                     f"({new_info.get('name','')})")
+    logger.info("🔗 Account %d re-attributed by %s: %s → %s",
+                account_id, _actor_label(caller), res["old_code"] or "-", res["new_code"] or "-")
+    return {"ok": True, **res, "referrer": new_info.get("name", "")}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/reattribute")
+@limiter.limit("30/minute")
+async def nidaan_ops_reattribute_claim(claim_id: int, body: NidaanReattributeReq, request: Request):
+    """Super-admin: CORRECT a single claim's OWN attribution (takes precedence over the account)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    res = await nidaan.reattribute_claim(claim_id, body.ref_code, clear=body.clear)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Could not update"))
+    new_info = await nidaan.resolve_ref_info(res["new_code"]) if res["new_code"] else {"name": "Account default"}
+    await _ops_audit(request, "claim.reattribute", "claim", str(claim_id),
+                     f"{res['old_code'] or 'Account default'} → {res['new_code'] or 'Account default'} "
+                     f"({new_info.get('name','')})")
+    logger.info("🔗 Claim %d re-attributed by %s: %s → %s",
+                claim_id, _actor_label(caller), res["old_code"] or "-", res["new_code"] or "-")
+    return {"ok": True, **res, "referrer": new_info.get("name", "")}
+
+
 @app.get("/nidaan/ops/api/payments")
 async def nidaan_ops_payments_ledger(request: Request, limit: int = 200,
                                      source: str = "", verified_only: bool = False):
