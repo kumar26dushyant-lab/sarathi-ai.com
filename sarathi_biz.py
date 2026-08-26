@@ -4236,6 +4236,10 @@ async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    # 1d — already-subscribed guide: detect + guide (never error / double-charge).
+    _guide = await _nidaan_resub_guard(account["account_id"], body.plan)
+    if _guide:
+        return _guide
     rzp_key_id = _nidaan_rzp_id()
     rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:
@@ -5082,6 +5086,48 @@ async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request
 
 # ── Nidaan: Create recurring subscription (quarterly auto-renew) ───────────────
 
+def _plan_label(plan: str) -> str:
+    base = (plan or "").replace("_annual", "")
+    cyc = " (annual)" if (plan or "").endswith("_annual") else ""
+    return (base[:1].upper() + base[1:]) + cyc if base else "your plan"
+
+
+async def _nidaan_resub_guard(account_id: int, requested_plan: str) -> Optional[dict]:
+    """1d — detect an existing subscriber trying to re-subscribe and GUIDE them (never
+    error, never double-charge / mis-record). Returns a friendly guide dict if the account
+    already has an active plan, else None (caller proceeds normally). Bilingual EN/HI."""
+    cur = await nidaan.get_active_subscription(account_id)
+    if not cur:
+        return None
+    cur_plan = (cur.get("plan") or "").strip().lower()
+    same = cur_plan == (requested_plan or "").strip().lower()
+    cur_lbl = _plan_label(cur_plan)
+    ends = ""
+    try:
+        _e = (cur.get("current_period_end") or "")[:10]
+        if _e:
+            ends = datetime.strptime(_e, "%Y-%m-%d").strftime("%d %b %Y")
+    except Exception:
+        ends = (cur.get("current_period_end") or "")[:10]
+    until_en = f" It stays active till {ends}." if ends else ""
+    until_hi = f" यह {ends} तक सक्रिय है।" if ends else ""
+    if same:
+        msg_en = (f"You already have the {cur_lbl} plan active.{until_en} "
+                  f"No need to pay again — it renews automatically.")
+        msg_hi = (f"आपके पास पहले से {cur_lbl} प्लान सक्रिय है।{until_hi} "
+                  f"दोबारा भुगतान की ज़रूरत नहीं — यह अपने आप रिन्यू होता है।")
+    else:
+        msg_en = (f"You already have the {cur_lbl} plan active.{until_en} "
+                  f"To switch plans, please cancel the current one first from "
+                  f"Manage Subscription — you won't be double-charged.")
+        msg_hi = (f"आपके पास पहले से {cur_lbl} प्लान सक्रिय है।{until_hi} "
+                  f"प्लान बदलने के लिए पहले ‘Manage Subscription’ से मौजूदा प्लान रद्द करें — "
+                  f"आपसे दोहरा शुल्क नहीं लिया जाएगा।")
+    return {"guide": True, "code": "already_active", "same_plan": same,
+            "current_plan": cur_plan, "current_plan_label": cur_lbl, "ends_at": ends,
+            "message_en": msg_en, "message_hi": msg_hi}
+
+
 @app.post("/nidaan/api/subscribe/recurring")
 @limiter.limit("5/minute")
 async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request):
@@ -5100,6 +5146,10 @@ async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request)
     account = await _nidaan_account_from_payload(payload)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    # 1d — already-subscribed guide: detect + guide (never error / double-charge).
+    _guide = await _nidaan_resub_guard(account["account_id"], body.plan)
+    if _guide:
+        return _guide
     rzp_key_id = _nidaan_rzp_id()
     rzp_key_secret = _nidaan_rzp_secret()
     if not rzp_key_id or not rzp_key_secret:

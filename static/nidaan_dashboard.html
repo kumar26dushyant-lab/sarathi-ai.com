@@ -2227,6 +2227,12 @@ async function doSubscribe() {
       });
       if (!res) return;
       const data = await res.json();
+      // 1d — already-subscribed guide (server returns 200 with a friendly message, not an error).
+      if (data && data.guide) {
+        msg.className = 'msg'; msg.style.color = 'var(--nd-cyan-text, #0891b2)';
+        msg.textContent = (isHi ? data.message_hi : data.message_en) || (isHi ? 'आपके पास पहले से एक प्लान सक्रिय है।' : 'You already have an active plan.');
+        btn.disabled = false; return;
+      }
       if (!res.ok) throw new Error(_extractErr(data, 'Subscription creation failed'));
 
       const _isAnnual = _selectedPlan.endsWith('_annual');
@@ -2290,6 +2296,12 @@ async function doSubscribe() {
       });
       if (!res) return;
       const data = await res.json();
+      // 1d — already-subscribed guide (server returns 200 with a friendly message, not an error).
+      if (data && data.guide) {
+        msg.className = 'msg'; msg.style.color = 'var(--nd-cyan-text, #0891b2)';
+        msg.textContent = (isHi ? data.message_hi : data.message_en) || (isHi ? 'आपके पास पहले से एक प्लान सक्रिय है।' : 'You already have an active plan.');
+        btn.disabled = false; return;
+      }
       if (!res.ok) throw new Error(_extractErr(data, 'Subscription failed'));
 
       const isAnnual = data.plan.endsWith('_annual');
