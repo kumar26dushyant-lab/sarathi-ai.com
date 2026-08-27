@@ -1,239 +1,196 @@
 """
-biz_nidaan_wa_flow.py — WhatsApp onboarding conversation logic for Nidaan.
+NidaanPartner claimant-WhatsApp FLOW logic — inbound handling + opt-in + message log.
 
-Handles the language-selection + welcome/save-number + consent opt-in flow,
-trilingual (English / हिंदी / मराठी). This module is PURE LOGIC + TEMPLATES:
-- It generates the messages to send.
-- It decides what to do next given the inbound text and the contact's state.
-It does NOT touch the DB or send anything — the inbound handler calls
-`decide_onboarding_action()` and executes the returned action. This keeps it
-unit-testable in isolation (Phase 2 discipline, mirrors Phase 1).
-
-Design rules (from NIDAAN_WHATSAPP_JOURNEY_SPEC.md):
-- First contact gets the welcome in ALL THREE languages at once, so a
-  non-English speaker can still understand how to pick (reply 1/2/3).
-- "change language" (in any language) re-sends the picker, anytime.
-- Advisor-managed customers must opt-in (YES) before transactional messages;
-  the consent line names BOTH advisor name AND firm name.
-- Everything here is template-driven — zero AI, zero free-prose (anti-hallucination).
+Phase 0 (this file, foundation): parse Meta webhook payloads, dedup on wamid, log every
+message, track the 24h session window, and handle opt-in keywords (STOP / START / language).
+Documents that arrive are logged and ops is alerted; the intelligent doc pipeline (quality +
+right-doc verification + PDF/naming + checklist update + guided next-step) lands in Phase 1 at
+the marked handoff (`_on_inbound_media`). Never raises to the webhook.
 """
 from __future__ import annotations
 
-import re
+import logging
+from datetime import datetime
 from typing import Optional
 
-LANGS = ("en", "hi", "mr")
-DEFAULT_LANG = "en"
+import aiosqlite
 
-# ── Verify-trust line (reused) ───────────────────────────────────────────────
-_VERIFY = {
-    "en": "🔒 Doubt this is really us? Verify our official numbers on nidaanpartner.com and in your dashboard (Support).",
-    "hi": "🔒 शक है कि यह सच में हम हैं? हमारे आधिकारिक नंबर nidaanpartner.com पर और अपने डैशबोर्ड (सपोर्ट) में जाँचें।",
-    "mr": "🔒 हे खरंच आम्हीच आहोत का शंका आहे? आमचे अधिकृत नंबर nidaanpartner.com वर आणि तुमच्या डॅशबोर्डमध्ये (सपोर्ट) तपासा.",
-}
+import biz_database as db
+import biz_nidaan_whatsapp as wa
 
+logger = logging.getLogger("nidaan.wa.flow")
+DB_PATH = db.DB_PATH
 
-# ── 1. Trilingual welcome + save-number + language picker ────────────────────
-def render_welcome() -> str:
-    """First message to a brand-new contact. All three languages at once."""
-    return (
-        "🙏 *Namaste · नमस्ते · नमस्कार!*\n\n"
-        "This is the official WhatsApp of *Nidaan – The Legal Consultants* "
-        "(NidaanPartner.com).\n"
-        "📌 Please *SAVE this number* so our updates always reach you safely.\n\n"
-        "*Choose your language · अपनी भाषा चुनें · तुमची भाषा निवडा:*\n"
-        "Reply *1* → English\n"
-        "उत्तर *2* → हिंदी\n"
-        "उत्तर *3* → मराठी\n\n"
-        + _VERIFY["en"] + "\n"
-        + _VERIFY["hi"] + "\n"
-        + _VERIFY["mr"]
-    )
+_STOP_WORDS = {"stop", "unsubscribe", "band karo", "band karein", "roko", "mat bhejo"}
+_START_WORDS = {"start", "yes", "haan", "haँ", "ha", "ok", "okay", "start karo"}
+_LANG_WORDS = {"english": "en", "eng": "en", "hindi": "hi", "हिंदी": "hi",
+               "hinglish": "hinglish", "roman": "hinglish"}
 
 
-# ── 2. Language-set acknowledgement (after they pick) ────────────────────────
-_LANG_ACK = {
-    "en": ("✅ Language set to *English*. You can change it anytime by replying "
-           "*change language*.\n\n" + _VERIFY["en"]),
-    "hi": ("✅ भाषा *हिंदी* सेट कर दी गई। आप कभी भी *change language* या "
-           "*भाषा बदलें* लिखकर इसे बदल सकते हैं।\n\n" + _VERIFY["hi"]),
-    "mr": ("✅ भाषा *मराठी* सेट केली. तुम्ही कधीही *change language* किंवा "
-           "*भाषा बदला* लिहून ती बदलू शकता.\n\n" + _VERIFY["mr"]),
-}
-
-
-def render_lang_ack(lang: str) -> str:
-    return _LANG_ACK.get(lang, _LANG_ACK["en"])
-
-
-# ── 3. Consent opt-in (advisor-managed customers; names advisor + firm) ──────
-_CONSENT = {
-    "en": ("Nidaan – The Legal Consultants is handling your insurance claim on "
-           "behalf of *{who}*.\n\nReply *YES* to receive case updates here, or "
-           "*STOP* to opt out.\n\n" + _VERIFY["en"]),
-    "hi": ("Nidaan – The Legal Consultants आपके बीमा क्लेम को *{who}* की ओर से "
-           "संभाल रहा है।\n\nयहाँ अपडेट पाने के लिए *YES* लिखें, या बाहर निकलने "
-           "के लिए *STOP*।\n\n" + _VERIFY["hi"]),
-    "mr": ("Nidaan – The Legal Consultants तुमचा विमा दावा *{who}* यांच्या वतीने "
-           "हाताळत आहे.\n\nइथे अपडेट्स मिळवण्यासाठी *YES* लिहा, किंवा बाहेर "
-           "पडण्यासाठी *STOP* लिहा.\n\n" + _VERIFY["mr"]),
-}
-
-
-def _format_who(advisor_name: str = "", firm_name: str = "") -> str:
-    a = (advisor_name or "").strip()
-    f = (firm_name or "").strip()
-    if a and f:
-        return f"{a}, {f}"
-    return a or f or "your advisor"
-
-
-def render_consent(lang: str, advisor_name: str = "", firm_name: str = "") -> str:
-    who = _format_who(advisor_name, firm_name)
-    tmpl = _CONSENT.get(lang, _CONSENT["en"])
-    return tmpl.format(who=who)
-
-
-# ── 4. Consent acknowledgements ──────────────────────────────────────────────
-_CONSENT_YES_ACK = {
-    "en": "✅ Thank you! You'll now receive updates about your claim here. Our team will reach out shortly.",
-    "hi": "✅ धन्यवाद! अब आपको अपने क्लेम के अपडेट यहाँ मिलेंगे। हमारी टीम जल्द संपर्क करेगी।",
-    "mr": "✅ धन्यवाद! आता तुम्हाला तुमच्या दाव्याचे अपडेट्स इथे मिळतील. आमची टीम लवकरच संपर्क करेल.",
-}
-_CONSENT_STOP_ACK = {
-    "en": "You've opted out and won't receive further WhatsApp updates. Reply *START* anytime to resume.",
-    "hi": "आपने ऑप्ट-आउट कर दिया है और अब WhatsApp अपडेट नहीं मिलेंगे। फिर से शुरू करने के लिए कभी भी *START* लिखें।",
-    "mr": "तुम्ही ऑप्ट-आउट केले आहे आणि यापुढे WhatsApp अपडेट्स मिळणार नाहीत. पुन्हा सुरू करण्यासाठी कधीही *START* लिहा.",
-}
-
-
-def render_consent_yes_ack(lang: str) -> str:
-    return _CONSENT_YES_ACK.get(lang, _CONSENT_YES_ACK["en"])
-
-
-def render_consent_stop_ack(lang: str) -> str:
-    return _CONSENT_STOP_ACK.get(lang, _CONSENT_STOP_ACK["en"])
-
-
-# ── Parsers (all template-driven, no AI) ─────────────────────────────────────
-_LANG_WORDS = {
-    "en": {"1", "english", "eng", "अंग्रेज़ी", "अंग्रेजी", "इंग्रजी", "इंग्लिश"},
-    "hi": {"2", "hindi", "हिंदी", "हिन्दी"},
-    "mr": {"3", "marathi", "मराठी"},
-}
-
-
-def parse_language_choice(text: str) -> Optional[str]:
-    """Map a reply to a language code, or None if it isn't a language pick."""
-    if not text:
-        return None
-    t = text.strip().lower()
-    # exact-ish token match (handles "1", "2", "3", or the word)
-    # strip common punctuation
-    t_clean = re.sub(r"[^\wऀ-ॿ]+", "", t)
-    for lang, words in _LANG_WORDS.items():
-        if t_clean in words or t in words:
-            return lang
-    return None
-
-
-_CHANGE_LANG_PATTERNS = [
-    r"change\s*(the\s*)?lang", r"\blanguage\s*change\b", r"switch\s*lang",
-    r"भाषा\s*बदल", r"भाषा\s*चेंज", r"भाषा\s*बदला", r"भाषा\s*बदलो",
-]
-
-
-def is_change_language_command(text: str) -> bool:
-    if not text:
+async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = None,
+                      wa_message_id: str = "", msg_type: str = "", template_name: str = "",
+                      body: str = "", media_id: str = "", status: str = "", error: str = "") -> bool:
+    """Write one row to the WA message log. Idempotent on wa_message_id (inbound dedup)."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            if wa_message_id:
+                ex = await (await conn.execute(
+                    "SELECT 1 FROM nidaan_wa_messages WHERE wa_message_id=?", (wa_message_id,))).fetchone()
+                if ex:
+                    return False
+            await conn.execute(
+                """INSERT INTO nidaan_wa_messages
+                   (direction, msisdn, claim_id, wa_message_id, msg_type, template_name,
+                    body, media_id, status, error)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (direction, msisdn, claim_id, wa_message_id or "", msg_type or "", template_name or "",
+                 (body or "")[:4000], media_id or "", status or "", (error or "")[:300]))
+            await conn.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("log_message failed: %s", e)
         return False
-    t = text.strip().lower()
-    return any(re.search(p, t) for p in _CHANGE_LANG_PATTERNS)
 
 
-_YES_WORDS = {"yes", "y", "haan", "हाँ", "हां", "हो", "ok", "okay", "start", "सुरू"}
-_STOP_WORDS = {"stop", "no", "नहीं", "नको", "बंद", "unsubscribe"}
+async def get_contact(msisdn: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
+    return dict(r) if r else None
 
 
-def is_consent_yes(text: str) -> bool:
-    if not text:
+async def upsert_contact(msisdn: str, *, claim_id: Optional[int] = None, account_id: Optional[int] = None,
+                         opted_in: Optional[bool] = None, opt_source: str = "", language: Optional[str] = None,
+                         status: Optional[str] = None, mark_inbound: bool = False,
+                         mark_outbound: bool = False) -> None:
+    """Create/update a claimant WA contact. Only non-None fields are changed."""
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("INSERT OR IGNORE INTO nidaan_wa_contacts (msisdn) VALUES (?)", (msisdn,))
+        sets, args = [], []
+        if claim_id is not None:      sets.append("claim_id=?");   args.append(claim_id)
+        if account_id is not None:    sets.append("account_id=?"); args.append(account_id)
+        if opted_in is not None:
+            sets.append("opted_in=?"); args.append(1 if opted_in else 0)
+            if opted_in:
+                sets.append("opted_in_at=?"); args.append(now)
+        if opt_source:                sets.append("opt_source=?"); args.append(opt_source)
+        if language:                  sets.append("language=?");   args.append(language)
+        if status:                    sets.append("status=?");     args.append(status)
+        if mark_inbound:              sets.append("last_inbound_at=?");  args.append(now)
+        if mark_outbound:             sets.append("last_outbound_at=?"); args.append(now)
+        if sets:
+            await conn.execute(f"UPDATE nidaan_wa_contacts SET {', '.join(sets)} WHERE msisdn=?",
+                               tuple(args) + (msisdn,))
+        await conn.commit()
+
+
+async def in_session_window(msisdn: str) -> bool:
+    """True if the claimant messaged us within the last 24h (free-form/text is allowed)."""
+    c = await get_contact(msisdn)
+    if not c or not c.get("last_inbound_at"):
         return False
-    t = re.sub(r"[^\wऀ-ॿ]+", "", text.strip().lower())
-    return t in _YES_WORDS
-
-
-def is_consent_stop(text: str) -> bool:
-    if not text:
+    try:
+        last = datetime.strptime(str(c["last_inbound_at"])[:19], "%Y-%m-%d %H:%M:%S")
+        return (datetime.utcnow() - last).total_seconds() < 24 * 3600
+    except Exception:
         return False
-    t = re.sub(r"[^\wऀ-ॿ]+", "", text.strip().lower())
-    return t in _STOP_WORDS
 
 
-# ── Decision function (the brain the inbound handler calls) ───────────────────
-# Action codes returned to the caller:
-ACT_SEND_WELCOME = "send_welcome"        # send render_welcome(); contact is new / no lang
-ACT_SET_LANG = "set_lang"                # persist `lang`, send ack (+ maybe consent next)
-ACT_RESEND_PICKER = "resend_picker"      # "change language" — re-send welcome/picker
-ACT_SEND_CONSENT = "send_consent"        # advisor-managed, not opted in — ask consent
-ACT_SET_CONSENT_YES = "set_consent_yes"  # persist opt-in, send ack
-ACT_SET_CONSENT_STOP = "set_consent_stop"  # persist opt-out, send ack
-ACT_PROCEED = "proceed"                  # fully onboarded — let normal claim/doc logic run
+async def _claim_for_msisdn(msisdn: str) -> Optional[int]:
+    c = await get_contact(msisdn)
+    return c.get("claim_id") if c else None
 
 
-def decide_onboarding_action(
-    *,
-    has_lang: bool,
-    lang: Optional[str],
-    opted_in: bool,
-    is_advisor_managed: bool,
-    inbound_text: str,
-    advisor_name: str = "",
-    firm_name: str = "",
-) -> dict:
-    """Pure decision: given the contact's onboarding state + their inbound text,
-    return {action, lang?, message?}. The caller persists state + sends message.
+async def _on_inbound_text(msisdn: str, text: str) -> None:
+    """Handle a text reply. Phase 0: opt-in keywords + language switch. Phase 1 will route the
+    rest into the Gemini conversational doc-collection layer."""
+    t = (text or "").strip().lower()
+    if t in _STOP_WORDS:
+        await upsert_contact(msisdn, opted_in=False, status="stopped")
+        try:
+            await wa.send_text(msisdn, "Theek hai — aapko ab WhatsApp par updates nahi bhejenge. "
+                                       "Dobara chalu karne ke liye START bhejein.")
+        except Exception:
+            pass
+        return
+    if t in _START_WORDS:
+        await upsert_contact(msisdn, opted_in=True, status="active", opt_source="reply_yes")
+        return
+    if t in _LANG_WORDS:
+        await upsert_contact(msisdn, language=_LANG_WORDS[t])
+        return
+    # PHASE 1 HANDOFF: conversational doc-collection (Gemini) — answer questions, guide the next
+    # document, handle "which docs pending", etc. For now the reply just keeps the 24h window open.
+    return
 
-    `has_lang`           — is a comm_lang already stored for this contact?
-    `lang`               — the stored/just-chosen language (used for rendering)
-    `opted_in`           — has this contact given WhatsApp consent?
-    `is_advisor_managed` — True if the contact is a CUSTOMER under an advisor
-                           (needs explicit consent). Self-service = False.
-    """
-    text = (inbound_text or "").strip()
-    cur_lang = lang if lang in LANGS else DEFAULT_LANG
 
-    # (A) "change language" — honoured anytime, before anything else.
-    if is_change_language_command(text):
-        return {"action": ACT_RESEND_PICKER, "message": render_welcome()}
+async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -> None:
+    """A claimant sent a FILE (a document). PHASE 1 HANDOFF — the intelligent pipeline goes here:
+      1. download_media → 2. right-doc + quality check (Gemini vision, against the doc we asked for)
+      3. normalize_to_pdf + segment → 4. name per convention → 5. mark_doc_received / nudge if wrong
+      6. sync the checklist (single source of truth) → 7. guided next-step reply.
+    Phase 0: log it + alert ops so nothing is lost while the pipeline is wired."""
+    claim_id = await _claim_for_msisdn(msisdn)
+    try:
+        import biz_nidaan_notifications as _nnot
+        await _nnot.notify_staff_inapp(
+            await _admin_ids(), "📎 Claimant sent a document on WhatsApp",
+            f"A document arrived from {msisdn}" + (f" (claim #{claim_id})" if claim_id else "")
+            + ". Auto-processing pipeline is being wired — review in ops if needed.",
+            event_key="wa.doc_received", email=False, claim_id=claim_id)
+    except Exception:
+        pass
 
-    # (B) No language chosen yet → either they're picking now, or send welcome.
-    if not has_lang:
-        choice = parse_language_choice(text)
-        if choice:
-            # Persist language; decide whether consent is needed next.
-            need_consent = is_advisor_managed and not opted_in
-            msg = render_lang_ack(choice)
-            if need_consent:
-                msg = msg + "\n\n" + render_consent(choice, advisor_name, firm_name)
-            return {
-                "action": ACT_SET_LANG,
-                "lang": choice,
-                "needs_consent_next": need_consent,
-                "message": msg,
-            }
-        # Not a language pick → (re)send the trilingual welcome + picker.
-        return {"action": ACT_SEND_WELCOME, "message": render_welcome()}
 
-    # (C) Language set. Advisor-managed customer who hasn't opted in → consent.
-    if is_advisor_managed and not opted_in:
-        if is_consent_yes(text):
-            return {"action": ACT_SET_CONSENT_YES, "lang": cur_lang,
-                    "message": render_consent_yes_ack(cur_lang)}
-        if is_consent_stop(text):
-            return {"action": ACT_SET_CONSENT_STOP, "lang": cur_lang,
-                    "message": render_consent_stop_ack(cur_lang)}
-        # Re-ask consent.
-        return {"action": ACT_SEND_CONSENT, "lang": cur_lang,
-                "message": render_consent(cur_lang, advisor_name, firm_name)}
+async def _admin_ids() -> list:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        rows = await (await conn.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+            "AND status='active' AND deleted_at IS NULL")).fetchall()
+    return [r[0] for r in rows]
 
-    # (D) Fully onboarded — let the normal claim/document handler take over.
-    return {"action": ACT_PROCEED, "lang": cur_lang}
+
+async def handle_inbound_payload(payload: dict) -> dict:
+    """Parse a Meta webhook POST body. Handles message + status events. Idempotent, never raises."""
+    handled = 0
+    try:
+        for entry in (payload.get("entry") or []):
+            for ch in (entry.get("changes") or []):
+                val = ch.get("value") or {}
+                # Inbound messages
+                for m in (val.get("messages") or []):
+                    msisdn = wa.normalize_msisdn(m.get("from", ""))
+                    wamid = m.get("id", "")
+                    mtype = m.get("type", "")
+                    if not await log_message(direction="in", msisdn=msisdn, wa_message_id=wamid,
+                                             msg_type=mtype, status="received",
+                                             body=(m.get("text", {}) or {}).get("body", "")):
+                        continue  # duplicate wamid — already processed
+                    await upsert_contact(msisdn, mark_inbound=True)
+                    handled += 1
+                    if mtype == "text":
+                        await _on_inbound_text(msisdn, (m.get("text") or {}).get("body", ""))
+                    elif mtype in ("image", "document", "audio", "video"):
+                        media = m.get(mtype) or {}
+                        await _on_inbound_media(msisdn, media.get("id", ""), media.get("mime_type", ""), wamid)
+                    elif mtype == "button":
+                        await _on_inbound_text(msisdn, (m.get("button") or {}).get("text", ""))
+                    elif mtype == "interactive":
+                        _i = m.get("interactive") or {}
+                        _br = (_i.get("button_reply") or _i.get("list_reply") or {})
+                        await _on_inbound_text(msisdn, _br.get("title", "") or _br.get("id", ""))
+                # Delivery/read statuses for our outbound
+                for s in (val.get("statuses") or []):
+                    try:
+                        async with aiosqlite.connect(DB_PATH) as conn:
+                            await conn.execute(
+                                "UPDATE nidaan_wa_messages SET status=? WHERE wa_message_id=?",
+                                (s.get("status", ""), s.get("id", "")))
+                            await conn.commit()
+                    except Exception:
+                        pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning("handle_inbound_payload failed: %s", e)
+    return {"handled": handled}

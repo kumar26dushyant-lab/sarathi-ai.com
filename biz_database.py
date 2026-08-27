@@ -1185,6 +1185,63 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_pay_created ON nidaan_payments(created_at);
             CREATE INDEX IF NOT EXISTS idx_pay_source  ON nidaan_payments(source);
 
+            -- ═══ NidaanPartner CLAIMANT WhatsApp (document-collection bot) ═══════════════
+            -- Separate from the Sarathi premium WA. Powers the L2 document-collection automation:
+            -- guided one-doc-at-a-time collection, quality/right-doc verification, daily reminders,
+            -- voice guidance, cross-channel sync (the doc checklist stays the single source of truth).
+
+            -- Full message log (in + out) — audit, dedup, and 24h-session tracking.
+            CREATE TABLE IF NOT EXISTS nidaan_wa_messages (
+                wam_row_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                direction      TEXT NOT NULL,          -- in | out
+                msisdn         TEXT NOT NULL,          -- E.164 digits (91XXXXXXXXXX)
+                claim_id       INTEGER,
+                wa_message_id  TEXT DEFAULT '',        -- Meta wamid (idempotency for inbound)
+                msg_type       TEXT DEFAULT '',        -- text|template|image|document|audio|...
+                template_name  TEXT DEFAULT '',
+                body           TEXT DEFAULT '',
+                media_id       TEXT DEFAULT '',
+                status         TEXT DEFAULT '',         -- queued|sent|delivered|read|failed (out) / received (in)
+                error          TEXT DEFAULT '',
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_wamsg_msisdn ON nidaan_wa_messages(msisdn);
+            CREATE INDEX IF NOT EXISTS idx_wamsg_claim  ON nidaan_wa_messages(claim_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_wamsg_wamid ON nidaan_wa_messages(wa_message_id)
+                WHERE wa_message_id <> '';
+
+            -- Per-claimant-number opt-in + language + 24h-session tracking.
+            CREATE TABLE IF NOT EXISTS nidaan_wa_contacts (
+                msisdn          TEXT PRIMARY KEY,       -- E.164 digits
+                claim_id        INTEGER,                -- most-recent claim this number is collecting for
+                account_id      INTEGER,
+                opted_in        INTEGER DEFAULT 0,      -- 1 = consented to WhatsApp updates
+                opted_in_at     TIMESTAMP,
+                opt_source      TEXT DEFAULT '',        -- claim_form | reply_yes | portal | staff
+                language        TEXT DEFAULT 'hinglish',-- hinglish | hi | en  (default Hinglish/Hindi)
+                status          TEXT DEFAULT 'active',  -- active | stopped (replied STOP)
+                last_inbound_at TIMESTAMP,              -- drives the 24h free-form session window
+                last_outbound_at TIMESTAMP,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Per-claim doc-collection schedule/state. Claim-level values OVERRIDE the dashboard
+            -- defaults (ops_settings wa_* keys). Precedence: claim-level when set, else global.
+            CREATE TABLE IF NOT EXISTS nidaan_wa_claim_settings (
+                claim_id        INTEGER PRIMARY KEY,
+                paused          INTEGER DEFAULT 0,      -- stop reminders for this claim
+                send_hour_ist   INTEGER,                -- preferred send hour (0-23 IST); NULL = use default
+                cadence_hours   INTEGER,                -- reminder gap; NULL = use default (24)
+                escalate_days   INTEGER,                -- days of no progress before escalation; NULL = default
+                human_takeover  INTEGER DEFAULT 0,      -- 1 = a staffer took over this chat (bot pauses)
+                takeover_by     TEXT DEFAULT '',
+                next_send_at    TIMESTAMP,              -- when the reminder loop should next act
+                last_reminder_at TIMESTAMP,
+                awaiting_doc_key TEXT DEFAULT '',       -- the doc the bot last asked for (guided flow)
+                started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TIMESTAMP
+            );
+
             -- Business-analytics event log. Every meaningful attempt/outcome is appended here so
             -- the super-admin analytics dashboard can segment signups / one-time / subscribers /
             -- failures / abandonment BY CHANNEL in real time. Append-only; never mutated in place.

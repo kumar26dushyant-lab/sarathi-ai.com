@@ -4556,6 +4556,40 @@ async def claimshield_case_documents(claim_id: int, request: Request):
     }
 
 
+@app.get("/nidaan/api/wa/webhook", include_in_schema=False)
+async def nidaan_wa_webhook_verify(request: Request):
+    """Meta webhook verification handshake for the NidaanPartner claimant WhatsApp number.
+    Meta calls this once on setup with hub.verify_token — we echo hub.challenge if it matches."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_whatsapp as _nwa
+    qp = request.query_params
+    if qp.get("hub.mode") == "subscribe" and qp.get("hub.verify_token") == _nwa.verify_token() \
+            and _nwa.verify_token():
+        return PlainTextResponse(qp.get("hub.challenge", ""))
+    raise HTTPException(status_code=403, detail="verification failed")
+
+
+@app.post("/nidaan/api/wa/webhook", include_in_schema=False)
+@limiter.limit("600/minute")
+async def nidaan_wa_webhook(request: Request):
+    """Inbound WhatsApp events (messages + delivery statuses) for the claimant number. Signature-
+    verified over the RAW body; parsing/handling is delegated to biz_nidaan_wa_flow (never raises)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_whatsapp as _nwa, biz_nidaan_wa_flow as _waflow
+    raw = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if _nwa._app_secret() and not _nwa.verify_webhook_signature(_nwa._app_secret(), raw, sig):
+        raise HTTPException(status_code=401, detail="bad signature")
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+    await _waflow.handle_inbound_payload(payload)
+    return {"ok": True}   # Meta needs a fast 200 or it retries
+
+
 @app.post("/nidaan/api/webhook")
 @limiter.limit("60/minute")
 async def nidaan_razorpay_webhook(request: Request):
