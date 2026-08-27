@@ -1225,6 +1225,24 @@ async def init_db():
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- Unified CLAIM ACTIVITY timeline. Every automation message/reminder sent, every
+            -- customer response, and key events are recorded here so a claim reads like a human
+            -- was managing it. The ops claim view MERGES this with status-log + WA messages +
+            -- payments into one chronological trail. Append-only.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_activity (
+                act_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER NOT NULL,
+                kind        TEXT NOT NULL,          -- welcome|thank_you|claim_registered|doc_reminder|doc_received|doc_rejected|status|handoff|note|...
+                channel     TEXT DEFAULT '',        -- whatsapp|telegram|email|web|system
+                direction   TEXT DEFAULT '',        -- out|in|''
+                actor       TEXT DEFAULT '',        -- 'bot' | staff name | 'claimant' | 'system'
+                summary     TEXT DEFAULT '',        -- human-readable one-liner for the timeline
+                meta        TEXT DEFAULT '',        -- small JSON blob (doc_key, msg id, etc.)
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_claimact_claim ON nidaan_claim_activity(claim_id);
+            CREATE INDEX IF NOT EXISTS idx_claimact_created ON nidaan_claim_activity(created_at);
+
             -- Per-claim doc-collection schedule/state. Claim-level values OVERRIDE the dashboard
             -- defaults (ops_settings wa_* keys). Precedence: claim-level when set, else global.
             CREATE TABLE IF NOT EXISTS nidaan_wa_claim_settings (

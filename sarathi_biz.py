@@ -5792,6 +5792,17 @@ async def nidaan_ops_reattribute_claim(claim_id: int, body: NidaanReattributeReq
     return {"ok": True, **res, "referrer": new_info.get("name", "")}
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/activity")
+async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int = 200):
+    """Unified claim timeline — automation messages, customer responses, status changes,
+    WhatsApp, and payments merged chronologically. Staff+ (team_member sees their own scope)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    rows = await nidaan.get_claim_activity(claim_id, limit=limit)
+    return {"activity": rows, "count": len(rows)}
+
+
 @app.get("/nidaan/ops/api/payments")
 async def nidaan_ops_payments_ledger(request: Request, limit: int = 200,
                                      source: str = "", verified_only: bool = False):

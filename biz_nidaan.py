@@ -5759,6 +5759,68 @@ async def get_claim_payments(claim_id: int) -> list:
     return [dict(r) for r in rows]
 
 
+async def record_claim_activity(claim_id: int, kind: str, *, channel: str = "", direction: str = "",
+                                actor: str = "", summary: str = "", meta: str = "") -> None:
+    """Append one row to a claim's activity timeline (automation messages, customer responses,
+    events). Never raises — a logging hiccup must not break the caller's flow."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                """INSERT INTO nidaan_claim_activity
+                   (claim_id, kind, channel, direction, actor, summary, meta)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (claim_id, kind, channel or "", direction or "", actor or "",
+                 (summary or "")[:600], (meta or "")[:2000]))
+            await conn.commit()
+    except Exception as e:
+        logger.warning("record_claim_activity failed claim=%s: %s", claim_id, e)
+
+
+async def get_claim_activity(claim_id: int, limit: int = 200) -> list:
+    """One chronological timeline for a claim — MERGES the explicit activity log, status changes,
+    WhatsApp messages, and payments so the ops view shows everything that happened, newest first."""
+    items = []
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        for r in await (await conn.execute(
+                "SELECT kind, channel, direction, actor, summary, meta, created_at "
+                "FROM nidaan_claim_activity WHERE claim_id=? ORDER BY created_at DESC LIMIT ?",
+                (claim_id, limit))).fetchall():
+            d = dict(r); d["source"] = "activity"; items.append(d)
+        for r in await (await conn.execute(
+                "SELECT to_status, note, changed_by_type, created_at FROM nidaan_claim_status_log "
+                "WHERE claim_id=? ORDER BY created_at DESC LIMIT ?", (claim_id, limit))).fetchall():
+            items.append({"source": "status", "kind": "status", "channel": "system",
+                          "actor": r["changed_by_type"] or "system",
+                          "summary": (r["note"] or f"→ {r['to_status']}"), "created_at": r["created_at"]})
+        # WhatsApp messages (table may not exist on very old DBs — guard).
+        try:
+            for r in await (await conn.execute(
+                    "SELECT direction, msg_type, template_name, body, status, created_at "
+                    "FROM nidaan_wa_messages WHERE claim_id=? ORDER BY created_at DESC LIMIT ?",
+                    (claim_id, limit))).fetchall():
+                _b = r["body"] or (f"template: {r['template_name']}" if r["template_name"] else r["msg_type"])
+                items.append({"source": "whatsapp", "kind": "wa_" + (r["direction"] or ""),
+                              "channel": "whatsapp", "direction": r["direction"],
+                              "actor": "claimant" if r["direction"] == "in" else "bot",
+                              "summary": (_b or "")[:200], "created_at": r["created_at"]})
+        except Exception:
+            pass
+        try:
+            for r in await (await conn.execute(
+                    "SELECT source, total_paise, verified, created_at FROM nidaan_payments "
+                    "WHERE claim_id=? ORDER BY created_at DESC LIMIT ?", (claim_id, limit))).fetchall():
+                items.append({"source": "payment", "kind": "payment", "channel": "system",
+                              "actor": "system",
+                              "summary": f"₹{int(r['total_paise'])/100:.2f} received ({r['source']})"
+                                         + (" ✓" if r["verified"] else " · manual"),
+                              "created_at": r["created_at"]})
+        except Exception:
+            pass
+    items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+    return items[:limit]
+
+
 async def get_payments_ledger(limit: int = 200, source: str = "", verified_only: bool = False) -> list:
     """Recent unified-ledger rows (newest first), for the super-admin Payments view."""
     q = "SELECT * FROM nidaan_payments"
