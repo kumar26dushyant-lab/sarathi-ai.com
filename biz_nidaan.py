@@ -5788,11 +5788,11 @@ async def get_claim_activity(claim_id: int, limit: int = 200) -> list:
                 (claim_id, limit))).fetchall():
             d = dict(r); d["source"] = "activity"; items.append(d)
         for r in await (await conn.execute(
-                "SELECT to_status, note, changed_by_type, created_at FROM nidaan_claim_status_log "
-                "WHERE claim_id=? ORDER BY created_at DESC LIMIT ?", (claim_id, limit))).fetchall():
+                "SELECT to_status, note, changed_by_type, changed_at FROM nidaan_claim_status_log "
+                "WHERE claim_id=? ORDER BY changed_at DESC LIMIT ?", (claim_id, limit))).fetchall():
             items.append({"source": "status", "kind": "status", "channel": "system",
                           "actor": r["changed_by_type"] or "system",
-                          "summary": (r["note"] or f"→ {r['to_status']}"), "created_at": r["created_at"]})
+                          "summary": (r["note"] or f"→ {r['to_status']}"), "created_at": r["changed_at"]})
         # WhatsApp messages (table may not exist on very old DBs — guard).
         try:
             for r in await (await conn.execute(
