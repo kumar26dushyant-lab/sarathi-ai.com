@@ -849,6 +849,7 @@ async function _loginSuccess(data) {
   // (Switching ₹499 ⇄ plan is a deliberate action with its own cancel/refund
   //  rules — never an implicit side-effect of clicking a login button.)
   let isExisting = true;  // safe default: on any error, go to the dashboard (never auto-create)
+  let hasSub = false;     // hoisted — used by the intent router below
   try {
     const auth = { 'Authorization': 'Bearer ' + token };
     const [meR, clR] = await Promise.all([
@@ -857,7 +858,7 @@ async function _loginSuccess(data) {
     ]);
     const me = meR.ok ? await meR.json() : null;
     const claims = clR.ok ? ((await clR.json()).claims || []) : [];
-    const hasSub = !!(me && me.subscription);
+    hasSub = !!(me && me.subscription);
     const pc = me && me.per_claim;
     const hasReview = !!(pc && ((pc.purchased > 0) ||
         (Array.isArray(pc.pending) && pc.pending.length) ||
@@ -865,12 +866,24 @@ async function _loginSuccess(data) {
     isExisting = hasSub || hasReview || claims.length > 0;
   } catch (e) { isExisting = true; }
 
+  // ── Honour the LINK the user arrived on (subscription vs one-time review) ─────
+  // Two distinct staff/branch links must never conflict:
+  //   • Subscription link  (?plan=…)      → the subscription flow (dashboard?subscribe=…)
+  //   • One-time review link (#get-reviewed → _funnelMode) → the ₹499 review claim form
+  // Opening the subscribe modal or the claim form both require an explicit next action, so
+  // honouring intent for EXISTING users too is safe (no duplicate claim / no auto-charge).
+  // hasSub is derived above from /nidaan/api/me.
+  const wantsSub = !!_plan;
+  const wantsReview = _funnelMode;
   if (isExisting) {
-    window.location.href = '/nidaan/dashboard';   // their real dashboard, regardless of endpoint
+    // Already-active subscribers never need the subscribe pitch — send them to their dashboard.
+    if (wantsSub && !hasSub) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
+    if (wantsReview) { _funnelMode = true; enterClaimForm(); return; }   // review link → review flow
+    window.location.href = '/nidaan/dashboard';   // plain Login → their own dashboard
     return;
   }
   // Brand-new account → honour the intent they arrived with.
-  if (_plan) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
+  if (wantsSub) { window.location.href = '/nidaan/dashboard?subscribe=' + _plan; return; }
   _funnelMode = true;
   enterClaimForm();   // first-timer with no plan intent → start their first ₹499 review
 }

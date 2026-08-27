@@ -254,9 +254,9 @@ function renderShareCard(code){
   const c = encodeURIComponent(code);
   // Two DISTINCT links so the recipient lands on the right flow:
   //   subscribe (advisor → plan) carries &plan=silver → dashboard opens the subscribe modal.
-  //   review (customer → one-time ₹499) is the plain ref link.
+  //   review (customer → one-time ₹499) carries #get-reviewed → the ₹499 review claim form.
   _subLink = location.origin + '/nidaan/start?ref=' + c + '&plan=silver';
-  _revLink = location.origin + '/nidaan/start?ref=' + c;
+  _revLink = location.origin + '/nidaan/start?ref=' + c + '#get-reviewed';
   const a = $('refLinkSub'); if (a) a.value = _subLink;
   const b = $('refLinkRev'); if (b) b.value = _revLink;
   const card = $('shareCard'); if (card) card.style.display = '';

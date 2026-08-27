@@ -4003,7 +4003,7 @@ async function loadMyBusiness() {
       </div>
       <div style="font-size:.72rem;color:var(--nd-purple-text);font-weight:800;margin-bottom:.25rem">${hi?'📄 एक-बार ₹499 रिव्यू लिंक — ग्राहक के एकल क्लेम के लिए':'📄 One-time ₹499 review link — for a single customer claim'}</div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <input id="mbLinkRev" readonly value="${esc(link)}" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
+        <input id="mbLinkRev" readonly value="${esc(link)}#get-reviewed" style="flex:1;min-width:220px;font-size:.8rem;background:rgba(0,0,0,.25);color:var(--nd-text-primary);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .6rem">
         <button class="btn btn-primary" onclick="mbCopy(document.getElementById('mbLinkRev').value,this)">${hi?'कॉपी':'Copy'}</button>
         <button class="btn-sm btn-ghost" onclick="mbShare(document.getElementById('mbLinkRev').value)" style="color:var(--nd-success-text)">WhatsApp</button>
       </div>
