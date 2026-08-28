@@ -5603,6 +5603,15 @@ OPS_SETTING_DEFAULTS = {
     # always works regardless (ops override). Flip to "0" to let paid + reviewed-GO claims auto-send
     # without waiting for acceptance (the pre-Phase-3 behaviour).
     "claimshield_require_acceptance": "1",
+    # Claimant WhatsApp doc-collection — DASHBOARD DEFAULTS (a claim can override each; claim
+    # level wins when set). Times are IST 24h. cadence_hours = gap between reminders.
+    "wa_doc_collection_enabled": "0",   # master switch (off until the Meta number is live)
+    "wa_reminder_hour_ist": "11",       # send the daily nudge at ~11am IST
+    "wa_cadence_hours": "24",           # once a day
+    "wa_quiet_start_ist": "21",         # no sends 9pm…
+    "wa_quiet_end_ist": "8",            # …until 8am
+    "wa_escalate_days": "4",            # no progress this many days → escalate to subscriber+staff
+    "wa_default_language": "hinglish",  # hinglish | hi | en
     # T&C shown in the claimant consent card, in BOTH languages (Hindi-default audience). The
     # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel

@@ -452,6 +452,47 @@ CAPABILITIES: list[dict] = [
                "u": "अपना लिंक WhatsApp पर भेजें — जो भी जुड़ता है वह आपकी ब्रांच से टैग होता है।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
+    # ── Money, attribution & records (Aug 2026) ───────────────────────────────
+    {
+        "id": "payment_ledger",
+        "en": {"t": "Payment Ledger (every payment, one trail)",
+               "d": "Revenue shows one line per payment — subscription, ₹499 review, L2 fee, link or manual — with a ✅ reconciled banner and who recorded manual/offline ones.",
+               "u": "Open Revenue → Payment Ledger to see every rupee, verified vs manual, reconciled to the tables."},
+        "hi": {"t": "पेमेंट लेजर (हर पेमेंट, एक ट्रेल)",
+               "d": "Revenue में हर पेमेंट की एक लाइन — सब्सक्रिप्शन, ₹499 रिव्यू, L2 फीस, लिंक या मैनुअल — ✅ रिकंसाइल बैनर के साथ, और मैनुअल किसने दर्ज किया।",
+               "u": "Revenue → पेमेंट लेजर खोलें — हर रुपया, वेरिफाइड बनाम मैनुअल, टेबल से मिलान।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
+        "id": "reattribute_referral",
+        "en": {"t": "Fix a referral attribution",
+               "d": "Correct who gets credit for an account or a single claim (overrides the locked first-touch). Audited with your name.",
+               "u": "Accounts → 🏷️ on a row, or a claim's 'Referred by → Fix', to set the right staff/branch code or mark Direct."},
+        "hi": {"t": "रेफ़रल एट्रिब्यूशन ठीक करें",
+               "d": "किसी अकाउंट या क्लेम का सही श्रेय तय करें (लॉक्ड फर्स्ट-टच को बदलता है)। आपके नाम से लॉग होता है।",
+               "u": "Accounts में पंक्ति पर 🏷️, या क्लेम के 'Referred by → Fix' से सही स्टाफ/ब्रांच कोड सेट करें या Direct करें।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
+        "id": "archive_claims",
+        "en": {"t": "Archive test / garbage claims",
+               "d": "Move test or junk claims out of every working view (restorable, never deleted). Keeps All Claims / L2 clean.",
+               "u": "All Claims (Table) → tick claims → 'Archive selected'; view/restore them under '🗄️ Archived claims'."},
+        "hi": {"t": "टेस्ट / फालतू क्लेम आर्काइव करें",
+               "d": "टेस्ट या बेकार क्लेम को सभी वर्किंग व्यू से हटाएँ (वापस लाया जा सकता है, कभी डिलीट नहीं)।",
+               "u": "All Claims (टेबल) → क्लेम चुनें → 'Archive selected'; '🗄️ Archived claims' में देखें/रिस्टोर करें।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
+        "id": "claim_activity",
+        "en": {"t": "Claim activity timeline",
+               "d": "One trail per claim — status changes, payments, WhatsApp messages and every automation nudge + customer reply — so a claim reads like a human managed it.",
+               "u": "Open a claim to see its full chronological activity."},
+        "hi": {"t": "क्लेम एक्टिविटी टाइमलाइन",
+               "d": "हर क्लेम की एक ट्रेल — स्टेटस बदलाव, पेमेंट, WhatsApp संदेश और हर ऑटोमेशन रिमाइंडर + ग्राहक का जवाब।",
+               "u": "किसी क्लेम को खोलें और उसकी पूरी क्रमवार एक्टिविटी देखें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
 ]
 
 

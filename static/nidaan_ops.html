@@ -458,6 +458,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-staff" class="panel" style="display:none"></div>
       <div id="panel-settings" class="panel" style="display:none"></div>
       <div id="panel-numbers" class="panel" style="display:none"></div>
+      <div id="panel-whatsapp" class="panel" style="display:none"></div>
       <div id="panel-telegram" class="panel" style="display:none"></div>
       <div id="panel-guide" class="panel" style="display:none"></div>
       <div id="panel-analytics" class="panel" style="display:none"></div>
@@ -638,7 +639,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','support','docsplit','radar','claims','accounts','branches','staff','leavehistory','settings','numbers','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','overview','support','docsplit','radar','claims','accounts','branches','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -957,6 +958,7 @@ function buildSidebar() {
     {id:'leavehistory', label:'🌴 Leave History', minRank:2},
     {id:'settings',   label:'⚙️ Workflow Settings', minRank:2},
     {id:'numbers',    label:'📞 Official Numbers', minRank:2},
+    {id:'whatsapp',   label:'💬 WhatsApp Automation', minRank:2},
     {id:'telegram',   label:'✈️ Telegram Bot',     minRank:0},
     {id:'guide',      label:'✨ All Features (Listen)', minRank:0},
     null,
@@ -1012,6 +1014,7 @@ function showPanel(id, fromHistory) {
     staff: loadStaff,
     settings: loadWorkflowSettings,
     numbers: loadOfficialNumbers,
+    whatsapp: loadWhatsapp,
     telegram: loadTelegramPanel,
     guide: loadGuidePanel,
     analytics: loadAnalytics,
@@ -9406,6 +9409,102 @@ async function tgUnlink(){
 // ═══════════════════════════════════════════════════════════════
 //  OFFICIAL NIDAAN WHATSAPP NUMBERS (SA only)
 // ═══════════════════════════════════════════════════════════════
+// ══ WhatsApp Automation (claimant doc-collection via Meta Cloud API) ═════════════
+async function loadWhatsapp(){
+  const panel = document.getElementById('panel-whatsapp');
+  if (_role !== 'super_admin') { panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">WhatsApp Automation is Super Admin only.</div>'; return; }
+  panel.innerHTML = '<div style="padding:1.5rem">Loading…</div>';
+  const r = await API('/wa/overview');
+  if (!r.ok) { panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">Failed to load</div>'; return; }
+  const d = await r.json();
+  const s = d.settings || {};
+  const h = d.health || {};
+  const c = d.contacts || {}; const mc = d.messages || {};
+  const configured = !!d.configured;
+
+  const statusCard = configured
+    ? `<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.35);border-radius:12px;padding:1rem;margin-bottom:1rem">
+         <div style="font-weight:800;color:var(--nd-success-text)">✅ Connected — ${esc(h.verified_name||'NidaanPartner')}</div>
+         <div style="font-family:monospace;font-size:.85rem;color:var(--nd-text-secondary);margin-top:.2rem">${esc(h.display_phone_number||'')}</div>
+         <div style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.35rem">Quality: <b>${esc(h.quality_rating||'—')}</b> · Verification: ${esc(h.code_verification_status||'—')}</div>
+       </div>`
+    : `<div style="background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.4);border-radius:12px;padding:1rem;margin-bottom:1rem">
+         <div style="font-weight:800;color:#a16207">⏳ Not connected yet — awaiting Meta setup for number <b>9183686384</b></div>
+         <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.5rem;line-height:1.7">
+           1. Verify the number in Meta → set display name <b>"NidaanPartner"</b>.<br>
+           2. Add to server <code>biz.env</code>: ${(d.env_needed||[]).map(k=>`<code>${esc(k)}</code>`).join(' · ')}<br>
+           3. Meta → Webhooks → callback URL <code>https://nidaanpartner.com/nidaan/api/wa/webhook</code>, subscribe to <b>messages</b>.
+         </div>
+         <div style="font-size:.78rem;color:var(--nd-text-faint);margin-top:.5rem">Webhook verify token ${d.webhook_ready?'is set ✓':'not set yet'}.</div>
+       </div>`;
+
+  const stat = (label,val,color)=>`<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem"><div style="font-size:1.5rem;font-weight:800;color:${color}">${val}</div><div style="font-size:.74rem;color:var(--nd-text-muted)">${label}</div></div>`;
+
+  const num = (id,val,min,max)=>`<input id="${id}" type="number" min="${min}" max="${max}" value="${esc(String(val==null?'':val))}" style="width:80px">`;
+  const langSel = ['hinglish','hi','en'].map(l=>`<option value="${l}"${(s.wa_default_language||'hinglish')===l?' selected':''}>${l==='hi'?'हिंदी':l==='en'?'English':'Hinglish'}</option>`).join('');
+
+  const rows = (d.recent||[]).map(m=>`
+    <tr>
+      <td style="white-space:nowrap">${(m.created_at||'').replace('T',' ').slice(0,16)}</td>
+      <td>${m.direction==='in'?'⬅️ in':'➡️ out'}</td>
+      <td style="font-family:monospace;font-size:.72rem">${esc(m.msisdn||'')}</td>
+      <td>${m.claim_id?('#'+m.claim_id):'—'}</td>
+      <td>${esc(m.template_name||m.msg_type||'')}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((m.body||'').slice(0,60))}</td>
+      <td>${esc(m.status||'')}</td>
+    </tr>`).join('');
+
+  panel.innerHTML = `
+    <div class="section-hdr"><div><div class="section-title">💬 WhatsApp Automation</div>
+      <div class="section-sub">Claimant document-collection bot (NidaanPartner's own number). Separate from the Sarathi premium WhatsApp add-on.</div></div></div>
+    ${statusCard}
+    <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1.2rem">
+      ${stat('Opted-in claimants', c.opted_in||0, '#34d399')}
+      ${stat('Stopped (opted out)', c.stopped||0, '#f87171')}
+      ${stat('Messages sent', mc.sent||0, '#7dd3fc')}
+      ${stat('Replies received', mc.received||0, '#a78bfa')}
+    </div>
+
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
+      <div class="section-title" style="font-size:1rem;margin-bottom:.6rem">⚙️ Doc-collection defaults <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— any claim can override these; claim-level wins</span></div>
+      <div style="display:flex;gap:1.1rem;flex-wrap:wrap;align-items:end;font-size:.84rem">
+        <label>Master switch<br><select id="waEnabled"><option value="1"${s.wa_doc_collection_enabled==='1'?' selected':''}>ON</option><option value="0"${s.wa_doc_collection_enabled!=='1'?' selected':''}>OFF</option></select></label>
+        <label>Reminder hour (IST)<br>${num('waHour', s.wa_reminder_hour_ist, 0, 23)}</label>
+        <label>Cadence (hours)<br>${num('waCadence', s.wa_cadence_hours, 1, 168)}</label>
+        <label>Quiet from (IST)<br>${num('waQuietS', s.wa_quiet_start_ist, 0, 23)}</label>
+        <label>Quiet until (IST)<br>${num('waQuietE', s.wa_quiet_end_ist, 0, 23)}</label>
+        <label>Escalate after (days)<br>${num('waEsc', s.wa_escalate_days, 1, 60)}</label>
+        <label>Default language<br><select id="waLang">${langSel}</select></label>
+        <button class="btn btn-primary" onclick="saveWaSettings()">Save defaults</button>
+      </div>
+      <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
+    </div>
+
+    <div class="section-title" style="font-size:1rem;margin-bottom:.5rem">🧾 Recent messages</div>
+    <div class="table-wrap"><table style="min-width:640px">
+      <thead><tr><th>When</th><th>Dir</th><th>Number</th><th>Claim</th><th>Type</th><th>Message</th><th>Status</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:var(--nd-text-faint);padding:1rem">No messages yet — starts once the number is live.</td></tr>'}</tbody>
+    </table></div>
+    <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.5rem">Templates (reminder / received / quality-issue / complete) will appear here for approval once Phase 1 is wired.</div>`;
+}
+async function saveWaSettings(){
+  const g=id=>document.getElementById(id);
+  const body={
+    wa_doc_collection_enabled: g('waEnabled').value,
+    wa_reminder_hour_ist: g('waHour').value,
+    wa_cadence_hours: g('waCadence').value,
+    wa_quiet_start_ist: g('waQuietS').value,
+    wa_quiet_end_ist: g('waQuietE').value,
+    wa_escalate_days: g('waEsc').value,
+    wa_default_language: g('waLang').value,
+  };
+  const m=g('waSettingsMsg'); m.style.color='var(--nd-text-faint)'; m.textContent='Saving…';
+  const r=await API('/wa/settings',{method:'POST', body:JSON.stringify(body)});
+  if(r.ok){ m.style.color='var(--nd-success-text)'; m.textContent='✓ Saved.'; }
+  else { m.style.color='var(--nd-danger-text)'; const e=await r.json().catch(()=>({})); m.textContent='✕ '+(e.detail||'Failed'); }
+}
+window.loadWhatsapp=loadWhatsapp; window.saveWaSettings=saveWaSettings;
+
 async function loadOfficialNumbers(){
   const panel = document.getElementById('panel-numbers');
   if (_role !== 'super_admin') {

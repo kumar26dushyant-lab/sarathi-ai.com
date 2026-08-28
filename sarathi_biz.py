@@ -5792,6 +5792,64 @@ async def nidaan_ops_reattribute_claim(claim_id: int, body: NidaanReattributeReq
     return {"ok": True, **res, "referrer": new_info.get("name", "")}
 
 
+@app.get("/nidaan/ops/api/wa/overview")
+async def nidaan_ops_wa_overview(request: Request):
+    """Super-admin WhatsApp-automation overview: config/number status, opt-in counts, recent
+    messages, and the doc-collection schedule defaults. Skeleton — populates live once the
+    Meta number is configured."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_whatsapp as _nwa
+    configured = _nwa.is_configured()
+    health = await _nwa.number_health() if configured else {"configured": False}
+    _wa_keys = ["wa_doc_collection_enabled", "wa_reminder_hour_ist", "wa_cadence_hours",
+                "wa_quiet_start_ist", "wa_quiet_end_ist", "wa_escalate_days", "wa_default_language"]
+    settings = {k: await nidaan.get_ops_setting(k) for k in _wa_keys}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        contacts = dict(await (await _c.execute(
+            "SELECT COUNT(*) total, COALESCE(SUM(opted_in),0) opted_in, "
+            "COALESCE(SUM(status='stopped'),0) stopped FROM nidaan_wa_contacts")).fetchone())
+        msg_counts = dict(await (await _c.execute(
+            "SELECT COALESCE(SUM(direction='out'),0) sent, COALESCE(SUM(direction='in'),0) received "
+            "FROM nidaan_wa_messages")).fetchone())
+        recent = [dict(r) for r in await (await _c.execute(
+            "SELECT direction, msisdn, claim_id, msg_type, template_name, body, status, created_at "
+            "FROM nidaan_wa_messages ORDER BY wam_row_id DESC LIMIT 25")).fetchall()]
+    return {"configured": configured, "webhook_ready": bool(_nwa.verify_token()),
+            "health": health, "settings": settings, "contacts": contacts,
+            "messages": msg_counts, "recent": recent,
+            "env_needed": ["WA_NIDAAN_ACCESS_TOKEN", "WA_NIDAAN_PHONE_NUMBER_ID",
+                           "WA_NIDAAN_WABA_ID", "WA_NIDAAN_APP_SECRET", "WA_NIDAAN_VERIFY_TOKEN"]}
+
+
+class OpsWaSettingsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    wa_doc_collection_enabled: Optional[str] = None
+    wa_reminder_hour_ist: Optional[str] = None
+    wa_cadence_hours: Optional[str] = None
+    wa_quiet_start_ist: Optional[str] = None
+    wa_quiet_end_ist: Optional[str] = None
+    wa_escalate_days: Optional[str] = None
+    wa_default_language: Optional[str] = None
+
+
+@app.post("/nidaan/ops/api/wa/settings")
+async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
+    """Super-admin: set the WhatsApp doc-collection DASHBOARD DEFAULTS (a claim can override)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    sid = str((caller or {}).get("staff_id") or "")
+    changed = 0
+    for k, v in body.model_dump(exclude_none=True).items():
+        await nidaan.set_ops_setting(k, str(v), updated_by=sid)
+        changed += 1
+    await _ops_audit(request, "wa.settings", "settings", "wa", f"updated {changed} default(s)")
+    return {"ok": True, "updated": changed}
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/activity")
 async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int = 200):
     """Unified claim timeline — automation messages, customer responses, status changes,
