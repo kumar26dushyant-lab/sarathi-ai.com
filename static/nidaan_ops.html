@@ -4770,6 +4770,11 @@ async function openClaimDrawer(claimId) {
       <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
+    <!-- Activity timeline (automation messages, responses, status, payments) -->
+    <details class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimActivity(${c.claim_id});}">
+      <summary style="cursor:pointer;font-weight:700;list-style:none">📜 Activity timeline <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— status, payments, WhatsApp &amp; every automation nudge + reply</span></summary>
+      <div id="claimActivity_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
+    </details>
     <!-- Notes & discussion -->
     <div class="drawer-section">
       <h4>Internal Notes &amp; Discussion</h4>
@@ -9504,6 +9509,27 @@ async function saveWaSettings(){
   else { m.style.color='var(--nd-danger-text)'; const e=await r.json().catch(()=>({})); m.textContent='✕ '+(e.detail||'Failed'); }
 }
 window.loadWhatsapp=loadWhatsapp; window.saveWaSettings=saveWaSettings;
+
+// Claim activity timeline (merged: status + payments + WhatsApp + automation events).
+async function loadClaimActivity(cid){
+  const el=document.getElementById('claimActivity_'+cid); if(!el) return;
+  el.textContent='Loading…';
+  let r; try{ r=await API('/claims/'+cid+'/activity'); }catch(e){ el.textContent='Could not load.'; return; }
+  if(!r.ok){ el.textContent='Could not load.'; return; }
+  const items=((await r.json()).activity)||[];
+  if(!items.length){ el.innerHTML='<span style="color:var(--nd-text-faint)">No activity recorded yet.</span>'; return; }
+  el.innerHTML=items.map(it=>{
+    const ic = it.channel==='whatsapp'?'💬':(it.source==='payment'?'💰':(it.source==='status'?'🔄':(it.channel==='email'?'📧':'•')));
+    const when=(it.created_at||'').replace('T',' ').slice(0,16);
+    return `<div style="display:flex;gap:.55rem;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
+      <span style="flex-shrink:0">${ic}</span>
+      <div style="flex:1;min-width:0">
+        <div style="line-height:1.4">${esc(it.summary||it.kind||'')}</div>
+        <div style="font-size:.68rem;color:var(--nd-text-faint)">${when}${it.actor?(' · '+esc(it.actor)):''}${it.channel&&it.channel!=='system'?(' · '+esc(it.channel)):''}</div>
+      </div></div>`;
+  }).join('');
+}
+window.loadClaimActivity=loadClaimActivity;
 
 async function loadOfficialNumbers(){
   const panel = document.getElementById('panel-numbers');

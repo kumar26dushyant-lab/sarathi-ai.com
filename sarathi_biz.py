@@ -10614,10 +10614,9 @@ async def nidaan_set_prefs(body: _SubscriberPrefsReq, request: Request):
 # ── vCard download for the 3 official numbers ─────────────────────────────────
 @app.get("/nidaan/api/official-vcard")
 async def nidaan_vcard():
-    """Returns a .vcf containing all 3 Nidaan official contacts so subscriber
+    """Returns a .vcf containing the Nidaan official contacts so subscriber
     (or staff) can save them with one click."""
     contacts = [
-        ("Nidaan Cases",   "+919827284804"),
         ("Nidaan Updates", "+919826011116"),
         ("Nidaan Support", "+919584468804"),
     ]

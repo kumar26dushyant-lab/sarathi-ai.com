@@ -507,15 +507,11 @@
   <!-- Saved-all-3-contacts confirmation prompt (shown after Turn On) -->
   <div id="waVcardModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target.id==='waVcardModalBg')document.getElementById('waVcardModalBg').style.display='none'">
     <div style="background:var(--nd-bg-base);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:480px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
-      <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 Save All 3 Nidaan Numbers</h2>
+      <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 Save Both Nidaan Numbers</h2>
       <p style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:1rem">
-        We may message you from any of these. Save all 3 so our messages don't go to spam.
+        We may message you from either of these. Save both so our messages don't go to spam.
       </p>
       <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
-          <div><div style="font-weight:600">Nidaan Cases</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98272 84804</div></div>
-          <button onclick="copyOfficial('+919827284804')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
-        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
           <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98260 11116</div></div>
           <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
@@ -526,7 +522,7 @@
         </div>
       </div>
       <a href="/nidaan/api/official-vcard" download="NidaanPartner.vcf" class="btn-sm btn-cyan" style="display:block;text-align:center;padding:.75rem;border-radius:8px;font-weight:700;margin-bottom:.65rem">
-        📥 Download all 3 as contact card (.vcf)
+        📥 Download both as contact card (.vcf)
       </a>
       <div style="display:flex;gap:.5rem">
         <button onclick="confirmSavedNumbers()" class="btn-sm btn-cyan" style="flex:1;padding:.65rem;border-radius:8px;font-weight:700">✓ I've saved them</button>
