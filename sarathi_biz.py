@@ -5874,6 +5874,24 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
     return {"ok": True, "updated": changed}
 
 
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-reminder/email")
+@limiter.limit("30/minute")
+async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
+    """Email the claimant their pending documents + upload link (in-house L2 doc-collection).
+    Gated on a valid claimant email. sub_super_admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_doc_collect as _dc
+    res = await _dc.send_email_reminder(claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        _m = {"no_email": "This claim has no claimant email yet — add one on the claim first.",
+              "no_pending": "All required documents are already received — nothing to remind.",
+              "claim_not_found": "Claim not found."}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not send the reminder"))
+    return res
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/activity")
 async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int = 200):
     """Unified claim timeline — automation messages, customer responses, status changes,

@@ -3494,10 +3494,19 @@ function _portalBadge(c){
   const enter = (admin && c.portal_token) ? ` <a href="/nidaan/claim/magic?token=${encodeURIComponent(c.portal_token)}&staff=1" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--nd-cyan-text)">enter ↗</a>` : '';
   return `<span>🖥️ ${c.portal_opened?'opened':'not opened'}</span>${enter}`;
 }
+function _contactBadge(c){
+  const em=!!(c.insured_email && String(c.insured_email).includes('@'));
+  const ph=String(c.insured_phone||'').replace(/\D/g,'').length>=10;
+  if(em&&ph) return '<span style="color:var(--nd-success-text)">✓ reachable</span>';
+  if(!em&&!ph) return '<span style="color:var(--nd-danger-text)">⚠ no contact</span>';
+  if(!em) return '<span style="color:var(--nd-warning-text)">⚠ no claimant email</span>';
+  return '<span style="color:var(--nd-warning-text)">⚠ no phone</span>';
+}
 function _claimTrail(c){
   return `<div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.3rem;line-height:1.6;border-top:1px dashed var(--nd-border);padding-top:.25rem">`
     + `👤 raised: <b>${esc(c.owner_name||'—')}</b> · ${_claimSrcBadge(c)}<br>`
-    + `${_claimPayBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}`
+    + `${_claimPayBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}<br>`
+    + `📇 claimant: ${_contactBadge(c)}`
     + `</div>`;
 }
 function _l2CardInner(c){
@@ -4734,6 +4743,14 @@ async function openClaimDrawer(claimId) {
       <h4>🔗 Claimant Portal</h4>
       <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.5rem">Direct dashboard for the insured / policyholder — track status, share documents, and accept the success-fee terms. Reach them directly; the mediator stays in the loop.</div>
       <div id="claimPortalCard_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
+      <div style="margin-top:.7rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Document collection — claimant: ${_contactBadge(c)}</div>
+        ${c.insured_email
+          ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
+          : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No claimant email — use ✏️ Edit above to add one, so email doc-collection can reach them.</span>`}
+        <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem;margin-left:.5rem"></span>
+        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Sends the still-pending checklist documents + secure upload link. (WhatsApp nudges join once the number is live.)</div>
+      </div>
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
     <div class="drawer-section">
@@ -9548,6 +9565,17 @@ async function loadClaimActivity(cid){
   }).join('');
 }
 window.loadClaimActivity=loadClaimActivity;
+
+// Email the claimant their pending documents + upload link (in-house L2 doc-collection).
+async function sendDocReminderEmail(cid){
+  const m=document.getElementById('docReminderMsg_'+cid);
+  if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Sending…'; }
+  let r; try{ r=await API('/claims/'+cid+'/doc-reminder/email',{method:'POST'}); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){ if(m){ m.style.color='var(--nd-success-text)'; m.textContent=`✓ Sent — ${d.pending} pending (${d.done}/${d.total} done)`; } }
+  else { if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(d.detail||'Failed'); } }
+}
+window.sendDocReminderEmail=sendDocReminderEmail;
 
 async function loadOfficialNumbers(){
   const panel = document.getElementById('panel-numbers');
