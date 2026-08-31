@@ -18,6 +18,13 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - Counsel-vet the success-fee T&C (claimant consent card copy).
 - Send staff announcements (drafts ready in `ANNOUNCEMENTS.md`).
 
+### 🟡 In progress — In-house L2 model (NidaanPartner)
+- **ClaimShield routing PAUSED ✅** (master switch `claimshield_routing_enabled=0`; Workflow Settings toggle). L2 claims stay in NidaanPartner. Resume anytime.
+- **Contact capture for nudging:** new claims ✅ (claimant email+mobile mandatory). GAP: **48/58 existing claims lack `insured_email`**, **50/85 accounts lack phone** → ops must fill before email/WA doc-collection can reach them.
+  - NEXT: "needs claimant contact" flag on L2 claims + gate doc-collection on a reachable claimant.
+- **Email doc-collection path** (buildable now — SMTP live; WA path blocked on SIM): remind claimant of pending checklist docs by email with the portal upload link.
+- "What processes after docs are collected" — founder to specify later.
+
 ### 🟡 In progress — Claimant WhatsApp doc-collection
 - **Phase 0 ✅ shipped** (module + inbound flow + tables + webhook; inert until number configured).
 - **Phase 1 — orchestrator (in progress):** guided one-doc-at-a-time on the checklist spine; Gemini **right-doc + quality gate** (reject wrong/old/blurry doc with a specific nudge); `normalize_to_pdf`+`segment` → name `NP-{claim}_{doc_key}.pdf` → `mark_doc_received(via='whatsapp')`; conversational layer (Hinglish default, switchable). **Message composer ✅ built** (`biz_nidaan_wa_messages.py` — bilingual welcome/claim-registered/thank-you/doc-reminder/received/wrong-doc/quality/complete; pure + tested). Remaining: wire composer + checklist "next-doc" logic + Gemini vision gate + reminder loop into the live number.
