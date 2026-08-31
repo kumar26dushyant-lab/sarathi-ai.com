@@ -8641,11 +8641,29 @@ async function loadWorkflowSettings(){
   const _gstOn = (((_opsSettingsCache||{}).settings||{}).gst_enabled || '0') === '1';
   const _gstRate = ((_opsSettingsCache||{}).settings||{}).gst_rate || '18';
   const _gstState = ((_opsSettingsCache||{}).settings||{}).gst_home_state || '';
+  const _csRouting = ((_opsSettingsCache||{}).settings||{}).claimshield_routing_enabled !== '0';
 
   let html = `
     <div style="padding:1.25rem 1.5rem">
       <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:.3rem">⚙️ Workflow Settings</h1>
       <div style="color:var(--nd-text-muted);font-size:.88rem;margin-bottom:1.25rem">Configure statuses, SLA defaults, and system-wide toggles.</div>
+
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">⚖️ ClaimShield (Level-2) routing</h2>
+      <div class="card" style="background:var(--nd-bg-surface);border:1px solid ${_csRouting?'var(--nd-border)':'rgba(234,179,8,.5)'};border-radius:12px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">When <b>ON</b>, reviewed-GO paid claims move to ClaimShield (external L2 legal). When <b>PAUSED</b>, L2 claims stay in <b>NidaanPartner</b> — no auto-send, and the manual "Send to ClaimShield" push is blocked — while the in-house L2 document-collection model is built.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
+          <div>
+            <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">Routing</label>
+            <select id="csRoutingSel" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px">
+              <option value="1" ${_csRouting?'selected':''}>ON — route reviewed-GO claims to ClaimShield</option>
+              <option value="0" ${!_csRouting?'selected':''}>PAUSED — keep all L2 claims in NidaanPartner</option>
+            </select>
+          </div>
+          <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveCsRouting()">Save</button>
+          ${!_csRouting?'<span style="font-size:.78rem;color:#a16207;font-weight:700">● Currently PAUSED — L2 stays in NidaanPartner</span>':''}
+        </div>
+        <div id="csRoutingMsg" style="font-size:.8rem;margin-top:.55rem"></div>
+      </div>
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">💳 Branch Billing — Level-2</h2>
       <div class="card" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
@@ -9797,6 +9815,18 @@ async function saveReviewFee(){
   else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
 }
 
+async function saveCsRouting(){
+  const enabled = document.getElementById('csRoutingSel').value === '1';
+  const msg = document.getElementById('csRoutingMsg');
+  if (enabled && !confirm('Turn ClaimShield routing ON? Reviewed-GO paid claims will start moving to ClaimShield again.')) return;
+  if (!enabled && !confirm('PAUSE ClaimShield routing? All L2 claims will stay in NidaanPartner — no auto-send and the manual push is blocked.')) return;
+  const r = await fetch('/nidaan/ops/api/claimshield/routing', {
+    method:'POST', headers:{...hdrs(),'Content-Type':'application/json'}, body: JSON.stringify({enabled})
+  });
+  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓ — reloading…';} try{ndUI.toast('ClaimShield routing '+(enabled?'ON':'PAUSED'),'success');}catch(e){} setTimeout(loadWorkflowSettings, 600); }
+  else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
+}
+window.saveCsRouting=saveCsRouting;
 async function saveGst(){
   const enabled = document.getElementById('gstEnabled').value === '1';
   const rate = parseFloat(document.getElementById('gstRate').value)||0;

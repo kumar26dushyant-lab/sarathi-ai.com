@@ -4459,6 +4459,25 @@ async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Reques
     return {"ok": True, "bucket": result["bucket"]}
 
 
+class _CsRoutingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+
+
+@app.post("/nidaan/ops/api/claimshield/routing")
+async def ops_claimshield_routing(body: _CsRoutingReq, request: Request):
+    """Super-admin master switch for ClaimShield (L2 legal) routing. OFF = L2 claims stay in
+    NidaanPartner (no auto-send, manual push refused). Audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("claimshield_routing_enabled", "1" if body.enabled else "0",
+                                 updated_by=str(staff.get("staff_id") or ""))
+    await _ops_audit(request, "claimshield.routing", "settings", "claimshield",
+                     f"routing {'ON' if body.enabled else 'PAUSED (L2 kept in NidaanPartner)'}")
+    return {"ok": True, "enabled": body.enabled}
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/send-to-claimshield")
 @limiter.limit("30/minute")
 async def ops_send_to_claimshield(claim_id: int, request: Request):
@@ -4467,6 +4486,11 @@ async def ops_send_to_claimshield(claim_id: int, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "sub_super_admin")
+    # MASTER pause: while the in-house L2 model is being built, ClaimShield routing is OFF and
+    # L2 claims stay in NidaanPartner. A super_admin can resume it in Workflow Settings.
+    if str(await nidaan.get_ops_setting("claimshield_routing_enabled", "1")).strip().lower() not in ("1", "true", "on", "yes"):
+        raise HTTPException(status_code=409, detail="ClaimShield routing is paused — L2 claims are "
+                            "handled in NidaanPartner. Re-enable it in Workflow Settings to send.")
     _by = _actor_label(caller)   # real actor, even if impersonating another staff
     reason = ""
     try:

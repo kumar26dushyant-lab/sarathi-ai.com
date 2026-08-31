@@ -5603,6 +5603,10 @@ OPS_SETTING_DEFAULTS = {
     # always works regardless (ops override). Flip to "0" to let paid + reviewed-GO claims auto-send
     # without waiting for acceptance (the pre-Phase-3 behaviour).
     "claimshield_require_acceptance": "1",
+    # MASTER switch for ClaimShield (L2 legal) routing. "0" = PAUSED — L2 claims stay in
+    # NidaanPartner (no auto-send, and the manual push is refused). Set OFF Aug 2026 while the
+    # robust in-house L2 doc-collection model is built; flip ON in Workflow Settings to resume.
+    "claimshield_routing_enabled": "1",
     # Claimant WhatsApp doc-collection — DASHBOARD DEFAULTS (a claim can override each; claim
     # level wins when set). Times are IST 24h. cadence_hours = gap between reminders.
     "wa_doc_collection_enabled": "0",   # master switch (off until the Meta number is live)

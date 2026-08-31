@@ -320,6 +320,13 @@ async def auto_send_if_eligible(claim_id: int) -> dict:
     manual button). Called from the payment/review state-changes. Idempotent, flag-gated
     (ops setting 'claimshield_auto_send', default ON), and best-effort — never blocks the
     caller. sent_by is stamped as an auto action (distinct from a person's manual push)."""
+    # MASTER routing switch — when paused, L2 stays in NidaanPartner (no auto, no manual).
+    try:
+        master = await _n.get_ops_setting("claimshield_routing_enabled", "1")
+    except Exception:
+        master = "1"
+    if str(master).strip().lower() not in ("1", "true", "on", "yes"):
+        return {"ok": False, "error": "routing_paused"}
     try:
         flag = await _n.get_ops_setting("claimshield_auto_send", "1")
     except Exception:
