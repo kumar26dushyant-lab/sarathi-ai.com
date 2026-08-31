@@ -12,7 +12,8 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ### 🔴 Blocked / awaiting owner
 - **WhatsApp number ✅ LIVE** — +91 91836 86384 connected as "NidaanPartner" (VERIFIED), creds in `biz.env`. **ONE step left (owner):** Meta → Webhooks → callback `https://nidaanpartner.com/nidaan/api/wa/webhook`, verify token `np_wa_0d8cac5997584755d553`, subscribe to `messages`. Then inbound flows.
-- **WA orchestrator wiring (now UNBLOCKED):** wire composer + checklist next-doc + Gemini right-doc/quality gate + reminder loop + welcome/thank-you/claim-registered triggers → the live number.
+- **WA orchestrator ✅ LIVE (in-session guided flow).** `biz_nidaan_wa_orchestrator.py`: claimant messages number → matched to claim by phone → greet + ask next pending doc → inbound doc → download → PDF → Gemini right-doc/quality gate → save + mark checklist → ask next/complete; recorded on claim timeline. Manual start: drawer "💬 Start WhatsApp collection" + `POST /claims/{id}/wa/start`. Webhook verified.
+  - **REMAINING for full automation (needs Meta template approval):** submit templates (welcome / doc_reminder / received / quality / complete) so COLD-START + out-of-session **daily reminders** work (free-form only delivers inside the 24h session). Then wire the **reminder loop** (Phase 2) + welcome/thank-you/claim-registered triggers. Composer copy is ready to become templates.
 - **NidaanPartner.com WhatsApp Business CAMPAIGN alignment** — the big campaign setup discussed earlier; large work, do once the number(s) are verified/available.
 - Flip `claimant_autosend_enabled` ON when ready to auto-email claimants their L2 authorization link.
 - ClaimShield live doc-pull test (once a real L2 case is ready).
