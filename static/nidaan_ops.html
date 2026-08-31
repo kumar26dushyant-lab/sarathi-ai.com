@@ -3865,7 +3865,7 @@ async function loadBranches() {
       <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:var(--nd-cyan-text);font-size:.7rem">edit</a>`:''}</td>
       <td style="text-align:right;font-size:.78rem;color:var(--nd-warning-text)">₹${fmt(b.share||0)}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'var(--nd-success-text)':'#fca5a5'}">${b.status}</span></td>
-      <td style="white-space:nowrap">${_role==='super_admin'?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this branch's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
+      <td style="white-space:nowrap">${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this branch's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
@@ -4745,11 +4745,16 @@ async function openClaimDrawer(claimId) {
       <div id="claimPortalCard_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
       <div style="margin-top:.7rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
         <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Document collection — claimant: ${_contactBadge(c)}</div>
-        ${c.insured_email
-          ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
-          : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No claimant email — use ✏️ Edit above to add one, so email doc-collection can reach them.</span>`}
-        <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem;margin-left:.5rem"></span>
-        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Sends the still-pending checklist documents + secure upload link. (WhatsApp nudges join once the number is live.)</div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+          ${c.insured_email
+            ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
+            : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No claimant email — use ✏️ Edit above to add one.</span>`}
+          ${c.insured_phone
+            ? `<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(${c.claim_id})">💬 Start WhatsApp collection</button>`
+            : ''}
+          <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem"></span>
+        </div>
+        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Guided one-doc-at-a-time on WhatsApp + email — both read the same checklist. WhatsApp free-form delivers once the claimant has messaged the number (24h session); a cold start needs an approved template.</div>
       </div>
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
@@ -9576,6 +9581,17 @@ async function sendDocReminderEmail(cid){
   else { if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(d.detail||'Failed'); } }
 }
 window.sendDocReminderEmail=sendDocReminderEmail;
+
+// Start (or continue) WhatsApp guided doc-collection for a claim's claimant.
+async function startWaCollection(cid){
+  const m=document.getElementById('docReminderMsg_'+cid);
+  if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Starting…'; }
+  let r; try{ r=await API('/claims/'+cid+'/wa/start',{method:'POST'}); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){ if(m){ m.style.color='var(--nd-success-text)'; m.textContent = d.complete ? '✓ All docs already in' : (d.asked ? '✓ WhatsApp sent — asked for the next document' : '✓ Sent'); } }
+  else { if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(d.detail||'Failed'); } }
+}
+window.startWaCollection=startWaCollection;
 
 async function loadOfficialNumbers(){
   const panel = document.getElementById('panel-numbers');

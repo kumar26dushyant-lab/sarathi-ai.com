@@ -5892,6 +5892,27 @@ async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
     return res
 
 
+@app.post("/nidaan/ops/api/claims/{claim_id}/wa/start")
+@limiter.limit("30/minute")
+async def nidaan_ops_wa_start(claim_id: int, request: Request):
+    """Start (or continue) the WhatsApp guided doc-collection for a claim's claimant. Free-form
+    delivery needs an open 24h session (claimant messaged us recently); a cold start needs an
+    approved template. sub_super_admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_whatsapp as _nwa
+    if not _nwa.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp number not configured")
+    import biz_nidaan_wa_orchestrator as _orch
+    res = await _orch.start_for_claim(claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        _m = {"no_phone": "This claim has no claimant phone.",
+              "no_claim": "Claim/claimant not found."}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not start"))
+    return res
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/activity")
 async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int = 200):
     """Unified claim timeline — automation messages, customer responses, status changes,
@@ -8281,12 +8302,12 @@ async def ops_impersonate_staff(staff_id: int, request: Request):
 
 @app.post("/nidaan/ops/api/branches/{branch_code}/impersonate")
 async def ops_impersonate_branch(branch_code: str, request: Request):
-    """Super admin: enter a branch's own dashboard (mint a short-lived branch token to view what the
-    branch sees). Audited. Branches self-serve password via email OTP, so no reset here — this is
-    purely 'see inside their dashboard'."""
+    """Super admin / admin: enter a branch's own dashboard (mint a short-lived branch token to view
+    what the branch sees). Audited. Branches self-serve password via email OTP, so no reset here —
+    this is purely 'see inside their dashboard'."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "super_admin")
+    caller = _require_staff(request, "sub_super_admin")
     branch = await nidaan.get_branch(branch_code)
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")

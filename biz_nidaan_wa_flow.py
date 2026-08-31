@@ -120,9 +120,18 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
         return
     if t in _LANG_WORDS:
         await upsert_contact(msisdn, language=_LANG_WORDS[t])
+        try:
+            import biz_nidaan_wa_orchestrator as _orch
+            await _orch.start_or_continue(msisdn)   # re-ask in the new language
+        except Exception:
+            pass
         return
-    # PHASE 1 HANDOFF: conversational doc-collection (Gemini) — answer questions, guide the next
-    # document, handle "which docs pending", etc. For now the reply just keeps the 24h window open.
+    # Guided doc-collection: match the number to its claim, greet + ask the next pending doc.
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.handle_inbound_text(msisdn, text)
+    except Exception as e:  # noqa: BLE001
+        logger.info("orchestrator text handoff failed: %s", e)
     return
 
 
@@ -131,14 +140,23 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -
       1. download_media → 2. right-doc + quality check (Gemini vision, against the doc we asked for)
       3. normalize_to_pdf + segment → 4. name per convention → 5. mark_doc_received / nudge if wrong
       6. sync the checklist (single source of truth) → 7. guided next-step reply.
-    Phase 0: log it + alert ops so nothing is lost while the pipeline is wired."""
+    Routed to the orchestrator's guided pipeline: right-doc + quality gate → convert → save →
+    mark checklist → ask next. Falls back to an ops alert only if no claim matches the number."""
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        res = await _orch.handle_inbound_document(msisdn, media_id, mime)
+        if res.get("ok") or res.get("error") not in ("no_claim", None):
+            return   # handled (accepted, nudged, or human-takeover)
+    except Exception as e:  # noqa: BLE001
+        logger.info("orchestrator media handoff failed: %s", e)
+    # No matching claim (or orchestrator error) — don't lose it: alert ops.
     claim_id = await _claim_for_msisdn(msisdn)
     try:
         import biz_nidaan_notifications as _nnot
         await _nnot.notify_staff_inapp(
             await _admin_ids(), "📎 Claimant sent a document on WhatsApp",
             f"A document arrived from {msisdn}" + (f" (claim #{claim_id})" if claim_id else "")
-            + ". Auto-processing pipeline is being wired — review in ops if needed.",
+            + " but it could not be auto-matched to a claim — review in ops.",
             event_key="wa.doc_received", email=False, claim_id=claim_id)
     except Exception:
         pass
