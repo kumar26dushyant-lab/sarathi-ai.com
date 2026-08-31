@@ -24525,6 +24525,29 @@ async def main():
                     await asyncio.sleep(3600)
         asyncio.create_task(marketing_batch_loop())
 
+        # Step 6h: NidaanPartner daily ops summary — an AI "watch on top" that at ~20:00 IST
+        # Telegrams each super-admin a crisp end-of-day activity digest (text + voice, their
+        # language). Worker-only singleton; fires once per day.
+        async def daily_ops_summary_loop():
+            import biz_nidaan_daily_summary as _dsum
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            _IST = _tz(_td(hours=5, minutes=30))
+            while True:
+                try:
+                    now = _dtm.now(_IST)
+                    nxt = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - now).total_seconds()))
+                    res = await _dsum.run_daily_ops_summary()
+                    logger.info("🌙 Daily ops summary: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Daily ops summary error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(daily_ops_summary_loop())
+
         # Step 6g: Branch fallback — twice-daily sweep that emails affiliate
         # branches about attributed leads still unpaid past 24h (once each).
         async def branch_unpaid_loop():

@@ -262,6 +262,25 @@ async def send_message(chat_id: str, text: str,
     return (False, str(err)[:200])
 
 
+async def send_voice(chat_id: str, ogg_bytes: bytes, caption: str = "") -> tuple[bool, str]:
+    """Send an OGG/Opus voice note (round voice bubble). ogg_bytes must be Opus-in-OGG."""
+    tok = await get_bot_token()
+    if not tok or not chat_id or not ogg_bytes:
+        return (False, "missing")
+    url = API_BASE.format(token=tok, method="sendVoice")
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption[:1000]
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(url, data=data,
+                                  files={"voice": ("summary.ogg", ogg_bytes, "audio/ogg")})
+        j = r.json() if r.content else {}
+        return (bool(j.get("ok")), "" if j.get("ok") else str(j)[:180])
+    except Exception as e:  # noqa: BLE001
+        return (False, str(e)[:180])
+
+
 # ── staff linking ────────────────────────────────────────────────────────────
 LINK_CODE_TTL_MIN = 15   # a connect code is valid for this long, then expires
 
