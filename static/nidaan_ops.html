@@ -3788,7 +3788,7 @@ function _filterClaimsBySearch(list){
 }
 let _claimSearchTimer;
 function _claimSearchDebounced(){ clearTimeout(_claimSearchTimer); _claimSearchTimer=setTimeout(_renderClaimResults, 160); }
-window._claimSearchDebounced=_claimSearchDebounced; window._renderClaimResults=function(){_renderClaimResults();};
+window._claimSearchDebounced=_claimSearchDebounced;  // _renderClaimResults is already global (top-level fn)
 function _renderClaimResults(){
  try {
   const claims = _filterClaimsBySearch(_claimsCache||[]);
