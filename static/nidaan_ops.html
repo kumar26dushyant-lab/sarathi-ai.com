@@ -3598,8 +3598,10 @@ function _renderOutcome(key){
   let rows = all;
   if(q) rows = rows.filter(c => ((c.insured_name||'')+' '+(c.insured_phone||'')+' '+(c.policy_no||'')+' '+(c.insurer_name||'')+' '+c.claim_id).toLowerCase().includes(q));
   if(isL2){
-    if(_l2f.pay==='paid') rows=rows.filter(c=>c.l2_payment_status==='paid');
-    else if(_l2f.pay==='due') rows=rows.filter(c=>c.l2_payment_status!=='paid');
+    // Use the SAME basis as the displayed L2-fee badge (_l2Eligible = L2 fee paid OR ₹499 review
+    // OR subscription = "covered"), so the Paid/Due filter matches exactly what the row shows.
+    if(_l2f.pay==='paid') rows=rows.filter(c=>_l2Eligible(c));
+    else if(_l2f.pay==='due') rows=rows.filter(c=>!_l2Eligible(c));
     if(_l2f.cs==='sent') rows=rows.filter(c=>c.claimshield_case_id);
     else if(_l2f.cs==='notsent') rows=rows.filter(c=>!c.claimshield_case_id);
     if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
@@ -3696,7 +3698,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="Re-check recent Razorpay payments and unlock any claim/L2 that was captured but not reflected" onclick="reconcilePayments()">🔄 Reconcile payments</button>`:''}
     </div>
     <div class="filter-bar">
-      <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="applyClaimFilters()" style="flex:1;min-width:160px">
+      <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="_claimSearchDebounced()" style="flex:1;min-width:160px">
       <select id="claimStatusFilter" onchange="applyClaimFilters()">
         <option value="">All Statuses</option>
         <option value="intimated">Intimated</option>
@@ -3727,10 +3729,22 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (plan)   document.getElementById('claimPlanFilter').value = plan;
   if (branch) document.getElementById('claimBranchFilter').value = branch;
   loadClaimAutoAssignState();
+  // Populate the Staff filter (it was created empty → the filter did nothing).
+  if (_role !== 'team_member') {
+    try {
+      const asg = await _loadAssigneesOnce();
+      const sel = document.getElementById('claimAssignFilter');
+      if (sel && asg) {
+        sel.innerHTML = '<option value="">All Staff</option>' + asg.map(a =>
+          `<option value="${a.staff_id}"${String(assigned)===String(a.staff_id)?' selected':''}>${esc(a.name||('#'+a.staff_id))}</option>`).join('');
+      }
+    } catch(e){}
+  }
 
   const params = new URLSearchParams();
   if (statusFilter) params.set('status', statusFilter);
-  if (search) params.set('search', search);
+  // NOTE: search is applied CLIENT-SIDE (see _filterClaimsBySearch) — not sent to the server —
+  // so typing never triggers a fetch/rebuild. Dropdown filters below stay server-side.
   if (branch) params.set('branch', branch);
   if (plan) params.set('plan', plan);
   if (assigned) params.set('assigned_to', assigned);
@@ -3740,9 +3754,22 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   const r = await API('/claims?' + params);
   if (!r.ok) { document.getElementById('claimTableWrap').innerHTML='<div class="empty"><p>Failed to load claims</p></div>'; return; }
   const d = await r.json();
-  _claimsCache = d.claims;
-
-  if (!d.claims.length) {
+  _claimsCache = d.claims || [];
+  _renderClaimResults();
+}
+// Client-side search over the cached claims — fast, no server round-trip, no focus loss. This
+// permanently fixes the "one letter at a time" lag: typing no longer rebuilds the panel/input.
+function _filterClaimsBySearch(list){
+  const q = ((document.getElementById('claimSearch')||{}).value||'').trim().toLowerCase();
+  if(!q) return list||[];
+  return (list||[]).filter(c => ((c.insured_name||'')+' '+(c.insured_phone||'')+' '+(c.policy_no||'')+' '+(c.insurer_name||'')+' '+(c.owner_name||'')+' #'+c.claim_id).toLowerCase().includes(q));
+}
+let _claimSearchTimer;
+function _claimSearchDebounced(){ clearTimeout(_claimSearchTimer); _claimSearchTimer=setTimeout(_renderClaimResults, 160); }
+window._claimSearchDebounced=_claimSearchDebounced; window._renderClaimResults=function(){_renderClaimResults();};
+function _renderClaimResults(){
+  const claims = _filterClaimsBySearch(_claimsCache||[]);
+  if (!claims.length) {
     document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
     return;
   }
@@ -3767,7 +3794,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
     return `<span style="font-size:.68rem;font-weight:700;color:${col}">${lbl}</span>${l2}`;
   };
   const _claimAdmin = (_role==='super_admin' || _role==='sub_super_admin');
-  const rows = d.claims.map(c=>`
+  const rows = claims.map(c=>`
     <tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
       ${_claimAdmin?`<td onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" ${_claimSel.has(c.claim_id)?'checked':''} onchange="_toggleClaimSel(${c.claim_id},this.checked)"></td>`:''}
       <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
@@ -3791,8 +3818,8 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <button class="${cv==='cards'?'active':''}" onclick="_setClaimsView('cards')">▤ Cards</button>
     </span></div>`;
   let bodyHtml;
-  if(cv==='board'){ bodyHtml = _renderClaimBoard(d.claims); }
-  else if(cv==='cards'){ bodyHtml = _renderClaimCards(d.claims); }
+  if(cv==='board'){ bodyHtml = _renderClaimBoard(claims); }
+  else if(cv==='cards'){ bodyHtml = _renderClaimCards(claims); }
   else bodyHtml = `<div class="table-wrap"><table>
         <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured</th><th>Type</th><th>Insurer</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
