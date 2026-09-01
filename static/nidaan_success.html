@@ -71,7 +71,7 @@ function render(){
 function toggleLang(){ LANG = (LANG==='hi')?'en':'hi'; localStorage.setItem('nidaan_lang', LANG); render(); }
 render();
 // Auto-continue after a few seconds so nobody is stuck on this page.
-setTimeout(function(){ location.href = next; }, 5000);
+setTimeout(function(){ location.href = next; }, 3000);
 </script>
 </body>
 </html>
