@@ -10,6 +10,12 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### 🟡 In progress — PAYMENT RELIABILITY (founder: "I don't want any payment issue in future")
+- ✅ Removed stale artifacts: success email showed "10 claims / quarter" + "auto-renews every quarter" → now LIVE quota (3/month silver·gold, 10/month platinum) + cycle-aware. billing_cycle default monthly. (Dead `nidaan_signup.html` route redirects to /start — not served.)
+- ✅ Thank-you page auto-continues in **3s** (was 5s).
+- **ROOT CAUSE of "thank-you not showing":** lost client callback (UPI app-switch / low network) — payment completes via webhook (email sent) but the browser never runs the success handler → no redirect. **NEXT: recovery-on-return** — on dashboard load, detect an activated-but-unconfirmed payment → show the thank-you.
+- **Proposed workstream (founder to green-light):** (1) recovery-on-return everywhere; (2) dead-end elimination (already-paid → guide, never stuck gateway); (3) user-guidance for every failure mode (timeout/low-net/failed/wrong-page/double-submit); (4) **AI payment watchdog** — auto-reconcile captured-but-unactivated, alert on anomalies, amount↔plan mismatch, payment-health report; (5) superadmin **payment-health funnel** (initiated→captured→activated→confirmed drop-offs); (6) My-Business/branch **performance monitor bot**. All on the unified `nidaan_payments` ledger.
+
 ### 🔴 Blocked / awaiting owner
 - **WhatsApp number ✅ LIVE** — +91 91836 86384 connected as "NidaanPartner" (VERIFIED), creds in `biz.env`. **ONE step left (owner):** Meta → Webhooks → callback `https://nidaanpartner.com/nidaan/api/wa/webhook`, verify token `np_wa_0d8cac5997584755d553`, subscribe to `messages`. Then inbound flows.
 - **WA orchestrator ✅ LIVE (in-session guided flow).** `biz_nidaan_wa_orchestrator.py`: claimant messages number → matched to claim by phone → greet + ask next pending doc → inbound doc → download → PDF → Gemini right-doc/quality gate → save + mark checklist → ask next/complete; recorded on claim timeline. Manual start: drawer "💬 Start WhatsApp collection" + `POST /claims/{id}/wa/start`. Webhook verified.
