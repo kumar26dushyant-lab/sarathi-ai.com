@@ -10,6 +10,15 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### 🟡 In progress — CLAIM ARCHITECTURE & DATA CLARITY (build carefully, no breakage)
+- ✅ Fixes: All Claims search lag (client-side), Staff filter populated, L2 Paid/Due filter, **All Claims stuck-loading** (staff-filter await was blocking the fetch → non-blocking). Sidebar grouped into labeled zones (Accounts in Work). Official Numbers archived (unused ~52d). Save-number banner → Meta-WABA informational message.
+- **Claim raise forms at ALL endpoints — review + align data (NEXT, careful):** capture with clarity → **Claimant (mobile+email MANDATORY** — explain in-form why: they provide documents later; **insured mobile optional)**, Subscriber (email+mobile), Branch (code+mobile+email), referral + staff-referral codes. Goal: WhatsApp/email always reach the RIGHT person. Review every form (branch raise, subscriber, ops, ₹499, review-request) for field completeness.
+- **Comms routing map:** define which message goes to whom at each stage; if the **claimant doesn't respond → escalate to whoever referred them** (subscriber/branch/staff/My-Business) explaining why + what's needed; send across all channels.
+- **Claim pipeline (one workspace, stage+origin views)** replacing the 3-section confusion — build TILL L2 now; **leave space AFTER L2** for post-L2 stages (drafting, Lokpal: 3 insurer reminders + 30-day wait, claimant email-ID creation tied to the email-forwarding radar). Then resolved.
+- **Accounts stays separate** (people directory) but keep the **plan/paid/capping double-check** visible.
+- Awaiting: founder's **document list per claim type** → load into checklist templates for the WhatsApp bot.
+
+
 ### 🟡 In progress — PAYMENT RELIABILITY (founder: "I don't want any payment issue in future")
 - ✅ Removed stale artifacts: success email showed "10 claims / quarter" + "auto-renews every quarter" → now LIVE quota (3/month silver·gold, 10/month platinum) + cycle-aware. billing_cycle default monthly. (Dead `nidaan_signup.html` route redirects to /start — not served.)
 - ✅ Thank-you page auto-continues in **3s** (was 5s).
