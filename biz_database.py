@@ -1006,7 +1006,7 @@ async def init_db():
                 account_id                INTEGER NOT NULL REFERENCES nidaan_accounts(account_id),
                 plan                      TEXT NOT NULL,
                 amount_paid               INTEGER NOT NULL,
-                billing_cycle             TEXT DEFAULT 'quarterly',
+                billing_cycle             TEXT DEFAULT 'monthly',
                 razorpay_subscription_id  TEXT,
                 started_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 current_period_end        TIMESTAMP,

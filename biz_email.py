@@ -506,9 +506,9 @@ async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str
 
 
 PLAN_FEATURES = {
-    "silver":   {"label": "Silver",   "quota": "10 claims / quarter", "support": "Basic email support"},
-    "gold":     {"label": "Gold",     "quota": "25 claims / quarter", "support": "Priority support"},
-    "platinum": {"label": "Platinum", "quota": "Unlimited claims",    "support": "Dedicated case manager"},
+    "silver":   {"label": "Silver",   "support": "Basic email support"},
+    "gold":     {"label": "Gold",     "support": "Priority support"},
+    "platinum": {"label": "Platinum", "support": "Dedicated case manager"},
 }
 
 async def send_nidaan_subscription_email(
@@ -518,8 +518,21 @@ async def send_nidaan_subscription_email(
     amount_paid: int,
     renewal_date: str,
 ) -> bool:
-    """Send a subscription confirmation email with plan details and renewal date."""
-    info = PLAN_FEATURES.get(plan, {"label": plan.title(), "quota": "—", "support": "—"})
+    """Send a subscription confirmation email with plan details and renewal date. Quota + billing
+    cycle are derived from the LIVE plan config so they never drift (no hardcoded quarterly/quota)."""
+    base_plan = str(plan or "").replace("_annual", "")
+    info = PLAN_FEATURES.get(base_plan, {"label": base_plan.title() or "Plan", "support": "—"})
+    # Real quota from the live limits — silver/gold = 3/month, platinum = 10/month, etc. NO "quarter".
+    quota = "—"
+    try:
+        import biz_nidaan as _n
+        _lim = _n.PLAN_LIMITS.get(plan) or _n.PLAN_LIMITS.get(base_plan) or {}
+        _cpm = _lim.get("claims_per_month")
+        quota = "Unlimited claims" if _cpm is None else f"{_cpm} claims / month"
+    except Exception:
+        pass
+    info = {**info, "quota": quota}
+    cycle_word = "year" if str(plan).endswith("_annual") else "month"
     greeting = f"Hi {owner_name}," if owner_name else "Hi,"
     amount_str = f"₹{amount_paid:,}" if amount_paid else "—"
     content = f"""
@@ -546,7 +559,7 @@ async def send_nidaan_subscription_email(
   </a>
 </p>
 <p style="color:#475569;font-size:.82rem">
-  Your subscription auto-renews every quarter. You can manage or cancel your subscription
+  Your subscription auto-renews every {cycle_word}. You can manage or cancel your subscription
   at any time from the Profile section of your dashboard.
 </p>"""
     return await send_email(

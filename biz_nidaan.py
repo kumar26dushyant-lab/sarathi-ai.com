@@ -6,10 +6,11 @@
 #  Architecture: plug-and-play.  No Sarathi tables are modified here.
 #  The only join point is product_link(nidaan_account_id, sarathi_tenant_id).
 #
-#  Plans (quarterly Razorpay subscriptions):
-#    silver   — ₹1 500/quarter  (1 user,  10 claims/quarter, legal review)
-#    gold     — ₹3 000/quarter  (5 users, 25 claims/quarter + Sarathi bundle)
-#    platinum — ₹6 000/quarter  (unlimited users/claims + Sarathi bundle)
+#  Plans (MONTHLY or ANNUAL Razorpay subscriptions — no quarterly). Base prices; GST added on top.
+#    silver   — ₹499/month  (1 user,  3 claims/month,  legal review, up to ₹5L/claim)
+#    gold     — ₹999/month  (5 users, 3 claims/month,  + Sarathi bundle, up to ₹10L/claim)
+#    platinum — ₹1999/month (unlimited users, 10 claims/month, + Sarathi bundle, up to ₹50L/claim)
+#    (annual variants = ~10 months' price; quotas from PLAN_LIMITS/config, enforced PER MONTH.)
 #
 # =============================================================================
 
@@ -1663,7 +1664,7 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     """
     Returns (allowed, reason).
     Priority order:
-      1. Active subscription (all tiers) — quota enforced per quarter.
+      1. Active subscription (all tiers) — quota enforced per month.
       2. Per-claim purchase (status='paid', no linked_claim_id yet) — exactly 1 claim.
     """
     sub = await get_active_subscription(account_id)
