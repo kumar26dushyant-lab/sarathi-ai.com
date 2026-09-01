@@ -5076,6 +5076,32 @@ async def nidaan_payments_reconcile(request: Request, hours: int = 168, dry_run:
 
 # ── Nidaan: Check order payment status (recovery endpoint) ────────────────────
 
+@app.get("/nidaan/api/payment/confirm-check")
+async def nidaan_payment_confirm_check(request: Request):
+    """Recovery-on-return: tells the dashboard whether the account's plan activated RECENTLY (last
+    ~90 min) so it can show the thank-you confirmation even when the original payment callback was
+    lost (UPI app-switch / low network → activated via webhook, browser never confirmed). The client
+    tracks which sub_id it already showed, so this never loops."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sub = await nidaan.get_active_subscription(payload["sub"])
+    if not sub:
+        return {"just_activated": False}
+    recent = False
+    try:
+        from datetime import datetime as _dt
+        started = _dt.fromisoformat(str(sub.get("started_at") or "").replace(" ", "T")[:19])
+        recent = (_dt.utcnow() - started).total_seconds() < 90 * 60
+    except Exception:
+        recent = False
+    return {"just_activated": bool(recent), "sub_id": sub.get("sub_id"),
+            "plan": sub.get("plan"), "cycle": sub.get("billing_cycle") or "monthly",
+            "amount": sub.get("amount_paid")}
+
+
 @app.get("/nidaan/api/subscribe/check")
 async def nidaan_subscribe_check(order_id: str, request: Request):
     """Check if a Razorpay order has been paid. Used by the dashboard to recover from
@@ -5922,6 +5948,17 @@ async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int 
     _require_staff(request, "team_member")
     rows = await nidaan.get_claim_activity(claim_id, limit=limit)
     return {"activity": rows, "count": len(rows)}
+
+
+@app.get("/nidaan/ops/api/payments/health")
+async def nidaan_ops_payment_health(request: Request, run: bool = False):
+    """Payment-health funnel + anomalies (from the watchdog). super_admin. `run=true` re-scans now."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_payment_watch as _pw
+    snap = await _pw.run_payment_health_check(alert=False) if run else await _pw.get_snapshot()
+    return {"snapshot": snap}
 
 
 @app.get("/nidaan/ops/api/payments")
@@ -24568,6 +24605,22 @@ async def main():
                     logger.error("Daily ops summary error: %s", e)
                     await asyncio.sleep(3600)
         asyncio.create_task(daily_ops_summary_loop())
+
+        # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
+        # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;
+        # alerts super-admins ONLY on anomalies. Worker-only singleton.
+        async def payment_watch_loop():
+            import biz_nidaan_payment_watch as _pw
+            await asyncio.sleep(200)  # let startup settle
+            while True:
+                try:
+                    await _pw.run_payment_health_check()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("payment watchdog error: %s", e)
+                await asyncio.sleep(900)  # every 15 min
+        asyncio.create_task(payment_watch_loop())
 
         # Step 6g: Branch fallback — twice-daily sweep that emails affiliate
         # branches about attributed leads still unpaid past 24h (once each).

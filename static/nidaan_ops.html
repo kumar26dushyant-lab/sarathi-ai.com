@@ -6804,6 +6804,43 @@ const _PAY_SRC = {
   branch_l2:'Level-2 Fee', payment_link:'Payment Link', mark_paid:'Manual/Offline',
   sarathi_sub:'Sarathi CRM', other:'Other'
 };
+function _revHealthHTML(s){
+  if(!s || !s.checked_at){ return `<div style="margin:1.25rem 0;padding:1rem;border:1px solid var(--nd-border);border-radius:12px;background:var(--nd-bg-surface-2)">
+    <div class="section-title" style="font-size:1rem">🩺 Payment Health</div>
+    <div style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.4rem">No scan yet — the watchdog runs every 15 min. <button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="rescanPayHealth()">Scan now</button></div></div>`; }
+  const f=s.funnel||{};
+  const ok = !s.anomaly;
+  const banner = ok
+    ? `<span style="color:var(--nd-success-text);font-weight:700">✅ Healthy</span> — no payment anomalies detected.`
+    : `<span style="color:var(--nd-danger-text);font-weight:700">⚠️ Needs attention</span> — see below (super-admins were alerted).`;
+  const cell=(l,v)=>`<div style="flex:1;min-width:90px"><div style="font-size:1.15rem;font-weight:800">${v}</div><div style="font-size:.68rem;color:var(--nd-text-muted)">${l}</div></div>`;
+  let issues='';
+  if((s.mismatches||[]).length){
+    issues += `<div style="margin-top:.6rem;font-size:.8rem"><b style="color:var(--nd-danger-text)">Amount ≠ plan (${s.mismatches.length}):</b><ul style="margin:.3rem 0 0 1rem;padding:0">`
+      + s.mismatches.slice(0,6).map(m=>`<li>${esc(m.plan)}: recorded ₹${fmt(m.recorded_rs)} vs expected ₹${fmt(m.expected_rs)} <span style="color:var(--nd-text-faint)">(pay #${m.pay_id})</span></li>`).join('') + '</ul></div>';
+  }
+  if((s.stuck||[]).length){
+    issues += `<div style="margin-top:.6rem;font-size:.8rem"><b style="color:#a16207">Captured but not recorded (${s.stuck.length}):</b><ul style="margin:.3rem 0 0 1rem;padding:0">`
+      + s.stuck.slice(0,6).map(x=>`<li>account #${x.account_id} · ₹${fmt(x.amount_rs)} · ${esc(x.purpose||'')}</li>`).join('') + '</ul></div>';
+  }
+  if((s.failures_1h||0)>6){ issues += `<div style="margin-top:.6rem;font-size:.8rem;color:var(--nd-danger-text)"><b>Failure spike:</b> ${s.failures_1h} failures in the last hour.</div>`; }
+  return `<div style="margin:1.25rem 0;padding:1rem;border:1px solid ${ok?'var(--nd-border)':'rgba(220,38,38,.4)'};border-radius:12px;background:var(--nd-bg-surface-2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+      <div class="section-title" style="font-size:1rem">🩺 Payment Health</div>
+      <button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="rescanPayHealth()">↻ Re-scan</button>
+    </div>
+    <div style="font-size:.82rem;margin:.4rem 0 .6rem">${banner}</div>
+    <div style="display:flex;gap:.7rem;flex-wrap:wrap;text-align:center;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.7rem">
+      ${cell('Pay opened (24h)', f.pay_opened||0)}${cell('Succeeded', f.payment_success||0)}${cell('Failed', f.payment_failed||0)}${cell('Recorded', f.recorded_24h||0)}${cell('Collected 24h', '₹'+fmt(f.collected_24h_rs||0))}
+    </div>
+    ${issues}
+    <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.5rem">Last scan: ${esc((s.checked_at||'').replace('T',' ').slice(0,16))} · anomalies alert super-admins on bell + email + Telegram.</div>
+  </div>`;
+}
+async function rescanPayHealth(){
+  try{ const r=await API('/payments/health?run=true'); if(r.ok){ ndUI.toast('Payment health re-scanned','success'); if(_currentPanel==='revenue') loadRevenue(); } }catch(e){}
+}
+window.rescanPayHealth=rescanPayHealth;
 function _revLedgerHTML(pl){
   if(!pl || !pl.summary){ return ''; }
   const s = pl.summary;
@@ -6860,6 +6897,9 @@ async function loadRevenue() {
   let pl = null;
   try { const plr = await API('/payments?limit=100'); if (plr.ok) pl = await plr.json(); } catch(e){}
   const ledgerHTML = _revLedgerHTML(pl);
+  let ph = null;
+  try { const phr = await API('/payments/health'); if (phr.ok) ph = (await phr.json()).snapshot; } catch(e){}
+  const healthHTML = _revHealthHTML(ph);
 
   const byPlanRows = Object.entries(d.by_plan||{}).map(([plan,info])=>`
     <div class="chart-bar-row">
@@ -6889,6 +6929,7 @@ async function loadRevenue() {
       <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">D2C ₹499 Revenue</div></div>
     </div>
 
+    ${healthHTML}
     ${ledgerHTML}
 
     <!-- Revenue Split -->

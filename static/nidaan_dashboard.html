@@ -2874,6 +2874,29 @@ setLang(_lang);
 // Called on modal dismiss AND on page init.
 // If UPI app switch caused JS context loss, handler never fired.
 // We check the order status server-side and activate if paid.
+// Recovery-on-return: if a plan activated recently and we've not yet confirmed THIS sub to the
+// user, show an inline congrats banner (loop-proof — no navigation). Tracked by sub_id.
+async function _confirmRecover() {
+  try {
+    const r = await api('/nidaan/api/payment/confirm-check');
+    if (!r || !r.ok) return;
+    const d = await r.json();
+    if (!d.just_activated) return;
+    if (String(localStorage.getItem('nidaan_confirmed_sub') || '') === String(d.sub_id)) return;
+    localStorage.setItem('nidaan_confirmed_sub', String(d.sub_id));
+    const banner = document.getElementById('subBanner');
+    if (banner) {
+      const base = String(d.plan || '').replace('_annual', '');
+      const pl = base ? base.charAt(0).toUpperCase() + base.slice(1) : 'your';
+      banner.className = 'sub-banner sub-active';
+      banner.innerHTML = '<div class="sub-banner-text">'
+        + '<strong class="en">🎉 Your ' + pl + ' plan is active — payment confirmed.</strong>'
+        + '<strong class="hi">🎉 आपका ' + pl + ' प्लान सक्रिय है — भुगतान की पुष्टि हो गई।</strong></div>';
+      banner.style.display = '';
+    }
+  } catch (e) {}
+}
+
 async function recoverPendingPayment(showFeedback) {
   const raw = localStorage.getItem('nidaan_pending_order');
   if (!raw) return;
@@ -3026,6 +3049,9 @@ loadDashboard().then(() => {
     // No explicit success param — attempt recovery if there's a pending order
     // (covers UPI app switching, browser context loss, network errors during verify)
     recoverPendingPayment(false);
+    // Belt-and-braces: even with NO pending order (fully lost callback → webhook-activated),
+    // confirm a recent activation with an INLINE banner (no redirect = no loop).
+    _confirmRecover();
   }
   history.replaceState(null, '', '/nidaan/dashboard');
 });
