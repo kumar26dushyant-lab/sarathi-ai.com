@@ -1712,10 +1712,10 @@ async def on_claimant_accepted(claim_id: int):
             ids.append(c["assigned_to_staff_id"])
     if not ids:
         return
-    subj = f"✅ Claimant AUTHORIZED — #{_cn(claim_id)} {c.get('insured_name','')}"
-    body = (f"The claimant accepted the success-fee terms for this case.\n\n"
+    subj = f"✅ Claimant authorized — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"The claimant accepted the authorization terms for this case.\n\n"
             f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
-            f"The signed acceptance is on file (L2) and the case is being released to ClaimShield.\n\n"
+            f"The signed acceptance is on file — we're taking the claim forward for further processing.\n\n"
             f"Open: /nidaan/ops")
     try:
         await notify_staff_inapp(ids, subj, body, event_key="claimant.accepted", email=True,

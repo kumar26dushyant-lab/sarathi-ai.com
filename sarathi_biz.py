@@ -1377,8 +1377,62 @@ async def nidaan_claim_consent(request: Request):
                 await _nnot.on_claimant_accepted(cid)
             except Exception:
                 pass
+            # 4) Thank the claimant for accepting (email + WhatsApp best-effort), log it.
+            try:
+                await _claimant_accept_thankyou(cid)
+            except Exception as _te:
+                logger.warning("claimant thank-you failed claim=%s: %s", cid, _te)
         asyncio.create_task(_post_accept(ctx["claim_id"]))
     return {"ok": True, "already": res.get("already", False)}
+
+
+async def _claimant_accept_thankyou(claim_id: int) -> None:
+    """Thank the claimant right after they accept the authorization — email (reliable) + WhatsApp
+    (best-effort, in-session), and record it on the claim timeline. No ClaimShield/L2 wording."""
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT insured_name, insured_email, insured_phone FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+    if not r:
+        return
+    name = (r["insured_name"] or "").split(" ")[0]
+    reg = f"NP-{claim_id}"
+    email = (r["insured_email"] or "").strip()
+    if email and "@" in email:
+        html = (f"<div style='font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.6'>"
+                f"<p>Namaste {_esc_html(name)} 🙏</p>"
+                f"<p>Thank you for confirming your authorization for claim <b>{reg}</b>. "
+                f"We're now taking your claim forward for further processing, and we'll keep you "
+                f"updated at every step. If we need any documents, we'll reach out on WhatsApp/email.</p>"
+                f"<p style='color:#444'>नमस्ते {_esc_html(name)} 🙏<br>आपके क्लेम <b>{reg}</b> के लिए "
+                f"अधिकार-पुष्टि के लिए धन्यवाद। अब हम आपके क्लेम को आगे की प्रक्रिया के लिए ले रहे हैं और "
+                f"हर चरण पर आपको अपडेट करते रहेंगे।</p>"
+                f"<p style='color:#888;font-size:13px'>— Team NidaanPartner</p></div>")
+        try:
+            await email_svc.send_email(to_email=email, subject=f"[NidaanPartner] Thank you — claim {reg} authorized",
+                                       html_body=html, from_name="Nidaan Partner")
+        except Exception:
+            pass
+    phone = (r["insured_phone"] or "").strip()
+    if phone:
+        try:
+            import biz_nidaan_whatsapp as _nwa
+            if _nwa.is_configured():
+                await _nwa.send_text(phone, f"Namaste {name} 🙏 Aapke claim {reg} ki authorization "
+                                            f"mil gayi — dhanyavaad! Ab hum aapka claim aage badha rahe hain "
+                                            f"aur har update aapko yahin denge. — Team NidaanPartner")
+        except Exception:
+            pass
+    try:
+        await nidaan.record_claim_activity(claim_id, "authorization_accepted", channel="system",
+                                           actor="claimant", summary="Claimant accepted authorization; thank-you sent")
+    except Exception:
+        pass
+
+
+def _esc_html(s: str) -> str:
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
 # ── Ops side: manage a claim's claimant portal (staff, from the L2 claim view) ──
