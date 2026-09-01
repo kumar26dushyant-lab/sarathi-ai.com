@@ -3764,11 +3764,20 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   params.set('limit','200');
   if (window._claimsArchivedView) params.set('archived_only','true');
 
-  const r = await API('/claims?' + params);
-  if (!r.ok) { document.getElementById('claimTableWrap').innerHTML='<div class="empty"><p>Failed to load claims</p></div>'; return; }
-  const d = await r.json();
-  _claimsCache = d.claims || [];
-  _renderClaimResults();
+  const _wrap = document.getElementById('claimTableWrap');
+  try {
+    const _ctrl = new AbortController();
+    const _to = setTimeout(()=>{ try{_ctrl.abort();}catch(e){} }, 15000);
+    const r = await API('/claims?' + params, { signal: _ctrl.signal });
+    clearTimeout(_to);
+    if (!r.ok) { if(_wrap) _wrap.innerHTML='<div class="empty"><p>Failed to load claims ('+r.status+'). <a href="#" onclick="applyClaimFilters();return false" style="color:var(--nd-cyan-text)">Retry</a></p></div>'; return; }
+    const d = await r.json();
+    _claimsCache = d.claims || [];
+    _renderClaimResults();
+  } catch(err) {
+    const msg = (err && err.name==='AbortError') ? 'Request timed out' : ('Error — '+String((err&&err.message)||err));
+    if(_wrap) _wrap.innerHTML='<div class="empty"><p>Could not load claims. '+esc(msg)+'. <a href="#" onclick="applyClaimFilters();return false" style="color:var(--nd-cyan-text)">Retry</a></p></div>';
+  }
 }
 // Client-side search over the cached claims — fast, no server round-trip, no focus loss. This
 // permanently fixes the "one letter at a time" lag: typing no longer rebuilds the panel/input.
