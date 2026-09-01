@@ -3729,16 +3729,15 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (plan)   document.getElementById('claimPlanFilter').value = plan;
   if (branch) document.getElementById('claimBranchFilter').value = branch;
   loadClaimAutoAssignState();
-  // Populate the Staff filter (it was created empty → the filter did nothing).
+  // Populate the Staff filter NON-BLOCKING (must never gate the claims list). Fire-and-forget.
   if (_role !== 'team_member') {
-    try {
-      const asg = await _loadAssigneesOnce();
+    _loadAssigneesOnce().then(asg => {
       const sel = document.getElementById('claimAssignFilter');
       if (sel && asg) {
         sel.innerHTML = '<option value="">All Staff</option>' + asg.map(a =>
           `<option value="${a.staff_id}"${String(assigned)===String(a.staff_id)?' selected':''}>${esc(a.name||('#'+a.staff_id))}</option>`).join('');
       }
-    } catch(e){}
+    }).catch(()=>{});
   }
 
   const params = new URLSearchParams();
@@ -3768,6 +3767,7 @@ let _claimSearchTimer;
 function _claimSearchDebounced(){ clearTimeout(_claimSearchTimer); _claimSearchTimer=setTimeout(_renderClaimResults, 160); }
 window._claimSearchDebounced=_claimSearchDebounced; window._renderClaimResults=function(){_renderClaimResults();};
 function _renderClaimResults(){
+ try {
   const claims = _filterClaimsBySearch(_claimsCache||[]);
   if (!claims.length) {
     document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
@@ -3835,6 +3835,9 @@ function _renderClaimResults(){
       ${archView?'<span style="color:var(--nd-text-faint);font-size:.74rem">Archived claims are hidden from all working views but never deleted.</span>':''}
     </div>` : '';
   document.getElementById('claimTableWrap').innerHTML = sw + toolbar + bodyHtml;
+ } catch(e){
+   try{ document.getElementById('claimTableWrap').innerHTML = '<div class="empty"><p>Could not render claims — '+esc(String((e&&e.message)||e))+'</p></div>'; }catch(_){}
+ }
 }
 function _setClaimsView(v){ localStorage.setItem('claims_view', v); applyClaimFilters(); }
 function _toggleClaimSel(id, on){ if(on) _claimSel.add(id); else _claimSel.delete(id);
