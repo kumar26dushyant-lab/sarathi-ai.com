@@ -507,25 +507,18 @@
   <!-- Saved-all-3-contacts confirmation prompt (shown after Turn On) -->
   <div id="waVcardModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target.id==='waVcardModalBg')document.getElementById('waVcardModalBg').style.display='none'">
     <div style="background:var(--nd-bg-base);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:480px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
-      <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 Save Both Nidaan Numbers</h2>
-      <p style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:1rem">
-        We may message you from either of these. Save both so our messages don't go to spam.
+      <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">📱 NidaanPartner on WhatsApp</h2>
+      <p style="font-size:.88rem;color:var(--nd-text-secondary);margin-bottom:1rem">
+        You'll receive your updates, reminders and messages from our <b>official NidaanPartner WhatsApp Business</b>. Please check and follow it — that's where we'll reach you for your claim.
       </p>
       <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.85rem;margin-bottom:.85rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border)">
-          <div><div style="font-weight:600">Nidaan Updates</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 98260 11116</div></div>
-          <button onclick="copyOfficial('+919826011116')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
-        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0">
-          <div><div style="font-weight:600">Nidaan Support</div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 95844 68804</div></div>
-          <button onclick="copyOfficial('+919584468804')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
+          <div><div style="font-weight:600">NidaanPartner <span style="font-size:.72rem;color:var(--nd-success-text)">✓ official</span></div><div style="font-family:monospace;color:var(--nd-text-muted);font-size:.85rem">+91 91836 86384</div></div>
+          <button onclick="copyOfficial('+919183686384')" class="btn-sm" style="background:var(--nd-bg-surface-2);color:var(--nd-text-primary);padding:.3rem .65rem;border-radius:5px">📋 Copy</button>
         </div>
       </div>
-      <a href="/nidaan/api/official-vcard" download="NidaanPartner.vcf" class="btn-sm btn-cyan" style="display:block;text-align:center;padding:.75rem;border-radius:8px;font-weight:700;margin-bottom:.65rem">
-        📥 Download both as contact card (.vcf)
-      </a>
       <div style="display:flex;gap:.5rem">
-        <button onclick="confirmSavedNumbers()" class="btn-sm btn-cyan" style="flex:1;padding:.65rem;border-radius:8px;font-weight:700">✓ I've saved them</button>
+        <button onclick="confirmSavedNumbers()" class="btn-sm btn-cyan" style="flex:1;padding:.65rem;border-radius:8px;font-weight:700">✓ Got it</button>
         <button onclick="document.getElementById('waVcardModalBg').style.display='none'" class="btn-sm" style="background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary);padding:.65rem 1rem;border-radius:8px">Later</button>
       </div>
     </div>
@@ -1543,7 +1536,7 @@ async function confirmSavedNumbers() {
   document.getElementById('waOptInCard').style.display = 'none';
   const t = document.createElement('div');
   t.style.cssText = 'position:fixed;top:1.25rem;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;border:1px solid #10b981;border-radius:10px;padding:.75rem 1.25rem;color:#d1fae5;font-weight:600;font-size:.9rem;box-shadow:0 8px 32px rgba(0,0,0,.4)';
-  t.innerHTML = '🔔 WhatsApp updates enabled. We’ll message you from our official numbers only.';
+  t.innerHTML = '🔔 Great! You’ll get updates from our official NidaanPartner WhatsApp Business.';
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 5000);
 }
