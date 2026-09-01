@@ -5950,6 +5950,142 @@ async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int 
     return {"activity": rows, "count": len(rows)}
 
 
+# ── CRM (marketing/sales) — leads pipeline ────────────────────────────────────
+class _CrmLeadReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=120)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=120)
+    company: str = Field("", max_length=120)
+    city: str = Field("", max_length=80)
+    source: str = Field("", max_length=40)
+    owner_staff_id: Optional[int] = None
+    interest: str = Field("", max_length=200)
+    notes: str = Field("", max_length=2000)
+    next_action: str = Field("", max_length=200)
+    next_followup_at: str = Field("", max_length=25)
+
+
+class _CrmUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    stage: Optional[str] = None
+    owner_staff_id: Optional[int] = None
+    next_action: Optional[str] = None
+    next_followup_at: Optional[str] = None
+    interest: Optional[str] = None
+    notes: Optional[str] = None
+    lost_reason: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    city: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+class _CrmCommentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+async def _crm_notify_assignment(lead_id: int, owner_staff_id: int, lead_name: str, by: str) -> None:
+    try:
+        import biz_nidaan_notifications as _nnot
+        subj = f"🎯 New lead assigned: {lead_name}"
+        body = f"{by} assigned you a CRM lead: {lead_name} (#{lead_id}).\nOpen ops → CRM to work it."
+        await _nnot.notify_staff_inapp([owner_staff_id], subj, body, event_key="crm.assigned", email=True)
+        await _nnot._telegram_mirror(owner_staff_id, f"{subj}\n\n{body}", url="/nidaan/ops")
+    except Exception:
+        pass
+
+
+@app.get("/nidaan/ops/api/crm/leads")
+async def crm_list_leads(request: Request, stage: str = "", owner: Optional[int] = None,
+                         search: str = "", archived: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    mine = None if is_admin else staff["staff_id"]
+    leads = await _crm.list_leads(stage=stage, owner_staff_id=owner, search=search,
+                                  archived=archived, mine_staff_id=mine)
+    counts = await _crm.pipeline_counts(mine_staff_id=mine)
+    return {"leads": leads, "counts": counts, "stages": _crm.STAGES,
+            "stage_labels": _crm.STAGE_LABELS, "is_admin": is_admin}
+
+
+@app.post("/nidaan/ops/api/crm/leads")
+@limiter.limit("60/minute")
+async def crm_create_lead(body: _CrmLeadReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    owner = body.owner_staff_id or staff["staff_id"]
+    lead_id = await _crm.create_lead(
+        name=body.name, phone=body.phone, email=body.email, company=body.company, city=body.city,
+        source=body.source, owner_staff_id=owner, interest=body.interest, notes=body.notes,
+        next_action=body.next_action, next_followup_at=body.next_followup_at,
+        created_by_staff_id=staff["staff_id"], created_by_name=_actor_label(staff))
+    if owner and owner != staff["staff_id"]:
+        await _crm_notify_assignment(lead_id, owner, body.name, _actor_label(staff))
+    await _ops_audit(request, "crm.lead_create", "crm_lead", str(lead_id), body.name)
+    return {"ok": True, "lead_id": lead_id}
+
+
+@app.get("/nidaan/ops/api/crm/leads/{lead_id}")
+async def crm_get_lead(lead_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    lead = await _crm.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
+
+@app.patch("/nidaan/ops/api/crm/leads/{lead_id}")
+async def crm_update_lead(lead_id: int, body: _CrmUpdateReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    fields = body.model_dump(exclude_none=True)
+    prev = await _crm.get_lead(lead_id)
+    if not prev:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    ok = await _crm.update_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff), **fields)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    new_owner = fields.get("owner_staff_id")
+    if new_owner and new_owner != prev.get("owner_staff_id") and new_owner != staff["staff_id"]:
+        await _crm_notify_assignment(lead_id, new_owner, prev.get("name", ""), _actor_label(staff))
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/crm/leads/{lead_id}/comment")
+async def crm_add_comment(lead_id: int, body: _CrmCommentReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    cid = await _crm.add_comment(lead_id, body.body, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
+    return {"ok": True, "act_id": cid}
+
+
+@app.post("/nidaan/ops/api/crm/leads/{lead_id}/convert")
+async def crm_convert_lead(lead_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    await _crm.convert_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
+    await _ops_audit(request, "crm.lead_won", "crm_lead", str(lead_id), "marked won")
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/payments/health")
 async def nidaan_ops_payment_health(request: Request, run: bool = False):
     """Payment-health funnel + anomalies (from the watchdog). super_admin. `run=true` re-scans now."""

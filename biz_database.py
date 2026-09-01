@@ -1260,6 +1260,48 @@ async def init_db():
                 updated_at      TIMESTAMP
             );
 
+            -- ═══ CRM (marketing/sales) — leads pipeline + per-lead timeline ══════════════
+            -- Drives the marketing team so no lead/follow-up is missed. Reuses the notification
+            -- engine; the AI acts as a "team lead" suggesting next steps. Leads = prospective
+            -- advisors/subscribers (distinct from claim leads). A won lead links to a nidaan_account.
+            CREATE TABLE IF NOT EXISTS nidaan_crm_leads (
+                lead_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                TEXT NOT NULL,
+                phone               TEXT DEFAULT '',
+                email               TEXT DEFAULT '',
+                company             TEXT DEFAULT '',      -- firm / agency
+                city                TEXT DEFAULT '',
+                source              TEXT DEFAULT '',      -- referral|ad|inbound|walk-in|campaign|...
+                stage               TEXT DEFAULT 'new',   -- new|contacted|interested|demo|negotiation|won|lost
+                owner_staff_id      INTEGER,              -- assigned marketing/sales staff
+                next_action         TEXT DEFAULT '',
+                next_followup_at    TIMESTAMP,            -- when to follow up next (drives reminders)
+                interest            TEXT DEFAULT '',      -- plan/value interest
+                notes               TEXT DEFAULT '',
+                converted_account_id INTEGER,             -- set when WON
+                lost_reason         TEXT DEFAULT '',
+                archived            INTEGER DEFAULT 0,
+                created_by_staff_id INTEGER,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at          TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_crm_owner    ON nidaan_crm_leads(owner_staff_id);
+            CREATE INDEX IF NOT EXISTS idx_crm_stage    ON nidaan_crm_leads(stage);
+            CREATE INDEX IF NOT EXISTS idx_crm_followup ON nidaan_crm_leads(next_followup_at);
+
+            -- Per-lead timeline: comments, stage moves, assignments, follow-ups, AI suggestions.
+            CREATE TABLE IF NOT EXISTS nidaan_crm_activity (
+                act_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id       INTEGER NOT NULL,
+                kind          TEXT NOT NULL,        -- comment|stage|assign|followup|created|ai_suggest|won|lost
+                body          TEXT DEFAULT '',
+                by_staff_id   INTEGER,
+                by_name       TEXT DEFAULT '',
+                meta          TEXT DEFAULT '',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_crmact_lead ON nidaan_crm_activity(lead_id);
+
             -- Business-analytics event log. Every meaningful attempt/outcome is appended here so
             -- the super-admin analytics dashboard can segment signups / one-time / subscribers /
             -- failures / abandonment BY CHANNEL in real time. Append-only; never mutated in place.
