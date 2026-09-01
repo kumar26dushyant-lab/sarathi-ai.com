@@ -17,6 +17,8 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - **Claim pipeline (one workspace, stage+origin views)** replacing the 3-section confusion — build TILL L2 now; **leave space AFTER L2** for post-L2 stages (drafting, Lokpal: 3 insurer reminders + 30-day wait, claimant email-ID creation tied to the email-forwarding radar). Then resolved.
 - **Accounts stays separate** (people directory) but keep the **plan/paid/capping double-check** visible.
 - Awaiting: founder's **document list per claim type** → load into checklist templates for the WhatsApp bot.
+- ✅ Authorization notifications no longer say ClaimShield/L2/release → "taking the claim forward for further processing"; claimant gets a thank-you (email + WA) on acceptance.
+- **Email radar — SIMPLIFY (founder model):** connect ONE mailbox `info@nidaanpartner.com` (app password) → forward ALL customers' emails there → radar scans this single inbox + surfaces important ones → team opens the mailbox to read. (Drop the multi-Gmail approach; forwarding is easy, one app password only.) Build when picked up.
 
 
 ### 🟡 In progress — PAYMENT RELIABILITY (founder: "I don't want any payment issue in future")
