@@ -2300,6 +2300,12 @@ async function doSubscribe() {
       });
       if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
       try { if (window.NidaanTrack) NidaanTrack.startFlow('pay', 'subscription'); } catch(e){}
+      rzpSub.on('payment.failed', function(){
+        msg.className = 'msg err';
+        msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।'
+                               : 'Payment could not be completed — you were NOT charged. Please try again.';
+        btn.disabled = false;
+      });
       rzpSub.open();
     } else {
       // ── One-time Order flow (existing, also used for annual plans) ─────────
@@ -2390,6 +2396,13 @@ async function doSubscribe() {
       if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
       closeSubscribeModal();
       const rzp = new Razorpay(opts);
+      rzp.on('payment.failed', function(){
+        const b = document.getElementById('subBanner');
+        if (b) { b.className = 'sub-banner'; b.style.display = '';
+          b.innerHTML = '<div class="sub-banner-text" style="color:#f87171">'
+            + '<strong class="en">Payment could not be completed — you were NOT charged. Please try again.</strong>'
+            + '<strong class="hi">भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।</strong></div>'; }
+      });
       rzp.open();
     }
   } catch(err) {
