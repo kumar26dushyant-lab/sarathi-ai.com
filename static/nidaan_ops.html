@@ -3315,6 +3315,20 @@ function _payBadge(ps) {
   if (ps === 'subscription') return '<span title="Covered by subscription" style="background:#1e3a8a;color:#93c5fd;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">SUB</span>';
   return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:var(--nd-success-text);font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
 }
+// Canonical pay+L2 badge — ONE representation used in EVERY view (Claims Dashboard, All Claims,
+// L2) so the same claim never reads three different ways. Review-pay (LEAD/PAID/SUB) + an L2
+// chip once the claim has reached Level-2 (reviewed GO). This is the unified-claim-model badge.
+function _uPay(c){
+  const base = _payBadge(c.payment_status);
+  if ((c.review_outcome||'') === 'can_fight') {
+    const covered = (c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription');
+    return base + (covered
+      ? ' <span title="At Level-2 — fee covered/paid" style="background:#064e3b;color:var(--nd-success-text);font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px">L2 ✓</span>'
+      : ' <span title="At Level-2 — L2 fee due" style="background:#78350f;color:#fcd34d;font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px">L2 due</span>');
+  }
+  return base;
+}
+window._uPay=_uPay;
 function setOpsPayFilter(ps) {
   _opsPayFilter = (_opsPayFilter === ps) ? '' : ps;  // toggle
   renderActiveClaimsWidget(window._ovStatusFilter || '', window._ovSearch || '');
@@ -3354,7 +3368,7 @@ async function renderActiveClaimsWidget(statusFilter, search) {
       <td>${esc(c.claim_type||'—')}</td>
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
-      <td>${_payBadge(c.payment_status)}</td>
+      <td>${_uPay(c)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
       <td style="font-size:.75rem;color:var(--nd-text-muted)">${esc(c.owner_name||'—')}</td>
       <td style="font-size:.75rem;color:var(--nd-text-muted)">${esc(c.assigned_staff_name||'—')}</td>
@@ -3642,7 +3656,7 @@ function _renderOutcome(key){
         }
         return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
         <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
-        <td>${esc(c.insured_name)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
+        <td>${esc(c.insured_name)} ${_payBadge(c.payment_status)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
         + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
@@ -3826,7 +3840,7 @@ function _renderClaimResults(){
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
       <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
-      <td>${payPill(c)}</td>
+      <td>${_uPay(c)}</td>
       <td style="font-size:.8rem">${_sourceBadge(c)}</td>
       <td style="font-size:.72rem;line-height:1.5">${_authBadge(c)}<br>${_portalBadge(c)}</td>
       <td>${esc(c.assigned_staff_name||'—')}</td>

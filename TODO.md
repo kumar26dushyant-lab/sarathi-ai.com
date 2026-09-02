@@ -84,6 +84,12 @@ Unified payment ledger + reconciliation · governance/mark-paid audit · super-a
 ---
 
 ## ⚙️ SHARED / INFRA
+
+### 🔴 INFRA MIGRATION + COST CUT (founder — do ~Sep 3 holiday)
+- **Move whole stack (Sarathi + NidaanPartner + GoLuQ) Contabo → Oracle Always-Free**, then separate apps. Apps are tiny (DB 15M, disk 5%, RAM 7% on Contabo) — fits free tier easily. Domains unchanged → WhatsApp + Razorpay webhooks need NO reconfig, only DNS→new IP.
+- Plan: (1) cancel unused paid extras first — **Evolution VPS + proxies dead** (on official Meta WA now), marketing-studio big-server on hold → **need founder's list of paid services (Hetzner + what each runs)**; (2) lift-and-shift to Oracle in PARALLEL, copy 15M DB, verify, DNS cutover (near-zero downtime, instant rollback), keep encrypted off-server backups; (3) app separation on Oracle — define level: (a) independent services same box / (b) separate DBs / (c) separate codebases. GoLuQ (`goluq.service` + /opt/goluq) is on Contabo too → moves with it.
+- Risks: Oracle Always-Free ARM reclaim-if-idle (mitigate: keep active + backups), TLS + Oracle security-list ports (deploy guide covers). `DEPLOY_ORACLE_CLOUD.md` exists.
+
 - ✅ **SMTP live** (Gmail app-password via `nidaanpartner@gmail.com`; secured in `biz.env`).
 - Staging env (port 8003, `staging` branch): awaiting DNS + TLS.
 - Off-server encrypted backups: live.
