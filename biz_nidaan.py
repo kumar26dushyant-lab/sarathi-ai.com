@@ -2016,6 +2016,10 @@ async def submit_claim(
     payment_status: str = "subscription",
     skip_eligibility: bool = False,
     origin: str = "",
+    complainant_name: str = "",
+    complainant_phone: str = "",
+    complainant_email: str = "",
+    complainant_role: str = "",
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -2039,21 +2043,29 @@ async def submit_claim(
 
     insured_name = _capname(insured_name)   # #6: store names in caps
     type_specific_json = json.dumps(type_specific or {})
+    # Complainant = presenter/contact who provides documents. Defaults to the insured (patient)
+    # when the form doesn't distinguish, so existing callers keep working unchanged.
+    complainant_name = _capname(complainant_name) or insured_name
+    complainant_phone = (complainant_phone or "").strip() or insured_phone
+    complainant_email = (complainant_email or "").strip() or insured_email
+    complainant_role = (complainant_role or "").strip() or ("branch" if (origin or "") == "branch" else "self")
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             """INSERT INTO nidaan_claims
                (account_id, user_id, claim_type, insured_name, insured_phone,
                 insured_email, insurer_name, policy_no, disputed_amount,
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
-                notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin,
+                complainant_name, complainant_phone, complainant_email, complainant_role)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
              type_specific_json, notes_from_agent,
              (intermediary_code or "").strip(), (intermediary_name or "").strip(),
              (branch_code or "").strip().upper(),
-             payment_status, (origin or "").strip()),
+             payment_status, (origin or "").strip(),
+             complainant_name, complainant_phone, complainant_email, complainant_role),
         )
         claim_id = cur.lastrowid
         await conn.execute(

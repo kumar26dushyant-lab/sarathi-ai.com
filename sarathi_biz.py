@@ -814,28 +814,34 @@ async def nidaan_branch_account_detail(account_id: int, request: Request):
     return {"account": account, "claims": claims, "reviews": reviews}
 
 
-def _clean_insured_contact(insured_phone: str, insured_email: str):
-    """Phase 2: enforce a valid 10-digit mobile + a valid email for the CLAIMANT (insured) at
-    EVERY claim-creation endpoint. The email is VERIFIED later when the claimant opens the L2
-    authorization magic-link (no OTP at creation for mediated claims). Returns (phone10, email);
-    raises HTTPException(400) with a plain-language message on failure."""
-    phone = "".join(ch for ch in (insured_phone or "") if ch.isdigit())
+def _clean_complainant_contact(phone_in: str, email_in: str):
+    """Enforce a valid 10-digit mobile + a valid email for the COMPLAINANT (the person presenting
+    the case and providing documents) at every claim-creation endpoint — this is our comms point.
+    Returns (phone10, email); raises HTTPException(400) with a plain-language message on failure."""
+    phone = "".join(ch for ch in (phone_in or "") if ch.isdigit())
     if len(phone) >= 11 and phone.startswith("91"):
         phone = phone[-10:]
     if len(phone) != 10:
-        raise HTTPException(400, "Enter a valid 10-digit mobile number for the claimant")
-    email = auth.sanitize_email(insured_email or "")
+        raise HTTPException(400, "Enter a valid 10-digit mobile number for the complainant")
+    email = auth.sanitize_email(email_in or "")
     if not email:
-        raise HTTPException(400, "Enter a valid email for the claimant — we email them the "
-                                 "authorization link when the claim reaches Level-2")
+        raise HTTPException(400, "Enter a valid email for the complainant — that's where we send "
+                                 "document requests and updates")
     return phone, email
 
 
 # ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
 class _BranchClaimReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    # Complainant = the contact who presents the case + provides documents (our comms point).
+    # When a form sends these, THEY are the mandatory contact. Optional here so the ops form (which
+    # still sends insured_*) keeps working — the endpoint falls back to insured_* as the complainant.
+    complainant_name: str = Field("", max_length=120)
+    complainant_phone: str = Field("", max_length=15)
+    complainant_email: str = Field("", max_length=120)
+    # Insured (patient) — name required (every form sends a name); phone now optional (patient's).
     insured_name: str = Field(..., min_length=1, max_length=120)
-    insured_phone: str = Field(..., max_length=15)
+    insured_phone: str = Field("", max_length=15)
     insured_email: str = Field("", max_length=120)
     claim_type: str = Field(..., max_length=40)
     insurer_name: str = Field("", max_length=120)
@@ -851,15 +857,24 @@ async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     code = _branch_bearer(request)
     if not code: raise HTTPException(401, "Unauthorized")
-    phone, email = _clean_insured_contact(body.insured_phone, body.insured_email)
+    # Complainant = the contact who provides documents (mandatory). Falls back to the insured
+    # fields when a form doesn't split them (keeps older callers working).
+    _cname = (body.complainant_name or body.insured_name or "").strip()
+    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
+                                                body.complainant_email or body.insured_email)
+    # Insured (patient): name from the patient field (or the complainant); phone optional.
+    _iname = (body.insured_name or _cname).strip()
+    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
     house_account = await nidaan.get_or_create_branch_house_account(code)
     claim_id, msg = await nidaan.submit_claim(
         account_id=house_account, user_id=None,
-        claim_type=(body.claim_type or "").strip(), insured_name=body.insured_name.strip(),
-        insured_phone=phone, insured_email=email, insurer_name=(body.insurer_name or "").strip(),
+        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
+        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
-        payment_status="unpaid_lead", skip_eligibility=True, origin="branch")
+        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
+        complainant_role="branch")
     if not claim_id:
         raise HTTPException(400, msg or "Could not raise claim")
     try:
@@ -3150,7 +3165,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     if not body.claim_type or not body.insured_name or not body.insured_phone:
         raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
     # Phase 2: claimant mobile + email mandatory (email verified later via the L2 magic-link).
-    _ins_phone, _ins_email = _clean_insured_contact(body.insured_phone, body.insured_email)
+    _ins_phone, _ins_email = _clean_complainant_contact(body.insured_phone, body.insured_email)
     # ₹499 value-first funnel: determine the payment path.
     #   • Active subscription  → 'subscription' (consumes quota, review starts now)
     #   • Paid ₹499 per-claim  → 'paid'         (review starts now)
@@ -7067,15 +7082,21 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
     exactly like a branch. The L2 fee (if any) is charged later only on a GO review."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     _staff, code = await _staff_claim_code(request)
-    phone, email = _clean_insured_contact(body.insured_phone, body.insured_email)
+    _cname = (body.complainant_name or body.insured_name or "").strip()
+    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
+                                                body.complainant_email or body.insured_email)
+    _iname = (body.insured_name or _cname).strip()
+    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
     house_account = await nidaan.get_or_create_branch_house_account(code)
     claim_id, msg = await nidaan.submit_claim(
         account_id=house_account, user_id=None,
-        claim_type=(body.claim_type or "").strip(), insured_name=body.insured_name.strip(),
-        insured_phone=phone, insured_email=email, insurer_name=(body.insurer_name or "").strip(),
+        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
+        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
-        payment_status="unpaid_lead", skip_eligibility=True, origin="branch")
+        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
+        complainant_role="staff")
     if not claim_id:
         raise HTTPException(400, msg or "Could not raise claim")
     try:

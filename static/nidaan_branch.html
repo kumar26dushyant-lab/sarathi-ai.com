@@ -164,10 +164,21 @@
   <div class="card">
     <div style="font-weight:700;margin-bottom:.4rem;color:var(--nd-text-primary)">📝 Raise a claim for your customer</div>
     <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Rejected or underpaid claim? Submit it here — Nidaan reviews it and tells you if it can go to Level-2 legal. You'll only pay the Level-2 fee if it's a go.</div>
+    <div style="font-size:.72rem;font-weight:800;color:var(--nd-cyan-text);text-transform:uppercase;letter-spacing:.05em;margin:.2rem 0 .35rem">Complainant — who is giving us the case &amp; documents</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem">
+      <input id="bcCompName" placeholder="Complainant full name *" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
+      <input id="bcCompPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Mobile (10-digit) *" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
+      <input id="bcCompEmail" type="email" placeholder="Email *" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
+    </div>
+    <div style="font-size:.72rem;color:var(--nd-text-faint);margin:.3rem 0 .5rem">📩 We'll send all document requests &amp; updates here — give the mobile &amp; email of whoever will share the documents.</div>
+    <label style="display:flex;gap:.45rem;align-items:center;font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:.4rem;cursor:pointer">
+      <input type="checkbox" id="bcInsDiff" onchange="document.getElementById('bcInsRow').style.display=this.checked?'grid':'none'"> Insured (patient) is a different person
+    </label>
+    <div id="bcInsRow" style="display:none;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;margin-bottom:.5rem">
+      <input id="bcInsName" placeholder="Insured / patient name" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
+      <input id="bcInsPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Insured mobile (optional)" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem" id="bcGrid">
-      <input id="bcName" placeholder="Customer full name" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
-      <input id="bcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Customer mobile (10-digit)" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-      <input id="bcEmail" type="email" placeholder="Customer email (required)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
       <select id="bcType" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
         <option value="">Claim type…</option>
         <option value="health">Health</option><option value="life">Life</option>
@@ -482,20 +493,23 @@ async function loadBranchClaims(){
 async function raiseBranchClaim(){
   const msg=$('bcMsg'), btn=$('bcSubmitBtn');
   const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'var(--nd-text-muted)'); };
-  const name=($('bcName').value||'').trim();
-  const phone=($('bcPhone').value||'').replace(/[^0-9]/g,'');
-  const email=($('bcEmail').value||'').trim();
+  const cname=($('bcCompName').value||'').trim();
+  const cphone=($('bcCompPhone').value||'').replace(/[^0-9]/g,'');
+  const cemail=($('bcCompEmail').value||'').trim();
+  const insName=($('bcInsName').value||'').trim();
+  const insPhone=($('bcInsPhone').value||'').replace(/[^0-9]/g,'');
   const type=$('bcType').value;
   const rej=$('bcRejFile').files[0];
-  if(!name){ setMsg('Enter the customer name.',false); return; }
-  if(phone.length!==10){ setMsg('Enter a valid 10-digit customer mobile.',false); return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setMsg('Enter a valid customer email — we email them the authorization link at Level-2.',false); return; }
+  if(!cname){ setMsg('Enter the complainant name.',false); return; }
+  if(cphone.length!==10){ setMsg('Enter a valid 10-digit complainant mobile.',false); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cemail)){ setMsg('Enter a valid complainant email — we send document requests & updates there.',false); return; }
   if(!type){ setMsg('Select a claim type.',false); return; }
   if(!rej){ setMsg('Attach the rejection letter — it is required.',false); return; }
   btn.disabled=true; setMsg('Submitting…');
   try{
     const r=await fetch('/nidaan/branch/api/claims',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},
-      body:JSON.stringify({insured_name:name,insured_phone:phone,insured_email:email,claim_type:type,
+      body:JSON.stringify({complainant_name:cname, complainant_phone:cphone, complainant_email:cemail,
+        insured_name:(insName||cname), insured_phone:insPhone, claim_type:type,
         insurer_name:($('bcInsurer').value||'').trim(),policy_no:($('bcPolicy').value||'').trim(),
         disputed_amount:parseInt($('bcAmount').value)||null,notes:($('bcNotes').value||'').trim()})});
     const d=await r.json().catch(()=>({}));
@@ -503,8 +517,9 @@ async function raiseBranchClaim(){
     try{ const fd=new FormData(); fd.append('files',rej);
       await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',{method:'POST',headers:authHeaders(),body:fd}); }catch(_){}
     setMsg('Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.',true);
-    ['bcName','bcPhone','bcEmail','bcInsurer','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
+    ['bcCompName','bcCompPhone','bcCompEmail','bcInsName','bcInsPhone','bcInsurer','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
     $('bcType').value=''; $('bcRejFile').value='';
+    try{ $('bcInsDiff').checked=false; $('bcInsRow').style.display='none'; }catch(_){}
     loadBranchClaims();
   }catch(e){ setMsg(e.message,false); }
   btn.disabled=false;
