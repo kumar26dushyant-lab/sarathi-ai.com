@@ -189,6 +189,55 @@ async def _save_wa_doc(account_id, claim_id: int, doc_key: str, pdf_bytes: bytes
         return None
 
 
+# Lifecycle event → approved-template name. Fill these in once templates are approved in Meta;
+# until then a COLD (out-of-session) send logs "needs template" rather than failing loudly.
+JOURNEY_TEMPLATES = {
+    "welcome": "", "intro_value": "", "claim_registered": "",
+    "thank_you_payment": "", "payment_failed": "",
+}
+
+
+async def wa_journey(claim_id: int, event: str, extra: dict | None = None) -> dict:
+    """Send a lifecycle WhatsApp message to the claim's COMPLAINANT (welcome / intro_value /
+    claim_registered / thank_you_payment / payment_failed). In-session → free-form text; cold →
+    approved template (logs 'needs template' until they exist). Records on the claim timeline. Safe."""
+    try:
+        if not _wa.is_configured():
+            return {"ok": False, "error": "not_configured"}
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT claim_id, complainant_name, complainant_phone, complainant_email, insured_name, "
+                "insured_phone, claim_type FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not r:
+            return {"ok": False, "error": "no_claim"}
+        claim = dict(r)
+        phone = (claim.get("complainant_phone") or claim.get("insured_phone") or "").strip()
+        if not phone:
+            return {"ok": False, "error": "no_phone"}
+        msisdn = _wa.normalize_msisdn(phone)
+        lang = await _lang(msisdn)
+        ctx = {"name": (claim.get("complainant_name") or claim.get("insured_name") or "").split(" ")[0],
+               "claim_id": claim_id, "insured_name": claim.get("insured_name") or ""}
+        if extra:
+            ctx.update(extra)
+        text = _msg.compose(event, lang, ctx)
+        import biz_nidaan_wa_flow as _flow
+        if await _flow.in_session_window(msisdn):
+            res = await _wa.send_text(msisdn, text)
+        else:
+            tmpl = JOURNEY_TEMPLATES.get(event, "")
+            res = await _wa.send_template(msisdn, tmpl) if tmpl else {"ok": False, "error": "needs_template"}
+        await _activity(claim_id, f"wa_{event}", summary=(
+            f"WhatsApp {event} → complainant" + ("" if res.get("ok") else
+            (" (queued — needs approved template)" if res.get("error") == "needs_template" else
+             f" (not sent: {res.get('error')})"))))
+        return res
+    except Exception as e:  # noqa: BLE001
+        logger.warning("wa_journey %s failed claim=%s: %s", event, claim_id, e)
+        return {"ok": False, "error": str(e)[:120]}
+
+
 async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
     """Ops-triggered start: greet the claimant + ask the first pending doc. Free-form delivers only
     inside a 24h session; a cold start needs an approved template (returns needs_template hint)."""

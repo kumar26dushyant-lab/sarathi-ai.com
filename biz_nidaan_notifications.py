@@ -1650,6 +1650,12 @@ async def on_claim_filed(claim_id: int, account_id: int):
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
                   f"Open: /admin?account={account_id}"),
             claim_id=claim_id, account_id=account_id)
+    # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.wa_journey(claim_id, "claim_registered")
+    except Exception as e:
+        logger.warning("on_claim_filed wa_journey failed claim %s: %s", claim_id, e)
 
 
 async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
@@ -1691,6 +1697,12 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
             await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
         except Exception:
             pass
+    # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.wa_journey(claim_id, "claim_registered")
+    except Exception as e:
+        logger.warning("on_ops_claim_raised wa_journey failed claim %s: %s", claim_id, e)
 
 
 async def on_claimant_accepted(claim_id: int):

@@ -70,6 +70,44 @@ def thank_you_payment(ctx: dict, lang: str = "hinglish") -> str:
     return hi_ + _SIGN[l]
 
 
+def intro_value(ctx: dict, lang: str = "hinglish") -> str:
+    """Warm, emotionally-connecting intro after welcome — what NidaanPartner does + a gentle ask.
+    Built to build trust and convert. Kept human, not salesy."""
+    l = _lang(lang); name = ctx.get("name") or ""
+    hi_ = {
+        "hinglish": (f"{name}, hum samajhte hain — jab mehnat ki kamai se liya insurance claim reject ya "
+                     f"kam ho jaata hai, to bahut takleef hoti hai. 😔\n\n*NidaanPartner* aapke jaise logon "
+                     f"ke liye hi bana hai — hamari legal team aapke reject/underpaid claim ko ladti hai, "
+                     f"documents se lekar company se baat tak, sab hum sambhalte hain.\n\nAap bas itna "
+                     f"bataiye — aapka claim kis cheez ka hai aur kya problem aayi? Hum aage ka raasta "
+                     f"batayenge. Rejection ka matlab ant nahi — aapke claim me abhi dum baaki hai. 💪"),
+        "hi": (f"{name}, हम समझते हैं — मेहनत की कमाई से लिया इंश्योरेंस क्लेम जब रिजेक्ट या कम हो जाता है, "
+               f"तो बहुत तकलीफ़ होती है। 😔\n\n*NidaanPartner* आप जैसे लोगों के लिए ही बना है — हमारी लीगल टीम "
+               f"आपके रिजेक्ट/कम भुगतान वाले क्लेम को लड़ती है; दस्तावेज़ से लेकर कंपनी से बात तक सब हम संभालते हैं।\n\n"
+               f"आप बस इतना बताइए — आपका क्लेम किस चीज़ का है और क्या दिक्कत आई? रिजेक्शन का मतलब अंत नहीं — "
+               f"आपके क्लेम में अभी दम बाकी है। 💪"),
+        "en": (f"{name}, we understand — when a hard-earned insurance claim is rejected or underpaid, it "
+               f"really hurts. 😔\n\n*NidaanPartner* exists for people like you — our legal team fights your "
+               f"rejected/underpaid claim end to end, from documents to dealing with the company.\n\nJust "
+               f"tell us — what is your claim for, and what went wrong? We'll show you the way forward. A "
+               f"rejection isn't the end — your claim still has a fighting chance. 💪"),
+    }[l]
+    return hi_ + _SIGN[l]
+
+
+def payment_failed(ctx: dict, lang: str = "hinglish") -> str:
+    l = _lang(lang)
+    hi_ = {
+        "hinglish": ("Aapka payment poora nahi ho paaya — aapse koi paisa nahi kata. 🙏 Koi baat nahi, "
+                     "dobara try karein ya humein yahin bataayein, hum madad kar denge."),
+        "hi": ("आपका भुगतान पूरा नहीं हो पाया — आपसे कोई पैसा नहीं कटा। 🙏 कोई बात नहीं, दोबारा कोशिश करें या "
+               "हमें यहीं बताएं, हम मदद कर देंगे।"),
+        "en": ("Your payment didn't go through — you were NOT charged. 🙏 No worries, please try again or "
+               "tell us here and we'll help."),
+    }[l]
+    return hi_ + _SIGN[l]
+
+
 def doc_reminder(ctx: dict, lang: str = "hinglish") -> str:
     """Ask for ONE specific next document, with progress."""
     l = _lang(lang); doc = ctx.get("doc_label") or ""; done = ctx.get("done", 0); total = ctx.get("total", 0)
@@ -142,7 +180,8 @@ def docs_complete(ctx: dict, lang: str = "hinglish") -> str:
 
 # Dispatch table so the orchestrator can call compose(kind, lang, ctx) generically.
 _COMPOSERS = {
-    "welcome": welcome, "claim_registered": claim_registered, "thank_you_payment": thank_you_payment,
+    "welcome": welcome, "intro_value": intro_value, "claim_registered": claim_registered,
+    "thank_you_payment": thank_you_payment, "payment_failed": payment_failed,
     "doc_reminder": doc_reminder, "doc_received_ok": doc_received_ok, "doc_wrong": doc_wrong,
     "doc_quality": doc_quality, "docs_complete": docs_complete,
 }
