@@ -3313,7 +3313,7 @@ let _opsPayFilter = '';   // '' | 'unpaid_lead' | 'paid' | 'subscription'
 function _payBadge(ps) {
   if (ps === 'unpaid_lead') return '<span title="Free lead — not yet paid" style="background:#7c2d12;color:#fdba74;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px;letter-spacing:.04em">LEAD</span>';
   if (ps === 'subscription') return '<span title="Covered by subscription" style="background:#1e3a8a;color:#93c5fd;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">SUB</span>';
-  return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:var(--nd-success-text);font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
+  return '<span title="₹499 paid — SLA running" style="background:#064e3b;color:#6ee7b7;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:4px">PAID</span>';
 }
 // Canonical pay+L2 badge — ONE representation used in EVERY view (Claims Dashboard, All Claims,
 // L2) so the same claim never reads three different ways. Review-pay (LEAD/PAID/SUB) + an L2
@@ -3323,7 +3323,7 @@ function _uPay(c){
   if ((c.review_outcome||'') === 'can_fight') {
     const covered = (c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription');
     return base + (covered
-      ? ' <span title="At Level-2 — fee covered/paid" style="background:#064e3b;color:var(--nd-success-text);font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px">L2 ✓</span>'
+      ? ' <span title="At Level-2 — fee covered/paid" style="background:#064e3b;color:#6ee7b7;font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px">L2 ✓</span>'
       : ' <span title="At Level-2 — L2 fee due" style="background:#78350f;color:#fcd34d;font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px">L2 due</span>');
   }
   return base;
@@ -4832,12 +4832,12 @@ async function openClaimDrawer(claimId) {
       <h4>Branch &amp; Level-2</h4>
       <div class="kv"><span class="kv-label">Origin</span><span class="kv-val">Branch${c.branch_code?(' · '+esc(c.branch_code)):''}</span></div>
       <div class="kv"><span class="kv-label">Review</span><span class="kv-val">${
-        c.review_outcome==='can_fight'?'<span style="background:#065f46;color:var(--nd-success-text);padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Can be challenged (GO)</span>'
+        c.review_outcome==='can_fight'?'<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Can be challenged (GO)</span>'
         :(c.review_outcome==='no_scope'?'<span style="background:#7c2d12;color:#fdba74;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">No scope</span>':'—')
       }</span></div>
       <div class="kv"><span class="kv-label">Level-2</span><span class="kv-val">${
         c.l2_payment_status==='paid'
-          ? '<span style="background:#065f46;color:var(--nd-success-text);padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' paid'):'no charge')+'</span>'
+          ? '<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' paid'):'no charge')+'</span>'
           : (c.review_outcome==='can_fight'?'<span style="background:#78350f;color:#fcd34d;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Awaiting branch payment</span>':'—')
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
