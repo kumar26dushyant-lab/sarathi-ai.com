@@ -1,5 +1,25 @@
 # Staff Announcement Drafts
 
+## 2026-09-03 — New: one Claim Pipeline (see every claim by stage)
+
+**Title (EN):**
+🗂️ New Claim Pipeline — every claim, by stage, in one place
+
+**Details (EN):**
+Team, there's a new **🗂️ Claim Pipeline** in ops (top of the Work menu). It puts every active claim into one board, arranged by its real stage — Leads → New → Assigned → In Review → L2 (fee due / active) → Resolved. Use the chips on top to filter by how the claim came in (Subscriber / Branch / Staff / ₹499 / Direct), or search by name. Click any card to open the claim exactly as before. The old Claims Dashboard, All Claims and L2 screens still work — the Pipeline just brings them together so nothing is confusing or hidden. Try it and tell us what helps.
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🗂️ नया Claim Pipeline — हर क्लेम, स्टेज के हिसाब से, एक जगह
+
+**Details (HI):**
+टीम, ops में एक नया **🗂️ Claim Pipeline** आया है (Work मेन्यू में सबसे ऊपर)। यह हर चालू क्लेम को उसकी असली स्टेज के हिसाब से एक बोर्ड पर दिखाता है — Leads → New → Assigned → In Review → L2 (fee due / active) → Resolved। ऊपर के चिप्स से छाँटें कि क्लेम कैसे आया (Subscriber / Branch / Staff / ₹499 / Direct), या नाम से खोजें। किसी भी कार्ड पर क्लिक करके क्लेम पहले की तरह खुलेगा। पुराने Claims Dashboard, All Claims और L2 स्क्रीन अब भी चलते हैं — Pipeline बस उन्हें एक साथ लाता है ताकि कुछ भी उलझन भरा या छुपा हुआ न रहे। इसे आज़माएँ और बताएँ क्या मदद करता है।
+पढ़ने के बाद 👍 करें; कुछ अस्पष्ट हो तो ऑफ़िस IT SPOC से पूछें।
+
+_Suggested roles: Team members + Admins + Super admins (anyone who handles claims)._
+
+---
+
 ## 2026-09-03 — Doc Splitter upgraded + Merge-to-one-PDF + AI tasks
 
 **Title (EN):**
