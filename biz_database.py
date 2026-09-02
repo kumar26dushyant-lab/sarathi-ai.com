@@ -1495,6 +1495,25 @@ async def init_db():
             # L2 authorization magic-link (no OTP at creation for mediated claims). 0=unverified.
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified INTEGER DEFAULT 0",
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified_at TIMESTAMP",
+            # COMPLAINANT vs INSURED (Sep 2026): terminology + model clarified by founder.
+            #   insured_*      = the PATIENT (whose treatment/policy it is) — phone optional.
+            #   complainant_*  = the PERSON PRESENTING the case to Nidaan (provides documents, our
+            #                    comms point) — could be the insured, a family member, or the
+            #                    subscriber/branch/staff who brought it. Mobile + EMAIL mandatory.
+            # Backfilled at startup: for existing claims complainant_* := insured_* (the contact we
+            # already hold), so nothing breaks; new forms capture both distinctly.
+            "ALTER TABLE nidaan_claims ADD COLUMN complainant_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN complainant_phone TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN complainant_email TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN complainant_role TEXT DEFAULT ''",  # self|family|subscriber|branch|staff
+            # One-time backfill (idempotent — only fills blanks): existing contact := complainant.
+            ("UPDATE nidaan_claims SET "
+             "complainant_name  = CASE WHEN COALESCE(complainant_name,'')=''  THEN insured_name  ELSE complainant_name  END, "
+             "complainant_phone = CASE WHEN COALESCE(complainant_phone,'')='' THEN insured_phone ELSE complainant_phone END, "
+             "complainant_email = CASE WHEN COALESCE(complainant_email,'')='' THEN insured_email ELSE complainant_email END, "
+             "complainant_role  = CASE WHEN COALESCE(complainant_role,'')=''  THEN (CASE WHEN origin='branch' THEN 'branch' ELSE 'self' END) ELSE complainant_role END "
+             "WHERE COALESCE(complainant_name,'')='' OR COALESCE(complainant_phone,'')='' "
+             "OR COALESCE(complainant_email,'')='' OR COALESCE(complainant_role,'')=''"),
             # Manual ARCHIVE (Aug 2026): super-admin/admin can move test/garbage claims out of the
             # working views without deleting them. 1=archived. Restorable. Distinct from the
             # computed no_scope auto-archive flag (which is time-based, not stored).
