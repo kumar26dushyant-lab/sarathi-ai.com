@@ -124,8 +124,13 @@ def _cleanup_old(max_age: int = 6 * 3600) -> None:
 
 # ── AI segmentation ──────────────────────────────────────────────────────────
 async def segment(pdf_bytes: bytes, page_count: int) -> list:
-    """Detect the distinct documents in the merged PDF + their contiguous page ranges (1-indexed).
-    Best-effort: on any failure, returns a single document covering all pages (the human then splits)."""
+    """Detect the distinct documents in the merged PDF + their page ranges (1-indexed).
+
+    Page-level strategy (more accurate than one-shot range guessing): ask the model to label
+    EACH page with its document type + a `new_doc` flag, then build contiguous documents from
+    the boundaries. This reasons per page, so it nails the split points even when many short
+    documents are stacked. Same single API call — no extra cost. Best-effort: any failure →
+    one document covering all pages (the human then splits)."""
     fallback = [{"name": "Document 1", "start": 1, "end": page_count, "summary": ""}]
     try:
         import biz_ai
@@ -136,21 +141,79 @@ async def segment(pdf_bytes: bytes, page_count: int) -> list:
         prompt = (
             f"This PDF has {page_count} page(s) and usually contains SEVERAL different documents merged "
             "together — e.g. discharge summary, hospital/final bills, lab or investigation reports, "
-            "prescriptions, insurance policy copy, claim form, ID/KYC, referral or cashless letters, etc. "
-            "Read it and identify each DISTINCT document and the CONTIGUOUS page range it spans. "
-            f"Cover ALL pages 1..{page_count} in order, with no gaps and no overlaps. Give each a short, "
-            "clear name (its document type) and a one-line summary. If a page is unclear, still assign it "
-            "to the most likely adjacent document. Respond with JSON ONLY: "
-            '{"documents":[{"name":"...","start":<int>,"end":<int>,"summary":"..."}]}')
+            "prescriptions, insurance policy copy, claim form, ID/KYC, referral or cashless letters, etc.\n\n"
+            f"Go through the pages IN ORDER (1..{page_count}) and label EACH page. For every page give:\n"
+            "  - page: the page number (int)\n"
+            "  - doc_type: a short, clear name for the document that page belongs to (its type)\n"
+            "  - new_doc: true if this page STARTS a new/different document from the previous page, "
+            "else false (page 1 is always true)\n"
+            "  - summary: a few words on what the page shows.\n"
+            "Judge new_doc from real cues — a new letterhead/logo, a form's first page, a bill header, "
+            "a report cover, a change of document type. Multi-page documents keep new_doc=false on their "
+            "continuation pages. Cover every page exactly once. Respond with JSON ONLY: "
+            '{"pages":[{"page":<int>,"doc_type":"...","new_doc":<bool>,"summary":"..."}]}')
         resp = await client.aio.models.generate_content(
             model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
             contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt],
             config=gt.GenerateContentConfig(response_mime_type="application/json"))
-        docs = (json.loads(resp.text) or {}).get("documents") or []
-        return _sanitize(docs, page_count) or fallback
+        _log_usage(resp, page_count)
+        pages = (json.loads(resp.text) or {}).get("pages") or []
+        docs = _pages_to_docs(pages, page_count)
+        return docs or fallback
     except Exception as e:
         logger.warning("docsplit segment failed: %s", e)
         return fallback
+
+
+def _log_usage(resp, page_count: int) -> None:
+    """Record the Gemini call's token cost (ops-only tool — not billed, but tracked for margin)."""
+    try:
+        um = getattr(resp, "usage_metadata", None)
+        t_in = int(getattr(um, "prompt_token_count", 0) or 0)
+        t_out = int(getattr(um, "candidates_token_count", 0) or 0)
+        if not (t_in or t_out):
+            return
+        import asyncio
+        import biz_database as _db
+        asyncio.create_task(_db.log_ai_usage(
+            feature="nidaan_docsplit", tokens_in=t_in, tokens_out=t_out, source="nidaan_ops"))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("docsplit usage log skipped: %s", e)
+
+
+def _pages_to_docs(pages: list, n: int) -> list:
+    """Fold per-page labels into contiguous documents by their `new_doc` boundaries."""
+    # Index labels by page number; tolerate gaps/dupes by clamping to 1..n.
+    by_page = {}
+    for p in pages or []:
+        try:
+            pg = max(1, min(int(p.get("page", 0)), n))
+        except Exception:
+            continue
+        by_page.setdefault(pg, p)
+    docs, cur = [], None
+    for pg in range(1, n + 1):
+        lbl = by_page.get(pg, {})
+        name = (str(lbl.get("doc_type") or "").strip() or "Document")[:80]
+        is_start = bool(lbl.get("new_doc")) or pg == 1 or cur is None
+        summ = (str(lbl.get("summary") or "").strip())[:200]
+        if is_start:
+            if cur:
+                docs.append(cur)
+            cur = {"name": name, "start": pg, "end": pg, "summary": summ}
+        else:
+            cur["end"] = pg
+            if summ and not cur["summary"]:
+                cur["summary"] = summ
+    if cur:
+        docs.append(cur)
+    # Number repeats of the same type (e.g. "Lab Report", "Lab Report 2") for clarity.
+    seen = {}
+    for d in docs:
+        seen[d["name"]] = seen.get(d["name"], 0) + 1
+        if seen[d["name"]] > 1:
+            d["name"] = f"{d['name']} {seen[d['name']]}"
+    return docs
 
 
 def _sanitize(docs: list, n: int) -> list:

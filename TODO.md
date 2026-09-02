@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-08-29 (number removed everywhere; claim activity timeline live; WA message composer built; Sarathi Embedded-Signup design added)
+**Last updated:** 2026-09-03 (WA complainant journey wired + de-duped + templates draft; doc collator + page-level splitter shipped; email-radar 2-mailbox spec locked)
 
 ---
 
@@ -22,7 +22,12 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - **Accounts stays separate** (people directory) but keep the **plan/paid/capping double-check** visible.
 - Awaiting: founder's **document list per claim type** → load into checklist templates for the WhatsApp bot.
 - ✅ Authorization notifications no longer say ClaimShield/L2/release → "taking the claim forward for further processing"; claimant gets a thank-you (email + WA) on acceptance.
-- **Email radar — SIMPLIFY (founder model):** connect ONE mailbox `info@nidaanpartner.com` (app password) → forward ALL customers' emails there → radar scans this single inbox + surfaces important ones → team opens the mailbox to read. (Drop the multi-Gmail approach; forwarding is easy, one app password only.) Build when picked up.
+- **Email radar — mechanics only, forwarding model (founder Sep 3, APPROVED to build to spec):** connect **2 Gmail IDs via app-password** (IMAP, READ-ONLY — no send, no AI reply). All customer emails are **forwarded** into these two inboxes. A worker polls both, Gemini classifies each new mail (is it a response from an authority / insurer / ombudsman? urgent? needs action?) → **flag important ones in an Email Radar panel** in superadmin ops (panel id `radar` already registered), best-effort **linked to the matching claim**, urgent ones pushed to Telegram/bell. **No IRDA/Lokpal names in UI.** 🟢 NEXT to build.
+
+### 🟢 Doc Splitter & Collator (ops-only tool — all 3 phased; AI cost logged, not billed)
+- ✅ **Phase (a) Collator SHIPPED** — `GET /nidaan/ops/api/docsplit/{job}/pdf` returns the merged batch as ONE clean PDF (zero-AI, deterministic). UI "⬇ Merge → one PDF" button; tool retitled "Splitter & Collator".
+- ✅ **Phase (b) Splitter accuracy SHIPPED** — `segment` rewritten to **page-level classification** (label each page + `new_doc` flag → fold into contiguous docs), far better boundaries on stacked/interleaved docs; same single Gemini call (no extra cost). **AI cost logged** to `ai_usage_log` (feature `nidaan_docsplit`, source `nidaan_ops`) via `usage_metadata`.
+- 🟢 **Phase (c) Prompt-library** — a small set of copy-paste task prompts inside the Doc tool; user picks a task, uploads, AI returns the result. Keep AI cost logged + shown for margin.
 
 
 ### 🟡 In progress — PAYMENT RELIABILITY (founder: "I don't want any payment issue in future")
