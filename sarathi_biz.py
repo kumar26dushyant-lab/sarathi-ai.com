@@ -6929,9 +6929,17 @@ class _RadarReplyReq(BaseModel):
 
 @app.post("/nidaan/ops/api/radar/items/{item_id}/reply")
 async def ops_radar_reply(item_id: int, body: _RadarReplyReq, request: Request):
-    """Reply to the sender FROM the customer's mailbox (SMTP). Moves the item to 'Waiting'. Audited."""
+    """Reply to the sender FROM the customer's mailbox (SMTP). Moves the item to 'Waiting'. Audited.
+
+    DISABLED (founder Sep 3 2026): Email Radar is strictly read-only — read + flag, never send-as.
+    The send path (radar.send_reply / _smtp_send) is retained but this route is off. Re-enable by
+    removing this guard if the policy changes."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    raise HTTPException(status_code=403,
+                        detail="Email Radar is read-only — replying from the customer's mailbox is disabled.")
+    # --- retained (unreachable) original send path ---
     staff = _require_staff(request, "sub_super_admin")
     res = await radar.send_reply(item_id, body.message, staff.get("staff_id"))
     if not res.get("ok"):

@@ -4355,13 +4355,13 @@ function _renderRadarItems(){
   const b=_radarFlag||'act';
   const items=_radarItems.filter(i=>_radarInBucket(i,b));
   const fTab=(v,lbl)=>`<div class="tab-pill ${b===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
-  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need a reply')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
+  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need attention')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
   const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}</div>`;
   if(!items.length){
     const noMb = !_radarMailboxes.length;
     const empty = noMb
-      ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails appear here; you read &amp; reply without opening Gmail.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
-      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='act'?'All caught up — no updates waiting on a reply.':'New emails appear here automatically. Or hit 🔄 Check now.'}</p></div>`;
+      ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails appear here, flagged when an authority or urgent update arrives.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
+      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='act'?'All caught up — nothing needs attention right now.':'New emails appear here automatically. Or hit 🔄 Check now.'}</p></div>`;
     return metricStrip+filters+empty;
   }
   const rows=items.map(i=>{
@@ -4379,7 +4379,7 @@ function _renderRadarItems(){
           ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:.3rem;align-items:flex-end">
-          <button class="btn-sm btn-primary" style="white-space:nowrap" onclick="event.stopPropagation();openRadarEmail(${i.item_id})">Read &amp; reply</button>
+          <button class="btn-sm btn-primary" style="white-space:nowrap" onclick="event.stopPropagation();openRadarEmail(${i.item_id})">Read</button>
           ${dl?`<a href="${dl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:.66rem;color:var(--nd-text-faint);text-decoration:none">Gmail ↗</a>`:''}
         </div>
       </div></div>`;
@@ -4402,13 +4402,9 @@ async function openRadarEmail(id){
       <div><b>Date:</b> ${esc(d.date||'')}</div>
     </div>
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:.84rem;line-height:1.55">${esc(emailBody)}</div>
-    <div style="margin-top:.9rem">
-      <div style="font-size:.8rem;font-weight:700;margin-bottom:.35rem">✍️ Reply <span style="font-weight:400;color:var(--nd-text-muted)">— sent from ${esc(it.mailbox_email_masked||'the customer mailbox')} on their behalf</span></div>
-      <textarea id="radarReplyBox" rows="5" placeholder="Type your reply to ${esc(d.from||'the sender')}…" style="width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);border-radius:8px;padding:.6rem;font-size:.9rem"></textarea>
-      <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="radarSendReply(${id},this)">📤 Send reply</button>
-        ${resolved?'<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ Resolved</span>':`<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="radarResolve(${id})">✅ Mark resolved</button>`}
-      </div>
+    <div style="margin-top:.9rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <span style="font-size:.76rem;color:var(--nd-text-muted)">📡 Read-only radar — this email is flagged for your attention. To reply, open the mailbox directly.</span>
+      ${resolved?'<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ Resolved</span>':`<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="radarResolve(${id})">✅ Mark resolved</button>`}
     </div>`;
 }
 async function radarSendReply(id,btn){
@@ -4457,7 +4453,7 @@ function _renderRadarMailboxes(){
       <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">3️⃣</div><div>Click <b>＋ Connect a customer mailbox</b> → enter the Yahoo address + the app password → open <b>⚙️ Advanced</b> and set <b>Mail server (IMAP)</b> to <code>imap.mail.yahoo.com</code> (port 993) → <b>Test Connection</b> → <b>Save</b>.</div></div>
 
       <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">➡️ Forwarding option (read-only) <span style="font-size:.72rem;color:var(--nd-warning-text)">— being added</span></div>
-      <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Lightest setup: the customer's mailbox simply <b>forwards a copy</b> of incoming mail to our updates inbox — no app password stored. You'll SEE the authority's emails, but to REPLY you open that mailbox. (Two-way reply from ops needs the app-password method above.)</div>
+      <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Lightest setup: the customer's mailbox simply <b>forwards a copy</b> of incoming mail to our updates inbox — no app password stored. The radar will <b>read &amp; flag</b> the authority's emails for you. (Radar is read-only — to reply, open the mailbox directly.)</div>
       <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail:</b> Settings (⚙️) → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → enter our updates address → confirm the code Google sends → choose <b>keep Gmail's copy in the Inbox</b>.</div></div>
       <div style="display:flex;gap:.7rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add our updates address → verify.</div></div>
     </div>
