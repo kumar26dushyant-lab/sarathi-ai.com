@@ -33,7 +33,7 @@ logger = logging.getLogger("nidaan.wa.campaign")
 DB_PATH = db.DB_PATH
 
 _SEND_GAP_SECONDS = 0.4          # gentle pacing between sends
-_LANG_MAP = {"hi": "hi", "en": "en", "hinglish": "en"}   # Meta template language code
+_LANG_MAP = {"hi": "hi", "en": "en", "hinglish": "hi"}   # Meta template language code (Hindi-first)
 
 
 def _audience_sql(filters: dict) -> tuple[str, list]:

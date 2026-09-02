@@ -9858,6 +9858,7 @@ async function loadWhatsapp(){
         <label>Escalate after (days)<br>${num('waEsc', s.wa_escalate_days, 1, 60)}</label>
         <label>Default language<br><select id="waLang">${langSel}</select></label>
         <label title="Automatically record an inbound WhatsApp number as a CRM lead when it isn't a known customer">Auto-capture leads<br><select id="waLeadCap"><option value="1"${s.wa_lead_capture_enabled!=='0'?' selected':''}>ON</option><option value="0"${s.wa_lead_capture_enabled==='0'?' selected':''}>OFF</option></select></label>
+        <label title="Live WhatsApp alerts to the complainant on claim-registered / payment success / payment failed. Turn OFF to pause all automatic customer messages.">Live journey alerts<br><select id="waJourney"><option value="1"${s.wa_journey_enabled!=='0'?' selected':''}>ON</option><option value="0"${s.wa_journey_enabled==='0'?' selected':''}>OFF</option></select></label>
         <button class="btn btn-primary" onclick="saveWaSettings()">Save defaults</button>
       </div>
       <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
@@ -9871,9 +9872,8 @@ async function loadWhatsapp(){
         <label>Message<br><select id="wcKind">
           <option value="intro_value">Value / re-engage (intro_value)</option>
           <option value="welcome">Welcome</option>
-          <option value="doc_reminder">Document reminder</option>
         </select></label>
-        <label title="The approved Meta template name for cold (out-of-session) sends, e.g. np_intro_value">Template name (cold)<br><input id="wcTemplate" type="text" placeholder="np_intro_value" style="width:150px"></label>
+        <label title="Approved Meta template for cold (out-of-session) sends. Use a template with a single {{1}}=name variable — np_intro_value or np_welcome.">Template name (cold)<br><input id="wcTemplate" type="text" placeholder="np_intro_value" style="width:150px"></label>
         <label>Language<br><select id="wcLang">${['hinglish','hi','en'].map(l=>`<option value="${l}">${l==='hi'?'हिंदी':l==='en'?'English':'Hinglish'}</option>`).join('')}</select></label>
         <label>Audience lang<br><select id="wcAudLang"><option value="any">Any</option><option value="hinglish">Hinglish</option><option value="hi">हिंदी</option><option value="en">English</option></select></label>
         <label>Segment<br><select id="wcSeg"><option value="all">All contacts</option><option value="has_claim">Has a claim</option><option value="no_claim">No claim (prospects)</option></select></label>
@@ -9957,6 +9957,7 @@ async function saveWaSettings(){
     wa_escalate_days: g('waEsc').value,
     wa_default_language: g('waLang').value,
     wa_lead_capture_enabled: g('waLeadCap').value,
+    wa_journey_enabled: g('waJourney').value,
   };
   const m=g('waSettingsMsg'); m.style.color='var(--nd-text-faint)'; m.textContent='Saving…';
   const r=await API('/wa/settings',{method:'POST', body:JSON.stringify(body)});

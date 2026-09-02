@@ -192,9 +192,35 @@ async def _save_wa_doc(account_id, claim_id: int, doc_key: str, pdf_bytes: bytes
 # Lifecycle event → approved-template name. Fill these in once templates are approved in Meta;
 # until then a COLD (out-of-session) send logs "needs template" rather than failing loudly.
 JOURNEY_TEMPLATES = {
-    "welcome": "", "intro_value": "", "claim_registered": "",
-    "thank_you_payment": "", "payment_failed": "",
+    "welcome": "np_welcome",
+    "intro_value": "np_intro_value",
+    "claim_registered": "np_claim_registered",
+    "thank_you_payment": "np_payment_thanks",
+    "payment_failed": "np_payment_failed",
+    "doc_reminder": "np_doc_reminder",
 }
+
+# Meta template language code for a contact's stored language. We authored en + hi variants;
+# hinglish (Hindi-first audience) maps to the Devanagari hi template for the cold first-touch,
+# while the in-session free-form message stays true Hinglish.
+_TMPL_LANG = {"hi": "hi", "en": "en", "hinglish": "hi"}
+
+
+def _reg_no(ctx: dict) -> str:
+    cid = ctx.get("claim_id")
+    return ctx.get("reg_no") or (f"NP-{int(cid):04d}" if cid else "")
+
+
+def _template_params(event: str, ctx: dict) -> list:
+    """Ordered {{1}},{{2}}… values for each approved template. Order MUST match the template body."""
+    name = ctx.get("name") or "ji"
+    if event == "claim_registered":       # {{1}}=name {{2}}=ref {{3}}=insured
+        return [name, _reg_no(ctx), ctx.get("insured_name") or name]
+    if event == "thank_you_payment":      # {{1}}=name {{2}}=amount {{3}}=ref
+        return [name, str(ctx.get("amount") or ""), _reg_no(ctx)]
+    if event == "doc_reminder":           # {{1}}=name {{2}}=ref {{3}}=doc
+        return [name, _reg_no(ctx), ctx.get("doc_label") or "document"]
+    return [name]                          # welcome / intro_value / payment_failed → {{1}}=name
 
 
 async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
@@ -208,6 +234,9 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
     try:
         if not _wa.is_configured():
             return {"ok": False, "error": "not_configured"}
+        # Master switch — the founder turns the live complainant journey on/off from the WA panel.
+        if str(await _n.get_ops_setting("wa_journey_enabled", "1")) not in ("1", "true", "True"):
+            return {"ok": False, "error": "journey_disabled"}
         async with aiosqlite.connect(DB_PATH) as c:
             c.row_factory = aiosqlite.Row
             r = await (await c.execute(
@@ -243,7 +272,11 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
             res = await _wa.send_text(msisdn, text)
         else:
             tmpl = JOURNEY_TEMPLATES.get(event, "")
-            res = await _wa.send_template(msisdn, tmpl) if tmpl else {"ok": False, "error": "needs_template"}
+            if tmpl:
+                comps = _wa.body_params(*_template_params(event, ctx))
+                res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
+            else:
+                res = {"ok": False, "error": "needs_template"}
         await _activity(claim_id, f"wa_{event}", summary=(
             f"WhatsApp {event} → complainant" + ("" if res.get("ok") else
             (" (queued — needs approved template)" if res.get("error") == "needs_template" else

@@ -5962,6 +5962,7 @@ class OpsWaSettingsReq(BaseModel):
     wa_escalate_days: Optional[str] = None
     wa_default_language: Optional[str] = None
     wa_lead_capture_enabled: Optional[str] = None
+    wa_journey_enabled: Optional[str] = None
 
 
 @app.post("/nidaan/ops/api/wa/settings")
