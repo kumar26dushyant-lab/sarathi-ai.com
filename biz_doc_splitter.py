@@ -36,6 +36,48 @@ TMP_ROOT = os.getenv("DOCSPLIT_TMP") or os.path.join(_BASE_DIR, "var", "docsplit
 MAX_PAGES = 80          # safety cap for a single job
 IMAGE_EXTS = ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff")
 
+# ── AI prompt-library (Phase c) — ready-made tasks the ops team runs on an uploaded file ──
+# Each task is a curated prompt run on the merged job PDF via Gemini. Ops-only; cost logged.
+# `prompt` is the copy-paste text (also shown so staff can run it in their own AI if they prefer).
+AI_TASKS = {
+    "summary": {
+        "label": "📋 Summarise the whole file",
+        "desc": "Treatment, hospital, dates, amounts, and what each document is.",
+        "prompt": ("Summarise this insurance-claim file for our legal team. State: the patient/insured, "
+                   "the hospital, admission & discharge dates, the diagnosis/treatment, the total amount "
+                   "claimed/billed, and a bullet list of every document present. Be factual — do not guess "
+                   "anything not in the file."),
+    },
+    "bill_extract": {
+        "label": "🧾 Extract all bills & totals",
+        "desc": "Every charge/line item with amounts and the grand total.",
+        "prompt": ("From this file, extract every bill and charge. For each bill give the hospital/vendor, "
+                   "date, line items with amounts, and the bill total. Then give the GRAND TOTAL across all "
+                   "bills. Present as a clean list. Only use figures actually printed in the documents."),
+    },
+    "doc_inventory": {
+        "label": "🗂️ List every document + pages",
+        "desc": "An inventory of each distinct document and its page range.",
+        "prompt": ("List every distinct document in this file. For each, give its type/name, the page range "
+                   "it spans, and a one-line description. Cover all pages in order."),
+    },
+    "missing_docs": {
+        "label": "🔎 Flag likely-missing documents",
+        "desc": "Which standard claim documents appear present vs missing.",
+        "prompt": ("For a health-insurance claim, review this file and list (A) the standard documents that "
+                   "ARE present (discharge summary, final hospital bill, payment receipts, investigation/lab "
+                   "reports, prescriptions, policy copy, claim form, KYC/ID, cashless/denial letter), and "
+                   "(B) the common ones that appear to be MISSING. Base it only on what you can see."),
+    },
+    "chronology": {
+        "label": "🗓️ Build a date-wise chronology",
+        "desc": "Events ordered by date — admission, procedures, discharge, billing.",
+        "prompt": ("From these documents, build a date-ordered chronology of events (admission, key "
+                   "procedures/investigations, discharge, billing, any insurer correspondence). One line "
+                   "per event as 'DATE — event'. Use only dates present in the documents."),
+    },
+}
+
 
 def _safe_job(job: str) -> str:
     return re.sub(r"[^a-f0-9]", "", (job or "").lower())[:32]
@@ -163,6 +205,33 @@ async def segment(pdf_bytes: bytes, page_count: int) -> list:
     except Exception as e:
         logger.warning("docsplit segment failed: %s", e)
         return fallback
+
+
+async def run_ai_task(pdf_bytes: bytes, task_key: str) -> dict:
+    """Run a prompt-library task (AI_TASKS) on the merged job PDF and return the text result.
+    Ops-only; cost logged. Returns {ok, text} or {ok:False, error}."""
+    task = AI_TASKS.get(task_key)
+    if not task:
+        return {"ok": False, "error": "Unknown task"}
+    try:
+        import biz_ai
+        client = biz_ai._get_client()
+        if not client:
+            return {"ok": False, "error": "AI is not configured"}
+        from google.genai import types as gt
+        prompt = task["prompt"] + ("\n\nReturn clear, readable plain text (use short headings and "
+                                   "bullet points). No preamble.")
+        resp = await client.aio.models.generate_content(
+            model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
+            contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt])
+        _log_usage(resp, 0)
+        text = (getattr(resp, "text", "") or "").strip()
+        if not text:
+            return {"ok": False, "error": "No result — please try again"}
+        return {"ok": True, "text": text}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("docsplit ai-task %s failed: %s", task_key, e)
+        return {"ok": False, "error": "The AI task failed — please try again"}
 
 
 def _log_usage(resp, page_count: int) -> None:

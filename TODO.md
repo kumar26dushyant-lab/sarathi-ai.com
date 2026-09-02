@@ -27,7 +27,7 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 ### 🟢 Doc Splitter & Collator (ops-only tool — all 3 phased; AI cost logged, not billed)
 - ✅ **Phase (a) Collator SHIPPED** — `GET /nidaan/ops/api/docsplit/{job}/pdf` returns the merged batch as ONE clean PDF (zero-AI, deterministic). UI "⬇ Merge → one PDF" button; tool retitled "Splitter & Collator".
 - ✅ **Phase (b) Splitter accuracy SHIPPED** — `segment` rewritten to **page-level classification** (label each page + `new_doc` flag → fold into contiguous docs), far better boundaries on stacked/interleaved docs; same single Gemini call (no extra cost). **AI cost logged** to `ai_usage_log` (feature `nidaan_docsplit`, source `nidaan_ops`) via `usage_metadata`.
-- 🟢 **Phase (c) Prompt-library** — a small set of copy-paste task prompts inside the Doc tool; user picks a task, uploads, AI returns the result. Keep AI cost logged + shown for margin.
+- ✅ **Phase (c) Prompt-library SHIPPED** — `AI_TASKS` in the splitter (summarise / bill-extract / doc-inventory / missing-docs / chronology); `GET /docsplit/tasks` + `POST /docsplit/{job}/ai-task`. UI: "🤖 AI tasks on this file" cards after upload → AI reads the file & returns text (copy-result + copy-prompt affordances). Cost logged to `ai_usage_log`.
 
 
 ### 🟡 In progress — PAYMENT RELIABILITY (founder: "I don't want any payment issue in future")

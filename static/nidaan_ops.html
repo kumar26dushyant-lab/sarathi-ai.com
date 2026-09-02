@@ -4621,9 +4621,43 @@ function dsRenderReview(skipped){
       <button class="btn btn-primary" onclick="dsExport(this)">⬇ Split → separate PDFs (zip)</button>
       <button class="btn btn-success" onclick="dsCollate(this)" title="Combine all pages into a single PDF">⬇ Merge → one PDF</button>
       <button class="btn-sm btn-ghost" onclick="loadDocSplit()">↻ Start over</button>
-    </div>`;
+    </div>
+    <div id="dsTasks" style="margin-top:1.2rem"></div>`;
   dsRenderDocs();
   dsLoadThumbs();
+  dsLoadTasks();
+}
+async function dsLoadTasks(){
+  const wrap=document.getElementById('dsTasks'); if(!wrap) return;
+  let tasks=[];
+  try{ const r=await fetch('/nidaan/ops/api/docsplit/tasks',{headers:{'Authorization':'Bearer '+_token}}); if(r.ok) tasks=(await r.json()).tasks||[]; }catch(e){}
+  if(!tasks.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=`
+    <div style="border-top:1px solid var(--nd-border);padding-top:1rem">
+      <div style="font-weight:700;margin-bottom:.15rem">🤖 AI tasks on this file</div>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">Pick a task — the AI reads the uploaded file and gives you the result. (Or copy a prompt to run in your own AI.)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        ${tasks.map(t=>`<button class="btn-sm btn-ghost" style="text-align:left" onclick="dsRunTask('${t.key}',this)" title="${esc(t.prompt)}">${esc(t.label)}<span style="opacity:.6" data-copy="${esc(t.prompt)}" onclick="event.stopPropagation();dsCopyPrompt(this)" title="Copy the prompt">&nbsp;⧉</span></button>`).join('')}
+      </div>
+      <div id="dsTaskOut" style="margin-top:.8rem"></div>
+    </div>`;
+}
+async function dsRunTask(key,btn){
+  const out=document.getElementById('dsTaskOut'); if(!out) return;
+  const orig=btn.innerHTML; btn.disabled=true;
+  out.innerHTML='<div class="empty" style="padding:1rem"><div class="ei">⏳</div><p>Reading the file &amp; preparing the result…</p></div>';
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/ai-task`,{method:'POST',headers:{'Authorization':'Bearer '+_token,'Content-Type':'application/json'},body:JSON.stringify({task:key})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); out.innerHTML=`<div style="color:var(--nd-danger-text);font-size:.82rem">⚠️ ${esc(e.detail||'Task failed.')}</div>`; return; }
+    const d=await r.json();
+    out.innerHTML=`<div class="nd-card" style="padding:.8rem 1rem;white-space:pre-wrap;font-size:.85rem;line-height:1.5">${esc(d.text||'')}</div>
+      <button class="btn-sm btn-ghost" style="margin-top:.5rem" data-copy="${esc(d.text||'')}" onclick="dsCopyPrompt(this)">⧉ Copy result</button>`;
+  }catch(e){ out.innerHTML='<div style="color:var(--nd-danger-text);font-size:.82rem">⚠️ Task failed — please try again.</div>'; }
+  finally{ btn.disabled=false; btn.innerHTML=orig; }
+}
+function dsCopyPrompt(el){
+  const txt=el.getAttribute('data-copy')||'';
+  navigator.clipboard.writeText(txt).then(()=>{ const o=el.textContent; el.textContent=' ✓'; setTimeout(()=>el.textContent=o,1200); }).catch(()=>{});
 }
 async function dsLoadThumbs(){
   for(let p=1;p<=_dsPages;p++){
@@ -4669,6 +4703,7 @@ async function dsCollate(btn){
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
+window.dsLoadTasks=dsLoadTasks; window.dsRunTask=dsRunTask; window.dsCopyPrompt=dsCopyPrompt;
 
 async function mbLoadTeam(){
   const wrap = document.getElementById('mbTeamWrap');

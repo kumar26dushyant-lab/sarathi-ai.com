@@ -8394,6 +8394,39 @@ async def ops_docsplit_collate(job: str, request: Request):
                     headers={"Content-Disposition": "attachment; filename=merged_document.pdf"})
 
 
+@app.get("/nidaan/ops/api/docsplit/tasks")
+async def ops_docsplit_tasks(request: Request):
+    """The AI prompt-library: ready-made tasks staff can run on an uploaded file (or copy the
+    prompt to run in their own AI)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    return {"tasks": [{"key": k, "label": v["label"], "desc": v["desc"], "prompt": v["prompt"]}
+                      for k, v in docsplit.AI_TASKS.items()]}
+
+
+class _DocSplitTaskReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task: str = Field(..., max_length=40)
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/ai-task")
+@limiter.limit("20/minute")
+async def ops_docsplit_ai_task(job: str, body: _DocSplitTaskReq, request: Request):
+    """Run one prompt-library task on the uploaded file → text result. AI cost is logged."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    res = await docsplit.run_ai_task(pdf, body.task)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Task failed")
+    await _ops_audit(request, "docsplit.ai_task", "docsplit", job, body.task)
+    return res
+
+
 @app.get("/nidaan/ops/api/accounts/{account_id}/detail")
 async def ops_account_detail(account_id: int, request: Request):
     """Sub-admin+: full account detail — account info + claims + review purchases."""
