@@ -6319,5 +6319,23 @@ Customers send a big MIXED file (discharge summary + bills + lab reports + polic
 
 ---
 
+## A89 — [NIDAAN] WhatsApp journey + campaigns/lead-capture, Doc tools upgrade, read-only Email Radar, Unified Claim Pipeline (Sep 3 2026)
+
+Big multi-feature session. All shipped + deployed; both sites 200.
+
+**WhatsApp complainant journey (commits d1f564c, c0d6e50).** `wa_journey(claim_id, event, extra, skip_phones)` in `biz_nidaan_wa_orchestrator.py` — one safe notifier to the **complainant** (`complainant_phone`, fallback insured): in-session → free-form composer; cold → approved template (`JOURNEY_TEMPLATES`, all `""` until Meta approves); records to the claim timeline. **Consent+dedup rails:** skips `nidaan_wa_contacts.status='stopped'`; `skip_phones` prevents a 2nd WhatsApp to a number the subscriber dispatch already messages. Wired: **claim_registered** (branch/ops `on_ops_claim_raised` + subscriber `on_claim_filed`); **payment success** (`on_branch_l2_paid`; `on_funnel_paid` guarded → self-service skips); **payment failed** (webhook resolves `claim_id` from Razorpay notes → "no money deducted" reassurance). Composer added `intro_value` + `payment_failed`. **Templates handoff:** `WA_META_SETUP_PROMPT.md` (self-contained, 6 bilingual templates for the Claude extension to create on Meta) + `WA_TEMPLATES_TO_SUBMIT.md`.
+
+**WhatsApp campaigns + lead-capture (commit 537f574).** `biz_nidaan_wa_campaigns.py`: audience = opted-in & non-stopped `nidaan_wa_contacts` (filters language + has-claim/no-claim); each send reuses the `wa_journey` gate (in-session free-form / cold template / STOP always skipped); `nidaan_wa_campaigns` summary + live stats; background send with 0.4s pacing; test-send to one number. Endpoints (super_admin): `/wa/campaign/preview`, `/wa/campaign` (+test), `/wa/campaigns`, `/wa/contacts/{msisdn}/lead`. UI: 📣 Bulk campaign composer + campaigns table in the 💬 panel; **auto lead-capture** (`maybe_capture_lead` in the inbound flow → unknown WhatsApp numbers become CRM leads `source='whatsapp'`, deduped; toggle `wa_lead_capture_enabled`). Cold bulk sends need approved templates.
+
+**Doc Splitter & Collator — all 3 phases, ops-only (commits adae328, b7bef4c, 5a2494e).** (a) **Collator** — `GET /docsplit/{job}/pdf` returns the merged batch as one clean PDF (zero-AI); "⬇ Merge → one PDF" button. (b) **Splitter accuracy** — `segment` rewritten to **page-level classification** (label each page + `new_doc` flag → `_pages_to_docs` folds into contiguous documents), far better on stacked/interleaved docs; same single Gemini call; **AI cost logged** to `ai_usage_log` (feature `nidaan_docsplit`, source `nidaan_ops`) via `usage_metadata`. (c) **Prompt-library** — `AI_TASKS` (summarise / bill-extract / doc-inventory / missing-docs / chronology); `GET /docsplit/tasks` + `POST /docsplit/{job}/ai-task`; "🤖 AI tasks on this file" cards with copy-result + copy-prompt.
+
+**Email Radar reconciled to READ-ONLY (commit 3b05ebb).** It was already built + live (`biz_nidaan_radar.py`, `radar_poll_loop` 15-min, panel 📨 Email Updates; read-only IMAP, encrypted app-password mailboxes, `biz_ai.radar_triage_email` → 🔴/🟡 authority/urgent flags + auto-Task + silence sweep). Founder reaffirmed read-only (read + flag, never send-as), so the **reply-as-customer (Phase C) is HIDDEN** — `POST /radar/items/{id}/reply` returns 403 (send code retained for easy re-enable), reply composer removed, copy reworded. No IRDA/Lokpal names. **[OWNER]** connects 2 app-password mailboxes in the Mailboxes tab.
+
+**Unified Claim Pipeline (commit dbce3a1).** New "🗂️ Claim Pipeline" panel (Work zone, first claim item) reconciling the split Dashboard / All Claims / L2 confusion into ONE workspace. Reuses the SAME `/nidaan/ops/api/claims` endpoint + `_uPay` badge + `openClaimDrawer` (a claim reads identically everywhere). `_pipeStage(c)` derives ONE canonical stage from `payment_status`+`status`+`review_outcome`+L2 coverage: Leads → New → Assigned → In Review → L2 fee-due → L2 active → **[Drafting / Escalation reserved post-L2]** → Resolved (+ No-scope lane). Origin filter chips (subscriber/branch/staff/₹499/direct) + search; horizontal-scroll board (mobile-safe). Built THROUGH L2 with reserved room after (no "Lokpal"/"IRDA" labels per policy). **Old Dashboard/All Claims/L2 views kept for now** (additive/no-break) — retire once the founder validates the pipeline.
+
+**Announcements:** two bilingual staff drafts in `ANNOUNCEMENTS.md` (doc-tool upgrade + read-only radar) — founder reviews + sends.
+
+---
+
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
