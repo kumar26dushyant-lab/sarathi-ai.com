@@ -4585,8 +4585,8 @@ function loadDocSplit(){
   const el=document.getElementById('panel-docsplit');
   el.innerHTML=`
     <div class="section-hdr"><div>
-      <div class="section-title">📄 Document Splitter</div>
-      <div class="section-sub">Upload a customer's mixed file(s) — the AI separates the different documents (discharge summary, bills, reports, policy…) into individual PDFs so you can send each to the authorities. You review before exporting.</div>
+      <div class="section-title">📄 Document Splitter & Collator</div>
+      <div class="section-sub">Upload a customer's mixed file(s). <b>Split</b> — the AI separates the different documents (discharge summary, bills, reports, policy…) into individual PDFs to send to the authorities. <b>Merge</b> — combine everything into one clean PDF. You review before exporting.</div>
     </div></div>
     <div style="background:var(--nd-bg-surface);border:2px dashed var(--nd-border-strong);border-radius:12px;padding:1.6rem;text-align:center">
       <div style="font-size:2rem;margin-bottom:.5rem">📤</div>
@@ -4618,7 +4618,8 @@ function dsRenderReview(skipped){
     <div id="dsDocList"></div>
     <div style="display:flex;gap:.6rem;margin-top:.9rem;flex-wrap:wrap">
       <button class="btn-sm btn-ghost" onclick="dsAddDoc()">＋ Add a document</button>
-      <button class="btn btn-primary" onclick="dsExport(this)">⬇ Export separated PDFs (zip)</button>
+      <button class="btn btn-primary" onclick="dsExport(this)">⬇ Split → separate PDFs (zip)</button>
+      <button class="btn btn-success" onclick="dsCollate(this)" title="Combine all pages into a single PDF">⬇ Merge → one PDF</button>
       <button class="btn-sm btn-ghost" onclick="loadDocSplit()">↻ Start over</button>
     </div>`;
   dsRenderDocs();
@@ -4655,7 +4656,19 @@ async function dsExport(btn){
   }catch(e){ alert('Export failed.'); }
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
-window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport;
+async function dsCollate(btn){
+  if(!_dsJob){ alert('Upload file(s) first.'); return; }
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Merging…';
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/pdf`,{headers:{'Authorization':'Bearer '+_token}});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert(e.detail||'Merge failed.'); return; }
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement('a'); a.href=url; a.download='merged_document.pdf'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  }catch(e){ alert('Merge failed.'); }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
 
 async function mbLoadTeam(){
   const wrap = document.getElementById('mbTeamWrap');

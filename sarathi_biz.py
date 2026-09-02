@@ -8379,6 +8379,21 @@ async def ops_docsplit_export(job: str, body: _DocSplitExportReq, request: Reque
                     headers={"Content-Disposition": "attachment; filename=segregated_documents.zip"})
 
 
+@app.get("/nidaan/ops/api/docsplit/{job}/pdf")
+async def ops_docsplit_collate(job: str, request: Request):
+    """Collator: return the whole uploaded batch as ONE clean merged PDF (all pages, in order).
+    Zero-AI, deterministic — the mixed files were already normalised + merged on upload. Any staff."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    await _ops_audit(request, "docsplit.collate", "docsplit", job, "merged to one PDF")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=merged_document.pdf"})
+
+
 @app.get("/nidaan/ops/api/accounts/{account_id}/detail")
 async def ops_account_detail(account_id: int, request: Request):
     """Sub-admin+: full account detail — account info + claims + review purchases."""
