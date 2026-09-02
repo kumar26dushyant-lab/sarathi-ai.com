@@ -446,6 +446,7 @@ select.form-input option{background:#1e293b}
     <!-- Main content -->
     <main class="main">
       <div id="panel-overview" class="panel"></div>
+      <div id="panel-pipeline" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
@@ -641,7 +642,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -947,6 +948,7 @@ function buildSidebar() {
     {h:'Work', items:[
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
       {id:'crm',      label:'🎯 CRM',              minRank:0},
+      {id:'pipeline', label:'🗂️ Claim Pipeline',   minRank:1},
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
       {id:'claims',   label:'📋 All Claims',       minRank:1},
       {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
@@ -1017,6 +1019,7 @@ function showPanel(id, fromHistory) {
   });
   const loaders = {
     overview: loadOverview,
+    pipeline: loadPipeline,
     tasks: loadTasks,
     support: loadSupport,
     docsplit: loadDocSplit,
@@ -3563,6 +3566,75 @@ function _renderClaimBoard(rows){
 function _renderClaimCards(rows){
   return '<div class="card-grid">'+rows.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')+'</div>';
 }
+
+// ══════════ UNIFIED CLAIM PIPELINE — one workspace, stage columns + origin filter ══════════
+// Reconciles the old 3 views (Dashboard / All Claims / L2) into ONE canonical stage per claim,
+// derived from the composite of payment_status + status + review_outcome + L2 coverage. Reuses the
+// same /claims endpoint, the _uPay badge and openClaimDrawer, so a claim reads identically here.
+// Post-L2 columns (Drafting / Escalation) are reserved space — the founder builds THROUGH L2 now,
+// with room after. (No "Lokpal"/"IRDA" labels anywhere per policy.)
+const _PIPE_STAGES = [
+  ['lead',      '🟠 Leads',        'Unpaid — not yet a paying case'],
+  ['new',       '📥 New',          'Paid / subscriber — awaiting pickup'],
+  ['assigned',  '👤 Assigned',     'A handler owns it'],
+  ['in_review', '🔍 In Review',    'Expert review in progress'],
+  ['l2_due',    '💳 L2 — fee due', 'Reviewed GO — L2 fee pending'],
+  ['l2_active', '⚖️ L2 — active',  'Reviewed GO + covered — legal process'],
+  ['drafting',  '📝 Drafting',     'Post-L2 — reserved'],
+  ['escalation','🏛️ Escalation',   'Post-L2 — reserved'],
+  ['resolved',  '🏁 Resolved',     'Won / lost / closed'],
+  ['no_go',     '🚫 No scope',     'Reviewed — no basis to challenge'],
+];
+function _pipeStage(c){
+  const st=(c.status||'').toLowerCase();
+  const po=(c.payment_status||'').toLowerCase();
+  const ro=(c.review_outcome||'').toLowerCase();
+  if(['resolved_won','resolved_lost','closed','withdrawn'].includes(st)) return 'resolved';
+  if(ro==='no_scope') return 'no_go';
+  if(ro==='can_fight') return (String(c.l2_payment_status||'')==='paid' || _l2Eligible(c)) ? 'l2_active' : 'l2_due';
+  if(po==='unpaid_lead') return 'lead';
+  if(st==='in_review' || st==='in_negotiation') return 'in_review';
+  if(st==='assigned') return 'assigned';
+  return 'new';
+}
+let _pipeRows=[], _pipeOrigin='all', _pipeSearch='';
+async function loadPipeline(){
+  const el=document.getElementById('panel-pipeline');
+  el.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Loading the pipeline…</p></div>';
+  let d={};
+  try{ const r=await API('/claims?limit=400'); if(r.ok) d=await r.json(); else throw 0; }
+  catch(e){ el.innerHTML='<div class="empty"><div class="ei">⚠️</div><p>Could not load claims. Try again.</p></div>'; return; }
+  _pipeRows=(d.claims||[]);
+  _renderPipeline();
+}
+function _renderPipeline(){
+  const el=document.getElementById('panel-pipeline'); if(!el) return;
+  const q=(_pipeSearch||'').trim().toLowerCase();
+  let rows=_pipeRows.filter(c=>_pipeOrigin==='all' || (c.source_kind||'direct')===_pipeOrigin);
+  if(q) rows=rows.filter(c=>((c.insured_name||'')+' '+(c.claim_type||'')+' '+(c.owner_name||'')+' '+fmtClaimNum(c.claim_id)).toLowerCase().includes(q));
+  const byStage={}; rows.forEach(c=>{ const s=_pipeStage(c); (byStage[s]=byStage[s]||[]).push(c); });
+  const origins=[['all','All'],['subscriber','💳 Subscriber'],['branch','🏢 Branch'],['staff','👤 Staff'],['review','📋 ₹499'],['direct','🌐 Direct']];
+  const chip=(v,l)=>`<div class="tab-pill ${_pipeOrigin===v?'active':''}" onclick="pipeSetOrigin('${v}')">${l}${v!=='all'?` <span style="opacity:.6">${_pipeRows.filter(c=>(c.source_kind||'direct')===v).length}</span>`:''}</div>`;
+  const cols=_PIPE_STAGES.map(([key,label,desc])=>{
+    const list=byStage[key]||[];
+    const cards=list.length
+      ? list.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')
+      : `<div style="font-size:.72rem;color:var(--nd-text-faint);padding:.5rem;text-align:center">${(key==='drafting'||key==='escalation')?'reserved for post-L2':'—'}</div>`;
+    return `<details class="board-col" open><summary title="${esc(desc)}">${label}<span class="vw-count">${list.length}</span></summary><div class="board-cards">${cards}</div></details>`;
+  }).join('');
+  el.innerHTML=`
+    <div class="section-hdr"><div><div class="section-title">🗂️ Claim Pipeline</div>
+      <div class="section-sub">One workspace for every claim — from lead to L2 — grouped by stage. The same claim reads identically everywhere. Click a card to open it. (Replaces the split Dashboard / All Claims / L2 views.)</div></div>
+      <div><input type="search" placeholder="🔍 Search claims…" value="${esc(_pipeSearch)}" oninput="pipeSearch(this.value)" style="padding:.5rem .7rem;border-radius:8px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);min-width:200px"></div>
+    </div>
+    <div style="font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.5rem">Showing <b>${rows.length}</b> active claim(s)</div>
+    <div class="tab-row" style="margin-bottom:.9rem">${origins.map(o=>chip(o[0],o[1])).join('')}</div>
+    <div class="board">${cols}</div>`;
+}
+function pipeSetOrigin(v){ _pipeOrigin=v; _renderPipeline(); }
+let _pipeSearchT=null;
+function pipeSearch(v){ _pipeSearch=v; clearTimeout(_pipeSearchT); _pipeSearchT=setTimeout(_renderPipeline,180); }
+window.loadPipeline=loadPipeline; window.pipeSetOrigin=pipeSetOrigin; window.pipeSearch=pipeSearch;
 // Eligible to send to ClaimShield = reviewed-GO (all rows here are) AND paid
 // (L2 fee paid, or review ₹499 paid, or subscriber) — mirrors the backend guard.
 function _l2Eligible(c){ return c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription'; }
