@@ -1260,6 +1260,29 @@ async def init_db():
                 updated_at      TIMESTAMP
             );
 
+            -- ═══ WhatsApp BULK CAMPAIGNS (superadmin) — one row per campaign run ══════════
+            -- A campaign sends an approved template (cold, business-initiated) OR a free-form
+            -- composer message (only to contacts inside their 24h session) to a filtered audience
+            -- of opted-in, non-stopped nidaan_wa_contacts. Consent is always enforced. Per-send
+            -- rows still land in nidaan_wa_messages; this table is the campaign summary + stats.
+            CREATE TABLE IF NOT EXISTS nidaan_wa_campaigns (
+                campaign_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT NOT NULL,
+                template_name   TEXT DEFAULT '',        -- approved Meta template (cold send); '' = in-session free-form only
+                kind            TEXT DEFAULT '',         -- composer kind (label + free-form body)
+                lang            TEXT DEFAULT 'hinglish',
+                audience        TEXT DEFAULT '',         -- JSON snapshot of the audience filter used
+                status          TEXT DEFAULT 'draft',    -- draft|running|done|failed
+                total           INTEGER DEFAULT 0,       -- audience size at launch
+                sent            INTEGER DEFAULT 0,
+                failed          INTEGER DEFAULT 0,
+                skipped         INTEGER DEFAULT 0,       -- opted-out / no session & no template
+                created_by      INTEGER,
+                created_by_name TEXT DEFAULT '',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                finished_at     TIMESTAMP
+            );
+
             -- ═══ CRM (marketing/sales) — leads pipeline + per-lead timeline ══════════════
             -- Drives the marketing team so no lead/follow-up is missed. Reuses the notification
             -- engine; the AI acts as a "team lead" suggesting next steps. Leads = prospective

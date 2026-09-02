@@ -9766,7 +9766,7 @@ async function loadWhatsapp(){
 
   panel.innerHTML = `
     <div class="section-hdr"><div><div class="section-title">💬 WhatsApp Automation</div>
-      <div class="section-sub">Claimant document-collection bot (NidaanPartner's own number). Separate from the Sarathi premium WhatsApp add-on.</div></div></div>
+      <div class="section-sub">NidaanPartner's own number — doc-collection bot, complainant journey, bulk campaigns, and auto lead-capture. Separate from the Sarathi premium WhatsApp add-on.</div></div></div>
     ${statusCard}
     <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1.2rem">
       ${stat('Opted-in claimants', c.opted_in||0, '#34d399')}
@@ -9785,17 +9785,94 @@ async function loadWhatsapp(){
         <label>Quiet until (IST)<br>${num('waQuietE', s.wa_quiet_end_ist, 0, 23)}</label>
         <label>Escalate after (days)<br>${num('waEsc', s.wa_escalate_days, 1, 60)}</label>
         <label>Default language<br><select id="waLang">${langSel}</select></label>
+        <label title="Automatically record an inbound WhatsApp number as a CRM lead when it isn't a known customer">Auto-capture leads<br><select id="waLeadCap"><option value="1"${s.wa_lead_capture_enabled!=='0'?' selected':''}>ON</option><option value="0"${s.wa_lead_capture_enabled==='0'?' selected':''}>OFF</option></select></label>
         <button class="btn btn-primary" onclick="saveWaSettings()">Save defaults</button>
       </div>
       <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
+    </div>
+
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
+      <div class="section-title" style="font-size:1rem;margin-bottom:.2rem">📣 Bulk campaign</div>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">Sends to <b>opted-in</b> contacts only (anyone who replied STOP is always skipped). Contacts in an open 24-hour chat get the full message now; others need an <b>approved template</b> name (cold sends). Leave the template blank to reach only currently-active chats.</div>
+      <div style="display:flex;gap:1.1rem;flex-wrap:wrap;align-items:end;font-size:.84rem">
+        <label>Campaign name<br><input id="wcName" type="text" placeholder="e.g. Reactivation Sept" style="width:170px"></label>
+        <label>Message<br><select id="wcKind">
+          <option value="intro_value">Value / re-engage (intro_value)</option>
+          <option value="welcome">Welcome</option>
+          <option value="doc_reminder">Document reminder</option>
+        </select></label>
+        <label title="The approved Meta template name for cold (out-of-session) sends, e.g. np_intro_value">Template name (cold)<br><input id="wcTemplate" type="text" placeholder="np_intro_value" style="width:150px"></label>
+        <label>Language<br><select id="wcLang">${['hinglish','hi','en'].map(l=>`<option value="${l}">${l==='hi'?'हिंदी':l==='en'?'English':'Hinglish'}</option>`).join('')}</select></label>
+        <label>Audience lang<br><select id="wcAudLang"><option value="any">Any</option><option value="hinglish">Hinglish</option><option value="hi">हिंदी</option><option value="en">English</option></select></label>
+        <label>Segment<br><select id="wcSeg"><option value="all">All contacts</option><option value="has_claim">Has a claim</option><option value="no_claim">No claim (prospects)</option></select></label>
+      </div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.8rem;align-items:center">
+        <button class="btn-sm btn-ghost" onclick="waPreviewAudience()">👁 Preview audience</button>
+        <span id="wcCount" style="font-size:.82rem;color:var(--nd-text-muted)"></span>
+        <input id="wcTestTo" type="text" placeholder="Test to (your number)" style="width:150px">
+        <button class="btn-sm btn-ghost" onclick="waTestCampaign(this)">✈ Send test</button>
+        <button class="btn btn-primary" onclick="waLaunchCampaign(this)">📣 Launch campaign</button>
+      </div>
+      <div id="wcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
+      <div id="wcList" style="margin-top:.9rem"></div>
     </div>
 
     <div class="section-title" style="font-size:1rem;margin-bottom:.5rem">🧾 Recent messages</div>
     <div class="table-wrap"><table style="min-width:640px">
       <thead><tr><th>When</th><th>Dir</th><th>Number</th><th>Claim</th><th>Type</th><th>Message</th><th>Status</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:var(--nd-text-faint);padding:1rem">No messages yet — starts once the number is live.</td></tr>'}</tbody>
-    </table></div>
-    <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.5rem">Templates (reminder / received / quality-issue / complete) will appear here for approval once Phase 1 is wired.</div>`;
+    </table></div>`;
+  waLoadCampaigns();
+}
+async function waPreviewAudience(){
+  const el=document.getElementById('wcCount'); el.textContent='Counting…';
+  const filters={language:document.getElementById('wcAudLang').value, segment:document.getElementById('wcSeg').value};
+  try{ const r=await API('/wa/campaign/preview',{method:'POST',body:JSON.stringify(filters)});
+    if(r.ok){ const d=await r.json(); el.innerHTML=`🎯 <b>${d.count}</b> opted-in contact(s) match.`; }
+    else el.textContent='Could not count.'; }catch(e){ el.textContent='Could not count.'; }
+}
+function _wcBody(){
+  return {name:document.getElementById('wcName').value||'Campaign',
+    template_name:document.getElementById('wcTemplate').value.trim(),
+    kind:document.getElementById('wcKind').value, lang:document.getElementById('wcLang').value,
+    filters:{language:document.getElementById('wcAudLang').value, segment:document.getElementById('wcSeg').value}};
+}
+async function waTestCampaign(btn){
+  const to=document.getElementById('wcTestTo').value.trim();
+  const m=document.getElementById('wcMsg');
+  if(!to){ m.style.color='var(--nd-danger-text)'; m.textContent='Enter your number to send a test.'; return; }
+  const body=_wcBody(); body.test_to=to;
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Sending…';
+  try{ const r=await API('/wa/campaign',{method:'POST',body:JSON.stringify(body)});
+    if(r.ok){ m.style.color='var(--nd-success-text)'; m.textContent='✓ Test sent to '+to+'.'; }
+    else { const e=await r.json().catch(()=>({})); m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(e.detail||'Test failed'); }
+  }catch(e){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ Test failed.'; }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+async function waLaunchCampaign(btn){
+  const body=_wcBody();
+  if(!confirm(`Launch "${body.name}" to all matching opted-in contacts?\n\nSTOP-list contacts are always skipped. Cold contacts need the approved template "${body.template_name||'(none set)'}".`)) return;
+  const m=document.getElementById('wcMsg'); const orig=btn.textContent; btn.disabled=true; btn.textContent='Launching…';
+  try{ const r=await API('/wa/campaign',{method:'POST',body:JSON.stringify(body)});
+    if(r.ok){ const d=await r.json(); m.style.color='var(--nd-success-text)'; m.textContent=`✓ Campaign started — ${d.total} recipient(s). Progress updates below.`; setTimeout(waLoadCampaigns,1500); }
+    else { const e=await r.json().catch(()=>({})); m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(e.detail||'Could not launch'); }
+  }catch(e){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ Could not launch.'; }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+async function waLoadCampaigns(){
+  const el=document.getElementById('wcList'); if(!el) return;
+  let items=[];
+  try{ const r=await API('/wa/campaigns'); if(r.ok) items=(await r.json()).campaigns||[]; }catch(e){}
+  if(!items.length){ el.innerHTML='<div style="font-size:.78rem;color:var(--nd-text-faint)">No campaigns yet.</div>'; return; }
+  el.innerHTML=`<div class="table-wrap"><table style="min-width:560px;font-size:.8rem">
+    <thead><tr><th>When</th><th>Name</th><th>Message</th><th>Total</th><th>Sent</th><th>Skipped</th><th>Failed</th><th>Status</th></tr></thead>
+    <tbody>${items.map(c=>`<tr>
+      <td style="white-space:nowrap">${(c.created_at||'').replace('T',' ').slice(0,16)}</td>
+      <td>${esc(c.name||'')}</td><td>${esc(c.template_name||c.kind||'')}</td>
+      <td>${c.total||0}</td><td style="color:var(--nd-success-text)">${c.sent||0}</td>
+      <td style="color:var(--nd-warning-text)">${c.skipped||0}</td><td style="color:var(--nd-danger-text)">${c.failed||0}</td>
+      <td>${c.status==='running'?'⏳ running':c.status==='done'?'✅ done':esc(c.status||'')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
 }
 async function saveWaSettings(){
   const g=id=>document.getElementById(id);
@@ -9807,6 +9884,7 @@ async function saveWaSettings(){
     wa_quiet_end_ist: g('waQuietE').value,
     wa_escalate_days: g('waEsc').value,
     wa_default_language: g('waLang').value,
+    wa_lead_capture_enabled: g('waLeadCap').value,
   };
   const m=g('waSettingsMsg'); m.style.color='var(--nd-text-faint)'; m.textContent='Saving…';
   const r=await API('/wa/settings',{method:'POST', body:JSON.stringify(body)});
@@ -9814,6 +9892,7 @@ async function saveWaSettings(){
   else { m.style.color='var(--nd-danger-text)'; const e=await r.json().catch(()=>({})); m.textContent='✕ '+(e.detail||'Failed'); }
 }
 window.loadWhatsapp=loadWhatsapp; window.saveWaSettings=saveWaSettings;
+window.waPreviewAudience=waPreviewAudience; window.waTestCampaign=waTestCampaign; window.waLaunchCampaign=waLaunchCampaign; window.waLoadCampaigns=waLoadCampaigns;
 
 // Claim activity timeline (merged: status + payments + WhatsApp + automation events).
 async function loadClaimActivity(cid){

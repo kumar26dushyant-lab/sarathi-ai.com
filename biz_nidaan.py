@@ -5629,6 +5629,7 @@ OPS_SETTING_DEFAULTS = {
     "wa_quiet_end_ist": "8",            # …until 8am
     "wa_escalate_days": "4",            # no progress this many days → escalate to subscriber+staff
     "wa_default_language": "hinglish",  # hinglish | hi | en
+    "wa_lead_capture_enabled": "1",     # auto-record inbound unknown WhatsApp numbers as CRM leads
     # T&C shown in the claimant consent card, in BOTH languages (Hindi-default audience). The
     # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel

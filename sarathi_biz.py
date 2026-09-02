@@ -5961,6 +5961,7 @@ class OpsWaSettingsReq(BaseModel):
     wa_quiet_end_ist: Optional[str] = None
     wa_escalate_days: Optional[str] = None
     wa_default_language: Optional[str] = None
+    wa_lead_capture_enabled: Optional[str] = None
 
 
 @app.post("/nidaan/ops/api/wa/settings")
@@ -5976,6 +5977,86 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
         changed += 1
     await _ops_audit(request, "wa.settings", "settings", "wa", f"updated {changed} default(s)")
     return {"ok": True, "updated": changed}
+
+
+# ── WhatsApp bulk campaigns (super_admin) ────────────────────────────────────
+class _WaCampaignFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Optional[str] = "any"     # any | hinglish | hi | en
+    segment: Optional[str] = "all"      # all | has_claim | no_claim
+
+
+class _WaCampaignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("Campaign", max_length=120)
+    template_name: str = Field("", max_length=80)   # approved Meta template (cold send)
+    kind: str = Field("intro_value", max_length=40)  # composer kind (in-session free-form)
+    lang: str = Field("hinglish", max_length=12)
+    filters: _WaCampaignFilters = _WaCampaignFilters()
+    test_to: str = Field("", max_length=20)          # if set → send ONE test to this number only
+
+
+@app.post("/nidaan/ops/api/wa/campaign/preview")
+async def nidaan_ops_wa_campaign_preview(body: _WaCampaignFilters, request: Request):
+    """Count the eligible (opted-in, non-stopped) audience for a campaign filter."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    return {"count": await _camp.count_audience(body.model_dump())}
+
+
+@app.post("/nidaan/ops/api/wa/campaign")
+@limiter.limit("10/minute")
+async def nidaan_ops_wa_campaign(body: _WaCampaignReq, request: Request):
+    """Create + launch a WhatsApp campaign (or send a single test). Consent is always enforced."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    if body.test_to.strip():
+        res = await _camp.send_test(template_name=body.template_name, kind=body.kind,
+                                    lang=body.lang, to=body.test_to)
+        if not res.get("ok"):
+            _m = {"needs_template": "This contact isn't in an open chat — a test needs an approved template name.",
+                  "WhatsApp is not configured": "WhatsApp is not configured."}
+            raise HTTPException(status_code=400, detail=_m.get(res.get("error"), res.get("error") or "Test failed"))
+        await _ops_audit(request, "wa.campaign.test", "wa", body.test_to, body.template_name or body.kind)
+        return {"ok": True, "test": True}
+    res = await _camp.create_and_run(
+        name=body.name, template_name=body.template_name, kind=body.kind, lang=body.lang,
+        filters=body.filters.model_dump(), by_id=(caller or {}).get("staff_id"),
+        by_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not start the campaign")
+    await _ops_audit(request, "wa.campaign.launch", "wa_campaign", str(res.get("campaign_id")),
+                     f"{res.get('total')} recipient(s); {body.template_name or body.kind}")
+    return res
+
+
+@app.get("/nidaan/ops/api/wa/campaigns")
+async def nidaan_ops_wa_campaigns_list(request: Request):
+    """Recent WhatsApp campaigns + their live stats."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    return {"campaigns": await _camp.list_campaigns(30)}
+
+
+@app.post("/nidaan/ops/api/wa/contacts/{msisdn}/lead")
+async def nidaan_ops_wa_promote_lead(msisdn: str, request: Request):
+    """Manually record a WhatsApp contact as a CRM lead (sub_super_admin+)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_flow as _flow
+    digits = "".join(ch for ch in (msisdn or "") if ch.isdigit())
+    if len(digits) < 10:
+        raise HTTPException(status_code=400, detail="Invalid number")
+    await _flow.maybe_capture_lead(digits)
+    await _ops_audit(request, "wa.lead.capture", "wa_contact", digits, "promoted to CRM lead")
+    return {"ok": True}
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/doc-reminder/email")

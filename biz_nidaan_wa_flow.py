@@ -126,6 +126,8 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
         except Exception:
             pass
         return
+    # Record cold/unknown numbers as CRM leads (no-op for known customers). Non-blocking.
+    await maybe_capture_lead(msisdn)
     # Guided doc-collection: match the number to its claim, greet + ask the next pending doc.
     try:
         import biz_nidaan_wa_orchestrator as _orch
@@ -160,6 +162,30 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -
             event_key="wa.doc_received", email=False, claim_id=claim_id)
     except Exception:
         pass
+
+
+async def maybe_capture_lead(msisdn: str, name: str = "") -> None:
+    """Record an inbound WhatsApp number as a CRM lead when it's NOT already a known customer
+    (no linked claim, no linked account) and not already a lead. Gated by ops setting
+    `wa_lead_capture_enabled` (default on). Best-effort, never raises."""
+    try:
+        import biz_nidaan as _n
+        if str(await _n.get_ops_setting("wa_lead_capture_enabled", "1")) not in ("1", "true", "True"):
+            return
+        c = await get_contact(msisdn)
+        if c and (c.get("claim_id") or c.get("account_id")):
+            return   # already a customer — not a cold lead
+        import biz_nidaan_crm as _crm
+        existing = await _crm.list_leads(search=msisdn, limit=1)
+        if existing:
+            return   # already captured
+        await _crm.create_lead(
+            name=(name or "").strip() or f"WhatsApp {msisdn[-4:]}", phone=msisdn,
+            source="whatsapp", interest="Inbound WhatsApp enquiry",
+            notes="Auto-captured from an inbound WhatsApp message.", created_by_name="WhatsApp bot")
+        logger.info("wa lead captured: %s", msisdn)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("wa lead capture skipped for %s: %s", msisdn, e)
 
 
 async def _admin_ids() -> list:
