@@ -1,5 +1,51 @@
 # Staff Announcement Drafts
 
+## 2026-09-03 — Doc Splitter upgraded + Merge-to-one-PDF + AI tasks
+
+**Title (EN):**
+📄 Doc tool upgraded: sharper splitting, merge-to-one-PDF, and AI tasks
+
+**Details (EN):**
+Team, the **Doc Splitter** (ops → 📄) is better and does more:
+• **Sharper splitting** — it now reads the file page-by-page, so it separates stacked documents (discharge summary, bills, lab reports, policy…) far more accurately. Always glance at the page ranges before exporting.
+• **Merge → one PDF** — a new green button combines a customer's mixed files (photos + PDFs) into ONE clean PDF.
+• **🤖 AI tasks on this file** — after uploading, pick a task (summarise the file, extract all bills & totals, list every document, flag likely-missing documents, build a date-wise chronology) and the AI reads it and gives you the result to copy. You can also copy the prompt to run in your own AI.
+React 👍 once you've read this, and ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📄 डॉक्यूमेंट टूल बेहतर हुआ: सटीक अलगाव, एक PDF में जोड़ना, और AI टास्क
+
+**Details (HI):**
+टीम, **Doc Splitter** (ops → 📄) अब बेहतर है और ज़्यादा काम करता है:
+• **ज़्यादा सटीक अलगाव** — अब यह फ़ाइल को पेज-दर-पेज पढ़ता है, इसलिए एक साथ जुड़े दस्तावेज़ (डिस्चार्ज समरी, बिल, लैब रिपोर्ट, पॉलिसी…) कहीं ज़्यादा सही तरीके से अलग होते हैं। एक्सपोर्ट से पहले पेज रेंज ज़रूर देख लें।
+• **Merge → one PDF** — नया हरा बटन ग्राहक की मिली-जुली फ़ाइलों (फोटो + PDF) को एक साफ़-सुथरी PDF में जोड़ देता है।
+• **🤖 AI tasks on this file** — अपलोड के बाद कोई टास्क चुनें (फ़ाइल का सारांश, सभी बिल व कुल रकम निकालना, हर दस्तावेज़ की सूची, संभावित छूटे दस्तावेज़ बताना, तारीख-वार क्रम बनाना) — AI इसे पढ़कर नतीजा देता है जिसे आप कॉपी कर सकते हैं। चाहें तो प्रॉम्प्ट कॉपी करके अपने AI में भी चला सकते हैं।
+पढ़ने के बाद 👍 करें, और कुछ भी समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+_Suggested roles: Team members + Admins + Super admins (anyone who handles customer documents)._
+
+---
+
+## 2026-09-03 — Email Updates radar is read-only (read & flag)
+
+**Title (EN):**
+📨 Email Updates: read-only radar for authority replies
+
+**Details (EN):**
+Admins, the **Email Updates** radar (ops → 📨) watches connected customer mailboxes and **flags** when an authority or urgent email arrives — so nobody has to open each inbox daily. It is **read-only**: it reads and flags, it does **not** send or reply from anyone's mailbox. To reply, open that mailbox directly. To start, connect a mailbox in the **Mailboxes** tab (app-password or simple forwarding).
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📨 Email Updates: सिर्फ़-पढ़ने वाला रडार (अथॉरिटी के जवाब पकड़ता है)
+
+**Details (HI):**
+एडमिन्स, **Email Updates** रडार (ops → 📨) जुड़े हुए ग्राहक मेलबॉक्स पर नज़र रखता है और जैसे ही किसी अथॉरिटी या ज़रूरी ईमेल आता है, उसे **फ़्लैग** कर देता है — ताकि किसी को रोज़ हर इनबॉक्स खोलना न पड़े। यह **सिर्फ़ पढ़ता और फ़्लैग करता है**, किसी के मेलबॉक्स से भेजता या जवाब **नहीं** देता। जवाब देने के लिए वह मेलबॉक्स सीधे खोलें। शुरू करने के लिए **Mailboxes** टैब में मेलबॉक्स जोड़ें (ऐप-पासवर्ड या साधारण फ़ॉरवर्डिंग)।
+पढ़ने के बाद 👍 करें; कुछ अस्पष्ट हो तो ऑफ़िस IT SPOC से पूछें।
+
+_Suggested roles: Admins + Super admins only._
+
+---
+
 Ready-to-send drafts for the **Announce an update** feature (ops portal → 🆕 Announce).
 Rule: I draft these; **you review and send** — nothing goes out automatically.
 Keep the language simple, warm, and motivating. Paste Title + Details, pick roles, Send.
