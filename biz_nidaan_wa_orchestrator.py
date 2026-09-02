@@ -197,10 +197,14 @@ JOURNEY_TEMPLATES = {
 }
 
 
-async def wa_journey(claim_id: int, event: str, extra: dict | None = None) -> dict:
+async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
+                     skip_phones: list | None = None) -> dict:
     """Send a lifecycle WhatsApp message to the claim's COMPLAINANT (welcome / intro_value /
     claim_registered / thank_you_payment / payment_failed). In-session → free-form text; cold →
-    approved template (logs 'needs template' until they exist). Records on the claim timeline. Safe."""
+    approved template (logs 'needs template' until they exist). Records on the claim timeline. Safe.
+
+    skip_phones: numbers another path already messages (e.g. the subscriber WhatsApp confirmation);
+    if the complainant is one of them we DON'T send a second WhatsApp to the same phone."""
     try:
         if not _wa.is_configured():
             return {"ok": False, "error": "not_configured"}
@@ -216,6 +220,18 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None) -> di
         if not phone:
             return {"ok": False, "error": "no_phone"}
         msisdn = _wa.normalize_msisdn(phone)
+        # De-dup: don't send a second WhatsApp to a number another path already messages.
+        if skip_phones:
+            _skip = {_wa.normalize_msisdn(p) for p in skip_phones if (p or "").strip()}
+            if msisdn in _skip:
+                return {"ok": False, "error": "dedup_same_phone"}
+        # Consent: never message a complainant who replied STOP.
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            _ct = await (await c.execute(
+                "SELECT status FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
+        if _ct and dict(_ct).get("status") == "stopped":
+            return {"ok": False, "error": "opted_out"}
         lang = await _lang(msisdn)
         ctx = {"name": (claim.get("complainant_name") or claim.get("insured_name") or "").split(" ")[0],
                "claim_id": claim_id, "insured_name": claim.get("insured_name") or ""}

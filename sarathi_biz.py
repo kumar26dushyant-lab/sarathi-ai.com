@@ -4754,6 +4754,15 @@ async def nidaan_razorpay_webhook(request: Request):
                                                        ref_code=(_notes.get("ref", "") or "")))
         except Exception as _fe:
             logger.warning("payment.failed alert dispatch failed: %s", _fe)
+        # Complainant-facing reassurance on WhatsApp ("no money was deducted, try again") —
+        # only for claim-linked payments, where the order notes carry the claim_id.
+        _cid_note = str(_notes.get("claim_id", "") or "").strip()
+        if _cid_note.isdigit():
+            try:
+                import biz_nidaan_wa_orchestrator as _worch
+                _asyncio.create_task(_worch.wa_journey(int(_cid_note), "payment_failed"))
+            except Exception as _we:
+                logger.warning("payment.failed wa_journey dispatch failed: %s", _we)
         # Persist for the analytics dashboard (failures-by-channel + trend). Best-effort.
         try:
             _purpose = {"nidaan": "subscription", "nidaan_claim_499": "review499",

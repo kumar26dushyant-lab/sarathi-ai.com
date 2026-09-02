@@ -1931,6 +1931,14 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
             await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
         except Exception:
             pass
+    # Complainant payment-thanks on WhatsApp (branch/ops claim — the customer is not the
+    # account-holder here, so no collision with any subscriber-facing confirmation).
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.wa_journey(claim_id, "thank_you_payment",
+                               extra={"amount": str(fee) if fee else ""})
+    except Exception as e:
+        logger.warning("on_branch_l2_paid wa_journey failed claim %s: %s", claim_id, e)
 
 
 async def on_subscriber_signup(account_id: int):
@@ -2961,6 +2969,14 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
         recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
         subject="Payment confirmed — your review has started",
         body=body, claim_id=claim_id)
+    # Complainant payment-thanks — skips the subscriber's own number (the dispatch above owns
+    # it and honours wa_opt_in); fires only if the complainant is a DIFFERENT person.
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.wa_journey(claim_id, "thank_you_payment", extra={"amount": "499"},
+                               skip_phones=[claim.get("account_phone"), claim.get("insured_phone")])
+    except Exception as e:
+        logger.warning("on_funnel_paid wa_journey failed claim %s: %s", claim_id, e)
 
 
 async def on_report_ready(claim_id: int):
