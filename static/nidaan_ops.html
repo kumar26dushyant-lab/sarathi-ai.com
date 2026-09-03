@@ -4455,7 +4455,22 @@ function renderRadar(){
 }
 function _radarFlagDot(f){ return f==='red'?'🔴':(f==='green'?'⚪':'🟡'); }
 function _mTile(label,val,sub){ return `<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.6rem .8rem"><div style="font-size:1.3rem;font-weight:800">${val}</div><div style="font-size:.72rem;color:var(--nd-text-muted)">${label}${sub?' · '+sub:''}</div></div>`; }
+// Gmail/Yahoo send the forwarding verification to the DESTINATION inbox — i.e. to cs@/np@, us.
+// These land in the radar like any other mail, so surface them with the code pulled out.
+function _isFwdConfirm(i){
+  const f=(i.from_addr||'').toLowerCase(), s=(i.subject||'').toLowerCase();
+  return f.includes('forwarding-noreply@google.com') || f.includes('mail-noreply@yahoo')
+      || s.includes('forwarding confirmation') || s.includes('verify your forwarding')
+      || (s.includes('forwarding') && s.includes('confirm'));
+}
+function _fwdCode(i){
+  const hay=`${i.subject||''} ${i.snippet||''}`;
+  const m = hay.match(/\(#\s*(\d{6,12})\s*\)/) || hay.match(/confirmation code[:\s]*([0-9]{6,12})/i)
+         || hay.match(/\b(\d{9})\b/);
+  return m ? m[1] : '';
+}
 function _radarInBucket(i,b){
+  if(b==='forwarding') return _isFwdConfirm(i);
   if(b==='act') return i.status==='new' && (i.flag==='red'||i.flag==='amber');
   if(b==='waiting') return i.status==='responded';
   if(b==='resolved') return i.status==='resolved'||i.status==='closed';
@@ -4469,13 +4484,33 @@ function _renderRadarItems(){
   const items=_radarItems.filter(i=>_radarInBucket(i,b));
   const fTab=(v,lbl)=>`<div class="tab-pill ${b===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
   const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need attention')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
-  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}${fTab('forwarding','📮 Forwarding codes ('+(_radarItems.filter(_isFwdConfirm).length)+')')}</div>`;
   if(!items.length){
     const noMb = !_radarMailboxes.length;
     const empty = noMb
       ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails appear here, flagged when an authority or urgent update arrives.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
-      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='act'?'All caught up — nothing needs attention right now.':'New emails appear here automatically. Or hit 🔄 Check now.'}</p></div>`;
+      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b==='forwarding'?'Forwarding codes':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='forwarding'?'When a customer adds cs@ or np@ as a forwarding address, Google emails the code here. Hit 🔄 Check now after they submit it.':(b==='act'?'All caught up — nothing needs attention right now.':'New emails appear here automatically. Or hit 🔄 Check now.')}</p></div>`;
     return metricStrip+filters+empty;
+  }
+  // Forwarding-verification view: the code is the whole point, so lead with it.
+  if(b==='forwarding'){
+    const fwd=items.map(i=>{
+      const code=_fwdCode(i);
+      return `<div class="nd-card" style="padding:.8rem 1rem;margin-bottom:.55rem;border-left:3px solid var(--nd-cyan-text)">
+        <div style="display:flex;justify-content:space-between;gap:.8rem;align-items:center;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:.78rem;color:var(--nd-text-muted)">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${i.received_at?fmtDateTime(i.received_at):''}</div>
+            <div style="font-weight:600;font-size:.84rem;margin-top:.15rem">${esc(i.subject||'(no subject)')}</div>
+          </div>
+          ${code?`<div style="text-align:center">
+              <div style="font-family:monospace;font-size:1.5rem;font-weight:800;letter-spacing:.06em;color:var(--nd-cyan-text)">${esc(code)}</div>
+              <button class="btn-sm btn-ghost" data-copy="${esc(code)}" onclick="dsCopyPrompt(this)">⧉ Copy code</button>
+            </div>`:'<span style="font-size:.74rem;color:var(--nd-text-faint)">open the email for the link</span>'}
+          <button class="btn-sm btn-primary" style="white-space:nowrap" onclick="openRadarEmail(${i.item_id})">Open</button>
+        </div></div>`;}).join('');
+    return metricStrip+filters
+      +`<div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.6rem">Give this code to the customer to paste into their Gmail/Yahoo forwarding screen — or open the email and click the confirm link yourself.</div>`
+      +fwd;
   }
   const rows=items.map(i=>{
     const mid=String(i.message_id||'').replace(/[<>]/g,'');
@@ -4553,8 +4588,8 @@ function _renderRadarMailboxes(){
   const has = a => _radarMailboxes.some(m => (m.email_address||m.email_masked||'').toLowerCase().startsWith(a));
   // THE MODEL: we do NOT connect a mailbox per customer any more. There are exactly TWO
   // collection inboxes; every customer simply FORWARDS their claim mail into the right one.
-  const guide = `<details ${none?'open':''} style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;margin-bottom:1rem">
-    <summary style="cursor:pointer;padding:.85rem 1rem;font-weight:700;font-size:.9rem;list-style:none">📖 How Email Updates works <span style="font-weight:400;color:var(--nd-text-muted);font-size:.8rem">(tap to open/close)</span></summary>
+  const guide = `<details open style="background:var(--nd-bg-surface);border:1px solid rgba(34,211,238,.45);border-radius:12px;margin-bottom:1rem">
+    <summary style="cursor:pointer;padding:.85rem 1rem;font-weight:700;font-size:.9rem;list-style:none;background:rgba(34,211,238,.10);border-radius:11px 11px 0 0;color:var(--nd-cyan-text)">📖 How Email Updates works — read this before setting up forwarding <span style="font-weight:400;color:var(--nd-text-muted);font-size:.8rem">(click to fold/unfold)</span></summary>
     <div style="padding:0 1rem 1rem;font-size:.84rem;color:var(--nd-text-secondary);line-height:1.6">
       <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.7rem .9rem;margin-bottom:.9rem">
         <b>The whole idea in one line:</b> we no longer log into each customer's mailbox. Every customer <b>forwards</b> a copy of their claim email into <b>one of our two collection inboxes</b>, and the AI reads everything that lands there and raises the ones that matter.
@@ -4570,8 +4605,11 @@ function _renderRadarMailboxes(){
 
       <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">➡️ Step B — set forwarding on each customer's mailbox</div>
       <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Send <b>old / ClaimShield cases → cs@nidaanpartner.com</b> and <b>new cases → np@nidaanpartner.com</b>. Nothing else changes for the customer, and they keep their own copy.</div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail:</b> Settings (⚙️) → <b>See all settings</b> → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → type the right address above → Google emails a confirmation code to us → once confirmed, select <b>Forward a copy</b> and choose <b>keep Gmail's copy in the Inbox</b>.</div></div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.9rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add the right address → verify.</div></div>
+      <div style="background:rgba(234,179,8,.10);border:1px solid rgba(234,179,8,.35);border-radius:8px;padding:.6rem .8rem;margin-bottom:.6rem;color:var(--nd-text-secondary)">
+        <b>⚠️ Important — who gets the confirmation code?</b> Google sends it to the <b>destination</b> address, i.e. to <b>cs@ / np@ — us, not the customer</b>. So the customer types our address, and then <b>we</b> read the code and pass it back to them (or just click the confirm link ourselves). Open the <b>🚨 Radar → 📮 Forwarding codes</b> tab: every Google confirmation that lands in our inboxes is shown there with the code pulled out. No extra password needed anywhere — the two inboxes are already connected here.
+      </div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail (customer's mailbox):</b> Settings (⚙️) → <b>See all settings</b> → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → type the right address above → Google shows a "verify" prompt and emails the code <b>to us</b> → get the code from <b>📮 Forwarding codes</b> (or click the link in it) → the customer enters that code → finally select <b>Forward a copy</b> and choose <b>keep Gmail's copy in the Inbox</b> → <b>Save Changes</b> at the bottom.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.9rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add the right address → Yahoo also sends the verification to <b>our</b> inbox, so use the same <b>📮 Forwarding codes</b> tab.</div></div>
 
       <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.6rem .8rem;color:var(--nd-text-muted)">✅ That's it. Anything an insurer or authority sends now lands in a collection inbox, the AI reads it and raises it in the <b>🚨 Radar</b> tab. <b>Read-only</b> — we never send from these inboxes; to reply, open the mailbox directly. Only mail that arrives from now on is pulled in — never old backlog.</div>
     </div>

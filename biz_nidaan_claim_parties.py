@@ -151,6 +151,45 @@ async def get_claim_parties(claim_id: int) -> list[dict]:
     return out
 
 
+async def dashboard_link(party: dict, claim_id: Optional[int] = None) -> str:
+    """The link THIS party should land on — so a notification is actionable, not just news.
+
+    Complainant → a magic link straight into their own claim (upload documents there).
+    Subscriber  → their dashboard (bulk-upload across all their cases).
+    Branch      → the branch dashboard.  Staff → their My Business view in ops."""
+    try:
+        import biz_nidaan_claimant as _cl
+        base = _cl._public_base()
+    except Exception:
+        base = "https://nidaanpartner.com"
+    role = party.get("role")
+    try:
+        if role == "complainant" and claim_id:
+            import biz_nidaan_claimant as _cl
+            await _cl.ensure_portal(claim_id, with_token=True)
+            p = await _cl.get_portal(claim_id)
+            if p and p.get("access_token"):
+                return f"{base}/nidaan/claim/magic?token={p['access_token']}"
+            return f"{base}/nidaan/dashboard"
+        if role == "subscriber":
+            return f"{base}/nidaan/dashboard"
+        if role == "branch":
+            return f"{base}/nidaan/branch"
+        if role == "staff":
+            return f"{base}/nidaan/ops"
+    except Exception as e:  # noqa: BLE001
+        logger.debug("dashboard_link failed (%s): %s", role, e)
+    return f"{base}/nidaan/dashboard"
+
+
+_LINK_CTA = {
+    "complainant": "Open your case to upload documents or check progress",
+    "subscriber": "Open your dashboard — upload documents for all your cases in one place",
+    "branch": "Open your branch dashboard for the full picture",
+    "staff": "Open My Business in ops",
+}
+
+
 def _missing_ask(party: dict, lang_en: bool = True) -> str:
     """The line we append asking a party for the channel we don't have."""
     url = ROLE_PROFILE_URL.get(party.get("role"), "/nidaan/dashboard")
@@ -188,7 +227,10 @@ async def notify_claim_parties(claim_id: int, *, event_key: str, subject: str, b
                 continue
             seen.add(key)
             ask = _missing_ask(p)
-            text = f"{body}{ask}"
+            # Every notification lands them somewhere useful, on their OWN dashboard.
+            link = await dashboard_link(p, claim_id)
+            cta = _LINK_CTA.get(p["role"], "Open your dashboard")
+            text = f"{body}{ask}\n\n👉 {cta}:\n{link}"
             # ── email + dashboard (the always-on rail) ─────────────────────────
             try:
                 if p["role"] == "staff" and p.get("staff_id"):
