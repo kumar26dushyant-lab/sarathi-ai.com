@@ -5074,21 +5074,69 @@ async def activate_from_razorpay_webhook(
     nidaan_account_id: int,
     plan: str,
     amount_paise: int,
+    razorpay_payment_id: str = "",
 ) -> bool:
-    """Activate / renew a Nidaan subscription from Razorpay webhook. Idempotent."""
-    # Check not already recorded
+    """Activate OR RENEW a Nidaan subscription from a Razorpay webhook.
+
+    Both `subscription.activated` and `subscription.charged` land here. The FIRST charge creates
+    the subscription; every LATER charge is a RENEWAL that must (a) extend current_period_end,
+    (b) record GST and (c) write the payment to the unified ledger — previously the function
+    returned early whenever the subscription row existed, so renewals silently did none of that
+    (a paying customer would have looked expired and the renewal never reached Revenue).
+
+    `record_payment` is the idempotency gate: it returns False when this exact charge was already
+    recorded, so duplicate webhooks (and the activated+charged pair on the first payment) can
+    never double-extend a period or double-count revenue."""
+    # Live plan config is the source of truth for period/price; hardcoded seed is the fallback.
+    try:
+        _cfg = await get_plan_cfg(plan)
+    except Exception:
+        _cfg = None
+    period_days = int((_cfg or {}).get("period_days") or 0) or \
+        int(NIDAAN_RAZORPAY_PLANS.get(plan, {}).get("period_days", 30))
+    _base_rs = (int(_cfg["price_paise"]) / 100) if (_cfg and _cfg.get("price_paise")) \
+        else (NIDAAN_RAZORPAY_PLANS.get(plan, {}).get("amount_paise", 0) / 100)
+
     async with aiosqlite.connect(DB_PATH) as conn:
-        cur = await conn.execute(
-            "SELECT sub_id FROM nidaan_subscriptions "
-            "WHERE razorpay_subscription_id=? AND plan=?",
-            (razorpay_sub_id, plan),
-        )
-        existing = await cur.fetchone()
+        conn.row_factory = aiosqlite.Row
+        _ex = await (await conn.execute(
+            "SELECT sub_id, current_period_end FROM nidaan_subscriptions "
+            "WHERE razorpay_subscription_id=? AND plan=?", (razorpay_sub_id, plan))).fetchone()
+    existing = dict(_ex) if _ex else None
+
+    # ── RENEWAL (the subscription already exists) ──────────────────────────────
     if existing:
-        logger.info("Nidaan sub already recorded for rzp_sub %s", razorpay_sub_id)
+        _key = (razorpay_payment_id or "").strip() or \
+            f"subrenew:{razorpay_sub_id}:{existing.get('current_period_end') or ''}"
+        fresh = await record_payment(
+            source="subscription_renewal", total_paise=int(amount_paise or 0), dedup_key=_key,
+            razorpay_payment_id=(razorpay_payment_id or ""), razorpay_subscription_id=razorpay_sub_id,
+            account_id=nidaan_account_id, plan=plan, base_paise=int(_base_rs * 100),
+            verified=True, verify_method="webhook", note="recurring subscription charge")
+        if not fresh:
+            logger.info("Nidaan sub renewal already processed (rzp_sub=%s)", razorpay_sub_id)
+            return True
+        # Extend from the LATER of now / current end, so an early webhook never shortens a period.
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE nidaan_subscriptions SET status='active', current_period_end = datetime("
+                "  CASE WHEN COALESCE(current_period_end,'') > datetime('now') "
+                "       THEN current_period_end ELSE datetime('now') END, ?) WHERE sub_id=?",
+                (f"+{int(period_days)} days", existing["sub_id"]))
+            await conn.commit()
+        try:
+            await record_gst(_key, "subscription_recurring", _base_rs, account_id=nidaan_account_id)
+        except Exception as _ge:
+            logger.warning("record_gst (recurring) failed: %s", _ge)
+        if PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+            try:
+                await _provision_sarathi_bundle(nidaan_account_id, plan, period_days)
+            except Exception as _be:
+                logger.warning("bundle re-provision on renewal failed: %s", _be)
+        logger.info("🔁 Nidaan sub RENEWED: account=%s plan=%s +%sd", nidaan_account_id, plan, period_days)
         return True
-    plan_info = NIDAAN_RAZORPAY_PLANS.get(plan, {})
-    period_days = plan_info.get("period_days", 92)
+
+    # ── FIRST ACTIVATION ───────────────────────────────────────────────────────
     sub_id = await create_subscription(
         account_id=nidaan_account_id,
         plan=plan,
@@ -5101,14 +5149,23 @@ async def activate_from_razorpay_webhook(
     if PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
         await _provision_sarathi_bundle(nidaan_account_id, plan, period_days)
 
-    # GST ledger: record tax for this recurring charge (base from plan config; no-op if off).
+    # Unified ledger (webhook is the durable fallback if the checkout path missed it; dedup-safe).
     try:
-        _cfg = await get_plan_cfg(plan)
-        _base = (int(_cfg["price_paise"]) / 100) if (_cfg and _cfg.get("price_paise")) \
-            else (NIDAAN_RAZORPAY_PLANS.get(plan, {}).get("amount_paise", 0) / 100)
-        await record_gst(razorpay_sub_id, "subscription_recurring", _base, account_id=nidaan_account_id)
+        await record_payment(
+            source="subscription", total_paise=int(amount_paise or 0),
+            dedup_key=(razorpay_payment_id or f"subactivate:{razorpay_sub_id}"),
+            razorpay_payment_id=(razorpay_payment_id or ""), razorpay_subscription_id=razorpay_sub_id,
+            account_id=nidaan_account_id, plan=plan, base_paise=int(_base_rs * 100),
+            verified=True, verify_method="webhook", note="subscription activation")
+    except Exception as _pe:
+        logger.warning("record_payment (activation) failed: %s", _pe)
+
+    # GST ledger: record tax for this charge (base from plan config; no-op if off).
+    try:
+        await record_gst(razorpay_sub_id, "subscription_recurring", _base_rs,
+                         account_id=nidaan_account_id)
     except Exception as _ge:
-        logger.warning("record_gst (recurring) failed: %s", _ge)
+        logger.warning("record_gst (activation) failed: %s", _ge)
 
     return True
 

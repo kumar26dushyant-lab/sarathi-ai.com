@@ -4991,7 +4991,11 @@ async def nidaan_razorpay_webhook(request: Request):
     if event in ("subscription.activated", "subscription.charged"):
         payment_entity = payload.get("payment", {}).get("entity", {})
         amount_paise = payment_entity.get("amount", 0)
-        await nidaan.activate_from_razorpay_webhook(rzp_sub_id, account_id, plan, amount_paise)
+        # Pass the Razorpay payment id: it is the idempotency key that lets the renewal path
+        # extend the period + hit the ledger exactly once per charge.
+        await nidaan.activate_from_razorpay_webhook(
+            rzp_sub_id, account_id, plan, amount_paise,
+            razorpay_payment_id=(payment_entity.get("id") or ""))
         async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
             _c.row_factory = __import__("aiosqlite").Row
             _row = await (await _c.execute(

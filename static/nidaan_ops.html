@@ -3597,7 +3597,15 @@ function _pipeStage(c){
   if(st==='assigned') return 'assigned';
   return 'new';
 }
-let _pipeRows=[], _pipeOrigin='all', _pipeSearch='';
+let _pipeRows=[], _pipeOrigin='all', _pipeCust='all', _pipeSearch='';
+// A claim has TWO independent dimensions and conflating them hid our subscribers:
+//   source_kind = WHO BROUGHT IT (a branch/staff referrer wins the attribution chain), and
+//   payment_status = WHAT KIND OF CUSTOMER it is (subscription / one-off ₹499 / unpaid lead).
+// A subscriber introduced by a branch is BOTH — so we filter on each separately.
+function _pipeCustKind(c){
+  const p=(c.payment_status||'').toLowerCase();
+  return p==='subscription' ? 'subscription' : (p==='paid' ? 'paid' : 'unpaid_lead');
+}
 async function loadPipeline(){
   const el=document.getElementById('panel-pipeline');
   el.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Loading the pipeline…</p></div>';
@@ -3610,11 +3618,14 @@ async function loadPipeline(){
 function _renderPipeline(){
   const el=document.getElementById('panel-pipeline'); if(!el) return;
   const q=(_pipeSearch||'').trim().toLowerCase();
-  let rows=_pipeRows.filter(c=>_pipeOrigin==='all' || (c.source_kind||'direct')===_pipeOrigin);
+  let rows=_pipeRows.filter(c=>(_pipeOrigin==='all' || (c.source_kind||'direct')===_pipeOrigin)
+                            && (_pipeCust==='all' || _pipeCustKind(c)===_pipeCust));
   if(q) rows=rows.filter(c=>((c.insured_name||'')+' '+(c.claim_type||'')+' '+(c.owner_name||'')+' '+fmtClaimNum(c.claim_id)).toLowerCase().includes(q));
   const byStage={}; rows.forEach(c=>{ const s=_pipeStage(c); (byStage[s]=byStage[s]||[]).push(c); });
-  const origins=[['all','All'],['subscriber','💳 Subscriber'],['branch','🏢 Branch'],['staff','👤 Staff'],['review','📋 ₹499'],['direct','🌐 Direct']];
+  const origins=[['all','All'],['branch','🏢 Branch'],['staff','👤 Staff'],['subscriber','💳 Self'],['review','📋 ₹499'],['direct','🌐 Direct']];
   const chip=(v,l)=>`<div class="tab-pill ${_pipeOrigin===v?'active':''}" onclick="pipeSetOrigin('${v}')">${l}${v!=='all'?` <span style="opacity:.6">${_pipeRows.filter(c=>(c.source_kind||'direct')===v).length}</span>`:''}</div>`;
+  const custs=[['all','All'],['subscription','💳 Subscriber'],['paid','✅ ₹499 paid'],['unpaid_lead','🟠 Lead (unpaid)']];
+  const cchip=(v,l)=>`<div class="tab-pill ${_pipeCust===v?'active':''}" onclick="pipeSetCust('${v}')">${l}${v!=='all'?` <span style="opacity:.6">${_pipeRows.filter(c=>_pipeCustKind(c)===v).length}</span>`:''}</div>`;
   const cols=_PIPE_STAGES.map(([key,label,desc])=>{
     const list=byStage[key]||[];
     const cards=list.length
@@ -3628,13 +3639,15 @@ function _renderPipeline(){
       <div><input type="search" placeholder="🔍 Search claims…" value="${esc(_pipeSearch)}" oninput="pipeSearch(this.value)" style="padding:.5rem .7rem;border-radius:8px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);min-width:200px"></div>
     </div>
     <div style="font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.5rem">Showing <b>${rows.length}</b> active claim(s)</div>
-    <div class="tab-row" style="margin-bottom:.9rem">${origins.map(o=>chip(o[0],o[1])).join('')}</div>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem"><span style="font-size:.72rem;color:var(--nd-text-faint);min-width:74px">Brought by</span><div class="tab-row" style="margin:0">${origins.map(o=>chip(o[0],o[1])).join('')}</div></div>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem"><span style="font-size:.72rem;color:var(--nd-text-faint);min-width:74px">Customer</span><div class="tab-row" style="margin:0">${custs.map(o=>cchip(o[0],o[1])).join('')}</div></div>
     <div class="board">${cols}</div>`;
 }
 function pipeSetOrigin(v){ _pipeOrigin=v; _renderPipeline(); }
+function pipeSetCust(v){ _pipeCust=v; _renderPipeline(); }
 let _pipeSearchT=null;
 function pipeSearch(v){ _pipeSearch=v; clearTimeout(_pipeSearchT); _pipeSearchT=setTimeout(_renderPipeline,180); }
-window.loadPipeline=loadPipeline; window.pipeSetOrigin=pipeSetOrigin; window.pipeSearch=pipeSearch;
+window.loadPipeline=loadPipeline; window.pipeSetOrigin=pipeSetOrigin; window.pipeSetCust=pipeSetCust; window.pipeSearch=pipeSearch;
 // Eligible to send to ClaimShield = reviewed-GO (all rows here are) AND paid
 // (L2 fee paid, or review ₹499 paid, or subscriber) — mirrors the backend guard.
 function _l2Eligible(c){ return c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription'; }

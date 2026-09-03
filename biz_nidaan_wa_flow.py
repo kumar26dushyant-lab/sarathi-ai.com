@@ -129,12 +129,45 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
     # Record cold/unknown numbers as CRM leads (no-op for known customers). Non-blocking.
     await maybe_capture_lead(msisdn)
     # Guided doc-collection: match the number to its claim, greet + ask the next pending doc.
+    res = {}
     try:
         import biz_nidaan_wa_orchestrator as _orch
-        await _orch.handle_inbound_text(msisdn, text)
+        res = await _orch.handle_inbound_text(msisdn, text) or {}
     except Exception as e:  # noqa: BLE001
         logger.info("orchestrator text handoff failed: %s", e)
+        return
+    # NOBODY should be left on read. If the number isn't linked to a claim, answer anyway:
+    # the first time with the full value message (what we do + what we need to know), and
+    # after that with a short "we're on it" nudge. Free-form is fine — they just wrote to us,
+    # so the 24h session is open and no template is required.
+    if not res.get("ok") and res.get("error") == "no_claim":
+        await _reply_unlinked(msisdn)
     return
+
+
+async def _reply_unlinked(msisdn: str) -> None:
+    """Reply to an inbound from a number we have no claim for, and alert ops on first contact."""
+    try:
+        import biz_nidaan_wa_messages as _msg
+        c = await get_contact(msisdn) or {}
+        lang = (c.get("language") or "hinglish")
+        first_touch = not (c.get("last_outbound_at") or "")
+        body = _msg.compose("intro_value" if first_touch else "human_followup", lang, {"name": ""})
+        if body:
+            await wa.send_text(msisdn, body)
+            await upsert_contact(msisdn, mark_outbound=True)
+        if first_touch:
+            try:
+                import biz_nidaan_notifications as _nnot
+                await _nnot.notify_staff_inapp(
+                    await _admin_ids(), "💬 New WhatsApp enquiry",
+                    f"A new number {msisdn} messaged NidaanPartner on WhatsApp. It has been recorded "
+                    f"as a CRM lead and auto-answered — pick it up in CRM.",
+                    event_key="wa.new_enquiry", email=False)
+            except Exception:
+                pass
+    except Exception as e:  # noqa: BLE001
+        logger.info("unlinked WhatsApp reply failed for %s: %s", msisdn, e)
 
 
 async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -> None:

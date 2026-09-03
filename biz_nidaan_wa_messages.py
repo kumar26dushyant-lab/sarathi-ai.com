@@ -95,6 +95,24 @@ def intro_value(ctx: dict, lang: str = "hinglish") -> str:
     return hi_ + _SIGN[l]
 
 
+def human_followup(ctx: dict, lang: str = "hinglish") -> str:
+    """Short ack for an inbound from someone we don't have a claim for yet (after the first
+    intro_value). Keeps the person warm without repeating the long pitch."""
+    l = _lang(lang)
+    hi_ = {
+        "hinglish": ("Aapka message mil gaya 🙏 Hamari team ise dekh rahi hai aur jaldi aapse "
+                     "sampark karegi.\n\nAgar aap yahin bata dein — claim kis cheez ka hai, kaunsi "
+                     "insurance company hai, aur kya problem aayi — to hum turant aage badh payenge."),
+        "hi": ("आपका मैसेज मिल गया 🙏 हमारी टीम इसे देख रही है और जल्दी आपसे संपर्क करेगी।\n\n"
+               "अगर आप यहीं बता दें — क्लेम किस चीज़ का है, कौन-सी इंश्योरेंस कंपनी है, और क्या दिक्कत आई — "
+               "तो हम तुरंत आगे बढ़ पाएंगे।"),
+        "en": ("We've received your message 🙏 Our team is looking at it and will contact you "
+               "shortly.\n\nIf you can tell us here — what the claim is for, which insurance company, "
+               "and what went wrong — we can move forward right away."),
+    }[l]
+    return hi_ + _SIGN[l]
+
+
 def payment_failed(ctx: dict, lang: str = "hinglish") -> str:
     l = _lang(lang)
     hi_ = {
@@ -184,6 +202,7 @@ _COMPOSERS = {
     "thank_you_payment": thank_you_payment, "payment_failed": payment_failed,
     "doc_reminder": doc_reminder, "doc_received_ok": doc_received_ok, "doc_wrong": doc_wrong,
     "doc_quality": doc_quality, "docs_complete": docs_complete,
+    "human_followup": human_followup,
 }
 
 
