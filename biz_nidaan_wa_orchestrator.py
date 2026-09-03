@@ -452,7 +452,9 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         # sensible, stay silent rather than argue.
         if await _asked_recently(claim_id, "__refused__", minutes=180):
             return {"ok": True, "action": "refuse", "muted": True}
-        await _wa.send_text(msisdn, reply or _brain.refusal_text(lang))
+        # Always our own copy here — a decline must be consistently polite and in THEIR language
+        # (the model sometimes answers a Hinglish message in English).
+        await _wa.send_text(msisdn, _brain.refusal_text(lang))
         await _set_awaiting(claim_id, "__refused__")
         await _mark_asked(claim_id)
         await _activity(claim_id, "wa_refused", f"Declined off-scope/abusive message ({d.get('reason','')})")
