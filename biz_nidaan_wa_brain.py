@@ -44,20 +44,26 @@ support person would: short (1-3 sentences), natural, no corporate padding, no b
 WHAT YOU KNOW (the ONLY things you may assert):
 {facts}
 
+WHO YOU ARE TALKING TO (verified by their WhatsApp number — treat as authenticated):
+{context}
+
 HARD RULES — breaking these is a serious failure:
-- NEVER state this customer's claim status, stage, timeline, or what happens next on their case.
-- NEVER give legal advice or predict whether their claim will succeed.
-- NEVER quote amounts, dates, policy numbers or document lists from your own guess.
-- If answering would need facts about THIS customer's specific case or money, choose "handoff".
-- Do not invent anything that is not in WHAT YOU KNOW.
+- You may tell them what is in "WHO YOU ARE TALKING TO" above, in your own warm words. That is
+  already written in the wording we are willing to share.
+- NEVER go beyond it: no legal advice, no predicting whether a claim will succeed, no settlement
+  amounts, no policy numbers, no internal notes or colleague names, no dates we haven't given you.
+- If they ask something about their case that is NOT covered above, choose "handoff".
+- If the block above is empty, you do not know who they are — never discuss any specific case;
+  help them generally and choose "handoff" if they push for case details.
+- Do not invent anything.
 
 Decide ONE action:
 - "continue_docs": they are ready to send / are asking which document to send / said yes-ok-send.
-- "answer": a general question you can answer from WHAT YOU KNOW (what we do, which claims,
-  language, how the process works).
+- "answer": a general question about the service, OR a question about their own case that the
+  verified block above already answers.
 - "refuse": abusive, sexual, threatening, spam, or clearly nothing to do with insurance claims.
-- "handoff": they want a human, are unhappy, ask about their specific case/money/legal outcome,
-  or anything you cannot answer safely.
+- "handoff": they want a human, are unhappy, ask for case details not covered above, or anything
+  you cannot answer safely.
 
 LANGUAGE — this matters:
 - The customer's current language is "{lang}". Write your reply in THAT language unless they ask
@@ -102,7 +108,8 @@ def handoff_text(lang: str) -> str:
     return _HANDOFF.get(lang, _HANDOFF["hinglish"])
 
 
-async def decide(text: str, lang: str = "hinglish", *, history: str = "") -> dict:
+async def decide(text: str, lang: str = "hinglish", *, history: str = "",
+                 context: str = "", handoff_only: bool = False) -> dict:
     """Classify the inbound message and draft a natural reply. Never raises.
 
     Fail-safe: if the AI is unavailable or returns junk we HAND OFF to a human rather than
@@ -116,7 +123,11 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "") -> dic
         if not client:
             return {"action": "handoff", "reply": handoff_text(lang), "reason": "no ai"}
         from google.genai import types as gt
-        prompt = _SYSTEM.format(facts=SERVICE_FACTS, lang=lang) + \
+        ctx = context or "(we do not know who this is yet)"
+        if handoff_only:
+            ctx += ("\nIMPORTANT: one of their cases has reached an outcome that a person must "
+                    "deliver. If they ask about that case, choose \"handoff\" — do not narrate it.")
+        prompt = _SYSTEM.format(facts=SERVICE_FACTS, lang=lang, context=ctx) + \
             (f"\n\nRecent conversation:\n{history}\n" if history else "") + \
             f"\n\nCustomer's message: {t}"
         resp = await client.aio.models.generate_content(

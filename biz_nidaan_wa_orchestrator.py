@@ -114,6 +114,20 @@ async def _asked_recently(claim_id: int, doc_key: str, minutes: int = 90) -> boo
         return False
 
 
+async def _recent_outbound(msisdn: str, minutes: int = 120) -> bool:
+    """Did we message this number within `minutes`? A generic throttle that — unlike the
+    document one — never touches the claim's awaiting-document state."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            r = await (await c.execute(
+                "SELECT 1 FROM nidaan_wa_contacts WHERE msisdn=? AND last_outbound_at IS NOT NULL "
+                "AND last_outbound_at > datetime('now', ?)",
+                (msisdn, f"-{int(minutes)} minutes"))).fetchone()
+        return bool(r)
+    except Exception:
+        return False
+
+
 async def _mark_asked(claim_id: int) -> None:
     try:
         async with aiosqlite.connect(DB_PATH) as c:
@@ -440,17 +454,38 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     Previously this ignored the message entirely and re-sent welcome + the same document ask
     every single time. Now the conversation brain decides: answer the question, continue the
     guided document flow, decline once (abuse / off-topic), or hand off to a human."""
-    claim = await _claim_for_msisdn(msisdn)
-    if not claim:
-        return {"ok": False, "error": "no_claim"}
-    claim_id = claim["claim_id"]
-    if await _awaiting(claim_id) == "__human__":
-        return {"ok": False, "error": "human_takeover"}   # a human owns this chat — stay quiet
-    lang = await _lang(msisdn)
-    await _link_contact(msisdn, claim)
-
     import biz_nidaan_wa_brain as _brain
-    d = await _brain.decide(text, lang)
+    import biz_nidaan_wa_identity as _ident
+
+    claim = await _claim_for_msisdn(msisdn)
+    claim_id = claim["claim_id"] if claim else None
+    lang = await _lang(msisdn)
+
+    # Who is this? A number that matches our records is an authenticated identity (Meta proves
+    # possession), so a verified customer / subscriber / branch can be SERVED here instead of
+    # being told "our team will contact you".
+    ident = await _ident.resolve(msisdn)
+    sc = await _ident.safe_context(ident)
+
+    # Under human takeover the bot must not talk over the staffer — but it must not go SILENT
+    # either; that is exactly what dead-ended the last conversation. Acknowledge, at most once
+    # every 2 hours, without touching the pending-document state.
+    if claim_id and await _awaiting(claim_id) == "__human__":
+        if not await _recent_outbound(msisdn, 120):
+            await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
+            await _touch_outbound(msisdn)
+            await _activity(claim_id, "wa_ack", "Acknowledged (case is with a human).")
+        return {"ok": True, "action": "human_takeover_ack"}
+
+    # Nothing we can tie to a person → let the caller run the prospect/sales reply.
+    if not claim and ident.get("role") == "unknown":
+        return {"ok": False, "error": "no_claim"}
+
+    if claim:
+        await _link_contact(msisdn, claim)
+
+    d = await _brain.decide(text, lang, context=sc.get("text", ""),
+                            handoff_only=bool(sc.get("handoff_only")))
     action, reply = d.get("action"), d.get("reply") or ""
     # If they asked to switch language, REMEMBER it — every later reply, document ask and
     # reminder now uses it, until they ask to change again.
@@ -464,51 +499,65 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
             pass
     await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
 
-    if action == "continue_docs":
+    if action == "continue_docs" and claim:
         # They're ready to send — always re-state the exact document (force past the throttle).
         return await start_or_continue(msisdn, force_ask=True)
 
     if action == "refuse":
-        # Decline ONCE. If they were already declined and still haven't asked something
-        # sensible, stay silent rather than argue.
-        if await _asked_recently(claim_id, "__refused__", minutes=180):
+        # Decline ONCE, then stay quiet until they ask something sensible (a sensible question
+        # comes back as "answer", not "refuse", so it is never muted).
+        if await _recent_outbound(msisdn, 180):
             return {"ok": True, "action": "refuse", "muted": True}
         # Always our own copy here — a decline must be consistently polite and in THEIR language
         # (the model sometimes answers a Hinglish message in English).
         await _wa.send_text(msisdn, _brain.refusal_text(lang))
-        await _set_awaiting(claim_id, "__refused__")
-        await _mark_asked(claim_id)
+        await _touch_outbound(msisdn)
         await _activity(claim_id, "wa_refused", f"Declined off-scope/abusive message ({d.get('reason','')})")
         return {"ok": True, "action": "refuse"}
 
     if action == "handoff":
         await _wa.send_text(msisdn, reply or _brain.handoff_text(lang))
-        await _handoff_to_support(claim, msisdn, text, lang, reason=d.get("reason", ""))
+        await _touch_outbound(msisdn)
+        await _handoff_to_support(claim, msisdn, text, lang, reason=d.get("reason", ""),
+                                  identity=ident)
         return {"ok": True, "action": "handoff"}
 
-    # action == "answer" — a natural reply, then a gentle (throttled) nudge for the pending doc.
+    # action == "answer" — a natural reply, then (for a claim) a gentle throttled document nudge.
     await _wa.send_text(msisdn, reply)
+    await _touch_outbound(msisdn)
     await _activity(claim_id, "wa_answer", f"Answered: {reply[:120]}")
+    if not claim:
+        return {"ok": True, "action": "answer", "role": ident.get("role")}
     await ask_next(claim_id, msisdn)          # throttled — won't repeat if just asked
     return {"ok": True, "action": "answer"}
 
 
-async def _handoff_to_support(claim: dict, msisdn: str, text: str, lang: str, reason: str = "") -> None:
-    """Open (or extend) a Support thread in ops with the WhatsApp message, escalate it to a
-    human, and mute the bot on this claim so it never talks over the person taking it."""
+async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: str = "",
+                              identity: dict | None = None) -> None:
+    """Open a Support thread in ops with the WhatsApp message, escalate it to a human, and (for a
+    claim) mute the bot so it never talks over the person taking it. Works for a subscriber or
+    branch too, where there is no single claim to attach."""
+    claim = claim or {}
+    ident = identity or {}
     claim_id = claim.get("claim_id")
     try:
+        who = (claim.get("complainant_name") or claim.get("insured_name")
+               or ident.get("name") or "WhatsApp customer")
         th = await _n.create_support_thread(
-            name=(claim.get("complainant_name") or claim.get("insured_name") or "WhatsApp customer"),
-            contact=msisdn, account_id=claim.get("account_id"), channel="whatsapp", lang=lang)
+            name=who, contact=msisdn,
+            account_id=(claim.get("account_id") or ident.get("account_id")),
+            channel="whatsapp", lang=lang)
         tid = th.get("thread_id")
         # Carry the WhatsApp conversation into the thread so staff have the context.
         await _n.add_support_message(tid, "customer", (text or "")[:2000])
+        _ref = f"Claim #NP-{claim_id:04d}." if claim_id else \
+            f"Role: {ident.get('role') or 'unknown'}{(' ' + ident.get('branch_code')) if ident.get('branch_code') else ''}."
         await _n.add_support_message(
             tid, "ai", f"[auto] Handed off from the WhatsApp bot — {reason or 'needs a human'}. "
-                       f"Claim #NP-{claim_id}. Reply to the customer on WhatsApp {msisdn}.")
+                       f"{_ref} Reply to the customer on WhatsApp {msisdn}.")
         await _n.set_support_status(tid, "escalated")
-        await _set_takeover(claim_id, by="support")
+        if claim_id:
+            await _set_takeover(claim_id, by="support")
         await _activity(claim_id, "wa_handoff", f"Handed to Support (thread #{tid}) — {reason or 'needs a human'}")
         try:
             import biz_nidaan_notifications as _nnot
@@ -519,7 +568,18 @@ async def _handoff_to_support(claim: dict, msisdn: str, text: str, lang: str, re
         logger.warning("WhatsApp support handoff failed for claim %s: %s", claim_id, e)
 
 
-async def _activity(claim_id: int, kind: str, summary: str, *, channel: str = "whatsapp", direction: str = "out") -> None:
+async def _touch_outbound(msisdn: str) -> None:
+    """Record that we just messaged this number (drives the generic throttle)."""
+    try:
+        import biz_nidaan_wa_flow as _flow
+        await _flow.upsert_contact(msisdn, mark_outbound=True)
+    except Exception:
+        pass
+
+
+async def _activity(claim_id, kind: str, summary: str, *, channel: str = "whatsapp", direction: str = "out") -> None:
+    if not claim_id:
+        return   # a subscriber/branch conversation with no claim attached — nothing to pin it to
     try:
         await _n.record_claim_activity(claim_id, kind, channel=channel, direction=direction,
                                        actor=("claimant" if direction == "in" else "bot"), summary=summary)
