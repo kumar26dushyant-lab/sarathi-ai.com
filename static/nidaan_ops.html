@@ -4027,11 +4027,13 @@ async function loadBranches() {
     const active = b.status==='active';
     const unpaid = b.unpaid||0;
     const email = b.contact_email||'';
+    const phone = b.contact_phone||'';
     return `<tr>
       <td><strong style="color:var(--nd-purple-text)">${esc(b.branch_code)}</strong></td>
       <td>${esc(b.city)}</td>
       <td>${esc(b.name||'—')}</td>
       <td style="font-size:.74rem">${email?esc(email):'<span style="color:var(--nd-danger-text)" title="This branch cannot log in until you add an email">⚠ no login email</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${email?'edit':'add'}</a>${email?` · <a href="#" onclick="branchLoginInfo('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">🔗 login link</a>`:''}</td>
+      <td style="font-size:.74rem">${phone?esc(phone):'<span style="color:var(--nd-warning-text)" title="Without a number this branch gets claim updates by email only">⚠ no WhatsApp</span>'} <a href="#" onclick="editBranchPhone('${esc(b.branch_code)}','${esc(phone)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${phone?'edit':'add'}</a></td>
       <td style="text-align:center">${b.signups||0}</td>
       <td style="text-align:center;color:var(--nd-success-text)">${b.paid||0}</td>
       <td style="text-align:center">${unpaid>0?`<a href="#" onclick="showBranchUnpaid('${esc(b.branch_code)}');return false" style="background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;padding:.1rem .5rem;font-weight:700;text-decoration:none">${unpaid}</a>`:'<span style="color:var(--nd-text-disabled)">0</span>'}</td>
@@ -4043,7 +4045,7 @@ async function loadBranches() {
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Login / alert email</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Login / alert email</th><th>WhatsApp</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.5rem">Click an <b style="color:var(--nd-danger-text)">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this branch's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per branch.</div>`;
 }
@@ -4078,6 +4080,13 @@ async function createBranch() {
 async function toggleBranch(code, status) {
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({status})});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update branch.'); return; }
+  loadBranches();
+}
+async function editBranchPhone(code, current) {
+  const phone = prompt('WhatsApp number for branch '+code+'\n(10-digit mobile — claim updates go here as well as email; blank to clear):', current||'');
+  if (phone===null) return;
+  const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({contact_phone: phone.trim()})});
+  if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update the number.'); return; }
   loadBranches();
 }
 async function editBranchEmail(code, current) {

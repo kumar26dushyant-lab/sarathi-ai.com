@@ -599,7 +599,7 @@ async def list_branches(include_disabled: bool = True) -> list[dict]:
         conn.row_factory = aiosqlite.Row
         where = "" if include_disabled else "WHERE b.status='active'"
         cur = await conn.execute(
-            f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.status, b.created_at,
+            f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.contact_phone, b.status, b.created_at,
                        COALESCE(b.share_pct, 0) AS share_pct,
                        (SELECT COUNT(*) FROM nidaan_accounts a
                         WHERE UPPER(a.branch_code)=b.branch_code) AS ref_signups,
@@ -1255,8 +1255,9 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
 
 async def update_branch(code: str, status: Optional[str] = None,
                         contact_email: Optional[str] = None,
-                        share_pct: Optional[float] = None) -> bool:
-    """Update a branch's status, contact email, and/or profit-share %."""
+                        share_pct: Optional[float] = None,
+                        contact_phone: Optional[str] = None) -> bool:
+    """Update a branch's status, contact email, WhatsApp number, and/or profit-share %."""
     code = (code or "").strip().upper()
     sets, params = [], []
     if status is not None:
@@ -1268,6 +1269,13 @@ async def update_branch(code: str, status: Optional[str] = None,
             return False
         sets.append("contact_email=?")
         params.append(email)
+    if contact_phone is not None:
+        # Digits only; blank clears it. 10-digit Indian mobile (or with country code).
+        ph = "".join(ch for ch in (contact_phone or "") if ch.isdigit())
+        if ph and len(ph) < 10:
+            return False
+        sets.append("contact_phone=?")
+        params.append(ph[-10:] if len(ph) == 10 else ph)
     if share_pct is not None:
         try:
             pct = float(share_pct)
