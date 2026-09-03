@@ -4448,7 +4448,7 @@ function renderRadar(){
   const tab=(v,lbl)=>`<div class="tab-pill ${_radarView===v?'active':''}" onclick="radarSetView('${v}')">${lbl}</div>`;
   const head = `<div class="section-hdr"><div>
       <div class="section-title">📨 Email Updates — Radar</div>
-      <div class="section-sub">Every customer mailbox watched in one place, so nobody opens them one by one. 🔴 act now · 🟡 review · ⚪ auto-cleared.</div>
+      <div class="section-sub">Customers forward their claim mail into two collection inboxes — <code>cs@</code> (old/ClaimShield cases) and <code>np@</code> (all new cases) — and the AI raises what matters. 🔴 act now · 🟡 review · ⚪ auto-cleared. Read-only.</div>
     </div><button class="btn-sm btn-ghost" onclick="radarPollNow(this)">🔄 Check now</button></div>
     <div class="tab-row" style="margin-bottom:1rem">${tab('radar','🚨 Radar')}${tab('mailboxes','📮 Mailboxes')}${tab('settings','⚙️ Settings')}</div>`;
   el.innerHTML = head + (_radarView==='mailboxes'?_renderRadarMailboxes():_radarView==='settings'?_renderRadarSettings():_renderRadarItems());
@@ -4550,36 +4550,62 @@ function _renderRadarMailboxes(){
       <button class="btn-sm btn-ghost" style="color:var(--nd-warning-text)" onclick="radarPurge(${m.mailbox_id},'${esc((m.label||m.email_masked||'').replace(/'/g,''))}')" title="Case decided — stop watching &amp; delete everything">Disconnect &amp; purge</button>
     </td></tr>`).join('');
   const none = !_radarMailboxes.length;
-  // Guided walkthrough — open by default until at least one mailbox exists.
+  const has = a => _radarMailboxes.some(m => (m.email_address||m.email_masked||'').toLowerCase().startsWith(a));
+  // THE MODEL: we do NOT connect a mailbox per customer any more. There are exactly TWO
+  // collection inboxes; every customer simply FORWARDS their claim mail into the right one.
   const guide = `<details ${none?'open':''} style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;margin-bottom:1rem">
-    <summary style="cursor:pointer;padding:.85rem 1rem;font-weight:700;font-size:.9rem;list-style:none">📖 How to connect a customer's mailbox <span style="font-weight:400;color:var(--nd-text-muted);font-size:.8rem">(tap to open/close)</span></summary>
+    <summary style="cursor:pointer;padding:.85rem 1rem;font-weight:700;font-size:.9rem;list-style:none">📖 How Email Updates works <span style="font-weight:400;color:var(--nd-text-muted);font-size:.8rem">(tap to open/close)</span></summary>
     <div style="padding:0 1rem 1rem;font-size:.84rem;color:var(--nd-text-secondary);line-height:1.6">
-      <div style="color:var(--nd-text-muted);margin-bottom:.7rem">This lets the team watch all your customers' claim mailboxes from one screen instead of logging into each Gmail. Do this once per customer:</div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">1️⃣</div><div><b>In the customer's dedicated Gmail:</b> turn on <b>2-Step Verification</b> (Google Account → Security). Google needs this before the next step is possible.</div></div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">2️⃣</div><div><b>Create an "App Password":</b> Google Account → Security → <b>App passwords</b> → create one. Google shows a <b>16-character code</b> — copy it. (This is a safe, revocable key — NOT the Gmail login password.)</div></div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.7rem"><div style="font-size:1.1rem">3️⃣</div><div><b>Add it here:</b> click <b>＋ Connect a customer mailbox</b> below → type the customer's name + their Gmail → paste the 16-character code → choose who handles this case → click <b>Test Connection</b> (should turn green) → <b>Save</b>.</div></div>
-      <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.6rem .8rem;color:var(--nd-text-muted)">✅ Done. New emails from insurers/authorities will start showing in the <b>🚨 Radar</b> tab — automatically flagged and assigned to the handler you picked. Old mail is never pulled in; only new emails from now on.</div>
+      <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.7rem .9rem;margin-bottom:.9rem">
+        <b>The whole idea in one line:</b> we no longer log into each customer's mailbox. Every customer <b>forwards</b> a copy of their claim email into <b>one of our two collection inboxes</b>, and the AI reads everything that lands there and raises the ones that matter.
+      </div>
+      <div style="font-weight:700;margin:.2rem 0 .5rem;color:var(--nd-text-primary)">📮 The two collection inboxes</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">1️⃣</div><div><code>cs@nidaanpartner.com</code> — <b>OLD cases</b> (the ones running through ClaimShield.in). Forward the mail of every existing/legacy case here.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.9rem"><div style="font-size:1.1rem">2️⃣</div><div><code>np@nidaanpartner.com</code> — <b>ALL NEW cases</b>. Every case we take from now on forwards here.</div></div>
 
-      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">📧 Yahoo mailbox (two-way)</div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">1️⃣</div><div>In the customer's Yahoo account: <b>Account Security</b> → turn on <b>2-Step Verification</b>.</div></div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">2️⃣</div><div>Same page → <b>Generate app password</b> → pick "Other app", name it "Nidaan" → copy the code Yahoo shows.</div></div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">3️⃣</div><div>Click <b>＋ Connect a customer mailbox</b> → enter the Yahoo address + the app password → open <b>⚙️ Advanced</b> and set <b>Mail server (IMAP)</b> to <code>imap.mail.yahoo.com</code> (port 993) → <b>Test Connection</b> → <b>Save</b>.</div></div>
+      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">🔌 Step A — connect the two inboxes (done once, by us)</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">1️⃣</div><div>In that inbox's Google account, turn on <b>2-Step Verification</b> (Google Account → Security).</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.5rem"><div style="font-size:1.1rem">2️⃣</div><div>Google Account → Security → <b>App passwords</b> → create one. Copy the <b>16-character code</b>. (A safe, revocable key — NOT the login password.)</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.9rem"><div style="font-size:1.1rem">3️⃣</div><div>Click a <b>Connect</b> button below → paste the 16-character code → pick who should get the alerts → <b>Test Connection</b> (turns green) → <b>Save</b>.</div></div>
 
-      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">➡️ Forwarding option (read-only) <span style="font-size:.72rem;color:var(--nd-warning-text)">— being added</span></div>
-      <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Lightest setup: the customer's mailbox simply <b>forwards a copy</b> of incoming mail to our updates inbox — no app password stored. The radar will <b>read &amp; flag</b> the authority's emails for you. (Radar is read-only — to reply, open the mailbox directly.)</div>
-      <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail:</b> Settings (⚙️) → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → enter our updates address → confirm the code Google sends → choose <b>keep Gmail's copy in the Inbox</b>.</div></div>
-      <div style="display:flex;gap:.7rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add our updates address → verify.</div></div>
+      <div style="font-weight:700;margin:1rem 0 .5rem;color:var(--nd-text-primary)">➡️ Step B — set forwarding on each customer's mailbox</div>
+      <div style="color:var(--nd-text-muted);margin-bottom:.5rem">Send <b>old / ClaimShield cases → cs@nidaanpartner.com</b> and <b>new cases → np@nidaanpartner.com</b>. Nothing else changes for the customer, and they keep their own copy.</div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.4rem"><div style="font-size:1.1rem">•</div><div><b>Gmail:</b> Settings (⚙️) → <b>See all settings</b> → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → type the right address above → Google emails a confirmation code to us → once confirmed, select <b>Forward a copy</b> and choose <b>keep Gmail's copy in the Inbox</b>.</div></div>
+      <div style="display:flex;gap:.7rem;margin-bottom:.9rem"><div style="font-size:1.1rem">•</div><div><b>Yahoo:</b> Settings → <b>More Settings</b> → <b>Mailboxes</b> → select the account → <b>Forwarding</b> → add the right address → verify.</div></div>
+
+      <div style="background:var(--nd-bg-surface-2);border-radius:8px;padding:.6rem .8rem;color:var(--nd-text-muted)">✅ That's it. Anything an insurer or authority sends now lands in a collection inbox, the AI reads it and raises it in the <b>🚨 Radar</b> tab. <b>Read-only</b> — we never send from these inboxes; to reply, open the mailbox directly. Only mail that arrives from now on is pulled in — never old backlog.</div>
     </div>
   </details>`;
-  const addBtn = `<button class="btn btn-primary" onclick="radarEdit(0)" style="margin-bottom:1rem;font-size:.95rem;padding:.6rem 1.1rem">＋ Connect a customer mailbox</button>`;
+  const slot = (addr, title, sub) => `
+    <div style="flex:1;min-width:250px;background:var(--nd-bg-surface);border:1px solid ${has(addr)?'rgba(16,185,129,.4)':'var(--nd-border-strong)'};border-radius:12px;padding:.9rem 1rem">
+      <div style="font-weight:700">${title} ${has(addr)?'<span style="color:var(--nd-success-text);font-size:.75rem">✓ connected</span>':'<span style="color:var(--nd-warning-text);font-size:.75rem">not connected</span>'}</div>
+      <div style="font-family:monospace;font-size:.8rem;color:var(--nd-text-secondary);margin:.2rem 0 .35rem">${addr}</div>
+      <div style="font-size:.75rem;color:var(--nd-text-muted);margin-bottom:.6rem">${sub}</div>
+      ${has(addr)?'':`<button class="btn btn-primary" style="font-size:.85rem;padding:.45rem .9rem" onclick="radarConnectPreset('${addr}','${esc(title)}')">🔌 Connect ${addr.split('@')[0]}</button>`}
+    </div>`;
+  const slots = `<div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem">
+      ${slot('cs@nidaanpartner.com','ClaimShield — old cases','Forward every legacy / ClaimShield.in case here.')}
+      ${slot('np@nidaanpartner.com','NidaanPartner — new cases','Forward every new case we take from now on here.')}
+    </div>`;
   const table = _radarMailboxes.length ? `<div style="overflow-x:auto;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px">
       <table style="width:100%;border-collapse:collapse;font-size:.85rem">
         <thead><tr style="text-align:left;color:var(--nd-text-muted)">
-          <th style="padding:.6rem .7rem">Customer</th><th style="padding:.6rem .7rem">Mailbox</th>
+          <th style="padding:.6rem .7rem">Inbox</th><th style="padding:.6rem .7rem">Address</th>
           <th style="padding:.6rem .7rem">Status</th><th style="padding:.6rem .7rem">Last checked</th><th style="padding:.6rem .7rem">Actions</th>
         </tr></thead><tbody>${rows}</tbody></table></div>`
-    : `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted)">Follow the 3 steps above, then click <b>“＋ Connect a customer mailbox”</b> to add your first one.</p></div>`;
-  return guide + addBtn + table;
+    : `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">Neither collection inbox is connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted)">Follow <b>Step A</b> above, then use the two Connect buttons.</p></div>`;
+  const other = `<div style="margin-top:.9rem"><button class="btn-sm btn-ghost" onclick="radarEdit(0)">＋ Connect another mailbox (advanced)</button></div>`;
+  return guide + slots + table + other;
+}
+// Open the connect form pre-filled for one of the two collection inboxes.
+function radarConnectPreset(addr, title){
+  radarEdit(0);
+  setTimeout(()=>{
+    const l=document.getElementById('rmLabel'), e=document.getElementById('rmEmail');
+    if(l) l.value=title;
+    if(e) e.value=addr;
+    const p=document.getElementById('rmPass'); if(p) p.focus();
+  }, 60);
 }
 function _renderRadarSettings(){
   const c=_radarConfig||{};
@@ -4615,10 +4641,10 @@ async function radarEdit(id){
   const podChecks = staff.map(s=>`<label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;margin:.15rem .6rem .15rem 0"><input type="checkbox" class="rmPod" value="${s.staff_id}" ${others.has(s.staff_id)?'checked':''}> ${esc(s.name||('#'+s.staff_id))}</label>`).join('');
   const hint = t=>`<div style="font-size:.7rem;color:var(--nd-text-muted);font-weight:400;margin-top:.1rem">${t}</div>`;
   const body = `<div style="display:flex;flex-direction:column;gap:.85rem">
-      <label style="font-size:.82rem;font-weight:600">Customer / case name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. Ramesh Kumar" style="${_rmInp()}">${hint('A name you will recognise on the radar — usually the customer name.')}</label>
-      <label style="font-size:.82rem;font-weight:600">Customer's dedicated email (Gmail)<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="customer.case@gmail.com" style="${_rmInp()}">${hint('The dedicated Gmail this customer set up for their case.')}</label>
+      <label style="font-size:.82rem;font-weight:600">Inbox name<input id="rmLabel" value="${m?esc(m.label||''):''}" placeholder="e.g. NidaanPartner — new cases" style="${_rmInp()}">${hint('A name you will recognise on the radar — e.g. which set of cases forwards here.')}</label>
+      <label style="font-size:.82rem;font-weight:600">Collection inbox address<input id="rmEmail" type="email" value="${m?esc(m.email_address||''):''}" placeholder="np@nidaanpartner.com" style="${_rmInp()}">${hint('One of our two collection inboxes — cs@ for old/ClaimShield cases, np@ for all new cases. Customers forward their claim mail here.')}</label>
       <label style="font-size:.82rem;font-weight:600">App password (16 characters)<span style="display:flex;gap:.4rem;margin-top:.2rem"><input id="rmPass" type="password" placeholder="${m?'•••• (leave blank to keep current)':'xxxx xxxx xxxx xxxx'}" style="${_rmInp()};margin-top:0;flex:1"><button type="button" class="btn-sm btn-ghost" onclick="var p=document.getElementById('rmPass');p.type=p.type==='password'?'text':'password'" title="show / hide">👁</button></span>${hint('The 16-character code from Google → Security → App passwords. NOT the normal Gmail password. (See the “How to connect” steps.)')}</label>
-      <label style="font-size:.82rem;font-weight:600">Who handles this case? (primary)<select id="rmPrimary" style="${_rmInp()}">${primaryOpts}</select>${hint('This person gets the task and is alerted on every new update, on all channels.')}</label>
+      <label style="font-size:.82rem;font-weight:600">Who gets the alerts? (primary)<select id="rmPrimary" style="${_rmInp()}">${primaryOpts}</select>${hint('This person gets the task and is alerted on every new update that lands in this inbox, on all channels.')}</label>
       <label style="font-size:.82rem;font-weight:600">Also notify (optional pod)
         <div style="display:flex;flex-wrap:wrap;margin-top:.3rem;max-height:120px;overflow-y:auto;border:1px solid var(--nd-border);border-radius:8px;padding:.4rem .5rem">${podChecks||'<span style="color:var(--nd-text-muted);font-size:.78rem">No staff found</span>'}</div>${hint('Extra teammates who should also see this case and can act on it.')}</label>
       <details style="border:1px solid var(--nd-border);border-radius:8px;padding:.2rem .3rem">
