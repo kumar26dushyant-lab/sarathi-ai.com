@@ -86,6 +86,56 @@ async def _awaiting(claim_id: int) -> str:
     return (r["awaiting_doc_key"] if r and r["awaiting_doc_key"] else "")
 
 
+async def _has_spoken(msisdn: str) -> bool:
+    """Have we ever sent this number anything? Drives greet-once."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT last_outbound_at FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
+        return bool(r and (dict(r).get("last_outbound_at") or ""))
+    except Exception:
+        return False
+
+
+async def _asked_recently(claim_id: int, doc_key: str, minutes: int = 90) -> bool:
+    """True if we already asked for this exact document within `minutes` — stops the bot
+    repeating the identical request every time the customer says anything."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT awaiting_doc_key, last_reminder_at FROM nidaan_wa_claim_settings "
+                "WHERE claim_id=? AND last_reminder_at IS NOT NULL "
+                "AND last_reminder_at > datetime('now', ?)",
+                (claim_id, f"-{int(minutes)} minutes"))).fetchone()
+        return bool(r and (dict(r).get("awaiting_doc_key") or "") == doc_key)
+    except Exception:
+        return False
+
+
+async def _mark_asked(claim_id: int) -> None:
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("UPDATE nidaan_wa_claim_settings SET last_reminder_at=CURRENT_TIMESTAMP "
+                            "WHERE claim_id=?", (claim_id,))
+            await c.commit()
+    except Exception:
+        pass
+
+
+async def _set_takeover(claim_id: int, by: str = "support") -> None:
+    """Bot goes quiet on this claim — a human has it now."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("INSERT OR IGNORE INTO nidaan_wa_claim_settings (claim_id) VALUES (?)", (claim_id,))
+            await c.execute("UPDATE nidaan_wa_claim_settings SET human_takeover=1, takeover_by=?, "
+                            "updated_at=CURRENT_TIMESTAMP WHERE claim_id=?", (by[:40], claim_id))
+            await c.commit()
+    except Exception:
+        pass
+
+
 async def _link_contact(msisdn: str, claim: dict) -> None:
     try:
         import biz_nidaan_wa_flow as _flow
@@ -109,7 +159,7 @@ def _send_ctx(claim: dict, done: int, total: int, doc=None, next_doc=None, **ext
 
 
 # ── outbound guided asks (free-form; in-session) ─────────────────────────────
-async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True) -> dict:
+async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: bool = False) -> dict:
     """Ask for the next pending document, or send the completion message if all are in."""
     claim = await _claim_for_msisdn(msisdn) if not isinstance(claim_id, dict) else claim_id
     if not claim:
@@ -125,25 +175,32 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True) -> dict:
         await _activity(claim_id, "docs_complete", "All required documents received (WhatsApp).")
         return {"ok": True, "complete": True}
     doc = pending[0]
+    # Don't repeat the identical request every time they write — that is what made the bot
+    # look broken. `force=True` (they said "ok, send it") always re-asks.
+    if not force and await _asked_recently(claim_id, doc["key"]):
+        return {"ok": True, "skipped": "asked_recently", "asked": doc["key"]}
     await _set_awaiting(claim_id, doc["key"])
     await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc)))
+    await _mark_asked(claim_id)
     await _activity(claim_id, "doc_reminder", f"Asked for: {doc.get('en')} ({done}/{total})", channel="whatsapp")
     return {"ok": True, "asked": doc["key"]}
 
 
-async def start_or_continue(msisdn: str) -> dict:
-    """A claimant messaged us. Match to their claim, greet on first contact, then ask the next doc."""
+async def start_or_continue(msisdn: str, *, force_ask: bool = False) -> dict:
+    """A claimant messaged us. Match to their claim, greet ONCE ever, then ask the next doc."""
     claim = await _claim_for_msisdn(msisdn)
     if not claim:
         return {"ok": False, "error": "no_claim"}
     await _link_contact(msisdn, claim)
     lang = await _lang(msisdn)
-    # Greet once per session-open if we've not spoken recently (best-effort; cheap).
-    try:
-        await _wa.send_text(msisdn, _msg.compose("welcome", lang, _send_ctx(claim, 0, 0)))
-    except Exception:
-        pass
-    return await ask_next(claim["claim_id"], msisdn)
+    # Greet only on the very first message we ever send this number. Re-greeting on every
+    # inbound is what spammed the same welcome over and over.
+    if not await _has_spoken(msisdn):
+        try:
+            await _wa.send_text(msisdn, _msg.compose("welcome", lang, _send_ctx(claim, 0, 0)))
+        except Exception:
+            pass
+    return await ask_next(claim["claim_id"], msisdn, force=force_ask)
 
 
 # ── inbound document pipeline ────────────────────────────────────────────────
@@ -367,14 +424,76 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
 
 
 async def handle_inbound_text(msisdn: str, text: str) -> dict:
-    """A claimant sent text. If they're linked to a claim, greet+continue the guided flow.
-    (A richer Gemini Q&A layer can slot in here later.)"""
+    """A claimant sent text. READ IT FIRST, then respond like a person would.
+
+    Previously this ignored the message entirely and re-sent welcome + the same document ask
+    every single time. Now the conversation brain decides: answer the question, continue the
+    guided document flow, decline once (abuse / off-topic), or hand off to a human."""
     claim = await _claim_for_msisdn(msisdn)
     if not claim:
         return {"ok": False, "error": "no_claim"}
-    if await _awaiting(claim["claim_id"]) == "__human__":
-        return {"ok": False, "error": "human_takeover"}
-    return await start_or_continue(msisdn)
+    claim_id = claim["claim_id"]
+    if await _awaiting(claim_id) == "__human__":
+        return {"ok": False, "error": "human_takeover"}   # a human owns this chat — stay quiet
+    lang = await _lang(msisdn)
+    await _link_contact(msisdn, claim)
+
+    import biz_nidaan_wa_brain as _brain
+    d = await _brain.decide(text, lang)
+    action, reply = d.get("action"), d.get("reply") or ""
+    await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
+
+    if action == "continue_docs":
+        # They're ready to send — always re-state the exact document (force past the throttle).
+        return await start_or_continue(msisdn, force_ask=True)
+
+    if action == "refuse":
+        # Decline ONCE. If they were already declined and still haven't asked something
+        # sensible, stay silent rather than argue.
+        if await _asked_recently(claim_id, "__refused__", minutes=180):
+            return {"ok": True, "action": "refuse", "muted": True}
+        await _wa.send_text(msisdn, reply or _brain.refusal_text(lang))
+        await _set_awaiting(claim_id, "__refused__")
+        await _mark_asked(claim_id)
+        await _activity(claim_id, "wa_refused", f"Declined off-scope/abusive message ({d.get('reason','')})")
+        return {"ok": True, "action": "refuse"}
+
+    if action == "handoff":
+        await _wa.send_text(msisdn, reply or _brain.handoff_text(lang))
+        await _handoff_to_support(claim, msisdn, text, lang, reason=d.get("reason", ""))
+        return {"ok": True, "action": "handoff"}
+
+    # action == "answer" — a natural reply, then a gentle (throttled) nudge for the pending doc.
+    await _wa.send_text(msisdn, reply)
+    await _activity(claim_id, "wa_answer", f"Answered: {reply[:120]}")
+    await ask_next(claim_id, msisdn)          # throttled — won't repeat if just asked
+    return {"ok": True, "action": "answer"}
+
+
+async def _handoff_to_support(claim: dict, msisdn: str, text: str, lang: str, reason: str = "") -> None:
+    """Open (or extend) a Support thread in ops with the WhatsApp message, escalate it to a
+    human, and mute the bot on this claim so it never talks over the person taking it."""
+    claim_id = claim.get("claim_id")
+    try:
+        th = await _n.create_support_thread(
+            name=(claim.get("complainant_name") or claim.get("insured_name") or "WhatsApp customer"),
+            contact=msisdn, account_id=claim.get("account_id"), channel="whatsapp", lang=lang)
+        tid = th.get("thread_id")
+        # Carry the WhatsApp conversation into the thread so staff have the context.
+        await _n.add_support_message(tid, "customer", (text or "")[:2000])
+        await _n.add_support_message(
+            tid, "ai", f"[auto] Handed off from the WhatsApp bot — {reason or 'needs a human'}. "
+                       f"Claim #NP-{claim_id}. Reply to the customer on WhatsApp {msisdn}.")
+        await _n.set_support_status(tid, "escalated")
+        await _set_takeover(claim_id, by="support")
+        await _activity(claim_id, "wa_handoff", f"Handed to Support (thread #{tid}) — {reason or 'needs a human'}")
+        try:
+            import biz_nidaan_notifications as _nnot
+            await _nnot.on_support_escalated(tid)
+        except Exception:
+            pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning("WhatsApp support handoff failed for claim %s: %s", claim_id, e)
 
 
 async def _activity(claim_id: int, kind: str, summary: str, *, channel: str = "whatsapp", direction: str = "out") -> None:

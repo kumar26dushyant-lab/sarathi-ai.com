@@ -1,0 +1,130 @@
+"""
+NidaanPartner WhatsApp — CONVERSATION BRAIN.
+
+The guided doc-collection flow used to reply to EVERY inbound message with the same welcome +
+document ask, no matter what the person actually said. This module reads the message first and
+decides what a human would do:
+
+  answer         → a short, natural reply from what we're allowed to say
+  continue_docs  → they're ready to send the document; run the guided flow
+  refuse         → abusive / clearly out-of-scope; decline ONCE, politely, then stay quiet
+  handoff        → needs a human → open a Support thread (ops → Support) and hand over
+
+ANTI-HALLUCINATION (locked policy): the AI may explain the SERVICE. It must never state this
+claim's status/stage/timeline, give legal opinion, predict an outcome, quote amounts, dates or
+policy specifics, or invent which documents are needed — those come from templates/DB only.
+Anything needing claim-specific facts is a `handoff`, never a guess.
+"""
+from __future__ import annotations
+
+import os
+import json
+import logging
+
+logger = logging.getLogger("nidaan.wa.brain")
+
+# What the assistant is allowed to explain, in its own words.
+SERVICE_FACTS = """
+NidaanPartner (nidaanpartner.com) helps people whose insurance claim was REJECTED, delayed,
+short-paid or disputed. Nidaan – The Legal Consultants LLP is the legal firm behind it.
+- We handle: health/mediclaim, life, accident, motor and other general insurance claims.
+- How it works: you share the claim papers on WhatsApp or the dashboard, our team reviews the
+  case, tells you honestly whether it can be fought, and then pursues it with the insurer.
+- We work in Hindi, Hinglish and English — the customer picks.
+- We ask for documents one at a time so it stays simple.
+- A paid expert review is available; the team confirms any fee before anything is charged.
+"""
+
+_ACTIONS = ("answer", "continue_docs", "refuse", "handoff")
+
+_SYSTEM = """You are the WhatsApp assistant for NidaanPartner, an Indian insurance-claim support
+service. You are talking to a real customer on WhatsApp. Reply the way a warm, competent Indian
+support person would: short (1-3 sentences), natural, no corporate padding, no bullet lists.
+
+WHAT YOU KNOW (the ONLY things you may assert):
+{facts}
+
+HARD RULES — breaking these is a serious failure:
+- NEVER state this customer's claim status, stage, timeline, or what happens next on their case.
+- NEVER give legal advice or predict whether their claim will succeed.
+- NEVER quote amounts, dates, policy numbers or document lists from your own guess.
+- If answering would need facts about THIS customer's specific case or money, choose "handoff".
+- Do not invent anything that is not in WHAT YOU KNOW.
+
+Decide ONE action:
+- "continue_docs": they are ready to send / are asking which document to send / said yes-ok-send.
+- "answer": a general question you can answer from WHAT YOU KNOW (what we do, which claims,
+  language, how the process works).
+- "refuse": abusive, sexual, threatening, spam, or clearly nothing to do with insurance claims.
+- "handoff": they want a human, are unhappy, ask about their specific case/money/legal outcome,
+  or anything you cannot answer safely.
+
+Reply STRICTLY as JSON:
+{{"action":"<one of continue_docs|answer|refuse|handoff>","reply":"<the message to send, in the
+customer's language ({lang}); empty string if action is continue_docs>","reason":"<3-6 words>"}}
+"""
+
+_FALLBACK = {
+    "hinglish": "Main aapki baat samajh gaya. Hamari team aapse jaldi baat karegi. 🙏",
+    "hi": "मैं आपकी बात समझ गया। हमारी टीम आपसे जल्दी बात करेगी। 🙏",
+    "en": "I've noted your message. Our team will get back to you shortly. 🙏",
+}
+_REFUSE = {
+    "hinglish": ("Maaf kijiye — main sirf insurance claim se judi baat me madad kar sakta hoon. "
+                 "Apne claim ke baare me poochhiye, main zaroor help karunga. 🙏"),
+    "hi": ("माफ़ कीजिए — मैं सिर्फ़ इंश्योरेंस क्लेम से जुड़ी बात में मदद कर सकता हूँ। "
+           "अपने क्लेम के बारे में पूछिए, मैं ज़रूर मदद करूँगा। 🙏"),
+    "en": ("Sorry — I can only help with insurance-claim matters. Ask me about your claim and "
+           "I'll gladly help. 🙏"),
+}
+_HANDOFF = {
+    "hinglish": "Main aapko hamari team se jod raha hoon — wo jaldi hi aapse yahin baat karenge. 🙏",
+    "hi": "मैं आपको हमारी टीम से जोड़ रहा हूँ — वे जल्दी ही आपसे यहीं बात करेंगे। 🙏",
+    "en": "I'm connecting you with our team — they'll reply to you right here shortly. 🙏",
+}
+
+
+def refusal_text(lang: str) -> str:
+    return _REFUSE.get(lang, _REFUSE["hinglish"])
+
+
+def handoff_text(lang: str) -> str:
+    return _HANDOFF.get(lang, _HANDOFF["hinglish"])
+
+
+async def decide(text: str, lang: str = "hinglish", *, history: str = "") -> dict:
+    """Classify the inbound message and draft a natural reply. Never raises.
+
+    Fail-safe: if the AI is unavailable or returns junk we HAND OFF to a human rather than
+    guessing — silence or a wrong answer on a claim is worse than a person picking it up."""
+    t = (text or "").strip()
+    if not t:
+        return {"action": "handoff", "reply": handoff_text(lang), "reason": "empty message"}
+    try:
+        import biz_ai
+        client = biz_ai._get_client()
+        if not client:
+            return {"action": "handoff", "reply": handoff_text(lang), "reason": "no ai"}
+        from google.genai import types as gt
+        prompt = _SYSTEM.format(facts=SERVICE_FACTS, lang=lang) + \
+            (f"\n\nRecent conversation:\n{history}\n" if history else "") + \
+            f"\n\nCustomer's message: {t}"
+        resp = await client.aio.models.generate_content(
+            model=os.getenv("WA_BRAIN_MODEL", "gemini-2.5-flash"),
+            contents=[prompt],
+            config=gt.GenerateContentConfig(response_mime_type="application/json"))
+        v = json.loads(resp.text) or {}
+        action = str(v.get("action", "")).strip().lower()
+        if action not in _ACTIONS:
+            action = "handoff"
+        reply = str(v.get("reply", "")).strip()[:900]
+        if action == "answer" and not reply:
+            action, reply = "handoff", handoff_text(lang)
+        if action == "refuse" and not reply:
+            reply = refusal_text(lang)
+        if action == "handoff" and not reply:
+            reply = handoff_text(lang)
+        return {"action": action, "reply": reply, "reason": str(v.get("reason", ""))[:60]}
+    except Exception as e:  # noqa: BLE001
+        logger.info("wa brain decide failed (handing off): %s", e)
+        return {"action": "handoff", "reply": handoff_text(lang), "reason": "ai error"}
