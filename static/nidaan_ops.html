@@ -3726,7 +3726,7 @@ function _renderOutcome(key){
   if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows); return; }
   if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows); return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Subscriber / Referred by</th><th>Delivered</th></tr></thead><tbody>'
+    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
         if(isL2){
@@ -3747,11 +3747,30 @@ function _renderOutcome(key){
         + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
              + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
              + csCell:'')
-        + `<td style="font-size:.78rem">${c.origin==='branch'
-            ? `<span style="color:var(--nd-purple-text);font-weight:700">${c.ref_kind==='staff'?'👤':'🏢'} ${esc(c.ref_name||('Branch '+(c.ref_code||'')))}</span><br><span style="font-size:.66rem;color:var(--nd-text-faint)">raised · ${esc(c.ref_code||'—')}</span>`
-            : `<span style="font-weight:600">${esc(c.owner_name||'—')}</span>${(c.ref_name||c.ref_code)?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${c.ref_kind==='staff'?'👤 staff':(c.ref_kind==='branch'?'🏢 branch':'ref')}: ${esc(c.ref_name||c.ref_code)}${c.ref_code?(' · '+esc(c.ref_code)):''}</span>`:''}`}</td>
-        <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
+        + `<td style="font-size:.78rem">${_subscriberCell(c)}</td>`
+        + `<td style="font-size:.78rem">${_referredByCell(c)}</td>`
+        + `<td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
       </tr>`;}).join('') + '</tbody></table></div>';
+}
+// "Subscriber" and "Referred by" are two DIFFERENT facts and used to share one column, which
+// read as contradictory (a branch name under a "Subscriber" label). Now split.
+function _subscriberCell(c){
+  // For a branch/staff-raised claim the account is the partner's house account, not a real
+  // subscriber — say so plainly instead of showing it as if a person subscribed.
+  const owner=(c.owner_name||'').trim();
+  const house=/house account/i.test(owner) || c.origin==='branch';
+  if(!owner) return '<span style="color:var(--nd-text-faint)">—</span>';
+  if(house) return `<span style="color:var(--nd-text-faint)" title="${esc(owner)}">— <span style="font-size:.66rem">(partner-raised)</span></span>`;
+  return `<span style="font-weight:600">${esc(owner)}</span>`
+    + (c.firm_name?`<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${esc(c.firm_name)}</span>`:'');
+}
+function _referredByCell(c){
+  const nm=c.ref_name||c.ref_code||'';
+  if(!nm) return '<span style="color:var(--nd-text-faint)">—</span>';
+  const icon=c.ref_kind==='staff'?'👤':(c.ref_kind==='branch'?'🏢':'🔗');
+  const kind=c.ref_kind==='staff'?'staff':(c.ref_kind==='branch'?'branch':'ref');
+  return `<span style="color:var(--nd-purple-text);font-weight:700">${icon} ${esc(c.ref_name||c.ref_code)}</span>`
+    + `<br><span style="font-size:.66rem;color:var(--nd-text-faint)">${kind}${c.ref_code?(' · '+esc(c.ref_code)):''}</span>`;
 }
 // Why this claim is eligible for L2 (transparency in the send modal + tooltip).
 function _l2PayBasis(c){
@@ -5665,13 +5684,14 @@ function exportAccountsCSV(){
 }
 function exportL2CSV(){
   const list = _outcomeCache['l2claims']||[];
-  const rows = [['Claim #','Insured','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber / Referred by','Ref code','Delivered']]
+  const rows = [['Claim #','Insured','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber','Referred by','Ref code','Delivered']]
     .concat(list.map(c=>{
-      const who = c.origin==='branch' ? (c.ref_name||('Branch '+(c.ref_code||'')))
-                : ((c.owner_name||'') + (c.ref_name?(' (ref: '+c.ref_name+')'):''));
+      const owner=(c.owner_name||'').trim();
+      const subscriber = (/house account/i.test(owner) || c.origin==='branch') ? '' : owner;
+      const referredBy = c.ref_name || c.ref_code || '';
       const paid = (c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription')?'Paid':'Due';
       return [c.claim_id, c.insured_name||'', c.insured_phone||'', c.claim_type||'', c.disputed_amount||0,
-        paid, c.status||'', c.claimshield_case_id||'', who, c.ref_code||'',
+        paid, c.status||'', c.claimshield_case_id||'', subscriber, referredBy, c.ref_code||'',
         (c.review_delivered_at||c.last_status_at||c.created_at||'')];
     }));
   opsDownloadCSV('nidaan-L2-claims_'+new Date().toISOString().slice(0,10)+'.csv', rows);

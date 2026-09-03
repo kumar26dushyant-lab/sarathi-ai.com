@@ -146,14 +146,25 @@ async def _link_contact(msisdn: str, claim: dict) -> None:
         pass
 
 
-def _send_ctx(claim: dict, done: int, total: int, doc=None, next_doc=None, **extra) -> dict:
+def _doc_label(doc: dict, lang: str) -> str:
+    """Document name in the SAME script as the message. Hinglish is Roman-script, so it takes the
+    English label — mixing Roman sentences with a Devanagari document name reads badly."""
+    if not doc:
+        return ""
+    if lang == "hi":
+        return doc.get("hi") or doc.get("en") or ""
+    return doc.get("en") or doc.get("hi") or ""
+
+
+def _send_ctx(claim: dict, done: int, total: int, doc=None, next_doc=None,
+              lang: str = "hinglish", **extra) -> dict:
     ctx = {"name": (claim.get("insured_name") or "").split(" ")[0],
            "insured_name": claim.get("insured_name") or "", "claim_id": claim.get("claim_id"),
            "done": done, "total": total}
     if doc:
-        ctx["doc_label"] = doc.get("hi") or doc.get("en") or ""
+        ctx["doc_label"] = _doc_label(doc, lang)
     if next_doc:
-        ctx["next_label"] = next_doc.get("hi") or next_doc.get("en") or ""
+        ctx["next_label"] = _doc_label(next_doc, lang)
     ctx.update(extra)
     return ctx
 
@@ -180,7 +191,7 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: b
     if not force and await _asked_recently(claim_id, doc["key"]):
         return {"ok": True, "skipped": "asked_recently", "asked": doc["key"]}
     await _set_awaiting(claim_id, doc["key"])
-    await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc)))
+    await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc, lang=lang)))
     await _mark_asked(claim_id)
     await _activity(claim_id, "doc_reminder", f"Asked for: {doc.get('en')} ({done}/{total})", channel="whatsapp")
     return {"ok": True, "asked": doc["key"]}
@@ -381,7 +392,7 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     dl = await _wa.download_media(media_id)
     if not dl.get("ok"):
         await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, reason="could not open the file")))
+                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason="could not open the file")))
         return {"ok": False, "error": "download_failed"}
     ext = ".pdf" if "pdf" in (mime or "") else (".jpg" if "jpe" in (mime or "") or "jpg" in (mime or "") else ".png" if "png" in (mime or "") else ".bin")
     try:
@@ -391,18 +402,18 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
         pdf_bytes = None
     if not pdf_bytes:
         await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, reason="unsupported format")))
+                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason="unsupported format")))
         return {"ok": False, "error": "convert_failed"}
     # Gemini right-doc + quality gate.
     v = await classify_document(pdf_bytes, doc.get("en") or doc.get("hi") or "document")
     if not v["is_expected"]:
         await _wa.send_text(msisdn, _msg.compose("doc_wrong", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, looks_like=v.get("looks_like") or "")))
+                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, looks_like=v.get("looks_like") or "")))
         await _activity(claim_id, "doc_rejected", f"Wrong doc for {doc.get('en')} (looked like {v.get('looks_like')})", channel="whatsapp", direction="in")
         return {"ok": False, "error": "wrong_doc"}
     if not v["legible"]:
         await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, reason=v.get("reason") or "not clear")))
+                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason=v.get("reason") or "not clear")))
         await _activity(claim_id, "doc_rejected", f"Poor quality for {doc.get('en')}: {v.get('reason')}", channel="whatsapp", direction="in")
         return {"ok": False, "error": "poor_quality"}
     # Good → save + mark + ask next.
@@ -413,7 +424,7 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     pending2 = await _ck.pending_required_docs(claim_id, ctype)
     nxt = pending2[0] if pending2 else None
     done = max(0, total - len(pending2))
-    await _wa.send_text(msisdn, _msg.compose("doc_received_ok", lang, _send_ctx(claim, done, total, doc=doc, next_doc=nxt)))
+    await _wa.send_text(msisdn, _msg.compose("doc_received_ok", lang, _send_ctx(claim, done, total, doc=doc, next_doc=nxt, lang=lang)))
     if nxt:
         await _set_awaiting(claim_id, nxt["key"])
     else:
@@ -441,6 +452,16 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     import biz_nidaan_wa_brain as _brain
     d = await _brain.decide(text, lang)
     action, reply = d.get("action"), d.get("reply") or ""
+    # If they asked to switch language, REMEMBER it — every later reply, document ask and
+    # reminder now uses it, until they ask to change again.
+    if d.get("set_lang") and d["set_lang"] != lang:
+        lang = d["set_lang"]
+        try:
+            import biz_nidaan_wa_flow as _flow
+            await _flow.upsert_contact(msisdn, language=lang)
+            await _activity(claim_id, "wa_lang", f"Customer switched language → {lang}")
+        except Exception:
+            pass
     await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
 
     if action == "continue_docs":

@@ -59,9 +59,19 @@ Decide ONE action:
 - "handoff": they want a human, are unhappy, ask about their specific case/money/legal outcome,
   or anything you cannot answer safely.
 
+LANGUAGE — this matters:
+- The customer's current language is "{lang}". Write your reply in THAT language unless they ask
+  to change it.
+- If they ask to talk in a specific language ("can you talk in english", "hindi me baat karo",
+  "English please"), set "set_lang" to "en", "hi" or "hinglish" AND write the reply in that new
+  language. Otherwise set "set_lang" to "".
+- "hi" = Hindi in Devanagari script. "hinglish" = Hindi written in Roman/English letters.
+  "en" = plain English. Never mix scripts inside one reply.
+
 Reply STRICTLY as JSON:
 {{"action":"<one of continue_docs|answer|refuse|handoff>","reply":"<the message to send, in the
-customer's language ({lang}); empty string if action is continue_docs>","reason":"<3-6 words>"}}
+customer's language; empty string if action is continue_docs>","set_lang":"<en|hi|hinglish or
+empty>","reason":"<3-6 words>"}}
 """
 
 _FALLBACK = {
@@ -122,9 +132,13 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "") -> dic
             action, reply = "handoff", handoff_text(lang)
         if action == "refuse" and not reply:
             reply = refusal_text(lang)
+        set_lang = str(v.get("set_lang", "")).strip().lower()
+        if set_lang not in ("en", "hi", "hinglish"):
+            set_lang = ""
         if action == "handoff" and not reply:
-            reply = handoff_text(lang)
-        return {"action": action, "reply": reply, "reason": str(v.get("reason", ""))[:60]}
+            reply = handoff_text(set_lang or lang)
+        return {"action": action, "reply": reply, "set_lang": set_lang,
+                "reason": str(v.get("reason", ""))[:60]}
     except Exception as e:  # noqa: BLE001
         logger.info("wa brain decide failed (handing off): %s", e)
-        return {"action": "handoff", "reply": handoff_text(lang), "reason": "ai error"}
+        return {"action": "handoff", "reply": handoff_text(lang), "set_lang": "", "reason": "ai error"}
