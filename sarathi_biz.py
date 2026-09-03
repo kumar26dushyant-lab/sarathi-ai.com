@@ -7966,6 +7966,26 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
             )
     except Exception:
         pass
+    # Everyone else involved — complainant, branch / My Business, and the referring staff — used
+    # to learn nothing on a status change (only the account holder was emailed above).
+    try:
+        import biz_nidaan_claim_parties as _cp
+        from biz_nidaan_notifications import _cn as _claim_no
+        _st = (body.new_status or "").replace("_", " ")
+        _who = ""
+        try:
+            _who = f" for {claim.get('insured_name','')}" if claim else ""
+        except Exception:
+            _who = ""
+        _asyncio.create_task(_cp.notify_claim_parties(
+            claim_id, event_key="claim.status",
+            subject=f"Claim #{_claim_no(claim_id)} update — {_st}",
+            body=(f"The claim #{_claim_no(claim_id)}{_who} has moved to: {_st}."
+                  + (f"\n\nNote: {body.note}" if body.note else "")
+                  + "\n\nOpen it on your dashboard for the full trail."),
+            roles=["complainant", "branch", "staff"]))
+    except Exception as _pe:
+        logger.info("claim-party fan-out failed for claim %s: %s", claim_id, _pe)
     return {"claim_id": claim_id, "status": body.new_status}
 
 

@@ -1640,6 +1640,13 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # Branch WhatsApp number — branches previously had email only, so every claim update to a
+        # branch was email-only. Needed so a branch can be notified on WhatsApp too (and so the
+        # missing-contact nudge can ask for it).
+        try:
+            await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN contact_phone TEXT DEFAULT ''")
+        except Exception:
+            pass
         # Seed the initial branches (idempotent — INSERT OR IGNORE on the PK).
         for _code, _city, _name in [
             ("IND-HO", "Indore", "Indore Head Office"),
