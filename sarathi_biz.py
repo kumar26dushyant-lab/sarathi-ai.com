@@ -6114,6 +6114,20 @@ async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int 
     return {"activity": rows, "count": len(rows)}
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/parties")
+async def nidaan_ops_claim_parties(claim_id: int, request: Request):
+    """Everyone who should be notified on this claim + which channel we're MISSING for each,
+    so the case handler can chase the detail. Notifications start flowing from the moment a
+    detail is added — nothing historical is replayed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_claim_parties as _cp
+    parties = await _cp.get_claim_parties(claim_id)
+    return {"parties": parties,
+            "gaps": sum(1 for p in parties if p.get("missing"))}
+
+
 # ── CRM (marketing/sales) — leads pipeline ────────────────────────────────────
 class _CrmLeadReq(BaseModel):
     model_config = ConfigDict(extra="forbid")

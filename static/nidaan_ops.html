@@ -5010,6 +5010,11 @@ async function openClaimDrawer(claimId) {
       <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
+    <!-- Who gets notified on this claim + the contact details we're missing -->
+    <details class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
+      <summary style="cursor:pointer;font-weight:700;list-style:none">🔔 Who gets notified <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— every party on this claim + any missing WhatsApp/email to chase</span></summary>
+      <div id="claimParties_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
+    </details>
     <!-- Activity timeline (automation messages, responses, status, payments) -->
     <details class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimActivity(${c.claim_id});}">
       <summary style="cursor:pointer;font-weight:700;list-style:none">📜 Activity timeline <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— status, payments, WhatsApp &amp; every automation nudge + reply</span></summary>
@@ -10001,6 +10006,29 @@ window.loadWhatsapp=loadWhatsapp; window.saveWaSettings=saveWaSettings;
 window.waPreviewAudience=waPreviewAudience; window.waTestCampaign=waTestCampaign; window.waLaunchCampaign=waLaunchCampaign; window.waLoadCampaigns=waLoadCampaigns;
 
 // Claim activity timeline (merged: status + payments + WhatsApp + automation events).
+// Every party on a claim + the channel we're MISSING for each, so the handler can chase it.
+// Adding a detail starts notifications from that moment — nothing historical is replayed.
+async function loadClaimParties(cid){
+  const el=document.getElementById('claimParties_'+cid); if(!el) return;
+  el.textContent='Loading…';
+  let d={};
+  try{ const r=await API('/claims/'+cid+'/parties'); if(!r.ok) throw 0; d=await r.json(); }
+  catch(e){ el.innerHTML='<span style="color:var(--nd-danger-text)">Could not load.</span>'; return; }
+  const ps=d.parties||[];
+  if(!ps.length){ el.innerHTML='<span style="color:var(--nd-text-faint)">No parties resolved.</span>'; return; }
+  const chip=(ok,label)=>ok
+    ? `<span style="background:#064e3b;color:#6ee7b7;border-radius:999px;padding:.1rem .5rem;font-size:.68rem;white-space:nowrap">✓ ${label}</span>`
+    : `<span style="background:#7c2d12;color:#fdba74;border-radius:999px;padding:.1rem .5rem;font-size:.68rem;white-space:nowrap">⚠ no ${label}</span>`;
+  el.innerHTML=`
+    ${d.gaps?`<div style="color:var(--nd-warning-text);font-size:.78rem;margin-bottom:.5rem">⚠ ${d.gaps} ${d.gaps===1?'party is':'parties are'} missing a contact detail — ask them to add it so they start getting updates.</div>`:'<div style="color:var(--nd-success-text);font-size:.78rem;margin-bottom:.5rem">✓ Everyone on this claim is reachable on both WhatsApp and email.</div>'}
+    ${ps.map(p=>`
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;padding:.35rem 0;border-bottom:1px dashed var(--nd-border)">
+        <span style="min-width:104px;font-size:.72rem;color:var(--nd-text-faint)">${esc(p.label||p.role)}</span>
+        <span style="font-weight:600;color:var(--nd-text-primary)">${esc(p.name||'—')}</span>
+        ${chip(!!p.phone,'WhatsApp')} ${chip(!!p.email,'email')}
+      </div>`).join('')}
+    <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.5rem">Updates go out on every status change. A party with a missing channel still gets the one we have, and the message asks them for the other.</div>`;
+}
 async function loadClaimActivity(cid){
   const el=document.getElementById('claimActivity_'+cid); if(!el) return;
   el.textContent='Loading…';
@@ -10019,7 +10047,7 @@ async function loadClaimActivity(cid){
       </div></div>`;
   }).join('');
 }
-window.loadClaimActivity=loadClaimActivity;
+window.loadClaimActivity=loadClaimActivity; window.loadClaimParties=loadClaimParties;
 
 // Email the claimant their pending documents + upload link (in-house L2 doc-collection).
 async function sendDocReminderEmail(cid){
