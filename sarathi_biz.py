@@ -9157,85 +9157,17 @@ async def ops_refund_manual(body: _ManualRefundReq, request: Request):
 
 # ── App health (super_admin only) ─────────────────────────────────────────────
 
-@app.get("/nidaan/ops/api/health")
-async def ops_health(request: Request):
-    if not _is_nidaan_host(request):
-        raise HTTPException(status_code=404)
-    _require_staff(request, "super_admin")
-    health = await nidaan.get_app_health()
-    # Live service checks for the control center.
-    checks = []
+async def _subsystem_checks() -> list:
+    """Health of the subsystems added after this panel was first built (WhatsApp Cloud API,
+    Email Radar, Gemini, Doc Splitter, SMTP, renewals, reachability, backups).
+
+    Extracted so the App Health panel AND the proactive watchdog run the SAME checks -
+    two copies would drift, and a monitor that disagrees with the dashboard is worse than
+    no monitor. Returns [{name, ok, note}]."""
+    checks: list = []
+
     def _chk(name, ok, note=""):
         checks.append({"name": name, "ok": bool(ok), "note": note})
-    _chk("Database", health is not None, "SQLite reachable")
-    _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
-    _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
-    # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe
-    # (same Bot API the send path uses), delivery enabled, and staff actually linked.
-    try:
-        import biz_nidaan_telegram as _tg
-        _tok = await _tg.get_bot_token()
-        if not _tok:
-            _chk("Telegram Bot", False, "not configured — no bot token")
-        else:
-            _tg_enabled = (await _tg._get_setting("telegram_enabled", "1")) == "1"
-            _me = await _tg._call("getMe", {}, token=_tok)
-            if _me and _me.get("ok"):
-                _uname = ((_me.get("result") or {}).get("username")) or "NidaanOpsBot"
-                _chk("Telegram Bot", _tg_enabled,
-                     f"@{_uname} reachable & delivering" if _tg_enabled
-                     else f"@{_uname} reachable — delivery DISABLED")
-            else:
-                _chk("Telegram Bot", False,
-                     f"unreachable / invalid token ({(_me or {}).get('error') or (_me or {}).get('description') or 'no response'})")
-        async with aiosqlite.connect(db.DB_PATH) as _tc:
-            _cur = await _tc.execute("SELECT COUNT(DISTINCT staff_id) FROM nidaan_staff_telegram")
-            _linked = (await _cur.fetchone())[0]
-        _chk("Telegram Staff Linked", _linked > 0,
-             f"{_linked} staff linked" if _linked else "no staff linked — alerts reach no one")
-    except Exception as _te:
-        _chk("Telegram Bot", False, f"check failed: {str(_te)[:80]}")
-    # WhatsApp status comes from the NIDAAN official instances (not the Sarathi
-    # wa_instances table). health_state 'open' == connected.
-    try:
-        wa_insts = await nnot.list_official_instances()
-        connected = [i for i in wa_insts if (i.get("health_state") == "open")]
-        # Reset-aware "sent today" — mirror compute_effective_caps so App Health and
-        # the Official Numbers page always agree (a stale yesterday counter reads 0).
-        from datetime import date as _date
-        _today = _date.today().isoformat()
-        def _sent_today(i):
-            return (i.get("daily_sent_count") or 0) if str(i.get("daily_count_reset_at")) == _today else 0
-        _sh = await nnot.wa_send_health()
-        health["wa_instances"] = [
-            {"slot": i.get("instance_slot"), "name": i.get("display_name"),
-             "phone": i.get("phone_number"), "state": i.get("health_state"),
-             "sent_today": _sent_today(i),
-             "send_broken": bool(_sh.get(i.get("instance_slot"), {}).get("broken")),
-             "last_error": _sh.get(i.get("instance_slot"), {}).get("last_error", "")}
-            for i in wa_insts]
-        # A number that's "open" but whose sends are failing is a ghost connection.
-        _ghost = [i for i in wa_insts if i.get("health_state") == "open"
-                  and _sh.get(i.get("instance_slot"), {}).get("broken")]
-        if wa_insts:
-            _can_send = [i for i in connected
-                         if not _sh.get(i.get("instance_slot"), {}).get("broken")]
-            note = f"{len(connected)}/{len(wa_insts)} connected"
-            if _ghost:
-                note += f" · ⚠️ {len(_ghost)} connected but sends FAILING — re-pair (QR)"
-            _chk("WhatsApp", len(_can_send) > 0, note)
-        else:
-            _chk("WhatsApp", False, "no official numbers configured yet")
-    except Exception as _we:
-        health["wa_instances"] = []
-        _chk("WhatsApp", False, f"status check failed: {_we}")
-    try:
-        import shutil as _sh
-        du = _sh.disk_usage(".")
-        pct = round(du.used / du.total * 100, 1)
-        _chk("Disk", pct < 90, f"{pct}% used")
-    except Exception:
-        pass
 
     # ── Subsystems added since this panel was first built ────────────────────
     # WhatsApp Cloud API (the live NidaanPartner number). The block above still reports the
@@ -9357,6 +9289,91 @@ async def ops_health(request: Request):
             _chk("Backups", False, f"no backup files found in {_bd}")
     except Exception as _e:
         _chk("Backups", False, f"check failed: {str(_e)[:70]}")
+
+    return checks
+
+
+@app.get("/nidaan/ops/api/health")
+async def ops_health(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    health = await nidaan.get_app_health()
+    # Live service checks for the control center.
+    checks = []
+    def _chk(name, ok, note=""):
+        checks.append({"name": name, "ok": bool(ok), "note": note})
+    _chk("Database", health is not None, "SQLite reachable")
+    _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
+    _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
+    # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe
+    # (same Bot API the send path uses), delivery enabled, and staff actually linked.
+    try:
+        import biz_nidaan_telegram as _tg
+        _tok = await _tg.get_bot_token()
+        if not _tok:
+            _chk("Telegram Bot", False, "not configured — no bot token")
+        else:
+            _tg_enabled = (await _tg._get_setting("telegram_enabled", "1")) == "1"
+            _me = await _tg._call("getMe", {}, token=_tok)
+            if _me and _me.get("ok"):
+                _uname = ((_me.get("result") or {}).get("username")) or "NidaanOpsBot"
+                _chk("Telegram Bot", _tg_enabled,
+                     f"@{_uname} reachable & delivering" if _tg_enabled
+                     else f"@{_uname} reachable — delivery DISABLED")
+            else:
+                _chk("Telegram Bot", False,
+                     f"unreachable / invalid token ({(_me or {}).get('error') or (_me or {}).get('description') or 'no response'})")
+        async with aiosqlite.connect(db.DB_PATH) as _tc:
+            _cur = await _tc.execute("SELECT COUNT(DISTINCT staff_id) FROM nidaan_staff_telegram")
+            _linked = (await _cur.fetchone())[0]
+        _chk("Telegram Staff Linked", _linked > 0,
+             f"{_linked} staff linked" if _linked else "no staff linked — alerts reach no one")
+    except Exception as _te:
+        _chk("Telegram Bot", False, f"check failed: {str(_te)[:80]}")
+    # WhatsApp status comes from the NIDAAN official instances (not the Sarathi
+    # wa_instances table). health_state 'open' == connected.
+    try:
+        wa_insts = await nnot.list_official_instances()
+        connected = [i for i in wa_insts if (i.get("health_state") == "open")]
+        # Reset-aware "sent today" — mirror compute_effective_caps so App Health and
+        # the Official Numbers page always agree (a stale yesterday counter reads 0).
+        from datetime import date as _date
+        _today = _date.today().isoformat()
+        def _sent_today(i):
+            return (i.get("daily_sent_count") or 0) if str(i.get("daily_count_reset_at")) == _today else 0
+        _sh = await nnot.wa_send_health()
+        health["wa_instances"] = [
+            {"slot": i.get("instance_slot"), "name": i.get("display_name"),
+             "phone": i.get("phone_number"), "state": i.get("health_state"),
+             "sent_today": _sent_today(i),
+             "send_broken": bool(_sh.get(i.get("instance_slot"), {}).get("broken")),
+             "last_error": _sh.get(i.get("instance_slot"), {}).get("last_error", "")}
+            for i in wa_insts]
+        # A number that's "open" but whose sends are failing is a ghost connection.
+        _ghost = [i for i in wa_insts if i.get("health_state") == "open"
+                  and _sh.get(i.get("instance_slot"), {}).get("broken")]
+        if wa_insts:
+            _can_send = [i for i in connected
+                         if not _sh.get(i.get("instance_slot"), {}).get("broken")]
+            note = f"{len(connected)}/{len(wa_insts)} connected"
+            if _ghost:
+                note += f" · ⚠️ {len(_ghost)} connected but sends FAILING — re-pair (QR)"
+            _chk("WhatsApp", len(_can_send) > 0, note)
+        else:
+            _chk("WhatsApp", False, "no official numbers configured yet")
+    except Exception as _we:
+        health["wa_instances"] = []
+        _chk("WhatsApp", False, f"status check failed: {_we}")
+    try:
+        import shutil as _sh
+        du = _sh.disk_usage(".")
+        pct = round(du.used / du.total * 100, 1)
+        _chk("Disk", pct < 90, f"{pct}% used")
+    except Exception:
+        pass
+
+    checks.extend(await _subsystem_checks())
 
     health["checks"] = checks
     health["failing"] = [c["name"] for c in checks if not c["ok"]]
@@ -25423,6 +25440,24 @@ async def main():
                     logger.error("Branch unpaid sweep error: %s", e)
                 await asyncio.sleep(12 * 3600)  # twice daily
         asyncio.create_task(branch_unpaid_loop())
+
+        # Step 6g1a2: PROACTIVE health watchdog. App Health only speaks when someone looks at it,
+        # which is how the WhatsApp number sat dead for days. This runs the SAME checks and alerts
+        # super-admins the moment a subsystem breaks (edge-triggered, so no repeat spam).
+        async def health_watch_loop():
+            await asyncio.sleep(600)   # let startup settle before judging anything
+            while True:
+                try:
+                    import biz_nidaan_health_watch as _hw
+                    res = await _hw.run_health_watch()
+                    if res.get("alerted"):
+                        logger.warning("HEALTH_WATCH alerted: %s", res["alerted"])
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Health watch error: %s", e)
+                await asyncio.sleep(1800)   # every 30 min
+        asyncio.create_task(health_watch_loop())
 
         # Step 6g1b: Email Update Radar — poll customer mailboxes, AI-triage new mail into flagged
         # radar items. Worker-only singleton; internally staggered; every 15 min.

@@ -1558,7 +1558,8 @@ function closeModal() { document.getElementById('claimModal').classList.remove('
 function showRejectionLetterName() {
   const f = document.getElementById('claimRejectionLetter').files[0];
   const el = document.getElementById('claimRejectionLetterName');
-  if (el) el.innerHTML = f ? `📄 ${f.name} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span>` : '';
+  // esc(): a filename is user-controlled text, so it must never reach innerHTML raw.
+  if (el) el.innerHTML = f ? `📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span>` : '';
 }
 
 function showClaimDocList() {
@@ -1566,7 +1567,7 @@ function showClaimDocList() {
   const list = document.getElementById('claimDocList');
   if (!files.length) { list.innerHTML = ''; return; }
   list.innerHTML = Array.from(files).map(f =>
-    `<div>📄 ${f.name} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
   ).join('');
 }
 
