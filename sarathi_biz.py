@@ -1891,7 +1891,12 @@ async def nidaan_support_thread(thread_id: int, thread_key: str, request: Reques
         await nidaan.mark_support_seen_by_subscriber(thread_id)
     except Exception:
         pass
-    return {"thread_id": thread_id, "status": thread.get("status"), "messages": msgs}
+    try:
+        await nidaan.mark_support_read(thread_id, "customer")
+    except Exception:
+        pass
+    return {"thread_id": thread_id, "status": thread.get("status"), "messages": msgs,
+            "read": await nidaan.get_support_read_marks(thread_id)}
 
 
 @app.get("/nidaan/api/support/status")
@@ -7693,7 +7698,14 @@ async def ops_support_thread(thread_id: int, request: Request):
     meta = await nidaan.get_support_thread_meta(thread_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Thread not found")
-    return {"thread": meta, "messages": await nidaan.get_support_messages(thread_id)}
+    msgs = await nidaan.get_support_messages(thread_id)
+    # Opening the thread IS reading it - advance our pointer so the customer sees the read tick.
+    try:
+        await nidaan.mark_support_read(thread_id, "staff")
+    except Exception:
+        pass
+    return {"thread": meta, "messages": msgs,
+            "read": await nidaan.get_support_read_marks(thread_id)}
 
 
 class OpsSupportReplyReq(BaseModel):

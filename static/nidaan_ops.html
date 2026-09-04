@@ -7788,6 +7788,7 @@ async function openSupportThread(id){
   if (!r.ok){ alert('Could not open conversation.'); return; }
   const d = await r.json();
   const meta = d.thread||{}; const msgs = d.messages||[];
+  const custSeen = (d.read && d.read.customer_seen) || 0;   // highest msg the customer has read
   const custName = (meta.name && String(meta.name).trim()) ? String(meta.name).trim() : 'Customer';
   const bubbles = msgs.map(m=>{
     const mine = (m.sender_type==='staff');
@@ -7801,7 +7802,7 @@ async function openSupportThread(id){
     const ts = fmtDateTime(m.created_at);
     return `<div style="display:flex;justify-content:${side};margin:.35rem 0">
       <div style="max-width:80%;background:${bg};color:${col};padding:.55rem .8rem;border-radius:14px;${side==='flex-end'?'border-bottom-right-radius:5px':'border-bottom-left-radius:5px'};font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18)">
-        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'var(--nd-cyan-text)':'var(--nd-purple-text)')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}</div>`:''}</div></div>`;
+        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'var(--nd-cyan-text)':'var(--nd-purple-text)')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}${(mine||ai)?` <span title="${m.msg_id<=custSeen?'Read by the customer':'Sent — not read yet'}">${m.msg_id<=custSeen?'✓✓':'✓'}</span>`:''}</div>`:''}</div></div>`;
   }).join('');
   const ov = document.createElement('div');
   ov.id='supModal';

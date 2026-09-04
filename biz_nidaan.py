@@ -2585,6 +2585,30 @@ async def create_support_thread(name: str = "", contact: str = "",
         return {"thread_id": cur.lastrowid, "thread_key": key}
 
 
+async def mark_support_read(thread_id: int, by: str) -> None:
+    """Advance the read pointer for 'customer' or 'staff' to the newest message in the thread.
+    Drives the WhatsApp-style tick so each side can see the other has actually read it."""
+    col = "sub_last_seen_msg_id" if by == "customer" else "staff_last_seen_msg_id"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            f"""UPDATE nidaan_support_threads
+                   SET {col} = COALESCE(
+                       (SELECT MAX(msg_id) FROM nidaan_support_messages WHERE thread_id=?),
+                       {col})
+                 WHERE thread_id=?""", (thread_id, thread_id))
+        await conn.commit()
+
+
+async def get_support_read_marks(thread_id: int) -> dict:
+    """{customer_seen, staff_seen} - the highest msg_id each side has read."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT COALESCE(sub_last_seen_msg_id,0) AS c, COALESCE(staff_last_seen_msg_id,0) AS s "
+            "FROM nidaan_support_threads WHERE thread_id=?", (thread_id,))).fetchone()
+    return {"customer_seen": (r["c"] if r else 0), "staff_seen": (r["s"] if r else 0)}
+
+
 async def find_open_support_thread(*, account_id=None, contact: str = "",
                                    channel: str = "", max_age_hours: int = 720) -> Optional[dict]:
     """An existing OPEN thread for the SAME person, so one customer does not end up as several

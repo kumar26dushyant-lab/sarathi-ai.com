@@ -1640,6 +1640,14 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # Support read receipts: the customer side already had sub_last_seen_msg_id; the STAFF
+        # side had no equivalent, so neither party could tell whether the other had actually read
+        # the conversation. This is the mirror pointer.
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_support_threads ADD COLUMN staff_last_seen_msg_id INTEGER")
+        except Exception:
+            pass
         # Unsend on a claim message: SOFT delete only. A legal practice must keep the record of
         # what was said, so the row stays and is filtered out of the thread instead of destroyed.
         for _c, _t in (("deleted_at", "TIMESTAMP"), ("deleted_by_staff_id", "INTEGER")):
