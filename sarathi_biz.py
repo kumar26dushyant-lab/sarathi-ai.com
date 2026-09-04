@@ -295,15 +295,11 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Allow Google Sign-In popup (window.opener.postMessage) — without this, GIS popup hangs 60s+
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
-    # Content-Security-Policy — deliberately ONLY the directives that cannot break this app.
-    # The pages rely on inline scripts/handlers, so script-src is intentionally NOT restricted
-    # here (that would break every ops screen). What these three DO stop is real and cheap:
-    #   object-src 'none'   → no Flash/plugin/<embed> injection vector
-    #   base-uri 'self'     → an injected <base> can't silently re-point every relative URL
-    #   frame-ancestors     → clickjacking, and unlike X-Frame-Options this is still honoured
-    # Verified first that no page uses <object>, <embed> or <base>, so nothing regresses.
-    response.headers["Content-Security-Policy"] = (
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+    # NOTE: Content-Security-Policy is set by nginx (a full policy: default-src 'self',
+    # pinned script/style/font/connect/frame hosts, form-action 'self', object-src 'none',
+    # base-uri 'self', frame-ancestors 'self', upgrade-insecure-requests). Deliberately NOT
+    # duplicated here — two CSP headers make the browser enforce the intersection, which only
+    # makes future debugging confusing. Audited 2026-09-04: nginx policy verified live.
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
