@@ -615,6 +615,24 @@ async def nidaan_about_page(request: Request):
     return _nidaan_page("nidaan_about.html")
 
 
+@app.get("/nidaan/privacy", response_class=HTMLResponse)
+async def nidaan_privacy_page(request: Request):
+    """NidaanPartner's own privacy policy. The footer of every Nidaan page linked here but the
+    route did not exist (404) — and /privacy serves the Sarathi-AI policy, which is the wrong
+    entity for a legal-services LLP handling medical records."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_privacy.html")
+
+
+@app.get("/nidaan/terms", response_class=HTMLResponse)
+async def nidaan_terms_page(request: Request):
+    """NidaanPartner's own terms of service (see the note on /nidaan/privacy)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_terms.html")
+
+
 @app.get("/nidaan/success", response_class=HTMLResponse)
 async def nidaan_success_page(request: Request):
     """Post-payment thank-you page (all payment flows land here, then continue to the dashboard)."""
@@ -3826,6 +3844,21 @@ async def nidaan_delete_review_doc(purchase_id: int, doc_id: int, request: Reque
     if stored is None: raise HTTPException(404, "Document not found")
     _nidaan_remove_doc_file(stored)
     return {"ok": True}
+
+
+@app.get("/nidaan/branch/api/claims/{claim_id}/documents")
+async def nidaan_branch_list_claim_docs(claim_id: int, request: Request):
+    """Documents already attached to one of THIS branch's claims — so the partner can see what is
+    on file before uploading, instead of sending duplicates."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(404, "Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
 
 
 @app.delete("/nidaan/branch/api/claims/{claim_id}/documents/{doc_id}")
@@ -7316,6 +7349,36 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
             file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
         saved.append({"doc_id": doc_id, "original_name": f.filename})
     return {"uploaded": saved, "count": len(saved)}
+
+
+@app.get("/nidaan/ops/api/my-claims/{claim_id}/documents")
+async def ops_my_claim_docs(claim_id: int, request: Request):
+    """Documents on a claim this staffer raised under their own My Business code."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _staff, code = await _staff_claim_code(request)
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+@app.delete("/nidaan/ops/api/my-claims/{claim_id}/documents/{doc_id}")
+async def ops_my_claim_doc_delete(claim_id: int, doc_id: int, request: Request):
+    """Remove a wrongly-attached document from a claim this staffer raised."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _staff, code = await _staff_claim_code(request)
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _nidaan_remove_doc_file(stored)
+    await _ops_audit(request, "myclaim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
+    return {"ok": True}
 
 
 @app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-pay")

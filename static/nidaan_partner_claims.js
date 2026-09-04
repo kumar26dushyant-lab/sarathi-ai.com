@@ -64,11 +64,15 @@
         <td style="text-align:right">${c.disputed_amount ? ('₹' + fmt(c.disputed_amount)) : '—'}</td>
         <td>${esc((c.status || '').replace(/_/g, ' '))}</td>
         <td>${l2}</td>
+        <td><button class="btn-sm btn-ghost" style="${bs};white-space:nowrap" onclick="NidaanPartnerClaims.docs(${c.claim_id})">📎 ${h ? 'दस्तावेज़' : 'Documents'}</button></td>
         <td style="font-size:.74rem;color:var(--nd-text-faint)">${fmtDate(c.created_at)}</td>
-      </tr>`;
+      </tr>
+      <tr id="npDocRow_${c.claim_id}" style="display:none"><td colspan="7" style="background:var(--nd-bg-surface-2,#f8fafc);padding:.7rem .9rem">
+        <div id="npDocPanel_${c.claim_id}" style="font-size:.82rem">…</div>
+      </td></tr>`;
     }).join('');
     wrap.innerHTML = tabs + `<div class="table-wrap"><table>
-      <thead><tr><th>${h ? 'ग्राहक' : 'Customer'}</th><th>${h ? 'प्रकार' : 'Type'}</th><th>${h ? 'राशि' : 'Amount'}</th><th>${h ? 'स्थिति' : 'Status'}</th><th>Level-2</th><th>${h ? 'दर्ज' : 'Raised'}</th></tr></thead>
+      <thead><tr><th>${h ? 'ग्राहक' : 'Customer'}</th><th>${h ? 'प्रकार' : 'Type'}</th><th>${h ? 'राशि' : 'Amount'}</th><th>${h ? 'स्थिति' : 'Status'}</th><th>Level-2</th><th>${h ? 'दस्तावेज़' : 'Documents'}</th><th>${h ? 'दर्ज' : 'Raised'}</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
 
@@ -163,10 +167,93 @@
     } catch (e) { alert(e.message); }
   }
 
+  // ── Documents on a claim the partner raised ────────────────────────────────
+  // Partners could raise a claim but never attach paperwork afterwards, and could not see what
+  // was already on file - so they re-sent the same documents. This panel lists what is attached
+  // (so no duplication), lets them add more later, and lets them remove a wrong one.
+  function docApi(claimId, extra, opts) {
+    return CFG.api('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents' + (extra || ''), opts);
+  }
+
+  async function loadDocs(claimId) {
+    const box = document.getElementById('npDocPanel_' + claimId);
+    if (!box) return;
+    const h = hi();
+    box.innerHTML = h ? 'लोड हो रहा है…' : 'Loading…';
+    let docs = [];
+    try {
+      const r = await docApi(claimId, '');
+      if (!r.ok) throw 0;
+      docs = (await r.json()).docs || [];
+    } catch (e) {
+      box.innerHTML = `<span style="color:var(--nd-danger-text,#b91c1c)">${h ? 'दस्तावेज़ लोड नहीं हुए।' : 'Could not load documents.'}</span>`;
+      return;
+    }
+    const list = docs.length
+      ? docs.map(d => `<div style="display:flex;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px dashed var(--nd-border,#e2e8f0)">
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(d.original_name || d.stored_name || 'document')}</span>
+            <span style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(d.uploaded_at || d.created_at)}</span>
+            ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--nd-cyan-text,#0891b2)">${h ? 'देखें' : 'View'}</a>` : ''}
+            <button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.15rem .45rem;color:var(--nd-danger-text,#b91c1c)"
+                    onclick="NidaanPartnerClaims.delDoc(${claimId}, ${d.doc_id})" title="${h ? 'हटाएँ' : 'Remove'}">✕</button>
+          </div>`).join('')
+      : `<div style="color:var(--nd-text-faint);padding:.2rem 0">${h ? 'अभी कोई दस्तावेज़ नहीं जुड़ा।' : 'No documents attached yet.'}</div>`;
+    box.innerHTML = `
+      <div style="font-weight:700;margin-bottom:.3rem">${h ? 'जुड़े दस्तावेज़' : 'Attached documents'} (${docs.length})</div>
+      ${list}
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
+        <input type="file" id="npDocFile_${claimId}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp"
+               style="font-size:.78rem;max-width:230px">
+        <button class="btn btn-primary btn-cyan" style="padding:.3rem .7rem;font-size:.76rem"
+                onclick="NidaanPartnerClaims.upDoc(${claimId}, this)">${h ? 'अपलोड करें' : 'Upload'}</button>
+        <span id="npDocMsg_${claimId}" style="font-size:.76rem;color:var(--nd-text-muted)"></span>
+      </div>
+      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.35rem">${h ? 'PDF / JPG / PNG · एक बार में 5 तक' : 'PDF / JPG / PNG · up to 5 at a time'}</div>`;
+  }
+
+  function toggleDocs(claimId) {
+    const row = document.getElementById('npDocRow_' + claimId);
+    if (!row) return;
+    const show = row.style.display === 'none';
+    row.style.display = show ? '' : 'none';
+    if (show) loadDocs(claimId);
+  }
+
+  async function uploadDocs(claimId, btn) {
+    const h = hi();
+    const inp = document.getElementById('npDocFile_' + claimId);
+    const msg = document.getElementById('npDocMsg_' + claimId);
+    if (!inp || !inp.files.length) { if (msg) msg.textContent = h ? 'पहले फ़ाइल चुनें।' : 'Choose a file first.'; return; }
+    const fd = new FormData();
+    for (const f of inp.files) fd.append('files', f);
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = h ? 'भेजा जा रहा…' : 'Uploading…';
+    try {
+      // Multipart must NOT carry a JSON Content-Type, so pages inject a dedicated uploader.
+      const r = CFG.upload ? await CFG.upload('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents/upload', fd)
+                           : await docApi(claimId, '/upload', { method: 'POST', body: fd });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Upload failed'); }
+      if (msg) { msg.style.color = 'var(--nd-success-text,#047857)'; msg.textContent = h ? 'अपलोड हो गया ✓' : 'Uploaded ✓'; }
+      await loadDocs(claimId);
+    } catch (e) {
+      if (msg) { msg.style.color = 'var(--nd-danger-text,#b91c1c)'; msg.textContent = '✕ ' + (e.message || 'Upload failed'); }
+    } finally { btn.disabled = false; btn.textContent = orig; }
+  }
+
+  async function deleteDoc(claimId, docId) {
+    const h = hi();
+    if (!confirm(h ? 'यह दस्तावेज़ हटाएँ? यह वापस नहीं आएगा।' : 'Remove this document? This cannot be undone.')) return;
+    try {
+      const r = await docApi(claimId, '/' + docId, { method: 'DELETE' });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Could not remove'); }
+      await loadDocs(claimId);
+    } catch (e) { alert(e.message || 'Could not remove the document.'); }
+  }
+
   window.NidaanPartnerClaims = {
     init: function (cfg) { CFG = cfg; VIEW = 'active'; },
     render: render,
     setTab: function (v) { VIEW = v; render(); },
-    pay: pay, advance: advance, link: link
+    pay: pay, advance: advance, link: link,
+    docs: toggleDocs, upDoc: uploadDocs, delDoc: deleteDoc
   };
 })();

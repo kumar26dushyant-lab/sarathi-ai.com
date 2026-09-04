@@ -260,6 +260,16 @@ h1,h2,h3,h4{font-family:'Poppins','Inter',sans-serif}
 .faq-q .faq-arrow{font-size:1.1rem;transition:transform .25s;flex-shrink:0}
 .faq-a{font-size:.9rem;color:#374151;line-height:1.8;padding-bottom:1rem;display:none}
 .faq-item.open .faq-a{display:block}
+/* The language toggle uses `body.en .en{display:block!important}`, which outranked the fold
+   rule above and left every English answer permanently open (the arrow turned, nothing folded).
+   These scoped rules restore the accordion in BOTH languages: hidden unless .open, and only
+   the answer for the active language is shown. */
+body.en .faq-item .faq-a.en{display:none!important}
+body.en .faq-item.open .faq-a.en{display:block!important}
+body.en .faq-item .faq-a.hi{display:none!important}
+body.hi .faq-item .faq-a.hi{display:none!important}
+body.hi .faq-item.open .faq-a.hi{display:block!important}
+body.hi .faq-item .faq-a.en{display:none!important}
 .faq-item.open .faq-arrow{transform:rotate(180deg)}
 
 /* OFFICES */
@@ -1385,7 +1395,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Yes — absolutely free. In the first meeting, we listen to the problem and give expert advice at no cost.</div>
-        <div class="faq-a hi" style="display:none">हाँ — बिल्कुल मुफ्त। पहली बैठक में हम समस्या सुनते हैं और विशेषज्ञ सलाह देते हैं — कोई शुल्क नहीं।</div>
+        <div class="faq-a hi">हाँ — बिल्कुल मुफ्त। पहली बैठक में हम समस्या सुनते हैं और विशेषज्ञ सलाह देते हैं — कोई शुल्क नहीं।</div>
       </div>
 
       <div class="faq-item">
@@ -1395,7 +1405,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">No. Only a registration fee for legal documentation is charged upfront. The consultancy fee is due only after successful resolution.</div>
-        <div class="faq-a hi" style="display:none">नहीं। केवल कानूनी दस्तावेज़ीकरण की रजिस्ट्रेशन फीस अग्रिम ली जाती है। परामर्श शुल्क केवल सफल समाधान के बाद।</div>
+        <div class="faq-a hi">नहीं। केवल कानूनी दस्तावेज़ीकरण की रजिस्ट्रेशन फीस अग्रिम ली जाती है। परामर्श शुल्क केवल सफल समाधान के बाद।</div>
       </div>
 
       <div class="faq-item">
@@ -1405,7 +1415,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">No. All drafting and follow-ups are handled by Nidaan. Your client only needs to provide document copies. No travel required.</div>
-        <div class="faq-a hi" style="display:none">नहीं। सभी ड्राफ्टिंग और फॉलो-अप Nidaan करता है। क्लाइंट को केवल दस्तावेज़ की प्रतियां देनी होती हैं। कोई यात्रा नहीं।</div>
+        <div class="faq-a hi">नहीं। सभी ड्राफ्टिंग और फॉलो-अप Nidaan करता है। क्लाइंट को केवल दस्तावेज़ की प्रतियां देनी होती हैं। कोई यात्रा नहीं।</div>
       </div>
 
       <div class="faq-item">
@@ -1415,7 +1425,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Health/Mediclaim, Life, Motor/Vehicle, Property, Fire, Marine, Industrial, Labour, and Travel insurance claims. We also handle hospital and TPA disputes.</div>
-        <div class="faq-a hi" style="display:none">हेल्थ/मेडिक्लेम, लाइफ, मोटर/वाहन, प्रॉपर्टी, फायर, मरीन, इंडस्ट्रियल, लेबर और ट्रैवल बीमा क्लेम। अस्पताल और TPA विवाद भी।</div>
+        <div class="faq-a hi">हेल्थ/मेडिक्लेम, लाइफ, मोटर/वाहन, प्रॉपर्टी, फायर, मरीन, इंडस्ट्रियल, लेबर और ट्रैवल बीमा क्लेम। अस्पताल और TPA विवाद भी।</div>
       </div>
 
       <div class="faq-item">
@@ -1425,7 +1435,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Our success rate is 95%+. Resolution time depends on the complexity of each case — we always pursue the earliest possible resolution.</div>
-        <div class="faq-a hi" style="display:none">हमारी सफलता दर 95%+ है। समाधान का समय हर मामले की जटिलता पर निर्भर करता है — हम हमेशा जल्द से जल्द समाधान का प्रयास करते हैं।</div>
+        <div class="faq-a hi">हमारी सफलता दर 95%+ है। समाधान का समय हर मामले की जटिलता पर निर्भर करता है — हम हमेशा जल्द से जल्द समाधान का प्रयास करते हैं।</div>
       </div>
 
       <div class="faq-item">
@@ -1435,7 +1445,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Silver = 3 claims/month (up to ₹5L each), Gold = 3 claims/month (up to ₹10L each), Platinum = 10 claims/month (up to ₹50L each). If you hit your limit, you'll see an upgrade prompt in your dashboard — or you can purchase a single-claim review for ₹499.</div>
-        <div class="faq-a hi" style="display:none">सिल्वर = 3 क्लेम/माह (प्रति ₹5 लाख तक), गोल्ड = 3 क्लेम/माह (प्रति ₹10 लाख तक), प्लेटिनम = 10 क्लेम/माह (प्रति ₹50 लाख तक)। सीमा पहुंचने पर डैशबोर्ड में अपग्रेड का संकेत मिलेगा — या ₹499 में एकल क्लेम समीक्षा।</div>
+        <div class="faq-a hi">सिल्वर = 3 क्लेम/माह (प्रति ₹5 लाख तक), गोल्ड = 3 क्लेम/माह (प्रति ₹10 लाख तक), प्लेटिनम = 10 क्लेम/माह (प्रति ₹50 लाख तक)। सीमा पहुंचने पर डैशबोर्ड में अपग्रेड का संकेत मिलेगा — या ₹499 में एकल क्लेम समीक्षा।</div>
       </div>
 
       <div class="faq-item">
@@ -1445,7 +1455,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">No. Since the consultancy fee is payable only after successful claim recovery, there is no financial risk for the client.</div>
-        <div class="faq-a hi" style="display:none">नहीं। परामर्श शुल्क केवल सफल क्लेम वसूली के बाद देय होता है — क्लाइंट के लिए कोई वित्तीय जोखिम नहीं।</div>
+        <div class="faq-a hi">नहीं। परामर्श शुल्क केवल सफल क्लेम वसूली के बाद देय होता है — क्लाइंट के लिए कोई वित्तीय जोखिम नहीं।</div>
       </div>
 
       <div class="faq-item">
@@ -1455,7 +1465,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Copies of claim documents (rejection letter, policy copy, discharge summary for mediclaim, etc.). Our team will guide them on exactly what's needed for their specific case.</div>
-        <div class="faq-a hi" style="display:none">क्लेम दस्तावेज़ों की प्रतियां (अस्वीकृति पत्र, पॉलिसी कॉपी, मेडिक्लेम के लिए डिस्चार्ज सारांश आदि)। हमारी टीम उनके मामले के अनुसार बताएगी।</div>
+        <div class="faq-a hi">क्लेम दस्तावेज़ों की प्रतियां (अस्वीकृति पत्र, पॉलिसी कॉपी, मेडिक्लेम के लिए डिस्चार्ज सारांश आदि)। हमारी टीम उनके मामले के अनुसार बताएगी।</div>
       </div>
 
       <div class="faq-item">
@@ -1465,7 +1475,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">Yes — <a href="/nidaan/start#get-reviewed" style="color:var(--cyan-dark);font-weight:600">submit your claim for review here</a>. A one-time ₹499 legal review, no subscription required.</div>
-        <div class="faq-a hi" style="display:none">हाँ — <a href="/nidaan/start#get-reviewed" style="color:var(--cyan-dark);font-weight:600">यहाँ अपना क्लेम समीक्षा के लिए जमा करें</a>। एकमुश्त ₹499 में कानूनी समीक्षा, कोई सब्सक्रिप्शन नहीं।</div>
+        <div class="faq-a hi">हाँ — <a href="/nidaan/start#get-reviewed" style="color:var(--cyan-dark);font-weight:600">यहाँ अपना क्लेम समीक्षा के लिए जमा करें</a>। एकमुश्त ₹499 में कानूनी समीक्षा, कोई सब्सक्रिप्शन नहीं।</div>
       </div>
 
       <div class="faq-item">
@@ -1475,7 +1485,7 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
           <span class="faq-arrow">▾</span>
         </button>
         <div class="faq-a en">We have 3 offices in Indore and 1 in Bhopal. The registered office is at 79-A, Dravid Nagar, Indore – 452009. See footer for all addresses.</div>
-        <div class="faq-a hi" style="display:none">इंदौर में 3 और भोपाल में 1 कार्यालय। पंजीकृत कार्यालय: 79-A, द्रविड़ नगर, इंदौर – 452009। सभी पते Footer में।</div>
+        <div class="faq-a hi">इंदौर में 3 और भोपाल में 1 कार्यालय। पंजीकृत कार्यालय: 79-A, द्रविड़ नगर, इंदौर – 452009। सभी पते Footer में।</div>
       </div>
 
     </div>

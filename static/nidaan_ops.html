@@ -4272,6 +4272,9 @@ async function loadMyBusiness() {
     hi: () => _mbHi(),
     api: (path, opts) => API(path, opts),
     l2Path: (id, a) => '/my-claims/' + id + '/' + a,
+    docsBase: 'my-claims',
+    // Multipart: bypass the JSON API helper so the browser sets the multipart boundary.
+    upload: (path, fd) => fetch('/nidaan/ops/api' + path, { method: 'POST', headers: (_token ? { 'Authorization': 'Bearer ' + _token } : {}), body: fd }),
     reload: mbLoadClaims
   });
   mbLoadClaims();

@@ -474,6 +474,9 @@ async function showDashboard(){
       hi: () => false,
       api: (path, opts) => { opts = opts || {}; const h = { ...authHeaders() }; if (opts.body) h['Content-Type'] = 'application/json'; return fetch('/nidaan/branch/api' + path, { ...opts, headers: h }); },
       l2Path: (id, a) => '/claims/' + id + '/' + a,
+      docsBase: 'claims',
+      // Multipart: never set Content-Type by hand - the browser must add the boundary.
+      upload: (path, fd) => fetch('/nidaan/branch/api' + path, { method: 'POST', headers: authHeaders(), body: fd }),
       reload: loadBranchClaims
     });
     loadBranchClaims();
