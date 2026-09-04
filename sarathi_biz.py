@@ -7025,6 +7025,40 @@ async def ops_radar_read_email(item_id: int, request: Request):
     return await radar.read_full_email(item_id)
 
 
+@app.get("/nidaan/ops/api/radar/items/{item_id}/attachments")
+async def ops_radar_attachments(item_id: int, request: Request):
+    """Files attached to this email + the claim we'd suggest filing them against. Read-only —
+    nothing is attached to a claim until a human confirms."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.list_attachments(item_id)
+
+
+class _RadarFileReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_id: int = Field(..., ge=1)
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/file-to-claim")
+@limiter.limit("20/minute")
+async def ops_radar_file_to_claim(item_id: int, body: _RadarFileReq, request: Request):
+    """Attach this email's files to a claim (human-confirmed). Each is normalised to PDF and
+    saved as a claim document, and the claim timeline records it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    res = await radar.file_attachments_to_claim(item_id, body.claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        _m = {"not_found": "That email is no longer available",
+              "no_attachments": "This email has no attachments we can file",
+              "claim_not_found": "Claim not found"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not file the attachments"))
+    await _ops_audit(request, "radar.file_to_claim", "claim", str(body.claim_id),
+                     f"{res.get('filed')} attachment(s) from radar item {item_id}")
+    return res
+
+
 class _RadarReplyReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(..., min_length=1, max_length=8000)

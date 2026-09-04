@@ -4550,10 +4550,53 @@ async function openRadarEmail(id){
       <div><b>Date:</b> ${esc(d.date||'')}</div>
     </div>
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:.84rem;line-height:1.55">${esc(emailBody)}</div>
+    <div id="radarAttach_${id}" style="margin-top:.9rem;font-size:.8rem;color:var(--nd-text-faint)">Checking for attachments…</div>
     <div style="margin-top:.9rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <span style="font-size:.76rem;color:var(--nd-text-muted)">📡 Read-only radar — this email is flagged for your attention. To reply, open the mailbox directly.</span>
       ${resolved?'<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ Resolved</span>':`<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="radarResolve(${id})">✅ Mark resolved</button>`}
     </div>`;
+  radarLoadAttachments(id);
+}
+// Attachments are never auto-filed onto a claim — a wrong match would be a privacy problem.
+// We show what's attached, suggest the claim, and file only when a human confirms.
+async function radarLoadAttachments(id){
+  const el=document.getElementById('radarAttach_'+id); if(!el) return;
+  let d={};
+  try{ const r=await API('/radar/items/'+id+'/attachments'); if(!r.ok) throw 0; d=await r.json(); }
+  catch(e){ el.innerHTML='<span style="color:var(--nd-text-faint)">Could not check attachments.</span>'; return; }
+  const files=d.attachments||[];
+  if(!files.length){ el.innerHTML='<span style="color:var(--nd-text-faint)">📎 No attachments on this email.</span>'; return; }
+  const s=d.suggestion;
+  const kb=n=>n>1048576?((n/1048576).toFixed(1)+' MB'):(Math.max(1,Math.round(n/1024))+' KB');
+  el.innerHTML=`
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.7rem .9rem">
+      <div style="font-weight:700;color:var(--nd-text-primary);margin-bottom:.35rem">📎 ${files.length} attachment(s)</div>
+      ${files.map(f=>`<div style="font-size:.78rem;color:var(--nd-text-secondary)">• ${esc(f.name)} <span style="color:var(--nd-text-faint)">(${kb(f.size)})</span></div>`).join('')}
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
+        <span style="font-size:.76rem;color:var(--nd-text-muted)">File to claim #</span>
+        <input id="radarFileClaim_${id}" type="number" min="1" value="${s?s.claim_id:''}" placeholder="e.g. 93" style="width:96px;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)">
+        <button class="btn-sm btn-primary" onclick="radarFileToClaim(${id},this)">📥 File to claim</button>
+      </div>
+      ${s?`<div style="font-size:.72rem;color:var(--nd-success-text);margin-top:.35rem">Suggested: <b>${esc(s.label)}</b> — ${esc(s.reason)}. Check it before filing.</div>`
+         :`<div style="font-size:.72rem;color:var(--nd-warning-text);margin-top:.35rem">No claim could be matched automatically — enter the claim number yourself.</div>`}
+      <div id="radarFileMsg_${id}" style="font-size:.76rem;margin-top:.35rem"></div>
+    </div>`;
+}
+async function radarFileToClaim(id, btn){
+  const inp=document.getElementById('radarFileClaim_'+id);
+  const cid=parseInt((inp&&inp.value)||'',10);
+  const msg=document.getElementById('radarFileMsg_'+id);
+  if(!cid){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Enter the claim number first.'; return; }
+  if(!confirm('File these attachment(s) onto claim #'+cid+'?\n\nThey will be saved as documents on that claim.')) return;
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Filing…';
+  try{
+    const r=await API('/radar/items/'+id+'/file-to-claim',{method:'POST',body:JSON.stringify({claim_id:cid})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ '+(e.detail||'Could not file.'); return; }
+    const d=await r.json();
+    msg.style.color='var(--nd-success-text)';
+    msg.textContent=`✓ Filed ${d.filed} document(s) to claim #${cid}.`+((d.skipped||[]).length?` Skipped: ${d.skipped.join(', ')}.`:'');
+  }catch(e){ msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ Could not file.'; }
+  finally{ btn.disabled=false; btn.textContent=orig; }
 }
 async function radarSendReply(id,btn){
   const t=document.getElementById('radarReplyBox'); const msg=(t&&t.value||'').trim(); if(!msg){alert('Type a reply first.');return;}
@@ -4573,6 +4616,7 @@ async function radarPurge(id,label){
   try{ const r=await API('/radar/mailboxes/'+id+'/purge',{method:'POST'}); if(r.ok){ loadRadar(); } else { const e=await r.json().catch(()=>({})); alert(e.detail||'Could not purge.'); } }catch(e){ alert('Could not purge.'); }
 }
 window.openRadarEmail=openRadarEmail; window.radarSendReply=radarSendReply; window.radarResolve=radarResolve; window.radarPurge=radarPurge;
+window.radarLoadAttachments=radarLoadAttachments; window.radarFileToClaim=radarFileToClaim; window.radarConnectPreset=radarConnectPreset;
 function _renderRadarMailboxes(){
   const rows = _radarMailboxes.map(m=>`<tr style="border-top:1px solid var(--nd-border)">
     <td style="padding:.55rem .7rem;font-weight:600">${esc(m.label||'—')}</td>

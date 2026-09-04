@@ -881,6 +881,167 @@ async def read_full_email(item_id: int) -> dict:
     return res or {"error": "fetch_failed"}
 
 
+# ── Attachments → claim documents ────────────────────────────────────────────
+# A forwarded claim email often carries the actual paperwork. We NEVER auto-file it: an
+# attachment on the wrong claim is a privacy and data-integrity bug. Instead we extract the
+# files, SUGGEST the claim we think it belongs to, and let a human confirm in one click.
+_ATTACH_MAX_FILES = 10
+_ATTACH_MAX_BYTES = 25 * 1024 * 1024      # per file
+_ATTACH_SKIP_EXT = (".ics", ".vcf", ".p7s", ".asc")
+
+
+def _imap_fetch_attachments(host: str, port: int, email: str, password: str, uid: int,
+                            names_only: bool = False) -> list:
+    """Real attachments on ONE email → [{name, size, data?}]. Blocking; never raises."""
+    import imaplib
+    import email as _email
+    from email.header import make_header, decode_header
+    M = None
+    out: list = []
+    try:
+        M = imaplib.IMAP4_SSL(host or DEFAULT_IMAP_HOST, int(port or DEFAULT_IMAP_PORT), timeout=40)
+        M.login(email, password)
+        M.select("INBOX", readonly=True)
+        typ, data = M.uid("fetch", str(uid), "(RFC822)")
+        if typ != "OK" or not data or not data[0]:
+            return []
+        msg = _email.message_from_bytes(data[0][1])
+        for part in msg.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            fname = part.get_filename()
+            disp = str(part.get("Content-Disposition") or "")
+            # A real attachment: it has a filename, or is explicitly dispositioned as one.
+            if not fname and "attachment" not in disp:
+                continue
+            try:
+                fname = str(make_header(decode_header(fname))) if fname else "attachment"
+            except Exception:
+                fname = fname or "attachment"
+            if fname.lower().endswith(_ATTACH_SKIP_EXT):
+                continue
+            payload = part.get_payload(decode=True) or b""
+            if not payload or len(payload) > _ATTACH_MAX_BYTES:
+                continue
+            rec = {"name": fname[:160], "size": len(payload)}
+            if not names_only:
+                rec["data"] = payload
+            out.append(rec)
+            if len(out) >= _ATTACH_MAX_FILES:
+                break
+        return out
+    except Exception as e:  # noqa: BLE001
+        logger.info("attachment fetch failed uid=%s: %s", uid, e)
+        return []
+    finally:
+        try:
+            if M is not None:
+                M.logout()
+        except Exception:
+            pass
+
+
+async def _attachments(item_id: int, names_only: bool) -> tuple:
+    """(item, [attachments]) or (None, []) — shared by the list + file calls."""
+    it = await get_item(item_id)
+    if not it:
+        return None, []
+    try:
+        pw = decrypt_secret(it.get("enc_password") or "")
+    except Exception:
+        return it, []
+    files = await asyncio.to_thread(
+        _imap_fetch_attachments, it.get("imap_host"), it.get("imap_port"),
+        it.get("email_address"), pw, int(it.get("uid") or 0), names_only)
+    return it, files
+
+
+async def suggest_claim(item: dict) -> Optional[dict]:
+    """Best-effort guess of which claim an email belongs to — a SUGGESTION only, never applied
+    automatically. Strongest signal first: an explicit NP-#### reference, then a sender address
+    that matches a claim's own contacts."""
+    hay = f"{item.get('subject') or ''} {item.get('snippet') or ''} {item.get('ai_summary') or ''}"
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        m = re.search(r"\bNP[-\s]?(\d{1,6})\b", hay, re.I) or re.search(r"#(\d{2,6})\b", hay)
+        if m:
+            cid = int(m.group(1))
+            r = await (await conn.execute(
+                "SELECT claim_id, insured_name FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone()
+            if r:
+                r = dict(r)
+                return {"claim_id": r["claim_id"], "label": f"NP-{r['claim_id']:04d} {r.get('insured_name') or ''}",
+                        "reason": "claim number found in the email"}
+        addr = (item.get("from_addr") or "").strip().lower()
+        if addr and "@" in addr:
+            r = await (await conn.execute(
+                "SELECT claim_id, insured_name FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND ("
+                "LOWER(COALESCE(complainant_email,''))=? OR LOWER(COALESCE(insured_email,''))=?) "
+                "ORDER BY claim_id DESC LIMIT 1", (addr, addr))).fetchone()
+            if r:
+                r = dict(r)
+                return {"claim_id": r["claim_id"], "label": f"NP-{r['claim_id']:04d} {r.get('insured_name') or ''}",
+                        "reason": "sender matches this claim's contact"}
+    return None
+
+
+async def list_attachments(item_id: int) -> dict:
+    """Attachment names/sizes on this email + the claim we'd suggest filing them against."""
+    it, files = await _attachments(item_id, names_only=True)
+    if not it:
+        return {"error": "not_found"}
+    return {"attachments": files, "suggestion": await suggest_claim(it)}
+
+
+async def file_attachments_to_claim(item_id: int, claim_id: int, by: str = "") -> dict:
+    """Attach this email's files to a claim: normalise each to PDF and save it as a claim
+    document. Human-confirmed only. Returns {ok, filed, skipped}."""
+    it, files = await _attachments(item_id, names_only=False)
+    if not it:
+        return {"ok": False, "error": "not_found"}
+    if not files:
+        return {"ok": False, "error": "no_attachments"}
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        c = await (await conn.execute(
+            "SELECT claim_id, account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not c:
+        return {"ok": False, "error": "claim_not_found"}
+    account_id = dict(c).get("account_id")
+    import biz_doc_splitter as _split
+    import biz_nidaan as _bn
+    from pathlib import Path
+    import uuid as _uuid
+    docs_dir = Path(__file__).parent / "uploads" / "nidaan-docs"
+    filed, skipped = 0, []
+    for f in files:
+        try:
+            pdf, pages, _sk = _split.normalize_to_pdf([(f["name"], f["data"])])
+            if not pdf or not pages:
+                skipped.append(f["name"])
+                continue
+            docs_dir.mkdir(parents=True, exist_ok=True)
+            stored = f"{_uuid.uuid4().hex}.pdf"
+            (docs_dir / stored).write_bytes(pdf)
+            await _bn.save_claim_document(
+                account_id=account_id, stored_name=stored,
+                original_name=f"NP-{claim_id}_{f['name']}"[:180], file_size=len(pdf),
+                mime_type="application/pdf", claim_id=claim_id, source="email")
+            filed += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("file attachment failed (%s → claim %s): %s", f.get("name"), claim_id, e)
+            skipped.append(f.get("name") or "file")
+    if filed:
+        try:
+            await _bn.record_claim_activity(
+                claim_id, "email_attachment", channel="email", direction="in",
+                actor=(by or "ops"),
+                summary=f"Filed {filed} attachment(s) from the email \"{(it.get('subject') or '')[:60]}\"")
+        except Exception:
+            pass
+    return {"ok": filed > 0, "filed": filed, "skipped": skipped}
+
+
 async def send_reply(item_id: int, body: str, staff_id: Optional[int]) -> dict:
     """Reply to the sender of a radar item, FROM the customer's mailbox (SMTP). Records the send,
     moves the item to 'responded' (→ Waiting bucket). Returns {ok} or {error}."""
