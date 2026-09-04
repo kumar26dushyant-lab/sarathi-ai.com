@@ -81,6 +81,13 @@ logging.basicConfig(
     format="%(asctime)s  %(name)-22s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
 )
+# SECURITY: httpx/httpcore log every request URL at INFO. Meta's Graph API takes the WhatsApp
+# access token as a QUERY PARAMETER, so those lines wrote a live send-as-NidaanPartner
+# credential into the systemd journal (and therefore into any log backup or shipper). Anyone
+# with log access could then message our customers as us. Warnings and errors still surface;
+# only the request-URL chatter is silenced.
+for _noisy in ("httpx", "httpcore", "urllib3", "openai", "google_genai", "google.genai"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 logger = logging.getLogger("sarathi.biz")
 
 # ── Control-center error ring buffer: keep the most recent WARNING+ log records
