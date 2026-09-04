@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-03 (WhatsApp number REGISTERED + webhook fixed → live both ways; subscription RENEWAL no-op fixed; pipeline Subscriber-count fixed; multi-party claim notifications P1)
+**Last updated:** 2026-09-04 (App Health rebuilt for the new subsystems; full security audit — auth/SQLi/secrets clean, rate limits + CSP dedup; email attachments → claim; L2-and-beyond PAUSED)
 
 ### 🔴 FOUND & FIXED THIS SESSION — three live defects
 - ✅ **WhatsApp was dead in BOTH directions (not a code bug — 2 Meta setup steps were never done).** Diagnosis: phone `status=PENDING`/`platform_type=NOT_APPLICABLE` → number was **never registered on Cloud API** (every send failed `#133010 Account not registered`); `subscribed_apps=[]` and the app was subscribed to the **`user`** object instead of `whatsapp_business_account/messages` → **0 inbound messages ever**. Fixed via Graph API: registered the number (**2FA PIN `481902` — record this**), subscribed the app to the WABA, and subscribed `whatsapp_business_account`→`messages` to our callback. Now `status=CONNECTED`, `platform_type=CLOUD_API`. **Also fixed in code:** an inbound from a number with no claim got NO reply (`handle_inbound_text`→`no_claim`, nothing sent) → now answers (first touch = full value message, later = short follow-up) + one-time ops alert + CRM lead.
@@ -19,7 +19,7 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 ### 🟡 WhatsApp as the full customer channel (founder Sep 4) — self-service LIVE, rest queued
 - ✅ **Dead-end killed.** A handoff set `human_takeover=1` and the bot then went permanently silent (claim 16 — cleared). Now it acknowledges at most once every 2h under takeover, and most questions never reach a handoff at all.
 - ✅ **Verified self-service** (`biz_nidaan_wa_identity.py`). WhatsApp proves number possession, so a number matching our records IS an authenticated identity. `resolve()` → complainant / subscriber / branch / staff / unknown; `safe_context()` returns a **support-desk view** (friendly stage wording, what we still need, plan validity, branch book) and deliberately NOT internal notes, colleague names, legal opinion or settlement figures. Decided outcomes + no-scope reviews are `handoff_only` so a person delivers them. Staff are redirected to the **Telegram office bot** (staff never work from WhatsApp). **Verified live:** "mera claim ka kya status hai?" → real answer (NP-0016, reviewed, 3 docs pending); "kitna paisa milega?" → handoff.
-- 🟢 **REMAINING for "everything on WhatsApp":** signup/onboarding flow, payment links + confirmation in-chat, L2 **authorization/consent** capture, and a richer sales flow for unknown prospects. Campaigns, doc-collection, journey alerts, lead capture and support are already live.
+- ⏸️ **PAUSED ON FOUNDER'S INSTRUCTION (Sep 4) — L2 process and beyond.** Do NOT resume without a fresh go-ahead. Parked: signup/onboarding on WhatsApp, payment links + confirmation in-chat, **L2 authorization/consent capture**, richer prospect sales flow, and the post-L2 pipeline stages (drafting / escalation columns are reserved but empty). Already live and unaffected: campaigns, doc-collection, journey alerts, lead capture, verified self-service support.
 
 ### ✅ WhatsApp conversation quality (founder Sep 3, live-tested)
 - ✅ **Repeat loop killed** — `start_or_continue` greeted on EVERY inbound (the "greet once" comment was never implemented) and `handle_inbound_text` ignored the message text entirely. Now greets once ever, throttles a repeated doc ask (90 min) unless the customer says they're sending it.
@@ -32,6 +32,19 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 ---
 
 ## 🟦 NIDAANPARTNER.COM
+
+### ✅ App Health rebuilt + full security audit (founder Sep 4)
+**App Health** had not been revisited since WhatsApp Cloud API, Email Radar, Doc Splitter, CRM and the party-notification rails were added — it still reported only the decommissioned Evolution slots. Now also checks: **WhatsApp Cloud API** (status/platform_type, so an unregistered number silently failing every send with `133010` is visible), **WA journey** master switch + templates wired, **Email Radar** inbox connectivity, **Gemini** (radar triage / WA brain / doc splitter all depend on it), **Doc Splitter** job-dir writability, **SMTP**, **subscription renewals past period end** (renewal webhook not landing), **contact reachability** (branches with no WhatsApp, claims with no phone), **backup freshness**. Added a failing-subsystem banner + self-serve actions: **poll radar, test mailboxes, payment re-scan, toggle WA journey**. Verified live — all green (WA CONNECTED/CLOUD_API/GREEN, 6/6 templates, 2 inboxes ok, Gemini ok, SMTP ok, backup 8h old).
+Two bugs found while writing the checks: `number_health()` never requested the `status` field (CONNECTED vs PENDING was invisible — the exact thing that hid the dead number for days), and the backup check globbed `*.db` when backups are `.tar.gz`.
+
+**Security audit — findings:**
+- ✅ **Authorization: clean.** All **241** `/nidaan/ops/api` routes enforce auth. The 14 without a literal `_require_staff` use `_staff_claim_code` (which calls it) or the stricter `_require_owner` (super_admin + owner-email). No gap.
+- ✅ **SQL injection: clean.** Every f-string SQL interpolation is a hardcoded/whitelisted table or field name; all values parameterized (CSV export uses an explicit table whitelist, CRM/task updates whitelist field names).
+- ✅ **Secret leakage: clean.** `list_mailboxes` excludes the password; no endpoint returns `enc_password`/`password_hash`. App-password vault is Fernet-encrypted.
+- ✅ **CSP already strong** — set by **nginx** (default-src self, pinned hosts, form-action self, object-src none, base-uri self, frame-ancestors self, upgrade-insecure-requests). An app-level duplicate was added then **removed** (two CSP headers make browsers enforce the intersection — confusing to debug). Single header verified live.
+- ✅ **Fixed: missing rate limits** — change-password 10/h, staff reset-password 10/h, manual refund 10/min. Ops login was already 5/min; portfolio token already limited.
+- 🟢 **Next security pass:** proactive alerting (a worker loop that runs these checks and alerts super-admins on Telegram when one fails — currently the panel is reactive/pull-only), and an XSS sweep of `innerHTML` sites in the ops page.
+
 
 ### 🟡 In progress — CLAIM ARCHITECTURE & DATA CLARITY (build carefully, no breakage)
 - ✅ Fixes: All Claims search lag (client-side), Staff filter populated, L2 Paid/Due filter, **All Claims stuck-loading** (staff-filter await was blocking the fetch → non-blocking). Sidebar grouped into labeled zones (Accounts in Work). Official Numbers archived (unused ~52d). Save-number banner → Meta-WABA informational message.
