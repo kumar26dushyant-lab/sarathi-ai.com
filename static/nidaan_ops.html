@@ -5361,12 +5361,28 @@ async function opsLoadMessages(claimId){
       const who = staff ? (m.staff_name||'You') : 'Subscriber';
       const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
       const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
+      // WhatsApp-style receipt on OUR messages: sent (✓) vs read by the subscriber (✓✓ blue).
+      const read = !!m.read_by_subscriber_at;
+      const tick = staff
+        ? `<span title="${read?('Read '+String(m.read_by_subscriber_at).replace('T',' ').slice(0,16)):'Sent — not read yet'}" style="margin-left:.3rem;font-size:.72rem;color:${read?'#38bdf8':'var(--nd-text-faint)'}">${read?'✓✓':'✓'}</span>`
+        : '';
+      const unsend = staff
+        ? `<button class="btn-sm btn-ghost" title="Unsend this message" onclick="opsUnsendMessage(${claimId},${m.message_id})" style="font-size:.66rem;padding:0 .25rem;margin-left:.3rem;color:var(--nd-text-faint)">↶</button>`
+        : '';
       return `<div style="align-self:${staff?'flex-end':'flex-start'};max-width:82%;background:${staff?'rgba(8,145,178,.22)':'var(--nd-bg-surface-2)'};border:1px solid ${staff?'rgba(34,211,238,.3)':'var(--nd-border)'};border-radius:12px;padding:.5rem .7rem">
-        <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}</div>
+        <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}${tick}${unsend}</div>
         ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
     }).join('') : '<div style="color:var(--nd-text-faint);text-align:center;padding:.5rem">No messages yet</div>';
     el.scrollTop = el.scrollHeight;
   } catch(e){ el.innerHTML=''; }
+}
+async function opsUnsendMessage(claimId, messageId){
+  if(!confirm('Unsend this message? It disappears from the subscriber view too. The record is retained internally.')) return;
+  try{
+    const r = await API('/claims/'+claimId+'/messages/'+messageId, {method:'DELETE'});
+    if(!r.ok){ const e = await r.json().catch(()=>({})); alert(e.detail||'Could not unsend.'); return; }
+    opsLoadMessages(claimId);
+  }catch(e){ alert('Could not unsend.'); }
 }
 function opsMsgFilePicked(claimId){
   const f = document.getElementById('opsMsgFile_'+claimId);

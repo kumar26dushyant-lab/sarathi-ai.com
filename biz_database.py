@@ -1640,6 +1640,13 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # Unsend on a claim message: SOFT delete only. A legal practice must keep the record of
+        # what was said, so the row stays and is filtered out of the thread instead of destroyed.
+        for _c, _t in (("deleted_at", "TIMESTAMP"), ("deleted_by_staff_id", "INTEGER")):
+            try:
+                await conn.execute(f"ALTER TABLE nidaan_messages ADD COLUMN {_c} {_t}")
+            except Exception:
+                pass
         # Branch WhatsApp number — branches previously had email only, so every claim update to a
         # branch was email-only. Needed so a branch can be notified on WhatsApp too (and so the
         # missing-contact nudge can ask for it).

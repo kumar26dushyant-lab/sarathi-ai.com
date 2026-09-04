@@ -1805,11 +1805,22 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         _lang = _lang or (thread.get("lang") or "")
     else:
         _ch = _derive_support_channel(body.channel, _account)
-        started = await nidaan.create_support_thread(
-            name=(_account.get("owner_name") if _account else body.name),
-            contact=body.contact, channel=_ch, lang=_lang,
+        # Same person, one conversation. A signed-in customer who lost their thread key (new
+        # device, cleared storage) used to spawn a second thread, so support saw the same person
+        # twice. Reuse their open thread instead. Only for a PROVEN identity — see
+        # find_open_support_thread; an anonymous contact string is never matched.
+        _reuse = await nidaan.find_open_support_thread(
             account_id=(_account["account_id"] if _account else None))
-        tid, tkey = started["thread_id"], started["thread_key"]
+        if _reuse:
+            tid, tkey = _reuse["thread_id"], _reuse["thread_key"]
+            _prev_status = _reuse.get("status")
+            _lang = _lang or (_reuse.get("lang") or "")
+        else:
+            started = await nidaan.create_support_thread(
+                name=(_account.get("owner_name") if _account else body.name),
+                contact=body.contact, channel=_ch, lang=_lang,
+                account_id=(_account["account_id"] if _account else None))
+            tid, tkey = started["thread_id"], started["thread_key"]
     # Per-thread flood cap: stop a single conversation from being spammed unbounded.
     if body.thread_id and len(await nidaan.get_support_messages(tid, limit=200)) >= 80:
         raise HTTPException(status_code=429,
@@ -4040,6 +4051,20 @@ async def ops_claim_messages(claim_id: int, request: Request):
     msgs = _attach_message_urls(await nidaan.list_claim_messages(claim_id))
     await nidaan.mark_messages_read(claim_id, by="staff")
     return {"messages": msgs}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/messages/{message_id}")
+async def ops_claim_message_unsend(claim_id: int, message_id: int, request: Request):
+    """Unsend a message we sent to the subscriber. Soft delete: it disappears from both sides of
+    the thread but the row is retained for the record. Only OUR messages can be unsent."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    ok = await nidaan.unsend_claim_message(message_id, claim_id, staff["staff_id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Message not found, already unsent, or not ours to unsend")
+    await _ops_audit(request, "claim.message_unsend", "claim", str(claim_id), f"message {message_id}")
+    return {"ok": True}
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/messages")

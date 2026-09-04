@@ -2585,6 +2585,34 @@ async def create_support_thread(name: str = "", contact: str = "",
         return {"thread_id": cur.lastrowid, "thread_key": key}
 
 
+async def find_open_support_thread(*, account_id=None, contact: str = "",
+                                   channel: str = "", max_age_hours: int = 720) -> Optional[dict]:
+    """An existing OPEN thread for the SAME person, so one customer does not end up as several
+    parallel conversations in the support inbox.
+
+    SECURITY: this returns the thread_key, which is the per-thread secret that lets a client read
+    the history. So we only ever match on an identity the caller has actually PROVEN —
+    an authenticated account_id, or a WhatsApp msisdn (Meta verifies number possession). We do
+    NOT match on a typed-in email/phone from an anonymous visitor, because that would let anyone
+    who guesses a contact string read that person's conversation."""
+    if not account_id and not (contact and channel == "whatsapp"):
+        return None
+    where, params = ["status IN ('ai','escalated')",
+                     "last_at > datetime('now', ?)"], [f"-{int(max_age_hours)} hours"]
+    if account_id:
+        where.append("account_id=?")
+        params.append(account_id)
+    else:
+        where.append("contact=? AND channel='whatsapp'")
+        params.append(contact)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            f"SELECT * FROM nidaan_support_threads WHERE {' AND '.join(where)} "
+            f"ORDER BY thread_id DESC LIMIT 1", params)).fetchone()
+    return dict(row) if row else None
+
+
 async def set_support_rating(thread_id: int, rating: int) -> None:
     """Record a 👍/👎 (1 / -1) on a support thread (adds the columns on first use)."""
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -7043,7 +7071,8 @@ async def list_claim_messages(claim_id: int, limit: int = 200) -> list[dict]:
                FROM nidaan_messages m
                LEFT JOIN nidaan_staff s ON s.staff_id = m.sender_staff_id
                LEFT JOIN nidaan_claim_documents d ON d.doc_id = m.attachment_doc_id
-               WHERE m.claim_id=? ORDER BY m.message_id ASC LIMIT ?""",
+               WHERE m.claim_id=? AND m.deleted_at IS NULL
+               ORDER BY m.message_id ASC LIMIT ?""",
             (claim_id, limit))).fetchall()
         return [dict(r) for r in rows]
 
@@ -7123,6 +7152,19 @@ async def get_claim_watcher_ids(claim_id: int, exclude_staff_id: int = 0) -> lis
             "WHERE claim_id=? AND muted=0 AND staff_id<>?",
             (claim_id, exclude_staff_id or 0))).fetchall()
         return [r[0] for r in rows]
+
+
+async def unsend_claim_message(message_id: int, claim_id: int, staff_id: int) -> bool:
+    """Unsend a STAFF message on a claim thread. Soft delete — the row is retained (this is a
+    legal practice; the record of what was said must survive) and simply filtered out of the
+    thread. A subscriber's own message is never removable by staff."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_messages SET deleted_at=CURRENT_TIMESTAMP, deleted_by_staff_id=? "
+            "WHERE message_id=? AND claim_id=? AND sender_type='staff' AND deleted_at IS NULL",
+            (staff_id, message_id, claim_id))
+        await conn.commit()
+        return cur.rowcount > 0
 
 
 async def mark_messages_read(claim_id: int, by: str) -> None:

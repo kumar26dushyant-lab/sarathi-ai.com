@@ -543,11 +543,18 @@ async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: 
     try:
         who = (claim.get("complainant_name") or claim.get("insured_name")
                or ident.get("name") or "WhatsApp customer")
-        th = await _n.create_support_thread(
-            name=who, contact=msisdn,
-            account_id=(claim.get("account_id") or ident.get("account_id")),
-            channel="whatsapp", lang=lang)
-        tid = th.get("thread_id")
+        # One WhatsApp number = one open conversation. Every handoff used to open a NEW thread,
+        # so a customer who asked twice appeared twice in the support inbox. Safe to match on the
+        # msisdn here: WhatsApp proves number possession.
+        _open = await _n.find_open_support_thread(contact=msisdn, channel="whatsapp")
+        if _open:
+            tid = _open.get("thread_id")
+        else:
+            th = await _n.create_support_thread(
+                name=who, contact=msisdn,
+                account_id=(claim.get("account_id") or ident.get("account_id")),
+                channel="whatsapp", lang=lang)
+            tid = th.get("thread_id")
         # Carry the WhatsApp conversation into the thread so staff have the context.
         await _n.add_support_message(tid, "customer", (text or "")[:2000])
         _ref = f"Claim #NP-{claim_id:04d}." if claim_id else \
