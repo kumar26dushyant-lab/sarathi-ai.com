@@ -33,6 +33,18 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### 🔴 SECURITY — OWNER ACTION REQUIRED: rotate two credentials
+Found in the Sep 4 review: HTTP client libraries log every request URL at INFO, and **both Meta Graph and Google Gemini take their credential as a QUERY PARAMETER**. So the systemd journal contained live secrets — **10 `access_token=` (WhatsApp) and 64 `key=AIza` (Gemini) lines over 30 days** — and therefore so does every log backup / shipper. The WhatsApp token alone can message the entire customer base *as NidaanPartner*.
+- ✅ **Future leakage stopped** — request-URL logging silenced for httpx/httpcore/urllib3/openai/google_genai. Verified live: the same credentialed calls now print **0** secrets.
+- 🔴 **STILL TO DO (owner):** the historical journal still holds the old values, so treat both as exposed and **ROTATE** them — Meta (WhatsApp access token) and Google (Gemini API key). Update `/opt/sarathi/biz.env`, keeping `sarathi:sarathi 600`, then health-curl both sites.
+
+### ✅ Proactive health watchdog (Sep 4)
+`biz_nidaan_health_watch.py` on the worker, every 30 min — App Health only spoke when a human looked, which is exactly how the WhatsApp number sat dead for days. Alerts super-admins (bell + email + Telegram) the moment a subsystem breaks. **Edge-triggered**: one alert per outage, one on recovery, silent while green, re-arms once after 12h so a long outage isn't forgotten. State in `nidaan_ops_settings` (survives restart, no schema change). Extracted `_subsystem_checks()` so the panel and the watchdog run the **same** checks — a monitor that disagrees with the dashboard is worse than no monitor. Logic unit-tested incl. the corrupt-timestamp path. **Live run:** 10 subsystems checked, only "Contact reachability" failing (data completeness, deliberately not in the critical set), correctly stayed silent.
+
+### ✅ XSS audit of the ops/dashboard/branch/portal surfaces (Sep 4)
+Result is **reassuring**: every server-side field reaching `innerHTML` already passes through `esc()`. Two real but low-severity hits fixed — client-controlled **filenames** rendered raw into `innerHTML` on the dashboard file pickers (self-XSS, same class as the upload bug). Radar subject/snippet, claim names, message bodies, CRM fields all verified escaped.
+
+
 ### ✅ Urgent fixes batch (founder Sep 4)
 - ✅ **Partner document upload/view/delete — the urgent one.** Branches could raise a claim but never attach paperwork afterwards, and could not see what was already on file, so they re-sent duplicates. The branch upload+delete endpoints existed but **no UI ever exposed them**, and **no list endpoint existed at all**. Added `GET /nidaan/branch/api/claims/{id}/documents` and `GET`+`DELETE` for `/nidaan/ops/api/my-claims/{id}/documents` (staff My Business had upload only), each scoped to the caller's own claims. UI went into the **shared** `nidaan_partner_claims.js`, so branch AND My Business both got it in one place: a Documents column opening an inline panel that lists what is attached, uploads more, and removes a wrong one. Each page injects its own multipart uploader (the JSON API helpers would set Content-Type and break the boundary). Subscriber + ops claim panel already had list/upload/delete.
 - ✅ **Homepage FAQ never folded.** The language toggle's `body.en .en{display:block!important}` outranked `.faq-a{display:none}`, so every English answer was permanently open (arrow turned, nothing moved); the Hindi answers carried an inline `display:none` no class rule could beat. Scoped the fold rules per language, removed the 10 inline styles.
