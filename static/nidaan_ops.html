@@ -7802,7 +7802,7 @@ async function openSupportThread(id){
     const ts = fmtDateTime(m.created_at);
     return `<div style="display:flex;justify-content:${side};margin:.35rem 0">
       <div style="max-width:80%;background:${bg};color:${col};padding:.55rem .8rem;border-radius:14px;${side==='flex-end'?'border-bottom-right-radius:5px':'border-bottom-left-radius:5px'};font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18)">
-        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'var(--nd-cyan-text)':'var(--nd-purple-text)')}">${who}</div>${esc(m.body)}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}${(mine||ai)?` <span title="${m.msg_id<=custSeen?'Read by the customer':'Sent — not read yet'}">${m.msg_id<=custSeen?'✓✓':'✓'}</span>`:''}</div>`:''}</div></div>`;
+        <div style="font-size:.64rem;font-weight:700;margin-bottom:.2rem;color:${mine?'rgba(255,255,255,.85)':(ai?'var(--nd-cyan-text)':'var(--nd-purple-text)')}">${who}</div>${esc(m.body)}${m.attachment_url?`<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" rel="noopener" style="color:${mine?'#fff':'var(--nd-info-text)'};font-size:.8rem;text-decoration:underline">📎 ${esc(m.attachment_name||'attachment')}</a></div>`:''}${ts?`<div style="font-size:.6rem;opacity:.55;margin-top:.25rem;text-align:right">${ts}${(mine||ai)?` <span title="${m.msg_id<=custSeen?'Read by the customer':'Sent — not read yet'}">${m.msg_id<=custSeen?'✓✓':'✓'}</span>`:''}</div>`:''}</div></div>`;
   }).join('');
   const ov = document.createElement('div');
   ov.id='supModal';
@@ -7817,7 +7817,11 @@ async function openSupportThread(id){
       <div style="padding:.7rem;border-top:1px solid var(--nd-border-strong)">
         <textarea id="supReplyInput" rows="2" placeholder="Type a reply to the customer…" style="width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:10px;padding:.6rem;color:var(--nd-text-primary);font-family:inherit;font-size:.9rem"></textarea>
         <div style="display:flex;justify-content:space-between;gap:.6rem;margin-top:.5rem">
-          <button class="btn btn-ghost" style="font-size:.82rem" onclick="closeSupportThread(${id})">✓ Mark closed</button>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <button class="btn btn-ghost" style="font-size:.82rem" onclick="closeSupportThread(${id})">✓ Mark closed</button>
+            <input type="file" id="supAttachFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onchange="sendSupportAttach(${id})">
+            <button class="btn btn-ghost" style="font-size:.82rem" title="Attach a file" onclick="document.getElementById('supAttachFile').click()">📎</button>
+          </div>
           <button class="btn btn-primary" style="font-size:.85rem" onclick="sendSupportReply(${id})">Send reply →</button>
         </div>
         <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.4rem">The customer sees your reply when they reopen the chat widget.</div>
@@ -7834,6 +7838,20 @@ async function sendSupportReply(id){
   if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to send'); return; }
   document.getElementById('supModal').remove();
   openSupportThread(id);  // reload the thread with the new reply
+}
+
+async function sendSupportAttach(id){
+  const el = document.getElementById('supAttachFile');
+  if(!el || !el.files || !el.files[0]) return;
+  const fd = new FormData(); fd.append('file', el.files[0]);
+  try{
+    // multipart: no JSON Content-Type, so the browser sets the boundary itself
+    const r = await fetch('/nidaan/ops/api/support/threads/'+id+'/attach',
+      { method:'POST', headers: (_token ? {'Authorization':'Bearer '+_token} : {}), body: fd });
+    if(!r.ok){ const d = await r.json().catch(()=>({})); alert(d.detail||'Could not attach the file.'); return; }
+    document.getElementById('supModal').remove();
+    openSupportThread(id);
+  }catch(e){ alert('Could not attach the file.'); }
 }
 
 async function closeSupportThread(id){

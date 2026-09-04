@@ -407,6 +407,13 @@ async def nidaan_doc_access_guard(request: Request, call_next):
         # Valid signed request → serve, but keep it out of any shared cache.
         response = await call_next(request)
         response.headers["Cache-Control"] = "private, no-store"
+        # Never let an uploaded file RENDER on our origin. Even with the extension now derived
+        # from the file's own bytes, forcing a download means a crafted upload can't become
+        # stored XSS against a staff session — it can only be saved to disk. nosniff stops the
+        # browser second-guessing the type, and an empty sandbox drops any inherited privileges.
+        response.headers["Content-Disposition"] = "attachment"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
         return response
     return await call_next(request)
 
@@ -944,7 +951,7 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(415, f"{f.filename} does not look like a valid document.")
-        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        ext = _doc_ext_for(content)          # from the bytes, never the client filename
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -1346,7 +1353,7 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
             raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"{f.filename} does not look like a valid document.")
-        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        ext = _doc_ext_for(content)          # from the bytes, never the client filename
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -1885,7 +1892,7 @@ async def nidaan_support_thread(thread_id: int, thread_key: str, request: Reques
     thread = await nidaan.get_support_thread(thread_id, thread_key)
     if not thread:
         raise HTTPException(status_code=403, detail="Invalid conversation")
-    msgs = await nidaan.get_support_messages(thread_id, after_id=max(0, after_id))
+    msgs = _attach_message_urls(await nidaan.get_support_messages(thread_id, after_id=max(0, after_id)))
     # Customer viewed the thread → mark its messages seen (clears the dashboard chat-reply bell).
     try:
         await nidaan.mark_support_seen_by_subscriber(thread_id)
@@ -1897,6 +1904,89 @@ async def nidaan_support_thread(thread_id: int, thread_key: str, request: Reques
         pass
     return {"thread_id": thread_id, "status": thread.get("status"), "messages": msgs,
             "read": await nidaan.get_support_read_marks(thread_id)}
+
+
+_MAX_SUPPORT_ATTACH = 15          # per-thread storage-abuse cap
+
+
+async def _save_support_attachment(file, account_id):
+    """Store a support-chat file through the SAME hardened path as claim documents: size cap,
+    MIME allow-list, magic-byte check, and an extension derived from the bytes (never the client
+    filename). Returns the doc_id, or raises."""
+    content = await file.read()
+    if len(content) > _MAX_DOC_SIZE:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MB limit")
+    if file.content_type not in _ALLOWED_MIME:
+        raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
+    ext = _doc_ext_for(content)
+    if not ext:
+        raise HTTPException(status_code=415, detail="File does not look like a valid PDF / image / Word document.")
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+    return await nidaan.save_claim_document(
+        account_id=account_id, stored_name=stored_name,
+        original_name=(file.filename or stored_name)[:180],
+        file_size=len(content), mime_type=file.content_type or "", claim_id=None,
+        source="support")
+
+
+@app.post("/nidaan/api/support/attach")
+@limiter.limit("10/minute")
+async def nidaan_support_attach(request: Request, thread_id: int = Form(...),
+                                file: UploadFile = File(...)):
+    """Customer attaches a file to their support conversation.
+
+    SECURITY: deliberately requires a real signed-in account, NOT just the thread_key. The
+    thread_key is a read capability that can be copied out of a URL or a shared device; letting
+    it also grant WRITE-to-disk would hand an upload endpoint to anyone who ever saw a link.
+    So we require the account bearer token AND that the thread belongs to that account."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Please sign in to attach a file")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        t = await (await _c.execute(
+            "SELECT thread_id, account_id, status FROM nidaan_support_threads WHERE thread_id=?",
+            (thread_id,))).fetchone()
+    if not t or t["account_id"] != account_id:
+        raise HTTPException(status_code=403, detail="Not your conversation")
+    if t["status"] == "closed":
+        raise HTTPException(status_code=400, detail="This conversation is closed")
+    if await nidaan.count_support_attachments(thread_id) >= _MAX_SUPPORT_ATTACH:
+        raise HTTPException(status_code=429, detail="Too many files on this conversation")
+    doc_id = await _save_support_attachment(file, account_id)
+    mid = await nidaan.add_support_message(thread_id, "customer",
+                                           f"[file] {(file.filename or 'document')[:120]}",
+                                           attachment_doc_id=doc_id)
+    try:
+        await nidaan.set_support_status(thread_id, "escalated")   # a file needs a human to look
+    except Exception:
+        pass
+    return {"ok": True, "msg_id": mid}
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/attach")
+@limiter.limit("20/minute")
+async def ops_support_attach(thread_id: int, request: Request, file: UploadFile = File(...)):
+    """Staff attaches a file into a support conversation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    if await nidaan.count_support_attachments(thread_id) >= _MAX_SUPPORT_ATTACH:
+        raise HTTPException(status_code=429, detail="Too many files on this conversation")
+    doc_id = await _save_support_attachment(file, meta.get("account_id"))
+    mid = await nidaan.add_support_message(thread_id, "staff",
+                                           f"[file] {(file.filename or 'document')[:120]}",
+                                           attachment_doc_id=doc_id)
+    await _ops_audit(request, "support.attach", "support_thread", str(thread_id),
+                     (file.filename or "")[:80])
+    return {"ok": True, "msg_id": mid}
 
 
 @app.get("/nidaan/api/support/status")
@@ -3661,24 +3751,35 @@ _MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
 _MAX_DOCS_PER_CLAIM = 40          # storage-DoS guard for free leads
 
 
+def _doc_ext_for(content: bytes) -> str:
+    """The canonical extension implied by the file's OWN bytes, or "" if it isn't an allowed type.
+
+    SECURITY — this is what the stored filename's extension must come from. Deriving it from the
+    client-supplied filename instead is exploitable: a file can be a valid PDF/JPEG by magic bytes
+    AND contain HTML (a polyglot). Uploaded as "x.html" it would be stored as "<uuid>.html" and
+    served as text/html from our own origin, so a staffer opening the "document" would execute the
+    attacker's script inside their authenticated ops session. Trust the bytes, never the name."""
+    if len(content) < 8:
+        return ""
+    if content[:4] == b"%PDF":
+        return ".pdf"
+    if content[:3] == b"\xff\xd8\xff":                       # JPEG
+        return ".jpg"
+    if content[:8] == b"\x89PNG\r\n\x1a\n":                  # PNG
+        return ".png"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":  # WEBP
+        return ".webp"
+    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # legacy .doc (OLE)
+        return ".doc"
+    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):  # docx (zip)
+        return ".docx"
+    return ""
+
+
 def _doc_magic_ok(content: bytes) -> bool:
     """Defense-in-depth: client Content-Type is spoofable, so confirm the bytes
     actually look like an allowed document (PDF / JPEG / PNG / WEBP / DOC / DOCX)."""
-    if len(content) < 8:
-        return False
-    if content[:4] == b"%PDF":
-        return True
-    if content[:3] == b"\xff\xd8\xff":                       # JPEG
-        return True
-    if content[:8] == b"\x89PNG\r\n\x1a\n":                  # PNG
-        return True
-    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":  # WEBP
-        return True
-    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # legacy .doc (OLE)
-        return True
-    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):  # docx (zip)
-        return True
-    return False
+    return bool(_doc_ext_for(content))
 
 
 @app.post("/nidaan/api/review/{purchase_id}/documents/upload")
@@ -3711,7 +3812,7 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
-        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        ext = _doc_ext_for(content)          # from the bytes, never the client filename
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -3775,7 +3876,7 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
-        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        ext = _doc_ext_for(content)          # from the bytes, never the client filename
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -3976,7 +4077,7 @@ async def _save_message_attachment(file: UploadFile, claim_id: int, account_id: 
         raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
     if not _doc_magic_ok(content):
         raise HTTPException(status_code=415, detail="File does not look like a valid PDF / image / Word document.")
-    ext = Path(file.filename or "file").suffix.lower() or ".bin"
+    ext = _doc_ext_for(content)              # from the bytes, never the client filename
     stored_name = f"{uuid.uuid4().hex}{ext}"
     (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
     return await nidaan.save_claim_document(
@@ -7371,7 +7472,7 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(415, f"{f.filename} does not look like a valid document.")
-        ext = Path(f.filename or "file").suffix.lower() or ".bin"
+        ext = _doc_ext_for(content)          # from the bytes, never the client filename
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -7698,7 +7799,7 @@ async def ops_support_thread(thread_id: int, request: Request):
     meta = await nidaan.get_support_thread_meta(thread_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Thread not found")
-    msgs = await nidaan.get_support_messages(thread_id)
+    msgs = _attach_message_urls(await nidaan.get_support_messages(thread_id))
     # Opening the thread IS reading it - advance our pointer so the customer sees the read tick.
     try:
         await nidaan.mark_support_read(thread_id, "staff")

@@ -2585,6 +2585,15 @@ async def create_support_thread(name: str = "", contact: str = "",
         return {"thread_id": cur.lastrowid, "thread_key": key}
 
 
+async def count_support_attachments(thread_id: int) -> int:
+    """How many files this conversation already carries - a per-thread storage-abuse cap."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        r = await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_support_messages "
+            "WHERE thread_id=? AND attachment_doc_id IS NOT NULL", (thread_id,))).fetchone()
+    return int(r[0]) if r else 0
+
+
 async def mark_support_read(thread_id: int, by: str) -> None:
     """Advance the read pointer for 'customer' or 'staff' to the newest message in the thread.
     Drives the WhatsApp-style tick so each side can see the other has actually read it."""
@@ -2671,12 +2680,14 @@ async def get_support_thread(thread_id: int, thread_key: str) -> Optional[dict]:
     return dict(row)
 
 
-async def add_support_message(thread_id: int, sender_type: str, body: str) -> int:
+async def add_support_message(thread_id: int, sender_type: str, body: str,
+                              attachment_doc_id: Optional[int] = None) -> int:
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "INSERT INTO nidaan_support_messages (thread_id, sender_type, body) VALUES (?,?,?)",
+            "INSERT INTO nidaan_support_messages (thread_id, sender_type, body, attachment_doc_id) "
+            "VALUES (?,?,?,?)",
             (thread_id, sender_type if sender_type in ("customer", "ai", "staff") else "customer",
-             (body or "")[:4000]))
+             (body or "")[:4000], attachment_doc_id))
         await conn.execute(
             "UPDATE nidaan_support_threads SET last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
             (thread_id,))
@@ -2690,8 +2701,12 @@ async def get_support_messages(thread_id: int, limit: int = 200, after_id: int =
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT msg_id, sender_type, body, created_at FROM nidaan_support_messages "
-            "WHERE thread_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",
+            "SELECT m.msg_id, m.sender_type, m.body, m.created_at, m.attachment_doc_id, "
+            "       d.original_name AS attachment_name, d.stored_name AS attachment_stored, "
+            "       d.mime_type AS attachment_mime "
+            "FROM nidaan_support_messages m "
+            "LEFT JOIN nidaan_claim_documents d ON d.doc_id = m.attachment_doc_id "
+            "WHERE m.thread_id=? AND m.msg_id>? ORDER BY m.msg_id ASC LIMIT ?",
             (thread_id, after_id, limit))).fetchall()
         return [dict(r) for r in rows]
 

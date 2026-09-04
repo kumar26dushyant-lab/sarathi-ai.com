@@ -1640,6 +1640,13 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # Support-chat attachments. Links a nidaan_claim_documents row (same hardened store,
+        # same signed-URL retrieval) so support files inherit every guardrail claim docs have.
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_support_messages ADD COLUMN attachment_doc_id INTEGER")
+        except Exception:
+            pass
         # Support read receipts: the customer side already had sub_last_seen_msg_id; the STAFF
         # side had no equivalent, so neither party could tell whether the other had actually read
         # the conversation. This is the mirror pointer.
