@@ -1859,8 +1859,13 @@ function _renderClaimMsg(m){
   const who = mine ? (isHi ? 'आप' : 'You') : (m.staff_name || 'Nidaan');
   const t = m.created_at ? String(m.created_at).replace('T',' ').slice(5,16) : '';
   const att = m.attachment_url ? `<div style="margin-top:.3rem"><a href="${m.attachment_url}" target="_blank" style="color:var(--nd-info-text);text-decoration:none;font-size:.8rem">📎 ${esc(m.attachment_name||'attachment')}</a></div>` : '';
+  // Receipt on MY messages: single tick = delivered, double blue = the team has read it.
+  const seen = !!m.read_by_staff_at;
+  const tick = mine
+    ? `<span title="${seen?(isHi?'पढ़ लिया गया':'Read by our team'):(isHi?'भेजा गया':'Sent')}" style="margin-left:.3rem;font-size:.72rem;color:${seen?'#38bdf8':'var(--nd-text-faint)'}">${seen?'✓✓':'✓'}</span>`
+    : '';
   return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:82%;background:${mine?'rgba(8,145,178,.22)':'rgba(255,255,255,.06)'};border:1px solid ${mine?'rgba(34,211,238,.3)':'rgba(255,255,255,.1)'};border-radius:12px;padding:.5rem .7rem">
-    <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}</div>
+    <div style="font-size:.7rem;color:var(--nd-text-muted);margin-bottom:.15rem">${esc(who)} · ${t}${tick}</div>
     ${m.content?`<div style="white-space:pre-wrap">${esc(m.content)}</div>`:''}${att}</div>`;
 }
 async function loadClaimMessages(claim_id){
