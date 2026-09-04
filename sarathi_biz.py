@@ -295,6 +295,15 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Allow Google Sign-In popup (window.opener.postMessage) — without this, GIS popup hangs 60s+
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    # Content-Security-Policy — deliberately ONLY the directives that cannot break this app.
+    # The pages rely on inline scripts/handlers, so script-src is intentionally NOT restricted
+    # here (that would break every ops screen). What these three DO stop is real and cheap:
+    #   object-src 'none'   → no Flash/plugin/<embed> injection vector
+    #   base-uri 'self'     → an injected <base> can't silently re-point every relative URL
+    #   frame-ancestors     → clickjacking, and unlike X-Frame-Options this is still honoured
+    # Verified first that no page uses <object>, <embed> or <base>, so nothing regresses.
+    response.headers["Content-Security-Policy"] = (
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
@@ -5718,6 +5727,7 @@ class NidaanChangePasswordReq(BaseModel):
 
 
 @app.post("/nidaan/api/change-password")
+@limiter.limit("10/hour")
 async def nidaan_change_password(body: NidaanChangePasswordReq, request: Request):
     """Change password after verifying current password."""
     if not _is_nidaan_host(request):
@@ -6759,6 +6769,7 @@ async def ops_delete_inactive_staff(request: Request):
 
 
 @app.post("/nidaan/ops/api/staff/{staff_id}/reset-password")
+@limiter.limit("10/hour")
 async def ops_reset_staff_password(staff_id: int, request: Request):
     """One-click password reset (super admin). Generates a temporary password,
     sets it, and returns it once so the admin can share it securely."""
@@ -8883,6 +8894,7 @@ async def ops_refund_retry(refund_id: int, request: Request):
 
 
 @app.post("/nidaan/ops/api/refunds/manual")
+@limiter.limit("10/minute")
 async def ops_refund_manual(body: _ManualRefundReq, request: Request):
     """Owner-triggered refund (bypasses policy A — e.g. user complains beyond window)."""
     if not _is_nidaan_host(request):
@@ -9027,7 +9039,130 @@ async def ops_health(request: Request):
         _chk("Disk", pct < 90, f"{pct}% used")
     except Exception:
         pass
+
+    # ── Subsystems added since this panel was first built ────────────────────
+    # WhatsApp Cloud API (the live NidaanPartner number). The block above still reports the
+    # legacy Evolution slots; this is the one that actually sends today.
+    try:
+        import biz_nidaan_whatsapp as _cwa
+        if not _cwa.is_configured():
+            _chk("WhatsApp Cloud API", False, "not configured — WA_NIDAAN_* missing in biz.env")
+        else:
+            _h = await _cwa.number_health()
+            _st = (_h or {}).get("status") or ""
+            _plat = (_h or {}).get("platform_type") or ""
+            _ok = (_st == "CONNECTED")
+            _note = f"{(_h or {}).get('display_phone_number','')} · {_st or 'unknown'}"
+            if _plat and _plat != "CLOUD_API":
+                _note += f" · platform={_plat} (number NOT registered → every send fails 133010)"
+            _q = (_h or {}).get("quality_rating")
+            if _q and _q not in ("GREEN", "UNKNOWN"):
+                _note += f" · quality {_q}"
+            _chk("WhatsApp Cloud API", _ok, _note)
+    except Exception as _e:
+        _chk("WhatsApp Cloud API", False, f"check failed: {str(_e)[:70]}")
+    # WhatsApp journey master switch + approved-template wiring.
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        _jon = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
+        _tmpl = sum(1 for v in _orch.JOURNEY_TEMPLATES.values() if v)
+        _chk("WA journey", _jon, ("ON" if _jon else "PAUSED by super-admin")
+             + f" · {_tmpl}/{len(_orch.JOURNEY_TEMPLATES)} templates wired")
+    except Exception as _e:
+        _chk("WA journey", False, f"check failed: {str(_e)[:70]}")
+    # Email Radar — the two collection inboxes must be connected AND polling.
+    try:
+        _mbs = await radar.list_mailboxes()
+        _act = [m for m in _mbs if m.get("is_active")]
+        _bad = [m for m in _act if (m.get("last_sync_status") or "") != "ok"]
+        if not _act:
+            _chk("Email Radar", False, "no collection inbox connected (cs@ / np@)")
+        else:
+            _stale = 0
+            for m in _act:
+                _ls = str(m.get("last_synced_at") or "")
+                if not _ls:
+                    _stale += 1
+            _note = f"{len(_act)} inbox(es) · {len(_act)-len(_bad)} healthy"
+            if _bad:
+                _note += " · ⚠️ " + ", ".join(f"{(b.get('label') or b.get('email_masked'))}: {b.get('last_sync_status')}" for b in _bad[:2])
+            _chk("Email Radar", not _bad and not _stale, _note)
+    except Exception as _e:
+        _chk("Email Radar", False, f"check failed: {str(_e)[:70]}")
+    # Gemini — powers radar triage, the WhatsApp brain, doc-splitter segmentation + AI tasks.
+    try:
+        import biz_ai as _bai
+        _chk("AI (Gemini)", bool(_bai._get_client()),
+             "configured — radar triage, WhatsApp brain, doc splitter" if _bai._get_client()
+             else "NOT configured — radar triage, WA brain and doc splitter all degrade")
+    except Exception as _e:
+        _chk("AI (Gemini)", False, f"check failed: {str(_e)[:70]}")
+    # Doc splitter — needs a writable job dir (workers share it; /tmp would break under PrivateTmp).
+    try:
+        import biz_doc_splitter as _ds
+        from pathlib import Path as _P
+        _p = _P(_ds.TMP_ROOT)
+        _p.mkdir(parents=True, exist_ok=True)
+        _t = _p / ".healthcheck"
+        _t.write_text("ok", encoding="utf-8")
+        _t.unlink()
+        _chk("Doc Splitter", True, f"job dir writable ({_ds.TMP_ROOT})")
+    except Exception as _e:
+        _chk("Doc Splitter", False, f"job dir NOT writable: {str(_e)[:70]}")
+    # SMTP — the rail every party notification falls back to.
+    try:
+        _su = bool(os.getenv("SMTP_USER", "").strip() and os.getenv("SMTP_PASSWORD", "").strip())
+        _chk("SMTP (email out)", _su, "configured" if _su else "SMTP_USER/PASSWORD missing — emails will not send")
+    except Exception:
+        pass
+    # Payment integrity — the ledger must reconcile and renewals must be landing.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _pc:
+            _pc.row_factory = aiosqlite.Row
+            _due = (await (await _pc.execute(
+                "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active' "
+                "AND current_period_end IS NOT NULL AND current_period_end < datetime('now')"
+            )).fetchone())[0]
+            _soon = (await (await _pc.execute(
+                "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active' "
+                "AND current_period_end BETWEEN datetime('now') AND datetime('now','+7 days')"
+            )).fetchone())[0]
+        _chk("Subscription renewals", _due == 0,
+             (f"⚠️ {_due} active sub(s) PAST their period end — renewal webhook may not be landing"
+              if _due else f"none overdue · {_soon} due in the next 7 days"))
+    except Exception as _e:
+        _chk("Subscription renewals", False, f"check failed: {str(_e)[:70]}")
+    # Contact reachability — a party we cannot reach silently misses every update.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _cc:
+            _nob = (await (await _cc.execute(
+                "SELECT COUNT(*) FROM nidaan_branches WHERE status='active' "
+                "AND COALESCE(contact_phone,'')=''")).fetchone())[0]
+            _noc = (await (await _cc.execute(
+                "SELECT COUNT(*) FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND "
+                "COALESCE(complainant_phone,'')='' AND COALESCE(insured_phone,'')=''")).fetchone())[0]
+        _chk("Contact reachability", (_nob + _noc) == 0,
+             (f"{_nob} branch(es) without WhatsApp, {_noc} claim(s) with no phone at all"
+              if (_nob + _noc) else "every branch and claim has a contact"))
+    except Exception as _e:
+        _chk("Contact reachability", False, f"check failed: {str(_e)[:70]}")
+    # Backups — silent backup failure is the classic invisible disaster.
+    try:
+        from pathlib import Path as _BP
+        _bd = _BP(os.getenv("BACKUP_DIR", "/opt/sarathi/backups"))
+        _files = sorted([f for f in _bd.iterdir() if f.is_file()],
+                        key=lambda f: f.stat().st_mtime, reverse=True) if _bd.exists() else []
+        if _files:
+            import time as _tm
+            _age_h = (_tm.time() - _files[0].stat().st_mtime) / 3600
+            _chk("Backups", _age_h < 48, f"newest {_files[0].name} · {_age_h:.0f}h old · {len(_files)} kept")
+        else:
+            _chk("Backups", False, f"no backup files found in {_bd}")
+    except Exception as _e:
+        _chk("Backups", False, f"check failed: {str(_e)[:70]}")
+
     health["checks"] = checks
+    health["failing"] = [c["name"] for c in checks if not c["ok"]]
     health["errors_recent"] = len(_ERROR_RING)
     health["system"] = _system_metrics()
     health["latency"] = _latency_stats()
@@ -9118,6 +9253,28 @@ async def ops_health_action(body: OpsHealthAction, request: Request):
                               description="toggled via App Health self-serve")
         result = {"message": f"WhatsApp automation {'PAUSED' if newv == '1' else 'RESUMED'}.",
                   "paused": newv == "1"}
+    elif action == "radar_poll":
+        created = await radar.poll_all_mailboxes()
+        result = {"message": f"Email Radar polled — {created} new email(s) picked up."}
+    elif action == "radar_test":
+        # Re-test every connected inbox so a silent auth failure surfaces immediately.
+        out = []
+        for m in await radar.list_mailboxes():
+            if not m.get("is_active"):
+                continue
+            ok, note = await radar.test_mailbox(m["mailbox_id"])
+            out.append(f"{m.get('label') or m.get('email_masked')}: {'OK' if ok else note}")
+        result = {"message": "Mailbox connections tested.", "detail": out or ["no inbox connected"]}
+    elif action == "payment_rescan":
+        import biz_nidaan_payment_watch as _pw
+        res = await _pw.run_payment_health_check(alert=False)
+        result = {"message": "Payment watchdog re-scan complete.", "detail": res}
+    elif action == "toggle_wa_journey":
+        cur = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
+        newv = "0" if cur else "1"
+        await nidaan.set_ops_setting("wa_journey_enabled", newv, updated_by=str(staff["staff_id"]))
+        result = {"message": f"WhatsApp customer journey {'PAUSED' if newv == '0' else 'RESUMED'}.",
+                  "journey_on": newv == "1"}
     else:
         raise HTTPException(status_code=400, detail="Unknown action")
     try:
@@ -9134,7 +9291,8 @@ async def ops_health_flags(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "super_admin")
-    return {"wa_paused": (await ntasks.get_flag("wa_automation_paused", "0")) == "1"}
+    return {"wa_paused": (await ntasks.get_flag("wa_automation_paused", "0")) == "1",
+            "wa_journey_on": str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")}
 
 
 @app.get("/nidaan/ops/api/activity")

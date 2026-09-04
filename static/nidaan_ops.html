@@ -7845,7 +7845,7 @@ async function healthAction(action, desc){
     const d = await r.json().catch(()=>({}));
     if (!r.ok){ if(msgEl){ msgEl.style.color='#f87171'; msgEl.textContent=d.detail||'Action failed'; } return; }
     if (msgEl){ msgEl.style.color='#4ade80'; msgEl.textContent='✓ '+(d.message||'Done'); }
-    if (action==='toggle_wa_pause') loadHealthFlags();
+    if (action==='toggle_wa_pause' || action==='toggle_wa_journey') loadHealthFlags();
   } catch(e){ if(msgEl){ msgEl.style.color='#f87171'; msgEl.textContent='Action error'; } }
 }
 async function loadHealthFlags(){
@@ -7855,6 +7855,8 @@ async function loadHealthFlags(){
     const d = await r.json();
     const b = document.getElementById('waPauseBtn');
     if (b) b.textContent = d.wa_paused ? '▶️ Resume WA automation' : '⏸️ Pause WA automation';
+    const j = document.getElementById('waJourneyBtn');
+    if (j) j.textContent = d.wa_journey_on ? '⏸️ Pause WA journey' : '▶️ Resume WA journey';
   } catch(e){}
 }
 async function loadHealth() {
@@ -7887,6 +7889,12 @@ async function loadHealth() {
       <div><div class="section-title">Control Center</div><div class="section-sub">Live diagnostics, errors &amp; activity · ${d.timestamp}</div></div>
       <button class="btn btn-ghost" onclick="loadHealth()">🔄 Refresh</button>
     </div>
+
+    ${(d.failing||[]).length?`<div style="background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.45);border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem">
+      <div style="font-weight:800;color:var(--nd-danger-text)">⚠️ ${(d.failing||[]).length} subsystem(s) need attention</div>
+      <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.2rem">${(d.failing||[]).map(esc).join(' · ')}</div>
+      <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.3rem">Details on the cards below — hover any ✕ for the reason. Several can be fixed with the self-serve buttons.</div>
+    </div>`:'<div style="background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.35);border-radius:10px;padding:.6rem 1rem;margin-bottom:1rem;font-size:.85rem;color:var(--nd-success-text);font-weight:700">✓ All subsystems healthy</div>'}
 
     <div style="margin-bottom:1.25rem">
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:var(--nd-danger-text)">⚠️ ${d.errors_recent} recent error log(s)</span>`:'<span style="font-size:.78rem;color:var(--nd-success-text)">No recent errors</span>'}</div>
@@ -7931,6 +7939,10 @@ async function loadHealth() {
         <button class="btn-sm btn-ghost" onclick="healthAction('clear_cache','refresh the content + plans caches (re-read from DB)')">♻️ Clear cache</button>
         <button class="btn-sm btn-ghost" onclick="healthAction('wa_watchdog','run one WhatsApp watchdog cycle (check + auto-heal lines)')">📶 WA watchdog</button>
         <button class="btn-sm btn-ghost" id="waPauseBtn" onclick="healthAction('toggle_wa_pause','toggle WhatsApp automation on/off')">⏸️ WA automation…</button>
+        <button class="btn-sm btn-ghost" id="waJourneyBtn" onclick="healthAction('toggle_wa_journey','toggle the live customer journey (claim + payment WhatsApp alerts) on/off')">💬 WA journey…</button>
+        <button class="btn-sm btn-ghost" onclick="healthAction('radar_poll','check the email collection inboxes for new mail right now')">📨 Poll Email Radar</button>
+        <button class="btn-sm btn-ghost" onclick="healthAction('radar_test','re-test every connected mailbox so a silent auth failure surfaces')">🔌 Test mailboxes</button>
+        <button class="btn-sm btn-ghost" onclick="healthAction('payment_rescan','re-scan payments for mismatches, stuck captures and failure spikes')">💳 Payment re-scan</button>
       </div>
       <div id="healthActionMsg" style="font-size:.78rem;color:var(--nd-text-secondary);margin-top:.5rem"></div>
     </div>

@@ -186,7 +186,7 @@ async def number_health() -> dict:
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.get(f"{GRAPH}/{_phone_id()}",
                             params={"fields": "display_phone_number,verified_name,quality_rating,"
-                                    "code_verification_status,platform_type",
+                                    "code_verification_status,platform_type,status",
                                     "access_token": _token()})
         d = r.json() if r.content else {}
     except Exception as e:  # noqa: BLE001
