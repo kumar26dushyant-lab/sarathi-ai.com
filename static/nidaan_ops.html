@@ -3505,7 +3505,13 @@ const _SRC = {branch:'🏢 Branch', staff:'👤 Staff', subscriber:'💳 Subscri
 function _claimSrcBadge(c){
   if(!c) return '';
   const k=c.source_kind||'direct';
-  return (_SRC[k]||k) + (c.ref_name?(' · <b>'+esc(c.ref_name)+'</b>'):'');
+  // An associate is an agent who introduced the case but stays off the books as a subscriber —
+  // the staffer filed it for them. Show it here so attribution (and their commission) is
+  // traceable in the same place we already show who brought every other claim in.
+  const assoc = c.associate_referrer
+    ? `<br><span style="color:var(--nd-warning-text)" title="Associate credited for this claim">🤝 via ${esc(c.associate_referrer)}</span>`
+    : '';
+  return (_SRC[k]||k) + (c.ref_name?(' · <b>'+esc(c.ref_name)+'</b>'):'') + assoc;
 }
 function _claimPayBadge(c){
   if(!c) return '—';
@@ -4249,6 +4255,7 @@ async function loadMyBusiness() {
         <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurer name (optional)'}">
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
+        <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'संदर्भकर्ता (वैकल्पिक)…':'Referred by associate (optional)…'}</option></select>
       </div>
       <textarea id="mbcNotes" placeholder="${hi?'संक्षिप्त पृष्ठभूमि / अस्वीकृति का कारण…':'Brief background / reason for rejection…'}" style="width:100%;margin-top:.55rem;min-height:56px;resize:vertical"></textarea>
       <div id="mbcFilesWrap" style="margin-top:.55rem">
@@ -4278,6 +4285,7 @@ async function loadMyBusiness() {
     reload: mbLoadClaims
   });
   mbLoadClaims();
+  mbLoadAssociates();
   // Super-admin: team reconciliation + commission editor.
   if (_role === 'super_admin' || _role === 'sub_super_admin') {
     mbLoadTeam();
@@ -4305,6 +4313,19 @@ function mbcRenderFiles(){
   box.innerHTML = _mbcFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:.35rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.2rem .5rem;font-size:.78rem;color:var(--nd-text-secondary)">📄 ${esc(f.name)} <span style="color:var(--nd-text-faint);font-size:.7rem">(${(f.size/1024).toFixed(0)} KB)</span> <button type="button" onclick="mbcRemoveFile(${i})" title="Remove" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.95rem;line-height:1;padding:0">×</button></span>`).join('');
 }
 
+// Associates are agents who send us business but don't want to appear as a subscriber. The
+// roster is curated by a super-admin in ops -> Content, so this stays a controlled list
+// rather than free text, and the credited name is stored on the claim for commission.
+async function mbLoadAssociates(){
+  const sel=document.getElementById('mbcAssociate'); if(!sel) return;
+  try{
+    const r=await API('/associate-referrers'); if(!r.ok) return;
+    const names=(await r.json()).names||[];
+    if(!names.length){ sel.style.display='none'; return; }
+    sel.style.display='';
+    sel.insertAdjacentHTML('beforeend', names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+  }catch(e){}
+}
 async function mbRaiseClaim(){
   const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
   const g=id=>document.getElementById(id);
@@ -4321,7 +4342,8 @@ async function mbRaiseClaim(){
   const body={insured_name:name, insured_phone:phone, insured_email:email, claim_type:type,
     insurer_name:(g('mbcInsurer').value||'').trim(), policy_no:(g('mbcPolicy').value||'').trim(),
     disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
-    notes:(g('mbcNotes').value||'').trim()};
+    notes:(g('mbcNotes').value||'').trim(),
+    associate_referrer:(g('mbcAssociate')&&g('mbcAssociate').value||'')};
   const r=await API('/my-claims',{method:'POST', body:JSON.stringify(body)});
   if(!r.ok){ btn.disabled=false; btn.textContent=ob; const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); return; }
   const cd = await r.json().catch(()=>({}));

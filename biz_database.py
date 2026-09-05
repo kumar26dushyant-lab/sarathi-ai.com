@@ -1640,6 +1640,12 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # Associate referrer: the named (unsubscribed) agent a staff member credits when
+        # filing a claim from My Business, so commission and attribution stay traceable.
+        try:
+            await conn.execute("ALTER TABLE nidaan_claims ADD COLUMN associate_referrer TEXT DEFAULT ''")
+        except Exception:
+            pass
         # Support-chat attachments. Links a nidaan_claim_documents row (same hardened store,
         # same signed-URL retrieval) so support files inherit every guardrail claim docs have.
         try:

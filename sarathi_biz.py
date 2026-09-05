@@ -885,6 +885,7 @@ class _BranchClaimReq(BaseModel):
     policy_no: str = Field("", max_length=80)
     disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
     notes: str = Field("", max_length=2000)
+    associate_referrer: str = Field("", max_length=120)   # named agent credited (My Business)
 
 
 @app.post("/nidaan/branch/api/claims")
@@ -7427,6 +7428,7 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
         payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+        associate_referrer=body.associate_referrer,
         complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
         complainant_role="staff")
     if not claim_id:
@@ -7644,6 +7646,25 @@ async def nidaan_public_content(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     return {"content": await nidaan.public_content()}
+
+
+@app.get("/nidaan/ops/api/associate-referrers")
+async def ops_associate_referrers(request: Request):
+    """The named associates a staffer may credit on a My Business claim. Managed by a
+    super-admin in ops -> Content (key `associate_referrers`), one name per line, so the
+    roster stays controlled rather than free text."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    c = await nidaan.get_content()
+    raw = ((c.get("associate_referrers") or {}).get("en") or "")
+    names = []
+    for _line in raw.splitlines():          # one per line, but tolerate comma-separated too
+        for _part in _line.split(","):
+            _part = _part.strip()
+            if _part and _part not in names:
+                names.append(_part)
+    return {"names": names[:200]}
 
 
 @app.get("/nidaan/ops/api/content")

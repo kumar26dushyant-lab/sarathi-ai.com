@@ -124,6 +124,12 @@ async def seed_plans_config():
 _CONTENT_CACHE: dict | None = None
 
 DEFAULT_CONTENT = {
+    # Named associates a staff member can credit when raising a claim from My Business.
+    # Background: some insurance agents send us business but do NOT want to appear as a
+    # subscriber. They ask our staff to file the claim, and we still need to know who
+    # introduced it so commission can be settled and referrals tracked. One name per line.
+    "associate_referrers": {"label": "Associate referrers (My Business dropdown) - one name per line",
+        "en": "", "hi": ""},
     "jurisdictions":     {"label": "Jurisdictions served",
         "en": "Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab",
         "hi": "मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब"},
@@ -203,9 +209,10 @@ async def update_content(key: str, value_en: str, value_hi: str) -> dict:
     """Update one canonical fact (super-admin, enforced at route). Only known keys."""
     if key not in DEFAULT_CONTENT:
         raise ValueError("unknown_content_key")
-    en = (value_en or "").strip()[:600]
-    hi = (value_hi or "").strip()[:600]
-    if not en:
+    _cap = 4000 if key == "associate_referrers" else 600
+    en = (value_en or "").strip()[:_cap]
+    hi = (value_hi or "").strip()[:_cap]
+    if not en and key != "associate_referrers":
         raise ValueError("value_en_required")
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
@@ -224,10 +231,18 @@ async def all_content() -> list[dict]:
     return [{"key": k, "label": v["label"], "en": v["en"], "hi": v["hi"]} for k, v in cfg.items()]
 
 
+# Content keys that are INTERNAL — edited in ops but never served to the public site.
+# `associate_referrers` is the roster of agents who send us business while deliberately staying
+# off the record as subscribers; publishing their names on the homepage would betray the exact
+# confidence the feature exists to protect.
+_PRIVATE_CONTENT_KEYS = {"associate_referrers"}
+
+
 async def public_content() -> dict:
-    """{key: {en, hi}} for the homepage (both languages)."""
+    """{key: {en, hi}} for the homepage (both languages). Internal keys are withheld."""
     cfg = await get_content()
-    return {k: {"en": v["en"], "hi": v["hi"]} for k, v in cfg.items()}
+    return {k: {"en": v["en"], "hi": v["hi"]}
+            for k, v in cfg.items() if k not in _PRIVATE_CONTENT_KEYS}
 
 
 # ── Go/no-go review templates (super-admin managed; picked at review delivery) ──
@@ -2028,6 +2043,7 @@ async def submit_claim(
     complainant_phone: str = "",
     complainant_email: str = "",
     complainant_role: str = "",
+    associate_referrer: str = "",
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -2064,8 +2080,9 @@ async def submit_claim(
                 insured_email, insurer_name, policy_no, disputed_amount,
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
                 notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin,
-                complainant_name, complainant_phone, complainant_email, complainant_role)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                complainant_name, complainant_phone, complainant_email, complainant_role,
+                associate_referrer)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
@@ -2073,7 +2090,8 @@ async def submit_claim(
              (intermediary_code or "").strip(), (intermediary_name or "").strip(),
              (branch_code or "").strip().upper(),
              payment_status, (origin or "").strip(),
-             complainant_name, complainant_phone, complainant_email, complainant_role),
+             complainant_name, complainant_phone, complainant_email, complainant_role,
+             (associate_referrer or "").strip()[:120]),
         )
         claim_id = cur.lastrowid
         await conn.execute(
