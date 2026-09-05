@@ -9388,8 +9388,11 @@ async def ops_health(request: Request):
             if _ghost:
                 note += f" · ⚠️ {len(_ghost)} connected but sends FAILING — re-pair (QR)"
             _chk("WhatsApp", len(_can_send) > 0, note)
-        else:
-            _chk("WhatsApp", False, "no official numbers configured yet")
+        elif not wa_insts:
+            # Legacy Evolution slots are decommissioned - WhatsApp now runs on the Cloud API,
+            # which is checked separately below. Reporting "not configured" here was a permanent
+            # false alarm on a subsystem we no longer use, which trains people to ignore the panel.
+            pass
     except Exception as _we:
         health["wa_instances"] = []
         _chk("WhatsApp", False, f"status check failed: {_we}")
