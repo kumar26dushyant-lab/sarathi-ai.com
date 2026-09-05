@@ -959,7 +959,7 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(415, f"{f.filename} does not look like a valid document.")
-        ext = _doc_ext_for(content)          # from the bytes, never the client filename
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -1361,7 +1361,7 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
             raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"{f.filename} does not look like a valid document.")
-        ext = _doc_ext_for(content)          # from the bytes, never the client filename
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -1922,13 +1922,8 @@ async def _save_support_attachment(file, account_id):
     MIME allow-list, magic-byte check, and an extension derived from the bytes (never the client
     filename). Returns the doc_id, or raises."""
     content = await file.read()
-    if len(content) > _MAX_DOC_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds the 10 MB limit")
-    if file.content_type not in _ALLOWED_MIME:
-        raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
-    ext = _doc_ext_for(content)
-    if not ext:
-        raise HTTPException(status_code=415, detail="File does not look like a valid PDF / image / Word document.")
+    # One gate for size, real type, extension-from-bytes AND the virus scan.
+    ext = await validate_upload_scanned(content, (file.content_type or ""), what="file")
     stored_name = f"{uuid.uuid4().hex}{ext}"
     (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
     return await nidaan.save_claim_document(
@@ -3826,6 +3821,36 @@ def validate_upload(content: bytes, declared_mime: str = "", *, images_only: boo
     return ext
 
 
+async def validate_upload_scanned(content: bytes, declared_mime: str = "", *,
+                                  images_only: bool = False,
+                                  max_bytes: int = _MAX_DOC_SIZE, what: str = "file") -> str:
+    """validate_upload() PLUS an antivirus scan. Use this on every path that stores a file.
+
+    Type checks prove a file is a well-formed PDF; they cannot prove it is safe. We pass these
+    documents on to insurers, hospitals and our own staff, so we are a distribution point — a
+    clean-looking PDF carrying an exploit would go out under our name. The scan runs on the bytes
+    in memory BEFORE anything is written, so an infected file never lands on the server at all.
+    """
+    ext = validate_upload(content, declared_mime, images_only=images_only,
+                          max_bytes=max_bytes, what=what)
+    try:
+        import biz_av_scan as _av
+        allowed, reason = await _av.scan_bytes(content)
+    except Exception as e:  # noqa: BLE001
+        # The scanner module itself failing is still "no verdict" — refuse, don't assume clean.
+        logger.error("AV scan could not run: %s", e)
+        raise HTTPException(status_code=503,
+                            detail="Could not virus-scan this file right now. Please try again.")
+    if not allowed:
+        logger.warning("Rejected upload (%s): %s", what, reason)
+        if reason == "virus scanner unavailable":
+            raise HTTPException(status_code=503,
+                                detail="Could not virus-scan this file right now. Please try again.")
+        raise HTTPException(status_code=422,
+                            detail="This file was blocked by our virus scan. Please check it and upload a clean copy.")
+    return ext
+
+
 @app.post("/nidaan/api/review/{purchase_id}/documents/upload")
 @limiter.limit("20/minute")
 async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: list[UploadFile] = File(...)):
@@ -3856,7 +3881,7 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
-        ext = _doc_ext_for(content)          # from the bytes, never the client filename
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -3920,7 +3945,7 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
-        ext = _doc_ext_for(content)          # from the bytes, never the client filename
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -4115,13 +4140,8 @@ async def _save_message_attachment(file: UploadFile, claim_id: int, account_id: 
     """Validate + store a claim-message attachment (same rules/store as claim docs);
     returns its nidaan_claim_documents doc_id so it can be linked to the message."""
     content = await file.read()
-    if len(content) > _MAX_DOC_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds the 10 MB limit")
-    if file.content_type not in _ALLOWED_MIME:
-        raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
-    if not _doc_magic_ok(content):
-        raise HTTPException(status_code=415, detail="File does not look like a valid PDF / image / Word document.")
-    ext = _doc_ext_for(content)              # from the bytes, never the client filename
+    # One gate: size, real type, extension-from-bytes, and the virus scan.
+    ext = await validate_upload_scanned(content, (file.content_type or ""), what="attachment")
     stored_name = f"{uuid.uuid4().hex}{ext}"
     (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
     return await nidaan.save_claim_document(
@@ -6795,7 +6815,7 @@ async def ops_me_profile_pic(request: Request, file: UploadFile = File(...)):
     content = await file.read()
     # Was: extension taken from the client filename with no look at the bytes, so any content
     # named x.jpg was stored and served back. Now the bytes decide, through the shared gate.
-    ext = validate_upload(content, images_only=True, max_bytes=5 * 1024 * 1024, what="image")
+    ext = await validate_upload_scanned(content, images_only=True, max_bytes=5 * 1024 * 1024, what="image")
     import uuid as _uuid
     stored = f"avatar_{_uuid.uuid4().hex}{ext}"
     (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
@@ -7529,7 +7549,7 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
             raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
             raise HTTPException(415, f"{f.filename} does not look like a valid document.")
-        ext = _doc_ext_for(content)          # from the bytes, never the client filename
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -8679,7 +8699,7 @@ async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Reque
         content = await _f.read()
         # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
         # This previously trusted the client filename for the extension with no content check.
-        ext = validate_upload(content, (_f.content_type or ""), what="attachment")
+        ext = await validate_upload_scanned(content, (_f.content_type or ""), what="attachment")
         _stored = f"{_uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
         saved.append({"stored_name": _stored, "original_name": _f.filename})
@@ -9410,6 +9430,16 @@ async def _subsystem_checks() -> list:
         _chk("Doc Splitter", True, f"job dir writable ({_ds.TMP_ROOT})")
     except Exception as _e:
         _chk("Doc Splitter", False, f"job dir NOT writable: {str(_e)[:70]}")
+    # Antivirus — uploads FAIL CLOSED when clamd is down, so a dead scanner blocks every
+    # document upload. That must be loudly visible, not discovered by a confused customer.
+    try:
+        import biz_av_scan as _av
+        _ok = await _av.available()
+        _chk("Virus scanner", _ok,
+             "clamd reachable — every upload is scanned" if _ok
+             else "clamd DOWN — uploads are being refused (fail-closed). Run: systemctl start clamav-daemon")
+    except Exception as _e:
+        _chk("Virus scanner", False, f"check failed: {str(_e)[:70]}")
     # SMTP — the rail every party notification falls back to.
     try:
         _su = bool(os.getenv("SMTP_USER", "").strip() and os.getenv("SMTP_PASSWORD", "").strip())
@@ -10251,7 +10281,7 @@ async def ops_quick_task_note_add(qid: int, request: Request,
         content = await _f.read()
         # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
         # This previously trusted the client filename for the extension with no content check.
-        ext = validate_upload(content, (_f.content_type or ""), what="attachment")
+        ext = await validate_upload_scanned(content, (_f.content_type or ""), what="attachment")
         _stored = f"{_uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
         saved.append({"stored_name": _stored, "original_name": _f.filename})

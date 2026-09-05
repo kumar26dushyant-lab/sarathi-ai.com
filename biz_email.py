@@ -88,7 +88,8 @@ def is_enabled() -> bool:
 
 async def send_email(to_email: str, subject: str, html_body: str,
                      text_body: str = "", from_email: str = "",
-                     from_name: str = "", reply_to: str = "") -> bool:
+                     from_name: str = "", reply_to: str = "",
+                     delivery_critical: bool = False) -> bool:
     """Send transactional email. Prefers Resend HTTPS API when RESEND_API_KEY is
     set (proper DKIM-aligned deliverability), otherwise falls back to Gmail SMTP.
     Returns True on success.
@@ -185,6 +186,25 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # account is not their authorized sender and SMTP would misalign their domain.
     _smtp_ready = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
     _smtp_aligned = _smtp_ready and (sender_email or "").lower() == (SMTP_USER or "").lower()
+
+    # DELIVERY-CRITICAL MAIL (login/verification codes) — arrival beats branding.
+    # nidaanpartner.com publishes SPF "v=spf1 include:_spf.google.com ~all": it authorises GOOGLE
+    # only. Anything sent through Brevo while claiming From: info@nidaanpartner.com therefore
+    # fails SPF and Gmail files it as spam — which is exactly why signup codes were "never
+    # received" even though every send logged Brevo ✓. Until Brevo is added to SPF/DKIM (see
+    # NOTE below), send these through the authenticated Google account so the envelope aligns,
+    # and put the branded address in Reply-To so replies still reach the team.
+    #
+    # NOTE FOR THE OWNER: once DNS has
+    #     v=spf1 include:_spf.google.com include:spf.brevo.com ~all   (+ Brevo DKIM records)
+    # this override stops being necessary and branded From works on every transport.
+    if delivery_critical and _smtp_ready and not _smtp_aligned:
+        _orig_sender = sender_email
+        sender_email = SMTP_USER
+        reply_addr = reply_addr or _orig_sender
+        _smtp_aligned = True
+        logger.info("📧 delivery-critical: sending as %s (SPF-aligned), reply-to %s",
+                    sender_email, reply_addr)
     if _smtp_aligned and await _smtp_send():
         return True
 
@@ -453,6 +473,9 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
         _wrap_nidaan_template("Nidaan Partner OTP", content),
         from_name="Nidaan Partner",
         from_email=NIDAAN_FROM or None,
+        # A code that lands in spam is the same as no code at all — send this one on the
+        # transport the domain actually authorises.
+        delivery_critical=True,
     )
 
 
