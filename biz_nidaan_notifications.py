@@ -395,7 +395,7 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
         conn.row_factory = aiosqlite.Row
         ph = ",".join("?" * len(staff_ids))
         rows = [dict(r) for r in await (await conn.execute(
-            f"SELECT staff_id, COALESCE(NULLIF(notify_email,''), email) AS email "
+            f"SELECT staff_id, role, COALESCE(NULLIF(notify_email,''), email) AS email "
             f"FROM nidaan_staff WHERE staff_id IN ({ph}) "
             f"AND status='active' AND deleted_at IS NULL", list(staff_ids))).fetchall()]
     sent = 0
@@ -410,7 +410,20 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
-        if email and r.get("email"):
+        # The bell above always fires. The EMAIL leg is decided per recipient, so a super-admin
+        # keeps the full picture while a teammate gets internal chatter on Telegram instead of
+        # in their inbox. Money, documents and leave are never downgraded.
+        _email_ok = email
+        if email:
+            try:
+                import biz_nidaan_notify_policy as _pol
+                _email_ok, _why = _pol.should_email(event_key, role=(r.get("role") or ""))
+                if not _email_ok:
+                    logger.debug("email suppressed for %s (%s): %s",
+                                 r.get("staff_id"), event_key, _why)
+            except Exception:
+                _email_ok = email      # policy must never be able to silence a real alert
+        if _email_ok and r.get("email"):
             try:
                 await _send_email(to_email=r["email"], subject=f"[Nidaan] {subject}",
                                   html_body=body.replace("\n", "<br>"), text_body=body)
