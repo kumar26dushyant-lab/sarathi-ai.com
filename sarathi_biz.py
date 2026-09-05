@@ -885,7 +885,7 @@ class _BranchClaimReq(BaseModel):
     policy_no: str = Field("", max_length=80)
     disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
     notes: str = Field("", max_length=2000)
-    associate_referrer: str = Field("", max_length=120)   # named agent credited (My Business)
+    channel_partner_id: Optional[int] = None   # approved CP credited on a My Business claim
 
 
 @app.post("/nidaan/branch/api/claims")
@@ -7421,6 +7421,17 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
     _iname = (body.insured_name or _cname).strip()
     _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
     house_account = await nidaan.get_or_create_branch_house_account(code)
+    # Resolve the credited Channel Partner SERVER-SIDE. The client sends only an id, and we
+    # accept it only if that CP is APPROVED - otherwise a staffer could type any name and
+    # walk straight past the super-admin approval gate that governs who gets paid.
+    _cp_id, _cp_name = None, ""
+    if body.channel_partner_id:
+        import biz_nidaan_channel_partners as _cpm
+        _cp = await _cpm.get_partner(int(body.channel_partner_id))
+        if not _cp or _cp.get("status") != "approved":
+            raise HTTPException(status_code=400,
+                                detail="That channel partner is not approved for selection")
+        _cp_id, _cp_name = _cp["cp_id"], _cp["name"]
     claim_id, msg = await nidaan.submit_claim(
         account_id=house_account, user_id=None,
         claim_type=(body.claim_type or "").strip(), insured_name=_iname,
@@ -7428,7 +7439,7 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
         policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
         notes_from_agent=(body.notes or "").strip(), branch_code=code,
         payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
-        associate_referrer=body.associate_referrer,
+        associate_referrer=_cp_name, channel_partner_id=_cp_id,
         complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
         complainant_role="staff")
     if not claim_id:
@@ -7648,23 +7659,109 @@ async def nidaan_public_content(request: Request):
     return {"content": await nidaan.public_content()}
 
 
-@app.get("/nidaan/ops/api/associate-referrers")
-async def ops_associate_referrers(request: Request):
-    """The named associates a staffer may credit on a My Business claim. Managed by a
-    super-admin in ops -> Content (key `associate_referrers`), one name per line, so the
-    roster stays controlled rather than free text."""
+class _CpReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field("", max_length=160)
+    phone: str = Field("", max_length=20)
+    company: str = Field("", max_length=120)
+    notes: str = Field("", max_length=500)
+
+
+class _CpStatusReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(..., pattern=r"^(approved|rejected|disabled|pending)$")
+
+
+@app.get("/nidaan/ops/api/channel-partners")
+async def ops_cp_list(request: Request, approved_only: bool = False):
+    """Channel Partners. Any staffer may read the APPROVED list (that is what the My Business
+    claim form offers); the full list including pending/rejected is admin-only."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request)
-    c = await nidaan.get_content()
-    raw = ((c.get("associate_referrers") or {}).get("en") or "")
-    names = []
-    for _line in raw.splitlines():          # one per line, but tolerate comma-separated too
-        for _part in _line.split(","):
-            _part = _part.strip()
-            if _part and _part not in names:
-                names.append(_part)
-    return {"names": names[:200]}
+    caller = _require_staff(request)
+    import biz_nidaan_channel_partners as _cp
+    is_admin = (caller or {}).get("role") in ("super_admin", "sub_super_admin")
+    if approved_only or not is_admin:
+        return {"partners": await _cp.list_partners(approved_only=True), "can_approve": False}
+    return {"partners": await _cp.list_partners(),
+            "pending": await _cp.pending_count(),
+            "can_approve": (caller or {}).get("role") == "super_admin"}
+
+
+@app.post("/nidaan/ops/api/channel-partners")
+@limiter.limit("30/minute")
+async def ops_cp_create(body: _CpReq, request: Request):
+    """Propose a Channel Partner. A sub-admin's entry starts PENDING and is invisible in the
+    claim form until a super-admin approves it; a super-admin's own entry is approved on
+    creation and recorded as approved by them."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_channel_partners as _cp
+    res = await _cp.create_partner(
+        name=body.name, email=body.email, phone=body.phone, company=body.company,
+        notes=body.notes, by_staff_id=(caller or {}).get("staff_id"),
+        by_name=_actor_label(caller),
+        is_super_admin=((caller or {}).get("role") == "super_admin"))
+    if not res.get("ok"):
+        _m = {"name_required": "A name is required",
+              "duplicate": "A channel partner with that name already exists"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not add"))
+    await _ops_audit(request, "cp.create", "channel_partner", str(res["cp_id"]),
+                     f"{body.name} ({res['status']})")
+    # A pending CP needs a super-admin to act, so tell them rather than hoping someone looks.
+    if res.get("status") == "pending":
+        try:
+            import aiosqlite as _aio
+            async with _aio.connect(nidaan.DB_PATH) as _c:
+                _ids = [r[0] for r in await (await _c.execute(
+                    "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+                    "AND deleted_at IS NULL")).fetchall()]
+            if _ids:
+                await nnot.notify_staff_inapp(
+                    _ids, "🤝 Channel Partner needs approval",
+                    "\n".join([
+                        f"{_actor_label(caller)} added the channel partner: {body.name}",
+                        "",
+                        "It cannot be selected on a claim until a super-admin approves it.",
+                        "Open ops → Content → Channel Partners.",
+                    ]),
+                    event_key="cp.pending", email=False)
+        except Exception as _e:
+            logger.info("CP pending alert failed: %s", _e)
+    return res
+
+
+@app.patch("/nidaan/ops/api/channel-partners/{cp_id}")
+async def ops_cp_update(cp_id: int, body: _CpReq, request: Request):
+    """Edit a CP's details. Status is deliberately NOT editable here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_channel_partners as _cp
+    ok = await _cp.update_partner(cp_id, name=body.name, email=body.email, phone=body.phone,
+                                  company=body.company, notes=body.notes)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Channel partner not found")
+    await _ops_audit(request, "cp.update", "channel_partner", str(cp_id), body.name[:80])
+    return {"ok": True}
+
+
+@app.patch("/nidaan/ops/api/channel-partners/{cp_id}/status")
+async def ops_cp_status(cp_id: int, body: _CpStatusReq, request: Request):
+    """Approve / reject / disable a Channel Partner. SUPER-ADMIN ONLY — this is the gate that
+    decides whose name a commission can later be paid against, and approval stamps who did it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_channel_partners as _cp
+    ok = await _cp.set_status(cp_id, body.status, by_staff_id=(caller or {}).get("staff_id"),
+                              by_name=_actor_label(caller))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Channel partner not found")
+    await _ops_audit(request, "cp.status", "channel_partner", str(cp_id), body.status)
+    return {"ok": True}
 
 
 @app.get("/nidaan/ops/api/content")

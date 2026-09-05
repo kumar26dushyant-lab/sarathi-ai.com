@@ -124,12 +124,6 @@ async def seed_plans_config():
 _CONTENT_CACHE: dict | None = None
 
 DEFAULT_CONTENT = {
-    # Named associates a staff member can credit when raising a claim from My Business.
-    # Background: some insurance agents send us business but do NOT want to appear as a
-    # subscriber. They ask our staff to file the claim, and we still need to know who
-    # introduced it so commission can be settled and referrals tracked. One name per line.
-    "associate_referrers": {"label": "Associate referrers (My Business dropdown) - one name per line",
-        "en": "", "hi": ""},
     "jurisdictions":     {"label": "Jurisdictions served",
         "en": "Madhya Pradesh, Chhattisgarh, Maharashtra, Rajasthan & Punjab",
         "hi": "मध्य प्रदेश, छत्तीसगढ़, महाराष्ट्र, राजस्थान और पंजाब"},
@@ -209,10 +203,9 @@ async def update_content(key: str, value_en: str, value_hi: str) -> dict:
     """Update one canonical fact (super-admin, enforced at route). Only known keys."""
     if key not in DEFAULT_CONTENT:
         raise ValueError("unknown_content_key")
-    _cap = 4000 if key == "associate_referrers" else 600
-    en = (value_en or "").strip()[:_cap]
-    hi = (value_hi or "").strip()[:_cap]
-    if not en and key != "associate_referrers":
+    en = (value_en or "").strip()[:600]
+    hi = (value_hi or "").strip()[:600]
+    if not en:
         raise ValueError("value_en_required")
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
@@ -2044,6 +2037,7 @@ async def submit_claim(
     complainant_email: str = "",
     complainant_role: str = "",
     associate_referrer: str = "",
+    channel_partner_id=None,
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -2081,8 +2075,8 @@ async def submit_claim(
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
                 notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin,
                 complainant_name, complainant_phone, complainant_email, complainant_role,
-                associate_referrer)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                associate_referrer, channel_partner_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
@@ -2091,7 +2085,7 @@ async def submit_claim(
              (branch_code or "").strip().upper(),
              payment_status, (origin or "").strip(),
              complainant_name, complainant_phone, complainant_email, complainant_role,
-             (associate_referrer or "").strip()[:120]),
+             (associate_referrer or "").strip()[:120], channel_partner_id),
         )
         claim_id = cur.lastrowid
         await conn.execute(

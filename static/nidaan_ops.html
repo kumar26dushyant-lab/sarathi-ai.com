@@ -4255,7 +4255,7 @@ async function loadMyBusiness() {
         <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurer name (optional)'}">
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
-        <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'संदर्भकर्ता (वैकल्पिक)…':'Referred by associate (optional)…'}</option></select>
+        <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'चैनल पार्टनर (वैकल्पिक)…':'Channel Partner (optional)…'}</option></select>
       </div>
       <textarea id="mbcNotes" placeholder="${hi?'संक्षिप्त पृष्ठभूमि / अस्वीकृति का कारण…':'Brief background / reason for rejection…'}" style="width:100%;margin-top:.55rem;min-height:56px;resize:vertical"></textarea>
       <div id="mbcFilesWrap" style="margin-top:.55rem">
@@ -4319,11 +4319,13 @@ function mbcRenderFiles(){
 async function mbLoadAssociates(){
   const sel=document.getElementById('mbcAssociate'); if(!sel) return;
   try{
-    const r=await API('/associate-referrers'); if(!r.ok) return;
-    const names=(await r.json()).names||[];
-    if(!names.length){ sel.style.display='none'; return; }
+    const r=await API('/channel-partners?approved_only=true'); if(!r.ok) return;
+    const list=(await r.json()).partners||[];
+    if(!list.length){ sel.style.display='none'; return; }
     sel.style.display='';
-    sel.insertAdjacentHTML('beforeend', names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+    sel.insertAdjacentHTML('beforeend', list.map(p=>
+      `<option value="${p.cp_id}">${esc(p.name)}${p.company?(' · '+esc(p.company)):''}</option>`
+    ).join(''));
   }catch(e){}
 }
 async function mbRaiseClaim(){
@@ -4343,7 +4345,7 @@ async function mbRaiseClaim(){
     insurer_name:(g('mbcInsurer').value||'').trim(), policy_no:(g('mbcPolicy').value||'').trim(),
     disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
     notes:(g('mbcNotes').value||'').trim(),
-    associate_referrer:(g('mbcAssociate')&&g('mbcAssociate').value||'')};
+    channel_partner_id:((g('mbcAssociate')&&g('mbcAssociate').value)?parseInt(g('mbcAssociate').value,10):null)};
   const r=await API('/my-claims',{method:'POST', body:JSON.stringify(body)});
   if(!r.ok){ btn.disabled=false; btn.textContent=ob; const d=await r.json().catch(()=>({})); msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); return; }
   const cd = await r.json().catch(()=>({}));
@@ -7532,15 +7534,92 @@ async function saveClaimantTerms(btn){
   finally{ if(btn) btn.disabled=false; }
 }
 
+// ── Channel Partners (CP) ───────────────────────────────────────────────────
+// Agents who send us business but stay off the record as subscribers. A sub-admin can propose
+// one; only a super-admin can approve it, and the approver's name is stored — this is the name
+// a commission gets paid against later. Unapproved partners never reach the claim form.
+async function loadChannelPartners(){
+  const el=document.getElementById('cpEditor'); if(!el) return;
+  el.innerHTML='<div class="empty"><p>Loading channel partners…</p></div>';
+  let d={};
+  try{ const r=await API('/channel-partners'); if(!r.ok) throw 0; d=await r.json(); }
+  catch(e){ el.innerHTML='<div class="empty"><p>Could not load channel partners.</p></div>'; return; }
+  const list=d.partners||[], canApprove=!!d.can_approve;
+  const pill=st=>{
+    const m={approved:['#064e3b','#6ee7b7','approved'],pending:['#7c2d12','#fdba74','awaiting approval'],
+             rejected:['#7f1d1d','#fca5a5','rejected'],disabled:['#334155','#cbd5e1','disabled']}[st]||['#334155','#cbd5e1',st];
+    return `<span style="background:${m[0]};color:${m[1]};border-radius:999px;padding:.1rem .55rem;font-size:.68rem;white-space:nowrap">${m[2]}</span>`;
+  };
+  const rows=list.map(p=>`<tr style="border-top:1px solid var(--nd-border)">
+      <td style="padding:.5rem .6rem"><b>${esc(p.name)}</b>${p.company?`<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(p.company)}</span>`:''}</td>
+      <td style="padding:.5rem .6rem;font-size:.78rem">${esc(p.email||'—')}<br><span style="color:var(--nd-text-faint)">${esc(p.phone||'—')}</span></td>
+      <td style="padding:.5rem .6rem">${pill(p.status)}</td>
+      <td style="padding:.5rem .6rem;font-size:.72rem;color:var(--nd-text-faint)">
+        added by ${esc(p.created_by_name||'—')}
+        ${p.approved_by_name?`<br>approved by <b style="color:var(--nd-success-text)">${esc(p.approved_by_name)}</b>`:''}
+        ${p.approved_at?`<br>${esc(String(p.approved_at).slice(0,16))}`:''}</td>
+      <td style="padding:.5rem .6rem;white-space:nowrap">
+        ${canApprove&&p.status!=='approved'?`<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="cpSetStatus(${p.cp_id},'approved')">✓ Approve</button>`:''}
+        ${canApprove&&p.status==='pending'?`<button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="cpSetStatus(${p.cp_id},'rejected')">✕ Reject</button>`:''}
+        ${canApprove&&p.status==='approved'?`<button class="btn-sm btn-ghost" onclick="cpSetStatus(${p.cp_id},'disabled')">Disable</button>`:''}
+      </td></tr>`).join('');
+  el.innerHTML=`
+    <div class="nd-card" style="padding:1rem">
+      <div style="font-weight:800;margin-bottom:.2rem">🤝 Channel Partners (CP)${d.pending?` <span style="color:var(--nd-warning-text);font-size:.8rem">· ${d.pending} awaiting approval</span>`:''}</div>
+      <div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.7rem">Agents who send us business without taking a subscription. Staff credit one when raising a claim from My Business, so commission and referrals stay traceable. <b>A partner is selectable only after a super-admin approves it</b>, and the approver is recorded.</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.7rem">
+        <input id="cpName" placeholder="Full name *" style="min-width:150px">
+        <input id="cpCompany" placeholder="Company / agency" style="min-width:140px">
+        <input id="cpEmail" type="email" placeholder="Email" style="min-width:160px">
+        <input id="cpPhone" placeholder="Mobile" style="min-width:120px">
+        <input id="cpNotes" placeholder="Notes (optional)" style="min-width:160px">
+        <button class="btn btn-primary" onclick="cpAdd(this)">+ Add partner</button>
+      </div>
+      <div id="cpMsg" style="font-size:.8rem;margin-bottom:.5rem"></div>
+      ${list.length?`<div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="text-align:left;color:var(--nd-text-muted)"><th style="padding:.5rem .6rem">Partner</th><th style="padding:.5rem .6rem">Contact</th><th style="padding:.5rem .6rem">Status</th><th style="padding:.5rem .6rem">Trail</th><th style="padding:.5rem .6rem"></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`
+       :'<div style="color:var(--nd-text-faint);font-size:.85rem">No channel partners yet.</div>'}
+    </div>`;
+}
+async function cpAdd(btn){
+  const g=id=>document.getElementById(id);
+  const msg=g('cpMsg');
+  const body={name:(g('cpName').value||'').trim(), company:(g('cpCompany').value||'').trim(),
+              email:(g('cpEmail').value||'').trim(), phone:(g('cpPhone').value||'').trim(),
+              notes:(g('cpNotes').value||'').trim()};
+  if(!body.name){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Name is required.'; return; }
+  const o=btn.textContent; btn.disabled=true; btn.textContent='Adding…';
+  try{
+    const r=await API('/channel-partners',{method:'POST',body:JSON.stringify(body)});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ '+(e.detail||'Could not add'); return; }
+    const d=await r.json();
+    msg.style.color='var(--nd-success-text)';
+    msg.textContent = d.status==='approved' ? '✓ Added and approved.' : '✓ Added — a super-admin must approve it before staff can select it.';
+    loadChannelPartners();
+  }catch(e){ msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ Could not add.'; }
+  finally{ btn.disabled=false; btn.textContent=o; }
+}
+async function cpSetStatus(id, status){
+  if(status==='rejected' && !confirm('Reject this channel partner? They will not be selectable on claims.')) return;
+  if(status==='disabled' && !confirm('Disable this channel partner? They will no longer appear in the claim form.')) return;
+  try{
+    const r=await API('/channel-partners/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert(e.detail||'Could not update.'); return; }
+    loadChannelPartners();
+  }catch(e){ alert('Could not update.'); }
+}
 async function loadContentConfig(){
   const el = document.getElementById('panel-content');
   el.innerHTML = `<div class="section-hdr"><div><div class="section-title">Content — canonical facts</div>
     <div class="section-sub">Edit a business fact once here; the website homepage AND the chat assistant both read from it. Change → applies everywhere.</div></div>
     <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="loadContentConfig()">🔄 Refresh</button></div>
+    <div id="cpEditor" style="margin-bottom:1.6rem"></div>
     <div id="officesEditor" style="margin-bottom:1.6rem"></div>
     <div id="claimantTermsEditor" style="margin-bottom:1.6rem"></div>
     <div id="contentWrap"><div class="empty"><p>Loading…</p></div></div>
     <div id="reviewTplSection" style="margin-top:1.4rem"></div>`;
+  loadChannelPartners();
   loadOfficesEditor();
   loadClaimantTermsEditor();
   loadReviewTemplates();

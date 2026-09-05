@@ -1640,6 +1640,42 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN share_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # The old free-text associate roster is superseded by the approval-gated CP table.
+        try:
+            await conn.execute("DELETE FROM nidaan_content WHERE content_key='associate_referrers'")
+        except Exception:
+            pass
+        # ═══ CHANNEL PARTNERS (CP) ═══════════════════════════════════════════════
+        # Agents who send us business but deliberately stay off the record as subscribers. A
+        # staffer credits one when filing a claim from My Business, so commission and referral
+        # attribution stay traceable. A CP created by a sub-admin must be APPROVED by a
+        # super-admin before it can be selected - and we record who approved it, so the money
+        # trail has a named authoriser rather than appearing by itself.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_channel_partners (
+                cp_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name             TEXT NOT NULL,
+                email            TEXT DEFAULT '',
+                phone            TEXT DEFAULT '',
+                company          TEXT DEFAULT '',
+                notes            TEXT DEFAULT '',
+                status           TEXT DEFAULT 'pending',   -- pending | approved | rejected | disabled
+                created_by_staff_id   INTEGER,
+                created_by_name       TEXT DEFAULT '',
+                approved_by_staff_id  INTEGER,
+                approved_by_name      TEXT DEFAULT '',
+                approved_at      TIMESTAMP,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP
+            )""")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cp_status ON nidaan_channel_partners(status, name)")
+        # Link the claim to the CP record (the name is also snapshotted on the claim so history
+        # survives a later rename).
+        try:
+            await conn.execute("ALTER TABLE nidaan_claims ADD COLUMN channel_partner_id INTEGER")
+        except Exception:
+            pass
         # Associate referrer: the named (unsubscribed) agent a staff member credits when
         # filing a claim from My Business, so commission and attribution stay traceable.
         try:
