@@ -1621,7 +1621,34 @@ async def on_claim_filed(claim_id: int, account_id: int):
             "SELECT staff_id, name, phone, email FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') AND status='active'")
         admins = [dict(r) for r in await cur.fetchall()]
 
-    # Subscriber: friendly confirmation
+    # ORDER MATTERS. This whole function runs in a fire-and-forget asyncio task, so anything
+    # still pending when the process restarts (a deploy, a worker recycle) is lost silently.
+    # The subscriber dispatch sends an EMAIL, which took ~3s — and claim #108 was filed inside
+    # exactly that window during a deploy, so the subscriber rows landed and all 13 staff alerts
+    # were never written. Staff first: their rows are a fast local insert, so the team is told
+    # even if everything after this point dies.
+    for a in admins:
+        await dispatch(
+            event_key="claim.filed.admin", priority=PRIORITY_P1,
+            recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
+            recipient_phone=a.get("phone") or "",
+            recipient_email=a.get("email") or "",
+            subject=f"New claim #{_cn(claim_id)} — {claim.get('insured_name','')}",
+            body=(f"🆕 New claim filed.\n\n"
+                  f"Case: #{_cn(claim_id)} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
+                  f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
+                  f"Open: /admin?account={account_id}"),
+            claim_id=claim_id, account_id=account_id)
+    # Telegram mirror for the team (the bell alone is easy to miss).
+    for a in admins:
+        try:
+            await _telegram_mirror(a["staff_id"],
+                                  f"🆕 New claim #{_cn(claim_id)} — {claim.get('insured_name','')}\n"
+                                  f"{claim.get('claim_type','')} · {claim.get('owner_name','')}",
+                                  url="/nidaan/ops")
+        except Exception:
+            pass
+    # Subscriber: friendly confirmation (slower — sends email/WhatsApp).
     prefs = await get_subscriber_prefs(account_id)
     if prefs.get("wa_opt_in"):
         wa_phone = claim.get("account_phone") or claim.get("insured_phone")
@@ -1637,25 +1664,47 @@ async def on_claim_filed(claim_id: int, account_id: int):
               f"({claim.get('claim_type','')}). Our team will review within 24 hours "
               f"and reach out with next steps.\n\n— Nidaan – The Legal Consultants LLP"),
         claim_id=claim_id)
-    # Admins: internal alert
-    for a in admins:
-        await dispatch(
-            event_key="claim.filed.admin", priority=PRIORITY_P1,
-            recipient_type=RECIPIENT_STAFF, recipient_id=a["staff_id"],
-            recipient_phone=a.get("phone") or "",
-            recipient_email=a.get("email") or "",
-            subject=f"New claim #{_cn(claim_id)} — {claim.get('insured_name','')}",
-            body=(f"🆕 New claim filed.\n\n"
-                  f"Case: #{_cn(claim_id)} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
-                  f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
-                  f"Open: /admin?account={account_id}"),
-            claim_id=claim_id, account_id=account_id)
     # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
     try:
         import biz_nidaan_wa_orchestrator as _orch
         await _orch.wa_journey(claim_id, "claim_registered")
     except Exception as e:
         logger.warning("on_claim_filed wa_journey failed claim %s: %s", claim_id, e)
+
+
+async def sweep_missed_claim_alerts(hours: int = 48) -> int:
+    """Self-heal: find recent claims the team was never told about, and tell them.
+
+    Every claim alert is fired from a fire-and-forget asyncio task, so a deploy or worker recycle
+    mid-flight loses whatever hadn't run yet — silently. That is exactly how claim #108 reached
+    nobody. Reordering shrank the window; this closes it: any claim with no
+    `claim.filed.admin` row gets one, so a lost alert can never stay lost. Idempotent (it only
+    acts where the row is absent), so it is safe to run on a loop."""
+    sent = 0
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            rows = await (await conn.execute(
+                """SELECT c.claim_id FROM nidaan_claims c
+                    WHERE c.created_at > datetime('now', ?)
+                      AND COALESCE(c.archived,0)=0
+                      AND NOT EXISTS (SELECT 1 FROM nidaan_notifications n
+                                       WHERE n.claim_id = c.claim_id
+                                         AND n.event_key IN ('claim.filed.admin',
+                                                             'funnel.lead_filed.admin'))
+                    ORDER BY c.claim_id DESC LIMIT 25""",
+                (f"-{int(hours)} hours",))).fetchall()
+        for r in rows:
+            cid = dict(r)["claim_id"]
+            try:
+                await on_ops_claim_raised(cid, raised_by="recovered by the alert sweep")
+                sent += 1
+                logger.warning("MISSED CLAIM ALERT recovered for claim %s", cid)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("sweep could not alert claim %s: %s", cid, e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("sweep_missed_claim_alerts failed: %s", e)
+    return sent
 
 
 async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):

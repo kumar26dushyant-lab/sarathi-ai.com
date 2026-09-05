@@ -25448,6 +25448,23 @@ async def main():
                 await asyncio.sleep(12 * 3600)  # twice daily
         asyncio.create_task(branch_unpaid_loop())
 
+        # Step 6g1a1: SELF-HEAL missed claim alerts. Claim notifications fire from fire-and-forget
+        # tasks, so a deploy mid-flight silently loses them (this is what happened to claim #108).
+        # Every 20 min, any recent claim with no staff alert gets one. Idempotent.
+        async def claim_alert_sweep_loop():
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    n = await nnot.sweep_missed_claim_alerts()
+                    if n:
+                        logger.warning("Claim-alert sweep recovered %d missed alert(s)", n)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Claim-alert sweep error: %s", e)
+                await asyncio.sleep(1200)
+        asyncio.create_task(claim_alert_sweep_loop())
+
         # Step 6g1a2: PROACTIVE health watchdog. App Health only speaks when someone looks at it,
         # which is how the WhatsApp number sat dead for days. This runs the SAME checks and alerts
         # super-admins the moment a subsystem breaks (edge-triggered, so no repeat spam).
