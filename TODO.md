@@ -33,6 +33,20 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### 🔴 OWNER ACTION — DNS fix for email deliverability
+**Signup/login codes were sent successfully but never reached inboxes.** Root cause is DNS, not code: `nidaanpartner.com` publishes `v=spf1 include:_spf.google.com ~all`, which authorises **Google only**. Every mail sent through **Brevo** while claiming `From: info@nidaanpartner.com` fails SPF, so Gmail spam-folders it — which is why every send logged `Brevo ✓` yet nothing arrived. Brevo also has **0 send credits** and no `@nidaanpartner.com` validated sender (only a gmail address).
+- ✅ **Worked around in code:** delivery-critical mail (OTP/verification) now sends via the authenticated Google account so the envelope aligns, with `info@nidaanpartner.com` kept in **Reply-To**. Verified live: `SMTP ✓ ... from nidaanpartner@gmail.com`.
+- 🔴 **The real fix (DNS):** set SPF to `v=spf1 include:_spf.google.com include:spf.brevo.com ~all` and add Brevo's **DKIM** records, then validate `info@nidaanpartner.com` as a Brevo sender. After that, branded `From:` works on every transport and **all** Nidaan mail (not just OTPs) stops landing in spam. Brevo credits also need topping up (free tier = 300/day; **257 sent today**).
+
+### ✅ ClamAV on every upload (Sep 5)
+Type checks prove a file is a well-formed PDF; they cannot prove it is safe — and we pass documents on to insurers, hospitals and staff, so we are a **distribution point**. `clamav-daemon` installed with full definitions; `biz_av_scan.py` talks to clamd over its UNIX socket.
+- Scans **bytes in memory before anything touches disk** — an infected file never lands on the server.
+- **FAILS CLOSED**: scanner unreachable ⇒ upload refused, so knocking the scanner over cannot switch scanning off.
+- `validate_upload_scanned()` backs **all 10 storing upload paths**, so a future endpoint can't quietly skip it.
+- App Health gains a **Virus scanner** check (fail-closed means a dead clamd blocks uploads — must be loudly visible).
+- **Verified:** clean PDF allowed · **EICAR test virus BLOCKED** · scanner-down ⇒ refused.
+
+
 ### ✅ Sep 5 batch — CP, cache, uploads
 - ✅ **Partner Documents column was invisible — a CACHE bug, not a missing feature.** It shipped, but the shared component loads as `nidaan_partner_claims.js?v=2` and Cloudflare caches `/static` `max-age=604800, immutable`. Browsers got a 2-day-old copy (`cf-cache-status: HIT`) while the origin had the new one. Bumped to `?v=3`. **Rule: any change to a /static asset MUST bump its `?v=`** or nobody sees it. (`/nidaan/ops` itself is `DYNAMIC`, so page changes land immediately.)
 - ✅ **Stale WhatsApp alarm removed** — the legacy Evolution "no official numbers configured" check ran forever on a decommissioned subsystem; WhatsApp is Cloud API now (own green check). A permanent false alarm trains people to ignore the panel.
