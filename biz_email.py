@@ -152,13 +152,29 @@ async def send_email(to_email: str, subject: str, html_body: str,
             msg.attach(MIMEText(html_body, "html", "utf-8"))
             # Port 465 = implicit TLS; 587/others = STARTTLS. Many cloud hosts block 587
             # outbound, so 465 is the reliable path.
-            _implicit_tls = (_port == 465)
-            await aiosmtplib.send(
-                msg, hostname=_host, port=_port,
-                username=_user, password=_pass,
-                use_tls=_implicit_tls, start_tls=(not _implicit_tls), timeout=30)
-            logger.info("📧 SMTP ✓ '%s' → %s (from %s via %s)", subject, to_email, sender_email, _user)
-            return True
+            # Port 465 = implicit TLS; 587/others = STARTTLS. Cloud hosts commonly throttle or
+            # block outbound 587 — this box times out on it — so if the configured port fails to
+            # connect we retry once on 465 rather than reporting the mail undeliverable. Without
+            # this the "guaranteed" fallback below silently wasn't one.
+            _ports = [int(_port)]
+            if int(_port) != 465:
+                _ports.append(465)
+            _last = None
+            for _p in _ports:
+                try:
+                    _implicit_tls = (_p == 465)
+                    await aiosmtplib.send(
+                        msg, hostname=_host, port=_p,
+                        username=_user, password=_pass,
+                        use_tls=_implicit_tls, start_tls=(not _implicit_tls), timeout=30)
+                    logger.info("📧 SMTP ✓ '%s' → %s (from %s via %s:%d)",
+                                subject, to_email, sender_email, _user, _p)
+                    return True
+                except Exception as pe:
+                    _last = pe
+                    logger.warning("📧 SMTP port %d failed (%s)%s", _p, str(pe)[:80],
+                                   " — retrying on 465" if _p != _ports[-1] else "")
+            raise _last if _last else RuntimeError("smtp failed")
         except Exception as e:
             logger.error("📧 SMTP failed: '%s' → %s: %s", subject, to_email, e)
             return False
@@ -187,24 +203,12 @@ async def send_email(to_email: str, subject: str, html_body: str,
     _smtp_ready = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
     _smtp_aligned = _smtp_ready and (sender_email or "").lower() == (SMTP_USER or "").lower()
 
-    # DELIVERY-CRITICAL MAIL (login/verification codes) — arrival beats branding.
-    # nidaanpartner.com publishes SPF "v=spf1 include:_spf.google.com ~all": it authorises GOOGLE
-    # only. Anything sent through Brevo while claiming From: info@nidaanpartner.com therefore
-    # fails SPF and Gmail files it as spam — which is exactly why signup codes were "never
-    # received" even though every send logged Brevo ✓. Until Brevo is added to SPF/DKIM (see
-    # NOTE below), send these through the authenticated Google account so the envelope aligns,
-    # and put the branded address in Reply-To so replies still reach the team.
-    #
-    # NOTE FOR THE OWNER: once DNS has
-    #     v=spf1 include:_spf.google.com include:spf.brevo.com ~all   (+ Brevo DKIM records)
-    # this override stops being necessary and branded From works on every transport.
-    if delivery_critical and _smtp_ready and not _smtp_aligned:
-        _orig_sender = sender_email
-        sender_email = SMTP_USER
-        reply_addr = reply_addr or _orig_sender
-        _smtp_aligned = True
-        logger.info("📧 delivery-critical: sending as %s (SPF-aligned), reply-to %s",
-                    sender_email, reply_addr)
+    # NOTE: nidaanpartner.com is now authenticated for BOTH senders —
+    #   v=spf1 include:_spf.google.com include:spf.brevo.com ~all  + Brevo DKIM (brevo1/brevo2).
+    # So branded From: info@nidaanpartner.com passes SPF and DKIM on every transport, and we no
+    # longer force delivery-critical mail off Brevo. Instead it keeps the branded sender and gets
+    # a guaranteed last-resort retry at the bottom of this function if every transport fails
+    # (most likely Brevo's 300/day free allowance running out mid-day).
     if _smtp_aligned and await _smtp_send():
         return True
 
@@ -280,7 +284,27 @@ async def send_email(to_email: str, subject: str, html_body: str,
         if await _smtp_send():
             return True
 
-    logger.error("📧 Email failed on all transports: '%s' → %s", subject, to_email)
+    # ─── LAST RESORT for delivery-critical mail (login codes, verification, payment) ──────
+    # Everything above has failed — most often Brevo's 300/day free allowance running out
+    # mid-day. For these messages "failed to send" is not an acceptable outcome: the customer is
+    # sitting on a screen waiting for a code, or needs to know a payment failed. So re-send from
+    # the AUTHENTICATED Google account.
+    # From is REWRITTEN rather than spoofed on purpose: sending as info@nidaanpartner.com through
+    # an account that isn't a verified alias would either be rewritten by Gmail anyway or land in
+    # spam — which would defeat the whole point of a fallback. The branded address moves to
+    # Reply-To, so replies still reach the team.
+    if delivery_critical and _smtp_ready and \
+            (sender_email or "").lower() != (SMTP_USER or "").lower():
+        _branded = sender_email
+        sender_email = SMTP_USER          # read by _smtp_send() from this scope
+        reply_to = reply_to or _branded
+        logger.warning("📧 delivery-critical FALLBACK: re-sending '%s' → %s as %s "
+                       "(branded %s moved to Reply-To)", subject, to_email, SMTP_USER, _branded)
+        if await _smtp_send():
+            return True
+
+    logger.error("📧 Email failed on all transports: '%s' → %s%s", subject, to_email,
+                 "  [DELIVERY-CRITICAL]" if delivery_critical else "")
     return False
 
 
@@ -592,6 +616,8 @@ async def send_nidaan_subscription_email(
         f"Nidaan Partner — {info['label']} Plan Activated!",
         _wrap_nidaan_template("Subscription Activated", content),
         from_name="Nidaan Partner",
+        # Money: the customer paid and needs the confirmation to land, whatever Brevo's quota says.
+        delivery_critical=True,
     )
 
 
@@ -636,6 +662,8 @@ Reply to this email or use the chat on your dashboard.</p>"""
         to_email, f"Nidaan Partner — {title}",
         _wrap_nidaan_template("Auto-pay needs attention", content),
         from_name="Nidaan Partner",
+        # A failed auto-pay the customer never hears about becomes a silent lapsed subscription.
+        delivery_critical=True,
     )
 
 
