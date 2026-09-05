@@ -525,6 +525,8 @@ async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str
         _wrap_nidaan_template(title, content),
         from_name="Nidaan Partner",
         from_email=NIDAAN_FROM or None,
+        # A login link/code in the spam folder locks a partner out of their own portal.
+        delivery_critical=True,
     )
 
 
