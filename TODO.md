@@ -33,6 +33,19 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### ✅ Notification decision layer (Sep 5)
+`biz_nidaan_notify_policy.py` decides the **email leg per event AND per recipient**. Bell + Telegram are **never** suppressed — only email is downgraded, so nobody is left uninformed.
+- **Always email:** `payment.*`, `claim.doc*`, `doc.*`, `leave.*`, `health.*`, `cp.*`, `security.*`, `subscription.*`, `claim.filed*`, `claim.l2*`, `claim.review*`, `support.*` (founder: money, documents and leave must always trigger).
+- **Super-admins keep email on everything** — they're the backstop.
+- **Telegram + bell only:** `quick_task.comment`, `.comment_ack`, `.status`, `.created`, `.mention`, `claim_note.mention`.
+- **Unrecognised event ⇒ still emails.** Silence must be deliberate, never inherited by a new key. Policy is wrapped so it can never itself silence a real alert.
+- **Measured:** staff email **53/day → 26/day** (≈792/month saved, 50%). Less than before but honest — the 3 super-admins still receive chatter by design, and `leave.requested` (416/mo) is kept per instruction.
+- 🟢 Next: an ops screen showing the live policy (`summary()` already returns it) so the rules are visible rather than folklore.
+
+### 🔴 OWNER — Brevo/DNS handoff ready
+**`BREVO_DNS_SETUP_PROMPT.md`** — paste-ready for the Claude extension. Authenticates `nidaanpartner.com` in Brevo + Cloudflare (domain add, DKIM records, **SPF edited not duplicated**, verify, validate `info@` sender, report credits). Verification codes already work meanwhile via the Google transport.
+
+
 ### 🔴 OWNER ACTION — DNS fix for email deliverability
 **Signup/login codes were sent successfully but never reached inboxes.** Root cause is DNS, not code: `nidaanpartner.com` publishes `v=spf1 include:_spf.google.com ~all`, which authorises **Google only**. Every mail sent through **Brevo** while claiming `From: info@nidaanpartner.com` fails SPF, so Gmail spam-folders it — which is why every send logged `Brevo ✓` yet nothing arrived. Brevo also has **0 send credits** and no `@nidaanpartner.com` validated sender (only a gmail address).
 - ✅ **Worked around in code:** delivery-critical mail (OTP/verification) now sends via the authenticated Google account so the envelope aligns, with `info@nidaanpartner.com` kept in **Reply-To**. Verified live: `SMTP ✓ ... from nidaanpartner@gmail.com`.
