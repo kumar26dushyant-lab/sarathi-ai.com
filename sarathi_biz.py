@@ -3790,6 +3790,42 @@ def _doc_magic_ok(content: bytes) -> bool:
     return bool(_doc_ext_for(content))
 
 
+_IMAGE_EXTS = (".jpg", ".png", ".webp")
+
+
+def validate_upload(content: bytes, declared_mime: str = "", *, images_only: bool = False,
+                    max_bytes: int = _MAX_DOC_SIZE, what: str = "file") -> str:
+    """THE single gate every uploaded file must pass. Returns the canonical extension.
+
+    One helper on purpose: upload rules that live in each endpoint drift, and the weakest copy
+    becomes the way in. Every rule here is one an attacker must not be able to talk us out of:
+
+      • size      — bounded, so an upload can't fill the disk.
+      • bytes     — the file must REALLY be one of our allowed types. A declared Content-Type
+                    and a filename are both attacker-controlled; the magic bytes are not.
+      • extension — derived from those bytes, never the filename, so an HTML/JS payload cannot
+                    be stored as .html and served back as executable content on our origin.
+      • mime      — if the client declares one it must agree with our allow-list.
+
+    Combined with the serving guard (Content-Disposition: attachment, nosniff, CSP sandbox), a
+    hostile upload can at worst be downloaded — never rendered, never executed, never phished with.
+    """
+    if not content:
+        raise HTTPException(status_code=400, detail=f"The {what} is empty")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413,
+                            detail=f"{what.capitalize()} exceeds the {max_bytes // (1024*1024)} MB limit")
+    ext = _doc_ext_for(content)
+    if not ext or (images_only and ext not in _IMAGE_EXTS):
+        raise HTTPException(
+            status_code=415,
+            detail=("Please upload a real image (JPG, PNG or WebP)." if images_only
+                    else "That file is not a valid PDF, image or Word document."))
+    if declared_mime and declared_mime not in _ALLOWED_MIME:
+        raise HTTPException(status_code=415, detail="File type not allowed")
+    return ext
+
+
 @app.post("/nidaan/api/review/{purchase_id}/documents/upload")
 @limiter.limit("20/minute")
 async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: list[UploadFile] = File(...)):
@@ -4116,6 +4152,7 @@ async def nidaan_claim_messages(claim_id: int, request: Request):
 
 
 @app.post("/nidaan/api/claims/{claim_id}/messages")
+@limiter.limit("30/minute")
 async def nidaan_claim_message_send(claim_id: int, request: Request,
                                     content: str = Form(""),
                                     file: Optional[UploadFile] = File(None)):
@@ -4182,6 +4219,7 @@ async def ops_claim_message_unsend(claim_id: int, message_id: int, request: Requ
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/messages")
+@limiter.limit("60/minute")
 async def ops_claim_message_send(claim_id: int, request: Request,
                                  content: str = Form(""),
                                  file: Optional[UploadFile] = File(None)):
@@ -6747,18 +6785,17 @@ async def ops_me_profile(request: Request):
 
 
 @app.post("/nidaan/ops/api/me/profile-pic")
+@limiter.limit("10/minute")
 async def ops_me_profile_pic(request: Request, file: UploadFile = File(...)):
     """Upload/replace my profile photo (image only, ≤5 MB)."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request)
     if not (file.filename or ""):
         raise HTTPException(400, "No file")
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-        raise HTTPException(400, "Please upload an image (jpg, png, webp)")
     content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(413, "Image exceeds 5 MB")
+    # Was: extension taken from the client filename with no look at the bytes, so any content
+    # named x.jpg was stored and served back. Now the bytes decide, through the shared gate.
+    ext = validate_upload(content, images_only=True, max_bytes=5 * 1024 * 1024, what="image")
     import uuid as _uuid
     stored = f"avatar_{_uuid.uuid4().hex}{ext}"
     (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
@@ -8621,6 +8658,7 @@ async def ops_claim_notes_mark_read(claim_id: int, request: Request):
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/notes/{note_id}/attachments")
+@limiter.limit("30/minute")
 async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Request,
                                      files: Optional[list[UploadFile]] = File(None),
                                      file: Optional[UploadFile] = File(None)):
@@ -8639,9 +8677,9 @@ async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Reque
     saved: list[dict] = []
     for _f in _incoming:
         content = await _f.read()
-        if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(413, f"Attachment '{_f.filename}' exceeds 10 MB")
-        ext = os.path.splitext(_f.filename)[1][:10]
+        # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
+        # This previously trusted the client filename for the extension with no content check.
+        ext = validate_upload(content, (_f.content_type or ""), what="attachment")
         _stored = f"{_uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
         saved.append({"stored_name": _stored, "original_name": _f.filename})
@@ -8812,9 +8850,15 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
         raise HTTPException(status_code=404)
     _require_staff(request)
     raw = []
+    skipped_bad: list = []
     for f in (files or [])[:12]:
         b = await f.read()
         if not b or len(b) > 30 * 1024 * 1024:   # 30 MB per file cap
+            continue
+        # Confirm it really is a document/image before it reaches the PDF pipeline. Silently
+        # skipping (rather than erroring) matches the existing tolerant behaviour of this tool.
+        if not _doc_magic_ok(b):
+            skipped_bad.append(f.filename or "file")
             continue
         raw.append((f.filename or "file", b))
     if not raw:
@@ -8828,7 +8872,10 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
                             detail=f"Too many pages ({n}). Please split into batches of ≤{docsplit.MAX_PAGES}.")
     job = docsplit.save_job(pdf)
     documents = await docsplit.segment(pdf, n)
-    return {"job_id": job, "page_count": n, "documents": documents, "skipped": skipped}
+    # Report files rejected as not-a-real-document alongside the pipeline's own skips, so the
+    # staffer sees WHY something didn't make it in rather than silently losing a page.
+    return {"job_id": job, "page_count": n, "documents": documents,
+            "skipped": list(skipped or []) + skipped_bad}
 
 
 @app.get("/nidaan/ops/api/docsplit/{job}/thumb/{page}")
@@ -10172,6 +10219,7 @@ async def ops_quick_task_merge(qid: int, body: _QuickTaskMergeReq, request: Requ
 
 
 @app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")
+@limiter.limit("60/minute")
 async def ops_quick_task_note_add(qid: int, request: Request,
                                   note: str = Form(""),
                                   parent_note_id: Optional[int] = Form(None),
@@ -10201,9 +10249,9 @@ async def ops_quick_task_note_add(qid: int, request: Request,
     import uuid as _uuid
     for _f in _incoming:
         content = await _f.read()
-        if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(413, f"Attachment '{_f.filename}' exceeds 10 MB")
-        ext = os.path.splitext(_f.filename)[1][:10]
+        # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
+        # This previously trusted the client filename for the extension with no content check.
+        ext = validate_upload(content, (_f.content_type or ""), what="attachment")
         _stored = f"{_uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
         saved.append({"stored_name": _stored, "original_name": _f.filename})
