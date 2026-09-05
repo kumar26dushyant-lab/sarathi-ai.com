@@ -33,6 +33,19 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 ## 🟦 NIDAANPARTNER.COM
 
+### ✅ Claim alerts reaching nobody — root cause + self-heal (Sep 5)
+Claim **#108 produced ZERO staff notifications** while claims 101–106 each got the full 13. Cause: `on_claim_filed` runs in a **fire-and-forget asyncio task** and did the SUBSCRIBER dispatch first — that sends an email and took ~3s. #108 was filed inside that window **during a deploy**, so the process restarted before the admin loop ran and all 13 staff alerts vanished silently; nothing retried, nothing recorded them as missing.
+- ✅ **Order fixed** — staff first (a fast local insert), subscriber second. Added the **Telegram mirror** the subscriber-filed path never had (only branch/ops had it) — which is why no Telegram arrived either.
+- ✅ **Self-heal** — `sweep_missed_claim_alerts()` on a 20-min worker loop finds any recent claim with no `claim.filed.admin` row and sends it. Idempotent. **It recovered 4 claims on first run** (incl. #108), so this had been silently biting more than once.
+
+### ✅ Associate referrer on My Business claims (founder Sep 5)
+Staff contacts inside insurers/agencies send us business but don't want to appear as subscribers, so their introduction was invisible — no way to settle commission or track who refers whom. Added: content key **`associate_referrers`** (ops → Content, super-admin, one name per line — curated, not free text), `nidaan_claims.associate_referrer`, a dropdown on the My Business claim form (hidden entirely while the roster is empty), and **"🤝 via \<name\>" in the Source / Who column**. **OWNER:** add the names in ops → Content to switch the dropdown on.
+- 🔒 **Privacy catch:** `public_content()` backs an **unauthenticated** homepage endpoint and would have published the whole roster — the exact names these agents want off the record. Added `_PRIVATE_CONTENT_KEYS`; verified live the roster is absent from `/nidaan/api/content`.
+
+### ✅ Journal purged after the credential-logging fix (Sep 5)
+118 leaked secret lines → **0**, 1.7 GB freed, 12h of operational logs kept. Rotation judged **unnecessary** on evidence: backups carry no logs, the journal is root-only, the app user can't read it, there are no other human shell accounts — and `biz.env` already holds the same secrets in plaintext readable by that same root, so the logging widened *where* the secret sat, not *who* could reach it.
+
+
 ### 🔴 SECURITY — OWNER ACTION REQUIRED: rotate two credentials
 Found in the Sep 4 review: HTTP client libraries log every request URL at INFO, and **both Meta Graph and Google Gemini take their credential as a QUERY PARAMETER**. So the systemd journal contained live secrets — **10 `access_token=` (WhatsApp) and 64 `key=AIza` (Gemini) lines over 30 days** — and therefore so does every log backup / shipper. The WhatsApp token alone can message the entire customer base *as NidaanPartner*.
 - ✅ **Future leakage stopped** — request-URL logging silenced for httpx/httpcore/urllib3/openai/google_genai. Verified live: the same credentialed calls now print **0** secrets.
