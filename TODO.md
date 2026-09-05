@@ -42,7 +42,14 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - **Measured:** staff email **53/day → 26/day** (≈792/month saved, 50%). Less than before but honest — the 3 super-admins still receive chatter by design, and `leave.requested` (416/mo) is kept per instruction.
 - 🟢 Next: an ops screen showing the live policy (`summary()` already returns it) so the rules are visible rather than folklore.
 
-### 🔴 OWNER — Brevo/DNS handoff ready
+### ✅ Email deliverability + guaranteed fallback (Sep 5, DONE)
+**DNS is authenticated** (owner completed): SPF is a single record `v=spf1 include:_spf.google.com include:spf.brevo.com ~all`, Brevo DKIM CNAMEs (`brevo1`/`brevo2`) live, `info@nidaanpartner.com` verified as a Brevo sender. Branded mail now passes SPF **and** DKIM.
+- ✅ **Branding restored** — delivery-critical mail is no longer forced off Brevo; it keeps `From: info@nidaanpartner.com`.
+- ✅ **Guaranteed fallback** — if every transport fails (most likely Brevo's 300/day free cap mid-day), delivery-critical mail is re-sent from the authenticated Google account with the branded address moved to Reply-To. Covers **login codes, verification codes, branch login links, subscription-activated and auto-pay-failed**.
+- 🔴 **Testing found the fallback was a lie** — with Brevo simulated exhausted it did NOT deliver: `aiosmtplib` timed out on `smtp.gmail.com:587`, which this host throttles. The code's own comment already said 465 is the reliable path on cloud hosts. `_smtp_send` now retries on 465 when the configured port fails. **Re-verified: Brevo-down ⇒ still delivered.**
+- 🟢 Brevo free tier is 300/day and hit 0 on 5 Sep. The fallback covers critical mail, but bulk/notification mail still needs a top-up or paid plan.
+
+### ✅ OWNER — Brevo/DNS handoff (COMPLETED)
 **`BREVO_DNS_SETUP_PROMPT.md`** — paste-ready for the Claude extension. Authenticates `nidaanpartner.com` in Brevo + Cloudflare (domain add, DKIM records, **SPF edited not duplicated**, verify, validate `info@` sender, report credits). Verification codes already work meanwhile via the Google transport.
 
 
