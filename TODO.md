@@ -42,6 +42,21 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - **Measured:** staff email **53/day → 26/day** (≈792/month saved, 50%). Less than before but honest — the 3 super-admins still receive chatter by design, and `leave.requested` (416/mo) is kept per instruction.
 - 🟢 Next: an ops screen showing the live policy (`summary()` already returns it) so the rules are visible rather than folklore.
 
+### ✅ WhatsApp Inbox — structured chats, bot/human visibility, takeover (Sep 7, DONE)
+The WhatsApp panel showed one flat table of the last 25 messages across every number. Now: conversation list + thread + takeover + reply-from-ops. Building it surfaced three real defects, all fixed:
+- 🔴 **Outbound was NEVER logged.** `nidaan_wa_messages` held 27 inbound rows and **zero** outbound — every reply the bot ever sent was invisible and "Messages sent" had always read 0. Logging moved into `_post()`, the single choke point every send passes through. Failed sends log too (a message the customer never got must be visible).
+- 🔴 **Takeover could not mute a claimless chat.** `human_takeover` lived only on `nidaan_wa_claim_settings`, so a prospect or branch — no claim to hang it off — kept getting AI replies after being handed to a human. Takeover now belongs to the conversation (msisdn); the document-reminder loop respects it too.
+- 🔴 **No way to answer.** Staff had to open WhatsApp on a phone. They can now reply from ops, attributed to the real person even under impersonation; the first hand-typed reply takes the chat over automatically.
+- Consent is checked **before** connection state — whether WhatsApp happens to be configured must never decide whether we honour a STOP. The 24h reply window is shown with time left and refuses sends WhatsApp would drop.
+- Access: inbox = `sub_super_admin` (takeover needs available humans); settings + campaigns stay `super_admin`.
+- Verified on the server against a throwaway DB: 12 inbox checks + 5 outbound-logging checks pass. Live smoke test returns real conversations with identity resolution.
+- 🟡 Open: no template-send from the inbox yet (closed-window chats must go via Bulk campaign); inbox copy is English-only like the rest of ops.
+
+### ✅ Payment failures audited (Sep 7) — none were ours
+13 failures in 30 days, **every one user- or bank-side**: 8 timeouts/cancellations, 2 insufficient balance, 1 wrong OTP, 1 bank decline, 1 unconfirmed autopay mandate. Zero Razorpay errors in the logs, all 41 payments `verified=1`, watchdog reports no stuck and no mismatched rows — no money taken without being recorded.
+- 🔴 **The real gap is recovery, not failure:** only **4 of 13** got a retry link, because `_send_customer_retry_link` needs an email and 9 of them were phone-only. Retry email is now `delivery_critical`; **a WhatsApp/SMS retry for phone-only customers is still missing** and is the highest-value fix here.
+- 🟡 One failed payment fans out **14 staff emails** (all 13 staff + the customer's retry). Worth narrowing to super-admins + the assigned owner.
+
 ### ✅ Email deliverability + guaranteed fallback (Sep 5, DONE)
 **DNS is authenticated** (owner completed): SPF is a single record `v=spf1 include:_spf.google.com include:spf.brevo.com ~all`, Brevo DKIM CNAMEs (`brevo1`/`brevo2`) live, `info@nidaanpartner.com` verified as a Brevo sender. Branded mail now passes SPF **and** DKIM.
 - ✅ **Branding restored** — delivery-critical mail is no longer forced off Brevo; it keeps `From: info@nidaanpartner.com`.

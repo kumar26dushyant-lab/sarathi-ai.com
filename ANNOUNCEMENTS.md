@@ -1,5 +1,43 @@
 # Staff Announcement Drafts
 
+## 2026-09-07 — New: WhatsApp Inbox (see every chat, take one over when it needs you)
+
+**Title (EN):**
+📥 New WhatsApp Inbox — see every chat, and take one over when it needs a person
+
+**Details (EN):**
+Team, the **💬 WhatsApp Automation** screen in ops now opens with a proper **Inbox**. Each customer is one conversation you can read top to bottom, instead of a mixed list of recent messages.
+
+What you can now do:
+• **See who is replying.** Every message says who sent it — **AI assistant**, a **team member** (by name), a **campaign**, or an **automatic update**. You can read exactly what the AI told a customer.
+• **Take a chat over.** Press **"I will take over"** and the AI stops replying to that person straight away — including reminders for documents. When you are done, press **"Give back to the AI"**. Simply typing a reply also takes the chat over, so the customer never hears two voices at once.
+• **Reply yourself, from ops.** No need to open WhatsApp on your phone. Your reply goes out from the NidaanPartner number with your name recorded against it.
+• **Know if you can reply.** WhatsApp only lets us send a normal message for **24 hours** after the customer last writes. The screen shows the time left, and stops you sending after that instead of a message quietly failing.
+• **Filter fast** — All chats · Waiting for a reply · A person is handling · AI is handling · Opted out.
+
+Please pick up anything under **"Waiting for a reply"** during the day. Works on your phone too.
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📥 नया WhatsApp Inbox — हर चैट देखें, और ज़रूरत हो तो खुद संभालें
+
+**Details (HI):**
+टीम, ops की **💬 WhatsApp Automation** स्क्रीन अब एक असली **Inbox** के साथ खुलती है। हर ग्राहक की पूरी बातचीत एक जगह पढ़ी जा सकती है — पहले की तरह सिर्फ़ हाल के संदेशों की मिली-जुली लिस्ट नहीं।
+
+अब आप क्या कर सकते हैं:
+• **देखें कि जवाब कौन दे रहा है।** हर संदेश पर लिखा होता है कि उसे किसने भेजा — **AI assistant**, कोई **team member** (नाम के साथ), कोई **campaign**, या **automatic update**। AI ने ग्राहक से क्या कहा, वह आप पढ़ सकते हैं।
+• **चैट खुद संभालें।** **"I will take over"** दबाएँ — AI तुरंत उस व्यक्ति को जवाब देना बंद कर देगा, दस्तावेज़ के रिमाइंडर भी। काम पूरा हो जाए तो **"Give back to the AI"** दबाएँ। सिर्फ़ जवाब टाइप करने से भी चैट आपके पास आ जाती है, ताकि ग्राहक को दो अलग-अलग जवाब न मिलें।
+• **ops से ही जवाब दें।** फ़ोन पर WhatsApp खोलने की ज़रूरत नहीं। जवाब NidaanPartner नंबर से जाएगा और उस पर आपका नाम दर्ज रहेगा।
+• **जानें कि जवाब भेजा जा सकता है या नहीं।** ग्राहक के आख़िरी संदेश के बाद WhatsApp सिर्फ़ **24 घंटे** तक सामान्य संदेश भेजने देता है। स्क्रीन पर बचा हुआ समय दिखता है, और समय ख़त्म होने पर भेजने से रोक देती है — ताकि कोई संदेश चुपचाप फ़ेल न हो।
+• **तेज़ी से छाँटें** — All chats · Waiting for a reply · A person is handling · AI is handling · Opted out।
+
+दिन में **"Waiting for a reply"** वाली चैट ज़रूर उठाएँ। यह आपके फ़ोन पर भी चलता है।
+पढ़ने के बाद 👍 करें; कुछ अस्पष्ट हो तो ऑफ़िस IT SPOC से पूछें।
+
+_Suggested roles: Super admins + Admins (sub-super-admins) — the inbox is open to them._
+
+---
+
 ## 2026-09-03 — New: one Claim Pipeline (see every claim by stage)
 
 **Title (EN):**

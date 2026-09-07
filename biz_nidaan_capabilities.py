@@ -27,6 +27,18 @@ from __future__ import annotations
 ROLE_RANK = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
 
 CAPABILITIES: list[dict] = [
+    # ── WhatsApp inbox ───────────────────────────────────────────
+    {
+        "id": "wa_inbox",
+        "en": {"t": "Read every WhatsApp chat in one place",
+               "d": "Each customer is one conversation, not a row in a log. You can see whether "
+                    "the AI or a person is replying, read exactly what the AI said, and take a "
+                    "chat over yourself — the AI then stops replying until you hand it back."},
+        "hi": {"t": "हर WhatsApp चैट एक जगह पढ़ें",
+               "d": "हर ग्राहक की एक पूरी बातचीत दिखती है। आप देख सकते हैं कि AI जवाब दे रहा है या कोई व्यक्ति, "
+                    "AI ने क्या कहा वह पढ़ सकते हैं, और चैट खुद संभाल सकते हैं — फिर AI जवाब देना बंद कर देता है।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
     # ── Everyday task work ────────────────────────────────────────────────
     {
         "id": "tasks_pending_with_me",
