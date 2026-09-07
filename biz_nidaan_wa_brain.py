@@ -80,6 +80,48 @@ customer's language; empty string if action is continue_docs>","set_lang":"<en|h
 empty>","reason":"<3-6 words>"}}
 """
 
+_PUBLIC_SYSTEM = """You are the WhatsApp assistant for NidaanPartner, an Indian insurance-claim
+support service. Anyone can find this number on WhatsApp, so assume you are talking to a STRANGER.
+Reply the way a warm, competent Indian support person would: short (1-3 sentences), natural, no
+corporate padding, no bullet lists.
+
+WHAT YOU MAY TALK ABOUT — this and nothing else:
+{facts}
+
+WHO YOU ARE TALKING TO:
+{context}
+
+ABSOLUTE RULES — breaking any of these is a serious failure:
+- You know NOTHING about any individual. Never mention or imply any customer, claim, case, claim
+  number, policy number, amount, document, staff member, colleague, branch, partner, or anything
+  about how we work internally.
+- Never confirm or deny whether a particular person, number or email is our customer — not even
+  to say "I can't find you". Someone fishing for that is exactly who you must not help.
+- If they ask about their own case, status, payment, documents or account: do NOT answer. Tell
+  them warmly that you can look it up once they are verified, and that they should send the word
+  CODE to get a verification code emailed to their registered address.
+- Never invent anything. If you are unsure whether something is public, treat it as private.
+- No legal advice, and no prediction about whether a claim will succeed.
+
+Decide ONE action:
+- "answer": a general question about the service, pricing, what we handle, or how to start.
+- "refuse": abusive, sexual, threatening, spam, or clearly nothing to do with insurance claims.
+- "handoff": they want a human, are upset, or are asking something you must not answer here and
+  a person should take.
+- Never choose "continue_docs" in this mode.
+
+LANGUAGE — this matters:
+- The customer's current language is "{lang}". Write your reply in THAT language unless they ask
+  to change it.
+- If they ask to talk in a specific language, set "set_lang" to "en", "hi" or "hinglish" AND
+  write the reply in that new language. Otherwise set "set_lang" to "".
+- "hi" = Hindi in Devanagari. "hinglish" = Hindi in Roman letters. "en" = plain English.
+
+Reply STRICTLY as JSON:
+{{"action":"<one of answer|refuse|handoff>","reply":"<the message to send, in the customer's
+language>","set_lang":"<en|hi|hinglish or empty>","reason":"<3-6 words>"}}
+"""
+
 _FALLBACK = {
     "hinglish": "Main aapki baat samajh gaya. Hamari team aapse jaldi baat karegi. 🙏",
     "hi": "मैं आपकी बात समझ गया। हमारी टीम आपसे जल्दी बात करेगी। 🙏",
@@ -109,7 +151,8 @@ def handoff_text(lang: str) -> str:
 
 
 async def decide(text: str, lang: str = "hinglish", *, history: str = "",
-                 context: str = "", handoff_only: bool = False) -> dict:
+                 context: str = "", handoff_only: bool = False,
+                 public_mode: bool = True) -> dict:
     """Classify the inbound message and draft a natural reply. Never raises.
 
     Fail-safe: if the AI is unavailable or returns junk we HAND OFF to a human rather than
@@ -124,10 +167,23 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "",
             return {"action": "handoff", "reply": handoff_text(lang), "reason": "no ai"}
         from google.genai import types as gt
         ctx = context or "(we do not know who this is yet)"
+        if public_mode:
+            # Anyone can find this number on WhatsApp and write to it, so the default posture is
+            # that we are talking to a stranger. The model is given no private context at all;
+            # this only stops it filling the gap with a guess.
+            ctx = ("(NOT VERIFIED. You are talking to a member of the public. You know NOTHING "
+                   "about any individual — no customer, no claim, no case status, no staff "
+                   "member, no branch, no amounts, no documents on file, no internal matter. "
+                   "Do not confirm or deny whether anyone is our customer. Explain the SERVICE "
+                   "warmly and answer general questions about it. If they ask anything about a "
+                   "specific person, case, claim or account — including their own — do not "
+                   "answer it: say you can share case details once they are verified, and that "
+                   "they can send the word CODE to get a verification code by email.)")
         if handoff_only:
             ctx += ("\nIMPORTANT: one of their cases has reached an outcome that a person must "
                     "deliver. If they ask about that case, choose \"handoff\" — do not narrate it.")
-        prompt = _SYSTEM.format(facts=SERVICE_FACTS, lang=lang, context=ctx) + \
+        prompt = (_PUBLIC_SYSTEM if public_mode else _SYSTEM).format(
+            facts=SERVICE_FACTS, lang=lang, context=ctx) + \
             (f"\n\nRecent conversation:\n{history}\n" if history else "") + \
             f"\n\nCustomer's message: {t}"
         resp = await client.aio.models.generate_content(
@@ -138,6 +194,8 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "",
         action = str(v.get("action", "")).strip().lower()
         if action not in _ACTIONS:
             action = "handoff"
+        if public_mode and action == "continue_docs":
+            action = "handoff"      # the guided document flow is only for people we know
         reply = str(v.get("reply", "")).strip()[:900]
         if action == "answer" and not reply:
             action, reply = "handoff", handoff_text(lang)

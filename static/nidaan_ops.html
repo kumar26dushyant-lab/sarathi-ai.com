@@ -10152,6 +10152,7 @@ async function loadWhatsapp(){
       <button class="wai-chip" aria-pressed="false" onclick="waiScope('unread',this)">Waiting for a reply</button>
       <button class="wai-chip" aria-pressed="false" onclick="waiScope('human',this)">A person is handling</button>
       <button class="wai-chip" aria-pressed="false" onclick="waiScope('bot',this)">AI is handling</button>
+      <button class="wai-chip" aria-pressed="false" onclick="waiScope('verified',this)">Verified</button>
       <button class="wai-chip" aria-pressed="false" onclick="waiScope('stopped',this)">Opted out</button>
     </div>
     <div class="wai-grid" id="waiGrid" data-view="list" style="margin-bottom:1.3rem">
@@ -10176,9 +10177,58 @@ async function loadWhatsapp(){
       <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
     </div>
 
+    <details style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.9rem 1rem;margin-bottom:1.2rem">
+      <summary style="cursor:pointer;font-weight:800;font-size:.95rem;list-style:none">🔒 How the bot keeps customer information safe <span style="font-size:.74rem;color:var(--nd-text-faint);font-weight:400">&mdash; read this once</span></summary>
+      <div style="font-size:.83rem;color:var(--nd-text-secondary);line-height:1.75;margin-top:.7rem">
+        Anyone in India can search this number on WhatsApp and start chatting. So the bot works in <b>two modes</b>:
+        <div style="margin:.6rem 0;padding:.6rem .8rem;border-left:3px solid rgba(148,163,184,.5);background:rgba(148,163,184,.08);border-radius:0 8px 8px 0">
+          <b>🔒 Not verified (everyone, by default)</b><br>
+          The bot only explains what NidaanPartner does, what we handle, what it costs and how to start.
+          It will <b>not</b> reveal anything about any customer, claim, payment, document, staff member or branch &mdash;
+          and it will not even confirm whether someone is our customer.
+        </div>
+        <div style="margin:.6rem 0;padding:.6rem .8rem;border-left:3px solid rgba(34,197,94,.6);background:rgba(34,197,94,.08);border-radius:0 8px 8px 0">
+          <b>✅ Verified (earned, and only for 12 hours)</b><br>
+          When a customer, subscriber, branch or staff member asks about their own case, the bot emails a
+          <b>6-digit code to the email address on their record</b> &mdash; not to their phone. Once they send that code
+          back on WhatsApp, the bot can discuss their case for 12 hours, then it locks again.
+        </div>
+        <b>Why the email and not the phone?</b> Phone numbers get recycled by operators, SIMs get swapped, and
+        phones get shared at home and in offices. The email on the account is something the person holding the
+        SIM does not automatically have &mdash; that is what makes it proof.
+        <br><br>
+        <b>What you must do:</b> the same rule applies to you. If a chat shows <b>🔒 Not verified</b>, do not
+        type claim, payment, document or account details into it &mdash; ask the person to send the word <b>CODE</b> first.
+        The badge on every conversation tells you which mode it is in.
+        <br><br>
+        <span style="color:var(--nd-text-faint)">Behind the scenes the bot is also checked on the way out: if it ever tries to send a claim number, an email, a phone number, a branch code or an amount to an unverified chat, that message is blocked and replaced automatically.</span>
+      </div>
+    </details>
+
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
       <div class="section-title" style="font-size:1rem;margin-bottom:.2rem">📣 Bulk campaign</div>
       <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">Sends to <b>opted-in</b> contacts only (anyone who replied STOP is always skipped). Contacts in an open 24-hour chat get the full message now; others need an <b>approved template</b> name (cold sends). Leave the template blank to reach only currently-active chats.</div>
+
+      <details style="margin:0 0 .9rem;border:1px solid var(--nd-border);border-radius:10px;padding:.7rem .85rem;background:var(--nd-bg-surface-2)">
+        <summary style="cursor:pointer;font-weight:800;font-size:.86rem;list-style:none">📋 How to run a campaign &mdash; step by step</summary>
+        <ol style="font-size:.83rem;color:var(--nd-text-secondary);line-height:1.8;margin:.7rem 0 0;padding-left:1.3rem">
+          <li><b>Decide who you are writing to.</b> Set <b>Segment</b> &mdash; <i>All contacts</i>, <i>Has a claim</i> (existing customers) or <i>No claim</i> (prospects) &mdash; and <b>Audience lang</b> if you only want people who chat in one language.</li>
+          <li><b>Press &ldquo;👁 Preview audience&rdquo;.</b> It tells you exactly how many opted-in people match. <b>If this says 0, stop</b> &mdash; your filters are too narrow, or nobody has opted in yet.</li>
+          <li><b>Pick the message.</b> <b>Message</b> is what people in an <i>open chat</i> receive (they messaged us in the last 24 hours). Choose <i>Value / re-engage</i> or <i>Welcome</i>.</li>
+          <li><b>Add the template name for everyone else.</b> Anyone who has <i>not</i> written to us in the last 24 hours can only be reached with a <b>template Meta has approved</b> (for example <code>np_intro_value</code>). Type that name in <b>Template name (cold)</b>.
+            <div style="color:var(--nd-text-faint);margin:.25rem 0">Leave it blank and those people are simply <b>skipped</b> &mdash; they are counted under &ldquo;Skipped&rdquo;, not lost.</div></li>
+          <li><b>Set the language</b> of the message itself in <b>Language</b> (Hinglish, हिंदी or English).</li>
+          <li><b>Always send yourself a test first.</b> Put your own number in <b>Test to</b> and press <b>✈ Send test</b>. Read it on your phone. A campaign cannot be recalled once it goes out.</li>
+          <li><b>Name the campaign</b> something you will recognise later (&ldquo;Reactivation Sept&rdquo;), then press <b>📣 Launch campaign</b> and confirm.</li>
+          <li><b>Watch the table below.</b> <b>Sent</b> = delivered to WhatsApp · <b>Skipped</b> = opted out, or no open chat and no template · <b>Failed</b> = WhatsApp rejected it. Status moves from ⏳ running to ✅ done.</li>
+        </ol>
+        <div style="font-size:.8rem;margin-top:.8rem;padding:.6rem .75rem;background:var(--nd-warning-soft);border:1px solid var(--nd-warning-line);border-radius:8px;color:var(--nd-warning-text)">
+          <b>Rules that protect the number.</b> Anyone who replied STOP is never messaged again &mdash; that is automatic and cannot be overridden. Send campaigns people actually want: too many complaints and Meta lowers our quality rating, and a bad enough rating gets the number blocked. One good campaign a month beats four ignored ones.
+        </div>
+        <div style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.6rem">
+          <b>Campaigns never include private details.</b> They send the same wording to everyone, so never write a claim number, an amount or one person&rsquo;s case into a campaign message.
+        </div>
+      </details>
       <div style="display:flex;gap:1.1rem;flex-wrap:wrap;align-items:end;font-size:.84rem">
         <label>Campaign name<br><input id="wcName" type="text" placeholder="e.g. Reactivation Sept" style="width:170px"></label>
         <label>Message<br><select id="wcKind">
@@ -10299,6 +10349,8 @@ function _waiStyles(){
   .wai-b-bot{background:rgba(34,211,238,.16);color:var(--nd-cyan-text);border:1px solid rgba(34,211,238,.32)}
   .wai-b-hum{background:rgba(168,85,247,.16);color:var(--nd-purple-text);border:1px solid rgba(168,85,247,.32)}
   .wai-b-stop{background:rgba(239,68,68,.14);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.3)}
+  .wai-b-ver{background:rgba(34,197,94,.16);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.32)}
+  .wai-b-pub{background:rgba(148,163,184,.16);color:var(--nd-text-muted);border:1px solid rgba(148,163,184,.32)}
   .wai-unread{background:var(--nd-accent);color:#04121f;font-weight:800;font-size:.64rem;border-radius:999px;padding:.05rem .38rem}
   .wai-msgs{height:430px;overflow-y:auto;padding:.9rem;display:flex;flex-direction:column;gap:.55rem;background:var(--nd-bg-base-2)}
   .wai-b{max-width:78%;padding:.5rem .7rem;border-radius:12px;font-size:.83rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--nd-text-primary)}
@@ -10369,6 +10421,9 @@ async function waiLoadList(keepSel){
       ? '<span class="wai-badge wai-b-hum">With '+esc((c.assigned_name||'a person').split(' ')[0])+'</span>'
       : '<span class="wai-badge wai-b-bot">AI is replying</span>';
     const stop = c.status==='stopped' ? ' <span class="wai-badge wai-b-stop">Opted out</span>' : '';
+    const ver = (c.verified && c.verified.ok)
+      ? '<span class="wai-badge wai-b-ver">Verified '+esc(c.verified.role||'')+'</span>'
+      : '<span class="wai-badge wai-b-pub">Not verified</span>';
     const un = (c.unread||0) > 0 ? '<span class="wai-unread">'+c.unread+'</span>' : '';
     const dir = c.last_dir==='in' ? '' : '<span style="color:var(--nd-text-faint)">You: </span>';
     const claim = c.claim_id ? '<span class="wai-badge" style="background:var(--nd-bg-surface-3);color:var(--nd-text-secondary);border:1px solid var(--nd-border)">Claim #'+c.claim_id+'</span>' : '';
@@ -10379,7 +10434,7 @@ async function waiLoadList(keepSel){
       +     '<div class="wai-nm">'+esc(nm)+'</div><div class="wai-when">'+_waiTime(c.last_at)+' '+un+'</div>'
       +   '</div>'
       +   '<div class="wai-pv">'+dir+esc(c.preview||'—')+'</div>'
-      +   '<div style="margin-top:.3rem;display:flex;gap:.3rem;flex-wrap:wrap">'+owner+stop+claim+'</div>'
+      +   '<div style="margin-top:.3rem;display:flex;gap:.3rem;flex-wrap:wrap">'+owner+ver+stop+claim+'</div>'
       + '</div></div>';
   }).join('');
   if (!keepSel && !_waiSel && list.length && window.innerWidth > 820) waiOpen(list[0].msisdn);
@@ -10421,6 +10476,10 @@ async function waiOpen(msisdn){
       : '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-warning-line);color:var(--nd-warning-text);padding:.55rem .7rem;border-radius:10px;font-size:.78rem">The 24-hour reply window has closed. WhatsApp will not deliver a normal message now — reach them with an approved template from <b>Bulk campaign</b> below.</div>';
 
   const canType = w.open && !stopped;
+  const vv = c.verified || {};
+  const verifyNote = vv.ok
+    ? '<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--nd-success-text);padding:.5rem .7rem;border-radius:10px;font-size:.78rem">✅ <b>Identity confirmed</b> — this person entered the code we emailed to their registered address ('+esc(vv.role||'')+'). It is safe to discuss their case.</div>'
+    : '<div style="background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.32);color:var(--nd-text-secondary);padding:.5rem .7rem;border-radius:10px;font-size:.78rem">🔒 <b>Not verified</b> — this number has not proved who it belongs to, so the AI only shares public information about NidaanPartner. <b>Do not send claim, payment, document or account details until they verify.</b> Ask them to send the word <b>CODE</b> — we email a 6-digit code to the address on their record.</div>';
   const ownerBar = isHuman
     ? '<span class="wai-badge wai-b-hum" style="padding:.25rem .6rem">'+esc(c.assigned_name||'A person')+' is handling this</span>'
       + '<button class="btn-sm btn-ghost" onclick="waiOwner(false)">Give back to the AI</button>'
@@ -10440,6 +10499,7 @@ async function waiOpen(msisdn){
     + '</div>'
     + '<div class="wai-msgs" id="waiMsgs">'+bubbles+'</div>'
     + '<div style="padding:.7rem .9rem;border-top:1px solid var(--nd-border);display:flex;flex-direction:column;gap:.5rem">'
+    +   verifyNote
     +   windowNote
     +   (!isHuman && canType ? '<div style="font-size:.74rem;color:var(--nd-text-faint)">Sending a message here takes the conversation over, so the AI stops replying.</div>' : '')
     +   '<div style="display:flex;gap:.5rem;align-items:flex-end">'

@@ -6242,7 +6242,7 @@ async def nidaan_ops_wa_conversations(request: Request, scope: str = "all", limi
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
     import biz_nidaan_wa_inbox as _inbox
-    scope = scope if scope in ("all", "unread", "human", "bot", "stopped") else "all"
+    scope = scope if scope in ("all", "unread", "human", "bot", "stopped", "verified") else "all"
     return {"conversations": await _inbox.conversations(limit=limit, scope=scope),
             "counters": await _inbox.counters()}
 
@@ -25707,9 +25707,15 @@ async def main():
         async def payment_watch_loop():
             import biz_nidaan_payment_watch as _pw
             await asyncio.sleep(200)  # let startup settle
+            _tick = 0
             while True:
                 try:
                     await _pw.run_payment_health_check()
+                    # Chase unrecovered failures hourly, on Telegram only. Money noise belongs
+                    # where it is instant and free; the 15-min cadence would be nagging.
+                    _tick += 1
+                    if _tick % 4 == 0:
+                        await _pw.chase_unrecovered_failures()
                 except asyncio.CancelledError:
                     break
                 except Exception as e:

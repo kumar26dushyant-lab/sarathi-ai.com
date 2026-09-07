@@ -1,10 +1,13 @@
 """
 NidaanPartner WhatsApp — WHO IS THIS, AND WHAT MAY THEY BE TOLD.
 
-WhatsApp guarantees the message genuinely came from that number (Meta verifies possession), so a
-number that matches our records is an authenticated identity — the same factor an SMS OTP proves,
-without the friction. That lets the bot actually SERVE people instead of dead-ending into "our
-team will contact you".
+A number that matches our records tells us who this person PROBABLY is. It does not prove it.
+Operators recycle numbers, SIMs get swapped, and handsets get shared inside a family or an
+office — and what sits behind these roles is other people's insurance claims, by name. So a phone
+match now only makes someone a CANDIDATE: `resolve()` returns `verified: False`, and nothing
+private is released until they enter a code sent to the registered email on the account
+(`biz_nidaan_wa_auth`). Until then the conversation runs in public mode, where the bot explains
+the service and nothing else.
 
 Roles we resolve, in priority order:
   complainant — the number on a claim (they may hear about THEIR claims)
@@ -85,7 +88,7 @@ async def resolve(msisdn: str) -> dict:
                 "ORDER BY claim_id DESC LIMIT 10", (like, like))).fetchall()
             if rows:
                 rs = [dict(r) for r in rows]
-                out.update(role="complainant", verified=True,
+                out.update(role="complainant", verified=False,
                            name=(rs[0].get("complainant_name") or rs[0].get("insured_name") or ""),
                            claim_ids=[r["claim_id"] for r in rs])
                 return out
@@ -96,7 +99,7 @@ async def resolve(msisdn: str) -> dict:
                 "LIMIT 1", (like,))).fetchone()
             if a:
                 a = dict(a)
-                out.update(role="subscriber", verified=True, name=a.get("owner_name") or "",
+                out.update(role="subscriber", verified=False, name=a.get("owner_name") or "",
                            account_id=a.get("account_id"))
                 return out
             # 3) Branch / My-Business partner.
@@ -106,7 +109,7 @@ async def resolve(msisdn: str) -> dict:
                 (like,))).fetchone()
             if b:
                 b = dict(b)
-                out.update(role="branch", verified=True, name=b.get("name") or b.get("branch_code"),
+                out.update(role="branch", verified=False, name=b.get("name") or b.get("branch_code"),
                            branch_code=b.get("branch_code"))
                 return out
             # 4) Internal staff — they work from the Telegram office bot, not here.
@@ -115,19 +118,26 @@ async def resolve(msisdn: str) -> dict:
                 "AND REPLACE(REPLACE(COALESCE(phone,''),' ',''),'-','') LIKE ? LIMIT 1", (like,))).fetchone()
             if s:
                 s = dict(s)
-                out.update(role="staff", verified=True, name=s.get("name") or "",
+                out.update(role="staff", verified=False, name=s.get("name") or "",
                            staff_id=s.get("staff_id"))
     except Exception as e:  # noqa: BLE001
         logger.warning("wa identity resolve failed for %s: %s", msisdn, e)
     return out
 
 
-async def safe_context(identity: dict) -> dict:
+async def safe_context(identity: dict, *, verified: bool = False) -> dict:
     """The support-desk view of this person: {text, handoff_only}.
 
     `text` is what the assistant may draw on. `handoff_only` means the situation needs a human
-    (a decided outcome, a no-scope review) and the bot must not narrate it."""
+    (a decided outcome, a no-scope review) and the bot must not narrate it.
+
+    `verified` is the gate, and it is checked HERE rather than at the call site so that no future
+    caller can forget it: without a proven identity this returns nothing at all, and the model is
+    simply never given a private fact to leak.
+    """
     role = identity.get("role")
+    if not verified:
+        return {"text": "", "handoff_only": False, "public": True}
     try:
         if role == "complainant":
             return await _ctx_complainant(identity)

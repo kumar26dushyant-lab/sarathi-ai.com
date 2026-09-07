@@ -5902,6 +5902,16 @@ async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
                  1 if verified else 0, verify_method or "", status or "captured",
                  actor_id or "", actor_name or "", channel or "", (ref_code or "").upper(), note or ""))
             await conn.commit()
+        # Mirror the ledger row onto the analytics spine. Nothing was writing `payment_success`,
+        # so the ops funnel showed pay_opened → 0 successes forever and every conversion rate it
+        # displayed was wrong. Best-effort: analytics must never break a payment.
+        try:
+            await record_event("payment_success", channel=channel, ref_code=ref_code,
+                               account_id=account_id, claim_id=claim_id,
+                               amount_paise=int(total_paise or 0), purpose=(plan or source),
+                               status="ok", meta=(razorpay_payment_id or _key))
+        except Exception:
+            pass
         return True
     except Exception as e:
         try:

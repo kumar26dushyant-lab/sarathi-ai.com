@@ -58,6 +58,19 @@ def _window(last_inbound_at) -> dict:
             "expires_at": exp.strftime("%Y-%m-%d %H:%M:%S")}
 
 
+def _verified_now(role, until) -> dict:
+    """Is this conversation inside a live verified session? Shown so a staffer knows whether the
+    person on the other end actually proved who they are before anything private was discussed."""
+    if not role or not until:
+        return {"ok": False, "role": ""}
+    try:
+        if datetime.strptime(str(until)[:19], "%Y-%m-%d %H:%M:%S") <= datetime.utcnow():
+            return {"ok": False, "role": ""}
+    except Exception:
+        return {"ok": False, "role": ""}
+    return {"ok": True, "role": role, "until": str(until)}
+
+
 async def conversations(*, limit: int = 60, scope: str = "all") -> list[dict]:
     """One row per number, newest activity first.
 
@@ -67,6 +80,7 @@ async def conversations(*, limit: int = 60, scope: str = "all") -> list[dict]:
     sql = """
         SELECT c.msisdn, c.display_name, c.claim_id, c.account_id, c.language, c.status,
                c.opted_in, c.bot_paused, c.paused_by, c.assigned_to, c.assigned_name,
+               c.verified_role, c.verified_name, c.verified_until,
                c.last_inbound_at, c.last_outbound_at, c.last_read_at,
                (SELECT body      FROM nidaan_wa_messages m WHERE m.msisdn=c.msisdn
                  ORDER BY m.wam_row_id DESC LIMIT 1) last_body,
@@ -103,6 +117,7 @@ async def conversations(*, limit: int = 60, scope: str = "all") -> list[dict]:
         d["preview"] = body[:_PREVIEW]
         d["window"] = _window(d.get("last_inbound_at"))
         d["owner"] = "human" if d.get("bot_paused") else "bot"
+        d["verified"] = _verified_now(d.get("verified_role"), d.get("verified_until"))
         d.pop("last_body", None)
         out.append(d)
     if scope == "unread":
@@ -113,6 +128,8 @@ async def conversations(*, limit: int = 60, scope: str = "all") -> list[dict]:
         out = [x for x in out if not x.get("bot_paused") and x.get("status") != "stopped"]
     elif scope == "stopped":
         out = [x for x in out if x.get("status") == "stopped"]
+    elif scope == "verified":
+        out = [x for x in out if (x.get("verified") or {}).get("ok")]
     return out
 
 
@@ -132,6 +149,7 @@ async def thread(msisdn: str, *, limit: int = 200) -> dict:
     ct = dict(contact) if contact else {"msisdn": msisdn}
     ct["window"] = _window(ct.get("last_inbound_at"))
     ct["owner"] = "human" if ct.get("bot_paused") else "bot"
+    ct["verified"] = _verified_now(ct.get("verified_role"), ct.get("verified_until"))
     msgs = [dict(r) for r in rows][::-1]     # oldest first — reads like a chat
     # Who is this number, in business terms? Best-effort; never blocks the thread.
     who = {}

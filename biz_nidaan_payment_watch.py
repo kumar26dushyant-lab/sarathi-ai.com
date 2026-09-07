@@ -160,3 +160,111 @@ async def get_snapshot() -> dict:
         return json.loads(raw) if raw else {}
     except Exception:
         return {}
+
+
+# ── Unrecovered-failure chase (Telegram only) ────────────────────────────────
+# A failed payment used to be announced once and then forgotten, so a customer who never came
+# back was never chased. Email is the wrong channel for this — it is the scarce one, and the
+# founder asked for money noise to live on Telegram instead. So: a short, finite chase on
+# Telegram, never email, and it stops the moment the customer pays.
+CHASE_WINDOW_DAYS = 7      # ignore anything older — a stale failure is not actionable
+CHASE_MAX = 3              # at most three nudges per failure, then leave it alone
+CHASE_GAP_HOURS = 12       # never more than one nudge per failure per half-day
+CHASE_KEY = "payment_failure_chase"
+
+
+async def _chase_state() -> dict:
+    try:
+        raw = await _n.get_ops_setting(CHASE_KEY, "")
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+async def _save_chase_state(st: dict) -> None:
+    # Keep only the current window so this setting can never grow without bound.
+    cutoff = (datetime.utcnow() - timedelta(days=CHASE_WINDOW_DAYS * 2)).strftime("%Y-%m-%d %H:%M:%S")
+    st = {k: v for k, v in st.items() if (v.get("last") or "") >= cutoff}
+    try:
+        await _n.set_ops_setting(CHASE_KEY, json.dumps(st)[:8000], updated_by="pay_watch")
+    except Exception:
+        pass
+
+
+async def chase_unrecovered_failures() -> dict:
+    """Nudge super-admins on Telegram about payment failures the customer never completed.
+
+    A failure counts as RECOVERED once a payment_success event appears for the same contact
+    after it — then it is dropped from the chase and never mentioned again.
+    """
+    since = (datetime.utcnow() - timedelta(days=CHASE_WINDOW_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.utcnow()
+    out = {"checked": 0, "chased": 0, "recovered": 0}
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            fails = [dict(r) for r in await (await c.execute(
+                "SELECT event_id, contact, amount_paise, purpose, reason, created_at "
+                "FROM nidaan_events WHERE event_type='payment_failed' AND created_at>=? "
+                "AND COALESCE(contact,'')<>'' ORDER BY created_at DESC LIMIT 50", (since,))).fetchall()]
+            state = await _chase_state()
+            pending = []
+            for f in fails:
+                out["checked"] += 1
+                won = await (await c.execute(
+                    "SELECT 1 FROM nidaan_events WHERE event_type='payment_success' "
+                    "AND contact=? AND created_at>? LIMIT 1",
+                    (f["contact"], f["created_at"]))).fetchone()
+                if won:
+                    out["recovered"] += 1
+                    state.pop(str(f["event_id"]), None)
+                    continue
+                st = state.get(str(f["event_id"])) or {"n": 0, "last": ""}
+                if st["n"] >= CHASE_MAX:
+                    continue
+                if st["last"]:
+                    last = datetime.strptime(st["last"][:19], "%Y-%m-%d %H:%M:%S")
+                    if (now - last) < timedelta(hours=CHASE_GAP_HOURS):
+                        continue
+                pending.append((f, st))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("chase query failed: %s", e)
+        return out
+
+    if not pending:
+        await _save_chase_state(state)
+        return out
+
+    lines = [f"💸 {len(pending)} payment(s) still not completed — worth a call:"]
+    for f, st in pending[:8]:
+        rs = round((f.get("amount_paise") or 0) / 100.0, 2)
+        age_h = int((now - datetime.strptime(str(f["created_at"])[:19], "%Y-%m-%d %H:%M:%S"))
+                    .total_seconds() // 3600)
+        nth = st["n"] + 1
+        lines.append(f"• {f['contact']} — ₹{rs} ({f.get('purpose') or 'payment'}), "
+                     f"{age_h}h ago. {f.get('reason') or ''} [reminder {nth}/{CHASE_MAX}]")
+    lines.append("\nThey tried to pay and it did not go through. A quick call usually recovers it.")
+    lines.append("Open ops → Revenue → Payment Health.")
+    body = "\n".join(lines)
+
+    try:
+        import biz_nidaan_notifications as _nnot
+        async with aiosqlite.connect(DB_PATH) as c:
+            ids = [row[0] for row in await (await c.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+                "AND status='active' AND deleted_at IS NULL")).fetchall()]
+        # Telegram ONLY — deliberately not notify_staff_inapp, which would also email.
+        for sid in ids:
+            try:
+                await _nnot._telegram_mirror(sid, body, url="/nidaan/ops")
+            except Exception:
+                pass
+        stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+        for f, st in pending:
+            state[str(f["event_id"])] = {"n": st["n"] + 1, "last": stamp}
+        out["chased"] = len(pending)
+        logger.info("💸 chased %d unrecovered payment failure(s) on Telegram", len(pending))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("chase notify failed: %s", e)
+    await _save_chase_state(state)
+    return out

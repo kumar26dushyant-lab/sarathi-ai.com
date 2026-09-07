@@ -501,6 +501,7 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     Previously this ignored the message entirely and re-sent welcome + the same document ask
     every single time. Now the conversation brain decides: answer the question, continue the
     guided document flow, decline once (abuse / off-topic), or hand off to a human."""
+    import biz_nidaan_wa_auth as _auth
     import biz_nidaan_wa_brain as _brain
     import biz_nidaan_wa_identity as _ident
 
@@ -508,11 +509,14 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     claim_id = claim["claim_id"] if claim else None
     lang = await _lang(msisdn)
 
-    # Who is this? A number that matches our records is an authenticated identity (Meta proves
-    # possession), so a verified customer / subscriber / branch can be SERVED here instead of
-    # being told "our team will contact you".
+    # Who is this NUMBER likely to be? A record match makes them a candidate, not an authenticated
+    # person — numbers get recycled and phones get shared, and what sits behind these roles is
+    # other people's claims. Nothing private is released until they enter a code we email to the
+    # address on the account.
     ident = await _ident.resolve(msisdn)
-    sc = await _ident.safe_context(ident)
+    sess = await _auth.session(msisdn)
+    verified = bool(sess)
+    sc = await _ident.safe_context(ident, verified=verified)
 
     # Under human takeover the bot must not talk over the staffer — but it must not go SILENT
     # either; that is exactly what dead-ended the last conversation. Acknowledge, at most once
@@ -524,6 +528,36 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
             await _activity(claim_id, "wa_ack", "Acknowledged (case is with a human).")
         return {"ok": True, "action": "human_takeover_ack"}
 
+    # ── identity verification ────────────────────────────────────────────────
+    _t = (text or "").strip()
+    # 1. They sent the code we emailed them.
+    if not verified:
+        _code = _auth.looks_like_code(_t)
+        if _code:
+            res = await _auth.try_verify(msisdn, _code, lang)
+            await _wa.send_text(msisdn, res.get("message") or "")
+            await _touch_outbound(msisdn)
+            await _activity(claim_id, "wa_verify",
+                            "Identity verified on WhatsApp" if res.get("ok")
+                            else f"Verification failed ({res.get('reason')})", direction="in")
+            if res.get("ok"):
+                # Verified mid-conversation: pick straight up where they left off rather than
+                # making them repeat themselves.
+                if claim:
+                    await _link_contact(msisdn, claim)
+                    await ask_next(claim_id, msisdn)
+                return {"ok": True, "action": "verified"}
+            return {"ok": True, "action": "verify_failed"}
+
+        # 2. They asked for a code, or asked something only a verified person may hear.
+        if _wants_code(_t) or (ident.get("role") != "unknown" and _asks_private(_t)):
+            res = await _auth.request_code(msisdn, ident, lang)
+            await _wa.send_text(msisdn, res.get("message") or "")
+            await _touch_outbound(msisdn)
+            await _activity(claim_id, "wa_verify_sent",
+                            f"Verification code emailed ({res.get('masked') or res.get('reason')})")
+            return {"ok": True, "action": "verify_requested"}
+
     # Nothing we can tie to a person → let the caller run the prospect/sales reply.
     if not claim and ident.get("role") == "unknown":
         return {"ok": False, "error": "no_claim"}
@@ -532,7 +566,8 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         await _link_contact(msisdn, claim)
 
     d = await _brain.decide(text, lang, context=sc.get("text", ""),
-                            handoff_only=bool(sc.get("handoff_only")))
+                            handoff_only=bool(sc.get("handoff_only")),
+                            public_mode=not verified)
     action, reply = d.get("action"), d.get("reply") or ""
     # If they asked to switch language, REMEMBER it — every later reply, document ask and
     # reminder now uses it, until they ask to change again.
@@ -563,13 +598,22 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         return {"ok": True, "action": "refuse"}
 
     if action == "handoff":
-        await _wa.send_text(msisdn, reply or _brain.handoff_text(lang))
+        _hand = reply or _brain.handoff_text(lang)
+        if not verified:
+            _hand, _b = await _auth.guard_public_reply(msisdn, _hand, lang)
+        await _wa.send_text(msisdn, _hand)
         await _touch_outbound(msisdn)
         await _handoff_to_support(claim, msisdn, text, lang, reason=d.get("reason", ""),
                                   identity=ident)
         return {"ok": True, "action": "handoff"}
 
     # action == "answer" — a natural reply, then (for a claim) a gentle throttled document nudge.
+    # Last line of defence: an unverified conversation must not receive private detail even if the
+    # model was talked into writing some. A blocked reply is replaced, not trimmed.
+    if not verified:
+        reply, _blocked = await _auth.guard_public_reply(msisdn, reply, lang)
+        if _blocked:
+            await _activity(claim_id, "wa_guard", f"Blocked a reply containing {_blocked} (unverified)")
     await _wa.send_text(msisdn, reply)
     await _touch_outbound(msisdn)
     await _activity(claim_id, "wa_answer", f"Answered: {reply[:120]}")
@@ -577,6 +621,29 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         return {"ok": True, "action": "answer", "role": ident.get("role")}
     await ask_next(claim_id, msisdn)          # throttled — won't repeat if just asked
     return {"ok": True, "action": "answer"}
+
+
+# Words that mean "tell me about MY case/account" — the point where public mode is not enough.
+# Deliberately broad: over-triggering costs one verification step, under-triggering costs a leak.
+_PRIVATE_WORDS = (
+    "my claim", "mera claim", "meri claim", "claim status", "status", "kya hua", "update",
+    "kahan tak", "kitna", "how much", "settlement", "paisa", "payment", "refund", "policy",
+    "my case", "mera case", "document", "kagaz", "papers", "account", "subscription", "plan",
+    "branch", "commission", "payout", "leads", "customers", "mere customer", "मेरा", "स्थिति",
+    "क्लेम", "भुगतान", "खाता",
+)
+_CODE_WORDS = ("code", "otp", "verify", "verification", "kod", "कोड", "ओटीपी")
+
+
+def _wants_code(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return any(w == t or (w in t and len(t) <= 40) for w in _CODE_WORDS)
+
+
+def _asks_private(text: str) -> bool:
+    """Would answering this need something only a verified person may hear?"""
+    t = (text or "").lower()
+    return any(w in t for w in _PRIVATE_WORDS)
 
 
 async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: str = "",

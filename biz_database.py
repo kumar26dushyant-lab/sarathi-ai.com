@@ -1574,12 +1574,42 @@ async def init_db():
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN assigned_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN last_read_at TIMESTAMP",        # drives the unread badge
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN display_name TEXT DEFAULT ''",  # WhatsApp profile name
+            # ── WhatsApp IDENTITY VERIFICATION (Sep 2026) ────────────────────────────────
+            # Matching an inbound number against our records was previously treated as proof of
+            # identity ("Meta verifies possession"). It is not: numbers get recycled, SIMs get
+            # swapped, and phones get shared — and the branch/subscriber views list OTHER
+            # people's names and cases. Private data now needs a code sent to the REGISTERED
+            # EMAIL, which is a second factor the holder of the SIM does not automatically have.
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_role TEXT DEFAULT ''",   # complainant|subscriber|branch|staff
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_ref TEXT DEFAULT ''",    # account_id / branch_code / staff_id
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_at TIMESTAMP",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_until TIMESTAMP",        # sessions expire, deliberately
         ]
         for m in nidaan_migrations:
             try:
                 await conn.execute(m)
             except Exception:
                 pass
+
+        # One outstanding verification challenge per attempt. The code is never stored in the
+        # clear — only an HMAC — so a database read cannot be replayed as a login.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_wa_verify (
+                vid         INTEGER PRIMARY KEY AUTOINCREMENT,
+                msisdn      TEXT NOT NULL,
+                code_hash   TEXT NOT NULL,
+                role        TEXT DEFAULT '',
+                ref_id      TEXT DEFAULT '',
+                name        TEXT DEFAULT '',
+                sent_to     TEXT DEFAULT '',      -- masked email, for the audit trail only
+                attempts    INTEGER DEFAULT 0,
+                consumed    INTEGER DEFAULT 0,
+                expires_at  TIMESTAMP,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_waverify_msisdn "
+                           "ON nidaan_wa_verify(msisdn, vid DESC)")
 
         # One conversation = one msisdn; the inbox reads newest-first per number.
         try:
