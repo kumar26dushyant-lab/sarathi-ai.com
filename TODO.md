@@ -42,6 +42,24 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - **Measured:** staff email **53/day → 26/day** (≈792/month saved, 50%). Less than before but honest — the 3 super-admins still receive chatter by design, and `leave.requested` (416/mo) is kept per instruction.
 - 🟢 Next: an ops screen showing the live policy (`summary()` already returns it) so the rules are visible rather than folklore.
 
+### ✅ WhatsApp public/verified split — email-OTP identity + leak guard (Sep 7, DONE)
+Anyone can now find NidaanPartner on WhatsApp and chat with the bot, without that opening a door to customer data.
+- 🔴 **The old model called a phone match "authenticated"** — the identity module said so in its own docstring. Behind those roles sit other people's claims by name (the branch view lists a partner's whole book). Numbers get recycled, SIMs swapped, phones shared. Fixed: `resolve()` returns `verified: False` always; a match is a *candidate*.
+- **PUBLIC mode** (default, every unknown number): service, pricing, claim types, how to start. Nothing about any customer/claim/staff/branch/ops — and it will not confirm or deny whether someone is our customer, since that is what a fisher wants.
+- **VERIFIED mode** (12h, earned): 6-digit code to the **registered email**, not the phone — a factor the SIM holder does not automatically have. Codes are HMAC-hashed with a server secret (refuses to hash if none configured), single-use, 10-min expiry, 5 attempts then burned, 5/number/day, `compare_digest`.
+- **Three layers, since a prompt is not a security control:** (1) STARVE — `safe_context()` returns nothing unverified, gated *inside* the function so no caller can forget; (2) INSTRUCT — separate public system prompt; (3) INSPECT — every reply to an unverified number scanned for claim refs / emails / phones / branch codes / policy numbers / non-public amounts, and **replaced whole** (never trimmed). Layer 3 holds when 1 and 2 fail.
+- Ops UI: Verified / Not verified badge on every conversation + filters; the thread header tells staff plainly what they may not type into an unverified chat.
+- Page now carries a **step-by-step "How to run a campaign"** guide and a plain-language explainer of the two modes.
+- Verified on the server: 13 auth checks + 7 routing checks pass. The routing test forces the model to emit `NP-0042` to an unverified number and asserts the customer never sees it.
+- 🟡 Open: `_asks_private()` is keyword-based (deliberately over-triggering — a false positive costs one verification step, a false negative costs a leak). Staff on WhatsApp are still pointed to the Telegram office bot rather than served ops data.
+
+### ✅ Payment noise cut + failure chase (Sep 7, DONE)
+- **Money emails: 14 → 4 per failure.** `payment.*` now emails super-admins + whoever owns the item; everyone else keeps bell + Telegram. Nobody owns a failure that lands in thirteen inboxes, and it was eating the allowance login codes depend on. Documents and leave are untouched — still broad.
+- **Unrecovered failures are chased on Telegram** — up to 3 nudges, 12h apart, 7-day window, stopping the instant a `payment_success` event appears for that contact. Telegram only, never email.
+- 🔴 **`payment_success` events were never written.** The ops funnel showed pay_opened → 0 successes forever, so every conversion rate it displayed was wrong. `record_payment` now emits them.
+- 🟠 **Still worth knowing:** the watchdog's "stuck payment" check compares `payment_success` events against ledger rows. Now that both are written by the same call it can never disagree — it is a **tautology, not a guarantee**. Real capture-vs-ledger reconciliation has to come from the Razorpay API (`_tools/razorpay_webhook_reconcile.py`). Worth doing properly.
+- 🟡 Still missing: **WhatsApp/SMS retry for phone-only customers** — 9 of 13 failures got no retry link at all because we only had their number.
+
 ### ✅ WhatsApp Inbox — structured chats, bot/human visibility, takeover (Sep 7, DONE)
 The WhatsApp panel showed one flat table of the last 25 messages across every number. Now: conversation list + thread + takeover + reply-from-ops. Building it surfaced three real defects, all fixed:
 - 🔴 **Outbound was NEVER logged.** `nidaan_wa_messages` held 27 inbound rows and **zero** outbound — every reply the bot ever sent was invisible and "Messages sent" had always read 0. Logging moved into `_post()`, the single choke point every send passes through. Failed sends log too (a message the customer never got must be visible).

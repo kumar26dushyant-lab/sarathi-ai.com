@@ -1,5 +1,41 @@
 # Staff Announcement Drafts
 
+## 2026-09-07 — Important: what the WhatsApp bot will and will not tell people
+
+**Title (EN):**
+🔒 WhatsApp: customer details are now locked until the person verifies
+
+**Details (EN):**
+Team, anyone in India can search our number on WhatsApp and start chatting with our bot. So from today the bot works in **two modes**, and the same rule applies to us.
+
+• **🔒 Not verified — everyone, by default.** The bot only explains what NidaanPartner does, what we handle, what it costs and how to start. It will **not** say anything about any customer, claim, payment, document, staff member or branch — and it will not even confirm whether someone is our customer.
+• **✅ Verified — for 12 hours.** When a customer, subscriber, branch or staff member asks about their own case, the bot emails a **6-digit code to the email address on their record** (not to their phone). Once they send that code back on WhatsApp, the bot can discuss their case for 12 hours, then it locks again.
+• **Why email and not the phone?** Numbers get recycled, SIMs get swapped, and phones get shared at home and in the office. The email on the account is something the person holding the SIM does not automatically have — that is what makes it proof.
+
+**What you must do:** open ops → 💬 WhatsApp Automation. Every conversation shows a badge. If it says **🔒 Not verified**, do **not** type claim, payment, document or account details into that chat — ask the person to send the word **CODE** first. If it says **✅ Verified**, go ahead.
+
+If a customer says "I never got the code", check the email address on their record is correct.
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🔒 WhatsApp: ग्राहक की जानकारी अब वेरिफ़िकेशन के बिना नहीं मिलेगी
+
+**Details (HI):**
+टीम, भारत में कोई भी व्यक्ति WhatsApp पर हमारा नंबर सर्च करके हमारे बॉट से बात कर सकता है। इसलिए आज से बॉट **दो तरीकों से** काम करता है — और यही नियम हम पर भी लागू है।
+
+• **🔒 वेरिफ़ाई नहीं — डिफ़ॉल्ट रूप से सबके लिए।** बॉट सिर्फ़ यह बताता है कि NidaanPartner क्या करता है, किस तरह के क्लेम देखता है, ख़र्च कितना है और शुरू कैसे करें। किसी ग्राहक, क्लेम, भुगतान, दस्तावेज़, स्टाफ़ या ब्रांच के बारे में **कुछ नहीं** बताएगा — यह भी नहीं कि कोई हमारा ग्राहक है या नहीं।
+• **✅ वेरिफ़ाई — 12 घंटे के लिए।** जब कोई ग्राहक, सब्सक्राइबर, ब्रांच या स्टाफ़ अपने केस के बारे में पूछता है, बॉट उनके **रिकॉर्ड वाले ईमेल पर 6-अंकों का कोड** भेजता है (फ़ोन पर नहीं)। वह कोड WhatsApp पर भेजने के बाद 12 घंटे तक बात हो सकती है, फिर दोबारा लॉक हो जाता है।
+• **ईमेल क्यों, फ़ोन क्यों नहीं?** नंबर दोबारा जारी हो जाते हैं, सिम बदल जाते हैं, और फ़ोन घर-ऑफ़िस में साझा होते हैं। खाते वाला ईमेल सिम रखने वाले के पास अपने आप नहीं होता — इसीलिए वह प्रमाण है।
+
+**आपको क्या करना है:** ops → 💬 WhatsApp Automation खोलिए। हर चैट पर एक बैज दिखता है। अगर **🔒 Not verified** लिखा है तो उस चैट में क्लेम, भुगतान, दस्तावेज़ या खाते की जानकारी **न लिखें** — पहले उनसे **CODE** शब्द भेजने को कहिए। अगर **✅ Verified** है तो बेझिझक बात कीजिए।
+
+अगर कोई कहे "कोड नहीं मिला", तो जाँचिए कि उनके रिकॉर्ड में ईमेल सही है।
+पढ़ने के बाद 👍 करें; कुछ अस्पष्ट हो तो ऑफ़िस IT SPOC से पूछें।
+
+_Suggested roles: Super admins + Admins (anyone who opens the WhatsApp inbox)._
+
+---
+
 ## 2026-09-07 — New: WhatsApp Inbox (see every chat, take one over when it needs you)
 
 **Title (EN):**
