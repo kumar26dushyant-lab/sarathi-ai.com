@@ -86,6 +86,47 @@ async def _awaiting(claim_id: int) -> str:
     return (r["awaiting_doc_key"] if r and r["awaiting_doc_key"] else "")
 
 
+async def _contact_paused(msisdn: str) -> bool:
+    """Is a human holding THIS conversation? Keyed on the number, not the claim.
+
+    Takeover used to live only on nidaan_wa_claim_settings, so a chat with no claim attached —
+    a prospect, a branch, a subscriber asking a question — could never mute the bot, and the AI
+    kept replying over the staffer who had just been handed the conversation. A WhatsApp
+    conversation is one msisdn, so that is what ownership hangs off.
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT bot_paused FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
+        return bool(r and dict(r).get("bot_paused"))
+    except Exception:
+        return False   # never let a read error silence the bot on a live conversation
+
+
+async def _human_holds(msisdn: str, claim_id=None) -> bool:
+    """True if either the conversation or its claim is under human takeover."""
+    if await _contact_paused(msisdn):
+        return True
+    return bool(claim_id) and (await _awaiting(claim_id)) == "__human__"
+
+
+async def pause_bot(msisdn: str, *, by: str = "support", paused: bool = True) -> None:
+    """Hand this conversation to a human (or give it back to the bot). Idempotent."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("INSERT OR IGNORE INTO nidaan_wa_contacts (msisdn) VALUES (?)", (msisdn,))
+            if paused:
+                await c.execute("UPDATE nidaan_wa_contacts SET bot_paused=1, paused_by=?, "
+                                "paused_at=CURRENT_TIMESTAMP WHERE msisdn=?", (by[:40], msisdn))
+            else:
+                await c.execute("UPDATE nidaan_wa_contacts SET bot_paused=0, paused_by='', "
+                                "paused_at=NULL WHERE msisdn=?", (msisdn,))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("pause_bot(%s) failed: %s", msisdn, e)
+
+
 async def _has_spoken(msisdn: str) -> bool:
     """Have we ever sent this number anything? Drives greet-once."""
     try:
@@ -186,6 +227,10 @@ def _send_ctx(claim: dict, done: int, total: int, doc=None, next_doc=None,
 # ── outbound guided asks (free-form; in-session) ─────────────────────────────
 async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: bool = False) -> dict:
     """Ask for the next pending document, or send the completion message if all are in."""
+    # A staffer holding this chat must not have the reminder loop asking for documents behind
+    # their back — the customer would see two voices at once. Checked before anything else.
+    if await _human_holds(msisdn, claim_id if not isinstance(claim_id, dict) else None):
+        return {"ok": False, "error": "human_takeover"}
     claim = await _claim_for_msisdn(msisdn) if not isinstance(claim_id, dict) else claim_id
     if not claim:
         return {"ok": False, "error": "no_claim"}
@@ -351,12 +396,14 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
         text = _msg.compose(event, lang, ctx)
         import biz_nidaan_wa_flow as _flow
         if await _flow.in_session_window(msisdn):
-            res = await _wa.send_text(msisdn, text)
+            with _wa.sending_as("journey"):
+                res = await _wa.send_text(msisdn, text)
         else:
             tmpl = JOURNEY_TEMPLATES.get(event, "")
             if tmpl:
                 comps = _wa.body_params(*_template_params(event, ctx))
-                res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
+                with _wa.sending_as("journey"):
+                    res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
             else:
                 res = {"ok": False, "error": "needs_template"}
         await _activity(claim_id, f"wa_{event}", summary=(
@@ -393,7 +440,7 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     lang = await _lang(msisdn)
     ctype = claim.get("claim_type") or ""
     awaiting = await _awaiting(claim_id)
-    if awaiting == "__human__":
+    if awaiting == "__human__" or await _contact_paused(msisdn):
         return {"ok": False, "error": "human_takeover"}
     # Which doc did we ask for? (If none tracked, use the next pending.)
     pending = await _ck.pending_required_docs(claim_id, ctype)
@@ -470,7 +517,7 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     # Under human takeover the bot must not talk over the staffer — but it must not go SILENT
     # either; that is exactly what dead-ended the last conversation. Acknowledge, at most once
     # every 2 hours, without touching the pending-document state.
-    if claim_id and await _awaiting(claim_id) == "__human__":
+    if await _human_holds(msisdn, claim_id):
         if not await _recent_outbound(msisdn, 120):
             await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
             await _touch_outbound(msisdn)
@@ -563,6 +610,9 @@ async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: 
             tid, "ai", f"[auto] Handed off from the WhatsApp bot — {reason or 'needs a human'}. "
                        f"{_ref} Reply to the customer on WhatsApp {msisdn}.")
         await _n.set_support_status(tid, "escalated")
+        # Mute the bot on the CONVERSATION as well as the claim. Without this a prospect or a
+        # branch (no claim to hang takeover off) kept getting AI replies after being handed over.
+        await pause_bot(msisdn, by="support")
         if claim_id:
             await _set_takeover(claim_id, by="support")
         await _activity(claim_id, "wa_handoff", f"Handed to Support (thread #{tid}) — {reason or 'needs a human'}")

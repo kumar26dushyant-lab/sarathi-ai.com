@@ -26,12 +26,65 @@ import re
 import hmac
 import hashlib
 import logging
+import contextlib
+import contextvars
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger("nidaan.whatsapp")
 GRAPH = "https://graph.facebook.com/v22.0"
+
+# ── outbound attribution ─────────────────────────────────────────────────────
+# Only INBOUND messages were ever written to nidaan_wa_messages, so every reply the bot sent was
+# invisible to ops (the "Messages sent" stat sat at 0 forever) and a staffer could not read what
+# the AI had told a customer. _post() is the one choke point every send passes through, so the
+# log is written here — one place, complete coverage, no call site left to forget.
+#
+# A context variable carries WHO is sending, because _post() cannot see the caller. Unset means
+# "bot": every existing caller is an automation, so the default label stays truthful.
+_SENDER: contextvars.ContextVar = contextvars.ContextVar("wa_sender", default=("bot", "", ""))
+
+
+@contextlib.contextmanager
+def sending_as(sender: str, name: str = "", staff_id: str = ""):
+    """Attribute sends made inside this block — 'human', 'campaign', 'journey', 'bot'."""
+    tok = _SENDER.set((sender or "bot", name or "", str(staff_id or "")))
+    try:
+        yield
+    finally:
+        _SENDER.reset(tok)
+
+
+async def _log_outbound(payload: dict, res: dict) -> None:
+    """Record one outbound message. Best-effort: a logging failure must never break a send."""
+    try:
+        import biz_nidaan_wa_flow as _flow
+        to = str(payload.get("to") or "")
+        mtype = str(payload.get("type") or "")
+        tmpl = ((payload.get("template") or {}).get("name") or "") if mtype == "template" else ""
+        body = ((payload.get("text") or {}).get("body") or "") if mtype == "text" else ""
+        media_id = ""
+        for k in ("audio", "document", "image", "video"):
+            if isinstance(payload.get(k), dict) and payload[k].get("id"):
+                media_id = payload[k]["id"]
+                break
+        claim_id = None
+        try:
+            ct = await _flow.get_contact(to) or {}
+            claim_id = ct.get("claim_id")
+        except Exception:
+            pass
+        sender, sname, sid = _SENDER.get()
+        ok = bool(res.get("ok"))
+        await _flow.log_message(
+            direction="out", msisdn=to, claim_id=claim_id,
+            wa_message_id=str(res.get("message_id") or ""), msg_type=mtype or "text",
+            template_name=tmpl, body=body, media_id=media_id,
+            status="sent" if ok else "failed", error=str(res.get("error") or "")[:300],
+            sender=sender, sender_name=sname, staff_id=sid)
+    except Exception as e:  # noqa: BLE001
+        logger.info("outbound WhatsApp log failed (send itself was fine): %s", e)
 
 
 def _token() -> str:
@@ -85,13 +138,19 @@ async def _post(payload: dict) -> dict:
         d = r.json() if r.content else {}
     except Exception as e:  # noqa: BLE001
         logger.warning("nidaan-wa send failed: %s", e)
-        return {"ok": False, "error": str(e)[:150]}
+        res = {"ok": False, "error": str(e)[:150]}
+        await _log_outbound(payload, res)
+        return res
     if r.status_code == 200 and d.get("messages"):
-        return {"ok": True, "message_id": d["messages"][0].get("id", ""),
-                "wa_id": (d.get("contacts") or [{}])[0].get("wa_id", "")}
+        res = {"ok": True, "message_id": d["messages"][0].get("id", ""),
+               "wa_id": (d.get("contacts") or [{}])[0].get("wa_id", "")}
+        await _log_outbound(payload, res)
+        return res
     err = ((d.get("error") or {}).get("message")) or str(d)[:200]
     logger.warning("nidaan-wa send rejected [%s]: %s", r.status_code, err)
-    return {"ok": False, "error": err, "status": r.status_code}
+    res = {"ok": False, "error": err, "status": r.status_code}
+    await _log_outbound(payload, res)
+    return res
 
 
 def body_params(*values) -> list:

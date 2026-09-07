@@ -137,14 +137,16 @@ async def _send_one(msisdn: str, claim_id, account_id, template_name: str, kind:
     name = await _contact_name(claim_id, account_id)
     ctx = {"name": name}
     try:
-        if await _flow.in_session_window(msisdn):
-            body = _msg.compose(kind or "intro_value", lang or "hinglish", ctx)
-            res = await _wa.send_text(msisdn, body)
-        elif template_name:
-            comps = _wa.body_params(name or "ji")
-            res = await _wa.send_template(msisdn, template_name, _LANG_MAP.get(lang or "hinglish", "en"), comps)
-        else:
-            return {"ok": False, "error": "needs_template"}
+        # Label these in the inbox as a campaign, not as the AI answering someone.
+        with _wa.sending_as("campaign"):
+            if await _flow.in_session_window(msisdn):
+                body = _msg.compose(kind or "intro_value", lang or "hinglish", ctx)
+                res = await _wa.send_text(msisdn, body)
+            elif template_name:
+                comps = _wa.body_params(name or "ji")
+                res = await _wa.send_template(msisdn, template_name, _LANG_MAP.get(lang or "hinglish", "en"), comps)
+            else:
+                return {"ok": False, "error": "needs_template"}
         return res if isinstance(res, dict) else {"ok": bool(res)}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:120]}

@@ -1148,7 +1148,8 @@ async def _send_customer_retry_link(*, email: str, phone: str, name: str,
         why = (f"<br><span style='color:#6b7280;font-size:13px'>Reason: {reason}</span>") if reason else ""
         await email_svc.send_email(
             email, f"Complete your Nidaan payment — ₹{rupees}",
-            _nidaan_retry_email_html(kind, rupees, url, why), from_name="Nidaan Partner")
+            _nidaan_retry_email_html(kind, rupees, url, why), from_name="Nidaan Partner",
+            delivery_critical=True)   # a payment they are trying to complete must not be lost
         logger.info("💳 retry link emailed to %s (₹%d, %s)", email, rupees, kind)
     except Exception as e:
         logger.warning("send_customer_retry_link failed: %s", e)
@@ -6218,6 +6219,89 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
         changed += 1
     await _ops_audit(request, "wa.settings", "settings", "wa", f"updated {changed} default(s)")
     return {"ok": True, "updated": changed}
+
+
+# ── WhatsApp INBOX (conversations, takeover, human reply) ────────────────────
+# Gated at sub_super_admin, not super_admin: the whole point of takeover is that a senior human
+# can answer a customer, and there are only three super-admins. Settings and campaigns (below)
+# stay super-admin — reading and replying is day-to-day work, changing automation is not.
+
+def _wa_number_or_400(msisdn: str) -> str:
+    """E.164 digits only. Rejects anything else before it reaches a query or the Graph API."""
+    import re as _re_wa
+    n = (msisdn or "").strip()
+    if not _re_wa.fullmatch(r"\d{8,15}", n):
+        raise HTTPException(status_code=400, detail="Invalid number")
+    return n
+
+
+@app.get("/nidaan/ops/api/wa/conversations")
+async def nidaan_ops_wa_conversations(request: Request, scope: str = "all", limit: int = 60):
+    """Conversation list: one row per number, newest first, with owner + unread + reply window."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_inbox as _inbox
+    scope = scope if scope in ("all", "unread", "human", "bot", "stopped") else "all"
+    return {"conversations": await _inbox.conversations(limit=limit, scope=scope),
+            "counters": await _inbox.counters()}
+
+
+@app.get("/nidaan/ops/api/wa/thread/{msisdn}")
+async def nidaan_ops_wa_thread(msisdn: str, request: Request, limit: int = 200):
+    """Full message history for one number, oldest-first, with who-said-it on every message."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_inbox as _inbox
+    n = _wa_number_or_400(msisdn)
+    d = await _inbox.thread(n, limit=limit)
+    await _inbox.mark_read(n)
+    return d
+
+
+class _WaOwnerReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    human: bool = True          # True = a person takes over, False = hand back to the bot
+
+
+@app.post("/nidaan/ops/api/wa/thread/{msisdn}/owner")
+async def nidaan_ops_wa_owner(msisdn: str, body: _WaOwnerReq, request: Request):
+    """Take a conversation over from the bot, or hand it back."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_inbox as _inbox
+    res = await _inbox.set_owner(_wa_number_or_400(msisdn), human=body.human,
+                                 by_id=str(caller.get("staff_id") or ""),
+                                 by_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not change owner")
+    await _ops_audit(request, "wa.owner", "wa_contact", msisdn,
+                     "took over from the bot" if body.human else "handed back to the bot")
+    return res
+
+
+class _WaReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/wa/thread/{msisdn}/reply")
+@limiter.limit("30/minute")
+async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
+    """Send a staffer's own WhatsApp reply, attributed to the real person behind the session."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_inbox as _inbox
+    res = await _inbox.send_human(_wa_number_or_400(msisdn), body.text,
+                                  staff_id=str(caller.get("staff_id") or ""),
+                                  staff_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not send")
+    await _ops_audit(request, "wa.reply", "wa_contact", msisdn, body.text[:120])
+    return res
 
 
 # ── WhatsApp bulk campaigns (super_admin) ────────────────────────────────────

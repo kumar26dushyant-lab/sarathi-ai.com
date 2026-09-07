@@ -29,8 +29,17 @@ _LANG_WORDS = {"english": "en", "eng": "en", "hindi": "hi", "हिंदी": "
 
 async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = None,
                       wa_message_id: str = "", msg_type: str = "", template_name: str = "",
-                      body: str = "", media_id: str = "", status: str = "", error: str = "") -> bool:
-    """Write one row to the WA message log. Idempotent on wa_message_id (inbound dedup)."""
+                      body: str = "", media_id: str = "", status: str = "", error: str = "",
+                      sender: str = "", sender_name: str = "", staff_id: str = "") -> bool:
+    """Write one row to the WA message log. Idempotent on wa_message_id (inbound dedup).
+
+    `sender` records WHO produced an outbound message — bot | human | campaign | journey |
+    system — so the inbox can show a staffer plainly whether the AI or a colleague replied.
+    Inbound is always the customer. Unset outbound defaults to 'bot': every existing caller is
+    an automation, so the label stays honest without touching those call sites.
+    """
+    if not sender:
+        sender = "customer" if direction == "in" else "bot"
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             if wa_message_id:
@@ -41,10 +50,11 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
             await conn.execute(
                 """INSERT INTO nidaan_wa_messages
                    (direction, msisdn, claim_id, wa_message_id, msg_type, template_name,
-                    body, media_id, status, error)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    body, media_id, status, error, sender, sender_name, staff_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (direction, msisdn, claim_id, wa_message_id or "", msg_type or "", template_name or "",
-                 (body or "")[:4000], media_id or "", status or "", (error or "")[:300]))
+                 (body or "")[:4000], media_id or "", status or "", (error or "")[:300],
+                 sender[:20], (sender_name or "")[:80], str(staff_id or "")[:20]))
             await conn.commit()
         return True
     except Exception as e:  # noqa: BLE001

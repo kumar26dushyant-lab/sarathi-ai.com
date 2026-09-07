@@ -1557,12 +1557,36 @@ async def init_db():
             "ALTER TABLE nidaan_accounts ADD COLUMN utm_source TEXT DEFAULT ''",
             "ALTER TABLE nidaan_accounts ADD COLUMN utm_medium TEXT DEFAULT ''",
             "ALTER TABLE nidaan_accounts ADD COLUMN utm_campaign TEXT DEFAULT ''",
+            # ── WhatsApp INBOX (Sep 2026) ────────────────────────────────────────────────
+            # The message log recorded WHAT was said but never WHO said it, so ops could not tell
+            # an AI reply from a staffer's reply from a campaign blast. These three columns make
+            # authorship explicit on every outbound row and drive the bot/human badges in the UI.
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN sender TEXT DEFAULT ''",       # bot|human|campaign|journey|system|customer
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN sender_name TEXT DEFAULT ''",  # staff display name for human replies
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN staff_id TEXT DEFAULT ''",     # real actor id (accountability)
+            # Takeover used to live only on nidaan_wa_claim_settings, so a conversation with no
+            # claim (a prospect, a branch) could never mute the bot — it kept replying over the
+            # human who had been handed the chat. Takeover now belongs to the CONVERSATION.
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN bot_paused INTEGER DEFAULT 0",  # 1 = a human owns this chat
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN paused_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN paused_at TIMESTAMP",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN assigned_to TEXT DEFAULT ''",   # staff_id owning the chat
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN assigned_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN last_read_at TIMESTAMP",        # drives the unread badge
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN display_name TEXT DEFAULT ''",  # WhatsApp profile name
         ]
         for m in nidaan_migrations:
             try:
                 await conn.execute(m)
             except Exception:
                 pass
+
+        # One conversation = one msisdn; the inbox reads newest-first per number.
+        try:
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_wamsg_msisdn "
+                               "ON nidaan_wa_messages(msisdn, wam_row_id DESC)")
+        except Exception:
+            pass
 
         # ── Email-optional migration (mobile is the primary identity, Jul 2026) ──
         # nidaan_accounts.email was NOT NULL UNIQUE. Making it optional (multiple NULLs
