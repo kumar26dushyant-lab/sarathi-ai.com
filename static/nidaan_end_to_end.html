@@ -210,7 +210,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
 
 <div class="wrap">
 <header class="masthead">
-  <div class="eyebrow">NidaanPartner &middot; End-to-end operating model &middot; Draft 5 &middot; for stakeholder review</div>
+  <div class="eyebrow">NidaanPartner &middot; End-to-end operating model &middot; Draft 6 &middot; for stakeholder review</div>
   <h1>One case, many doors, one legal machine</h1>
   <p class="standfirst">Every way a claim reaches us, everything that happens until the money reaches
     the complainant, Nidaan and whoever brought the case — and what it takes to run this at
@@ -218,9 +218,10 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
     closed case, and the live database.</p>
   <div class="meta-row">
     <span><b>Status</b> Design under discussion — nothing built</span>
-    <span><b>Open questions</b> <span class="num">5</span></span>
+    <span><b>Open questions</b> <span class="num">3</span></span>
     <span><b>Rule IDs</b> cite them, e.g. <code>C8.3</code></span>
-    <span><b>Draft 5</b> fee model &middot; advisor vs CP &middot; commission engine &middot; 4&ndash;5 month target</span>
+    <span><b>Draft 6</b> the complainant is the counterparty &middot; fee applies to every settlement</span>
+    <span style="color:var(--wait)"><b>Awaiting</b> the Lokpal flow &mdash; section 9 will be rebuilt around it</span>
   </div>
 </header>
 
@@ -792,6 +793,19 @@ flowchart TB
       Total elapsed time is mostly a measure of other people’s speed.</p>
   </div>
 
+  <h3>The Ombudsman stage — detail still to come</h3>
+  <div class="note warn">
+    <span class="lbl">This part is deliberately thin, and will be rebuilt</span>
+    <p>What this document says about the Ombudsman today is only the outline: register, record the BHP
+      number, file annexures, attend the hearing, record the award. <strong>The detailed Lokpal flow is
+      being written by the team and will replace this section.</strong></p>
+    <p style="margin-top:9px">Please do not spend review time correcting the detail here — it is a
+      placeholder. What is worth commenting on is whether the <em>surrounding</em> machinery serves it:
+      that Ombudsman mail escalates from day one (R4), that annexure deadlines become tasks
+      automatically (C9.2), that hearing dates reach both the handler and the complainant (C9.3), and
+      that the one-year filing window is counted from day one rather than remembered.</p>
+  </div>
+
   <h3>The filing window</h3>
   <div class="note stop">
     <span class="lbl">The clock nobody watches</span>
@@ -860,7 +874,7 @@ flowchart TB
       <tr><td class="id">V1</td><td><strong>Who the complainant is</strong></td><td>Name, and their relationship to the insured — self, family, or authorised representative</td><td><span class="chip c-stop">yes</span></td></tr>
       <tr><td class="id">V2</td><td><strong>Complainant mobile</strong></td><td><strong>WhatsApp OTP.</strong> Proves the number works and that they can be reached on the channel that drives everything else</td><td><span class="chip c-stop">yes</span></td></tr>
       <tr><td class="id">V3</td><td><strong>Complainant email</strong></td><td><strong>Email OTP.</strong> Every insurer and Ombudsman message lands here</td><td><span class="chip c-stop">yes</span></td></tr>
-      <tr><td class="id">V4</td><td><strong>Who the insured is</strong></td><td>Name and relationship. Often not the same person as the complainant</td><td><span class="chip c-stop">yes</span></td></tr>
+      <tr><td class="id">V4</td><td><strong>Who the insured is</strong></td><td>Name, and their relationship to the complainant. Needed for the claim, but the <strong>complainant</strong> is the party we verify hardest — they sign, they pay, and every message goes to them</td><td><span class="chip c-stop">yes</span></td></tr>
       <tr><td class="id">V5</td><td><strong>Insurance company</strong></td><td>Picked from a list, not typed — free text makes matching insurer replies unreliable</td><td><span class="chip c-stop">yes</span></td></tr>
       <tr><td class="id">V6</td><td><strong>Policy and claim number</strong></td><td>Format-checked per insurer where a pattern is known</td><td><span class="chip c-wait">warn</span></td></tr>
       <tr><td class="id">V7</td><td><strong>Rejection date</strong></td><td>Starts the one-year filing clock. Without it we cannot compute eligibility</td><td><span class="chip c-stop">yes</span></td></tr>
@@ -1041,6 +1055,27 @@ flowchart TB
       the terms.</p>
   </div>
 
+  <h3>The complainant is the counterparty for everything</h3>
+  <div class="note good">
+    <span class="lbl">Settled — and it simplifies a great deal</span>
+    <p>Whoever talks to us, sends the documents and signs the authorisation <strong>is the
+      complainant</strong> — and they are the person liable for our fee. In almost every case that is
+      either the insured acting for themselves, or a family member acting for the insured. The insured is
+      a name on the policy; the complainant is the person we have a relationship with.</p>
+    <p style="margin-top:9px">So there is one counterparty throughout: one person to verify, one person
+      to chase, one person who signs, one person who pays. No case needs a second signatory and no case
+      stalls waiting to work out who is entitled to commit.</p>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Why this makes the last mile collectable</span>
+    <p>The hardest moment in the whole process is C11.4 — the complainant has been paid by the insurer and
+      goes quiet before paying us. This settles who that obligation belongs to: <strong>a named person,
+      with a phone and email we verified at intake, who signed an authorisation showing the exact amount
+      they would owe.</strong> That is a position worth being in. Without it, the same moment is an
+      argument about who agreed to what.</p>
+  </div>
+
   <h3>The authorisation is also the fee agreement</h3>
   <div class="note stop">
     <span class="lbl">This changes the sequence, not just the wording</span>
@@ -1064,6 +1099,18 @@ flowchart TB
       do anything about it, because the money is already in their account (C11.4).</p>
     <p style="margin-top:9px">The tentative calculation is not a legal nicety. It is the thing that makes
       the last mile collectable.</p>
+  </div>
+
+  <h3>The fee applies however the claim settles</h3>
+  <div class="note good">
+    <span class="lbl">Settled</span>
+    <p><strong>15% + GST is due on any settlement</strong> — whether the insurer simply pays during the
+      30-day window, the grievance officer resolves it, the Ombudsman awards it, or a consumer forum does.
+      The work that produced the outcome is the same work.</p>
+    <p style="margin-top:9px">This also removes an incentive that would have pointed the wrong way. The
+      best result for a complainant is usually the insurer paying quickly and quietly; that must not be
+      the outcome the firm earns least from. It is worth counting those wins separately on the dashboard
+      — they are the cheapest and fastest revenue in the business.</p>
   </div>
 
   <h3>Every payment shows base and GST</h3>
@@ -1252,8 +1299,8 @@ flowchart TB
 <!-- 18 -->
 <section id="s18">
   <div class="sec-head"><span class="sec-num">18</span><h2>Still open</h2></div>
-  <p class="lede">Most of the design is now settled. Five things remain, and only the first two block
-    building.</p>
+  <p class="lede">Most of the design is now settled. Three things remain — plus the Lokpal flow, which
+    is being written and will replace section 9.</p>
 
   <div class="tw"><table>
     <thead><tr><th style="width:44px">ID</th><th style="width:250px">Question</th><th>Why it matters</th></tr></thead>
@@ -1261,10 +1308,20 @@ flowchart TB
       <tr><td class="id">Q1</td><td><strong>The starting percentages.</strong> What does an advisor, a branch, a staff member and a channel partner each get out of the 15%? And can one case carry both an advisor and a channel partner?</td><td>The commission engine is configurable, so these are defaults rather than fixed rules — but it needs a starting set to launch with</td></tr>
       <tr><td class="id">Q2</td><td><strong>Two details on the insurer ladder.</strong> If no acknowledgement ever arrives, the 30-day clock still runs from the send date — confirm. And does a partial reply reset the window, or does it run regardless?</td><td>Completes the ladder in section 7</td></tr>
       <tr><td class="id">Q3</td><td><strong>How long each task actually takes.</strong> Roughly how many minutes does a health review take today? Writing a gist and draft? Filing at the Ombudsman? Even rough numbers from the people doing the work beat my estimates</td><td>Section 16 currently runs on my guesses. Real numbers turn it from arithmetic into a plan you can hire against — and tell you which role to hire <em>first</em></td></tr>
-      <tr><td class="id">Q4</td><td><strong>Does the 15% apply to a settlement the insurer pays during the 30-day window</strong>, before any escalation — or only to an Ombudsman or consumer-forum award?</td><td>The best outcome for a complainant is the insurer simply paying. It should not be the outcome we earn least from, or the incentive points the wrong way</td></tr>
-      <tr><td class="id">Q5</td><td><strong>Who signs the authorisation when the complainant is not the insured</strong> — a family member acting for a patient, or for someone who has died?</td><td>Common in health claims, and the authorisation is now the fee agreement too, so it has to be signed by someone who can commit to it</td></tr>
+      <tr><td class="id">Q4</td><td><strong>The Lokpal flow itself</strong> — expected from the team</td><td>Section 9 is a placeholder until it arrives, and will be rebuilt around it rather than patched</td></tr>
     </tbody>
   </table></div>
+
+  <div class="note good">
+    <span class="lbl">Closed since draft 5</span>
+    <ul style="margin:8px 0 0">
+      <li><strong>The fee applies to every settlement</strong>, including one the insurer pays during the
+        30-day window — so a fast, quiet win is not the outcome the firm earns least from.</li>
+      <li><strong>The complainant signs and pays.</strong> Whoever sends the documents and talks to us is
+        the complainant, whether that is the insured themselves or a relative acting for them. One
+        counterparty per case, throughout.</li>
+    </ul>
+  </div>
 
   <div class="note good">
     <span class="lbl">On Q3 — what I am actually asking</span>
