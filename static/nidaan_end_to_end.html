@@ -210,7 +210,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
 
 <div class="wrap">
 <header class="masthead">
-  <div class="eyebrow">NidaanPartner &middot; End-to-end operating model &middot; Draft 4 &middot; for stakeholder review</div>
+  <div class="eyebrow">NidaanPartner &middot; End-to-end operating model &middot; Draft 5 &middot; for stakeholder review</div>
   <h1>One case, many doors, one legal machine</h1>
   <p class="standfirst">Every way a claim reaches us, everything that happens until the money reaches
     the complainant, Nidaan and whoever brought the case — and what it takes to run this at
@@ -218,9 +218,9 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
     closed case, and the live database.</p>
   <div class="meta-row">
     <span><b>Status</b> Design under discussion — nothing built</span>
-    <span><b>Open questions</b> <span class="num">6</span></span>
+    <span><b>Open questions</b> <span class="num">5</span></span>
     <span><b>Rule IDs</b> cite them, e.g. <code>C8.3</code></span>
-    <span><b>Draft 4</b> decisions D1&ndash;D11 absorbed &middot; staffing model &middot; WhatsApp-first</span>
+    <span><b>Draft 5</b> fee model &middot; advisor vs CP &middot; commission engine &middot; 4&ndash;5 month target</span>
   </div>
 </header>
 
@@ -240,7 +240,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
     <li><a href="#s11"><span class="n">11</span>Identity &amp; validation</a></li>
     <li><a href="#s12"><span class="n">12</span>WhatsApp-first</a></li>
     <li><a href="#s13"><span class="n">13</span>Mailbox &amp; Radar</a></li>
-    <li><a href="#s14"><span class="n">14</span>Money &amp; accountability</a></li>
+    <li><a href="#s14"><span class="n">14</span>Fees, GST &amp; commission</a></li>
     <li><a href="#s15"><span class="n">15</span>Ending a case</a></li>
     <li><a href="#s16"><span class="n">16</span>How many people</a></li>
     <li><a href="#s17"><span class="n">17</span>Housekeeping fixes</a></li>
@@ -290,9 +290,16 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
       is hard to answer. This proposal finishes scaffolding that already exists.</p>
   </div>
 
-  <h3>What the closed case file shows</h3>
-  <p>Case 800049 — Star Health, ₹2,04,435 claimed, won at ₹1,44,357 — ran <strong>eighteen months</strong>.
-    Against a target of two to three months, that is the gap this design has to close.</p>
+  <h3>What one closed case file shows</h3>
+  <div class="note warn">
+    <span class="lbl">Read this as one example, not the pattern</span>
+    <p>Case 800049 is referenced throughout because it is the only complete file available — start to
+      finish, with every date and every rupee. It is a <strong>useful reference, not a template</strong>:
+      no two claims run the same way, and nothing here should be read as “this is how cases go”. It is
+      used to show what the system must be able to <em>hold</em>, not to predict what cases do.</p>
+  </div>
+  <p>That case — Star Health, ₹2,04,435 claimed, won at ₹1,44,357 — ran <strong>eighteen months</strong>.
+    Against a four-to-five month target, that is the gap this design has to close.</p>
   <div class="grid2">
     <div class="panel"><h4>Silences nobody counted</h4>
       <p>Eight weeks with no entry at all. Ten weeks between the hearing and the complainant being paid.
@@ -402,14 +409,35 @@ flowchart TB
     </tbody>
   </table></div>
 
+  <h3>Advisor and channel partner are different things</h3>
+  <div class="tw"><table>
+    <thead><tr><th style="width:150px">Party</th><th>Who they are</th><th style="width:190px">What that means for us</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Advisor</strong></td><td>An insurance advisor who <strong>takes a subscription</strong> — silver, gold or platinum. They are a paying customer of ours who happens to bring claims</td><td>No review fee, no L2 fee. Their claims flow straight through. We earn the settlement fee at the end</td></tr>
+      <tr><td><strong>Channel partner</strong></td><td>Someone who does <strong>not</strong> want a subscription — either not an advisor at all, or an advisor who wants to stay off a plan. They pass leads to a branch or staff member and prefer to stay in the background</td><td>No plan revenue. They earn a share of the settlement, and their visibility is deliberately limited</td></tr>
+    </tbody>
+  </table></div>
+
   <div class="note good">
-    <span class="lbl">Settled — the advisor rule</span>
-    <p>A branch <strong>does not earn on its advisor’s cases</strong>. The branch earns on bringing the
-      advisor in and on the advisor’s recurring subscription. Because advisors are on a plan we take
-      <strong>no review fee</strong> from them; after a Lokpal award the fee comes from the complainant,
-      and a share goes to the advisor — the exact split to be decided.</p>
-    <p style="margin-top:9px"><strong>Subscribers currently take no share of award money.</strong> That
-      keeps the model clean: a subscription buys the service, it does not buy a stake in outcomes.</p>
+    <span class="lbl">Settled — the branch rule</span>
+    <p>A branch earns <strong>for referring the advisor</strong> — the referral and the advisor’s
+      recurring subscription. It earns <strong>nothing on that advisor’s claims</strong>. Those belong to
+      the advisor.</p>
+    <p style="margin-top:9px"><strong>Subscribers take no share of award money.</strong> A subscription
+      buys the service; it does not buy a stake in outcomes.</p>
+  </div>
+
+  <h3>Commission is configured, not coded</h3>
+  <div class="note good">
+    <span class="lbl">Settled — and this changes how it gets built</span>
+    <p>Percentages must be <strong>editable by a super-admin</strong>, per party, from ops. A super-admin
+      decides who is in the calculation and who is not; removing a party makes the system
+      <strong>recalculate the rest</strong> rather than leaving a hole.</p>
+    <p style="margin-top:9px">That means commission is a <strong>rules table plus a calculator</strong>,
+      never percentages written into code. Every calculation shows its working — who was included, at
+      what rate, on what base — so a disputed share can be explained rather than argued about. And every
+      change to a rate is recorded with who made it and when: rates that move quietly are how commission
+      disputes start.</p>
   </div>
 
   <div class="note">
@@ -422,9 +450,10 @@ flowchart TB
 
   <div class="note warn">
     <span class="lbl">Still open (Q1)</span>
-    <p>The advisor’s share of the award fee, and whether a case can carry <strong>both</strong> an advisor
-      and a CP. Also: is an advisor a registered party with their own login and payout ledger, or a name
-      recorded for attribution? The first is more work but makes payouts auditable.</p>
+    <p>The default percentages themselves — what an advisor, a branch, a staff member and a channel
+      partner each get out of the settlement fee — and whether a case can carry <strong>both</strong> an
+      advisor and a channel partner. The engine does not care what the numbers are; it does need to know
+      the starting set.</p>
   </div>
 </section>
 
@@ -570,11 +599,20 @@ flowchart TB
       the original, by post”.</p>
   </div>
 
-  <div class="note warn">
-    <span class="lbl">Needed before build (Q2)</span>
-    <p>Life and General have category names but no document matrix. Same table, one row per sub-type,
-      written by whoever handles those cases today. Health ships first — the structure must not assume
-      Health.</p>
+  <h3>Life, General and anything unusual</h3>
+  <div class="note good">
+    <span class="lbl">Settled — and it solves a problem I could not</span>
+    <p>Life and General claims use the <strong>standard document set for that claim type</strong>, plus a
+      <strong>free-form request</strong>: a staff member types what else is needed and the message reaches
+      the complainant on WhatsApp, appearing as a new line on their checklist like any other.</p>
+    <p style="margin-top:9px">This is better than the exhaustive matrix I asked for. A fixed list can only
+      be wrong in one of two directions — too long and people ignore it, or too short and it blocks. A
+      standard list plus “ask for anything else” handles the unusual case without anyone maintaining
+      thirty tables. <strong>The same escape hatch should exist for Health too</strong>, for the case
+      nobody anticipated.</p>
+    <p style="margin-top:9px">One rule to keep it honest: a free-form request is still a
+      <strong>checklist line</strong> with a state and an owner — never a message that vanishes into a
+      chat. Otherwise it is not tracked, and untracked asks are how cases go quiet.</p>
   </div>
 </section>
 
@@ -621,13 +659,21 @@ flowchart TB
       it and when.</p>
   </div>
 
+  <div class="note good">
+    <span class="lbl">Settled — Path B and the human override</span>
+    <p>Path B’s two reminders are <strong>counted like Path C’s</strong>, and every reminder on any path
+      is <strong>flagged for a human to take over</strong> rather than fired blindly. The system schedules
+      and drafts; a person decides whether this particular insurer, on this particular case, should get
+      the standard reminder or something else.</p>
+    <p style="margin-top:9px">That is the right instinct. A reminder to an insurer is correspondence on a
+      live legal matter — the schedule should be automatic, the words should not.</p>
+  </div>
+
   <div class="note warn">
-    <span class="lbl">Still open (Q3)</span>
+    <span class="lbl">Two small things to confirm (Q2)</span>
     <ul style="margin:8px 0 0">
-      <li><strong>Path B’s two reminders</strong> — which days, and counted from when we sent the query
-        reply or from the original send?</li>
       <li><strong>If no acknowledgement ever arrives</strong> — the clock still runs from the send date,
-        and the missing acknowledgement is itself a flag. Confirm that is right.</li>
+        and the missing acknowledgement is itself a flag.</li>
       <li><strong>Does a partial reply reset the 30 days</strong>, or does the window run regardless?</li>
     </ul>
   </div>
@@ -714,9 +760,9 @@ flowchart TB
 <!-- 9 -->
 <section id="s9">
   <div class="sec-head"><span class="sec-num">09</span><h2>Speed, and the clocks that protect it</h2></div>
-  <p class="lede">The target is <strong>two to three months end to end</strong>. The sample case took
-    eighteen. Everything in this section exists to make the difference visible while there is still time
-    to act on it.</p>
+  <p class="lede">The target is <strong>four to five months end to end</strong>. That is a realistic
+    number, and the arithmetic below shows why two to three was not. Everything in this section exists to
+    make the difference visible while there is still time to act on it.</p>
 
   <h3>Where the time has to come from</h3>
   <div class="tw"><table>
@@ -728,20 +774,22 @@ flowchart TB
       <tr><td><strong>Documentation</strong></td><td class="num">10&ndash;20 days</td><td>The big variable. Originals by post are the long pole — track the consignment</td></tr>
       <tr><td><strong>Drafting</strong></td><td class="num">3&ndash;5 days</td><td>Writer and approver capacity</td></tr>
       <tr><td><strong>Representation</strong></td><td class="num">30 days</td><td>Fixed by the ladder — cannot be compressed, only started sooner</td></tr>
-      <tr><td><strong>Escalation &amp; Lokpal</strong></td><td class="num">outside our control</td><td>Ombudsman timelines. All we control is replying to them the same day</td></tr>
+      <tr><td><strong>Escalation &amp; Lokpal</strong></td><td class="num">6&ndash;12 weeks +</td><td>Ombudsman timelines, entirely outside our control. All we control is replying to them the same day — and that is worth measuring on its own</td></tr>
       <tr><td><strong>Settlement</strong></td><td class="num">7&ndash;14 days</td><td>Seven weeks in the sample case. C11.3 exists for this</td></tr>
     </tbody>
   </table></div>
 
-  <div class="note warn">
-    <span class="lbl">The honest arithmetic</span>
+  <div class="note good">
+    <span class="lbl">Why four to five months is the right number</span>
     <p>Intake to representation sent, at target, is roughly <strong>25 to 43 days</strong>. Add the
       mandatory 30-day window and a case is <strong>two to two and a half months old before the Ombudsman
-      is even an option</strong>. Two to three months end to end is therefore achievable only for cases
-      the insurer settles during the window — anything reaching the Ombudsman will run longer, and that
-      is outside our control.</p>
-    <p style="margin-top:9px">Worth being explicit with complainants about that from the start. The number
-      to hold the team to is <strong>days on our side of the line</strong>, not total elapsed time.</p>
+      is even an option</strong>. Everything after that belongs to the Ombudsman’s calendar, not ours.</p>
+    <p style="margin-top:9px">So four to five months is achievable and two to three was not — except for
+      cases the insurer settles during the window, which are worth counting separately because they are
+      the cheapest wins we get.</p>
+    <p style="margin-top:9px">The number to hold the team to is <strong>days on our side of the
+      line</strong>: intake to representation-sent, and same-day replies to anything the Ombudsman asks.
+      Total elapsed time is mostly a measure of other people’s speed.</p>
   </div>
 
   <h3>The filing window</h3>
@@ -751,8 +799,8 @@ flowchart TB
       A case can be progressing perfectly — documents in, draft written, insurer corresponding — while
       that window quietly closes. Then the route is gone.</p>
     <p style="margin-top:9px">It should be a <strong>countdown on the case header from day one</strong>,
-      amber at 90 days and red at 30. With a 2&ndash;3 month target it should never bind — which is
-      exactly why it will be forgotten, and exactly why it must be automatic.</p>
+      amber at 90 days and red at 30. At a four-to-five month pace it will rarely bind — which is exactly
+      why it will be forgotten, and exactly why it must be automatic.</p>
   </div>
 </section>
 
@@ -959,9 +1007,75 @@ flowchart TB
 
 <!-- 14 -->
 <section id="s14">
-  <div class="sec-head"><span class="sec-num">14</span><h2>Money, and who is accountable</h2></div>
-  <p class="lede">Payment glitches have come from having many intake channels and one loose set of rules.
-    The fix is not more checks — it is <strong>one path in, and a name against every decision</strong>.</p>
+  <div class="sec-head"><span class="sec-num">14</span><h2>Fees, GST and commission</h2></div>
+  <p class="lede">Payment glitches have come from many intake channels and one loose set of rules. The fix
+    is not more checks — it is <strong>one path in, one fee model, and a name against every
+    decision</strong>.</p>
+
+  <h3>What each kind of complainant pays</h3>
+  <div class="tw"><table>
+    <thead><tr><th style="width:190px">Where the claim came from</th><th style="width:130px">Review fee</th><th style="width:120px">L2 fee</th><th>At settlement</th></tr></thead>
+    <tbody>
+      <tr><td><strong>An active subscriber’s claim</strong><br><span style="color:var(--ink-3);font-size:12.5px">advisor on silver, gold or platinum</span></td><td><span class="chip c-good">none</span></td><td><span class="chip c-good">none</span></td><td><strong>15% + GST</strong> of the settled amount</td></tr>
+      <tr><td><strong>Direct client</strong></td><td><span class="chip c-wait">paid up front</span><br><span style="color:var(--ink-3);font-size:12.5px">non-refundable</span></td><td>Paid before L2 work starts</td><td><strong>15% + GST</strong></td></tr>
+      <tr><td><strong>Branch or staff walk-in</strong></td><td>Whoever brings the case pays</td><td>Whoever moves it forward pays</td><td><strong>15% + GST</strong>, split down the chain</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note good">
+    <span class="lbl">Settled — subscription is the product</span>
+    <p>An active subscriber’s claim <strong>flows straight through</strong>: no review fee, no L2 fee,
+      nothing to chase, no conversion step to stall in. The only money is the settlement fee at the end.</p>
+    <p style="margin-top:9px">That is a cleaner business than the direct funnel, and the system should
+      make the difference visible — a subscriber’s claim should never appear in the conversion queue at
+      all, because there is nothing to convert.</p>
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">Settled — the review fee is not refundable</span>
+    <p>A direct client pays first, the review happens, then the case moves to L2. If they withdraw at that
+      point the review fee is <strong>not returned</strong> — the work was done and delivered.</p>
+    <p style="margin-top:9px">This needs to be said <strong>before</strong> they pay, in plain words, on
+      the payment screen and in the receipt. A fee that is non-refundable and unexplained is the single
+      most common source of a complaint against a firm like ours. Said clearly up front, it is simply
+      the terms.</p>
+  </div>
+
+  <h3>The authorisation is also the fee agreement</h3>
+  <div class="note stop">
+    <span class="lbl">This changes the sequence, not just the wording</span>
+    <p>The authorisation letter must carry the <strong>actual number</strong>: “as per your disputed claim
+      amount with the insurance company, this is the tentative calculation” — the disputed amount, 15%,
+      the GST on it, and the total the complainant will owe <strong>after</strong> the claim settles,
+      whether by Ombudsman award or consumer forum.</p>
+    <p style="margin-top:9px">Which means the <strong>disputed amount must be captured and validated
+      before the authorisation can be generated</strong>. It cannot be a field someone fills in later.
+      The order is: capture the disputed amount &rarr; validate it against the rejection letter and policy
+      &rarr; <em>then</em> generate the authorisation with the calculation on it &rarr; then take consent.</p>
+    <p style="margin-top:9px">The claim form needs reworking for this too — the disputed amount stops
+      being one field among many and becomes the number the entire commercial relationship rests on.</p>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Why this is worth the extra step</span>
+    <p>A complainant who signs knowing they will owe roughly ₹22,000 on a ₹1,50,000 settlement does not
+      dispute the invoice five months later. A complainant who signs a generic authorisation and is billed
+      at the end has every reason to argue — and that argument arrives exactly when we are least able to
+      do anything about it, because the money is already in their account (C11.4).</p>
+    <p style="margin-top:9px">The tentative calculation is not a legal nicety. It is the thing that makes
+      the last mile collectable.</p>
+  </div>
+
+  <h3>Every payment shows base and GST</h3>
+  <div class="note good">
+    <span class="lbl">Settled</span>
+    <p>Every payment is <strong>base price + GST</strong>, shown separately — on the screen, in the
+      receipt, and in the ledger row. The gateway deducts GST automatically once it is passed through, but
+      the split must be explicit everywhere rather than inferred, so a receipt can always be reconciled and
+      a settlement fee can always be explained.</p>
+    <p style="margin-top:9px">The same applies to the settlement fee: <strong>15% of the settled amount,
+      plus GST on that 15%</strong> — never a single blended figure.</p>
+  </div>
 
   <h3>Who pays the L2 fee</h3>
   <div class="note good">
@@ -987,8 +1101,10 @@ flowchart TB
   </table></div>
 
   <h3>What a closed case has to account for</h3>
+  <p style="font-size:13px;color:var(--ink-3)">One real example, to show the shape of what must be
+    recorded — not a model of how cases go.</p>
   <div class="tw"><table>
-    <thead><tr><th style="width:190px">Money event</th><th>Sample case</th><th>Held as</th></tr></thead>
+    <thead><tr><th style="width:190px">Money event</th><th>One closed case</th><th>Held as</th></tr></thead>
     <tbody>
       <tr><td><strong>Claim amount</strong></td><td class="num">₹2,04,435</td><td>Captured at intake</td></tr>
       <tr><td><strong>Award</strong></td><td class="num">₹1,44,357</td><td>Routinely less than claimed</td></tr>
@@ -1026,7 +1142,7 @@ flowchart TB
       <tr><td class="id">W2</td><td>Before archiving</td><td>A final message on both channels: “we are closing this, reply to keep it open”. One last chance, clearly given</td></tr>
       <tr><td class="id">W3</td><td>Archived, day 0&ndash;60</td><td>Fully restorable if they come back. Hidden from every queue</td></tr>
       <tr><td class="id">W4</td><td>Day 60</td><td>Documents and case detail deleted. The basics are kept so a returning complainant is recognised</td></tr>
-      <tr><td class="id">W5</td><td>Any fee already paid</td><td>Refund policy decides. This still needs writing down (Q4)</td></tr>
+      <tr><td class="id">W5</td><td>Any fee already paid</td><td><strong>Not refunded.</strong> The review was done and delivered; the L2 fee was paid to start work that started. Stated up front at the point of payment, so this is the terms rather than a surprise</td></tr>
     </tbody>
   </table></div>
 
@@ -1095,7 +1211,7 @@ flowchart TB
     <tbody>
       <tr><td><strong>Intake / validation</strong></td><td>Every claim is complete and reachable before it moves. V1&ndash;V8</td><td>Drafts failing validation</td></tr>
       <tr><td><strong>Medical Officer</strong></td><td>Health reviews and health draft approval</td><td>Health claims awaiting verdict</td></tr>
-      <tr><td><strong>Advocate</strong></td><td>Life and General reviews, legal approval, Ombudsman strategy</td><td>Non-health awaiting verdict</td></tr>
+      <tr><td><strong>Advocate</strong></td><td>Life and General reviews, legal approval, Ombudsman strategy. <span style="color:var(--ink-3)">Advocates are in place; Life and General volume is small today, so this scales up only as that mix changes</span></td><td>Non-health awaiting verdict</td></tr>
       <tr><td><strong>Conversion</strong></td><td>The 27. Explaining the verdict, quoting, collecting</td><td>Can-fight, L2 unpaid, by age</td></tr>
       <tr><td><strong>Operation Officer</strong></td><td>Consent, claim mailbox, dashboard, category</td><td>Consolidation incomplete</td></tr>
       <tr><td><strong>Doc team</strong></td><td>Exceptions the bot cannot handle — wrong documents, originals, hospitals refusing records</td><td>Flagged document lines</td></tr>
@@ -1126,7 +1242,7 @@ flowchart TB
   <div class="tw"><table>
     <thead><tr><th style="width:44px">ID</th><th style="width:180px">Fix</th><th>Detail</th></tr></thead>
     <tbody>
-      <tr><td class="id">K1</td><td><strong>“Claimant” &rarr; “complainant”</strong></td><td><strong>297 occurrences across 16 files</strong>, including a whole module and the ops screens. The user-facing words should all change. Internal field names are a separate question — <code>complainant_name</code> and <code>complainant_phone</code> columns already exist alongside claimant-named code, and that inconsistency is worth resolving in the same pass rather than layering another name on top</td></tr>
+      <tr><td class="id">K1</td><td><strong>“Claimant” &rarr; “complainant”</strong></td><td><strong>297 occurrences across 16 files</strong>, including a whole module and the ops screens. Every user-facing word changes. <code>complainant_name</code> and <code>complainant_phone</code> columns already exist alongside claimant-named code, so the inconsistency gets resolved in the same pass rather than layering a third name on top.<br><br><strong>The harder half is the old data.</strong> In existing cases claimant, insured and complainant are mixed — the documents on file usually make clear who is who, but not always. So this is not a find-and-replace: every historic case gets checked, and any case where the three cannot be told apart is raised with a <strong>verify-and-edit flag carrying an explanation of what is ambiguous</strong>, for a person to resolve. Renaming without that step would silently assert things about people that may not be true</td></tr>
       <tr><td class="id">K2</td><td><strong>Authorisation letter on letterhead</strong></td><td>Today a plain Word document. It should be <strong>generated</strong> per case as a PDF on Nidaan Legal India letterhead with the logo, pre-filled with the complainant, the insured, the policy and claim numbers and the insurer — so nobody retypes it and every copy looks the same. This is the first thing a complainant sees that says we are a law firm; it is worth getting right</td></tr>
       <tr><td class="id">K3</td><td><strong>Health-check debounce</strong></td><td>A monitoring alert fired for 30 minutes when the WhatsApp number was perfectly healthy — the check could not reach Meta and reported it as an outage. It should take two or three consecutive failures to raise an alarm, and say “cannot reach” rather than “stopped working”</td></tr>
     </tbody>
@@ -1136,26 +1252,38 @@ flowchart TB
 <!-- 18 -->
 <section id="s18">
   <div class="sec-head"><span class="sec-num">18</span><h2>Still open</h2></div>
-  <p class="lede">Everything else has been settled. These six change what gets built.</p>
+  <p class="lede">Most of the design is now settled. Five things remain, and only the first two block
+    building.</p>
 
   <div class="tw"><table>
     <thead><tr><th style="width:44px">ID</th><th style="width:250px">Question</th><th>Why it matters</th></tr></thead>
     <tbody>
-      <tr><td class="id">Q1</td><td><strong>The advisor’s share</strong> of the award fee, and whether a case can carry both an advisor and a CP. Is an advisor a registered party with a login and payout ledger?</td><td>Settlement cannot be built without it</td></tr>
-      <tr><td class="id">Q2</td><td><strong>Life and General document matrices</strong> — one table each, from whoever handles those cases</td><td>Health ships first, but the structure must not assume Health</td></tr>
-      <tr><td class="id">Q3</td><td><strong>Path B’s two reminders</strong> — which days, counted from when? Does a partial reply reset the 30-day window?</td><td>Completes the insurer ladder</td></tr>
-      <tr><td class="id">Q4</td><td><strong>Refund on withdrawal</strong> — a complainant who stops after paying the L2 fee</td><td>W5 cannot be written without it, and it is a trust issue</td></tr>
-      <tr><td class="id">Q5</td><td><strong>Real minutes per task</strong> — replace the estimates in section 16 with observed numbers</td><td>Turns the staffing model from arithmetic into a plan you can hire against</td></tr>
-      <tr><td class="id">Q6</td><td><strong>Who reviews Life and General today</strong> — one advocate, or several by specialism? And what is the review capacity per person per day?</td><td>The reviewer is the first bottleneck at 35 claims a day</td></tr>
+      <tr><td class="id">Q1</td><td><strong>The starting percentages.</strong> What does an advisor, a branch, a staff member and a channel partner each get out of the 15%? And can one case carry both an advisor and a channel partner?</td><td>The commission engine is configurable, so these are defaults rather than fixed rules — but it needs a starting set to launch with</td></tr>
+      <tr><td class="id">Q2</td><td><strong>Two details on the insurer ladder.</strong> If no acknowledgement ever arrives, the 30-day clock still runs from the send date — confirm. And does a partial reply reset the window, or does it run regardless?</td><td>Completes the ladder in section 7</td></tr>
+      <tr><td class="id">Q3</td><td><strong>How long each task actually takes.</strong> Roughly how many minutes does a health review take today? Writing a gist and draft? Filing at the Ombudsman? Even rough numbers from the people doing the work beat my estimates</td><td>Section 16 currently runs on my guesses. Real numbers turn it from arithmetic into a plan you can hire against — and tell you which role to hire <em>first</em></td></tr>
+      <tr><td class="id">Q4</td><td><strong>Does the 15% apply to a settlement the insurer pays during the 30-day window</strong>, before any escalation — or only to an Ombudsman or consumer-forum award?</td><td>The best outcome for a complainant is the insurer simply paying. It should not be the outcome we earn least from, or the incentive points the wrong way</td></tr>
+      <tr><td class="id">Q5</td><td><strong>Who signs the authorisation when the complainant is not the insured</strong> — a family member acting for a patient, or for someone who has died?</td><td>Common in health claims, and the authorisation is now the fee agreement too, so it has to be signed by someone who can commit to it</td></tr>
     </tbody>
   </table></div>
+
+  <div class="note good">
+    <span class="lbl">On Q3 — what I am actually asking</span>
+    <p>Section 16 says roughly 20 people for 35 claims a day. That number is built on my estimates of how
+      long each task takes — 40 minutes for a health review, 75 for drafting, 90 for an Ombudsman filing.
+      <strong>I have no idea whether those are right.</strong></p>
+    <p style="margin-top:9px">Ask three people doing the work to time themselves on a normal day, or just
+      give their honest guess. Type the real numbers into the calculator and it recalculates. The point is
+      not precision — it is that the row with the largest hours is where the queue will form, and that is
+      the role to hire first.</p>
+  </div>
 
   <div class="note">
     <span class="lbl">Build order</span>
     <p>To be decided separately, once this map is agreed. Two candidates are worth flagging as
       independently valuable whenever the order is set: <strong>the conversion stage</strong>, because 27
-      already-reviewed cases are sitting in it, and <strong>the attribution chain</strong>, because every
-      day without it is commission data lost for good.</p>
+      already-reviewed cases are sitting in it — though note that subscriber claims bypass it entirely, so
+      it matters most for the direct funnel; and <strong>the attribution chain</strong>, because every day
+      without it is commission data lost for good.</p>
   </div>
 </section>
 
