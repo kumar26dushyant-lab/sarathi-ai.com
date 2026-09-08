@@ -10455,7 +10455,7 @@ function cbRender(d){
       if (!byB[k]) return;
       const nice = {none:'Us', internal:'A reviewer here', complainant:'The complainant',
                     insurer:'The insurer', lokpal:'The Ombudsman', hold:'Paused'}[k] || k;
-      who += _cbChip(nice, byB[k], _cbState.blocker===k, `cbSet('blocker','${k}')`);
+      who += _cbChip(esc(nice), byB[k], _cbState.blocker===k, `cbSet('blocker','${k}')`);
     });
     who += '</div>';
 
@@ -10473,7 +10473,7 @@ function cbRender(d){
       const nice = {stalled:'Stalled', fee_unpaid:'Fee unpaid', no_email:'No email',
                     no_phone:'No phone', unreviewed:'Not reviewed', docs_short:'Documents short',
                     no_timeline:'Nothing recorded', filing_window:'Deadline near'}[k] || k;
-      prob += _cbChip(nice, byF[k], _cbState.flag===k, `cbSet('flag','${k}')`);
+      prob += _cbChip(esc(nice), byF[k], _cbState.flag===k, `cbSet('flag','${k}')`);
     });
     prob += '</div>';
 
