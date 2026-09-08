@@ -6228,14 +6228,19 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
 
 @app.get("/nidaan/ops/api/cases/board")
 async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
-                                flag: str = "", limit: int = 300):
-    """The work board. Cases nobody else is holding up come first, oldest waiting at the top."""
+                                flag: str = "", mine: int = 0, limit: int = 300):
+    """The work board. Cases nobody else is holding up come first, oldest waiting at the top.
+
+    `mine=1` narrows to the caller's own assigned cases — the queue a staff member opens to see
+    what THEY need to do today, which is the whole point of the board for most of the team.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "team_member")
+    caller = _require_staff(request, "team_member")
     import biz_nidaan_case_state as _cs
+    _me = caller.get("staff_id") or caller.get("sub") if mine else None
     return await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
-                           flag=flag.strip(), limit=limit)
+                           flag=flag.strip(), assigned_to=_me, limit=limit)
 
 
 @app.get("/nidaan/ops/api/cases/{claim_id}/state")

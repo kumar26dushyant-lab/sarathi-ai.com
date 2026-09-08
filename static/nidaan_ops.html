@@ -447,6 +447,7 @@ select.form-input option{background:#1e293b}
     <main class="main">
       <div id="panel-overview" class="panel"></div>
       <div id="panel-pipeline" class="panel" style="display:none"></div>
+      <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
       <div id="panel-support" class="panel" style="display:none"></div>
@@ -642,7 +643,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','board','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
   showPanel(initial, true);
@@ -946,6 +947,7 @@ function buildSidebar() {
   // Grouped into clear zones. A zone header shows only if it has ≥1 visible item.
   const zones = [
     {h:'Work', items:[
+      {id:'board',    label:'🧭 Case Board',       minRank:0},
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
       {id:'crm',      label:'🎯 CRM',              minRank:0},
       {id:'pipeline', label:'🗂️ Claim Pipeline',   minRank:1},
@@ -1027,6 +1029,7 @@ function showPanel(id, fromHistory) {
     claims: loadClaims,
     l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
+    board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
     mybiz: loadMyBusiness,
@@ -10324,6 +10327,229 @@ async function saveWaSettings(){
   if(r.ok){ m.style.color='var(--nd-success-text)'; m.textContent='✓ Saved.'; }
   else { m.style.color='var(--nd-danger-text)'; const e=await r.json().catch(()=>({})); m.textContent='✕ '+(e.detail||'Failed'); }
 }
+// ══ Case Board — where every case is, and who owes the next move ═══════════════
+// `status` says what happened last. It cannot say where a case sits or who is holding it up,
+// so those lived in people's heads and a case could sit for weeks unnoticed. This is the
+// answer to "what do I work on today": ours first, longest-waiting at the top.
+//
+// Cards rather than a table at every width — a case carries several flags at once, and a table
+// wide enough to hold them would scroll sideways on a phone. Cards read the same on both.
+let _cbState = {blocker:'', stage:'', flag:'', mine:false};
+let _cbBusy = false;
+
+function _cbStyles(){
+  if (document.getElementById('cbCss')) return;
+  const st = document.createElement('style'); st.id = 'cbCss';
+  st.textContent = `
+  .cb-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+    background:var(--nd-border);border:1px solid var(--nd-border);border-radius:12px;overflow:hidden;margin-bottom:1rem}
+  .cb-tile{background:var(--nd-bg-surface);padding:.75rem .9rem}
+  .cb-tile .v{font-size:1.6rem;font-weight:800;line-height:1.1;color:var(--nd-text-primary)}
+  .cb-tile .v.hot{color:var(--nd-danger-text)}
+  .cb-tile .v.warn{color:var(--nd-warning-text)}
+  .cb-tile .k{font-size:.72rem;color:var(--nd-text-muted);margin-top:.2rem;line-height:1.35}
+  .cb-fgroup{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem}
+  .cb-fgroup .lbl{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--nd-text-faint);font-weight:700;min-width:74px}
+  .cb-chip{background:none;border:1px solid var(--nd-border);color:var(--nd-text-secondary);
+    border-radius:999px;padding:.24rem .68rem;font-size:.76rem;cursor:pointer;font-weight:600;
+    font-family:inherit;white-space:nowrap}
+  .cb-chip:hover{border-color:var(--nd-text-faint);color:var(--nd-text-primary)}
+  .cb-chip[aria-pressed="true"]{background:var(--nd-accent);color:#04121f;border-color:var(--nd-accent);font-weight:800}
+  .cb-chip .n{opacity:.72;font-weight:600;margin-left:.25rem}
+  .cb-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:.65rem;margin-top:.9rem}
+  .cb-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;
+    padding:.75rem .85rem;cursor:pointer;display:flex;flex-direction:column;gap:.45rem;text-align:left;
+    font-family:inherit;width:100%}
+  .cb-card:hover{border-color:var(--nd-border-strong);background:var(--nd-bg-surface-2)}
+  .cb-card.ours{box-shadow:inset 3px 0 0 var(--nd-accent)}
+  .cb-top{display:flex;gap:.5rem;align-items:baseline;justify-content:space-between}
+  .cb-who{font-weight:700;font-size:.92rem;color:var(--nd-text-primary);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .cb-id{font-size:.7rem;color:var(--nd-text-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .cb-meta{font-size:.75rem;color:var(--nd-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cb-row{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}
+  .cb-b{display:inline-block;font-size:.66rem;font-weight:700;padding:.13rem .45rem;border-radius:5px;
+    letter-spacing:.02em;white-space:nowrap}
+  .cb-b-stage{background:rgba(34,211,238,.16);color:var(--nd-cyan-text);border:1px solid rgba(34,211,238,.3)}
+  .cb-b-ours{background:rgba(168,85,247,.16);color:var(--nd-purple-text);border:1px solid rgba(168,85,247,.32)}
+  .cb-b-wait{background:var(--nd-bg-surface-3);color:var(--nd-text-secondary);border:1px solid var(--nd-border)}
+  .cb-b-flag{background:rgba(239,68,68,.13);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.28)}
+  .cb-b-soft{background:var(--nd-warning-soft);color:var(--nd-warning-text);border:1px solid var(--nd-warning-line)}
+  .cb-age{font-size:.72rem;color:var(--nd-text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .cb-age b{color:var(--nd-danger-text)}
+  .cb-docs{font-size:.72rem;color:var(--nd-text-muted);font-variant-numeric:tabular-nums}
+  .cb-empty{padding:2.2rem 1rem;text-align:center;color:var(--nd-text-muted);font-size:.88rem;
+    border:1px dashed var(--nd-border);border-radius:12px;margin-top:.9rem}
+  .cb-empty .ei{font-size:1.7rem;display:block;margin-bottom:.4rem}
+  @media (max-width:640px){
+    .cb-list{grid-template-columns:1fr}
+    .cb-fgroup .lbl{min-width:100%;margin-bottom:-.15rem}
+    .cb-tile .v{font-size:1.35rem}
+  }`;
+  document.head.appendChild(st);
+}
+
+function _cbChip(label, count, active, onclick){
+  const n = count == null ? '' : ` <span class="n">${count}</span>`;
+  return `<button type="button" class="cb-chip" aria-pressed="${active}" onclick="${onclick}">${label}${n}</button>`;
+}
+
+async function loadCaseBoard(){
+  _cbStyles();
+  const panel = document.getElementById('panel-board');
+  if (!panel) return;
+  if (!panel.dataset.ready){
+    panel.innerHTML =
+      '<div class="section-hdr"><div>'
+      + '<div class="section-title">🧭 Case Board</div>'
+      + '<div class="section-sub">Every open case, where it has reached, and who we are waiting for. '
+      + 'Cases where <b>nobody else is holding us up</b> come first — those are the ones to move today.</div>'
+      + '</div></div>'
+      + '<div id="cbTiles" class="cb-tiles"></div>'
+      + '<div id="cbFilters"></div>'
+      + '<div id="cbBody"><div class="cb-empty">Loading cases…</div></div>';
+    panel.dataset.ready = '1';
+  }
+  await cbRefresh();
+}
+
+async function cbRefresh(){
+  if (_cbBusy) return;
+  _cbBusy = true;
+  const body = document.getElementById('cbBody');
+  try{
+    const q = new URLSearchParams();
+    if (_cbState.stage)   q.set('stage', _cbState.stage);
+    if (_cbState.blocker) q.set('blocker', _cbState.blocker);
+    if (_cbState.flag)    q.set('flag', _cbState.flag);
+    if (_cbState.mine)    q.set('mine', '1');
+    const r = await API('/cases/board?' + q.toString());
+    if (!r.ok) throw new Error('load');
+    cbRender(await r.json());
+  }catch(e){
+    if (body) body.innerHTML =
+      '<div class="cb-empty"><span class="ei">⚠️</span>Could not load the case board.'
+      + '<div style="margin-top:.5rem"><button class="btn-sm btn-ghost" onclick="cbRefresh()">Try again</button></div></div>';
+  }finally{ _cbBusy = false; }
+}
+
+function cbRender(d){
+  const L = d.labels || {stage:{}, blocker:{}, flag:{}};
+  const byB = d.by_blocker || {}, byS = d.by_stage || {}, byF = d.by_flag || {};
+
+  // ── the four numbers worth seeing before any filter ──
+  const tiles = document.getElementById('cbTiles');
+  if (tiles) tiles.innerHTML =
+      `<div class="cb-tile"><div class="v">${d.open_total||0}</div><div class="k">open cases</div></div>`
+    + `<div class="cb-tile"><div class="v warn">${d.ours||0}</div><div class="k">waiting on us</div></div>`
+    + `<div class="cb-tile"><div class="v ${(byF.stalled||0)?'hot':''}">${byF.stalled||0}</div><div class="k">stalled too long</div></div>`
+    + `<div class="cb-tile"><div class="v ${(byF.fee_unpaid||0)?'hot':''}">${byF.fee_unpaid||0}</div><div class="k">waiting on a fee</div></div>`;
+
+  // ── filters. Only offer a chip that would actually match something ──
+  const f = document.getElementById('cbFilters');
+  if (f){
+    let who = '<div class="cb-fgroup"><span class="lbl">Waiting on</span>'
+      + _cbChip('Everything', d.open_total||0, !_cbState.blocker, "cbSet('blocker','')");
+    ['none','internal','complainant','insurer','lokpal','hold'].forEach(function(k){
+      if (!byB[k]) return;
+      const nice = {none:'Us', internal:'A reviewer here', complainant:'The complainant',
+                    insurer:'The insurer', lokpal:'The Ombudsman', hold:'Paused'}[k] || k;
+      who += _cbChip(nice, byB[k], _cbState.blocker===k, `cbSet('blocker','${k}')`);
+    });
+    who += '</div>';
+
+    let stg = '<div class="cb-fgroup"><span class="lbl">Stage</span>'
+      + _cbChip('All stages', null, !_cbState.stage, "cbSet('stage','')");
+    (d.stage_order||[]).forEach(function(k){
+      if (!byS[k]) return;
+      stg += _cbChip(esc(L.stage[k]||k), byS[k], _cbState.stage===k, `cbSet('stage','${k}')`);
+    });
+    stg += '</div>';
+
+    let prob = '<div class="cb-fgroup"><span class="lbl">Problem</span>'
+      + _cbChip('Any', null, !_cbState.flag, "cbSet('flag','')");
+    Object.keys(byF).sort(function(a,b){ return byF[b]-byF[a]; }).forEach(function(k){
+      const nice = {stalled:'Stalled', fee_unpaid:'Fee unpaid', no_email:'No email',
+                    no_phone:'No phone', unreviewed:'Not reviewed', docs_short:'Documents short',
+                    no_timeline:'Nothing recorded', filing_window:'Deadline near'}[k] || k;
+      prob += _cbChip(nice, byF[k], _cbState.flag===k, `cbSet('flag','${k}')`);
+    });
+    prob += '</div>';
+
+    const mine = '<div class="cb-fgroup"><span class="lbl">Show</span>'
+      + _cbChip('Everyone&rsquo;s cases', null, !_cbState.mine, "cbSet('mine',false)")
+      + _cbChip('Only mine', _cbState.mine ? (d.mine_total||0) : null, _cbState.mine, "cbSet('mine',true)")
+      + '</div>';
+
+    f.innerHTML = who + stg + prob + mine;
+  }
+
+  // ── the list ──
+  const body = document.getElementById('cbBody');
+  const items = d.items || [];
+  if (!items.length){
+    const filtered = _cbState.stage || _cbState.blocker || _cbState.flag || _cbState.mine;
+    body.innerHTML = filtered
+      ? '<div class="cb-empty"><span class="ei">🔍</span>No cases match these filters.'
+        + '<div style="margin-top:.5rem"><button class="btn-sm btn-ghost" onclick="cbClear()">Clear filters</button></div></div>'
+      : '<div class="cb-empty"><span class="ei">✅</span>Nothing open. Every case is closed or settled.</div>';
+    return;
+  }
+
+  const flagName = {stalled:'Stalled', fee_unpaid:'Fee unpaid', no_email:'No email',
+                    no_phone:'No phone', unreviewed:'Not reviewed', docs_short:'Docs short',
+                    no_timeline:'Nothing recorded', filing_window:'Deadline near'};
+
+  body.innerHTML =
+    `<div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.35rem">`
+    + `Showing ${items.length} of ${d.matching||items.length}`
+    + (items.length < (d.matching||0) ? ' — narrow the filters to see the rest' : '')
+    + `</div><div class="cb-list">`
+    + items.map(function(it){
+        const ours = it.blocker === 'none' || it.blocker === 'internal';
+        const who = (it.who || '').trim() || '(name not recorded)';
+        const wait = ours
+          ? `<span class="cb-b cb-b-ours">${it.blocker==='internal'?'With a reviewer':'Ours to move'}</span>`
+          : `<span class="cb-b cb-b-wait">Waiting: ${esc((L.blocker[it.blocker]||it.blocker).replace(/^The /,''))}</span>`;
+        const age = it.age_days == null ? ''
+          : (it.over_by > 0
+              ? `<span class="cb-age"><b>${it.age_days}d</b> · ${it.over_by}d over</span>`
+              : `<span class="cb-age">${it.age_days}d</span>`);
+        const flags = (it.flags||[]).map(function(fl){
+          const soft = (fl === 'unreviewed' || fl === 'docs_short' || fl === 'no_timeline');
+          return `<span class="cb-b ${soft?'cb-b-soft':'cb-b-flag'}">${esc(flagName[fl]||fl)}</span>`;
+        }).join('');
+        const bits = [];
+        if (it.insurer) bits.push(esc(it.insurer));
+        if (it.claim_type) bits.push(esc(it.claim_type));
+        if (it.amount) bits.push('₹' + Number(it.amount).toLocaleString('en-IN'));
+        if (it.branch_code) bits.push(esc(it.branch_code));
+        const docs = (it.docs && it.docs.total)
+          ? `<span class="cb-docs">Documents ${it.docs.done}/${it.docs.total}</span>` : '';
+        return `<button type="button" class="cb-card${ours?' ours':''}" onclick="openClaimDrawer(${it.claim_id})"
+                  title="Open case NP-${it.claim_id}">
+            <div class="cb-top"><span class="cb-who">${esc(who)}</span><span class="cb-id">NP-${it.claim_id}</span></div>
+            ${bits.length?`<div class="cb-meta">${bits.join(' · ')}</div>`:''}
+            <div class="cb-row"><span class="cb-b cb-b-stage">${esc(L.stage[it.stage]||it.stage)}</span>${wait}${age}</div>
+            ${(flags||docs)?`<div class="cb-row">${flags}${docs}</div>`:''}
+          </button>`;
+      }).join('')
+    + '</div>';
+}
+
+function cbSet(k, v){
+  if (k === 'mine') _cbState.mine = !!v;
+  else _cbState[k] = (_cbState[k] === v) ? '' : v;   // tapping the active chip clears it
+  cbRefresh();
+}
+function cbClear(){
+  _cbState = {blocker:'', stage:'', flag:'', mine:false};
+  cbRefresh();
+}
+window.loadCaseBoard=loadCaseBoard; window.cbRefresh=cbRefresh;
+window.cbSet=cbSet; window.cbClear=cbClear;
+
 // ══ WhatsApp INBOX — conversations, who is speaking, and human takeover ══════════
 // The panel used to render a flat table of the last 25 messages across every number. Ops could
 // not tell who was talking to whom, whether the AI or a colleague had answered, or whether

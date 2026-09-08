@@ -234,7 +234,7 @@ async def _last_activity(claim_ids: list) -> dict:
 
 
 async def board(*, stage: str = "", blocker: str = "", flag: str = "",
-                limit: int = 300) -> dict:
+                assigned_to=None, limit: int = 300) -> dict:
     """Every open case with its derived state, plus counts for the filter chips.
 
     Ordered so the answer to "what do I do next" is the top of the list: cases nobody else is
@@ -266,6 +266,7 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "claim_type": r.get("claim_type") or "",
             "amount": r.get("disputed_amount") or 0,
             "branch_code": r.get("branch_code") or "",
+            "assigned_to": r.get("assigned_to_staff_id"),
             "docs": {"done": done, "total": total},
             **st,
         })
@@ -282,6 +283,14 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             tally_flag[f] = tally_flag.get(f, 0) + 1
 
     open_items = [it for it in items if it["stage"] != "closed"]
+    mine_total = 0
+    if assigned_to is not None:
+        try:
+            _aid = int(assigned_to)
+            mine_total = sum(1 for it in open_items if it["assigned_to"] == _aid)
+            open_items = [it for it in open_items if it["assigned_to"] == _aid]
+        except (TypeError, ValueError):
+            pass
     if stage:
         open_items = [it for it in open_items if it["stage"] == stage]
     if blocker:
@@ -298,6 +307,7 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
         "matching": len(open_items),
         "open_total": sum(tally_stage.values()),
         "ours": sum(v for k, v in tally_blocker.items() if k in OURS),
+        "mine_total": mine_total,
         "by_stage": tally_stage,
         "by_blocker": tally_blocker,
         "by_flag": tally_flag,
