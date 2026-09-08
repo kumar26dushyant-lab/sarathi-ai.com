@@ -10336,6 +10336,7 @@ async function saveWaSettings(){
 // wide enough to hold them would scroll sideways on a phone. Cards read the same on both.
 let _cbState = {blocker:'', stage:'', flag:'', mine:false};
 let _cbBusy = false;
+let _cbLast = {};        // the last board response — the action sheet reads the case from here
 
 function _cbStyles(){
   if (document.getElementById('cbCss')) return;
@@ -10359,8 +10360,7 @@ function _cbStyles(){
   .cb-chip .n{opacity:.72;font-weight:600;margin-left:.25rem}
   .cb-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:.65rem;margin-top:.9rem}
   .cb-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;
-    padding:.75rem .85rem;cursor:pointer;display:flex;flex-direction:column;gap:.45rem;text-align:left;
-    font-family:inherit;width:100%}
+    padding:.75rem .85rem;display:flex;flex-direction:column;gap:.45rem;text-align:left}
   .cb-card:hover{border-color:var(--nd-border-strong);background:var(--nd-bg-surface-2)}
   .cb-card.ours{box-shadow:inset 3px 0 0 var(--nd-accent)}
   .cb-top{display:flex;gap:.5rem;align-items:baseline;justify-content:space-between}
@@ -10379,6 +10379,16 @@ function _cbStyles(){
   .cb-age{font-size:.72rem;color:var(--nd-text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .cb-age b{color:var(--nd-danger-text)}
   .cb-docs{font-size:.72rem;color:var(--nd-text-muted);font-variant-numeric:tabular-nums}
+  .cb-note{font-size:.74rem;color:var(--nd-text-muted);font-style:italic;
+    border-left:2px solid var(--nd-border-strong);padding-left:.5rem}
+  .cb-acts{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.15rem;padding-top:.5rem;
+    border-top:1px solid var(--nd-border)}
+  .cb-act{flex:1;min-width:110px;background:none;border:1px solid var(--nd-border);
+    color:var(--nd-text-secondary);border-radius:7px;padding:.34rem .5rem;font-size:.74rem;
+    cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap}
+  .cb-act:hover{border-color:var(--nd-accent);color:var(--nd-accent)}
+  .cb-who{cursor:pointer}
+  .cb-who:hover{color:var(--nd-accent)}
   .cb-empty{padding:2.2rem 1rem;text-align:center;color:var(--nd-text-muted);font-size:.88rem;
     border:1px dashed var(--nd-border);border-radius:12px;margin-top:.9rem}
   .cb-empty .ei{font-size:1.7rem;display:block;margin-bottom:.4rem}
@@ -10435,6 +10445,7 @@ async function cbRefresh(){
 }
 
 function cbRender(d){
+  _cbLast = d;
   const L = d.labels || {stage:{}, blocker:{}, flag:{}};
   const byB = d.by_blocker || {}, byS = d.by_stage || {}, byF = d.by_flag || {};
 
@@ -10527,13 +10538,22 @@ function cbRender(d){
         if (it.branch_code) bits.push(esc(it.branch_code));
         const docs = (it.docs && it.docs.total)
           ? `<span class="cb-docs">Documents ${it.docs.done}/${it.docs.total}</span>` : '';
-        return `<button type="button" class="cb-card${ours?' ours':''}" onclick="openClaimDrawer(${it.claim_id})"
-                  title="Open case NP-${it.claim_id}">
-            <div class="cb-top"><span class="cb-who">${esc(who)}</span><span class="cb-id">NP-${it.claim_id}</span></div>
-            ${bits.length?`<div class="cb-meta">${bits.join(' · ')}</div>`:''}
+        const note = (it.blocker_set && it.blocker_note)
+          ? `<div class="cb-note">${esc(it.blocker_note)}${it.hold_until?` · back on ${esc(it.hold_until)}`:''}</div>` : '';
+        return `<div class="cb-card${ours?' ours':''}">
+            <div class="cb-top">
+              <span class="cb-who" onclick="openClaimDrawer(${it.claim_id})" title="Open case NP-${it.claim_id}">${esc(who)}</span>
+              <span class="cb-id">NP-${it.claim_id}</span>
+            </div>
+            ${bits.length?`<div class="cb-meta" onclick="openClaimDrawer(${it.claim_id})">${bits.join(' · ')}</div>`:''}
             <div class="cb-row"><span class="cb-b cb-b-stage">${esc(L.stage[it.stage]||it.stage)}</span>${wait}${age}</div>
             ${(flags||docs)?`<div class="cb-row">${flags}${docs}</div>`:''}
-          </button>`;
+            ${note}
+            <div class="cb-acts">
+              <button type="button" class="cb-act" onclick="openClaimDrawer(${it.claim_id})">Open case</button>
+              <button type="button" class="cb-act" onclick="cbOpenSheet(${it.claim_id})">Change status or owner</button>
+            </div>
+          </div>`;
       }).join('')
     + '</div>';
 }
@@ -10549,6 +10569,188 @@ function cbClear(){
 }
 window.loadCaseBoard=loadCaseBoard; window.cbRefresh=cbRefresh;
 window.cbSet=cbSet; window.cbClear=cbClear;
+
+// ── Moving a case from the board ─────────────────────────────────────────────
+// A sheet rather than controls on the card: a card has to stay scannable, and on a phone a row
+// of buttons per card is unusable. One tap opens everything you can do to this case.
+let _cbSheet = null;
+
+function _cbSheetStyles(){
+  if (document.getElementById('cbsCss')) return;
+  const st = document.createElement('style'); st.id = 'cbsCss';
+  st.textContent = `
+  .cbs-back{position:fixed;inset:0;background:rgba(2,8,16,.62);z-index:9000;display:flex;
+    align-items:center;justify-content:center;padding:1rem}
+  .cbs{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:14px;
+    width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  .cbs-hd{padding:.85rem 1rem;border-bottom:1px solid var(--nd-border);display:flex;
+    justify-content:space-between;align-items:flex-start;gap:.6rem;position:sticky;top:0;
+    background:var(--nd-bg-surface);border-radius:14px 14px 0 0}
+  .cbs-hd h3{margin:0;font-size:1rem;color:var(--nd-text-primary)}
+  .cbs-hd .sub{font-size:.76rem;color:var(--nd-text-muted);margin-top:.15rem}
+  .cbs-x{background:none;border:0;color:var(--nd-text-faint);font-size:1.3rem;cursor:pointer;
+    line-height:1;padding:.1rem .3rem;font-family:inherit}
+  .cbs-x:hover{color:var(--nd-text-primary)}
+  .cbs-sec{padding:.9rem 1rem;border-bottom:1px solid var(--nd-border)}
+  .cbs-sec:last-of-type{border-bottom:0}
+  .cbs-lab{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--nd-text-faint);
+    font-weight:700;margin-bottom:.5rem}
+  .cbs-opts{display:flex;flex-direction:column;gap:.3rem}
+  .cbs-opt{display:flex;gap:.55rem;align-items:flex-start;padding:.5rem .6rem;border-radius:8px;
+    border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);cursor:pointer;
+    text-align:left;font-family:inherit;width:100%;color:var(--nd-text-secondary);font-size:.84rem}
+  .cbs-opt:hover{border-color:var(--nd-text-faint)}
+  .cbs-opt[aria-pressed="true"]{border-color:var(--nd-accent);background:rgba(34,211,238,.1);
+    color:var(--nd-text-primary);font-weight:600}
+  .cbs-opt .d{display:block;font-size:.73rem;color:var(--nd-text-muted);font-weight:400;margin-top:.1rem}
+  .cbs-in{width:100%;font-family:inherit;font-size:.86rem;padding:.5rem .6rem;border-radius:8px;
+    border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);
+    margin-top:.5rem}
+  select.cbs-in{cursor:pointer}
+  .cbs-ft{padding:.85rem 1rem;display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap;
+    border-top:1px solid var(--nd-border);position:sticky;bottom:0;background:var(--nd-bg-surface);
+    border-radius:0 0 14px 14px}
+  .cbs-msg{font-size:.8rem;margin-right:auto;align-self:center}
+  @media (max-width:520px){
+    .cbs-back{padding:0;align-items:flex-end}
+    .cbs{max-width:100%;max-height:92vh;border-radius:14px 14px 0 0}
+    .cbs-hd{border-radius:14px 14px 0 0}
+    .cbs-ft{border-radius:0}
+    .cbs-ft .btn,.cbs-ft .btn-sm{flex:1}
+  }`;
+  document.head.appendChild(st);
+}
+
+function cbOpenSheet(claimId){
+  _cbSheetStyles();
+  const it = (_cbLast.items || []).filter(function(x){ return x.claim_id === claimId; })[0];
+  if (!it) return;
+  const staff = _cbLast.staff || [];
+  _cbSheet = {claim_id: claimId, blocker: it.blocker, note: '', hold_until: '',
+              assigned: it.assigned_to || 0, overridden: !!it.blocker_set};
+
+  const who = (it.who || '').trim() || '(name not recorded)';
+  const opts = [
+    ['',            'Work it out automatically', 'Let the system decide from the case itself'],
+    ['none',        'Us — nothing is blocking',  'Nobody outside is holding this up'],
+    ['internal',    'A reviewer here',           'Waiting on a doctor, advocate or approver'],
+    ['complainant', 'The complainant',           'Documents, consent, a signature or a fee'],
+    ['insurer',     'The insurance company',     'Filed and waiting for their response'],
+    ['lokpal',      'The Ombudsman',             'With their office, no clock we control'],
+    ['hold',        'Pause this case',           'Needs a reason and a date to come back'],
+  ];
+
+  const back = document.createElement('div');
+  back.className = 'cbs-back';
+  back.id = 'cbsBack';
+  back.innerHTML =
+      '<div class="cbs" role="dialog" aria-modal="true" aria-label="Move this case">'
+    + '<div class="cbs-hd"><div><h3>' + esc(who) + '</h3>'
+    +   '<div class="sub">NP-' + claimId + ' · ' + esc(it.stage_label || it.stage) + '</div></div>'
+    +   '<button class="cbs-x" onclick="cbCloseSheet()" aria-label="Close">&times;</button></div>'
+    + '<div class="cbs-sec"><div class="cbs-lab">What is this case waiting for?</div>'
+    +   '<div class="cbs-opts" id="cbsOpts">'
+    +   opts.map(function(o){
+          return '<button type="button" class="cbs-opt" data-v="' + o[0] + '" aria-pressed="'
+            + (String(it.blocker_set||'') === o[0]) + '" onclick="cbPick(\'' + o[0] + '\')">'
+            + '<span>' + esc(o[1]) + '<span class="d">' + esc(o[2]) + '</span></span></button>';
+        }).join('')
+    +   '</div>'
+    +   '<div id="cbsExtra"></div></div>'
+    + '<div class="cbs-sec"><div class="cbs-lab">Who is handling it?</div>'
+    +   '<select class="cbs-in" id="cbsStaff">'
+    +   '<option value="0">Nobody yet</option>'
+    +   staff.map(function(s){
+          return '<option value="' + s.staff_id + '"' + (s.staff_id === (it.assigned_to||0) ? ' selected' : '')
+            + '>' + esc(s.name || ('Staff #' + s.staff_id)) + ' — ' + s.open_cases + ' open</option>';
+        }).join('')
+    +   '</select>'
+    +   '<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.4rem">'
+    +   'The number is how many open cases each person already holds, so work can be shared out fairly.</div></div>'
+    + '<div class="cbs-ft"><span class="cbs-msg" id="cbsMsg"></span>'
+    +   '<button class="btn-sm btn-ghost" onclick="cbCloseSheet()">Cancel</button>'
+    +   '<button class="btn btn-primary" id="cbsSave" onclick="cbSaveSheet(this)">Save</button></div>'
+    + '</div>';
+  back.addEventListener('click', function(e){ if (e.target === back) cbCloseSheet(); });
+  document.body.appendChild(back);
+  document.addEventListener('keydown', _cbEsc);
+  cbPick(String(it.blocker_set || ''), true);
+}
+
+function _cbEsc(e){ if (e.key === 'Escape') cbCloseSheet(); }
+
+function cbCloseSheet(){
+  const b = document.getElementById('cbsBack');
+  if (b) b.remove();
+  document.removeEventListener('keydown', _cbEsc);
+  _cbSheet = null;
+}
+
+function cbPick(v, quiet){
+  if (!_cbSheet) return;
+  _cbSheet.blocker = v;
+  document.querySelectorAll('#cbsOpts .cbs-opt').forEach(function(b){
+    b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false');
+  });
+  const extra = document.getElementById('cbsExtra');
+  if (!extra) return;
+  if (v === 'hold'){
+    // A park always needs a reason and an end date. An open-ended pause is how a case
+    // disappears for a year, so the form will not let you create one.
+    const min = new Date(Date.now() + 5.5*3600*1000).toISOString().slice(0,10);
+    extra.innerHTML =
+        '<input class="cbs-in" id="cbsNote" maxlength="400" placeholder="Why is it paused? (required)">'
+      + '<input class="cbs-in" id="cbsUntil" type="date" min="' + min + '">'
+      + '<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.4rem">'
+      + 'It disappears from the queues until this date, then comes back on its own.</div>';
+  } else if (v === ''){
+    extra.innerHTML = '';
+  } else {
+    extra.innerHTML = '<input class="cbs-in" id="cbsNote" maxlength="400" placeholder="Add a note (optional)">';
+  }
+  if (!quiet){ const m = document.getElementById('cbsMsg'); if (m) m.textContent = ''; }
+}
+
+async function cbSaveSheet(btn){
+  if (!_cbSheet) return;
+  const id = _cbSheet.claim_id;
+  const msg = document.getElementById('cbsMsg');
+  const noteEl = document.getElementById('cbsNote');
+  const untilEl = document.getElementById('cbsUntil');
+  const note = noteEl ? (noteEl.value || '').trim() : '';
+  const until = untilEl ? (untilEl.value || '') : '';
+  const staffSel = document.getElementById('cbsStaff');
+  const staffId = staffSel ? parseInt(staffSel.value, 10) || 0 : 0;
+
+  if (_cbSheet.blocker === 'hold'){
+    if (!note){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Say why it is paused.'; noteEl.focus(); return; }
+    if (!until){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Pick the date it comes back.'; untilEl.focus(); return; }
+    if (!confirm('Pause this case until ' + until + '?\n\nIt will disappear from every queue until then, and come back on its own.')) return;
+  }
+
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Saving…';
+  msg.style.color = 'var(--nd-text-faint)'; msg.textContent = '';
+  try{
+    let r = await API('/cases/' + id + '/blocker', {method:'POST',
+      body: JSON.stringify({blocker: _cbSheet.blocker, note: note, hold_until: until})});
+    if (!r.ok){ const e = await r.json().catch(function(){return {};}); throw new Error(e.detail || 'Could not save'); }
+    if (staffId !== (_cbSheet.assigned || 0)){
+      r = await API('/cases/' + id + '/assign', {method:'POST',
+        body: JSON.stringify({staff_id: staffId || null})});
+      if (!r.ok){ const e = await r.json().catch(function(){return {};}); throw new Error(e.detail || 'Saved, but could not change who is handling it'); }
+    }
+    cbCloseSheet();
+    ndUI.toast('Case updated.', 'success');
+    cbRefresh();
+  }catch(e){
+    msg.style.color = 'var(--nd-danger-text)';
+    msg.textContent = e.message || 'Could not save.';
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+window.cbOpenSheet=cbOpenSheet; window.cbCloseSheet=cbCloseSheet;
+window.cbPick=cbPick; window.cbSaveSheet=cbSaveSheet;
+
 
 // ══ WhatsApp INBOX — conversations, who is speaking, and human takeover ══════════
 // The panel used to render a flat table of the last 25 messages across every number. Ops could

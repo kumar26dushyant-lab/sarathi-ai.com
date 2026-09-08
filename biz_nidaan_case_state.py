@@ -15,19 +15,23 @@ The important one is BLOCKER. When it reads `none`, nobody outside is holding th
 the next move, and the case belongs at the top of somebody's list today. That single field turns
 "what should I work on" from a judgement call into a sort order.
 
-DERIVED, NOT STORED — on purpose, for now.
-Everything here is computed from columns that already exist and are already maintained by the
-live flows. Nothing writes a new column, so no existing path can be broken by this module, and
-no backfill can be wrong. The cost is that a state nobody records yet (consent signed, mailbox
-created) cannot be derived — those become explicit fields when the stages that own them are
-built, and this module is where they will be read from.
+DERIVED FIRST, OVERRIDDEN WHEN A PERSON KNOWS BETTER.
+Stage and blocker are computed from columns the live flows already maintain, so every case has a
+sensible state from day one with no backfill to get wrong. On top of that, a person can say what
+a case is actually waiting for — no derivation can know what someone was told on a phone call.
+An empty override means "keep deriving", which is why adding this to live cases changed none of
+them.
+
+A park is the one override with a rule attached: it needs a reason and an end date, and when the
+date passes the case rejoins the queue by itself. An open-ended park is precisely how a case
+disappears for a year.
 
 Every rule here is arithmetic over dates and existing values. No AI decides where a case is.
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
@@ -76,6 +80,7 @@ FLAG_LABEL = {
     "no_email": "No email address — insurer and Ombudsman mail has nowhere to go",
     "no_phone": "No phone number — we cannot reach or verify this person",
     "no_timeline": "Nothing recorded on this case",
+    "hold_expired": "The park has ended — this is ours again",
 }
 
 # Blockers that mean the next move is OURS. Both are internal; the difference is only who.
@@ -94,6 +99,28 @@ def _parse(ts) -> datetime | None:
 def _days_since(ts) -> int | None:
     t = _parse(ts)
     return None if not t else max(0, (datetime.utcnow() - t).days)
+
+
+def _parse_day(v):
+    """A plain YYYY-MM-DD, as DATE columns hand it back. None if it is not one."""
+    if not v:
+        return None
+    try:
+        return datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+# Calendar dates belong to the calendar the office and the complainant share, which is IST.
+# The server stores timestamps in UTC and runs on European local time, so three different
+# "today"s exist at once — between 18:30 and midnight IST, UTC is still on yesterday. A park
+# validated against UTC would reject a date the user can plainly see is tomorrow, or accept one
+# that has already gone. Anything a human picks off a calendar is compared in IST.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _today_ist():
+    return datetime.now(IST).date()
 
 
 def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
@@ -136,6 +163,20 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
         flags.append("unreviewed")
     else:
         stage, blocker = "intake", "none"
+
+    # ── an explicit override beats the derivation ────────────────────────────
+    # No derivation can know what someone was told on a phone call. When a person says what a
+    # case is waiting for, that wins — until a park expires, at which point the case rejoins the
+    # queue on its own rather than staying quietly hidden.
+    override = (claim.get("blocker") or "").strip().lower()
+    if override == "hold":
+        until = _parse_day(claim.get("hold_until"))
+        if until and until >= _today_ist():
+            blocker = "hold"
+        else:
+            flags.append("hold_expired")      # the park ran out; it is ours again
+    elif override in BLOCKERS and stage != "closed":
+        blocker = override
 
     # ── flags ────────────────────────────────────────────────────────────────
     # Age is measured from the last thing that ACTUALLY happened, not from any touch: a remark
@@ -247,7 +288,8 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "SELECT claim_id, account_id, claim_type, insured_name, complainant_name, "
             "complainant_phone, complainant_email, insured_phone, insured_email, insurer_name, "
             "status, review_outcome, l2_payment_status, disputed_amount, branch_code, "
-            "assigned_to_staff_id, archived, created_at, last_status_at "
+            "assigned_to_staff_id, archived, created_at, last_status_at, "
+            "blocker, blocker_note, blocker_by, hold_until "
             "FROM nidaan_claims WHERE COALESCE(archived,0)=0 "
             "ORDER BY claim_id DESC LIMIT 2000")).fetchall()]
 
@@ -267,6 +309,12 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "amount": r.get("disputed_amount") or 0,
             "branch_code": r.get("branch_code") or "",
             "assigned_to": r.get("assigned_to_staff_id"),
+            # The RAW override, so the sheet can show what a person chose rather than what was
+            # worked out. Empty means nobody has overridden it.
+            "blocker_set": (r.get("blocker") or ""),
+            "blocker_note": (r.get("blocker_note") or ""),
+            "blocker_by": (r.get("blocker_by") or ""),
+            "hold_until": (r.get("hold_until") or ""),
             "docs": {"done": done, "total": total},
             **st,
         })
@@ -328,3 +376,139 @@ async def for_claim(claim_id: int) -> dict:
     done, total = (await _checklist_counts([claim_id])).get(claim_id, (0, 0))
     last = (await _last_activity([claim_id])).get(claim_id)
     return derive(row, docs_done=done, docs_total=total, last_activity=last)
+
+
+# ── moving a case ────────────────────────────────────────────────────────────
+# Three actions, and every one of them writes to the case timeline. That is deliberate: the
+# board found 40 cases with no recorded history because only the WhatsApp and document flows
+# ever wrote a row. Anything a person does from the board should leave a trace, or the same
+# blindness comes straight back.
+
+async def _log(claim_id: int, kind: str, summary: str, actor: str) -> None:
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "INSERT INTO nidaan_claim_activity (claim_id, kind, channel, direction, actor, summary) "
+                "VALUES (?,?,?,?,?,?)",
+                (int(claim_id), kind, "web", "", (actor or "staff")[:80], summary[:400]))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("case activity log failed for %s: %s", claim_id, e)
+
+
+async def _open_claim(claim_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT claim_id, status, archived FROM nidaan_claims WHERE claim_id=?",
+            (int(claim_id),))).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    if d.get("archived") or (d.get("status") or "") in ("closed", "withdrawn"):
+        return None
+    return d
+
+
+async def set_blocker(claim_id: int, blocker: str, *, note: str = "", hold_until: str = "",
+                      actor: str = "", actor_id: str = "") -> dict:
+    """Record what a case is waiting for. Pass blocker='' to go back to deriving it.
+
+    A park (`hold`) always needs a reason and an end date — an open-ended park is exactly how a
+    case disappears for a year, so the system will not create one.
+    """
+    blocker = (blocker or "").strip().lower()
+    if blocker and blocker not in BLOCKERS:
+        return {"ok": False, "error": "That is not something a case can wait for."}
+    if not await _open_claim(claim_id):
+        return {"ok": False, "error": "That case is closed or does not exist."}
+
+    if blocker == "hold":
+        if not (note or "").strip():
+            return {"ok": False, "error": "Say why this case is being paused — it will be read later."}
+        day = _parse_day(hold_until)
+        if not day:
+            return {"ok": False, "error": "Pick the date this case should come back."}
+        if day < _today_ist():
+            return {"ok": False, "error": "That date has already passed. Pick a future date."}
+        hold_until = day.strftime("%Y-%m-%d")
+    else:
+        hold_until = ""
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "UPDATE nidaan_claims SET blocker=?, blocker_note=?, hold_until=?, "
+                "blocker_at=CURRENT_TIMESTAMP, blocker_by=? WHERE claim_id=?",
+                (blocker, (note or "").strip()[:400], hold_until or None,
+                 (actor or "")[:80], int(claim_id)))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("set_blocker failed for %s: %s", claim_id, e)
+        return {"ok": False, "error": "Could not save that. Try again."}
+
+    if not blocker:
+        summary = "Cleared the manual status — back to being worked out automatically"
+    elif blocker == "hold":
+        summary = f"Paused until {hold_until} — {note.strip()}"
+    else:
+        summary = f"Waiting on: {BLOCKER_LABEL.get(blocker, blocker)}" + (f" — {note.strip()}" if note.strip() else "")
+    await _log(claim_id, "case_blocker", summary, actor)
+    return {"ok": True, "blocker": blocker, "hold_until": hold_until}
+
+
+async def assign(claim_id: int, staff_id, *, actor: str = "") -> dict:
+    """Hand a case to someone, or to nobody. Only an active staff member can hold a case."""
+    if not await _open_claim(claim_id):
+        return {"ok": False, "error": "That case is closed or does not exist."}
+
+    name = ""
+    sid = None
+    if staff_id not in (None, "", 0, "0"):
+        try:
+            sid = int(staff_id)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "That is not a valid person."}
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT name FROM nidaan_staff WHERE staff_id=? AND status='active' "
+                "AND deleted_at IS NULL", (sid,))).fetchone()
+        if not r:
+            return {"ok": False, "error": "That person is not an active staff member."}
+        name = dict(r).get("name") or f"staff #{sid}"
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("UPDATE nidaan_claims SET assigned_to_staff_id=? WHERE claim_id=?",
+                            (sid, int(claim_id)))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("assign failed for %s: %s", claim_id, e)
+        return {"ok": False, "error": "Could not save that. Try again."}
+
+    await _log(claim_id, "case_assign",
+               (f"Assigned to {name}" if sid else "Assignment removed"), actor)
+    return {"ok": True, "assigned_to": sid, "assigned_name": name}
+
+
+async def assignable_staff() -> list[dict]:
+    """Who a case can be handed to — active staff only, with their current open load.
+
+    The load is here for balancing, not ranking: one person holding two thirds of the work is a
+    capacity problem to fix, not a performance score to publish.
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await c.execute(
+                "SELECT s.staff_id, s.name, s.role, "
+                "  (SELECT COUNT(*) FROM nidaan_claims cl WHERE cl.assigned_to_staff_id=s.staff_id "
+                "     AND COALESCE(cl.archived,0)=0 "
+                "     AND cl.status NOT IN ('closed','withdrawn')) open_cases "
+                "FROM nidaan_staff s WHERE s.status='active' AND s.deleted_at IS NULL "
+                "ORDER BY s.name")).fetchall()]
+        return rows
+    except Exception as e:  # noqa: BLE001
+        logger.warning("assignable_staff failed: %s", e)
+        return []

@@ -6239,8 +6239,11 @@ async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str 
     caller = _require_staff(request, "team_member")
     import biz_nidaan_case_state as _cs
     _me = caller.get("staff_id") or caller.get("sub") if mine else None
-    return await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
-                           flag=flag.strip(), assigned_to=_me, limit=limit)
+    out = await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
+                          flag=flag.strip(), assigned_to=_me, limit=limit)
+    out["staff"] = await _cs.assignable_staff()
+    out["me"] = caller.get("staff_id") or caller.get("sub")
+    return out
 
 
 @app.get("/nidaan/ops/api/cases/{claim_id}/state")
@@ -6254,6 +6257,53 @@ async def nidaan_ops_case_state(claim_id: int, request: Request):
     if not st:
         raise HTTPException(status_code=404, detail="Claim not found")
     return st
+
+
+class _CaseBlockerReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    blocker: str = Field("", max_length=20)      # '' = go back to working it out automatically
+    note: str = Field("", max_length=400)
+    hold_until: str = Field("", max_length=10)   # YYYY-MM-DD, required for a park
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/blocker")
+@limiter.limit("60/minute")
+async def nidaan_ops_case_blocker(claim_id: int, body: _CaseBlockerReq, request: Request):
+    """Record what a case is waiting for, or hand it back to the automatic working-out."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.set_blocker(claim_id, body.blocker, note=body.note,
+                                hold_until=body.hold_until,
+                                actor=_actor_label(caller),
+                                actor_id=str(caller.get("staff_id") or ""))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    await _ops_audit(request, "case.blocker", "claim", claim_id,
+                     f"{body.blocker or 'automatic'} {body.hold_until} {body.note}"[:160])
+    return res
+
+
+class _CaseAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: Optional[int] = None               # null / 0 = nobody
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/assign")
+@limiter.limit("60/minute")
+async def nidaan_ops_case_assign(claim_id: int, body: _CaseAssignReq, request: Request):
+    """Hand a case to someone, or to nobody."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.assign(claim_id, body.staff_id, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    await _ops_audit(request, "case.assign", "claim", claim_id,
+                     res.get("assigned_name") or "unassigned")
+    return res
 
 
 # ── Shared design document + stakeholder feedback ────────────────────────────

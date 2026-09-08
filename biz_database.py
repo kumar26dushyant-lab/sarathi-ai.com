@@ -1585,6 +1585,17 @@ async def init_db():
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_at TIMESTAMP",
             "ALTER TABLE nidaan_wa_contacts ADD COLUMN verified_until TIMESTAMP",        # sessions expire, deliberately
+            # ── CASE BOARD state (Sep 2026) ─────────────────────────────────────────────
+            # The board derives stage/blocker from columns the live flows already maintain.
+            # These let a person OVERRIDE that derivation — "actually we are waiting on the
+            # insurer", "park this until the 20th" — because no derivation can know what
+            # somebody was told on a phone call. Empty means: keep deriving. That default is
+            # what makes this safe to add to 70 live cases without touching any of them.
+            "ALTER TABLE nidaan_claims ADD COLUMN blocker TEXT DEFAULT ''",        # '' = derive
+            "ALTER TABLE nidaan_claims ADD COLUMN blocker_note TEXT DEFAULT ''",   # why, in their words
+            "ALTER TABLE nidaan_claims ADD COLUMN blocker_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN blocker_by TEXT DEFAULT ''",     # the REAL actor
+            "ALTER TABLE nidaan_claims ADD COLUMN hold_until DATE",                # a park always ends
         ]
         for m in nidaan_migrations:
             try:
