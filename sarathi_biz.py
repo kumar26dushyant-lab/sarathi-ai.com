@@ -6221,6 +6221,36 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
     return {"ok": True, "updated": changed}
 
 
+# ── Case board: where every case is and what it waits for ────────────────────
+# Read-only and derived from columns the live flows already maintain, so it cannot affect any
+# existing path. It answers the two questions status alone cannot: where is this case, and who
+# owes the next move.
+
+@app.get("/nidaan/ops/api/cases/board")
+async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
+                                flag: str = "", limit: int = 300):
+    """The work board. Cases nobody else is holding up come first, oldest waiting at the top."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    return await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
+                           flag=flag.strip(), limit=limit)
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/state")
+async def nidaan_ops_case_state(claim_id: int, request: Request):
+    """Derived stage, blocker and flags for one case — for the claim drawer."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    st = await _cs.for_claim(claim_id)
+    if not st:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return st
+
+
 # ── Shared design document + stakeholder feedback ────────────────────────────
 # A review surface for an operating-model document, so people who are not staff users can read it
 # and comment section by section. Deliberately narrow: it serves ONE static file, holds only what
