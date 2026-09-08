@@ -6221,6 +6221,123 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
     return {"ok": True, "updated": changed}
 
 
+# ── Shared design document + stakeholder feedback ────────────────────────────
+# A review surface for an operating-model document, so people who are not staff users can read it
+# and comment section by section. Deliberately narrow: it serves ONE static file, holds only what
+# reviewers type, and touches nothing to do with claims.
+#
+# Access is a share key held in ops settings, passed as ?k=. A staff session also opens it, so the
+# team never needs the key. The page carries process design and aggregate figures - no customer
+# records - but the key still keeps it off the open web.
+
+_DOC_KEYS = {"end-to-end": "nidaan_end_to_end.html"}
+
+
+async def _doc_share_key() -> str:
+    """The current share key, created on first use so there is never a blank-key window."""
+    k = (await nidaan.get_ops_setting("doc_share_key", "") or "").strip()
+    if not k:
+        import secrets as _sec
+        k = _sec.token_urlsafe(24)
+        await nidaan.set_ops_setting("doc_share_key", k, updated_by="system")
+    return k
+
+
+async def _doc_access_ok(request: Request, key: str) -> bool:
+    """A valid share key, or any signed-in staff member."""
+    import hmac as _h
+    real = await _doc_share_key()
+    if key and _h.compare_digest(key, real):
+        return True
+    try:
+        return bool(_get_staff_from_request(request))
+    except Exception:
+        return False
+
+
+@app.get("/end-to-end", include_in_schema=False)
+async def nidaan_doc_end_to_end(request: Request, k: str = ""):
+    """The operating-model document. Shareable with a key; staff sessions open it directly."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, k):
+        return HTMLResponse(
+            "<div style='font-family:system-ui;max-width:30rem;margin:18vh auto;padding:0 1.5rem;"
+            "line-height:1.6'><h2 style='margin:0 0 .5rem'>This page needs its share link</h2>"
+            "<p style='color:#555'>Ask whoever sent it for the full link, including the part after "
+            "<code>?k=</code>. If you are on the Nidaan team, sign in to ops first and open it "
+            "again.</p></div>", status_code=403)
+    f = static_dir / _DOC_KEYS["end-to-end"]
+    if not f.exists():
+        raise HTTPException(status_code=404)
+    return HTMLResponse(f.read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+
+
+@app.get("/nidaan/api/doc/feedback", include_in_schema=False)
+async def nidaan_doc_feedback_get(request: Request, doc: str = "", k: str = ""):
+    """Everything reviewers have left on this document."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if doc not in _DOC_KEYS:
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, k):
+        raise HTTPException(status_code=403, detail="Share link required")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT section, kind, name, text, vote, created_at FROM nidaan_doc_feedback "
+            "WHERE doc_key=? ORDER BY fb_id LIMIT 2000", (doc,))).fetchall()]
+    comments = [{"section": r["section"], "name": r["name"], "text": r["text"], "at": r["created_at"]}
+                for r in rows if r["kind"] == "comment"]
+    # One vote per person per section — the latest wins.
+    latest: dict = {}
+    for r in rows:
+        if r["kind"] == "vote":
+            latest[(r["section"], (r["name"] or "").strip().lower())] = {
+                "section": r["section"], "vote": r["vote"], "name": r["name"], "at": r["created_at"]}
+    return {"comments": comments, "votes": list(latest.values())}
+
+
+class _DocFeedbackReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc: str = Field(..., max_length=40)
+    section: str = Field(..., max_length=40)
+    kind: str = Field(..., max_length=10)          # comment | vote
+    name: str = Field("", max_length=80)
+    text: str = Field("", max_length=4000)
+    vote: str = Field("", max_length=10)
+    k: str = Field("", max_length=120)
+
+
+@app.post("/nidaan/api/doc/feedback", include_in_schema=False)
+@limiter.limit("20/minute")
+async def nidaan_doc_feedback_post(body: _DocFeedbackReq, request: Request):
+    """Record one comment or verdict. Stored as typed; the page renders it as text, never as HTML."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if body.doc not in _DOC_KEYS:
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, body.k):
+        raise HTTPException(status_code=403, detail="Share link required")
+    if body.kind not in ("comment", "vote"):
+        raise HTTPException(status_code=400, detail="Unknown kind")
+    if body.kind == "comment" and not body.text.strip():
+        raise HTTPException(status_code=400, detail="Nothing to say")
+    if body.kind == "vote" and body.vote not in ("agreed", "change", "open"):
+        raise HTTPException(status_code=400, detail="Unknown verdict")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        await c.execute(
+            "INSERT INTO nidaan_doc_feedback (doc_key, section, kind, name, text, vote) "
+            "VALUES (?,?,?,?,?,?)",
+            (body.doc, body.section[:40], body.kind,
+             (body.name or "Anonymous").strip()[:80], body.text.strip()[:4000], body.vote))
+        await c.commit()
+    return {"ok": True}
+
+
 # ── WhatsApp INBOX (conversations, takeover, human reply) ────────────────────
 # Gated at sub_super_admin, not super_admin: the whole point of takeover is that a senior human
 # can answer a customer, and there are only three super-admins. Settings and campaigns (below)

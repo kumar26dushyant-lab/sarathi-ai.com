@@ -1611,6 +1611,22 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_waverify_msisdn "
                            "ON nidaan_wa_verify(msisdn, vid DESC)")
 
+        # Feedback on a shared design document (ops/stakeholder review pages). Nothing to do with
+        # claims — a comment surface so a design can be reviewed by people who are not staff users.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_doc_feedback (
+                fb_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_key     TEXT NOT NULL,          -- which document, e.g. 'end-to-end'
+                section     TEXT NOT NULL,
+                kind        TEXT NOT NULL,          -- comment | vote
+                name        TEXT DEFAULT '',
+                text        TEXT DEFAULT '',
+                vote        TEXT DEFAULT '',        -- agreed | change | open
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_docfb_doc "
+                           "ON nidaan_doc_feedback(doc_key, fb_id DESC)")
+
         # One conversation = one msisdn; the inbox reads newest-first per number.
         try:
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_wamsg_msisdn "
