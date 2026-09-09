@@ -92,9 +92,9 @@ details>summary{cursor:pointer}
 .board-col>summary{list-style:none;cursor:pointer;padding:.6rem .8rem;font-weight:700;font-size:.82rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
 .board-col>summary::-webkit-details-marker{display:none}
 .board-col .board-cards{padding:.2rem .55rem .6rem;display:flex;flex-direction:column;gap:.45rem;max-height:66vh;overflow-y:auto}
-.board-card{background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:10px;padding:.55rem .65rem;cursor:pointer}
+.board-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.55rem .65rem;cursor:pointer}
 .board-card:hover{border-color:var(--nd-accent,#0d7a68)}
-.vw-count{background:var(--nd-bg-elev);border-radius:20px;padding:.05rem .5rem;font-size:.72rem;color:var(--nd-text-muted)}
+.vw-count{background:var(--nd-bg-surface);border-radius:20px;padding:.05rem .5rem;font-size:.72rem;color:var(--nd-text-muted)}
 .vw-chip{display:inline-flex;align-items:center;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:20px;padding:.25rem .7rem;font-size:.78rem;cursor:pointer;color:var(--nd-text-secondary)}
 .vw-chip.active{background:var(--nd-accent,#0d7a68);color:#fff;border-color:var(--nd-accent,#0d7a68);font-weight:700}
 .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem}
@@ -3705,7 +3705,7 @@ function _renderOutcome(key){
       const paid = all.filter(_l2Eligible).length;   // paid = L2 fee OR ₹499 review OR subscription
       const sent = all.filter(c=>c.claimshield_case_id).length;
       const disputed = all.reduce((s,c)=>s+(c.disputed_amount||0),0);
-      const card=(label,val,col)=>`<div style="flex:1 1 118px;min-width:108px;background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div></div>`;
+      const card=(label,val,col)=>`<div style="flex:1 1 118px;min-width:108px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div></div>`;
       m.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:.5rem">
         ${card('Total L2', all.length)}
         ${card('L2 fee paid', paid, 'var(--nd-success-text)')}
@@ -7774,7 +7774,7 @@ async function loadSupportAnalytics(){
   if(!r.ok){ box.innerHTML=''; return; }
   const a = await r.json();
   const card = (label, val, sub) =>
-    `<div style="flex:1 1 130px;min-width:120px;background:var(--nd-bg-elev);border:1px solid var(--nd-border);border-radius:12px;padding:.6rem .75rem">
+    `<div style="flex:1 1 130px;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.6rem .75rem">
        <div style="font-size:1.35rem;font-weight:800;color:var(--nd-text-primary);line-height:1.1">${val}</div>
        <div style="font-size:.72rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div>
        ${sub?`<div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.1rem">${sub}</div>`:''}
@@ -10270,7 +10270,7 @@ async function loadWhatsapp(){
           <li><b>Name the campaign</b> something you will recognise later (&ldquo;Reactivation Sept&rdquo;), then press <b>📣 Launch campaign</b> and confirm.</li>
           <li><b>Watch the table below.</b> <b>Sent</b> = delivered to WhatsApp · <b>Skipped</b> = opted out, or no open chat and no template · <b>Failed</b> = WhatsApp rejected it. Status moves from ⏳ running to ✅ done.</li>
         </ol>
-        <div style="font-size:.8rem;margin-top:.8rem;padding:.6rem .75rem;background:var(--nd-warning-soft);border:1px solid var(--nd-warning-line);border-radius:8px;color:var(--nd-warning-text)">
+        <div style="font-size:.8rem;margin-top:.8rem;padding:.6rem .75rem;background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);border-radius:8px;color:var(--nd-warning-text)">
           <b>Rules that protect the number.</b> Anyone who replied STOP is never messaged again &mdash; that is automatic and cannot be overridden. Send campaigns people actually want: too many complaints and Meta lowers our quality rating, and a bad enough rating gets the number blocked. One good campaign a month beats four ignored ones.
         </div>
         <div style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.6rem">
@@ -10401,13 +10401,13 @@ function _cbStyles(){
     border-radius:999px;padding:.24rem .68rem;font-size:.76rem;cursor:pointer;font-weight:600;
     font-family:inherit;white-space:nowrap}
   .cb-chip:hover{border-color:var(--nd-text-faint);color:var(--nd-text-primary)}
-  .cb-chip[aria-pressed="true"]{background:var(--nd-accent);color:#04121f;border-color:var(--nd-accent);font-weight:800}
+  .cb-chip[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);border-color:var(--nd-brand-cyan);font-weight:800}
   .cb-chip .n{opacity:.72;font-weight:600;margin-left:.25rem}
   .cb-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:.65rem;margin-top:.9rem}
   .cb-card{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;
     padding:.75rem .85rem;display:flex;flex-direction:column;gap:.45rem;text-align:left}
   .cb-card:hover{border-color:var(--nd-border-strong);background:var(--nd-bg-surface-2)}
-  .cb-card.ours{box-shadow:inset 3px 0 0 var(--nd-accent)}
+  .cb-card.ours{box-shadow:inset 3px 0 0 var(--nd-brand-cyan)}
   .cb-top{display:flex;gap:.5rem;align-items:baseline;justify-content:space-between}
   .cb-who{font-weight:700;font-size:.92rem;color:var(--nd-text-primary);overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;min-width:0}
@@ -10420,7 +10420,7 @@ function _cbStyles(){
   .cb-b-ours{background:rgba(168,85,247,.16);color:var(--nd-purple-text);border:1px solid rgba(168,85,247,.32)}
   .cb-b-wait{background:var(--nd-bg-surface-3);color:var(--nd-text-secondary);border:1px solid var(--nd-border)}
   .cb-b-flag{background:rgba(239,68,68,.13);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.28)}
-  .cb-b-soft{background:var(--nd-warning-soft);color:var(--nd-warning-text);border:1px solid var(--nd-warning-line)}
+  .cb-b-soft{background:var(--nd-warning-soft);color:var(--nd-warning-text);border:1px solid var(--nd-border-warn)}
   .cb-age{font-size:.72rem;color:var(--nd-text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .cb-age b{color:var(--nd-danger-text)}
   .cb-docs{font-size:.72rem;color:var(--nd-text-muted);font-variant-numeric:tabular-nums}
@@ -10431,9 +10431,9 @@ function _cbStyles(){
   .cb-act{flex:1;min-width:110px;background:none;border:1px solid var(--nd-border);
     color:var(--nd-text-secondary);border-radius:7px;padding:.34rem .5rem;font-size:.74rem;
     cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap}
-  .cb-act:hover{border-color:var(--nd-accent);color:var(--nd-accent)}
+  .cb-act:hover{border-color:var(--nd-brand-cyan);color:var(--nd-cyan-text)}
   .cb-who{cursor:pointer}
-  .cb-who:hover{color:var(--nd-accent)}
+  .cb-who:hover{color:var(--nd-cyan-text)}
   .cb-empty{padding:2.2rem 1rem;text-align:center;color:var(--nd-text-muted);font-size:.88rem;
     border:1px dashed var(--nd-border);border-radius:12px;margin-top:.9rem}
   .cb-empty .ei{font-size:1.7rem;display:block;margin-bottom:.4rem}
@@ -10646,7 +10646,7 @@ function _cbSheetStyles(){
     border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);cursor:pointer;
     text-align:left;font-family:inherit;width:100%;color:var(--nd-text-secondary);font-size:.84rem}
   .cbs-opt:hover{border-color:var(--nd-text-faint)}
-  .cbs-opt[aria-pressed="true"]{border-color:var(--nd-accent);background:rgba(34,211,238,.1);
+  .cbs-opt[aria-pressed="true"]{border-color:var(--nd-brand-cyan);background:rgba(34,211,238,.1);
     color:var(--nd-text-primary);font-weight:600}
   .cbs-opt .d{display:block;font-size:.73rem;color:var(--nd-text-muted);font-weight:400;margin-top:.1rem}
   .cbs-in{width:100%;font-family:inherit;font-size:.86rem;padding:.5rem .6rem;border-radius:8px;
@@ -10813,7 +10813,7 @@ function _waiStyles(){
   .wai-list{max-height:600px;overflow-y:auto}
   .wai-row{display:flex;gap:.6rem;padding:.7rem .8rem;border-bottom:1px solid var(--nd-border);cursor:pointer;align-items:flex-start}
   .wai-row:hover{background:var(--nd-bg-surface-2)}
-  .wai-row[aria-selected="true"]{background:var(--nd-bg-surface-3);box-shadow:inset 3px 0 0 var(--nd-accent)}
+  .wai-row[aria-selected="true"]{background:var(--nd-bg-surface-3);box-shadow:inset 3px 0 0 var(--nd-brand-cyan)}
   .wai-av{width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:.8rem;font-weight:800;
           background:rgba(34,197,94,.16);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.3)}
   .wai-nm{font-weight:700;font-size:.84rem;color:var(--nd-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -10825,7 +10825,7 @@ function _waiStyles(){
   .wai-b-stop{background:rgba(239,68,68,.14);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.3)}
   .wai-b-ver{background:rgba(34,197,94,.16);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.32)}
   .wai-b-pub{background:rgba(148,163,184,.16);color:var(--nd-text-muted);border:1px solid rgba(148,163,184,.32)}
-  .wai-unread{background:var(--nd-accent);color:#04121f;font-weight:800;font-size:.64rem;border-radius:999px;padding:.05rem .38rem}
+  .wai-unread{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);font-weight:800;font-size:.64rem;border-radius:999px;padding:.05rem .38rem}
   .wai-msgs{height:430px;overflow-y:auto;padding:.9rem;display:flex;flex-direction:column;gap:.55rem;background:var(--nd-bg-base-2)}
   .wai-b{max-width:78%;padding:.5rem .7rem;border-radius:12px;font-size:.83rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--nd-text-primary)}
   .wai-in{align-self:flex-start;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-bottom-left-radius:3px}
@@ -10837,7 +10837,7 @@ function _waiStyles(){
   .wai-meta{font-size:.62rem;color:var(--nd-text-faint);margin-top:.25rem;text-align:right}
   .wai-chip{background:none;border:1px solid var(--nd-border);color:var(--nd-text-secondary);border-radius:999px;
             padding:.25rem .7rem;font-size:.76rem;cursor:pointer;font-weight:600}
-  .wai-chip[aria-pressed="true"]{background:var(--nd-accent);color:#04121f;border-color:var(--nd-accent);font-weight:800}
+  .wai-chip[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);border-color:var(--nd-brand-cyan);font-weight:800}
   .wai-back{display:none}
   @media (max-width:820px){
     .wai-grid{grid-template-columns:1fr}
@@ -10947,7 +10947,7 @@ async function waiOpen(msisdn){
     ? '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--nd-danger-text);padding:.55rem .7rem;border-radius:10px;font-size:.78rem">This person sent STOP. We must not message them.</div>'
     : w.open
       ? '<div style="font-size:.74rem;color:var(--nd-text-muted)">You can reply freely for another <b>'+hrs+'h '+mins+'m</b> (WhatsApp allows free replies for 24 hours after the customer writes).</div>'
-      : '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-warning-line);color:var(--nd-warning-text);padding:.55rem .7rem;border-radius:10px;font-size:.78rem">The 24-hour reply window has closed. WhatsApp will not deliver a normal message now — reach them with an approved template from <b>Bulk campaign</b> below.</div>';
+      : '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);color:var(--nd-warning-text);padding:.55rem .7rem;border-radius:10px;font-size:.78rem">The 24-hour reply window has closed. WhatsApp will not deliver a normal message now — reach them with an approved template from <b>Bulk campaign</b> below.</div>';
 
   const canType = w.open && !stopped;
   const vv = c.verified || {};
