@@ -8368,13 +8368,24 @@ function _handleDeepLink(){
     const leave = p.get('leave');
     const account = p.get('account');
     const claim = p.get('claim');
+    const cp = p.get('cp');
     // CRITICAL: strip the deep-link params from the URL immediately so a reload
     // or panel navigation doesn't re-open the same task over and over
     // (the "task keeps popping up" bug). We act on the value we already captured.
-    if (qt || task || leave || account || claim) {
+    if (qt || task || leave || account || claim || cp) {
       try { history.replaceState({panel:_currentPanel}, '', location.pathname + (location.hash||'')); } catch(e){}
     }
-    if (qt && /^\d+$/.test(qt)) {
+    if (cp && /^\d+$/.test(cp)) {
+      // From a "channel partner needs approval" alert — land straight on the approval list
+      // rather than making a super-admin hunt for it inside Content.
+      setTimeout(()=>{ try{
+        showPanel('content');
+        setTimeout(()=>{
+          const el = document.getElementById('cpEditor');
+          if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+        }, 500);
+      }catch(e){} }, 250);
+    } else if (qt && /^\d+$/.test(qt)) {
       setTimeout(()=>{ try{ openQuickTaskDrawer(parseInt(qt,10)); }catch(e){} }, 350);
     } else if (account && /^\d+$/.test(account)) {
       // From a signup / new-claim / lead alert → open the subscriber's account.

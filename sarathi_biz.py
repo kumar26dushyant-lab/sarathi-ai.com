@@ -8097,15 +8097,23 @@ async def ops_cp_create(body: _CpReq, request: Request):
                     "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
                     "AND deleted_at IS NULL")).fetchall()]
             if _ids:
+                _lines = [f"{_actor_label(caller)} added the channel partner: {body.name}"]
+                if body.company:
+                    _lines.append(f"Company: {body.company}")
+                if body.phone:
+                    _lines.append(f"Phone: {body.phone}")
+                _lines += [
+                    "",
+                    "It cannot be put on a claim until a super-admin approves it.",
+                    "Approve straight from Telegram, or open the link below.",
+                ]
+                # Bell + Telegram (with Approve / Reject buttons) + email. Email is ON because a
+                # pending partner blocks real work: a claim raised in the meantime simply cannot
+                # credit them, and nobody downstream can tell why.
                 await nnot.notify_staff_inapp(
                     _ids, "🤝 Channel Partner needs approval",
-                    "\n".join([
-                        f"{_actor_label(caller)} added the channel partner: {body.name}",
-                        "",
-                        "It cannot be selected on a claim until a super-admin approves it.",
-                        "Open ops → Content → Channel Partners.",
-                    ]),
-                    event_key="cp.pending", email=False)
+                    "\n".join(_lines),
+                    event_key="cp.pending", email=True, cp_id=res["cp_id"])
         except Exception as _e:
             logger.info("CP pending alert failed: %s", _e)
     return res

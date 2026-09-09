@@ -383,7 +383,8 @@ async def _wd_probe(slot: int) -> Optional[bool]:
 
 async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                              event_key: str = "ops.notice", email: bool = True,
-                             require_ack: bool = False, claim_id=None, announce_id=None) -> int:
+                             require_ack: bool = False, claim_id=None, announce_id=None,
+                             cp_id=None) -> int:
     """Dashboard bell + web push (+ optional email) to specific staff. Never WhatsApp —
     used for notices that must land regardless of messaging-channel state.
     require_ack=True (Item #3) marks it as a must-acknowledge update → surfaces in the
@@ -406,7 +407,7 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
                 status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
-                announce_id=announce_id)
+                announce_id=announce_id, cp_id=cp_id)
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
@@ -733,7 +734,9 @@ async def _record_notification(**kw) -> int:
         tid, cid, aid = kw.get("task_id"), kw.get("claim_id"), kw.get("account_id")
         # Deep-link into the OPS PWA at /admin (its own installable scope) so a push
         # tap opens the installed app. Account link lands on the subscriber account.
+        _cpid = kw.get("cp_id")
         url = (f"/admin?qt={tid}" if tid
+               else f"/admin?cp={_cpid}" if _cpid
                else f"/admin?account={aid}" if aid
                else f"/admin?claim={cid}" if cid else "/admin")
         _fire_push([kw.get("recipient_id")],
@@ -759,6 +762,15 @@ async def _record_notification(**kw) -> int:
             elif kw.get("event_key") == "claim.reply" and cid:
                 # Customer replied on a claim → let the staffer reply straight from Telegram.
                 _tg_btns = [[{"text": "💬 Reply to customer", "callback_data": f"creply:{cid}"}]]
+            elif kw.get("event_key") == "cp.pending" and kw.get("cp_id"):
+                # A channel partner cannot be put on a claim until someone approves it, so the
+                # decision travels with the alert instead of waiting for a trip to the desk.
+                _cpid = int(kw["cp_id"])
+                _tg_text += "\n\n👇 Decide here:"
+                _tg_btns = [[
+                    {"text": "✅ Approve", "callback_data": f"cpa:{_cpid}:approve"},
+                    {"text": "✕ Reject", "callback_data": f"cpa:{_cpid}:reject"},
+                ]]
             asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
                                                  NIDAAN_BASE_URL + url, _tg_btns))
         except Exception:

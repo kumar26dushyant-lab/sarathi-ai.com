@@ -1534,6 +1534,38 @@ async def _handle_callback(cq: dict) -> None:
             t, kb = await _approvals_view(staff)
             await _edit(chat_id, message_id, t, kb); return
 
+        if data.startswith("cpa:"):
+            # Approve or reject a channel partner from the alert itself. SUPER-ADMIN ONLY: this
+            # decides whose name a commission can later be paid against, so the same gate as the
+            # web screen applies here, and the decision is stamped with who made it.
+            if not _can(staff, "super_admin"):
+                await ack(T(lang, "admins_only")); return
+            try:
+                _, _cid, _dec = data.split(":", 2)
+                cp_id = int(_cid)
+            except Exception:
+                await ack(T(lang, "failed")); return
+            if _dec not in ("approve", "reject"):
+                await ack(T(lang, "failed")); return
+            try:
+                import biz_nidaan_channel_partners as _cpm
+                _st = "approved" if _dec == "approve" else "rejected"
+                ok = await _cpm.set_status(cp_id, _st,
+                                           by_staff_id=staff.get("staff_id"),
+                                           by_name=(staff.get("name") or "Super admin"))
+            except Exception as e:  # noqa: BLE001
+                logger.info("cp decision from telegram failed: %s", e)
+                ok = False
+            if not ok:
+                await ack(T(lang, "failed")); return
+            _word = "approved and ready to use" if _dec == "approve" else "rejected"
+            await ack("✅ Done" if _dec == "approve" else "Rejected")
+            # Replace the buttons so the same message cannot be acted on twice.
+            await _edit(chat_id, message_id,
+                        f"🤝 Channel partner {_word}.\n\nDecided by {staff.get('name') or 'you'}.",
+                        _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            return
+
         if data.startswith("creply:"):
             # Customer replied on a claim → start a reply-from-Telegram flow.
             try:
