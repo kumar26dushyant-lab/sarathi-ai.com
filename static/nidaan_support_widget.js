@@ -33,6 +33,7 @@
   try { thread = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) { thread = null; }
   try { lang = localStorage.getItem(LKEY) || ''; } catch (e) { lang = ''; }
   var lastMsgId = 0, pollTimer = null, busy = false, greeted = false;
+  var _staffSeenId = 0;   // highest message of ours the team has read
   var supportOpen = true, LEADKEY = 'nidaan_support_lead';
 
   var OFFLINE = {
@@ -148,6 +149,9 @@
     + '.nsw-b.staff{align-self:flex-start;background:rgba(52,211,153,.14);color:#d1fae5;border-bottom-left-radius:4px}'
     + '.nsw-b.me{align-self:flex-end;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border-bottom-right-radius:4px}'
     + '.nsw-tag{font-size:.6rem;opacity:.55;margin-bottom:.15rem}'
+    // Grey ✓ = stored on our server. Blue ✓✓ = a person on the team has read it.
+    + '.nsw-tick{margin-left:.25rem;font-weight:700;letter-spacing:-.05em}'
+    + '.nsw-tick.seen{color:#38bdf8;opacity:1}'
     + '.nsw-note{align-self:center;font-size:.72rem;color:#fbbf24;text-align:center;padding:.2rem .5rem}'
     + '.nsw-typing{align-self:flex-start;background:rgba(255,255,255,.07);border-radius:14px;border-bottom-left-radius:4px;padding:.6rem .8rem;display:flex;gap:5px;align-items:center}'
     + '.nsw-dot{width:6px;height:6px;border-radius:50%;background:rgba(103,232,249,.8);animation:nswBounce 1.2s infinite ease-in-out}'
@@ -216,15 +220,38 @@
     html = html.replace(/(^|[\s(])(\/(?:nidaan[^\s<]*|#[a-z]+))/g, function(m,pre,path){ return pre+'<a href="'+path+'" target="_blank" rel="noopener" style="color:#67e8f9">'+path+'</a>'; });
     return html;
   }
-  function bubble(text, who, ts){
+  // Delivered / seen, the way people already understand it from WhatsApp. Only on the
+  // visitor's OWN messages — a tick on a reply we sent would mean nothing to them.
+  //   ✓   stored on our server
+  //   ✓✓  a person on the team has opened the conversation past this message
+  function _tickHtml(msgId){
+    if(!msgId) return '<span class="nsw-tick" data-m="0">✓</span>';
+    var seen = (_staffSeenId >= msgId);
+    return '<span class="nsw-tick'+(seen?' seen':'')+'" data-m="'+msgId+'" title="'
+      + (seen ? 'Read by our team' : 'Sent') + '">' + (seen ? '✓✓' : '✓') + '</span>';
+  }
+  function bubble(text, who, ts, msgId){
     var b=document.createElement('div');
     b.className='nsw-b '+(who==='customer'?'me':(who==='staff'?'staff':'ai'));
+    if(msgId) b.setAttribute('data-msg', msgId);
     var tag = who==='staff' ? '<div class="nsw-tag">Support agent</div>'
              : (who==='ai' ? '<div class="nsw-tag" style="color:#67e8f9;opacity:.85">NidaanMitra</div>' : '');
     var content = (who==='customer') ? el(text) : linkify(el(text));
     var t = fmtMsgTime(ts);
-    var timeHtml = t ? '<div style="font-size:.62rem;opacity:.5;margin-top:.25rem;'+(who==='customer'?'text-align:right':'')+'">'+t+'</div>' : '';
+    var tick = (who==='customer') ? (' ' + _tickHtml(msgId)) : '';
+    var timeHtml = (t || tick) ? '<div class="nsw-meta" style="font-size:.62rem;opacity:.55;margin-top:.25rem;'+(who==='customer'?'text-align:right':'')+'">'+(t||'')+tick+'</div>' : '';
     b.innerHTML = tag + content + timeHtml; msgs.appendChild(b); scroll();
+  }
+  // Repaint every tick when the team's read pointer moves forward.
+  function _applyReadMarks(staffSeen){
+    if(!staffSeen || staffSeen <= _staffSeenId) return;
+    _staffSeenId = staffSeen;
+    Array.prototype.forEach.call(msgs.querySelectorAll('.nsw-tick'), function(t){
+      var id = parseInt(t.getAttribute('data-m'), 10) || 0;
+      if(id && id <= _staffSeenId && t.textContent !== '✓✓'){
+        t.textContent = '✓✓'; t.className = 'nsw-tick seen'; t.title = 'Read by our team';
+      }
+    });
   }
   function note(text){ var n=document.createElement('div'); n.className='nsw-note'; n.innerHTML=el(text); msgs.appendChild(n); scroll(); }
 
@@ -332,7 +359,8 @@
       var r = await fetch('/nidaan/api/support/thread?thread_id='+thread.id+'&thread_key='+encodeURIComponent(thread.key)+'&after_id='+lastMsgId);
       if(!r.ok) return;
       var d = await r.json();
-      (d.messages||[]).forEach(function(m){ if(m.msg_id>lastMsgId){ bubble(m.body, m.sender_type, m.created_at); lastMsgId=m.msg_id; } });
+      (d.messages||[]).forEach(function(m){ if(m.msg_id>lastMsgId){ bubble(m.body, m.sender_type, m.created_at, m.msg_id); lastMsgId=m.msg_id; } });
+      if(d.read) _applyReadMarks(d.read.staff_seen || 0);
     }catch(e){}
   }
   function startPoll(){ if(pollTimer) return; pollTimer=setInterval(syncMessages, 4000); }
@@ -360,6 +388,8 @@
     if (_idleTimer){ clearTimeout(_idleTimer); _idleTimer = null; }
     if (thread){ try{ fetch('/nidaan/api/support/close', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({thread_id:thread.id, thread_key:thread.key})}); }catch(e){} }
     thread = null; lastMsgId = 0; greeted = false; openedOnce = false; ratedThisSession = false;
+    // Only the current chat is forgotten. The visitor key stays, so the next message continues
+    // this person's existing conversation instead of opening a second one on the support side.
     try{ localStorage.removeItem(TKEY); }catch(e){}
     stopPoll(); hideRating();
   }
@@ -490,11 +520,18 @@
     try{
       var body={ message:text, lang:lang }; if(nswChannel){ body.channel=nswChannel; if(window.NSW_NAME) body.name=window.NSW_NAME; }
       if(thread){ body.thread_id=thread.id; body.thread_key=thread.key; }
+      if(visitorToken){ body.visitor_token = visitorToken; }
       var r = await fetch('/nidaan/api/support/message', { method:'POST', headers:authHeaders(), body:JSON.stringify(body) });
       typing.remove();
       var d = await r.json().catch(function(){ return {}; });
       if(!r.ok){ bubble(d.detail||'Sorry, something went wrong. Please try again.', 'ai'); busy=false; sendBtn.disabled=false; return; }
       if(d.thread_id && d.thread_key){ thread={ id:d.thread_id, key:d.thread_key, ts:Date.now() }; localStorage.setItem(TKEY, JSON.stringify(thread)); setChatId(); }
+      // Remember the browser, not the person. Survives the 30-minute session so a visitor who
+      // comes back tomorrow continues the same conversation instead of becoming a second one.
+      if(d.visitor_token && d.visitor_token !== visitorToken){
+        visitorToken = d.visitor_token;
+        try{ localStorage.setItem(VKEY, visitorToken); }catch(e){}
+      }
       optimistic.remove();                 // replace optimistic bubble with server truth
       busy=false;                          // allow sync to run
       await syncMessages();                // pulls the stored customer msg + AI reply (with ids)

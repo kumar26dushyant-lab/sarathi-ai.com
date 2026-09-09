@@ -1777,6 +1777,7 @@ class NidaanSupportMsgReq(BaseModel):
     contact: str = Field("", max_length=120)
     lang: str = Field("", max_length=10)   # en | hi | hinglish (preferred reply language)
     channel: str = Field("", max_length=12)  # web | branch | staff — where the chat originates
+    visitor_token: str = Field("", max_length=64)  # server-minted; identifies the BROWSER
     hp: str = Field("", max_length=100)    # honeypot — must stay empty (bots fill it)
 
 
@@ -1852,6 +1853,7 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         if not thread:
             raise HTTPException(status_code=403, detail="Invalid conversation")
         tid, tkey = thread["thread_id"], body.thread_key
+        _vtok = thread.get("visitor_token") or ""
         _prev_status = thread.get("status")
         _lang = _lang or (thread.get("lang") or "")
     else:
@@ -1862,16 +1864,31 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         # find_open_support_thread; an anonymous contact string is never matched.
         _reuse = await nidaan.find_open_support_thread(
             account_id=(_account["account_id"] if _account else None))
+        # No account? Then the browser's own token continues its conversation. The widget used
+        # to forget the thread after 30 minutes idle, so one returning visitor became five
+        # threads in the support inbox and nobody could see they were the same person.
+        if not _reuse and body.visitor_token:
+            _reuse = await nidaan.find_thread_by_visitor(body.visitor_token)
         if _reuse:
             tid, tkey = _reuse["thread_id"], _reuse["thread_key"]
+            _vtok = _reuse.get("visitor_token") or ""
             _prev_status = _reuse.get("status")
             _lang = _lang or (_reuse.get("lang") or "")
+            # A visitor coming back to a closed conversation is re-opening it, not starting over.
+            if _prev_status == "closed":
+                try:
+                    await nidaan.set_support_status(tid, "ai")
+                    _prev_status = "ai"
+                except Exception:
+                    pass
         else:
             started = await nidaan.create_support_thread(
                 name=(_account.get("owner_name") if _account else body.name),
                 contact=body.contact, channel=_ch, lang=_lang,
-                account_id=(_account["account_id"] if _account else None))
+                account_id=(_account["account_id"] if _account else None),
+                visitor_token=body.visitor_token)
             tid, tkey = started["thread_id"], started["thread_key"]
+            _vtok = started["visitor_token"]
     # Per-thread flood cap: stop a single conversation from being spammed unbounded.
     if body.thread_id and len(await nidaan.get_support_messages(tid, limit=200)) >= 80:
         raise HTTPException(status_code=429,
@@ -1922,7 +1939,7 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
                 _aio.create_task(_nnot.on_support_customer_reply(tid))
         except Exception:
             pass
-    return {"thread_id": tid, "thread_key": tkey, "reply": answer,
+    return {"thread_id": tid, "thread_key": tkey, "visitor_token": _vtok, "reply": answer,
             "escalated": escalated, "support_hours": "Mon–Fri, 10am–6pm IST"}
 
 

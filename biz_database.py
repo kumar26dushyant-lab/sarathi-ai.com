@@ -1601,6 +1601,12 @@ async def init_db():
             # both. Defaulting to 'support' leaves every existing row and every existing caller
             # behaving exactly as before.
             "ALTER TABLE nidaan_support_reps ADD COLUMN duty TEXT DEFAULT 'support'",
+            # One visitor, one conversation. The widget used to forget its thread after 30
+            # minutes idle, so the same person came back as a brand-new thread every time and
+            # support saw one customer as five. This is a SERVER-MINTED random token that
+            # identifies the BROWSER, never anything the visitor types — matching on a typed
+            # phone or email would let anyone read a stranger's chat by guessing it.
+            "ALTER TABLE nidaan_support_threads ADD COLUMN visitor_token TEXT DEFAULT ''",
         ]
         for m in nidaan_migrations:
             try:
@@ -1642,6 +1648,12 @@ async def init_db():
             )""")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_docfb_doc "
                            "ON nidaan_doc_feedback(doc_key, fb_id DESC)")
+
+        try:
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_support_visitor "
+                               "ON nidaan_support_threads(visitor_token, thread_id DESC)")
+        except Exception:
+            pass
 
         # One conversation = one msisdn; the inbox reads newest-first per number.
         try:

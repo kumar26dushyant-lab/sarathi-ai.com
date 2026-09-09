@@ -2582,19 +2582,53 @@ async def _ensure_support_extra_columns(conn) -> None:
 
 async def create_support_thread(name: str = "", contact: str = "",
                                 account_id: Optional[int] = None,
-                                channel: str = "web", lang: str = "") -> dict:
-    """Start a support conversation. Returns {thread_id, thread_key}. thread_key is a
-    per-thread secret the client must present to continue/read (enumeration-safe)."""
+                                channel: str = "web", lang: str = "",
+                                visitor_token: str = "") -> dict:
+    """Start a support conversation. Returns {thread_id, thread_key, visitor_token}.
+
+    thread_key is a per-thread secret the client must present to continue/read
+    (enumeration-safe). visitor_token is a longer-lived secret for the same BROWSER, so a
+    returning visitor continues one conversation instead of spawning a new one each visit.
+    Both are minted here, server-side — never accepted from the client — so their entropy is
+    ours and a caller cannot choose a token that collides with somebody else's.
+    """
     key = secrets.token_urlsafe(24)
+    vtok = (visitor_token or "").strip()[:64] or secrets.token_urlsafe(24)
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact, channel, lang)
-               VALUES (?,?,?,?,?,?)""",
+            """INSERT INTO nidaan_support_threads (thread_key, account_id, name, contact,
+                                                   channel, lang, visitor_token)
+               VALUES (?,?,?,?,?,?,?)""",
             (key, account_id, (name or "").strip()[:80], (contact or "").strip()[:120],
              channel if channel in SUPPORT_CHANNELS else "web",
-             lang if lang in ("en", "hi", "hinglish") else ""))
+             lang if lang in ("en", "hi", "hinglish") else "", vtok))
         await conn.commit()
-        return {"thread_id": cur.lastrowid, "thread_key": key}
+        return {"thread_id": cur.lastrowid, "thread_key": key, "visitor_token": vtok}
+
+
+async def find_thread_by_visitor(visitor_token: str, *, max_age_days: int = 90) -> Optional[dict]:
+    """The most recent conversation from this BROWSER, so a returning visitor keeps one thread.
+
+    SECURITY: matched only against a token this server minted, exact and constant-time. It is
+    deliberately NOT matched against a name, phone or email a visitor typed — those are guessable,
+    and matching on them would hand a stranger somebody else's chat history. A stolen visitor
+    token exposes exactly that browser's own conversation, which is the same blast radius as the
+    thread_key it replaces.
+    """
+    import hmac as _hmac          # imported per-function here, as elsewhere in this module
+    tok = (visitor_token or "").strip()
+    if len(tok) < 20 or len(tok) > 64:
+        return None
+    cutoff = (datetime.utcnow() - timedelta(days=max_age_days)).strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            "SELECT * FROM nidaan_support_threads WHERE visitor_token<>'' AND last_at >= ? "
+            "ORDER BY thread_id DESC LIMIT 40", (cutoff,))).fetchall()
+    for r in rows:
+        if _hmac.compare_digest(r["visitor_token"] or "", tok):
+            return dict(r)
+    return None
 
 
 async def count_support_attachments(thread_id: int) -> int:
