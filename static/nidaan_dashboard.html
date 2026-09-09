@@ -1555,20 +1555,15 @@ function openModal()  {
   const _m = document.getElementById('claimMsg'); if (_m) { _m.className = 'msg'; _m.textContent = ''; }
 }
 function closeModal() { document.getElementById('claimModal').classList.remove('open'); document.getElementById('claimMsg').className = 'msg'; }
+// Both use the shared picker so a wrongly chosen file can be taken off again — see
+// /static/nidaan_files.js. The list markup, the Remove control and the styling are identical
+// everywhere an attachment can be made.
 function showRejectionLetterName() {
-  const f = document.getElementById('claimRejectionLetter').files[0];
-  const el = document.getElementById('claimRejectionLetterName');
-  // esc(): a filename is user-controlled text, so it must never reach innerHTML raw.
-  if (el) el.innerHTML = f ? `📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span>` : '';
+  ndFiles('claimRejectionLetter', 'claimRejectionLetterName');
 }
 
 function showClaimDocList() {
-  const files = document.getElementById('claimDocs').files;
-  const list = document.getElementById('claimDocList');
-  if (!files.length) { list.innerHTML = ''; return; }
-  list.innerHTML = Array.from(files).map(f =>
-    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
-  ).join('');
+  ndFiles('claimDocs', 'claimDocList');
 }
 
 // Insurer picker: native <select> (reliable on mobile) + "Other" free-text.
@@ -1686,14 +1681,11 @@ async function deleteRvDoc(id, type, docId) {
 }
 
 function previewRvDocs(id) {
-  const files = document.getElementById(`rvDocInput_${id}`).files;
-  const preview = document.getElementById(`rvDocPreview_${id}`);
-  const btn = document.getElementById(`rvDocUploadBtn_${id}`);
-  if (!files.length) { preview.innerHTML = ''; btn.style.display = 'none'; return; }
-  preview.innerHTML = Array.from(files).map(f =>
-    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
-  ).join('');
-  btn.style.display = '';
+  // The upload button follows the count, so removing the last file hides it again.
+  ndFiles(`rvDocInput_${id}`, `rvDocPreview_${id}`, (n) => {
+    const btn = document.getElementById(`rvDocUploadBtn_${id}`);
+    if (btn) btn.style.display = n ? '' : 'none';
+  });
 }
 
 async function uploadRvDocs(id, type) {
@@ -1882,9 +1874,9 @@ async function loadClaimMessages(claim_id){
   } catch(e){ el.innerHTML=''; }
 }
 function msgFilePicked(){
-  const f = document.getElementById('msgFile');
-  const lbl = document.getElementById('msgFileName');
-  if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
+  // An attachment on a message is the easiest one to get wrong and the hardest to notice,
+  // because the file name sits in a corner of the composer.
+  ndFiles('msgFile', 'msgFileName');
 }
 let _claimMsgSending = false;
 async function sendClaimMessage(claim_id){
@@ -1910,14 +1902,10 @@ async function sendClaimMessage(claim_id){
 }
 
 function previewDrawerDocs() {
-  const files = document.getElementById('drawerDocInput').files;
-  const preview = document.getElementById('drawerDocPreview');
-  const btn = document.getElementById('drawerUploadBtn');
-  if (!files.length) { preview.innerHTML = ''; btn.style.display = 'none'; return; }
-  preview.innerHTML = Array.from(files).map(f =>
-    `<div>📄 ${esc(f.name)} <span style="opacity:.45">(${(f.size/1024).toFixed(0)} KB)</span></div>`
-  ).join('');
-  btn.style.display = '';
+  ndFiles('drawerDocInput', 'drawerDocPreview', (n) => {
+    const btn = document.getElementById('drawerUploadBtn');
+    if (btn) btn.style.display = n ? '' : 'none';
+  });
 }
 
 async function uploadDrawerDocs(claim_id) {
@@ -3088,6 +3076,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="/static/nidaan_ui.js?v=2"></script>
+<script src="/static/nidaan_files.js?v=1"></script>
 <script>window.NIDAAN_APP_ID='sub';window.NIDAAN_APP_NAME='Nidaan Partner';</script>
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>

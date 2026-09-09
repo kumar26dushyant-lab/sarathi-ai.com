@@ -15,6 +15,7 @@
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <link rel="stylesheet" href="/static/nidaan_design.css?v=5">
 <script src="/static/nidaan_theme.js?v=2"></script>
+<script src="/static/nidaan_files.js?v=1"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--nd-bg-base);color:var(--nd-text-primary);min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
@@ -1266,6 +1267,36 @@ function _markDocDone(key, f) {
   const slot = document.getElementById('ds_' + key); if (!slot) return;
   slot.classList.add('done');
   slot.querySelector('button').textContent = '✓ ' + (f.name.length > 14 ? f.name.slice(0, 12) + '…' : f.name);
+  _renderDocRemove(key, f);
+}
+
+// Someone who attaches the wrong letter here has no way back short of reloading the page and
+// losing everything already typed. One Remove control fixes that.
+function _renderDocRemove(key, f) {
+  const slot = document.getElementById('ds_' + key); if (!slot) return;
+  let box = document.getElementById('dsrm_' + key);
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'dsrm_' + key;
+    box.style.cssText = 'flex-basis:100%;margin-top:.4rem';
+    slot.appendChild(box);
+  }
+  if (!f) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="ndf-row"><span class="ndf-nm">📄 ' + _revEsc(f.name) + '</span>'
+    + '<button type="button" class="ndf-x" onclick="_clearRevDoc(\'' + key + '\')">'
+    + _Lr('Remove', 'हटाएं') + '</button></div>';
+}
+
+function _clearRevDoc(key) {
+  delete _revFiles[key];
+  const inp = document.getElementById('df_' + key);
+  if (inp) inp.value = '';
+  const slot = document.getElementById('ds_' + key);
+  if (slot) {
+    slot.classList.remove('done');
+    slot.querySelector('button').textContent = _Lr('Upload', 'अपलोड');
+  }
+  _renderDocRemove(key, null);
 }
 function onRevDocPick(key, input) {
   const f = input.files[0]; if (!f) return;

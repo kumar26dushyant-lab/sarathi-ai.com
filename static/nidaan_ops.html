@@ -4261,10 +4261,20 @@ async function loadMyBusiness() {
         <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'चैनल पार्टनर (वैकल्पिक)…':'Channel Partner (optional)…'}</option></select>
       </div>
       <textarea id="mbcNotes" placeholder="${hi?'संक्षिप्त पृष्ठभूमि / अस्वीकृति का कारण…':'Brief background / reason for rejection…'}" style="width:100%;margin-top:.55rem;min-height:56px;resize:vertical"></textarea>
+      <div id="mbcRejWrap" style="margin-top:.55rem;background:var(--nd-danger-soft, rgba(248,113,113,.06));border:2px dashed rgba(248,113,113,.35);border-radius:8px;padding:.6rem .7rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--nd-danger-text);margin-bottom:.4rem">
+          ${hi ? 'क्लेम अस्वीकृति पत्र' : 'Claim rejection letter'} <span aria-hidden="true">*</span>
+          <span style="font-weight:400;color:var(--nd-text-faint);font-size:.72rem;margin-left:.3rem">${hi ? '(आवश्यक)' : '(required)'}</span>
+        </div>
+        <input id="mbcRej" type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="mbcPickRej(this)">
+        <button type="button" class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="document.getElementById('mbcRej').click()">📄 ${hi ? 'अस्वीकृति पत्र चुनें' : 'Attach rejection letter'}</button>
+        <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.35rem">${hi ? 'बीमा कंपनी का अस्वीकृति पत्र — इसके बिना क्लेम दर्ज नहीं हो सकता।' : "The insurer's rejection letter — a claim cannot be raised without it."}</div>
+        <div id="mbcRejList" style="margin-top:.35rem"></div>
+      </div>
       <div id="mbcFilesWrap" style="margin-top:.55rem">
         <input id="mbcFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="mbcAddFiles(this)">
         <button type="button" class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="document.getElementById('mbcFiles').click()">📎 ${hi?'दस्तावेज़ संलग्न करें':'Attach document(s)'}</button>
-        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अस्वीकृति पत्र, बिल आदि — PDF/JPG/PNG/DOCX (10MB तक)':'Rejection letter, bills, etc. — PDF/JPG/PNG/DOCX (up to 10MB)'}</span>
+        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अन्य सहायक दस्तावेज़ (वैकल्पिक) — PDF/JPG/PNG/DOCX (10MB तक)':'Other supporting documents (optional) — PDF/JPG/PNG/DOCX (up to 10MB)'}</span>
         <div id="mbcFileList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem"></div>
       </div>
       <div id="mbcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
@@ -4311,6 +4321,31 @@ function mbcAddFiles(input){
   mbcRenderFiles();
 }
 function mbcRemoveFile(i){ _mbcFiles.splice(i,1); mbcRenderFiles(); }   // pre-submit unstage — nothing persisted yet
+
+// The rejection letter is its own slot because it is the one document a claim cannot proceed
+// without: it is the insurer's decision, and therefore the basis of the whole dispute. Raising a
+// claim without it just moves the chasing to a later, more expensive point.
+let _mbcRejFile = null;
+function mbcPickRej(input){
+  const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
+  const f=(input.files||[])[0];
+  input.value='';                       // so the same file can be re-picked after a remove
+  if(!f) return;
+  if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+f.name+' — '+(hi?'10MB से बड़ी।':'over 10MB.'); } return; }
+  _mbcRejFile = f;
+  if(msg) msg.textContent='';
+  mbcRenderRej();
+}
+function mbcClearRej(){ _mbcRejFile=null; mbcRenderRej(); }
+function mbcRenderRej(){
+  const box=document.getElementById('mbcRejList'); if(!box) return;
+  const hi=_mbHi();
+  box.innerHTML = _mbcRejFile
+    ? `<div class="ndf-row"><span class="ndf-nm">📄 ${esc(_mbcRejFile.name)}</span>`
+      + `<span class="ndf-sz">${(_mbcRejFile.size/1024).toFixed(0)} KB</span>`
+      + `<button type="button" class="ndf-x" onclick="mbcClearRej()">${hi?'हटाएं':'Remove'}</button></div>`
+    : '';
+}
 function mbcRenderFiles(){
   const box=document.getElementById('mbcFileList'); if(!box) return;
   box.innerHTML = _mbcFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:.35rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:8px;padding:.2rem .5rem;font-size:.78rem;color:var(--nd-text-secondary)">📄 ${esc(f.name)} <span style="color:var(--nd-text-faint);font-size:.7rem">(${(f.size/1024).toFixed(0)} KB)</span> <button type="button" onclick="mbcRemoveFile(${i})" title="Remove" style="background:none;border:none;color:var(--nd-danger-text);cursor:pointer;font-size:.95rem;line-height:1;padding:0">×</button></span>`).join('');
@@ -4342,6 +4377,13 @@ async function mbRaiseClaim(){
   if(phone.length!==10){ msg.style.color='#f87171'; msg.textContent=hi?'मान्य 10-अंकों का मोबाइल दर्ज करें।':'Enter a valid 10-digit mobile.'; return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ msg.style.color='#f87171'; msg.textContent=hi?'ग्राहक का मान्य ईमेल दर्ज करें (अधिकार-पत्र लिंक भेजने के लिए)।':'Enter a valid customer email (to send the authorization link).'; return; }
   if(!type){ msg.style.color='#f87171'; msg.textContent=hi?'क्लेम प्रकार चुनें।':'Choose a claim type.'; return; }
+  if(!_mbcRejFile){
+    msg.style.color='#f87171';
+    msg.textContent = hi ? 'अस्वीकृति पत्र संलग्न करें — इसके बिना क्लेम दर्ज नहीं हो सकता।'
+                         : "Attach the insurer's rejection letter — a claim cannot be raised without it.";
+    const w=document.getElementById('mbcRejWrap'); if(w) w.scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
   const btn=g('mbcSubmit'); btn.disabled=true; const ob=btn.textContent; btn.textContent=hi?'जमा हो रहा है…':'Submitting…';
   msg.style.color='#94a3b8'; msg.textContent=hi?'जमा हो रहा है…':'Submitting…';
   const body={insured_name:name, insured_phone:phone, insured_email:email, claim_type:type,
@@ -4355,10 +4397,12 @@ async function mbRaiseClaim(){
   const claimId = cd.claim_id;
   // Attach the staged files to the just-created claim.
   let attachMsg='';
-  if(claimId && _mbcFiles.length){
+  if(claimId && (_mbcRejFile || _mbcFiles.length)){
     btn.textContent=hi?'फ़ाइलें अपलोड हो रही हैं…':'Uploading files…';
     try{
-      const fd=new FormData(); _mbcFiles.forEach(f=>fd.append('files', f));
+      const fd=new FormData();
+      if(_mbcRejFile) fd.append('files', _mbcRejFile);   // the letter goes first
+      _mbcFiles.forEach(f=>fd.append('files', f));
       const ur=await fetch('/nidaan/ops/api/my-claims/'+claimId+'/documents/upload', {method:'POST', headers:hdrs(), body:fd});
       if(ur.ok){ const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(ud.count||0)+(hi?' फ़ाइल संलग्न':' file(s) attached'); }
       else { const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(hi?'फ़ाइल अपलोड विफल: ':'file upload failed: ')+_extractErr(ud,'error'); }
@@ -4368,6 +4412,7 @@ async function mbRaiseClaim(){
   msg.style.color='#4ade80'; msg.textContent=(hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.')+attachMsg;
   ['mbcName','mbcPhone','mbcEmail','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
   _mbcFiles=[]; mbcRenderFiles();
+  _mbcRejFile=null; mbcRenderRej();
   mbLoadClaims(); setTimeout(()=>{msg.textContent='';},5000);
 }
 
@@ -10567,6 +10612,7 @@ function cbClear(){
   _cbState = {blocker:'', stage:'', flag:'', mine:false};
   cbRefresh();
 }
+window.mbcPickRej=mbcPickRej; window.mbcClearRej=mbcClearRej;
 window.loadCaseBoard=loadCaseBoard; window.cbRefresh=cbRefresh;
 window.cbSet=cbSet; window.cbClear=cbClear;
 
@@ -11493,6 +11539,7 @@ async function processRefund(subId, amount){
 .task-overdue { color:var(--nd-danger-text); font-weight:600; }
 </style>
 <script src="/static/nidaan_ui.js?v=2"></script>
+<script src="/static/nidaan_files.js?v=1"></script>
 <!-- ── PWA: installable app + service worker ── -->
 <style>
 #pwaInstall{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:9999;display:none;align-items:center;gap:.6rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none;border-radius:999px;padding:.7rem 1.15rem;font-weight:700;font-size:.85rem;box-shadow:0 10px 30px rgba(124,58,237,.45);cursor:pointer}

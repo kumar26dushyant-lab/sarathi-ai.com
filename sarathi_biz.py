@@ -538,7 +538,13 @@ def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
     # Inject intended_role before closing </head> tag
     inject = f'<script>window._INTENDED_ROLE = "{role}";</script>'
     html = html.replace("</head>", inject + "\n</head>", 1)
-    return HTMLResponse(html)
+    # Same no-store headers as _nidaan_page(). Without them a browser heuristically caches this
+    # page, and because the whole ops app IS this one file, a staffer keeps running whatever
+    # build their browser last stored — panels shipped since simply do not exist for them, with
+    # nothing on screen to explain why. That is exactly what happened to a sub-super-admin who
+    # had not logged in for two months.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate",
+                                       "Pragma": "no-cache", "Expires": "0"})
 
 
 def _nidaan_bearer(request: Request) -> Optional[dict]:
@@ -1331,6 +1337,36 @@ async def nidaan_claim_me(request: Request):
             for d in await claimant.list_claimant_docs(ctx["claim_id"])
         ],
     }
+
+
+@app.delete("/nidaan/claim/api/documents/{doc_id}")
+@limiter.limit("30/minute")
+async def nidaan_claim_delete_doc(doc_id: int, request: Request):
+    """The complainant removes a document they uploaded themselves.
+
+    Anyone can attach the wrong file — a phone gallery is full of near-identical photos. Without
+    this the only options were to leave a wrong document on the case or to ask staff to remove it,
+    and a case file full of "ignore the second one" is how the wrong paper reaches an insurer.
+
+    Scoped twice over: the token resolves to one claim, and the delete is guarded by claim_id, so
+    a token can only ever remove a document from its own case.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link has expired. Ask us for a new one.")
+    stored = await nidaan.delete_claim_document(int(doc_id), claim_id=int(ctx["claim_id"]))
+    if not stored:
+        raise HTTPException(status_code=404, detail="That document is no longer on this claim.")
+    _nidaan_remove_doc_file(stored)
+    try:
+        await nidaan.record_claim_activity(
+            int(ctx["claim_id"]), "doc_removed", channel="web", direction="in",
+            actor="complainant", summary="Complainant removed a document they had uploaded")
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @app.post("/nidaan/claim/api/documents/upload")

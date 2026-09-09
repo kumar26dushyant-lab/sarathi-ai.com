@@ -10,6 +10,13 @@
 <link rel="apple-touch-icon" href="/nidaan/claim/icon.svg">
 <title>My Claim · NidaanPartner</title>
 <style>
+    .docrow{display:flex;align-items:center;gap:.5rem;margin:.3rem 0}
+    .docrow .doc{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .docx{background:none;border:1px solid rgba(220,38,38,.35);color:#dc2626;border-radius:6px;
+      padding:.2rem .55rem;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;
+      white-space:nowrap;line-height:1.3}
+    .docx:hover{background:rgba(220,38,38,.10)}
+    .docx:disabled{opacity:.5;cursor:not-allowed}
   :root{ --brand:#0b5c4f; --brand-2:#0d7a68; --bg:#f4f7f6; --card:#ffffff; --ink:#12211d;
          --muted:#5b6b66; --line:#e2ebe8; --good:#0d7a68; --warn:#b4560a; --accent:#0d7a68; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -82,6 +89,9 @@ var T = {
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
     accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Your documents", docsHint:"Upload documents related to your claim (PDF, photo). Up to 5 files, 10 MB each.",
     upload:"📎 Upload documents", uploading:"Uploading…", noDocs:"No documents uploaded yet.",
+    remove:"Remove", removing:"Removing…",
+    confirmRemove:"Remove this document from your claim?",
+    removeFailed:"Could not remove that. Please try again.",
     timelineTitle:"Progress", updateTitle:"Latest update",
     reassure:"Rest assured — our legal team is working on your claim. You will see updates here.",
     expired:"This link is invalid or has expired. Please contact NidaanPartner for a fresh link.",
@@ -99,6 +109,9 @@ var T = {
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
     accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"आपके दस्तावेज़", docsHint:"अपने दावे से जुड़े दस्तावेज़ अपलोड करें (PDF, फ़ोटो)। अधिकतम 5 फ़ाइलें, हर एक 10 MB तक।",
     upload:"📎 दस्तावेज़ अपलोड करें", uploading:"अपलोड हो रहा है…", noDocs:"अभी तक कोई दस्तावेज़ अपलोड नहीं हुआ।",
+    remove:"हटाएं", removing:"हटाया जा रहा है…",
+    confirmRemove:"क्या यह दस्तावेज़ आपके क्लेम से हटा दें?",
+    removeFailed:"हटाया नहीं जा सका। कृपया दोबारा कोशिश करें।",
     timelineTitle:"प्रगति", updateTitle:"ताज़ा अपडेट",
     reassure:"निश्चिंत रहें — हमारी कानूनी टीम आपके दावे पर काम कर रही है। अपडेट आपको यहाँ दिखेंगे।",
     expired:"यह लिंक अमान्य है या समाप्त हो गया है। कृपया नए लिंक के लिए NidaanPartner से संपर्क करें।",
@@ -205,7 +218,12 @@ function render(){
   // Documents (claimant's own uploads) + upload
   var docs = DATA.documents || [];
   var docList = docs.length
-    ? docs.map(function(d){ return '<a class="doc" href="'+esc(d.url)+'" target="_blank" rel="noopener">📄 '+esc(d.name)+'</a>'; }).join('')
+    ? docs.map(function(d){
+        return '<div class="docrow">'
+          + '<a class="doc" href="'+esc(d.url)+'" target="_blank" rel="noopener">📄 '+esc(d.name)+'</a>'
+          + '<button type="button" class="docx" onclick="removeDoc('+Number(d.doc_id)+',this)">'
+          + esc(t("remove"))+'</button></div>';
+      }).join('')
     : '<div class="note">'+esc(t("noDocs"))+'</div>';
   var docsCard = '<div class="card"><h2>'+esc(t("docsTitle"))+'</h2>'+
     '<p class="note">'+esc(t("docsHint"))+'</p>'+
@@ -216,6 +234,25 @@ function render(){
   document.getElementById("content").innerHTML = profileCard + statusCard + feeCard + tlCard + docsCard;
   document.getElementById("reassure").textContent = t("reassure");
   maybeShowUpdate(tl);
+}
+
+// Attaching the wrong file is ordinary. Leaving it on the claim is not: the wrong paper
+// reaching an insurer is a real problem, so the complainant can take it off themselves.
+async function removeDoc(docId, btn){
+  if(!confirm(t("confirmRemove"))) return;
+  var old = btn.textContent;
+  btn.disabled = true; btn.textContent = t("removing");
+  try{
+    var r = await fetch("/nidaan/claim/api/documents/"+docId, {
+      method:"DELETE", headers:{ "Authorization":"Bearer "+TOKEN } });
+    if(r.ok){
+      var me = await fetch("/nidaan/claim/api/me",{headers:{"Authorization":"Bearer "+TOKEN}});
+      DATA = await me.json(); render();
+      return;
+    }
+  }catch(e){}
+  btn.disabled = false; btn.textContent = old;
+  alert(t("removeFailed"));
 }
 
 async function uploadDocs(input){
