@@ -6256,6 +6256,55 @@ async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
     return {"ok": True, "updated": changed}
 
 
+# ── Live pulse: what has landed since the staffer last looked ────────────────
+# Ops was refresh-to-see. A claim could arrive and sit unseen until somebody happened to reload,
+# which on a 30-40 claims/day pipeline is the difference between answering in minutes and
+# answering tomorrow. This rides the notification bell's existing 45-second poll rather than
+# adding a second timer, and returns only what is NEW to that staffer.
+
+@app.get("/nidaan/ops/api/pulse")
+async def nidaan_ops_pulse(request: Request, since: str = ""):
+    """Claims created since `since` (UTC, as this endpoint last reported it).
+
+    The server hands back its own clock as `now`, and the client echoes it next time, so no
+    client/server clock skew can make a claim invisible or announce the same one twice.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    # This module imports both of these per-function by convention, not at the top.
+    import re as _re_pulse
+    from datetime import datetime as _dt
+    import aiosqlite as _aio
+    _now = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    since = (since or "").strip()[:19]
+    if not _re_pulse.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", since):
+        # First call of a session: report nothing, just anchor the clock. Otherwise a staffer
+        # opening ops would be greeted by every claim ever filed.
+        return {"now": _now, "new_claims": [], "anchored": True}
+    rows = []
+    try:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            c.row_factory = _aio.Row
+            rows = [dict(r) for r in await (await c.execute(
+                "SELECT claim_id, claim_type, insured_name, complainant_name, insurer_name, "
+                "disputed_amount, branch_code, created_at "
+                "FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND created_at > ? "
+                "ORDER BY claim_id DESC LIMIT 20", (since,))).fetchall()]
+    except Exception as e:  # noqa: BLE001
+        logger.info("pulse query failed: %s", e)
+        return {"now": _now, "new_claims": []}
+    return {"now": _now, "new_claims": [
+        {"claim_id": r["claim_id"],
+         "who": (r.get("complainant_name") or r.get("insured_name") or "").strip(),
+         "claim_type": r.get("claim_type") or "",
+         "insurer": r.get("insurer_name") or "",
+         "amount": r.get("disputed_amount") or 0,
+         "branch_code": r.get("branch_code") or "",
+         "created_at": r.get("created_at")}
+        for r in rows]}
+
+
 # ── Case board: where every case is and what it waits for ────────────────────
 # Read-only and derived from columns the live flows already maintain, so it cannot affect any
 # existing path. It answers the two questions status alone cannot: where is this case, and who

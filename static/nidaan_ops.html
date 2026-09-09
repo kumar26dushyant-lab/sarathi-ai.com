@@ -8429,7 +8429,104 @@ async function loadBell(){
     const dd = document.getElementById('bellDropdown');
     if (dd && dd.style.display !== 'none') _renderBell();
     checkPendingAck();
+    pulseCheck();
   } catch(e){}
+}
+
+// ── New claims arriving, without a refresh ───────────────────────────────────
+// Ops was refresh-to-see: a claim could land and sit unnoticed until somebody happened to
+// reload. This rides the bell's poll rather than adding a second timer, and the SERVER decides
+// what counts as new — it hands back its own clock and we echo it, so no clock difference
+// between a laptop and the server can hide a claim or announce one twice.
+let _pulseSince = null;
+let _pulseBusy = false;
+
+async function pulseCheck(){
+  if (_pulseBusy) return;
+  _pulseBusy = true;
+  try{
+    const q = _pulseSince ? ('?since=' + encodeURIComponent(_pulseSince)) : '';
+    const r = await fetch('/nidaan/ops/api/pulse' + q, {headers: hdrs()});
+    if (!r.ok) return;
+    const d = await r.json();
+    _pulseSince = d.now || _pulseSince;
+    const fresh = d.new_claims || [];
+    if (fresh.length) pulseAnnounce(fresh);
+  }catch(e){ /* a missed beat is harmless — the next one catches up */ }
+  finally{ _pulseBusy = false; }
+}
+
+function _pulseStyles(){
+  if (document.getElementById('pulseCss')) return;
+  const st = document.createElement('style'); st.id='pulseCss';
+  st.textContent = `
+  .pulse-wrap{position:fixed;right:1rem;bottom:1rem;z-index:9500;display:flex;flex-direction:column;
+    gap:.5rem;max-width:min(340px,calc(100vw - 2rem))}
+  .pulse-card{background:var(--nd-bg-surface);border:1px solid var(--nd-brand-cyan);
+    border-left:4px solid var(--nd-brand-cyan);border-radius:12px;padding:.7rem .85rem;
+    box-shadow:0 10px 30px rgba(0,0,0,.28)}
+  .pulse-hd{display:flex;align-items:center;gap:.4rem;font-size:.82rem;font-weight:800;
+    color:var(--nd-cyan-text);margin-bottom:.35rem}
+  .pulse-x{margin-left:auto;background:none;border:0;color:var(--nd-text-faint);cursor:pointer;
+    font-size:1.05rem;line-height:1;padding:0 .15rem;font-family:inherit}
+  .pulse-x:hover{color:var(--nd-text-primary)}
+  .pulse-row{font-size:.8rem;color:var(--nd-text-secondary);padding:.22rem 0;cursor:pointer;
+    border-top:1px solid var(--nd-border)}
+  .pulse-row:hover{color:var(--nd-text-primary)}
+  .pulse-row b{color:var(--nd-text-primary)}
+  .pulse-more{font-size:.74rem;color:var(--nd-text-faint);padding-top:.3rem}
+  .pulse-act{margin-top:.5rem;width:100%;background:none;border:1px solid var(--nd-border);
+    color:var(--nd-text-secondary);border-radius:7px;padding:.3rem;font-size:.75rem;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  .pulse-act:hover{border-color:var(--nd-brand-cyan);color:var(--nd-cyan-text)}
+  @media (max-width:520px){
+    .pulse-wrap{right:.5rem;left:.5rem;bottom:.5rem;max-width:none}
+  }`;
+  document.head.appendChild(st);
+}
+
+function pulseAnnounce(list){
+  _pulseStyles();
+  let wrap = document.getElementById('pulseWrap');
+  if (!wrap){
+    wrap = document.createElement('div');
+    wrap.id = 'pulseWrap'; wrap.className = 'pulse-wrap';
+    document.body.appendChild(wrap);
+  }
+  const card = document.createElement('div');
+  card.className = 'pulse-card';
+  const n = list.length;
+  card.innerHTML =
+      '<div class="pulse-hd">\u{1F195} ' + (n === 1 ? 'New claim' : n + ' new claims')
+    + '<button class="pulse-x" aria-label="Dismiss">&times;</button></div>'
+    + list.slice(0,4).map(function(c){
+        const who = (c.who||'').trim() || 'name not recorded';
+        const bits = [];
+        if (c.claim_type) bits.push(esc(c.claim_type));
+        if (c.insurer) bits.push(esc(c.insurer));
+        if (c.amount) bits.push('\u20B9' + Number(c.amount).toLocaleString('en-IN'));
+        return '<div class="pulse-row" data-id="' + c.claim_id + '">'
+          + '<b>' + esc(who) + '</b> \u00B7 NP-' + c.claim_id
+          + (bits.length ? '<br>' + bits.join(' \u00B7 ') : '') + '</div>';
+      }).join('')
+    + (n > 4 ? '<div class="pulse-more">and ' + (n-4) + ' more</div>' : '')
+    + '<button class="pulse-act">Open the Case Board</button>';
+
+  card.querySelector('.pulse-x').onclick = () => card.remove();
+  card.querySelector('.pulse-act').onclick = () => { card.remove(); showPanel('board'); };
+  Array.prototype.forEach.call(card.querySelectorAll('.pulse-row'), function(row){
+    row.onclick = () => { card.remove(); try{ openClaimDrawer(parseInt(row.dataset.id,10)); }catch(e){} };
+  });
+  wrap.appendChild(card);
+  // Long enough to read on a phone, short enough not to pile up on a busy day.
+  setTimeout(()=>{ if (card.parentNode) card.remove(); }, 30000);
+
+  // If the staffer is looking at a screen that lists claims, bring the new one into it — but
+  // never while a drawer or modal is open, since that would yank the page out from under them.
+  const claimPanels = ['board','pipeline','overview','claims','tasks'];
+  if (claimPanels.includes(_currentPanel) && !_ndOverlayOpen()) {
+    try { showPanel(_currentPanel, true); } catch(e){}
+  }
 }
 
 // ── Item #3: consolidated must-acknowledge popup ("Updates for you") ──────────
