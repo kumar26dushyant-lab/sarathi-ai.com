@@ -538,11 +538,10 @@ def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
     # Inject intended_role before closing </head> tag
     inject = f'<script>window._INTENDED_ROLE = "{role}";</script>'
     html = html.replace("</head>", inject + "\n</head>", 1)
-    # Same no-store headers as _nidaan_page(). Without them a browser heuristically caches this
-    # page, and because the whole ops app IS this one file, a staffer keeps running whatever
-    # build their browser last stored — panels shipped since simply do not exist for them, with
-    # nothing on screen to explain why. That is exactly what happened to a sub-super-admin who
-    # had not logged in for two months.
+    # NOTE: nothing calls this today — both /nidaan/ops and /admin serve the page through
+    # _nidaan_page(), which already sends these headers. Kept in step with that function so the
+    # two cannot drift if this one is ever wired up: the whole ops app is this single file, so a
+    # cached copy means a staffer silently runs an old build with panels missing.
     return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate",
                                        "Pragma": "no-cache", "Expires": "0"})
 
