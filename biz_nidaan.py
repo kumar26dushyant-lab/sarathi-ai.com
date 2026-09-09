@@ -2918,16 +2918,24 @@ async def is_within_business_hours() -> bool:
 
 
 # ── Support-rep duty roster ───────────────────────────────────────────────────
+# DUTIES a staffer can be rostered onto. Same roster, same screen, same on-duty arithmetic —
+# the only difference is which queue the person is answering for that stretch of days.
+DUTIES = ("support", "whatsapp")
+
+
 async def add_support_rep(staff_id: int, start_date: str, end_date: str,
-                          created_by: Optional[int] = None) -> int:
+                          created_by: Optional[int] = None, duty: str = "support") -> int:
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", start_date or "") or not re.match(r"^\d{4}-\d{2}-\d{2}$", end_date or ""):
         raise ValueError("bad_date_format")
     if end_date < start_date:
         raise ValueError("end_before_start")
+    if duty not in DUTIES:
+        raise ValueError("bad_duty")
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "INSERT INTO nidaan_support_reps (staff_id, start_date, end_date, created_by) VALUES (?,?,?,?)",
-            (staff_id, start_date, end_date, created_by))
+            "INSERT INTO nidaan_support_reps (staff_id, start_date, end_date, created_by, duty) "
+            "VALUES (?,?,?,?,?)",
+            (staff_id, start_date, end_date, created_by, duty))
         await conn.commit()
         return cur.lastrowid
 
@@ -2939,24 +2947,33 @@ async def remove_support_rep(rep_id: int) -> bool:
         return cur.rowcount > 0
 
 
-async def list_support_reps() -> list[dict]:
-    """Roster rows with staff name + an on_duty flag (today within range, IST)."""
+async def list_support_reps(duty: Optional[str] = None) -> list[dict]:
+    """Roster rows with staff name + an on_duty flag (today within range, IST).
+
+    `duty=None` returns every duty, so the existing support screen keeps working unchanged.
+    """
     today = _now_ist().strftime("%Y-%m-%d")
+    where, args = "", []
+    if duty:
+        where = "WHERE COALESCE(r.duty,'support') = ?"
+        args.append(duty)
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await conn.execute(
-            """SELECT r.rep_id, r.staff_id, r.start_date, r.end_date, r.created_at,
-                      s.name AS staff_name, s.role AS staff_role
-               FROM nidaan_support_reps r
-               LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id
-               ORDER BY r.end_date DESC, r.start_date DESC""")).fetchall()]
+            f"""SELECT r.rep_id, r.staff_id, r.start_date, r.end_date, r.created_at,
+                       COALESCE(r.duty,'support') AS duty,
+                       s.name AS staff_name, s.role AS staff_role
+                FROM nidaan_support_reps r
+                LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id
+                {where}
+                ORDER BY r.end_date DESC, r.start_date DESC""", args)).fetchall()]
     for r in rows:
         r["on_duty"] = (r["start_date"] <= today <= r["end_date"])
     return rows
 
 
-async def on_duty_rep_ids() -> list[int]:
-    """staff_ids on support duty right now (today within range, IST, active staff)."""
+async def on_duty_rep_ids(duty: str = "support") -> list[int]:
+    """staff_ids on the given duty right now (today within range, IST, active staff)."""
     today = _now_ist().strftime("%Y-%m-%d")
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -2964,8 +2981,9 @@ async def on_duty_rep_ids() -> list[int]:
             """SELECT DISTINCT r.staff_id FROM nidaan_support_reps r
                JOIN nidaan_staff s ON s.staff_id = r.staff_id
                WHERE r.start_date <= ? AND r.end_date >= ?
+                 AND COALESCE(r.duty,'support') = ?
                  AND s.status='active' AND s.deleted_at IS NULL""",
-            (today, today))).fetchall()
+            (today, today, duty))).fetchall()
         return [r["staff_id"] for r in rows]
 
 

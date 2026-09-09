@@ -6463,6 +6463,28 @@ async def nidaan_doc_feedback_post(body: _DocFeedbackReq, request: Request):
 # can answer a customer, and there are only three super-admins. Settings and campaigns (below)
 # stay super-admin — reading and replying is day-to-day work, changing automation is not.
 
+async def _require_wa_inbox(request: Request) -> dict:
+    """Who may read and answer WhatsApp conversations.
+
+    Super-admins and sub-super-admins keep it for oversight. Beyond that it belongs to whoever is
+    ROSTERED onto WhatsApp today — the same duty roster the support chat uses, so nobody has to
+    learn a second way of saying who is answering. A team member rostered on can work the inbox;
+    the same person tomorrow, off duty, cannot.
+    """
+    caller = _require_staff(request, "team_member")
+    role = (caller or {}).get("role") or ""
+    if role in ("super_admin", "sub_super_admin"):
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(status_code=403,
+                        detail="The WhatsApp inbox is open to whoever is on WhatsApp duty today. "
+                               "Ask a super-admin to add you to the roster.")
+
+
 def _wa_number_or_400(msisdn: str) -> str:
     """E.164 digits only. Rejects anything else before it reaches a query or the Graph API."""
     import re as _re_wa
@@ -6477,7 +6499,7 @@ async def nidaan_ops_wa_conversations(request: Request, scope: str = "all", limi
     """Conversation list: one row per number, newest first, with owner + unread + reply window."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    await _require_wa_inbox(request)
     import biz_nidaan_wa_inbox as _inbox
     scope = scope if scope in ("all", "unread", "human", "bot", "stopped", "verified") else "all"
     return {"conversations": await _inbox.conversations(limit=limit, scope=scope),
@@ -6489,7 +6511,7 @@ async def nidaan_ops_wa_thread(msisdn: str, request: Request, limit: int = 200):
     """Full message history for one number, oldest-first, with who-said-it on every message."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    await _require_wa_inbox(request)
     import biz_nidaan_wa_inbox as _inbox
     n = _wa_number_or_400(msisdn)
     d = await _inbox.thread(n, limit=limit)
@@ -6507,7 +6529,7 @@ async def nidaan_ops_wa_owner(msisdn: str, body: _WaOwnerReq, request: Request):
     """Take a conversation over from the bot, or hand it back."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    caller = await _require_wa_inbox(request)
     import biz_nidaan_wa_inbox as _inbox
     res = await _inbox.set_owner(_wa_number_or_400(msisdn), human=body.human,
                                  by_id=str(caller.get("staff_id") or ""),
@@ -6530,7 +6552,7 @@ async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
     """Send a staffer's own WhatsApp reply, attributed to the real person behind the session."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    caller = await _require_wa_inbox(request)
     import biz_nidaan_wa_inbox as _inbox
     res = await _inbox.send_human(_wa_number_or_400(msisdn), body.text,
                                   staff_id=str(caller.get("staff_id") or ""),
@@ -8393,7 +8415,9 @@ async def ops_support_reps_get(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
-    return {"reps": await nidaan.list_support_reps()}
+    duty = (request.query_params.get("duty") or "").strip()
+    return {"reps": await nidaan.list_support_reps(duty if duty in nidaan.DUTIES else None),
+            "duties": list(nidaan.DUTIES)}
 
 
 class OpsSupportRepReq(BaseModel):
@@ -8401,6 +8425,7 @@ class OpsSupportRepReq(BaseModel):
     staff_id: int
     start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    duty: str = Field("support", max_length=20)
 
 
 @app.post("/nidaan/ops/api/support/reps")
@@ -8410,11 +8435,14 @@ async def ops_support_reps_add(body: OpsSupportRepReq, request: Request):
     staff = _require_staff(request, "super_admin")
     try:
         rep_id = await nidaan.add_support_rep(body.staff_id, body.start_date, body.end_date,
-                                              created_by=staff["staff_id"])
+                                              created_by=staff["staff_id"], duty=body.duty)
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        _m = {"bad_date_format": "Use dates in the form YYYY-MM-DD.",
+              "end_before_start": "The end date is before the start date.",
+              "bad_duty": "That is not a duty someone can be rostered onto."}
+        raise HTTPException(status_code=400, detail=_m.get(str(ve), str(ve)))
     await _ops_audit(request, "support.rep_add", "support",
-                     str(body.staff_id), f"{body.start_date}..{body.end_date}")
+                     str(body.staff_id), f"{body.duty} {body.start_date}..{body.end_date}")
     return {"ok": True, "rep_id": rep_id}
 
 

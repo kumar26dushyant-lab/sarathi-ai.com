@@ -1596,6 +1596,11 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN blocker_at TIMESTAMP",
             "ALTER TABLE nidaan_claims ADD COLUMN blocker_by TEXT DEFAULT ''",     # the REAL actor
             "ALTER TABLE nidaan_claims ADD COLUMN hold_until DATE",                # a park always ends
+            # The duty roster now covers more than support. A staffer can be rostered onto
+            # WhatsApp the same way they are rostered onto chat, and the same screen assigns
+            # both. Defaulting to 'support' leaves every existing row and every existing caller
+            # behaving exactly as before.
+            "ALTER TABLE nidaan_support_reps ADD COLUMN duty TEXT DEFAULT 'support'",
         ]
         for m in nidaan_migrations:
             try:

@@ -162,7 +162,9 @@ async def thread(msisdn: str, *, limit: int = 200) -> dict:
             "identity": {"name": who.get("name") or ct.get("display_name") or "",
                          "role": who.get("role") or "",
                          "account_id": who.get("account_id"),
-                         "branch_code": who.get("branch_code") or ""}}
+                         "branch_code": who.get("branch_code") or ""},
+            # The brief a staffer needs to answer well without opening three other screens.
+            "context": await case_context(msisdn, ct.get("claim_id"))}
 
 
 async def mark_read(msisdn: str) -> None:
@@ -286,3 +288,110 @@ async def counters() -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("counters failed: %s", e)
         return {}
+
+
+# ── what the staffer needs on screen to actually help ────────────────────────
+# Answering a WhatsApp message well means knowing, in the same glance: which case this is, how
+# far it has got, what we are waiting for, which documents are still missing, and whether any
+# money is outstanding. Without that the staffer opens three other screens, or worse, answers
+# from memory. Everything here is read-only and best-effort — a missing piece degrades to
+# "not known" rather than taking the thread down.
+
+async def case_context(msisdn: str, claim_id=None) -> dict:
+    """A one-glance brief on the person behind this conversation."""
+    out: dict = {"claims": [], "account": None}
+    d10 = "".join(ch for ch in (msisdn or "") if ch.isdigit())[-10:]
+    if not d10:
+        return out
+    like = f"%{d10}"
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await c.execute(
+                "SELECT claim_id, account_id, claim_type, insured_name, complainant_name, "
+                "insurer_name, policy_no, disputed_amount, status, review_outcome, "
+                "l2_payment_status, branch_code, assigned_to_staff_id, created_at "
+                "FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND ("
+                "  REPLACE(REPLACE(COALESCE(complainant_phone,''),' ',''),'-','') LIKE ? OR "
+                "  REPLACE(REPLACE(COALESCE(insured_phone,''),' ',''),'-','') LIKE ?) "
+                "ORDER BY claim_id DESC LIMIT 5", (like, like))).fetchall()]
+
+            # If the conversation is pinned to a claim the number does not carry, include it too.
+            if claim_id and not any(r["claim_id"] == claim_id for r in rows):
+                extra = await (await c.execute(
+                    "SELECT claim_id, account_id, claim_type, insured_name, complainant_name, "
+                    "insurer_name, policy_no, disputed_amount, status, review_outcome, "
+                    "l2_payment_status, branch_code, assigned_to_staff_id, created_at "
+                    "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+                if extra:
+                    rows.insert(0, dict(extra))
+
+            staff_names: dict = {}
+            sids = [r["assigned_to_staff_id"] for r in rows if r.get("assigned_to_staff_id")]
+            if sids:
+                ph = ",".join("?" * len(sids))
+                for sr in await (await c.execute(
+                        f"SELECT staff_id, name FROM nidaan_staff WHERE staff_id IN ({ph})",
+                        sids)).fetchall():
+                    staff_names[dict(sr)["staff_id"]] = dict(sr)["name"]
+
+            for r in rows:
+                cid = r["claim_id"]
+                # Documents: the single most common reason a claimant is messaging us.
+                try:
+                    dr = await (await c.execute(
+                        "SELECT COUNT(*) total, COALESCE(SUM(received),0) done "
+                        "FROM nidaan_claim_doc_checklist WHERE claim_id=? AND required=1",
+                        (cid,))).fetchone()
+                    dd = dict(dr) if dr else {}
+                    done, total = int(dd.get("done") or 0), int(dd.get("total") or 0)
+                except Exception:
+                    done, total = 0, 0
+                missing = []
+                if total and done < total:
+                    try:
+                        mr = await (await c.execute(
+                            "SELECT doc_key FROM nidaan_claim_doc_checklist "
+                            "WHERE claim_id=? AND required=1 AND COALESCE(received,0)=0 LIMIT 4",
+                            (cid,))).fetchall()
+                        missing = [dict(x)["doc_key"] for x in mr]
+                    except Exception:
+                        missing = []
+                out["claims"].append({
+                    "claim_id": cid,
+                    "claim_type": r.get("claim_type") or "",
+                    "insured_name": r.get("insured_name") or "",
+                    "complainant_name": r.get("complainant_name") or "",
+                    "insurer": r.get("insurer_name") or "",
+                    "policy_no": r.get("policy_no") or "",
+                    "amount": r.get("disputed_amount") or 0,
+                    "status": r.get("status") or "",
+                    "review_outcome": r.get("review_outcome") or "",
+                    "l2_paid": (r.get("l2_payment_status") or "") == "paid",
+                    "branch_code": r.get("branch_code") or "",
+                    "handler": staff_names.get(r.get("assigned_to_staff_id")) or "",
+                    "docs": {"done": done, "total": total, "missing": missing},
+                    "created_at": r.get("created_at"),
+                })
+
+            # Their account and plan, if this number belongs to one.
+            ar = await (await c.execute(
+                "SELECT account_id, owner_name, email, phone FROM nidaan_accounts "
+                "WHERE deleted_at IS NULL AND "
+                "REPLACE(REPLACE(COALESCE(phone,''),' ',''),'-','') LIKE ? LIMIT 1",
+                (like,))).fetchone()
+            if ar:
+                a = dict(ar)
+                sub = await (await c.execute(
+                    "SELECT plan, status, substr(current_period_end,1,10) ends "
+                    "FROM nidaan_subscriptions WHERE account_id=? AND status='active' "
+                    "ORDER BY sub_id DESC LIMIT 1", (a["account_id"],))).fetchone()
+                out["account"] = {
+                    "account_id": a["account_id"], "name": a.get("owner_name") or "",
+                    "email": a.get("email") or "",
+                    "plan": (dict(sub).get("plan") if sub else ""),
+                    "plan_ends": (dict(sub).get("ends") if sub else ""),
+                }
+    except Exception as e:  # noqa: BLE001
+        logger.warning("case_context failed for %s: %s", msisdn, e)
+    return out
