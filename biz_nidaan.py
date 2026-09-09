@@ -2954,7 +2954,17 @@ async def is_within_business_hours() -> bool:
 # ── Support-rep duty roster ───────────────────────────────────────────────────
 # DUTIES a staffer can be rostered onto. Same roster, same screen, same on-duty arithmetic —
 # the only difference is which queue the person is answering for that stretch of days.
-DUTIES = ("support", "whatsapp")
+#
+# Two channels, then one duty per STAGE of a case. That second group is deliberate: staff came
+# from a system where work lived in folders, and "which folders are mine today" is the question
+# they already know how to answer. A duty here IS a bucket, so the rota tells someone which
+# buckets to work without anyone having to learn a new idea.
+DUTIES = ("support", "whatsapp",
+          "intake", "review", "conversion", "consolidation", "documentation", "drafting",
+          "representation", "escalation", "lokpal", "outcome", "settlement")
+
+# Duties that correspond to a case stage (the rest are conversation channels).
+STAGE_DUTIES = DUTIES[2:]
 
 
 async def add_support_rep(staff_id: int, start_date: str, end_date: str,

@@ -512,3 +512,120 @@ async def assignable_staff() -> list[dict]:
     except Exception as e:  # noqa: BLE001
         logger.warning("assignable_staff failed: %s", e)
         return []
+
+
+# ── My Desk: one screen that answers "what do I do today" ────────────────────
+# The old system was folders, and people were good at it. This keeps that shape - buckets, and
+# which buckets are yours today - while the machine underneath does the counting, the clocks and
+# the flags. Nobody has to learn the words "stage" or "blocker" to use it.
+
+async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
+    """Everything one person needs on opening ops: am I on duty, what is on fire, what is mine."""
+    import biz_nidaan as _n
+    import biz_nidaan_stage_guide as _g
+
+    b = await board(limit=1000)
+    items = b.get("items") or []
+
+    # Who is on which duty today, so nobody has to ask across the room.
+    rota: dict = {}
+    mine: list = []
+    try:
+        for r in await _n.list_support_reps():
+            if not r.get("on_duty"):
+                continue
+            d = r.get("duty") or "support"
+            rota.setdefault(d, []).append({"staff_id": r.get("staff_id"),
+                                           "name": r.get("staff_name") or ("#%s" % r.get("staff_id"))})
+            if staff_id and int(r.get("staff_id") or 0) == int(staff_id):
+                mine.append(d)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("desk rota failed: %s", e)
+
+    def _count(stage):
+        rows = [i for i in items if i["stage"] == stage]
+        return {
+            "total": len(rows),
+            "ours": sum(1 for i in rows if i["blocker"] in OURS),
+            "stalled": sum(1 for i in rows if "stalled" in i["flags"]),
+            "mine": sum(1 for i in rows if staff_id and i.get("assigned_to") == int(staff_id)),
+        }
+
+    buckets = []
+    for st in STAGES:
+        if st == "closed":
+            continue
+        c = _count(st)
+        if not c["total"] and st not in mine:
+            continue          # an empty bucket nobody is rostered on is just noise
+        buckets.append({"key": st, **_g.label(st, lang), "guide": _g.guide(st, lang),
+                        "on_duty": rota.get(st, []), "yours": st in mine, **c})
+
+    # The channels a person can be rostered onto sit alongside the case buckets.
+    channels = []
+    for ch in ("support", "whatsapp"):
+        channels.append({"key": ch, **_g.label(ch, lang), "guide": _g.guide(ch, lang),
+                         "on_duty": rota.get(ch, []), "yours": ch in mine})
+
+    # ON FIRE — deliberately short. A list of forty is a list nobody reads, so this is capped and
+    # every line says WHY in words, not in a flag name.
+    def _why(i):
+        if "hold_expired" in i["flags"]:
+            return "the pause has ended - it is ours again"
+        if "filing_window" in i["flags"]:
+            return "the one-year Ombudsman window is closing"
+        if "no_email" in i["flags"] and i["stage"] in ("consolidation", "representation", "escalation", "lokpal"):
+            return "no email address, and this stage runs on email"
+        if i["blocker"] in OURS and i.get("over_by", 0) > 0:
+            return "waiting on us for %d days longer than it should" % i["over_by"]
+        if "stalled" in i["flags"]:
+            return "nothing has moved for %d days" % (i.get("age_days") or 0)
+        if "fee_unpaid" in i["flags"]:
+            return "we said we can win it, but the fee has not been paid"
+        if "unreviewed" in i["flags"]:
+            return "waiting for a reviewer to decide"
+        if "docs_short" in i["flags"]:
+            d = i.get("docs") or {}
+            return "%d of %d documents still to come" % (
+                max(0, (d.get("total") or 0) - (d.get("done") or 0)), d.get("total") or 0)
+        if "no_email" in i["flags"]:
+            return "no email address on file"
+        if "no_phone" in i["flags"]:
+            return "no phone number on file"
+        if "no_timeline" in i["flags"]:
+            return "nothing has ever been recorded on this case"
+        return "needs a look"
+
+    def _heat(i):
+        h = i.get("over_by", 0) or 0
+        if "filing_window" in i["flags"]:
+            h += 500                       # a legal deadline outranks everything
+        if "hold_expired" in i["flags"]:
+            h += 100
+        if i["blocker"] in OURS:
+            h += 50                        # nobody else is holding this up
+        return h
+
+    hot = sorted([i for i in items if i["flags"] or i.get("over_by", 0) > 0],
+                 key=_heat, reverse=True)
+    mine_hot = [i for i in hot if staff_id and i.get("assigned_to") == int(staff_id)]
+    on_fire = (mine_hot + [i for i in hot if i not in mine_hot])[:8]
+
+    return {
+        "lang": lang,
+        "my_duties": [{"key": d, **_g.label(d, lang)} for d in mine],
+        "rota": rota,
+        # A duty with a case waiting and nobody rostered is the gap worth naming out loud.
+        "gaps": [{"key": k, **_g.label(k, lang), "waiting": v["total"]}
+                 for k, v in ((bk["key"], bk) for bk in buckets)
+                 if not rota.get(k) and v["total"]],
+        "buckets": buckets,
+        "channels": channels,
+        "on_fire": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],
+                     **_g.label(i["stage"], lang),
+                     "why": _why(i), "age_days": i.get("age_days"),
+                     "mine": bool(staff_id and i.get("assigned_to") == int(staff_id))}
+                    for i in on_fire],
+        "totals": {"open": b.get("open_total", 0), "ours": b.get("ours", 0),
+                   "mine": sum(1 for i in items if staff_id and i.get("assigned_to") == int(staff_id))},
+    }

@@ -6327,6 +6327,22 @@ async def nidaan_ops_pulse(request: Request, since: str = ""):
 # existing path. It answers the two questions status alone cannot: where is this case, and who
 # owes the next move.
 
+@app.get("/nidaan/ops/api/desk")
+async def nidaan_ops_desk(request: Request, lang: str = "en"):
+    """One screen answering "what do I do today" — duties, what is on fire, and my buckets.
+
+    Deliberately shaped like the folders staff already know: a duty IS a bucket, so the rota
+    tells someone which buckets are theirs today without anyone learning a new idea.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    return await _cs.desk(caller.get("staff_id") or caller.get("sub"),
+                          role=(caller or {}).get("role") or "",
+                          lang=("hi" if lang == "hi" else "en"))
+
+
 @app.get("/nidaan/ops/api/cases/board")
 async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
                                 flag: str = "", mine: int = 0, limit: int = 300):

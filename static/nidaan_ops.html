@@ -447,6 +447,7 @@ select.form-input option{background:#1e293b}
     <main class="main">
       <div id="panel-overview" class="panel"></div>
       <div id="panel-pipeline" class="panel" style="display:none"></div>
+      <div id="panel-desk" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -643,9 +644,10 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','board','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
-  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'tasks';
+  // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
+  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
   showPanel(initial, true);
   try { history.replaceState({panel: initial}, '', '#' + initial); } catch(e){}
   // Notification bell — load + poll every 45s.
@@ -947,6 +949,7 @@ function buildSidebar() {
   // Grouped into clear zones. A zone header shows only if it has ≥1 visible item.
   const zones = [
     {h:'Work', items:[
+      {id:'desk',     label:'🧑‍💼 My Desk',          minRank:0},
       {id:'board',    label:'🧭 Case Board',       minRank:0},
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
       {id:'crm',      label:'🎯 CRM',              minRank:0},
@@ -1029,6 +1032,7 @@ function showPanel(id, fromHistory) {
     claims: loadClaims,
     l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
+    desk: loadDesk,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -10492,6 +10496,216 @@ async function saveWaSettings(){
   if(r.ok){ m.style.color='var(--nd-success-text)'; m.textContent='✓ Saved.'; }
   else { m.style.color='var(--nd-danger-text)'; const e=await r.json().catch(()=>({})); m.textContent='✕ '+(e.detail||'Failed'); }
 }
+// ══ My Desk — the one screen that answers "what do I do today" ═══════════════
+// Staff came from a system of folders and were good at it. This keeps that shape — buckets, and
+// which buckets are yours today — while the machine underneath does the counting, the clocks and
+// the flags. Nobody needs the words "stage" or "blocker" to use it.
+//
+// Every bucket explains itself: what it is, what you do, how you know you are finished, and what
+// usually goes wrong. Written for someone who is good at claims work and not at software.
+let _deskData = null;
+let _deskLang = 'en';
+let _deskOpenGuide = null;
+
+function _deskStyles(){
+  if (document.getElementById('deskCss')) return;
+  const st = document.createElement('style'); st.id='deskCss';
+  st.textContent = `
+  .dk-hello{font-size:1.05rem;font-weight:700;color:var(--nd-text-primary);margin-bottom:.15rem}
+  .dk-duty{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.5rem 0 1rem;font-size:.86rem}
+  .dk-duty .lbl{color:var(--nd-text-muted)}
+  .dk-dchip{display:inline-flex;align-items:center;gap:.3rem;background:rgba(34,211,238,.14);
+    border:1px solid rgba(34,211,238,.35);color:var(--nd-cyan-text);border-radius:999px;
+    padding:.2rem .7rem;font-weight:700;font-size:.82rem}
+  .dk-dnone{color:var(--nd-text-faint);font-style:italic}
+  .dk-sec{font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;color:var(--nd-text-faint);
+    font-weight:800;margin:1.3rem 0 .5rem}
+  .dk-fire{border:1px solid var(--nd-border-danger);border-radius:12px;overflow:hidden;
+    background:var(--nd-danger-soft)}
+  .dk-frow{display:flex;gap:.6rem;align-items:baseline;padding:.6rem .8rem;cursor:pointer;
+    border-top:1px solid var(--nd-border)}
+  .dk-frow:first-child{border-top:0}
+  .dk-frow:hover{background:var(--nd-bg-surface-2)}
+  .dk-fwho{font-weight:700;color:var(--nd-text-primary);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:11rem}
+  .dk-fwhy{flex:1;min-width:0;font-size:.84rem;color:var(--nd-text-secondary)}
+  .dk-fmine{background:rgba(168,85,247,.18);color:var(--nd-purple-text);border:1px solid rgba(168,85,247,.35);
+    border-radius:5px;font-size:.63rem;font-weight:800;padding:.08rem .38rem;white-space:nowrap}
+  .dk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:.7rem}
+  .dk-b{border:1px solid var(--nd-border);border-radius:12px;background:var(--nd-bg-surface);
+    padding:.75rem .85rem;display:flex;flex-direction:column;gap:.45rem}
+  .dk-b.yours{border-color:rgba(34,211,238,.5);box-shadow:inset 3px 0 0 var(--nd-brand-cyan)}
+  .dk-bt{display:flex;align-items:center;gap:.45rem;font-weight:700;font-size:.95rem;
+    color:var(--nd-text-primary)}
+  .dk-byours{margin-left:auto;font-size:.63rem;font-weight:800;letter-spacing:.03em;
+    background:rgba(34,211,238,.16);color:var(--nd-cyan-text);border:1px solid rgba(34,211,238,.32);
+    border-radius:5px;padding:.1rem .4rem;white-space:nowrap}
+  .dk-what{font-size:.82rem;color:var(--nd-text-secondary);line-height:1.5}
+  .dk-nums{display:flex;gap:.35rem;flex-wrap:wrap}
+  .dk-n{font-size:.72rem;border-radius:6px;padding:.15rem .45rem;white-space:nowrap;
+    border:1px solid var(--nd-border);color:var(--nd-text-secondary);background:var(--nd-bg-surface-2)}
+  .dk-n.hot{background:var(--nd-danger-soft);color:var(--nd-danger-text);border-color:var(--nd-border-danger)}
+  .dk-n.us{background:rgba(168,85,247,.14);color:var(--nd-purple-text);border-color:rgba(168,85,247,.3)}
+  .dk-who{font-size:.75rem;color:var(--nd-text-muted)}
+  .dk-who b{color:var(--nd-text-secondary)}
+  .dk-who.none{color:var(--nd-warning-text)}
+  .dk-acts{display:flex;gap:.4rem;margin-top:.1rem}
+  .dk-a{flex:1;background:none;border:1px solid var(--nd-border);color:var(--nd-text-secondary);
+    border-radius:7px;padding:.32rem;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .dk-a:hover{border-color:var(--nd-brand-cyan);color:var(--nd-cyan-text)}
+  .dk-guide{border-top:1px dashed var(--nd-border);padding-top:.5rem;font-size:.8rem;
+    color:var(--nd-text-secondary);line-height:1.55;display:flex;flex-direction:column;gap:.35rem}
+  .dk-g1{display:flex;gap:.4rem}
+  .dk-g1 .k{font-size:.63rem;letter-spacing:.05em;text-transform:uppercase;font-weight:800;
+    color:var(--nd-text-faint);min-width:3.4rem;padding-top:.15rem}
+  .dk-g1.warn .k{color:var(--nd-warning-text)}
+  .dk-g1.warn{color:var(--nd-warning-text)}
+  .dk-gap{background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);
+    color:var(--nd-warning-text);border-radius:10px;padding:.6rem .8rem;font-size:.84rem;line-height:1.6}
+  .dk-langs{margin-left:auto;display:flex;gap:.3rem}
+  .dk-lang{background:none;border:1px solid var(--nd-border);color:var(--nd-text-muted);
+    border-radius:999px;padding:.15rem .6rem;font-size:.74rem;cursor:pointer;font-family:inherit;font-weight:700}
+  .dk-lang[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);
+    border-color:var(--nd-brand-cyan)}
+  @media (max-width:640px){
+    .dk-grid{grid-template-columns:1fr}
+    .dk-fwho{max-width:7.5rem}
+  }`;
+  document.head.appendChild(st);
+}
+
+const DKT = {
+  en: {hello:'Your desk', sub:'What needs you today, and which buckets are yours.',
+       onduty:'You are on duty today for', notonduty:'You are not on any duty today.',
+       fire:'Needs attention now', fireNone:'Nothing urgent right now. Good.',
+       buckets:'The buckets', channels:'Conversations', gaps:'Nobody is on duty for these',
+       gapsHint:'Cases are waiting in these buckets and no one is rostered. A super-admin can assign someone in Support → duty roster.',
+       open:'open', ours:'need us', stalled:'stalled', mine:'mine',
+       yours:'YOURS TODAY', nobody:'Nobody on duty', onDutyNow:'On duty:',
+       show:'What do I do here?', hide:'Hide', openb:'Open',
+       what:'What', doo:'Do', done:'Done when', watch:'Watch'},
+  hi: {hello:'आपका डेस्क', sub:'आज आपसे क्या ज़रूरी है, और कौन-से बकेट आपके हैं।',
+       onduty:'आज आप इन पर ड्यूटी पर हैं', notonduty:'आज आपकी कोई ड्यूटी नहीं है।',
+       fire:'अभी ध्यान चाहिए', fireNone:'अभी कुछ ज़रूरी नहीं है। अच्छा है।',
+       buckets:'बकेट', channels:'बातचीत', gaps:'इन पर कोई ड्यूटी पर नहीं है',
+       gapsHint:'इन बकेट में केस इंतज़ार कर रहे हैं और कोई तैनात नहीं है। सुपर-एडमिन Support → ड्यूटी रोस्टर में किसी को लगा सकते हैं।',
+       open:'खुले', ours:'हमारे पास', stalled:'अटके', mine:'मेरे',
+       yours:'आज आपका', nobody:'कोई ड्यूटी पर नहीं', onDutyNow:'ड्यूटी पर:',
+       show:'यहाँ मुझे क्या करना है?', hide:'छुपाएँ', openb:'खोलें',
+       what:'क्या है', doo:'करना है', done:'पूरा कब', watch:'ध्यान रखें'},
+};
+
+async function loadDesk(){
+  _deskStyles();
+  const panel = document.getElementById('panel-desk');
+  if (!panel) return;
+  if (!panel.dataset.ready){
+    panel.innerHTML = '<div id="deskBody"><div class="empty"><p>Loading…</p></div></div>';
+    panel.dataset.ready = '1';
+  }
+  try{
+    const r = await API('/desk?lang=' + _deskLang);
+    if (!r.ok) throw 0;
+    _deskData = await r.json();
+    deskRender();
+  }catch(e){
+    const b = document.getElementById('deskBody');
+    if (b) b.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load your desk.'
+      + ' <button class="btn-sm btn-ghost" onclick="loadDesk()">Try again</button></p></div>';
+  }
+}
+
+function deskSetLang(l){ _deskLang = l; loadDesk(); }
+
+function deskRender(){
+  const d = _deskData || {}, T = DKT[_deskLang] || DKT.en;
+  const body = document.getElementById('deskBody');
+  if (!body) return;
+  const name = (_staffName || '').split(' ')[0] || '';
+
+  // ── who am I on duty for ──
+  const duties = d.my_duties || [];
+  const dutyLine = duties.length
+    ? '<span class="lbl">' + T.onduty + '</span>'
+      + duties.map(x => '<span class="dk-dchip">' + x.icon + ' ' + esc(x.name) + '</span>').join('')
+    : '<span class="dk-dnone">' + T.notonduty + '</span>';
+
+  // ── on fire ──
+  const fire = d.on_fire || [];
+  const fireHtml = fire.length
+    ? '<div class="dk-fire">' + fire.map(f =>
+        '<div class="dk-frow" onclick="openClaimDrawer(' + f.claim_id + ')">'
+        + '<span>' + f.icon + '</span>'
+        + '<span class="dk-fwho">' + esc(f.who || 'NP-' + f.claim_id) + '</span>'
+        + '<span class="dk-fwhy">' + esc(f.why) + '</span>'
+        + (f.mine ? '<span class="dk-fmine">' + T.mine.toUpperCase() + '</span>' : '')
+        + '</div>').join('') + '</div>'
+    : '<div class="dk-gap" style="background:var(--nd-success-soft);border-color:rgba(34,197,94,.3);color:var(--nd-success-text)">✓ ' + T.fireNone + '</div>';
+
+  // ── one bucket card ──
+  const card = (b, isChannel) => {
+    const g = b.guide || {};
+    const duty = (b.on_duty || []).length
+      ? '<div class="dk-who">' + T.onDutyNow + ' <b>' + (b.on_duty||[]).map(x=>esc(x.name)).join(', ') + '</b></div>'
+      : '<div class="dk-who none">' + T.nobody + '</div>';
+    const nums = isChannel ? '' :
+      '<div class="dk-nums">'
+      + '<span class="dk-n">' + b.total + ' ' + T.open + '</span>'
+      + (b.ours ? '<span class="dk-n us">' + b.ours + ' ' + T.ours + '</span>' : '')
+      + (b.stalled ? '<span class="dk-n hot">' + b.stalled + ' ' + T.stalled + '</span>' : '')
+      + (b.mine ? '<span class="dk-n">' + b.mine + ' ' + T.mine + '</span>' : '')
+      + '</div>';
+    const open = _deskOpenGuide === b.key;
+    const guide = open ? '<div class="dk-guide">'
+      + '<div class="dk-g1"><span class="k">' + T.what + '</span><span>' + esc(g.what||'') + '</span></div>'
+      + '<div class="dk-g1"><span class="k">' + T.doo + '</span><span>' + esc(g.do||'') + '</span></div>'
+      + '<div class="dk-g1"><span class="k">' + T.done + '</span><span>' + esc(g.done||'') + '</span></div>'
+      + '<div class="dk-g1 warn"><span class="k">' + T.watch + '</span><span>' + esc(g.watch||'') + '</span></div>'
+      + '</div>' : '';
+    const goto = isChannel
+      ? (b.key === 'whatsapp' ? "showPanel('whatsapp')" : "showPanel('support')")
+      : ("cbSet('stage','" + b.key + "');showPanel('board')");
+    return '<div class="dk-b' + (b.yours ? ' yours' : '') + '">'
+      + '<div class="dk-bt">' + b.icon + ' ' + esc(b.name)
+      +   (b.yours ? '<span class="dk-byours">' + T.yours + '</span>' : '') + '</div>'
+      + '<div class="dk-what">' + esc((b.guide||{}).what || '') + '</div>'
+      + nums + duty
+      + '<div class="dk-acts">'
+      +   '<button class="dk-a" onclick="deskGuide(\'' + b.key + '\')">' + (open ? T.hide : T.show) + '</button>'
+      +   '<button class="dk-a" onclick="' + goto + '">' + T.openb + '</button>'
+      + '</div>' + guide + '</div>';
+  };
+
+  const gaps = d.gaps || [];
+  const gapHtml = gaps.length
+    ? '<div class="dk-sec">' + T.gaps + '</div><div class="dk-gap">'
+      + gaps.map(g => g.icon + ' <b>' + esc(g.name) + '</b> — ' + g.waiting).join(' &nbsp;·&nbsp; ')
+      + '<div style="margin-top:.35rem;font-size:.78rem;opacity:.85">' + T.gapsHint + '</div></div>'
+    : '';
+
+  body.innerHTML =
+      '<div class="section-hdr" style="align-items:flex-start"><div>'
+    +   '<div class="dk-hello">🧑‍💼 ' + T.hello + (name ? ' — ' + esc(name) : '') + '</div>'
+    +   '<div class="section-sub">' + T.sub + '</div></div>'
+    +   '<div class="dk-langs">'
+    +     '<button class="dk-lang" aria-pressed="' + (_deskLang==='en') + '" onclick="deskSetLang(\'en\')">English</button>'
+    +     '<button class="dk-lang" aria-pressed="' + (_deskLang==='hi') + '" onclick="deskSetLang(\'hi\')">हिंदी</button>'
+    +   '</div></div>'
+    + '<div class="dk-duty">' + dutyLine + '</div>'
+    + '<div class="dk-sec">🔥 ' + T.fire + '</div>' + fireHtml
+    + gapHtml
+    + '<div class="dk-sec">' + T.buckets + '</div>'
+    + '<div class="dk-grid">' + (d.buckets||[]).map(b => card(b,false)).join('') + '</div>'
+    + '<div class="dk-sec">' + T.channels + '</div>'
+    + '<div class="dk-grid">' + (d.channels||[]).map(b => card(b,true)).join('') + '</div>';
+}
+
+function deskGuide(key){
+  _deskOpenGuide = (_deskOpenGuide === key) ? null : key;
+  deskRender();
+}
+window.loadDesk=loadDesk; window.deskGuide=deskGuide; window.deskSetLang=deskSetLang;
+
 // ══ Case Board — where every case is, and who owes the next move ═══════════════
 // `status` says what happened last. It cannot say where a case sits or who is holding it up,
 // so those lived in people's heads and a case could sit for weeks unnoticed. This is the
