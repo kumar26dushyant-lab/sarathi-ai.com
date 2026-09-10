@@ -4536,6 +4536,28 @@ function _radarFlagDot(f){ return f==='red'?'🔴':(f==='green'?'⚪':'🟡'); }
 function _mTile(label,val,sub){ return `<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.6rem .8rem"><div style="font-size:1.3rem;font-weight:800">${val}</div><div style="font-size:.72rem;color:var(--nd-text-muted)">${label}${sub?' · '+sub:''}</div></div>`; }
 // Gmail/Yahoo send the forwarding verification to the DESTINATION inbox — i.e. to cs@/np@, us.
 // These land in the radar like any other mail, so surface them with the code pulled out.
+// Who actually sent this, in the order a person reads it: the name they go by, then the
+// address, because a bare address tells you nothing about who is writing.
+function _radarWho(i){
+  const nm = (i.from_name||'').trim(), ad = (i.from_addr||'').trim();
+  if (nm && ad) return '<b style="color:var(--nd-text-secondary)">'+esc(nm)+'</b> &lt;'+esc(ad)+'&gt;';
+  return esc(nm || ad || 'unknown sender');
+}
+// Which case this belongs to, only where we can prove it - by the sender being on the claim, or
+// a claim number written in the subject. Where we cannot, say so plainly rather than guess: a
+// wrong case link on an email is worse than no link at all.
+function _radarCase(i){
+  if (i.claim_id){
+    return '<div style="font-size:.74rem;margin-top:.15rem">'
+      + '<a href="#" onclick="openClaimDrawer('+i.claim_id+');return false" '
+      +   'style="color:var(--nd-cyan-text);font-weight:700">📁 NP-'+i.claim_id+'</a>'
+      + (i.claim_who ? ' <span style="color:var(--nd-text-secondary)">'+esc(i.claim_who)+'</span>' : '')
+      + ' <span style="color:var(--nd-text-faint);font-size:.68rem">— '+esc(i.match_on||'')+'</span></div>';
+  }
+  return '<div style="font-size:.72rem;margin-top:.15rem;color:var(--nd-text-faint)">'
+    + '📁 Not matched to a case — search the sender or ask them for the claim number</div>';
+}
+
 function _isFwdConfirm(i){
   const f=(i.from_addr||'').toLowerCase(), s=(i.subject||'').toLowerCase();
   return f.includes('forwarding-noreply@google.com') || f.includes('mail-noreply@yahoo')
@@ -4600,7 +4622,8 @@ function _renderRadarItems(){
       <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start">
         <div style="min-width:0;flex:1">
           <div style="font-weight:700;font-size:.86rem">${_radarFlagDot(i.flag)} ${esc(i.subject||'(no subject)')} ${st}${i.priority_sender?' <span style="font-size:.66rem;color:var(--nd-danger-text)">priority</span>':''}</div>
-          <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${esc(i.from_name||i.from_addr||'')} · ${i.received_at?fmtDateTime(i.received_at):''}${i.quick_task_id?' · <span style="color:var(--nd-cyan-text)">📋 Task #'+i.quick_task_id+'</span>':''}</div>
+          <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.15rem">${_radarWho(i)} · ${esc(i.mailbox_label||i.mailbox_email_masked||'')} · ${i.received_at?fmtDateTime(i.received_at):''}${i.quick_task_id?' · <span style="color:var(--nd-cyan-text)">📋 Task #'+i.quick_task_id+'</span>':''}</div>
+          ${_radarCase(i)}
           ${i.ai_summary?`<div style="font-size:.78rem;margin-top:.3rem">🤖 ${esc(i.ai_summary)}</div>`:''}
           ${i.deadline?`<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.2rem">⏰ ${esc(i.deadline)}</div>`:''}
           ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
@@ -10583,6 +10606,8 @@ const DKT = {
        open:'open', ours:'need us', stalled:'stalled', mine:'mine',
        yours:'YOURS TODAY', nobody:'Nobody on duty', onDutyNow:'On duty:',
        show:'What do I do here?', hide:'Hide', openb:'Open',
+       assign:'→ Put someone on duty', assignShort:'Set duty',
+       assignHint:'Assign a staff member to this bucket for a date range',
        what:'What', doo:'Do', done:'Done when', watch:'Watch'},
   hi: {hello:'आपका डेस्क', sub:'आज आपसे क्या ज़रूरी है, और कौन-से बकेट आपके हैं।',
        onduty:'आज आप इन पर ड्यूटी पर हैं', notonduty:'आज आपकी कोई ड्यूटी नहीं है।',
@@ -10592,6 +10617,8 @@ const DKT = {
        open:'खुले', ours:'हमारे पास', stalled:'अटके', mine:'मेरे',
        yours:'आज आपका', nobody:'कोई ड्यूटी पर नहीं', onDutyNow:'ड्यूटी पर:',
        show:'यहाँ मुझे क्या करना है?', hide:'छुपाएँ', openb:'खोलें',
+       assign:'→ किसी को ड्यूटी पर लगाएँ', assignShort:'ड्यूटी लगाएँ',
+       assignHint:'इस बकेट पर किसी स्टाफ़ को तारीख़ों के लिए तैनात करें',
        what:'क्या है', doo:'करना है', done:'पूरा कब', watch:'ध्यान रखें'},
 };
 
@@ -10665,6 +10692,9 @@ function deskRender(){
     const goto = isChannel
       ? (b.key === 'whatsapp' ? "showPanel('whatsapp')" : "showPanel('support')")
       : ("cbSet('stage','" + b.key + "');showPanel('board')");
+    const assignBtn = (_role === 'super_admin')
+      ? '<button class="dk-a" onclick="deskAssign()" title="' + T.assignHint + '">' + T.assignShort + '</button>'
+      : '';
     return '<div class="dk-b' + (b.yours ? ' yours' : '') + '">'
       + '<div class="dk-bt">' + b.icon + ' ' + esc(b.name)
       +   (b.yours ? '<span class="dk-byours">' + T.yours + '</span>' : '') + '</div>'
@@ -10673,14 +10703,21 @@ function deskRender(){
       + '<div class="dk-acts">'
       +   '<button class="dk-a" onclick="deskGuide(\'' + b.key + '\')">' + (open ? T.hide : T.show) + '</button>'
       +   '<button class="dk-a" onclick="' + goto + '">' + T.openb + '</button>'
+      +   assignBtn
       + '</div>' + guide + '</div>';
   };
 
   const gaps = d.gaps || [];
+  const canAssign = (_role === 'super_admin');
   const gapHtml = gaps.length
     ? '<div class="dk-sec">' + T.gaps + '</div><div class="dk-gap">'
       + gaps.map(g => g.icon + ' <b>' + esc(g.name) + '</b> — ' + g.waiting).join(' &nbsp;·&nbsp; ')
-      + '<div style="margin-top:.35rem;font-size:.78rem;opacity:.85">' + T.gapsHint + '</div></div>'
+      + '<div style="margin-top:.35rem;font-size:.78rem;opacity:.85">' + T.gapsHint + '</div>'
+      + (canAssign
+          ? '<button class="dk-a" style="margin-top:.5rem;max-width:16rem;border-color:var(--nd-border-warn);color:var(--nd-warning-text)"'
+            + ' onclick="deskAssign()">' + T.assign + '</button>'
+          : '')
+      + '</div>'
     : '';
 
   body.innerHTML =
@@ -10700,11 +10737,27 @@ function deskRender(){
     + '<div class="dk-grid">' + (d.channels||[]).map(b => card(b,true)).join('') + '</div>';
 }
 
+// The duty roster lives on the Support screen. Nobody would guess that from My Desk, so this
+// takes them there and points at it rather than leaving them to hunt.
+function deskAssign(){
+  showPanel('support');
+  setTimeout(function(){
+    const el = document.getElementById('supReps');
+    if (el){
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      el.style.transition = 'box-shadow .4s';
+      el.style.boxShadow = '0 0 0 3px var(--nd-brand-cyan)';
+      setTimeout(function(){ el.style.boxShadow = ''; }, 2600);
+    }
+  }, 600);
+}
+
 function deskGuide(key){
   _deskOpenGuide = (_deskOpenGuide === key) ? null : key;
   deskRender();
 }
 window.loadDesk=loadDesk; window.deskGuide=deskGuide; window.deskSetLang=deskSetLang;
+window.deskAssign=deskAssign;
 
 // ══ Case Board — where every case is, and who owes the next move ═══════════════
 // `status` says what happened last. It cannot say where a case sits or who is holding it up,

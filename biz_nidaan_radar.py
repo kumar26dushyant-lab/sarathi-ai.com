@@ -365,6 +365,7 @@ def _imap_fetch_new(host: str, port: int, email: str, password: str,
     import imaplib
     import email as _email
     from email.utils import parsedate_to_datetime, parseaddr
+    from datetime import timezone as _dtz
     from email.header import make_header, decode_header
     M = None
     out: list = []
@@ -416,7 +417,14 @@ def _imap_fetch_new(host: str, port: int, email: str, password: str,
                 try:
                     dt = parsedate_to_datetime(msg.get("Date", ""))
                     if dt:
-                        recv = dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                        # astimezone() with no argument converts to the SERVER's local zone, which
+                        # is CEST here — so every arrival time was stored two hours ahead of every
+                        # other timestamp in the database, and the UI (which adds IST to a UTC
+                        # value) then showed mail arriving two hours in the future. Store UTC, the
+                        # way the rest of the schema does; the display layer converts to IST.
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=_dtz.utc)      # header had no offset
+                        recv = dt.astimezone(_dtz.utc).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     recv = None
                 try:
@@ -542,6 +550,9 @@ async def list_items(flag: str = "", limit: int = 120, bucket: str = "") -> list
         rows = [dict(r) for r in await (await conn.execute(q, params)).fetchall()]
     for r in rows:
         r["mailbox_email_masked"] = _mask_email(r.pop("mailbox_email", ""))
+    # Say which case each mail belongs to, where we can prove it. A subject line and an address
+    # tells a staffer nothing; "NP-118 · RAMESH GUPTA" tells them everything.
+    await _match_items_to_claims(rows)
     return rows
 
 
@@ -1104,3 +1115,75 @@ async def purge_mailbox(mailbox_id: int) -> bool:
         await conn.execute("DELETE FROM nidaan_radar_mailboxes WHERE mailbox_id=?", (mailbox_id,))
         await conn.commit()
     return True
+
+
+# ── Whose mail is this? ──────────────────────────────────────────────────────
+# A radar row used to be a subject line and an address, which tells a staffer nothing about
+# WHICH case it belongs to — so every item meant opening the mail and reading it. This attaches
+# the case where we can prove a link, and where we cannot, at least says plainly who sent it.
+#
+# Matching is on facts only: the sender address against the emails we hold, or a claim/policy
+# number appearing in the subject. No guessing by name — two people called Sharma are not the
+# same person, and a wrong claim link on an email is worse than none.
+
+_CLAIMNO_RX = re.compile(
+    r"\b(?:NP[-\s]?0*(\d{1,6})|claim\s*(?:id|no\.?|number|#)\s*:?\s*(\d{1,6}))\b", re.I)
+
+
+async def _match_items_to_claims(rows: list) -> None:
+    """Attach {claim_id, claim_who, match_on} to each row, in place. Never raises."""
+    if not rows:
+        return
+    addrs = {(r.get("from_addr") or "").strip().lower() for r in rows if r.get("from_addr")}
+    by_addr, by_id = {}, {}
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            if addrs:
+                ph = ",".join("?" * len(addrs))
+                lst = list(addrs)
+                # The complainant's own address, the insured's, or the account holder's.
+                for cr in await (await conn.execute(
+                        f"SELECT claim_id, complainant_name, insured_name, "
+                        f"       LOWER(COALESCE(complainant_email,'')) ce, "
+                        f"       LOWER(COALESCE(insured_email,'')) ie "
+                        f"FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND ("
+                        f"  LOWER(COALESCE(complainant_email,'')) IN ({ph}) OR "
+                        f"  LOWER(COALESCE(insured_email,'')) IN ({ph})) "
+                        f"ORDER BY claim_id DESC", lst + lst)).fetchall():
+                    d = dict(cr)
+                    who = (d.get("complainant_name") or d.get("insured_name") or "").strip()
+                    for a in (d.get("ce"), d.get("ie")):
+                        if a and a in addrs and a not in by_addr:
+                            by_addr[a] = (d["claim_id"], who)
+
+            # A claim number written in the subject is a direct statement of which case it is.
+            wanted = set()
+            for r in rows:
+                m = _CLAIMNO_RX.search(r.get("subject") or "")
+                if m:
+                    n = m.group(1) or m.group(2)
+                    if n and n.isdigit():
+                        wanted.add(int(n))
+            if wanted:
+                ph2 = ",".join("?" * len(wanted))
+                for cr in await (await conn.execute(
+                        f"SELECT claim_id, complainant_name, insured_name FROM nidaan_claims "
+                        f"WHERE claim_id IN ({ph2})", list(wanted))).fetchall():
+                    d = dict(cr)
+                    by_id[d["claim_id"]] = (d.get("complainant_name") or d.get("insured_name") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        logger.info("radar claim match failed: %s", e)
+        return
+
+    for r in rows:
+        r["claim_id"], r["claim_who"], r["match_on"] = None, "", ""
+        m = _CLAIMNO_RX.search(r.get("subject") or "")
+        if m:
+            n = m.group(1) or m.group(2)
+            if n and n.isdigit() and int(n) in by_id:
+                r["claim_id"], r["claim_who"], r["match_on"] = int(n), by_id[int(n)], "claim number in the subject"
+                continue
+        hit = by_addr.get((r.get("from_addr") or "").strip().lower())
+        if hit:
+            r["claim_id"], r["claim_who"], r["match_on"] = hit[0], hit[1], "sender is on this claim"
