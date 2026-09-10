@@ -26,7 +26,10 @@ logger = logging.getLogger("nidaan.av")
 
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 _SCAN_TIMEOUT = float(os.getenv("CLAMD_TIMEOUT", "20"))
-_MAX_SCAN_BYTES = 32 * 1024 * 1024      # clamd's default StreamMaxLength
+# Must stay BELOW clamd's StreamMaxLength (64M on this server) and ABOVE the app's per-file
+# upload cap (25 MB), so every file we are willing to store is a file we are able to scan. If
+# these ever cross, uploads in the gap get refused — we never store what we could not scan.
+_MAX_SCAN_BYTES = 48 * 1024 * 1024
 _CHUNK = 64 * 1024
 
 

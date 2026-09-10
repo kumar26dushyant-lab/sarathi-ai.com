@@ -1954,6 +1954,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS nidaan_radar_config (
                 id               INTEGER PRIMARY KEY CHECK (id=1),
                 priority_senders TEXT DEFAULT '',           -- newline/comma domains+emails = always RED
+                custom_rules     TEXT DEFAULT '',           -- one rule per line: from:/subject:/text: + words
                 silence_days     INTEGER DEFAULT 5,
                 updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -2491,6 +2492,10 @@ async def init_db():
             "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN fail_count INTEGER DEFAULT 0",
             "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN fail_alert_at TIMESTAMP",
             "ALTER TABLE nidaan_radar_mailboxes ADD COLUMN last_keepalive_at TIMESTAMP",
+            # Founder-written surfacing rules, and — on each item — WHICH rule caught it, so the
+            # radar can always answer "why am I looking at this?" instead of just asserting it.
+            "ALTER TABLE nidaan_radar_config ADD COLUMN custom_rules TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_radar_items ADD COLUMN matched_rule TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)

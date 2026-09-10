@@ -320,6 +320,30 @@ CAPABILITIES: list[dict] = [
     },
     # ── Document Splitter ────────────────────────────────────────────────
     {
+        "id": "email_radar_rules",
+        "en": {"t": "Teach the radar what matters to you",
+               "d": "Write your own rules in plain words \u2014 a sender, a word in the subject, or "
+                    "anything in the mail. Whatever matches is raised as Act now, even if the AI "
+                    "would have cleared it, and the row says which rule caught it.",
+               "u": "Settings tab in Email Updates. Type one rule per line, e.g. subject: hearing."},
+        "hi": {"t": "\u0930\u0921\u093e\u0930 \u0915\u094b \u0938\u093f\u0916\u093e\u090f\u0902 \u0915\u093f \u0906\u092a\u0915\u0947 \u0932\u093f\u090f \u0915\u094d\u092f\u093e \u091c\u093c\u0930\u0942\u0930\u0940 \u0939\u0948",
+               "d": "\u0905\u092a\u0928\u0947 \u0928\u093f\u092f\u092e \u0938\u093e\u0926\u0947 \u0936\u092c\u094d\u0926\u094b\u0902 \u092e\u0947\u0902 \u0932\u093f\u0916\u093f\u090f \u2014 \u092d\u0947\u091c\u0928\u0947 \u0935\u093e\u0932\u093e, \u0938\u092c\u094d\u091c\u0947\u0915\u094d\u091f \u0915\u093e \u0915\u094b\u0908 \u0936\u092c\u094d\u0926, \u092f\u093e \u092e\u0947\u0932 \u092e\u0947\u0902 \u0915\u0941\u091b \u092d\u0940\u0964 \u092e\u0948\u091a \u0939\u094b\u0928\u0947 \u092a\u0930 \u0935\u0939 Act now \u092e\u0947\u0902 \u0906\u090f\u0917\u093e\u0964",
+               "u": "Email Updates \u2192 Settings \u092e\u0947\u0902 \u090f\u0915 \u0932\u093e\u0907\u0928 \u092a\u0930 \u090f\u0915 \u0928\u093f\u092f\u092e\u0964"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
+        "id": "duty_roster_all_stages",
+        "en": {"t": "Put someone on duty for any stage",
+               "d": "The duty rota covers every bucket \u2014 Review, Conversion, Documents, Drafting, "
+                    "With the insurer, Escalation, Ombudsman, Settlement \u2014 not just the two chat "
+                    "channels. Whoever you roster sees that bucket marked YOURS TODAY on My Desk.",
+               "u": "My Desk \u2192 Set duty on any bucket, or Support \u2192 duty roster."},
+        "hi": {"t": "\u0915\u093f\u0938\u0940 \u092d\u0940 \u0938\u094d\u091f\u0947\u091c \u0915\u0940 \u0921\u094d\u092f\u0942\u091f\u0940 \u0932\u0917\u093e\u090f\u0902",
+               "d": "\u0921\u094d\u092f\u0942\u091f\u0940 \u0930\u094b\u0938\u094d\u091f\u0930 \u0905\u092c \u0939\u0930 \u092c\u0915\u0947\u091f \u0915\u0947 \u0932\u093f\u090f \u0939\u0948 \u2014 \u0938\u093f\u0930\u094d\u092b \u091a\u0948\u091f \u0915\u0947 \u0932\u093f\u090f \u0928\u0939\u0940\u0902\u0964 \u091c\u093f\u0938\u0947 \u0932\u0917\u093e\u090f\u0902\u0917\u0947 \u0909\u0938\u0947 My Desk \u092a\u0930 YOURS TODAY \u0926\u093f\u0916\u0947\u0917\u093e\u0964",
+               "u": "My Desk \u2192 Set duty, \u092f\u093e Support \u2192 duty roster\u0964"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
         "id": "doc_splitter",
         "en": {"t": "Document Splitter",
                "d": "Upload a customer's mixed file; AI separates it into individual documents to send to authorities.",

@@ -954,7 +954,7 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
             "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
     if not r: raise HTTPException(404, "Claim not found")
     account_id = r["account_id"]
-    if len(files) > 5: raise HTTPException(400, "Maximum 5 files per upload")
+    _guard_upload_batch(files)
     saved = []
     for f in files:
         content = await f.read()
@@ -1386,8 +1386,7 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
     if not r:
         raise HTTPException(status_code=404, detail="Claim not found")
     account_id = r["account_id"]
-    if len(files) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    _guard_upload_batch(files)
     saved = []
     for f in files:
         content = await f.read()
@@ -3803,8 +3802,39 @@ def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
     if e < int(_time.time()):
         return False
     return hmac.compare_digest(_doc_sig(stored_name, e), sig or "")
-_MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
-_MAX_DOCS_PER_CLAIM = 40          # storage-DoS guard for free leads
+# Per-file ceiling. 25 MB, not 100: every stored file is virus-scanned in memory before it is
+# written, and clamd will not scan a stream beyond its StreamMaxLength. A file we cannot scan is a
+# file we would have to either refuse or wave through unscanned, and we refuse to do the latter —
+# so the scanner's ceiling is the honest ceiling for the whole feature.
+_MAX_DOC_SIZE = 25 * 1024 * 1024  # 25 MB
+_MAX_DOCS_PER_CLAIM = 60          # storage-DoS guard for free leads
+# Files in ONE request. A person who has all the paperwork in hand should be able to attach it in
+# one go; the old limit of 5 forced a real claim file to be sent in four or five trips.
+_MAX_FILES_PER_UPLOAD = 20
+# Bytes in ONE request. nginx caps the request body at 50 MB, so this sits below that: the caller
+# gets a clear message from us instead of an opaque 413 from the web server. The browser splits a
+# large set into batches under this figure, so a big upload succeeds rather than being rejected.
+_MAX_UPLOAD_BATCH_BYTES = 40 * 1024 * 1024
+
+
+def _guard_upload_batch(files) -> None:
+    """Count + declared-size gate for a multi-file upload. Runs BEFORE any file is read into
+    memory, so an oversized batch costs us nothing."""
+    if len(files) > _MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Up to {_MAX_FILES_PER_UPLOAD} files per upload — please send the rest in a second batch.")
+    total = 0
+    for f in files:
+        try:
+            total += int(getattr(f, "size", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    if total > _MAX_UPLOAD_BATCH_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"That batch is {total // (1024*1024)} MB. Please send up to "
+                   f"{_MAX_UPLOAD_BATCH_BYTES // (1024*1024)} MB at a time.")
 
 
 def _doc_ext_for(content: bytes) -> str:
@@ -3923,13 +3953,13 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
         )
         if not await _cur.fetchone():
             raise HTTPException(status_code=404, detail="Review not found")
-    if len(files) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    _guard_upload_batch(files)
     saved = []
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
+            raise HTTPException(status_code=413,
+                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
         if f.content_type not in _ALLOWED_MIME:
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
@@ -3987,13 +4017,13 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
             "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=?", (claim_id,))).fetchone()
         if _dc and _dc[0] + len(files) > _MAX_DOCS_PER_CLAIM:
             raise HTTPException(status_code=429, detail=f"Document limit reached ({_MAX_DOCS_PER_CLAIM} per claim).")
-    if len(files) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 files per upload")
+    _guard_upload_batch(files)
     saved = []
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(status_code=413, detail=f"File {f.filename} exceeds 10 MB limit")
+            raise HTTPException(status_code=413,
+                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
         if f.content_type not in _ALLOWED_MIME:
             raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
@@ -7776,6 +7806,7 @@ async def ops_radar_purge(mailbox_id: int, request: Request):
 class _RadarConfigReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     priority_senders: str = Field("", max_length=4000)
+    custom_rules: str = Field("", max_length=4000)
     silence_days: int = Field(5, ge=1, le=60)
 
 
@@ -7789,13 +7820,17 @@ async def ops_radar_config_get(request: Request):
 
 @app.post("/nidaan/ops/api/radar/config")
 async def ops_radar_config_set(body: _RadarConfigReq, request: Request):
-    """Set priority-sender list (always-🔴 domains) + silence threshold. Admin+."""
+    """Priority senders (always-🔴 domains), the founder's own surfacing rules, and the
+    silence threshold. Admin+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    await radar.set_config(body.priority_senders, body.silence_days)
-    await _ops_audit(request, "radar.config", "radar", "1", f"silence_days={body.silence_days}")
-    return {"ok": True}
+    await radar.set_config(body.priority_senders, body.silence_days, body.custom_rules)
+    # Rules decide what the whole team sees, so record how many are in force, not their text.
+    _n_rules = len(radar._parse_rules(body.custom_rules or ""))
+    await _ops_audit(request, "radar.config", "radar", "1",
+                     f"silence_days={body.silence_days} rules={_n_rules}")
+    return {"ok": True, "rules_active": _n_rules}
 
 
 @app.post("/nidaan/ops/api/radar/poll")
@@ -7964,7 +7999,7 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
             "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
     if not r: raise HTTPException(404, "Claim not found")
     account_id = r["account_id"]
-    if len(files) > 5: raise HTTPException(400, "Maximum 5 files per upload")
+    _guard_upload_batch(files)
     saved = []
     for f in files:
         content = await f.read()
@@ -8498,8 +8533,14 @@ async def ops_support_reps_get(request: Request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     duty = (request.query_params.get("duty") or "").strip()
+    # Labels travel with the list so the roster screen never keeps its own copy of the duty names.
+    # It used to, and that copy knew only "support" and "whatsapp" — so My Desk could point at a
+    # bucket nobody could actually be rostered onto.
+    import biz_nidaan_stage_guide as _sg
     return {"reps": await nidaan.list_support_reps(duty if duty in nidaan.DUTIES else None),
-            "duties": list(nidaan.DUTIES)}
+            "duties": list(nidaan.DUTIES),
+            "stage_duties": list(nidaan.STAGE_DUTIES),
+            "duty_labels": {k: _sg.label(k, "en") for k in nidaan.DUTIES}}
 
 
 class OpsSupportRepReq(BaseModel):

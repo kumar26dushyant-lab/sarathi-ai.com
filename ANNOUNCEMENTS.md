@@ -1,5 +1,41 @@
 # Staff Announcement Drafts
 
+## 2026-09-10 — Attach everything at once, and the Email Radar tells you why
+
+**Title (EN):**
+📎 Attach up to 20 documents at once · 📨 Email Radar now names the sender, the case and the links
+
+**Details (EN):**
+Three changes today.
+
+• **Attachments — 20 files, 25 MB each.** Raising a claim used to stop you at 5 files of 10 MB, so a full claim file had to go in four or five trips. Now attach the whole set in one go. If the batch is very large the system splits it and uploads it for you — you do nothing differently. Every file is still virus-scanned before it is stored, and you can still remove any file before submitting.
+
+• **Email Radar — you can see why an email is in front of you.** Each row now shows the sender's **name** (not just the address), **which case** it belongs to where we can prove it, and a short line saying why it was raised. Links inside an email are clickable again — and the radar lists every link with its website name, so you can see where a link goes **before** you click. If a link looks unexpected, do not click it; ask first.
+
+• **A new ✅ Confirmations tab** collects receipts and acknowledgements — the emails that prove something was filed or received. They are not urgent, but they are proof, so they no longer disappear into the cleared pile.
+
+• **Duty for every stage.** Duty is no longer only Support chat and WhatsApp. A super-admin can now put someone on duty for Review, Conversion, Documents, Drafting, With the insurer, Escalation, Ombudsman or Settlement. When you are on duty, that bucket shows **YOURS TODAY** on My Desk.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📎 एक साथ 20 दस्तावेज़ · 📨 ईमेल रडार अब बताता है क्यों
+
+**Details (HI):**
+आज तीन बदलाव।
+
+• **अटैचमेंट — 20 फ़ाइलें, हर एक 25 MB तक।** पहले सिर्फ़ 5 फ़ाइलें (10 MB) जाती थीं, इसलिए पूरी फ़ाइल चार-पांच बार में भेजनी पड़ती थी। अब एक साथ सब लगा दीजिए। बहुत बड़ा सेट हो तो सिस्टम खुद हिस्सों में भेज देता है। हर फ़ाइल की वायरस जाँच पहले की जाती है।
+
+• **ईमेल रडार — अब पता चलता है क्यों।** हर पंक्ति में भेजने वाले का **नाम**, किस **केस** से जुड़ा है, और क्यों उठाया गया — सब दिखता है। ईमेल के लिंक दोबारा क्लिक होते हैं — और हर लिंक के साथ उसकी वेबसाइट का नाम दिखता है, ताकि क्लिक से **पहले** आप देख सकें कि वह कहाँ ले जाएगा। अनजान लिंक पर क्लिक न करें — पहले पूछें।
+
+• **नया ✅ Confirmations टैब** — रसीद और पुष्टि वाले ईमेल, जो सबूत होते हैं कि कुछ जमा या प्राप्त हुआ।
+
+• **हर स्टेज की ड्यूटी।** अब सिर्फ़ सपोर्ट चैट और WhatsApp नहीं — समीक्षा, फीस, दस्तावेज़, ड्राफ्टिंग आदि की भी ड्यूटी लग सकती है। ड्यूटी पर होने पर My Desk पर **YOURS TODAY** दिखेगा।
+
+पढ़ने के बाद 👍 करें; कोई दिक्कत हो तो ऑफ़िस IT SPOC से पूछें।
+
+---
+
 ## 2026-09-07 — Important: what the WhatsApp bot will and will not tell people
 
 **Title (EN):**

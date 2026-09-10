@@ -208,7 +208,7 @@
                 onclick="NidaanPartnerClaims.upDoc(${claimId}, this)">${h ? 'अपलोड करें' : 'Upload'}</button>
         <span id="npDocMsg_${claimId}" style="font-size:.76rem;color:var(--nd-text-muted)"></span>
       </div>
-      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.35rem">${h ? 'PDF / JPG / PNG · एक बार में 5 तक' : 'PDF / JPG / PNG · up to 5 at a time'}</div>`;
+      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.35rem">${h ? 'PDF / JPG / PNG · एक बार में 20 तक' : 'PDF / JPG / PNG · up to 20 at a time'}</div>`;
   }
 
   function toggleDocs(claimId) {

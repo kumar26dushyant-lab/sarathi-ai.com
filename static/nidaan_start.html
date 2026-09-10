@@ -1300,7 +1300,7 @@ function _clearRevDoc(key) {
 }
 function onRevDocPick(key, input) {
   const f = input.files[0]; if (!f) return;
-  if (f.size > 10 * 1024 * 1024) { showRevMsg('err', _Lr('Each file must be under 10 MB.', 'हर फ़ाइल 10 MB से कम होनी चाहिए।')); input.value=''; return; }
+  if (f.size > 25 * 1024 * 1024) { showRevMsg('err', _Lr('Each file must be under 25 MB.', 'हर फ़ाइल 25 MB से कम होनी चाहिए।')); input.value=''; return; }
   _revFiles[key] = f;
   _markDocDone(key, f);
 }

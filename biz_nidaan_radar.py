@@ -305,25 +305,78 @@ async def get_config() -> dict:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT priority_senders, silence_days FROM nidaan_radar_config WHERE id=1")).fetchone()
+            "SELECT priority_senders, custom_rules, silence_days "
+            "FROM nidaan_radar_config WHERE id=1")).fetchone()
         if not row:
             await conn.execute(
                 "INSERT OR IGNORE INTO nidaan_radar_config (id, priority_senders, silence_days) "
                 "VALUES (1,'',5)")
             await conn.commit()
-            return {"priority_senders": "", "silence_days": 5}
+            return {"priority_senders": "", "custom_rules": "", "silence_days": 5}
         return dict(row)
 
 
-async def set_config(priority_senders: str, silence_days: int) -> None:
+async def set_config(priority_senders: str, silence_days: int, custom_rules: str = "") -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
-            "INSERT INTO nidaan_radar_config (id, priority_senders, silence_days, updated_at) "
-            "VALUES (1,?,?,CURRENT_TIMESTAMP) "
+            "INSERT INTO nidaan_radar_config (id, priority_senders, custom_rules, silence_days, updated_at) "
+            "VALUES (1,?,?,?,CURRENT_TIMESTAMP) "
             "ON CONFLICT(id) DO UPDATE SET priority_senders=excluded.priority_senders, "
+            "custom_rules=excluded.custom_rules, "
             "silence_days=excluded.silence_days, updated_at=CURRENT_TIMESTAMP",
-            ((priority_senders or "")[:4000], max(1, min(int(silence_days or 5), 60))))
+            ((priority_senders or "")[:4000], (custom_rules or "")[:4000],
+             max(1, min(int(silence_days or 5), 60))))
         await conn.commit()
+
+
+# ── Founder-written surfacing rules ──────────────────────────────────────────
+# The AI decides most mail. These are the cases where the founder KNOWS something matters and
+# should not have to argue with a model about it: one rule per line, in words, e.g.
+#     from: irdai.gov.in          — anyone at that domain
+#     subject: hearing            — that word in the subject line
+#     text: policy cancelled      — that phrase anywhere in the mail we can see
+#     grievance                   — no prefix means "anywhere"
+# A rule is a plain substring, never a regex: a founder typing "(" must not be able to break
+# the radar for every mailbox, and a slow pattern must not be able to stall the poll.
+_RULE_FIELDS = {"from": "from", "sender": "from", "subject": "subject",
+                "text": "text", "body": "text", "any": "text"}
+_RULE_MAX = 60
+_RULE_MIN_LEN = 3
+
+
+def _parse_rules(blob: str) -> list:
+    """[(field, needle)] from the founder's free-text rules. Bad lines are skipped, never raised."""
+    out = []
+    for raw in (blob or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        head, sep, rest = line.partition(":")
+        if sep and head.strip().lower() in _RULE_FIELDS:
+            field, needle = _RULE_FIELDS[head.strip().lower()], rest.strip().lower()
+        else:
+            field, needle = "text", line.lower()
+        # Very short needles match nearly everything and would bury the radar in noise.
+        if len(needle) >= _RULE_MIN_LEN:
+            out.append((field, needle[:200]))
+        if len(out) >= _RULE_MAX:
+            break
+    return out
+
+
+def _rule_hit(rules: list, from_addr: str, from_name: str, subject: str, snippet: str) -> str:
+    """The first rule this email matches, written back as the founder typed it — so the radar can
+    say WHY it surfaced something. "" when nothing matches."""
+    if not rules:
+        return ""
+    hay_from = f"{from_addr or ''} {from_name or ''}".lower()
+    hay_sub = (subject or "").lower()
+    hay_all = f"{hay_from} {hay_sub} {snippet or ''}".lower()
+    for field, needle in rules:
+        hay = hay_from if field == "from" else (hay_sub if field == "subject" else hay_all)
+        if needle in hay:
+            return f"{field}: {needle}" if field != "text" else needle
+    return ""
 
 
 def _parse_senders(blob: str) -> list[str]:
@@ -451,7 +504,7 @@ def _imap_fetch_new(host: str, port: int, email: str, password: str,
 
 
 # ── Poll: fetch → AI triage → store as radar items ───────────────────────────
-async def poll_mailbox(mb: dict, senders: list[str]) -> int:
+async def poll_mailbox(mb: dict, senders: list[str], rules: Optional[list] = None) -> int:
     """Poll ONE mailbox: fetch new mail, AI-triage each, store flagged items, advance last_uid."""
     import biz_ai as _ai
     mid = mb["mailbox_id"]
@@ -473,17 +526,23 @@ async def poll_mailbox(mb: dict, senders: list[str]) -> int:
             ps = _is_priority_sender(m["from_addr"], senders)
             triage = await _ai.radar_triage_email(m["from_addr"], m["subject"], m["snippet"])
             flag = _decide_flag(triage, ps)
+            # A founder rule is an instruction, not a suggestion: if it matches, the mail is
+            # surfaced even where the AI would have cleared it. That is the whole point of having
+            # a rule — the human already knows this one matters.
+            hit = _rule_hit(rules or [], m["from_addr"], m["from_name"], m["subject"], m["snippet"])
+            if hit:
+                flag = "red"
             try:
                 cur = await conn.execute(
                     """INSERT OR IGNORE INTO nidaan_radar_items
                          (mailbox_id, uid, message_id, from_addr, from_name, subject, snippet,
                           received_at, flag, category, priority_sender, deadline, needs_action,
-                          ai_reason, ai_summary)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                          ai_reason, ai_summary, matched_rule)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (mid, m["uid"], m["message_id"], m["from_addr"], m["from_name"], m["subject"],
                      m["snippet"], m["received_at"], flag, triage["category"], 1 if ps else 0,
                      triage["deadline"], 1 if triage["needs_response"] else 0,
-                     triage["reason"], triage["summary"]))
+                     triage["reason"], triage["summary"], hit))
                 if cur.rowcount:
                     created += 1
                     if flag in ("red", "amber"):
@@ -508,6 +567,7 @@ async def poll_all_mailboxes() -> int:
     """Worker entry point: poll every active mailbox (staggered), triage + store new items."""
     cfg = await get_config()
     senders = _parse_senders(cfg.get("priority_senders") or "")
+    rules = _parse_rules(cfg.get("custom_rules") or "")
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         mbs = [dict(r) for r in await (await conn.execute(
@@ -515,7 +575,7 @@ async def poll_all_mailboxes() -> int:
     total = 0
     for mb in mbs:
         try:
-            total += await poll_mailbox(mb, senders)
+            total += await poll_mailbox(mb, senders, rules)
         except Exception as e:  # noqa: BLE001
             logger.warning("radar poll_mailbox %s failed: %s", mb.get("mailbox_id"), e)
         await asyncio.sleep(2)   # stagger — don't hammer Gmail
@@ -784,6 +844,63 @@ def _smtp_host(imap_host: str) -> str:
     return h.replace("imap.", "smtp.") if h.startswith("imap.") else h.replace("imap", "smtp")
 
 
+_URL_RX = re.compile(r"https?://[^\s<>\"'\)\]]+", re.I)
+_A_RX = re.compile(r"<a\b[^>]*?href\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", re.I | re.S)
+_TAG_RX = re.compile(r"<[^>]+>")
+_DROP_RX = re.compile(r"<(script|style)\b.*?</\1>", re.I | re.S)
+_BREAK_RX = re.compile(r"<(br|/p|/div|/tr|/h[1-6]|/li)\b[^>]*>", re.I)
+
+
+def _html_to_text(html: str) -> str:
+    """Readable text from an HTML mail body WITH the links kept.
+
+    The old version stripped every tag, which threw the href away - so a confirmation mail whose
+    only useful content is a "Confirm" button arrived as the word "Confirm" and nothing else. Here
+    an anchor becomes "text <url>", so the address survives into the text a human reads.
+    """
+    import html as _html
+    s = _DROP_RX.sub(" ", html or "")           # scripts/styles are never content
+
+    def _a(m):
+        href = (m.group(1) or "").strip()
+        label = _TAG_RX.sub(" ", m.group(2) or "").strip()
+        label = _html.unescape(re.sub(r"\s+", " ", label))
+        if not href.lower().startswith(("http://", "https://")):
+            return label                        # mailto:/tel:/javascript: - keep the words only
+        if not label or label.lower() == href.lower():
+            return href
+        # Parentheses, not angle brackets: the tag-stripper below would eat <https://...> as if it
+        # were markup, which is exactly how the address got lost in the first place.
+        return "%s (%s)" % (label, href)
+
+    s = _A_RX.sub(_a, s)
+    s = _BREAK_RX.sub("\n", s)
+    s = _TAG_RX.sub(" ", s)
+    s = _html.unescape(s)
+    s = re.sub(r"[ \t\xa0]+", " ", s)
+    s = re.sub(r"\n\s*\n\s*\n+", "\n\n", s)
+    return s.strip()
+
+
+def _extract_links(text: str) -> list:
+    """Every http(s) address in the body, in order, de-duplicated. Surfaced as its own list so a
+    staffer can see where a link actually goes before deciding to open it."""
+    out, seen = [], set()
+    for m in _URL_RX.finditer(text or ""):
+        url = m.group(0).rstrip(".,;:!?'\"")
+        if len(url) > 500 or url in seen:
+            continue
+        seen.add(url)
+        try:
+            host = url.split("//", 1)[1].split("/", 1)[0].split("@")[-1][:120]
+        except (IndexError, AttributeError):
+            host = ""
+        out.append({"url": url, "host": host})
+        if len(out) >= 40:
+            break
+    return out
+
+
 def _imap_fetch_full(host: str, port: int, email: str, password: str, uid: int) -> Optional[dict]:
     """Fetch ONE full email by UID → {from, subject, date, message_id, body}. Blocking; never raises."""
     import imaplib
@@ -816,7 +933,7 @@ def _imap_fetch_full(host: str, port: int, email: str, password: str, uid: int) 
                     if part.get_content_type() == "text/html":
                         try:
                             html = (part.get_payload(decode=True) or b"").decode(part.get_content_charset() or "utf-8", "ignore")
-                            body = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+                            body = _html_to_text(html)
                             break
                         except Exception:
                             pass
@@ -825,8 +942,13 @@ def _imap_fetch_full(host: str, port: int, email: str, password: str, uid: int) 
                 body = (msg.get_payload(decode=True) or b"").decode(msg.get_content_charset() or "utf-8", "ignore")
             except Exception:
                 body = str(msg.get_payload())
+            # A single-part text/html mail used to arrive as raw markup on the screen.
+            if (msg.get_content_type() or "").lower() == "text/html":
+                body = _html_to_text(body)
+        body = (body or "").strip()[:20000]
         return {"from": msg.get("From", ""), "subject": subj, "date": msg.get("Date", ""),
-                "message_id": (msg.get("Message-ID", "") or "").strip(), "body": (body or "").strip()[:20000]}
+                "message_id": (msg.get("Message-ID", "") or "").strip(), "body": body,
+                "links": _extract_links(body)}
     except imaplib.IMAP4.error:
         return {"error": "auth_failed"}
     except Exception as e:  # noqa: BLE001

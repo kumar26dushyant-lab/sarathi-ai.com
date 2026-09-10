@@ -23,7 +23,7 @@ try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.cla
 <meta name="apple-mobile-web-app-title" content="Nidaan Ops">
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="/static/_err.js?v=1"></script>
-<script src="/static/nidaan_partner_claims.js?v=3"></script>
+<script src="/static/nidaan_partner_claims.js?v=4"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -4278,7 +4278,7 @@ async function loadMyBusiness() {
       <div id="mbcFilesWrap" style="margin-top:.55rem">
         <input id="mbcFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="mbcAddFiles(this)">
         <button type="button" class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="document.getElementById('mbcFiles').click()">📎 ${hi?'दस्तावेज़ संलग्न करें':'Attach document(s)'}</button>
-        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अन्य सहायक दस्तावेज़ (वैकल्पिक) — PDF/JPG/PNG/DOCX (10MB तक)':'Other supporting documents (optional) — PDF/JPG/PNG/DOCX (up to 10MB)'}</span>
+        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अन्य सहायक दस्तावेज़ (वैकल्पिक) — PDF/JPG/PNG/DOCX (25MB तक, 20 तक)':'Other supporting documents (optional) — PDF/JPG/PNG/DOCX · up to 25MB each, 20 files'}</span>
         <div id="mbcFileList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem"></div>
       </div>
       <div id="mbcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
@@ -4311,20 +4311,36 @@ async function loadMyBusiness() {
 
 // ── Raise-claim staged attachments (review before submit, remove individually) ──
 let _mbcFiles = [];
-const _MBC_MAX = 5, _MBC_MAXSIZE = 10*1024*1024;
+// Someone who already has the whole file in hand should attach it in one go. 20 documents at up
+// to 25 MB each covers a full claim file; the old 5 forced four or five separate trips.
+const _MBC_MAX = 20, _MBC_MAXSIZE = 25*1024*1024;
+// One request stays under the web server's body limit. A bigger set is SPLIT into batches rather
+// than refused, so the person never has to work out the arithmetic themselves.
+const _MBC_BATCH_BYTES = 35*1024*1024;
 function mbcAddFiles(input){
   const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
   const picked = Array.from(input.files||[]);
   input.value='';   // allow re-picking the same file after a remove
   for(const f of picked){
-    if(_mbcFiles.length >= _MBC_MAX){ if(msg){ msg.style.color='#fbbf24'; msg.textContent=hi?'अधिकतम 5 फ़ाइलें।':'Up to 5 files.'; } break; }
-    if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(f.name)+' — '+(hi?'10MB से बड़ी।':'over 10MB.'); } continue; }
+    if(_mbcFiles.length >= _MBC_MAX){ if(msg){ msg.style.color='#fbbf24'; msg.textContent=hi?('अधिकतम '+_MBC_MAX+' फ़ाइलें।'):('Up to '+_MBC_MAX+' files.'); } break; }
+    if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(f.name)+' — '+(hi?'25MB से बड़ी।':'over 25MB.'); } continue; }
     if(_mbcFiles.some(x=>x.name===f.name && x.size===f.size)) continue;  // dedupe
     _mbcFiles.push(f);
   }
   mbcRenderFiles();
 }
-function mbcRemoveFile(i){ _mbcFiles.splice(i,1); mbcRenderFiles(); }   // pre-submit unstage — nothing persisted yet
+function mbcRemoveFile(i){ _mbcFiles.splice(i,1); mbcRenderFiles(); }
+// Group files into requests that each stay under the body-size limit. A single file larger than
+// the batch budget still goes alone - the per-file cap already keeps it inside the server limit.
+function _mbcBatch(list){
+  const out=[]; let cur=[], bytes=0;
+  for(const f of list){
+    if(cur.length && (bytes + f.size > _MBC_BATCH_BYTES || cur.length >= _MBC_MAX)){ out.push(cur); cur=[]; bytes=0; }
+    cur.push(f); bytes += f.size;
+  }
+  if(cur.length) out.push(cur);
+  return out;
+}   // pre-submit unstage — nothing persisted yet
 
 // The rejection letter is its own slot because it is the one document a claim cannot proceed
 // without: it is the insurer's decision, and therefore the basis of the whole dispute. Raising a
@@ -4335,7 +4351,7 @@ function mbcPickRej(input){
   const f=(input.files||[])[0];
   input.value='';                       // so the same file can be re-picked after a remove
   if(!f) return;
-  if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+f.name+' — '+(hi?'10MB से बड़ी।':'over 10MB.'); } return; }
+  if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+f.name+' — '+(hi?'25MB से बड़ी।':'over 25MB.'); } return; }
   _mbcRejFile = f;
   if(msg) msg.textContent='';
   mbcRenderRej();
@@ -4404,12 +4420,24 @@ async function mbRaiseClaim(){
   if(claimId && (_mbcRejFile || _mbcFiles.length)){
     btn.textContent=hi?'फ़ाइलें अपलोड हो रही हैं…':'Uploading files…';
     try{
-      const fd=new FormData();
-      if(_mbcRejFile) fd.append('files', _mbcRejFile);   // the letter goes first
-      _mbcFiles.forEach(f=>fd.append('files', f));
-      const ur=await fetch('/nidaan/ops/api/my-claims/'+claimId+'/documents/upload', {method:'POST', headers:hdrs(), body:fd});
-      if(ur.ok){ const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(ud.count||0)+(hi?' फ़ाइल संलग्न':' file(s) attached'); }
-      else { const ud=await ur.json().catch(()=>({})); attachMsg = ' · '+(hi?'फ़ाइल अपलोड विफल: ':'file upload failed: ')+_extractErr(ud,'error'); }
+      // The letter goes first, then the rest. Split into batches that each stay under the request
+      // size limit — a 20-file claim file is one action for the person, several trips for us.
+      const all = (_mbcRejFile ? [_mbcRejFile] : []).concat(_mbcFiles);
+      const batches = _mbcBatch(all);
+      let done=0, failed='';
+      for(let bi=0; bi<batches.length && !failed; bi++){
+        if(batches.length>1) btn.textContent=(hi?'अपलोड ':'Uploading ')+(bi+1)+'/'+batches.length+'…';
+        const fd=new FormData();
+        batches[bi].forEach(f=>fd.append('files', f));
+        const ur=await fetch('/nidaan/ops/api/my-claims/'+claimId+'/documents/upload', {method:'POST', headers:hdrs(), body:fd});
+        if(ur.ok){ const ud=await ur.json().catch(()=>({})); done += (ud.count||0); }
+        else { const ud=await ur.json().catch(()=>({})); failed=_extractErr(ud,'error'); }
+      }
+      // Report what actually landed. A partial upload must say so — silently claiming success
+      // when half the file is missing is how a claim goes forward incomplete.
+      attachMsg = failed
+        ? ' · '+done+(hi?' फ़ाइल संलग्न, फिर विफल: ':' attached, then failed: ')+failed
+        : ' · '+done+(hi?' फ़ाइल संलग्न':' file(s) attached');
     }catch(e){ attachMsg = ' · '+(hi?'फ़ाइल अपलोड में नेटवर्क त्रुटि':'file upload network error'); }
   }
   btn.disabled=false; btn.textContent=ob;
@@ -4538,6 +4566,37 @@ function _mTile(label,val,sub){ return `<div style="flex:1;min-width:120px;backg
 // These land in the radar like any other mail, so surface them with the code pulled out.
 // Who actually sent this, in the order a person reads it: the name they go by, then the
 // address, because a bare address tells you nothing about who is writing.
+// An email is untrusted input. It is ESCAPED first, and only then are http(s) addresses turned
+// into links - so nothing in a message can ever reach this page as markup. The address itself is
+// shown rather than hidden behind words, because "Click here" is how phishing works: a staffer
+// must be able to see where a link goes before deciding to follow it.
+function _radarLinkify(text){
+  return esc(text||'').replace(/https?:\/\/[^\s<>"']+/g, function(u){
+    const clean = u.replace(/[.,;:!?)\]]+$/, '');
+    const tail  = u.slice(clean.length);
+    return '<a href="' + clean + '" target="_blank" rel="noopener noreferrer nofollow"'
+         + ' style="color:var(--nd-cyan-text);text-decoration:underline;word-break:break-all">'
+         + clean + '</a>' + tail;
+  });
+}
+// Every destination in the mail, listed once, with the domain called out. A staffer scanning this
+// can tell a real insurer notice from a lookalike without opening anything.
+function _radarLinksBlock(links){
+  if(!links || !links.length) return '';
+  const rows = links.slice(0,20).map(function(l){
+    return '<div style="margin:.2rem 0;font-size:.78rem;word-break:break-all">'
+      + '<span style="color:var(--nd-text-faint)">' + esc(l.host||'') + '</span> &nbsp;'
+      + '<a href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer nofollow"'
+      + ' style="color:var(--nd-cyan-text)">' + esc(l.url) + '</a></div>';
+  }).join('');
+  return '<div style="margin-top:.7rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);'
+    + 'border-radius:8px;padding:.6rem .8rem">'
+    + '<div style="font-weight:700;font-size:.8rem;margin-bottom:.25rem">\U0001f517 Links in this email ('
+    + links.length + ')</div>'
+    + '<div style="font-size:.72rem;color:var(--nd-text-muted);margin-bottom:.35rem">'
+    + 'Check the domain before you open one. Anything unexpected \u2014 do not click.</div>'
+    + rows + '</div>';
+}
 function _radarWho(i){
   const nm = (i.from_name||'').trim(), ad = (i.from_addr||'').trim();
   if (nm && ad) return '<b style="color:var(--nd-text-secondary)">'+esc(nm)+'</b> &lt;'+esc(ad)+'&gt;';
@@ -4558,6 +4617,28 @@ function _radarCase(i){
     + '📁 Not matched to a case — search the sender or ask them for the claim number</div>';
 }
 
+// The radar must always be able to answer "why is this in front of me?". Silent ranking is how
+// a staffer learns to distrust a tool and go back to reading the raw inbox.
+function _radarWhy(i){
+  const bits=[];
+  if(i.matched_rule) bits.push('⚙️ your rule: ' + esc(i.matched_rule));
+  else if(i.priority_sender) bits.push('⭐ priority sender');
+  else if(i.flag==='red') bits.push('🔴 ' + esc(i.category||'urgent'));
+  else if(i.flag==='green') bits.push('⚪ ' + esc(i.category||'routine'));
+  else bits.push('🟡 needs a human look');
+  if(i.deadline) bits.push('⏰ ' + esc(i.deadline));
+  return '<span style="font-size:.68rem;color:var(--nd-text-faint)">' + bits.join(' · ') + '</span>';
+}
+// Confirmations, receipts and acknowledgements. These are not urgent, but they are PROOF that
+// something was filed or received - so they get their own place instead of being auto-cleared
+// into a pile nobody opens.
+function _isConfirm(i){
+  const s=((i.subject||'')+' '+(i.snippet||'')).toLowerCase();
+  const c=(i.category||'').toLowerCase();
+  if(_isFwdConfirm(i)) return true;
+  if(c==='receipt') return true;
+  return /\b(confirm|confirmation|confirmed|acknowledge|acknowledgement|acknowledgment|receipt|received|registered|submitted|verification|verify|otp|reference (no|number)|ticket (no|number)|complaint (no|number))\b/.test(s);
+}
 function _isFwdConfirm(i){
   const f=(i.from_addr||'').toLowerCase(), s=(i.subject||'').toLowerCase();
   return f.includes('forwarding-noreply@google.com') || f.includes('mail-noreply@yahoo')
@@ -4572,6 +4653,7 @@ function _fwdCode(i){
 }
 function _radarInBucket(i,b){
   if(b==='forwarding') return _isFwdConfirm(i);
+  if(b==='confirm') return _isConfirm(i);
   if(b==='act') return i.status==='new' && (i.flag==='red'||i.flag==='amber');
   if(b==='waiting') return i.status==='responded';
   if(b==='resolved') return i.status==='resolved'||i.status==='closed';
@@ -4585,12 +4667,12 @@ function _renderRadarItems(){
   const items=_radarItems.filter(i=>_radarInBucket(i,b));
   const fTab=(v,lbl)=>`<div class="tab-pill ${b===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
   const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need attention')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
-  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}${fTab('forwarding','📮 Forwarding codes ('+(_radarItems.filter(_isFwdConfirm).length)+')')}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}${fTab('confirm','✅ Confirmations ('+(_radarItems.filter(_isConfirm).length)+')')}${fTab('forwarding','📮 Forwarding codes ('+(_radarItems.filter(_isFwdConfirm).length)+')')}</div>`;
   if(!items.length){
     const noMb = !_radarMailboxes.length;
     const empty = noMb
       ? `<div class="empty" style="border:1px dashed var(--nd-border);border-radius:12px;padding:1.5rem"><div class="ei">📭</div><p style="font-weight:600">No mailboxes connected yet</p><p style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Connect a customer's mailbox first — then their new emails appear here, flagged when an authority or urgent update arrives.</p><button class="btn btn-primary" onclick="radarSetView('mailboxes')">📮 Go to Mailboxes → connect one</button></div>`
-      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b==='forwarding'?'Forwarding codes':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='forwarding'?'When a customer adds cs@ or np@ as a forwarding address, Google emails the code here. Hit 🔄 Check now after they submit it.':(b==='act'?'All caught up — nothing needs attention right now.':'New emails appear here automatically. Or hit 🔄 Check now.')}</p></div>`;
+      : `<div class="empty"><div class="ei">🛰️</div><p>Nothing in <b>${b==='act'?'Act now':b==='waiting'?'Waiting on them':b==='resolved'?'Resolved':b==='forwarding'?'Forwarding codes':b==='confirm'?'Confirmations':b}</b>.</p><p style="font-size:.82rem;color:var(--nd-text-muted)">${b==='forwarding'?'When a customer adds cs@ or np@ as a forwarding address, Google emails the code here. Hit 🔄 Check now after they submit it.':(b==='act'?'All caught up — nothing needs attention right now.':'New emails appear here automatically. Or hit 🔄 Check now.')}</p></div>`;
     return metricStrip+filters+empty;
   }
   // Forwarding-verification view: the code is the whole point, so lead with it.
@@ -4626,6 +4708,7 @@ function _renderRadarItems(){
           ${_radarCase(i)}
           ${i.ai_summary?`<div style="font-size:.78rem;margin-top:.3rem">🤖 ${esc(i.ai_summary)}</div>`:''}
           ${i.deadline?`<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.2rem">⏰ ${esc(i.deadline)}</div>`:''}
+          <div style="margin-top:.25rem">${_radarWhy(i)}</div>
           ${i.snippet?`<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.snippet)}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:.3rem;align-items:flex-end">
@@ -4647,11 +4730,13 @@ async function openRadarEmail(id){
   const resolved=(it.status==='resolved'||it.status==='closed');
   body.innerHTML=`
     <div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.5rem;line-height:1.6">
-      <div><b>From:</b> ${esc(d.from||'')}</div>
+      <div><b>From:</b> ${_radarWho(it)}${d.from && !it.from_addr ? ' ' + esc(d.from) : ''}</div>
+      <div><b>Case:</b> ${it.claim_id ? ('NP-' + it.claim_id + (it.claim_who ? ' · ' + esc(it.claim_who) : '')) : '<span style="color:var(--nd-text-faint)">not matched</span>'}</div>
       <div><b>Mailbox:</b> ${esc(it.mailbox_label||it.mailbox_email_masked||'')}${it.deadline?` · <span style="color:var(--nd-warning-text)">⏰ ${esc(it.deadline)}</span>`:''}</div>
       <div><b>Date:</b> ${esc(d.date||'')}</div>
     </div>
-    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:.84rem;line-height:1.55">${esc(emailBody)}</div>
+    <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:.84rem;line-height:1.55">${_radarLinkify(emailBody)}</div>
+    ${_radarLinksBlock(d.links)}
     <div id="radarAttach_${id}" style="margin-top:.9rem;font-size:.8rem;color:var(--nd-text-faint)">Checking for attachments…</div>
     <div style="margin-top:.9rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <span style="font-size:.76rem;color:var(--nd-text-muted)">📡 Read-only radar — this email is flagged for your attention. To reply, open the mailbox directly.</span>
@@ -4793,21 +4878,85 @@ function radarConnectPreset(addr, title){
 }
 function _renderRadarSettings(){
   const c=_radarConfig||{};
-  return `<div class="nd-card" style="padding:1rem;max-width:660px">
+  // No nowrap and a bounded first column: on a phone this has to wrap, not push the page sideways.
+  const row=(k,v)=>'<tr><td style="padding:.28rem .6rem .28rem 0;vertical-align:top;width:30%;min-width:6.5rem;'
+    +'color:var(--nd-text-secondary);font-weight:600">'+k+'</td>'
+    +'<td style="padding:.28rem 0;color:var(--nd-text-muted)">'+v+'</td></tr>';
+  // Staff act on what this screen decides, so the decision has to be written down in plain words.
+  // A filter nobody can explain is a filter nobody trusts, and they go back to the raw inbox.
+  const explain = `<div class="nd-card" style="padding:1rem;max-width:760px;margin-bottom:1rem">
+    <div style="font-weight:700;margin-bottom:.5rem">📖 How the radar decides what you see</div>
+    <div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.6rem">Every new email in the connected inboxes is read once, in this order. The first thing that matches wins. Nothing is ever deleted, moved or replied to — the radar only reads.</div>
+    <table style="font-size:.8rem;border-collapse:collapse;width:100%;table-layout:fixed">
+      ${row('1. Your rules','If an email matches a rule you wrote below, it is <b>🔴 Act now</b> — even if the AI would have cleared it. Your rule always wins.')}
+      ${row('2. Priority senders','Anyone on your priority list is <b>🔴 Act now</b>, whatever the mail says.')}
+      ${row('3. The AI\'s read','It works out what kind of mail it is and how urgent. An authority, legal or court mail, or anything it reads as high priority → <b>🔴 Act now</b>. A receipt, marketing or spam → <b>⚪ Auto-cleared</b>. <b>Anything else → 🟡 Review</b> — on doubt a human always looks.')}
+      ${row('4. Deadlines','Any date the mail commits us to is pulled out and shown on the <b>⏰ Deadlines</b> tab.')}
+    </table>
+    <div style="font-weight:700;margin:.9rem 0 .4rem">What it pulls out of each email</div>
+    <table style="font-size:.8rem;border-collapse:collapse;width:100%;table-layout:fixed">
+      ${row('Who wrote it','The sender\'s name first, then their address.')}
+      ${row('Which case','Matched only when it can be proved — the sender is on a claim, or a claim number appears in the subject. Never matched on a name.')}
+      ${row('The gist','A one-line summary, and why it was flagged.')}
+      ${row('Deadline','A date found in the mail.')}
+      ${row('Attachments','Listed, and filed onto a claim only when you confirm — never automatically.')}
+      ${row('Links','Every web address in the mail, with its domain shown, so you can see where a link goes before opening it.')}
+    </table>
+    <div style="font-weight:700;margin:.9rem 0 .4rem">Where things land</div>
+    <div style="font-size:.8rem;color:var(--nd-text-muted)">
+      <b>🔴 Act now</b> — needs a person today &nbsp;·&nbsp;
+      <b>🕒 Waiting on them</b> — we replied &nbsp;·&nbsp;
+      <b>✅ Confirmations</b> — receipts and acknowledgements worth keeping as proof &nbsp;·&nbsp;
+      <b>⏰ Deadlines</b> — anything dated &nbsp;·&nbsp;
+      <b>⚪ Cleared</b> — judged routine, still here if you want to check &nbsp;·&nbsp;
+      <b>📮 Forwarding codes</b> — the code Google sends when a customer points their mail at us.
+    </div>
+  </div>`;
+  return explain + `<div class="nd-card" style="padding:1rem;max-width:760px">
     <div style="font-weight:700;margin-bottom:.6rem">⚙️ Radar settings</div>
-    <label style="font-size:.82rem;display:block;margin-bottom:1rem">Priority senders — always flagged 🔴 no matter what the AI thinks. One per line: a domain (e.g. <code>example.gov.in</code>) or a full email address.
+
+    <label style="font-size:.82rem;display:block;margin-bottom:.3rem;font-weight:600">Your own rules — surface an email whenever it matches</label>
+    <div style="font-size:.75rem;color:var(--nd-text-muted);margin-bottom:.35rem">
+      One rule per line. Start a line with <code>from:</code>, <code>subject:</code> or <code>text:</code> to say where to look — or just type words to search the whole email. Matching ignores capitals. A rule is plain text, not a pattern, so brackets and symbols are safe to type. Lines starting with <code>#</code> are notes. At least 3 characters per rule.
+    </div>
+    <textarea id="rsRules" rows="7" placeholder="from: irdai.gov.in&#10;subject: hearing&#10;subject: notice&#10;text: policy cancelled&#10;grievance" style="${_rmInp()};font-family:monospace;font-size:.82rem">${esc(c.custom_rules||'')}</textarea>
+    <div style="font-size:.72rem;color:var(--nd-text-faint);margin:.25rem 0 1rem">
+      Anything a rule catches shows as 🔴 Act now, and the row says which rule caught it.
+    </div>
+
+    <label style="font-size:.82rem;display:block;margin-bottom:1rem;font-weight:600">Priority senders — always 🔴, no matter what the AI thinks
+      <span style="display:block;font-weight:400;color:var(--nd-text-muted);font-size:.75rem;margin-top:.15rem">One per line: a domain (e.g. <code>example.gov.in</code>) or a full email address.</span>
       <textarea id="rsSenders" rows="5" style="${_rmInp()};font-family:monospace;font-size:.82rem">${esc(c.priority_senders||'')}</textarea></label>
-    <label style="font-size:.82rem;display:block;margin-bottom:.35rem">Silence threshold (days)
+
+    <label style="font-size:.82rem;display:block;margin-bottom:.35rem;font-weight:600">Silence threshold (days)
       <input id="rsSilence" type="number" min="1" max="60" value="${c.silence_days||5}" style="${_rmInp()};max-width:120px"></label>
     <div style="font-size:.74rem;color:var(--nd-text-muted);margin:.3rem 0 1rem">If an open case gets no priority-sender reply for this many days, the radar will raise a 🟡 "Chase" flag so a quiet case never slips through. (Chase flags activate in a later update.)</div>
+
     <button class="btn btn-primary" onclick="radarSaveConfig(this)">Save settings</button>
+    <span id="rsMsg" style="font-size:.8rem;margin-left:.6rem"></span>
   </div>`;
 }
 async function radarSaveConfig(btn){
-  const payload={priority_senders:document.getElementById('rsSenders').value, silence_days:parseInt(document.getElementById('rsSilence').value,10)||5};
+  const rulesEl=document.getElementById('rsRules');
+  const payload={priority_senders:document.getElementById('rsSenders').value,
+                 custom_rules:(rulesEl?rulesEl.value:''),
+                 silence_days:parseInt(document.getElementById('rsSilence').value,10)||5};
+  const msg=document.getElementById('rsMsg');
   if(btn)btn.disabled=true;
-  try{ const r=await API('/radar/config',{method:'POST',body:JSON.stringify(payload)}); if(!r.ok){alert('Could not save.');} else {_radarConfig=payload; alert('Settings saved.');} }
-  catch(e){ alert('Could not save.'); } finally { if(btn)btn.disabled=false; }
+  try{
+    const r=await API('/radar/config',{method:'POST',body:JSON.stringify(payload)});
+    if(!r.ok){ if(msg){msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ Could not save.';} }
+    else {
+      const d=await r.json().catch(()=>({}));
+      _radarConfig=payload;
+      // Report how many rules actually took effect - a line that was too short or malformed is
+      // silently skipped, and saying "saved" while quietly dropping it would be a lie.
+      if(msg){ msg.style.color='var(--nd-success-text)';
+        msg.textContent='✓ Saved · '+(d.rules_active||0)+' rule(s) in force. New emails are checked against them from the next poll.'; }
+    }
+  }
+  catch(e){ if(msg){msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ Could not save.';} }
+  finally { if(btn)btn.disabled=false; }
 }
 async function radarPollNow(btn){
   if(btn){btn.disabled=true;btn.textContent='Checking…';}
@@ -7884,19 +8033,31 @@ async function loadSupport(){
 async function loadSupportReps(){
   const wrap=document.getElementById('supReps'); if(!wrap) return;
   const r=await API('/support/reps'); if(!r.ok){ wrap.innerHTML=''; return; }
-  const reps=(await r.json()).reps||[];
+  const d0=await r.json();
+  const reps=d0.reps||[];
   const canEdit=(_role==='super_admin');
-  const DUTY={support:{icon:'🎧',label:'Support chat'},whatsapp:{icon:'💬',label:'WhatsApp inbox'}};
+  // Duty names come from the server, which reads the same list the rules do. This screen used to
+  // hard-code {support, whatsapp}; every case-stage bucket was therefore un-rosterable, and "Set
+  // duty" on My Desk landed here with no way to pick the bucket you had just clicked.
+  const LBL=d0.duty_labels||{};
+  const ALL=(d0.duties||['support','whatsapp']);
+  const CHAN=ALL.filter(k=>(d0.stage_duties||[]).indexOf(k)<0);   // the conversation channels
+  const STAGE=(d0.stage_duties||[]);                              // the case-stage buckets
+  const DUTY={}; ALL.forEach(k=>{ DUTY[k]={icon:(LBL[k]||{}).icon||'•', label:(LBL[k]||{}).name||k}; });
   const dutyOf=x=>(x.duty||'support');
-  // Who is answering each queue right now. WhatsApp is called out separately because being on
-  // that roster is what OPENS the WhatsApp inbox for a team member — an empty list there means
-  // only admins can work it.
-  const dutyLine = Object.keys(DUTY).map(k=>{
+  // Who is answering each queue right now. The two channels are ALWAYS listed, empty or not,
+  // because being on the WhatsApp rota is what OPENS that inbox for a team member. Stage buckets
+  // are listed only once somebody is on them, so this stays a status line and not a wall of 13.
+  const shown = CHAN.concat(STAGE.filter(k=>reps.some(x=>x.on_duty && dutyOf(x)===k)));
+  const dutyLine = shown.map(k=>{
     const on=reps.filter(x=>x.on_duty && dutyOf(x)===k);
     const names = on.length ? on.map(x=>esc(x.staff_name||('#'+x.staff_id))).join(', ')
       : `<span style="color:var(--nd-warning-text)">${k==='whatsapp'?'nobody rostered — only admins can open the inbox':'nobody rostered (alerts fall back to admins)'}</span>`;
-    return `<div style="font-size:.82rem;margin-bottom:.3rem">${DUTY[k].icon} <b>${DUTY[k].label} — on duty now:</b> ${names}</div>`;
+    return `<div style="font-size:.82rem;margin-bottom:.3rem">${DUTY[k].icon} <b>${esc(DUTY[k].label)} — on duty now:</b> ${names}</div>`;
   }).join('');
+  const optsFor=list=>list.map(k=>`<option value="${esc(k)}">${DUTY[k].icon} ${esc(DUTY[k].label)}</option>`).join('');
+  const dutyOptions=`<optgroup label="Conversations">${optsFor(CHAN)}</optgroup>`
+                   +`<optgroup label="Case stages">${optsFor(STAGE)}</optgroup>`;
   const rows=reps.map(x=>`<tr>
      <td>${esc(x.staff_name||('#'+x.staff_id))} <span style="font-size:.68rem;color:var(--nd-text-faint)">${esc(x.staff_role||'')}</span></td>
      <td style="font-size:.8rem">${(DUTY[dutyOf(x)]||{}).icon||''} ${esc((DUTY[dutyOf(x)]||{}).label||dutyOf(x))}</td>
@@ -7908,7 +8069,7 @@ async function loadSupportReps(){
     ${dutyLine}
     ${reps.length?`<div class="table-wrap"><table><thead><tr><th>Person</th><th>Duty</th><th>Dates</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div style="font-size:.78rem;color:var(--nd-text-faint)">Nobody rostered yet.</div>'}
     ${canEdit?`<div id="supRepAdd" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-top:.6rem">
-      <label style="font-size:.75rem">Duty<br><select id="supRepDuty" style="min-width:150px"><option value="support">🎧 Support chat</option><option value="whatsapp">💬 WhatsApp inbox</option></select></label>
+      <label style="font-size:.75rem">Duty<br><select id="supRepDuty" style="min-width:170px">${dutyOptions}</select></label>
       <label style="font-size:.75rem">Staff<br><select id="supRepStaff" style="min-width:150px"><option value="">Loading…</option></select></label>
       <label style="font-size:.75rem">From<br><input id="supRepStart" type="date" style="max-width:150px"></label>
       <label style="font-size:.75rem">To<br><input id="supRepEnd" type="date" style="max-width:150px"></label>
@@ -7917,10 +8078,18 @@ async function loadSupportReps(){
     </div>`:''}
   </div>`;
   if(canEdit){
+    // Arriving from My Desk's "Set duty": preselect the bucket that was clicked, so the answer is
+    // already filled in and only the person and the dates are left to choose.
+    if(_deskDutyPick){
+      const ds=document.getElementById('supRepDuty');
+      if(ds && DUTY[_deskDutyPick]) ds.value=_deskDutyPick;
+      _deskDutyPick='';
+    }
     const sr=await API('/staff'); if(sr.ok){ const sd=await sr.json(); const staff=(sd.staff||sd||[]).filter(s=>!s.deleted_at);
       const sel=document.getElementById('supRepStaff'); if(sel) sel.innerHTML='<option value="">Select staff…</option>'+staff.map(s=>`<option value="${s.staff_id}">${esc(s.name||('#'+s.staff_id))}</option>`).join(''); }
   }
 }
+let _deskDutyPick='';
 async function addSupportRep(){
   const staff_id=parseInt(document.getElementById('supRepStaff').value);
   const start_date=document.getElementById('supRepStart').value;
@@ -10693,7 +10862,7 @@ function deskRender(){
       ? (b.key === 'whatsapp' ? "showPanel('whatsapp')" : "showPanel('support')")
       : ("cbSet('stage','" + b.key + "');showPanel('board')");
     const assignBtn = (_role === 'super_admin')
-      ? '<button class="dk-a" onclick="deskAssign()" title="' + T.assignHint + '">' + T.assignShort + '</button>'
+      ? '<button class="dk-a" onclick="deskAssign(\'' + b.key + '\')" title="' + T.assignHint + '">' + T.assignShort + '</button>'
       : '';
     return '<div class="dk-b' + (b.yours ? ' yours' : '') + '">'
       + '<div class="dk-bt">' + b.icon + ' ' + esc(b.name)
@@ -10715,7 +10884,7 @@ function deskRender(){
       + '<div style="margin-top:.35rem;font-size:.78rem;opacity:.85">' + T.gapsHint + '</div>'
       + (canAssign
           ? '<button class="dk-a" style="margin-top:.5rem;max-width:16rem;border-color:var(--nd-border-warn);color:var(--nd-warning-text)"'
-            + ' onclick="deskAssign()">' + T.assign + '</button>'
+            + ' onclick="deskAssign(\'' + esc(gaps[0].key||'') + '\')">' + T.assign + '</button>'
           : '')
       + '</div>'
     : '';
@@ -10739,17 +10908,22 @@ function deskRender(){
 
 // The duty roster lives on the Support screen. Nobody would guess that from My Desk, so this
 // takes them there and points at it rather than leaving them to hunt.
-function deskAssign(){
+function deskAssign(key){
+  // Carry the bucket across so the rota opens with that duty already chosen. Set BEFORE the panel
+  // switch, because switching is what kicks off the roster's own load.
+  _deskDutyPick = key || '';
   showPanel('support');
   setTimeout(function(){
-    const el = document.getElementById('supReps');
+    // Point at the row you actually fill in, not just the section it sits in.
+    const el = document.getElementById('supRepAdd') || document.getElementById('supReps');
     if (el){
       el.scrollIntoView({behavior:'smooth', block:'center'});
       el.style.transition = 'box-shadow .4s';
+      el.style.borderRadius = '10px';
       el.style.boxShadow = '0 0 0 3px var(--nd-brand-cyan)';
       setTimeout(function(){ el.style.boxShadow = ''; }, 2600);
     }
-  }, 600);
+  }, 700);
 }
 
 function deskGuide(key){
