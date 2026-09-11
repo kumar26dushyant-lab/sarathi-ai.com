@@ -4,7 +4,7 @@ event. Pure functions (no I/O), so they're testable without the live number and 
 into the Phase 1 orchestrator once the Meta number is connected.
 
 Languages: 'hinglish' (default) | 'hi' | 'en'. Hinglish is Roman-script Hindi — the most
-comfortable register for most Tier II/III claimants on WhatsApp.
+comfortable register for most Tier II/III complainants on WhatsApp.
 
 Every composer takes a `ctx` dict and returns a ready-to-send string. Keep them warm, human,
 short, and specific — this is the "feels like a person is managing it" layer.
@@ -41,7 +41,7 @@ def welcome(ctx: dict, lang: str = "hinglish") -> str:
 
 
 def claim_registered(ctx: dict, lang: str = "hinglish") -> str:
-    """To the claimant. (Subscriber/branch/staff get their own dispatch via the notify engine.)"""
+    """To the complainant. (Subscriber/branch/staff get their own dispatch via the notify engine.)"""
     l = _lang(lang); reg = _reg(ctx); insured = ctx.get("insured_name") or ""
     hi_ = {
         "hinglish": (f"✅ Aapka claim register ho gaya hai.\nRegistration No: *{reg}*\n"

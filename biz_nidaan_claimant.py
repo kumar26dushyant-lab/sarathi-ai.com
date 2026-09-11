@@ -79,7 +79,7 @@ def compute_fee(recovered_amount: float, fee_pct: float, gst_pct: float) -> dict
 # ── Portal lifecycle ─────────────────────────────────────────────────────────
 async def ensure_portal(claim_id: int, with_token: bool = True) -> dict:
     """Get-or-create the complainant portal row for a claim. `with_token` mints a magic-link token
-    (mediated path); pass False for direct ₹499 claimants who log in to their own account.
+    (mediated path); pass False for direct ₹499 complainants who log in to their own account.
     Idempotent — never rotates an existing token here."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -236,7 +236,7 @@ def claimant_status_label(status: str) -> str:
 
 
 async def claim_timeline(claim_id: int) -> list[dict]:
-    """The claim's status progression as a friendly, INTERNAL-NOTE-FREE timeline for the claimant.
+    """The claim's status progression as a friendly, INTERNAL-NOTE-FREE timeline for the complainant.
     (Notes on status changes are staff-facing and deliberately omitted here.)"""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

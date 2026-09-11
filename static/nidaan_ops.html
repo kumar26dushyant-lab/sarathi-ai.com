@@ -5660,7 +5660,7 @@ async function loadClaimPortalCard(claimId, freshLink, disputed){
   }
   const sentBadge = (s.exists && s.link_sent_count) ? `<span style="font-size:.72rem;color:var(--nd-text-faint)"> · sent ${s.link_sent_count}×</span>` : '';
   const linkHtml = freshLink
-    ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the claimant. Opening it logs a first-open.</div></div>`
+    ? `<div style="margin-bottom:.55rem"><input readonly value="${esc(freshLink)}" onclick="this.select()" style="width:100%;font-size:.72rem;padding:.4rem;border-radius:6px;border:1px solid var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)"><div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">Copied — send this to the complainant. Opening it logs a first-open.</div></div>`
     : '';
   const linkBtns = canIssue
     ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem"><button class="btn-sm btn-ghost" onclick="issueClaimPortalLink(${claimId})">${s.exists?'🔗 Re-issue &amp; copy link':'🔗 Create &amp; copy link'}</button></div>`
@@ -7720,7 +7720,7 @@ async function loadClaimantTermsEditor(){
   wrap.innerHTML = `
     <div class="section-hdr" style="margin-bottom:.6rem"><div>
       <div class="section-title" style="font-size:1rem">⚖️ Complainant Fee &amp; Terms</div>
-      <div class="section-sub">The success-fee % and the Terms shown to the policyholder in their consent card. <b>Counsel-owned</b> — edit the wording here; bump the version whenever it changes. Already-accepted claimants stay pinned to the version they agreed to.</div>
+      <div class="section-sub">The success-fee % and the Terms shown to the policyholder in their consent card. <b>Counsel-owned</b> — edit the wording here; bump the version whenever it changes. Already-accepted complainants stay pinned to the version they agreed to.</div>
     </div></div>
     <div class="ccfg-card" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem 1.1rem">
       <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
@@ -7732,7 +7732,7 @@ async function loadClaimantTermsEditor(){
       <div style="font-size:.72rem;color:var(--nd-text-muted);margin:.5rem 0">${gstNote}</div>
       <label style="font-size:.72rem;color:var(--nd-text-muted);display:block">Terms &amp; conditions — English (contracting entity: <b>Nidaan The Legal Consultant LLP</b>)
         <textarea id="ctTerms" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="Paste the counsel-approved English terms here…">${esc(cfg.terms_html||'')}</textarea></label>
-      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-top:.6rem">नियम व शर्तें — हिंदी (claimants are Tier 2/3; Hindi is their default)
+      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-top:.6rem">नियम व शर्तें — हिंदी (complainants are Tier 2/3; Hindi is their default)
         <textarea id="ctTermsHi" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="काउंसल-अनुमोदित हिंदी शर्तें यहाँ डालें…">${esc(cfg.terms_html_hi||'')}</textarea></label>
       ${(cfg.terms_html||'').indexOf('PLACEHOLDER')===0?'<div style="font-size:.76rem;color:var(--nd-warning-text);margin-top:.4rem">⚠️ Placeholder text — replace with counsel-approved terms before enabling live consent.</div>':''}
       <label style="display:flex;gap:.55rem;align-items:flex-start;margin-top:.8rem;font-size:.84rem;${canEdit?'':'opacity:.6'}">
@@ -7755,7 +7755,7 @@ async function saveClaimantTerms(btn){
   if(btn) btn.disabled = true; if(msg){ msg.style.color='var(--nd-text-muted)'; msg.textContent='Saving…'; }
   try{
     const r = await API('/claimant-terms',{method:'PUT', body:JSON.stringify({fee_pct, terms_version, terms_html, terms_html_hi, autosend_enabled})});
-    if(r.ok){ if(msg){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — new claimants see this'; } }
+    if(r.ok){ if(msg){ msg.style.color='#4ade80'; msg.textContent='✓ Saved — new complainants see this'; } }
     else { const d=await r.json().catch(()=>({})); if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(d.detail||'Failed'); } }
   }catch(e){ if(msg){ msg.style.color='#f87171'; msg.textContent='Network error'; } }
   finally{ if(btn) btn.disabled=false; }
@@ -10503,7 +10503,7 @@ async function loadWhatsapp(){
       <div class="section-sub">NidaanPartner's own number — doc-collection bot, complainant journey, bulk campaigns, and auto lead-capture. Separate from the Sarathi premium WhatsApp add-on.</div></div></div>
     ${statusCard}
     <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1.2rem">
-      ${stat('Opted-in claimants', c.opted_in||0, '#34d399')}
+      ${stat('Opted-in complainants', c.opted_in||0, '#34d399')}
       ${stat('Stopped (opted out)', c.stopped||0, '#f87171')}
       ${stat('Messages sent', mc.sent||0, '#7dd3fc')}
       ${stat('Replies received', mc.received||0, '#a78bfa')}
@@ -12109,7 +12109,7 @@ async function sendDocReminderEmail(cid){
 }
 window.sendDocReminderEmail=sendDocReminderEmail;
 
-// Start (or continue) WhatsApp guided doc-collection for a claim's claimant.
+// Start (or continue) WhatsApp guided doc-collection for a claim's complainant.
 async function startWaCollection(cid){
   const m=document.getElementById('docReminderMsg_'+cid);
   if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Starting…'; }

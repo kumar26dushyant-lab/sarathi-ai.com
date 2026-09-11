@@ -1514,7 +1514,7 @@ async def _claimant_accept_thankyou(claim_id: int) -> None:
             pass
     try:
         await nidaan.record_claim_activity(claim_id, "authorization_accepted", channel="system",
-                                           actor="claimant", summary="Complainant accepted authorization; thank-you sent")
+                                           actor="complainant", summary="Complainant accepted authorization; thank-you sent")
     except Exception:
         pass
 
@@ -1623,7 +1623,7 @@ class _ClaimantTermsReq(BaseModel):
 async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
     """Update the success-fee % + the T&C version/text (English + Hindi) (super-admin / counsel).
     Existing acceptances keep the version + % they were pinned to — this only changes what NEW
-    claimants will see."""
+    complainants will see."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "super_admin")
@@ -6908,7 +6908,7 @@ async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
 @app.post("/nidaan/ops/api/claims/{claim_id}/wa/start")
 @limiter.limit("30/minute")
 async def nidaan_ops_wa_start(claim_id: int, request: Request):
-    """Start (or continue) the WhatsApp guided doc-collection for a claim's claimant. Free-form
+    """Start (or continue) the WhatsApp guided doc-collection for a claim's complainant. Free-form
     delivery needs an open 24h session (complainant messaged us recently); a cold start needs an
     approved template. sub_super_admin+."""
     if not _is_nidaan_host(request):

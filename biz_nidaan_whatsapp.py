@@ -2,7 +2,7 @@
 NidaanPartner claimant-facing WhatsApp (Meta Cloud API) — the document-collection bot channel.
 
 ISOLATED and SEPARATE from biz_sarathi_whatsapp.py (the Sarathi premium WA add-on). This one
-uses NidaanPartner's OWN branded number + WABA so claimants see "NidaanPartner" as the sender.
+uses NidaanPartner's OWN branded number + WABA so complainants see "NidaanPartner" as the sender.
 All secrets from env, never code:
   WA_NIDAAN_ACCESS_TOKEN     — permanent System User token for the Nidaan WABA
   WA_NIDAAN_PHONE_NUMBER_ID  — the Nidaan sending number's Phone Number ID (number 9183686384)
@@ -13,7 +13,7 @@ All secrets from env, never code:
 Message kinds:
   • send_template  — business-initiated (approved template). The ONLY way to START/re-open a chat.
   • send_text      — free-form; delivers only inside the 24h session (after the complainant replied).
-  • send_audio     — voice note (TTS) — inside the 24h session; for low-literacy claimants.
+  • send_audio     — voice note (TTS) — inside the 24h session; for low-literacy complainants.
   • send_document  — send a PDF/file inside the 24h session.
   • download_media — pull an inbound media file (a document the complainant sent) by media id.
 

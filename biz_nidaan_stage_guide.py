@@ -155,7 +155,7 @@ CHANNEL_GUIDE = {
                "watch": "एक व्यक्ति = एक बातचीत - पहले लिख चुके व्यक्ति के लिए नया थ्रेड न खोलें।"},
     },
     "whatsapp": {
-        "en": {"what": "Our WhatsApp number, where claimants send documents and ask questions.",
+        "en": {"what": "Our WhatsApp number, where complainants send documents and ask questions.",
                "do": "Take over a chat when the AI cannot help. Check the badge before typing anything about a case.",
                "done": "Nothing is waiting for a reply and no chat is left half-answered.",
                "watch": "If a chat shows Not verified, share nothing about their claim until they send the code."},
