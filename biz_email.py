@@ -824,7 +824,7 @@ async def send_nidaan_claim_assigned_staff_email(
 <div style="background:#0f2a4a;border:1px solid rgba(6,182,212,.3);border-radius:10px;padding:18px 22px;margin:18px 0">
   <div style="font-size:.75rem;font-weight:700;color:#06b6d4;letter-spacing:.08em;margin-bottom:10px">CLAIM DETAILS</div>
   <div style="color:#e2e8f0"><strong>Claim #:</strong> #{claim_id}</div>
-  <div style="color:#e2e8f0;margin-top:6px"><strong>Claimant:</strong> {insured_name}</div>
+  <div style="color:#e2e8f0;margin-top:6px"><strong>Complainant:</strong> {insured_name}</div>
   <div style="color:#e2e8f0;margin-top:6px"><strong>Type:</strong> {claim_type.replace('_', ' ').title()}</div>
 </div>
 {advisor_section}

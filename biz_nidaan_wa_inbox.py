@@ -337,7 +337,7 @@ async def case_context(msisdn: str, claim_id=None) -> dict:
 
             for r in rows:
                 cid = r["claim_id"]
-                # Documents: the single most common reason a claimant is messaging us.
+                # Documents: the single most common reason a complainant is messaging us.
                 try:
                     dr = await (await c.execute(
                         "SELECT COUNT(*) total, COALESCE(SUM(received),0) done "

@@ -81,6 +81,7 @@ FLAG_LABEL = {
     "no_phone": "No phone number — we cannot reach or verify this person",
     "no_timeline": "Nothing recorded on this case",
     "hold_expired": "The park has ended — this is ours again",
+    "awaiting_l2_start": "Paid and winnable — Level-2 work has not been started",
 }
 
 # Blockers that mean the next move is OURS. Both are internal; the difference is only who.
@@ -186,16 +187,24 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     elif status == "in_negotiation":
         stage, blocker = "representation", "insurer"
     elif outcome == "can_fight":
+        # Everything here is pre-pipeline by definition: a case that HAS been started is caught by
+        # the pipeline override further down. So this branch never reaches past Conversion.
+        #
+        # It used to derive paid cases straight into Documents or Drafting, which put cases into
+        # post-L2 buckets that nobody had started — the buckets then held a mixture of work being
+        # done and work merely qualified for, and "who is on duty for Documents" became a question
+        # about a number that was not real. A paid case waits at the gate until someone starts it.
+        stage = "conversion"
         if l2 != "paid":
             # Reviewed, we said we can fight, and the work has not been paid for. This is the
             # gap the whole business is losing cases in.
-            stage, blocker = "conversion", "complainant"
+            blocker = "complainant"
             flags.append("fee_unpaid")
-        elif docs_total and docs_done >= docs_total:
-            stage, blocker = "drafting", "internal"
         else:
-            stage, blocker = "documentation", "complainant"
-            if docs_total:
+            # Paid and winnable, and not yet begun. Nobody outside is holding this up — we are.
+            blocker = "internal"
+            flags.append("awaiting_l2_start")
+            if docs_total and docs_done < docs_total:
                 flags.append("docs_short")
     elif status in ("intimated", "assigned", "in_review", "review_delivered"):
         stage, blocker = "review", "internal"
@@ -855,6 +864,21 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
         buckets = [b for b in all_buckets
                    if b["key"] in mine_set or b["key"] in has_assigned]
 
+    # THE MAP. The detailed cards above are deliberately filtered - an empty bucket nobody is on
+    # is noise on a working screen. But filtering them away also hid the SHAPE of the journey, so
+    # a person looking at three cards could not tell there are eleven stages or what order they
+    # run in. This is the whole route, always, counts and all, with the empty ones visibly empty.
+    # Everyone sees it: it is a map, not case data.
+    journey = []
+    for st in PRE_L2 + PIPELINE:
+        c = _count(st)
+        journey.append({"key": st, **_g.label(st, lang),
+                        "total": c["total"], "ours": c["ours"], "stalled": c["stalled"],
+                        "on_duty": [x["name"] for x in rota.get(st, [])],
+                        "yours": st in mine_set,
+                        "gate": st == PIPELINE[0],     # where L2 begins
+                        "pre_l2": st in PRE_L2})
+
     # The channels a person can be rostered onto sit alongside the case buckets.
     channels = []
     for ch in ("support", "whatsapp"):
@@ -876,6 +900,8 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
             return "waiting on us for %d days longer than it should" % i["over_by"]
         if "stalled" in i["flags"]:
             return "nothing has moved for %d days" % (i.get("age_days") or 0)
+        if "awaiting_l2_start" in i["flags"]:
+            return "paid and winnable, but nobody has started the Level-2 work"
         if "fee_unpaid" in i["flags"]:
             return "we said we can win it, but the fee has not been paid"
         if "unreviewed" in i["flags"]:
@@ -947,6 +973,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
                            "age_days": i.get("age_days")} for i in waiting_start[:8]],
         "waiting_start_count": len(waiting_start),
         "buckets": buckets,
+        "journey": journey,
         "channels": channels,
         "on_fire": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],
                      **_g.label(i["stage"], lang),

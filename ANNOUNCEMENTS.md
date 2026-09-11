@@ -1,5 +1,37 @@
 # Staff Announcement Drafts
 
+## 2026-09-12 — We now say "complainant", and you can see the whole journey
+
+**Title (EN):**
+📝 One word changes: "claimant" is now "complainant" · 🗺️ My Desk shows the full journey
+
+**Details (EN):**
+• **"Claimant" is now "complainant" everywhere** — on forms, in emails, on WhatsApp, on the authorization, and on your screens. Nothing about how the system works has changed; only the word. We use the word people actually use when they talk about a complaint.
+
+• **"Insurer" is now "Insurance Company"** on every form a customer fills in. In Hindi it now says बीमा कंपनी rather than बीमाकर्ता. Same reason — plain words.
+
+• **My Desk now shows the whole journey.** Some of you asked why the duty list offers eleven stages but only three or four cards appeared. The cards only show stages that need somebody today. Above them you will now see **every stage in order**, with how many cases are in each and who is on duty — the empty ones shown greyed. The ⚖️ mark shows where Level-2 begins.
+
+• **Important — the Documents bucket count has changed.** Cases that have been paid for but whose Level-2 work has **not been started** now wait in **Conversion**, not Documents. Nothing has been lost. Documents, Drafting and the rest now contain **only cases someone has actually started** — so when you open a bucket, everything in it is live work. Press **Start Level-2 processing** on a case to move it in.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📝 अब हम "complainant" कहेंगे · 🗺️ My Desk पर पूरा सफ़र दिखेगा
+
+**Details (HI):**
+• **"Claimant" की जगह अब हर जगह "complainant"** — फ़ॉर्म, ईमेल, WhatsApp, ऑथराइज़ेशन और आपकी स्क्रीन पर। काम करने का तरीक़ा नहीं बदला, सिर्फ़ शब्द बदला है।
+
+• **"Insurer" की जगह अब "Insurance Company"** हर उस फ़ॉर्म पर जो ग्राहक भरता है। हिंदी में अब बीमाकर्ता नहीं, **बीमा कंपनी** लिखा मिलेगा — वही शब्द जो लोग बोलचाल में इस्तेमाल करते हैं।
+
+• **My Desk पर अब पूरा सफ़र दिखता है।** कई लोगों ने पूछा कि ड्यूटी सूची में ग्यारह चरण हैं पर कार्ड तीन-चार ही दिखते हैं। कार्ड सिर्फ़ उन चरणों के होते हैं जिन पर आज किसी की ज़रूरत है। अब उनके ऊपर **हर चरण क्रम में** दिखेगा — कितने केस हैं, कौन ड्यूटी पर है, और जहाँ केस नहीं वे हल्के दिखेंगे। ⚖️ निशान बताता है कि Level-2 कहाँ से शुरू होता है।
+
+• **ज़रूरी — Documents की गिनती बदली है।** जिन केसों की फ़ीस आ चुकी है पर Level-2 का काम **शुरू नहीं हुआ**, वे अब **Conversion** में इंतज़ार करेंगे, Documents में नहीं। कुछ भी गुम नहीं हुआ है। Documents, Drafting वग़ैरह में अब **सिर्फ़ वही केस हैं जिन्हें किसी ने शुरू किया है** — यानी बकेट खोलने पर जो दिखे, वह सचमुच चालू काम है। केस पर **Start Level-2 processing** दबाने से वह अंदर आ जाएगा।
+
+पढ़ने के बाद 👍 करें; कोई दिक्कत हो तो ऑफ़िस IT SPOC से पूछें।
+
+---
+
 ## 2026-09-11 — Level-2 cases now move bucket by bucket
 
 **Title (EN):**

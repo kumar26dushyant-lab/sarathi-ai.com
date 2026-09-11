@@ -3,7 +3,7 @@ NidaanPartner in-house L2 DOCUMENT-COLLECTION engine.
 
 One engine, two arms — EMAIL (live now, SMTP configured) and WhatsApp (wires in once the Meta
 number is live). Both read the SAME document checklist (`biz_nidaan_doc_checklist`) so they never
-duplicate and stay in sync with the claimant dashboard. Every nudge is recorded on the claim
+duplicate and stay in sync with the complainant dashboard. Every nudge is recorded on the claim
 timeline (`record_claim_activity`). Never raises to the caller.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ DB_PATH = db.DB_PATH
 
 
 def contact_status(claim: dict) -> dict:
-    """Is the claimant reachable for nudging? email drives the email arm, phone the WhatsApp arm."""
+    """Is the complainant reachable for nudging? email drives the email arm, phone the WhatsApp arm."""
     email = (claim.get("insured_email") or "").strip()
     phone = (claim.get("insured_phone") or "").strip()
     return {"email_ok": bool(email and "@" in email), "phone_ok": len(_digits(phone)) >= 10,
@@ -44,21 +44,21 @@ async def _claim(claim_id: int) -> Optional[dict]:
 
 
 async def send_email_reminder(claim_id: int, *, by: str = "system") -> dict:
-    """Email the claimant the still-pending documents + the secure upload link. Gated on a valid
-    claimant email; no-ops (returns a reason) when nothing is pending. Records the nudge."""
+    """Email the complainant the still-pending documents + the secure upload link. Gated on a valid
+    complainant email; no-ops (returns a reason) when nothing is pending. Records the nudge."""
     claim = await _claim(claim_id)
     if not claim:
         return {"ok": False, "error": "claim_not_found"}
     email = (claim.get("insured_email") or "").strip()
     if not (email and "@" in email):
-        return {"ok": False, "error": "no_email"}   # gate: fill the claimant email first
+        return {"ok": False, "error": "no_email"}   # gate: fill the complainant email first
     ctype = claim.get("claim_type") or ""
     pending = await _ck.pending_required_docs(claim_id, ctype)
     total = len(_ck.doc_template_for(ctype)) or 0
     done = max(0, total - len(pending))
     if not pending:
         return {"ok": False, "error": "no_pending", "done": done, "total": total}
-    # Secure upload link (provisions the claimant portal + magic token on first use).
+    # Secure upload link (provisions the complainant portal + magic token on first use).
     try:
         await _cl.ensure_portal(claim_id, with_token=True)
         p = await _cl.get_portal(claim_id)
@@ -98,7 +98,7 @@ async def send_email_reminder(claim_id: int, *, by: str = "system") -> dict:
     try:
         await _n.record_claim_activity(
             claim_id, "doc_reminder", channel="email", direction="out", actor=by,
-            summary=(f"Emailed {len(pending)} pending doc(s) to claimant ({done}/{total} done)"
+            summary=(f"Emailed {len(pending)} pending doc(s) to complainant ({done}/{total} done)"
                      if ok else "Doc-reminder email attempted (send failed)"),
             meta=f'{{"pending":{len(pending)},"ok":{str(ok).lower()}}}')
     except Exception:

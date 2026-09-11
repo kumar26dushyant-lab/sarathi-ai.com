@@ -177,7 +177,7 @@ function render(){
       (c.disputed_amount ? '<div class="row"><span class="lbl">'+esc(t("disputed"))+'</span><span class="val">'+inr(c.disputed_amount)+'</span></div>' : '')+
     '</div>';
 
-  // Fee AUTHORIZATION is shown ONLY once the claim is at L2 (reviewed GO). Before that the claimant
+  // Fee AUTHORIZATION is shown ONLY once the claim is at L2 (reviewed GO). Before that the complainant
   // sees nothing about fees.
   var feeCard = "";
   if(con.is_l2 && con.accepted){
@@ -215,7 +215,7 @@ function render(){
     tlCard = '<div class="card"><h2>'+esc(t("timelineTitle"))+'</h2><div class="tl">'+items+'</div></div>';
   }
 
-  // Documents (claimant's own uploads) + upload
+  // Documents (complainant's own uploads) + upload
   var docs = DATA.documents || [];
   var docList = docs.length
     ? docs.map(function(d){

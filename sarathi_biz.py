@@ -1192,14 +1192,14 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CLAIMANT PORTAL — the policyholder's direct view of their claim (P1).
+# COMPLAINANT PORTAL — the policyholder's direct view of their claim (P1).
 # Auth = the opaque per-claim access_token (revocable; doubles as the magic-link).
-# The claimant reads status, sees the success-fee consent card, and gives digital
+# The complainant reads status, sees the success-fee consent card, and gives digital
 # acceptance — without any mediator in between. Dormant until the L2 trigger + link
 # send are wired (deliberately held until the T&C copy is counsel-approved).
 # ═════════════════════════════════════════════════════════════════════════════
 async def _claimant_ctx(request: Request) -> Optional[dict]:
-    """Resolve the claimant's access_token (Bearer or ?token=) → portal+claim row, or None."""
+    """Resolve the complainant's access_token (Bearer or ?token=) → portal+claim row, or None."""
     tok = ""
     h = request.headers.get("Authorization", "")
     if h.startswith("Bearer "):
@@ -1213,7 +1213,7 @@ async def _claimant_ctx(request: Request) -> Optional[dict]:
 
 @app.get("/nidaan/claim", response_class=HTMLResponse)
 async def nidaan_claim_portal_page(request: Request):
-    """The claimant's dashboard shell (mobile-first PWA). Auth happens client-side via the token in
+    """The complainant's dashboard shell (mobile-first PWA). Auth happens client-side via the token in
     the URL fragment (never sent to the server) — same pattern as the branch portal."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1222,7 +1222,7 @@ async def nidaan_claim_portal_page(request: Request):
 
 @app.get("/nidaan/claim/manifest.webmanifest")
 async def nidaan_claim_manifest(request: Request):
-    """PWA manifest so the claimant can install the dashboard to their home screen."""
+    """PWA manifest so the complainant can install the dashboard to their home screen."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     m = {
@@ -1268,15 +1268,15 @@ async def nidaan_claim_sw(request: Request):
 @app.get("/nidaan/claim/magic")
 @limiter.limit("20/minute")
 async def nidaan_claim_magic(request: Request, token: str = ""):
-    """One-click claimant entry from the emailed link. Validates the token, stamps first-open, then
+    """One-click complainant entry from the emailed link. Validates the token, stamps first-open, then
     hands the token to the dashboard via a URL fragment (not sent to the server)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     ctx = await claimant.get_portal_by_token(token or "")
     if not ctx:
         return RedirectResponse(url="/nidaan/claim?e=expired", status_code=303)
-    # staff=1 → an ops staffer is opening the claimant's view to inspect it; do NOT stamp first-open
-    # (that signal must mean the CLAIMANT opened it). Real claimant links omit this.
+    # staff=1 → an ops staffer is opening the complainant's view to inspect it; do NOT stamp first-open
+    # (that signal must mean the COMPLAINANT opened it). Real complainant links omit this.
     if request.query_params.get("staff") != "1":
         await claimant.mark_activated(ctx["claim_id"])
     return RedirectResponse(url=f"/nidaan/claim#t={token}", status_code=303)
@@ -1284,7 +1284,7 @@ async def nidaan_claim_magic(request: Request, token: str = ""):
 
 @app.get("/nidaan/claim/api/me")
 async def nidaan_claim_me(request: Request):
-    """Everything the claimant dashboard needs: their claim summary + current status + the
+    """Everything the complainant dashboard needs: their claim summary + current status + the
     success-fee consent card (terms + live line-item calc) + whether they've already accepted."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1294,7 +1294,7 @@ async def nidaan_claim_me(request: Request):
     cfg = await claimant.fee_config()
     disputed = ctx.get("disputed_amount") or 0
     # Pre-recovery, we show the rule + an ILLUSTRATIVE calc on the disputed amount (clearly labelled)
-    # so the claimant understands exactly how our fee works before accepting.
+    # so the complainant understands exactly how our fee works before accepting.
     illustration = claimant.compute_fee(disputed, cfg["fee_pct"], cfg["gst_pct"])
     # Friendly status: prefer the ClaimShield customer-facing label if present.
     status_label = ctx.get("claim_status") or "In progress"
@@ -1371,7 +1371,7 @@ async def nidaan_claim_delete_doc(doc_id: int, request: Request):
 @app.post("/nidaan/claim/api/documents/upload")
 @limiter.limit("20/minute")
 async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = File(...)):
-    """The claimant uploads documents for their own claim (marked source='claimant' so it never
+    """The complainant uploads documents for their own claim (marked source='claimant' so it never
     mixes with internal files). Reuses the standard nidaan-docs storage + validation."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1435,7 +1435,7 @@ async def _file_consent_pdf(claim_id: int) -> Optional[int]:
 @app.post("/nidaan/claim/api/consent")
 @limiter.limit("10/minute")
 async def nidaan_claim_consent(request: Request):
-    """Record the claimant's DIGITAL ACCEPTANCE of the success-fee terms (idempotent). Snapshots the
+    """Record the complainant's DIGITAL ACCEPTANCE of the success-fee terms (idempotent). Snapshots the
     % + GST + T&C version that applied at this moment. On the FIRST acceptance it also files the
     acceptance PDF into L2 and (Phase 3) releases the claim to ClaimShield via the gated auto-send."""
     if not _is_nidaan_host(request):
@@ -1453,29 +1453,29 @@ async def nidaan_claim_consent(request: Request):
                 await _file_consent_pdf(cid)
             except Exception as _fe:
                 logger.warning("file consent pdf failed claim=%s: %s", cid, _fe)
-            # 2) Claimant has authorized → run the GATED auto-send to ClaimShield.
+            # 2) Complainant has authorized → run the GATED auto-send to ClaimShield.
             try:
                 import biz_claimshield as _cs
                 await _cs.auto_send_if_eligible(cid)
             except Exception as _se:
                 logger.warning("post-accept ClaimShield send failed claim=%s: %s", cid, _se)
-            # 3) Alert admins on all channels that the claimant accepted.
+            # 3) Alert admins on all channels that the complainant accepted.
             try:
                 import biz_nidaan_notifications as _nnot
                 await _nnot.on_claimant_accepted(cid)
             except Exception:
                 pass
-            # 4) Thank the claimant for accepting (email + WhatsApp best-effort), log it.
+            # 4) Thank the complainant for accepting (email + WhatsApp best-effort), log it.
             try:
                 await _claimant_accept_thankyou(cid)
             except Exception as _te:
-                logger.warning("claimant thank-you failed claim=%s: %s", cid, _te)
+                logger.warning("complainant thank-you failed claim=%s: %s", cid, _te)
         asyncio.create_task(_post_accept(ctx["claim_id"]))
     return {"ok": True, "already": res.get("already", False)}
 
 
 async def _claimant_accept_thankyou(claim_id: int) -> None:
-    """Thank the claimant right after they accept the authorization — email (reliable) + WhatsApp
+    """Thank the complainant right after they accept the authorization — email (reliable) + WhatsApp
     (best-effort, in-session), and record it on the claim timeline. No ClaimShield/L2 wording."""
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
         _c.row_factory = __import__("aiosqlite").Row
@@ -1514,7 +1514,7 @@ async def _claimant_accept_thankyou(claim_id: int) -> None:
             pass
     try:
         await nidaan.record_claim_activity(claim_id, "authorization_accepted", channel="system",
-                                           actor="claimant", summary="Claimant accepted authorization; thank-you sent")
+                                           actor="claimant", summary="Complainant accepted authorization; thank-you sent")
     except Exception:
         pass
 
@@ -1523,10 +1523,10 @@ def _esc_html(s: str) -> str:
     return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-# ── Ops side: manage a claim's claimant portal (staff, from the L2 claim view) ──
+# ── Ops side: manage a claim's complainant portal (staff, from the L2 claim view) ──
 @app.get("/nidaan/ops/api/claims/{claim_id}/portal")
 async def ops_claim_portal_state(claim_id: int, request: Request):
-    """Portal status for the L2 claim view: exists? claimant opened it? accepted the fee terms?
+    """Portal status for the L2 claim view: exists? complainant opened it? accepted the fee terms?
     link sent how many times? Plus the current fee/GST config."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1536,7 +1536,7 @@ async def ops_claim_portal_state(claim_id: int, request: Request):
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/ensure")
 async def ops_claim_portal_ensure(claim_id: int, request: Request):
-    """Create the claimant portal + magic-link for this claim (idempotent) and return the link so a
+    """Create the complainant portal + magic-link for this claim (idempotent) and return the link so a
     staffer can send/re-send it. Does NOT itself email yet (send wiring lands with the L2 trigger)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -1564,7 +1564,7 @@ async def ops_claim_consent_proof(claim_id: int, request: Request):
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/push-authorization")
 async def ops_claim_push_authorization(claim_id: int, request: Request):
-    """Push the fee authorization to the claimant: records WHO pushed it + when (accountability),
+    """Push the fee authorization to the complainant: records WHO pushed it + when (accountability),
     then emails them their dashboard link IF they haven't accepted yet. Staff must have verified the
     dispute amount first (the UI prompts for that). Sub-admin+; audited."""
     if not _is_nidaan_host(request):
@@ -1584,14 +1584,14 @@ async def ops_claim_push_authorization(claim_id: int, request: Request):
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/send-email")
 async def ops_claim_portal_send_email(claim_id: int, request: Request):
-    """Manually email the claimant their portal link now (bypasses the auto-send switch). Used for
+    """Manually email the complainant their portal link now (bypasses the auto-send switch). Used for
     the 'send / re-send link' action + when a policyholder didn't get the auto email."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
     res = await claimant.send_greeting_email(claim_id, force=True)
     if not res.get("ok"):
-        _m = {"no_claimant_email": "This claim has no claimant email on file — add one first.",
+        _m = {"no_claimant_email": "This claim has no complainant email on file — add one first.",
               "claim_not_found": "Claim not found."}
         raise HTTPException(status_code=400, detail=_m.get(res.get("reason"), "Could not send the email."))
     await _ops_audit(request, "claimant_portal.email", "claim", str(claim_id), "greeting email sent")
@@ -3348,7 +3348,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if not body.claim_type or not body.insured_name or not body.insured_phone:
         raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
-    # Phase 2: claimant mobile + email mandatory (email verified later via the L2 magic-link).
+    # Phase 2: complainant mobile + email mandatory (email verified later via the L2 magic-link).
     _ins_phone, _ins_email = _clean_complainant_contact(body.insured_phone, body.insured_email)
     # ₹499 value-first funnel: determine the payment path.
     #   • Active subscription  → 'subscription' (consumes quota, review starts now)
@@ -4969,7 +4969,7 @@ async def claimshield_case_documents(claim_id: int, request: Request):
 
 @app.get("/nidaan/api/wa/webhook", include_in_schema=False)
 async def nidaan_wa_webhook_verify(request: Request):
-    """Meta webhook verification handshake for the NidaanPartner claimant WhatsApp number.
+    """Meta webhook verification handshake for the NidaanPartner complainant WhatsApp number.
     Meta calls this once on setup with hub.verify_token — we echo hub.challenge if it matches."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -4984,7 +4984,7 @@ async def nidaan_wa_webhook_verify(request: Request):
 @app.post("/nidaan/api/wa/webhook", include_in_schema=False)
 @limiter.limit("600/minute")
 async def nidaan_wa_webhook(request: Request):
-    """Inbound WhatsApp events (messages + delivery statuses) for the claimant number. Signature-
+    """Inbound WhatsApp events (messages + delivery statuses) for the complainant number. Signature-
     verified over the RAW body; parsing/handling is delegated to biz_nidaan_wa_flow (never raises)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -6890,15 +6890,15 @@ async def nidaan_ops_wa_promote_lead(msisdn: str, request: Request):
 @app.post("/nidaan/ops/api/claims/{claim_id}/doc-reminder/email")
 @limiter.limit("30/minute")
 async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
-    """Email the claimant their pending documents + upload link (in-house L2 doc-collection).
-    Gated on a valid claimant email. sub_super_admin+."""
+    """Email the complainant their pending documents + upload link (in-house L2 doc-collection).
+    Gated on a valid complainant email. sub_super_admin+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "sub_super_admin")
     import biz_nidaan_doc_collect as _dc
     res = await _dc.send_email_reminder(claim_id, by=_actor_label(caller))
     if not res.get("ok"):
-        _m = {"no_email": "This claim has no claimant email yet — add one on the claim first.",
+        _m = {"no_email": "This claim has no complainant email yet — add one on the claim first.",
               "no_pending": "All required documents are already received — nothing to remind.",
               "claim_not_found": "Claim not found."}
         raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not send the reminder"))
@@ -6909,7 +6909,7 @@ async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
 @limiter.limit("30/minute")
 async def nidaan_ops_wa_start(claim_id: int, request: Request):
     """Start (or continue) the WhatsApp guided doc-collection for a claim's claimant. Free-form
-    delivery needs an open 24h session (claimant messaged us recently); a cold start needs an
+    delivery needs an open 24h session (complainant messaged us recently); a cold start needs an
     approved template. sub_super_admin+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
@@ -6920,7 +6920,7 @@ async def nidaan_ops_wa_start(claim_id: int, request: Request):
     import biz_nidaan_wa_orchestrator as _orch
     res = await _orch.start_for_claim(claim_id, by=_actor_label(caller))
     if not res.get("ok"):
-        _m = {"no_phone": "This claim has no claimant phone.",
+        _m = {"no_phone": "This claim has no complainant phone.",
               "no_claim": "Claim/claimant not found."}
         raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not start"))
     return res

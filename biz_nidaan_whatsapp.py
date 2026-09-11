@@ -12,10 +12,10 @@ All secrets from env, never code:
 
 Message kinds:
   • send_template  — business-initiated (approved template). The ONLY way to START/re-open a chat.
-  • send_text      — free-form; delivers only inside the 24h session (after the claimant replied).
+  • send_text      — free-form; delivers only inside the 24h session (after the complainant replied).
   • send_audio     — voice note (TTS) — inside the 24h session; for low-literacy claimants.
   • send_document  — send a PDF/file inside the 24h session.
-  • download_media — pull an inbound media file (a document the claimant sent) by media id.
+  • download_media — pull an inbound media file (a document the complainant sent) by media id.
 
 Never raises to the caller — returns {ok, ...} or {ok:False, error}.
 """
@@ -168,7 +168,7 @@ async def send_template(to: str, name: str, lang: str = "en", components: Option
 
 
 async def send_text(to: str, body: str) -> dict:
-    """Free-form text — delivers only inside the 24h session (claimant replied recently)."""
+    """Free-form text — delivers only inside the 24h session (complainant replied recently)."""
     return await _post({"messaging_product": "whatsapp", "to": normalize_msisdn(to),
                         "type": "text", "text": {"body": (body or "")[:4000]}})
 
@@ -214,7 +214,7 @@ async def send_document(to: str, pdf_bytes: bytes, filename: str = "document.pdf
 
 
 async def download_media(media_id: str) -> dict:
-    """Pull an inbound media file (a document the claimant sent). Two steps: resolve the media
+    """Pull an inbound media file (a document the complainant sent). Two steps: resolve the media
     URL, then GET the bytes (both need the bearer token). Returns {ok, content, mime, sha256}."""
     if not is_configured() or not media_id:
         return {"ok": False, "error": "not_configured_or_no_id"}

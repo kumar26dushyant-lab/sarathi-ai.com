@@ -547,7 +547,7 @@
           <th class="en">Claim #</th><th class="hi">क्लेम #</th>
           <th class="en">Client</th><th class="hi">ग्राहक</th>
           <th class="en">Type</th><th class="hi">प्रकार</th>
-          <th class="en">Insurer</th><th class="hi">बीमाकर्ता</th>
+          <th class="en">Insurance Company</th><th class="hi">बीमा कंपनी</th>
           <th class="en">Filed</th><th class="hi">दर्ज</th>
           <th class="en">Status</th><th class="hi">स्थिति</th>
         </tr>
@@ -915,8 +915,8 @@
           </select>
         </div>
         <div class="field">
-          <label class="en">Insurer Name</label>
-          <label class="hi">बीमाकर्ता का नाम</label>
+          <label class="en">Insurance Company</label>
+          <label class="hi">बीमा कंपनी</label>
           <select id="insurerPick" onchange="_onInsurerPick()">
             <option value="">-- Select insurer --</option>
             <option>LIC of India</option><option>HDFC Life</option><option>ICICI Prudential Life</option>
@@ -931,7 +931,7 @@
             <option>Future Generali</option><option>Liberty General</option>
             <option value="__other">Other (type name)</option>
           </select>
-          <input type="text" id="insurerOther" placeholder="Type insurer name" autocomplete="off"
+          <input type="text" id="insurerOther" placeholder="Type the insurance company name" autocomplete="off"
                  style="display:none;margin-top:.45rem" oninput="document.getElementById('insurerName').value=this.value">
           <input type="hidden" id="insurerName">
         </div>

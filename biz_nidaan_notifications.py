@@ -1780,7 +1780,7 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
 
 
 async def on_claimant_accepted(claim_id: int):
-    """The claimant DIGITALLY ACCEPTED the success-fee authorization (Phase 3). Alert every
+    """The complainant DIGITALLY ACCEPTED the success-fee authorization (Phase 3). Alert every
     super-admin + sub-admin + the assigned handler on ALL channels (bell + push + email +
     Telegram) — this is the gate that releases the case to ClaimShield."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
@@ -1798,8 +1798,8 @@ async def on_claimant_accepted(claim_id: int):
             ids.append(c["assigned_to_staff_id"])
     if not ids:
         return
-    subj = f"✅ Claimant authorized — #{_cn(claim_id)} {c.get('insured_name','')}"
-    body = (f"The claimant accepted the authorization terms for this case.\n\n"
+    subj = f"✅ Complainant authorized — #{_cn(claim_id)} {c.get('insured_name','')}"
+    body = (f"The complainant accepted the authorization terms for this case.\n\n"
             f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
             f"The signed acceptance is on file — we're taking the claim forward for further processing.\n\n"
             f"Open: /nidaan/ops")

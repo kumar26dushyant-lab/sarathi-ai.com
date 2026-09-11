@@ -1,16 +1,16 @@
 """
-NidaanPartner — Claimant Portal (the policyholder's own view of their claim).
+NidaanPartner — Complainant Portal (the policyholder's own view of their claim).
 
 WHY: branches / staff / subscribers RAISE claims, but they are only mediators. The insured /
-claimant / policyholder is the one who owns the information (documents, facts) and who our fee
+complainant / policyholder is the one who owns the information (documents, facts) and who our fee
 agreement is actually with. So once a claim reaches L2 (ClaimShield) we open a direct line to the
-CLAIMANT — a dashboard to track status, share documents, and give digital consent to the
+COMPLAINANT — a dashboard to track status, share documents, and give digital consent to the
 success-fee terms — while keeping the mediator in the loop (CC/visibility).
 
 ONE dashboard, TWO entry paths (endpoint uniformity):
   • mediated claim        → a magic-link (access_token) provisions the dashboard on first click
                             (link IS the login; OTP/Google only for re-entry).
-  • direct ₹499 claimant  → already signed up + has a dashboard; access_token stays NULL and the
+  • direct ₹499 complainant  → already signed up + has a dashboard; access_token stays NULL and the
                             consent simply appears as an action-card inside their existing dashboard.
 
 This module is the safe, additive FOUNDATION (identity/token/consent/fee state). It does NOT send
@@ -27,7 +27,7 @@ import aiosqlite
 import biz_database as _db
 import biz_nidaan as _nidaan
 
-logger = logging.getLogger("sarathi.claimant")
+logger = logging.getLogger("sarathi.complainant")
 
 DB_PATH = _db.DB_PATH
 
@@ -63,7 +63,7 @@ async def fee_config() -> dict:
 
 def compute_fee(recovered_amount: float, fee_pct: float, gst_pct: float) -> dict:
     """Line-item breakdown shown in the consent card: fee on the RECOVERED amount, then GST on the
-    fee. Returns rupee figures (rounded) so the claimant sees exactly what they're accepting."""
+    fee. Returns rupee figures (rounded) so the complainant sees exactly what they're accepting."""
     recovered = max(0.0, float(recovered_amount or 0))
     fee = round(recovered * fee_pct / 100.0, 2)
     gst = round(fee * gst_pct / 100.0, 2) if gst_pct else 0.0
@@ -78,7 +78,7 @@ def compute_fee(recovered_amount: float, fee_pct: float, gst_pct: float) -> dict
 
 # ── Portal lifecycle ─────────────────────────────────────────────────────────
 async def ensure_portal(claim_id: int, with_token: bool = True) -> dict:
-    """Get-or-create the claimant portal row for a claim. `with_token` mints a magic-link token
+    """Get-or-create the complainant portal row for a claim. `with_token` mints a magic-link token
     (mediated path); pass False for direct ₹499 claimants who log in to their own account.
     Idempotent — never rotates an existing token here."""
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -107,7 +107,7 @@ async def get_portal(claim_id: int) -> Optional[dict]:
 
 
 async def get_portal_by_token(token: str) -> Optional[dict]:
-    """Resolve a magic-link token → portal row joined with the claim summary (for the claimant's
+    """Resolve a magic-link token → portal row joined with the claim summary (for the complainant's
     dashboard). Returns None for an unknown/blank/revoked token."""
     token = (token or "").strip()
     if not token:
@@ -124,7 +124,7 @@ async def get_portal_by_token(token: str) -> Optional[dict]:
 
 
 async def claim_is_l2(claim_id: int) -> bool:
-    """A claim is 'at L2' (legal action authorized) once it's reviewed-GO. Until then the claimant
+    """A claim is 'at L2' (legal action authorized) once it's reviewed-GO. Until then the complainant
     dashboard shows NOTHING about fees — only after L2 do we ask for authorization."""
     async with aiosqlite.connect(DB_PATH) as conn:
         row = await (await conn.execute(
@@ -133,7 +133,7 @@ async def claim_is_l2(claim_id: int) -> bool:
 
 
 async def mark_pushed(claim_id: int, staff_name: str) -> None:
-    """Record that a staffer pushed the fee authorization to the claimant (name + timestamp)."""
+    """Record that a staffer pushed the fee authorization to the complainant (name + timestamp)."""
     await ensure_portal(claim_id, with_token=True)
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
@@ -144,7 +144,7 @@ async def mark_pushed(claim_id: int, staff_name: str) -> None:
 
 async def rotate_token(claim_id: int) -> Optional[str]:
     """Issue a fresh magic-link token (invalidates the old one). Used if a link may have leaked or
-    the claimant needs a new link. Returns the new token, or None if no portal exists."""
+    the complainant needs a new link. Returns the new token, or None if no portal exists."""
     token = _gen_token()
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
@@ -155,10 +155,10 @@ async def rotate_token(claim_id: int) -> Optional[str]:
 
 
 async def mark_activated(claim_id: int) -> None:
-    """Stamp the first time the claimant actually opened their portal (only sets once).
+    """Stamp the first time the complainant actually opened their portal (only sets once).
 
     Opening the L2 magic-link proves control of the inbox we emailed → this is ALSO how the
-    claimant's email gets VERIFIED (Phase 2: email+mobile mandatory at creation, verified via
+    complainant's email gets VERIFIED (Phase 2: email+mobile mandatory at creation, verified via
     the magic-link, no OTP for mediated claims). Staff-inspect opens (?staff=1) never call this."""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
@@ -184,7 +184,7 @@ async def mark_link_sent(claim_id: int) -> None:
 
 async def record_consent(claim_id: int, ip: str = "", user_agent: str = "") -> dict:
     """Digital acceptance of the success-fee terms. Snapshots the % + GST + T&C VERSION and the exact
-    TERMS TEXT (EN+HI) that applied RIGHT NOW, plus the device (user-agent), the claimant's name, the
+    TERMS TEXT (EN+HI) that applied RIGHT NOW, plus the device (user-agent), the complainant's name, the
     IP and a SHA-256 integrity hash over the whole record — so a later config change never alters an
     accepted agreement (grandfathered) and the downloadable proof is tamper-evident.
     Idempotent: if already accepted, returns the existing record unchanged."""
@@ -196,7 +196,7 @@ async def record_consent(claim_id: int, ip: str = "", user_agent: str = "") -> d
     cfg = await fee_config()
     contact = await _claim_contact(claim_id)
     name = (contact or {}).get("insured_name") or ""
-    # The exact wording shown to the claimant (both languages), pinned for the record.
+    # The exact wording shown to the complainant (both languages), pinned for the record.
     snapshot = (("ENGLISH\n" + (cfg.get("terms_html") or "")).strip()
                 + "\n\n————————————————\n\nहिंदी\n" + (cfg.get("terms_html_hi") or "")).strip()
     ist = timezone(timedelta(hours=5, minutes=30))
@@ -214,7 +214,7 @@ async def record_consent(claim_id: int, ip: str = "", user_agent: str = "") -> d
             (accepted_at, cfg["terms_version"], cfg["fee_pct"], cfg["gst_pct"], (ip or "")[:64],
              snapshot, (user_agent or "")[:400], name[:120], chash, claim_id))
         await conn.commit()
-    logger.info("Claimant consent recorded: claim=%s fee=%s%% gst=%s%% ver=%s hash=%s",
+    logger.info("Complainant consent recorded: claim=%s fee=%s%% gst=%s%% ver=%s hash=%s",
                 claim_id, cfg["fee_pct"], cfg["gst_pct"], cfg["terms_version"], chash[:12])
     return {"ok": True, "already": False, "portal": await get_portal(claim_id)}
 
@@ -251,7 +251,7 @@ async def claim_timeline(claim_id: int) -> list[dict]:
 
 
 async def list_claimant_docs(claim_id: int) -> list[dict]:
-    """Documents the CLAIMANT uploaded via their portal (never internal files)."""
+    """Documents the COMPLAINANT uploaded via their portal (never internal files)."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
@@ -261,7 +261,7 @@ async def list_claimant_docs(claim_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ── L2 trigger: greet the claimant + open their portal + notify everyone ──────
+# ── L2 trigger: greet the complainant + open their portal + notify everyone ──────
 def _public_base() -> str:
     import os
     return os.getenv("NIDAAN_PUBLIC_BASE", "https://nidaanpartner.com").rstrip("/")
@@ -305,7 +305,7 @@ async def _claim_contact(claim_id: int) -> Optional[dict]:
 
 
 async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
-    """Open the claimant portal + email the policyholder their link (bilingual, no calc). Auto path
+    """Open the complainant portal + email the policyholder their link (bilingual, no calc). Auto path
     is gated by `claimant_autosend_enabled`; `force=True` (manual staff action) bypasses the gate.
     Best-effort: never raises. Also pings involved staff on all channels (mediator stays in loop)."""
     if not force and not await autosend_enabled():
@@ -326,7 +326,7 @@ async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
             email, "आपका दावा डैशबोर्ड · Your claim dashboard — NidaanPartner", html,
             from_name="Nidaan Partner")
     except Exception as e:  # noqa: BLE001
-        logger.warning("claimant greeting email failed claim=%s: %s", claim_id, e)
+        logger.warning("complainant greeting email failed claim=%s: %s", claim_id, e)
     if sent:
         await mark_link_sent(claim_id)
     # All-channel heads-up to involved staff (assignees + watchers) — keeps the mediator's ops team
@@ -335,12 +335,12 @@ async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
         import biz_nidaan_notifications as _notif
         await _notif.notify_claim_watchers(
             claim_id,
-            "Claimant portal link sent",
-            f"The claimant dashboard link was sent to {c.get('insured_name') or 'the policyholder'} "
+            "Complainant portal link sent",
+            f"The complainant dashboard link was sent to {c.get('insured_name') or 'the policyholder'} "
             f"({email}) for claim #{claim_id}.",
             event_key="claim.watch")
     except Exception as e:  # noqa: BLE001
-        logger.info("claimant portal staff-notify skipped claim=%s: %s", claim_id, e)
+        logger.info("complainant portal staff-notify skipped claim=%s: %s", claim_id, e)
     return {"ok": bool(sent), "sent": sent, "link": link}
 
 
@@ -372,7 +372,7 @@ def _wrap_lines(text: str, maxchars: int = 92) -> list:
 
 
 async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
-    """A downloadable, tamper-evident PDF of the claimant's digital acceptance — for the super-admin
+    """A downloadable, tamper-evident PDF of the complainant's digital acceptance — for the super-admin
     to retain as proof (auditable before authorities). English layout (fitz core fonts don't render
     Devanagari); the FULL bilingual terms text is covered by the integrity hash + kept in the DB.
     Returns None if there's no recorded consent."""
@@ -390,12 +390,12 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
     lines.append(("DIGITAL CONSENT RECORD", 15, True))
     lines.append(("Nidaan The Legal Consultant LLP", 11, True))
     lines.append(("", 10, False))
-    lines.append(("Electronically generated record of the claimant's digital acceptance of the "
+    lines.append(("Electronically generated record of the complainant's digital acceptance of the "
                   "engagement & success-fee terms, produced by NidaanPartner.com.", 9, False))
     lines.append(("", 10, False))
     lines.append(("CLAIM", 11, True))
     lines.append((f"Claim ID: #{claim_id}", 10, False))
-    lines.append((f"Claimant name: {contact.get('insured_name') or p.get('consent_name') or '-'}", 10, False))
+    lines.append((f"Complainant name: {contact.get('insured_name') or p.get('consent_name') or '-'}", 10, False))
     lines.append((f"Phone: {contact.get('insured_phone') or '-'}    Email: {contact.get('insured_email') or '-'}", 10, False))
     lines.append(("", 10, False))
     lines.append(("ACCEPTANCE", 11, True))
@@ -438,7 +438,7 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
 
 
 async def portal_state(claim_id: int) -> dict:
-    """Consolidated state for the ops L2 claim view: does a portal exist, has the claimant opened
+    """Consolidated state for the ops L2 claim view: does a portal exist, has the complainant opened
     it, have they accepted the fee terms, how many times we sent the link. Never raises."""
     p = await get_portal(claim_id)
     cfg = await fee_config()

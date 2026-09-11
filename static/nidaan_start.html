@@ -1147,9 +1147,9 @@ async function _prefillClaimForm() {
             <option value="other">Other / अन्य</option>
           </select>
         </div>
-        <div class="field"><label><span class="en">Insurer / Company Name</span><span class="hi">बीमा कंपनी का नाम</span></label>
+        <div class="field"><label><span class="en">Insurance Company</span><span class="hi">बीमा कंपनी का नाम</span></label>
           <select id="rv_insurer_pick" onchange="_onRvInsurerPick()">
-            <option value="">-- Select insurer --</option>
+            <option value="">-- Select the insurance company --</option>
             <option>LIC of India</option><option>HDFC Life</option><option>ICICI Prudential Life</option>
             <option>SBI Life</option><option>Max Life</option><option>Bajaj Allianz Life</option>
             <option>Kotak Life</option><option>Tata AIA Life</option><option>PNB MetLife</option>
@@ -1162,7 +1162,7 @@ async function _prefillClaimForm() {
             <option>Future Generali</option><option>Liberty General</option>
             <option value="__other">Other (type name)</option>
           </select>
-          <input type="text" id="rv_insurer_other" placeholder="Type insurer name" autocomplete="off"
+          <input type="text" id="rv_insurer_other" placeholder="Type the insurance company name" autocomplete="off"
                  style="display:none;margin-top:.45rem" oninput="document.getElementById('rv_insurer_name').value=this.value">
           <input type="hidden" id="rv_insurer_name">
         </div>

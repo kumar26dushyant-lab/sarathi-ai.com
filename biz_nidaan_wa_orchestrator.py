@@ -5,13 +5,13 @@ Ties together: the doc checklist (single source of truth), the message composer,
 (right-doc + quality gate), the PDF pipeline (normalize_to_pdf), and the WhatsApp send/receive.
 
 Flow (guided, one document at a time):
-  claimant messages us (opens 24h session) → we match them to their claim by phone → greet +
+  complainant messages us (opens 24h session) → we match them to their claim by phone → greet +
   ask for the NEXT pending document → they send a photo/PDF → we verify it's the RIGHT doc and
   legible (Gemini) → if wrong/blurry, a specific nudge; if good, convert→PDF, save to the claim,
   mark the checklist, and ask for the next one → when all in, a "complete" message. Every step is
   recorded on the claim activity timeline.
 
-In-session (claimant replied within 24h) uses free-form text — testable NOW. Business-INITIATED
+In-session (complainant replied within 24h) uses free-form text — testable NOW. Business-INITIATED
 messages (cold outreach, daily reminders when the session is closed) need approved templates;
 that path is marked and no-ops cleanly until the templates exist.
 """
@@ -257,7 +257,7 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: b
 
 
 async def start_or_continue(msisdn: str, *, force_ask: bool = False) -> dict:
-    """A claimant messaged us. Match to their claim, greet ONCE ever, then ask the next doc."""
+    """A complainant messaged us. Match to their claim, greet ONCE ever, then ask the next doc."""
     claim = await _claim_for_msisdn(msisdn)
     if not claim:
         return {"ok": False, "error": "no_claim"}
@@ -284,7 +284,7 @@ async def classify_document(pdf_bytes: bytes, expected_label: str) -> dict:
             return {"is_expected": True, "legible": True, "looks_like": "", "reason": "no_ai"}
         from google.genai import types as gt
         prompt = (
-            f"A claimant was asked to send their '{expected_label}' for an insurance claim. "
+            f"A complainant was asked to send their '{expected_label}' for an insurance claim. "
             "Look at the attached document and answer STRICTLY as JSON: "
             '{"is_expected": <true if this IS that document type, else false>, '
             '"looks_like": "<what document it actually appears to be, short>", '
@@ -417,7 +417,7 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
 
 
 async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
-    """Ops-triggered start: greet the claimant + ask the first pending doc. Free-form delivers only
+    """Ops-triggered start: greet the complainant + ask the first pending doc. Free-form delivers only
     inside a 24h session; a cold start needs an approved template (returns needs_template hint)."""
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
@@ -432,7 +432,7 @@ async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
 
 
 async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict:
-    """A claimant sent a file. Right-doc + quality gate → convert → save → mark → ask next."""
+    """A complainant sent a file. Right-doc + quality gate → convert → save → mark → ask next."""
     claim = await _claim_for_msisdn(msisdn)
     if not claim:
         return {"ok": False, "error": "no_claim"}
@@ -496,7 +496,7 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
 
 
 async def handle_inbound_text(msisdn: str, text: str) -> dict:
-    """A claimant sent text. READ IT FIRST, then respond like a person would.
+    """A complainant sent text. READ IT FIRST, then respond like a person would.
 
     Previously this ignored the message entirely and re-sent welcome + the same document ask
     every single time. Now the conversation brain decides: answer the question, continue the

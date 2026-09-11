@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Aug 19, 2026. Newest work is at the BOTTOM in sections **A74–A85** (read those first for what's current). Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 12, 2026. Newest work is at the BOTTOM — read **A93** first, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -2758,7 +2758,7 @@ Instead of 3 separate services (Node.js + Python FastAPI + PostgreSQL), collapse
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
 
-*Last updated: May 25, 2026*
+*Last updated: Sep 12, 2026*
 
 ---
 
@@ -6368,4 +6368,50 @@ Big multi-feature session. All shipped + deployed; both sites 200.
 ---
 
 *This document is the single source of truth for the Sarathi-AI Business project. Keep it updated after every significant change.*
+
+---
+
+## A93 — [NIDAAN] The post-L2 pipeline, attachments, Email Radar, and the claimant→complainant rename (Sep 10–12 2026)
+
+**Commits:** `3563a81` (radar time + readability), `053ca59` (attachments + duty roster + radar rules), `7aaf744` (post-L2 pipeline), this one (rename + wording + journey map).
+
+### The post-L2 pipeline — the core model change
+Up to L2 a case's stage can be DERIVED (a review outcome and a payment are facts we hold). After L2 it cannot — *"the consolidation is finished"* is a judgement only the person doing it can make. So the pipeline stops guessing and starts recording.
+
+* **New columns on `nidaan_claims`:** `pipeline_stage` (empty = not in the pipeline), `pipeline_entered_at`, `pipeline_stage_at` (per-bucket ageing), `pipeline_by`.
+* **The gate:** `enter_pipeline()` refuses unless `review_outcome='can_fight'` **AND** `l2_payment_status='paid'`. Live: **21 of 88** open cases qualify.
+* **Movement:** `move_stage()` across `PIPELINE = consolidation → documentation → drafting → representation → escalation → lokpal → outcome → settlement`. Backwards allowed, **requires a reason** (work does come back; a forward-only pipeline gets worked around within a week).
+* **`derive()` no longer sends paid cases into post-L2 buckets.** It used to put `can_fight`+paid straight into Documents/Drafting, so those buckets mixed work being *done* with work merely *qualified for*. Now everything pre-start sits in **Conversion** with flag `awaiting_l2_start`. **This deliberately moved 21 cases Documents → Conversion** (Conversion 46→67). Post-L2 buckets are now provably empty until somebody presses Start.
+* **Auto-advance is deliberately narrow:** only Documents→Drafting, only when the checklist is provably complete. Everything else stays manual.
+* **Role gating:** admins see every bucket; everyone else sees buckets they are **rostered on** plus cases assigned to them by name. `on_fire` is scoped identically.
+* **The journey map (`desk()["journey"]`):** all 11 stages in order, always, with counts and the L2 gate marked — because filtering the *cards* to what needs a person today also hid the SHAPE of the process, and the duty rota offers 13 duties while only 3–5 cards were showing. The map is shown to everyone; it is a route, not case data.
+* **Leave-aware coverage (`coverage_gaps()`):** three ranked situations — `nobody` rostered, `on_leave` (everyone rostered is on approved leave TODAY — the one that goes unnoticed because the rota still shows a name), `soon` (all go on leave within 14 days). Built on the existing `nidaan_leave_requests` + `cover_staff_id`.
+* **Endpoints:** `POST /cases/{id}/pipeline/start`, `/cases/{id}/pipeline/move`, `POST /pipeline/auto-advance`.
+* **BLOCKED ON FOUNDER:** Lokpal bucket behaviour and everything after it — *"after lokpal we'll update you how to create buckets and staff assignment"*.
+
+### Raising a claim for a subscriber (impersonation)
+`GET /subscribers/pick` (live subscriptions only) + `POST /subscribers/raise-claim`. Writes `raised_by_staff_id` / `raised_by_name` / `raised_via='on_behalf'` onto the claim permanently, and the first `nidaan_claim_status_log` row names the staff member instead of "Claim submitted by advisor". **RULE (founder, Sep 12): never bypass quota** — an on-behalf claim spends the subscriber's own quota, verified (second attempt → `quota_exceeded_silver`).
+
+### Attachments
+5 files/10 MB → **20 files/25 MB**, per-claim cap 40→60, via one `_guard_upload_batch()` across **all five** upload endpoints + copy on six surfaces. **Why 25 and not the 100 asked for:** every stored file is virus-scanned in memory before being written and clamd refuses a stream past `StreamMaxLength`; 100 MB would mean refusing files in the gap or storing them unscanned. clamd raised to **64M** instead (backup at `/root/clamd.conf.bak.*`), app cap set below it. Proven live: 25 MB scans clean in 4.4s, EICAR still blocked, oversized still refused. Browser **splits** a large set into batches under the nginx 50M body cap. `biz_av_scan._MAX_SCAN_BYTES` = 48 MB — **must stay between the app cap and clamd's limit**.
+
+### Email Radar
+* **Times were 2h in the future:** `dt.astimezone()` with no argument converts to the SERVER zone (CEST) while everything else is UTC. Fixed to `astimezone(timezone.utc)`; 10 rows backfilled.
+* **Links were being destroyed:** HTML bodies went through a strip-every-tag regex, killing every `href` — a confirmation mail whose content is a "Confirm" button arrived as the word "Confirm". New `_html_to_text()` keeps anchors as `text (url)` (parentheses, NOT angle brackets — the tag-stripper eats `<url>`). Bodies are **escaped first, linkified second**; only `http(s)` becomes clickable; a Links block shows every destination with its domain (anti-phishing).
+* **Founder rules** (`nidaan_radar_config.custom_rules`): one per line, `from:`/`subject:`/`text:` or bare words. A match forces 🔴 over the AI and `nidaan_radar_items.matched_rule` records which rule caught it. **Literal substrings, never regexes** — a typed `(` must not break the poll for every mailbox.
+* Rows now name the sender and the case (matched only by sender-on-claim or claim-number-in-subject — **never by name**). New ✅ Confirmations bucket.
+
+### "claimant" → "complainant" (Sep 12)
+**148 lines across 16 files.** Every occurrence a PERSON reads — labels, headings, email bodies, WhatsApp text, hints, comments, docstrings.
+
+**Deliberately NOT renamed, and this is load-bearing:**
+* `nidaan_claimant_portal` — a live table holding 22 real consent records
+* `biz_nidaan_claimant.py` and its `import … as claimant` alias
+* `claimant_portal` / `claimantPortal` / `/claimant/` paths and element ids
+* the literal value `"claimant"` — **written into `nidaan_claim_activity.actor`**; changing it would split history into two spellings of the same thing
+
+No DB **column** contains "claimant", so the rename carried zero data risk. Verified: 148 insertions / 148 deletions (line-scoped, no line-ending rewrite), all Python compiles, both HTML pages' JS passes `node --check`, portal table rows intact.
+
+### Wording for Tier II/III
+"Insurer" → **"Insurance Company"** on every form a complainant fills (dashboard claim form, free intake, branch raise, My Business, raise-for-subscriber). Hindi बीमाकर्ता (formal) → बीमा कंपनी (everyday). Internal ops tables keep "Insurer" — staff use the shorthand daily and the column is narrow.
 

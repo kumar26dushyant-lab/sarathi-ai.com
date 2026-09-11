@@ -3549,14 +3549,14 @@ function _contactBadge(c){
   const ph=String(c.insured_phone||'').replace(/\D/g,'').length>=10;
   if(em&&ph) return '<span style="color:var(--nd-success-text)">✓ reachable</span>';
   if(!em&&!ph) return '<span style="color:var(--nd-danger-text)">⚠ no contact</span>';
-  if(!em) return '<span style="color:var(--nd-warning-text)">⚠ no claimant email</span>';
+  if(!em) return '<span style="color:var(--nd-warning-text)">⚠ no complainant email</span>';
   return '<span style="color:var(--nd-warning-text)">⚠ no phone</span>';
 }
 function _claimTrail(c){
   return `<div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.3rem;line-height:1.6;border-top:1px dashed var(--nd-border);padding-top:.25rem">`
     + `👤 raised: <b>${esc(c.owner_name||'—')}</b> · ${_claimSrcBadge(c)}<br>`
     + `${_claimPayBadge(c)} · ${_authBadge(c)} · ${_portalBadge(c)}<br>`
-    + `📇 claimant: ${_contactBadge(c)}`
+    + `📇 complainant: ${_contactBadge(c)}`
     + `</div>`;
 }
 function _l2CardInner(c){
@@ -4262,7 +4262,7 @@ async function loadMyBusiness() {
         <input id="mbcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="${hi?'ग्राहक मोबाइल (10 अंक)':'Customer mobile (10-digit)'}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
         <input id="mbcEmail" type="email" placeholder="${hi?'ग्राहक का ईमेल (ज़रूरी)':'Customer email (required)'}">
         <select id="mbcType"><option value="">${hi?'क्लेम प्रकार…':'Claim type…'}</option><option value="health">${hi?'स्वास्थ्य':'Health'}</option><option value="life">${hi?'जीवन':'Life'}</option><option value="motor">${hi?'मोटर':'Motor'}</option><option value="general">${hi?'सामान्य / अन्य':'General / Other'}</option></select>
-        <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurer name (optional)'}">
+        <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurance company (optional)'}">
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
         <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'चैनल पार्टनर (वैकल्पिक)…':'Channel Partner (optional)…'}</option></select>
@@ -5320,30 +5320,30 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Status</span><span class="kv-val"><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></span></div>
       <div class="kv"><span class="kv-label">Insured</span><span class="kv-val">${esc(c.insured_name)}</span></div>
       <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.insured_phone)}</span></div>
-      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)} ${c.insured_email_verified?'<span title="Verified when the claimant opened the authorization link" style="background:rgba(16,185,129,.15);color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>':'<span title="Not yet verified — verifies when the claimant opens the Level-2 authorization link" style="background:rgba(234,179,8,.15);color:#a16207;padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'}</span></div>`:''}
+      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)} ${c.insured_email_verified?'<span title="Verified when the complainant opened the authorization link" style="background:rgba(16,185,129,.15);color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>':'<span title="Not yet verified — verifies when the complainant opens the Level-2 authorization link" style="background:rgba(234,179,8,.15);color:#a16207;padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'}</span></div>`:''}
       <div class="kv"><span class="kv-label">Insurer</span><span class="kv-val">${esc(c.insurer_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
       <div class="kv"><span class="kv-label">Disputed Amt</span><span class="kv-val">₹${fmt(c.disputed_amount||0)}</span></div>
       <div class="kv"><span class="kv-label">Submitted</span><span class="kv-val">${fmtDate(c.created_at)}</span></div>
       ${(c.review_fee_paid||0)>0?`<div class="kv"><span class="kv-label">Review fee paid</span><span class="kv-val">₹${fmt(c.review_fee_paid)}${c.review_outcome==='can_fight'?' <span style="color:var(--nd-success-text);font-size:.72rem">— credited toward legal</span>':''}</span></div>`:''}
     </div>
-    <!-- Claimant Portal (direct line to the policyholder) -->
+    <!-- Complainant Portal (direct line to the policyholder) -->
     <div class="drawer-section" style="border:1px solid rgba(13,122,104,.3);border-radius:10px;padding:.85rem">
-      <h4>🔗 Claimant Portal</h4>
+      <h4>🔗 Complainant Portal</h4>
       <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.5rem">Direct dashboard for the insured / policyholder — track status, share documents, and accept the success-fee terms. Reach them directly; the mediator stays in the loop.</div>
       <div id="claimPortalCard_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
       <div style="margin-top:.7rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
-        <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Document collection — claimant: ${_contactBadge(c)}</div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Document collection — complainant: ${_contactBadge(c)}</div>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
           ${c.insured_email
             ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
-            : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No claimant email — use ✏️ Edit above to add one.</span>`}
+            : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No complainant email — use ✏️ Edit above to add one.</span>`}
           ${c.insured_phone
             ? `<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(${c.claim_id})">💬 Start WhatsApp collection</button>`
             : ''}
           <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem"></span>
         </div>
-        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Guided one-doc-at-a-time on WhatsApp + email — both read the same checklist. WhatsApp free-form delivers once the claimant has messaged the number (24h session); a cold start needs an approved template.</div>
+        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Guided one-doc-at-a-time on WhatsApp + email — both read the same checklist. WhatsApp free-form delivers once the complainant has messaged the number (24h session); a cold start needs an approved template.</div>
       </div>
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
@@ -5510,7 +5510,7 @@ async function openClaimDrawer(claimId) {
   opsLoadMessages(c.claim_id);
   // Load "involved" watchers + my mute state
   loadClaimWatchers(c.claim_id);
-  // Claimant portal state (direct policyholder dashboard)
+  // Complainant portal state (direct policyholder dashboard)
   loadClaimPortalCard(c.claim_id, null, c.disputed_amount||0);
   // Claim notes: load @mention candidates + mark notes read (drives seen-receipts)
   loadClaimMentions(c.claim_id);
@@ -5640,7 +5640,7 @@ function opsMsgFilePicked(claimId){
   const lbl = document.getElementById('opsMsgFileName_'+claimId);
   if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
 }
-// ── Claimant Portal card (in the claim drawer) ───────────────────────────────
+// ── Complainant Portal card (in the claim drawer) ───────────────────────────────
 async function loadClaimPortalCard(claimId, freshLink, disputed){
   const box = document.getElementById('claimPortalCard_'+claimId); if(!box) return;
   if(typeof disputed==='number') box.dataset.disputed = disputed;
@@ -5652,9 +5652,9 @@ async function loadClaimPortalCard(claimId, freshLink, disputed){
   // ── Portal (status + documents) — available any time ──
   let statusLine;
   if(!s.exists){
-    statusLine = '<span style="color:var(--nd-text-muted)">No portal yet — issue a link to open the claimant\'s dashboard (status &amp; documents).</span>';
+    statusLine = '<span style="color:var(--nd-text-muted)">No portal yet — issue a link to open the complainant\'s dashboard (status &amp; documents).</span>';
   } else if(s.activated){
-    statusLine = '<span style="color:var(--nd-cyan-text)">👀 Opened by claimant</span>';
+    statusLine = '<span style="color:var(--nd-cyan-text)">👀 Opened by complainant</span>';
   } else {
     statusLine = '<span style="color:var(--nd-warning-text)">⏳ Link issued — not opened yet</span>';
   }
@@ -5675,15 +5675,15 @@ async function loadClaimPortalCard(claimId, freshLink, disputed){
     const fee = dv*feePct/100, gst = fee*gstPct/100, total = fee+gst;
     let authState;
     if(s.consent_accepted){
-      authState = `<span style="color:var(--nd-success-text)">✅ Authorization accepted by claimant${s.consent_accepted_at?(' · '+fmtDate(s.consent_accepted_at)):''} — ${s.consent_fee_pct}%${s.consent_gst_pct?(' + '+s.consent_gst_pct+'% GST'):''}</span>`;
+      authState = `<span style="color:var(--nd-success-text)">✅ Authorization accepted by complainant${s.consent_accepted_at?(' · '+fmtDate(s.consent_accepted_at)):''} — ${s.consent_fee_pct}%${s.consent_gst_pct?(' + '+s.consent_gst_pct+'% GST'):''}</span>`;
     } else if(s.pushed_by){
-      authState = `<span style="color:var(--nd-cyan-text)">📤 Pushed by ${esc(s.pushed_by)}${s.pushed_at?(' · '+fmtDate(s.pushed_at)):''} — awaiting claimant acceptance</span>`;
+      authState = `<span style="color:var(--nd-cyan-text)">📤 Pushed by ${esc(s.pushed_by)}${s.pushed_at?(' · '+fmtDate(s.pushed_at)):''} — awaiting complainant acceptance</span>`;
     } else {
       authState = '<span style="color:var(--nd-warning-text)">Not pushed yet</span>';
     }
     const calcLine = dv ? `<div style="font-size:.72rem;color:var(--nd-text-muted);margin-top:.25rem">On dispute ₹${fmt(dv)} → ${feePct}% = ₹${fmt(Math.round(fee))}${gstPct?(' + '+gstPct+'% GST ₹'+fmt(Math.round(gst))):''} = <b>₹${fmt(Math.round(total))}</b></div>` : '<div style="font-size:.72rem;color:var(--nd-warning-text);margin-top:.25rem">⚠️ No dispute amount on this claim — set it before pushing.</div>';
     const pushBtn = (canIssue && !s.consent_accepted)
-      ? `<button class="btn-sm btn-primary" style="margin-top:.4rem" onclick="pushAuthorization(${claimId},${dv},this)">📤 ${s.pushed_by?'Re-push':'Push'} authorization to claimant</button>` : '';
+      ? `<button class="btn-sm btn-primary" style="margin-top:.4rem" onclick="pushAuthorization(${claimId},${dv},this)">📤 ${s.pushed_by?'Re-push':'Push'} authorization to complainant</button>` : '';
     const proofBtn = (s.consent_accepted && _role==='super_admin')
       ? ` <button class="btn-sm btn-ghost" style="margin-top:.4rem" onclick="downloadConsentProof(${claimId},this)" title="Download the tamper-evident Digital Consent Record (PDF)">📄 Consent proof</button>` : '';
     authHtml = `<div style="border-top:1px solid var(--nd-border);margin-top:.6rem;padding-top:.5rem"><div style="font-size:.75rem;font-weight:700;color:var(--nd-text-secondary)">⚖️ Fee authorization</div><div style="font-size:.8rem;margin-top:.2rem">${authState}</div>${calcLine}${pushBtn}${proofBtn}</div>`;
@@ -5691,14 +5691,14 @@ async function loadClaimPortalCard(claimId, freshLink, disputed){
   box.innerHTML = linkHtml + `<div style="font-size:.85rem">${statusLine}${sentBadge}</div>` + linkBtns + authHtml;
 }
 async function pushAuthorization(claimId, disputed, btn){
-  if(!disputed || disputed<=0){ if(!confirm('This claim has NO dispute amount set — the claimant will see ₹0. Push anyway?')) return; }
-  else if(!confirm('⚠️ Verify the dispute amount is correct: ₹'+fmt(disputed)+'\n\nThe claimant will be asked to authorize our fee (15% of the amount recovered + GST). No payment is taken now — only acceptance.\n\nPush authorization to the claimant now?')) return;
+  if(!disputed || disputed<=0){ if(!confirm('This claim has NO dispute amount set — the complainant will see ₹0. Push anyway?')) return; }
+  else if(!confirm('⚠️ Verify the dispute amount is correct: ₹'+fmt(disputed)+'\n\nThe complainant will be asked to authorize our fee (15% of the amount recovered + GST). No payment is taken now — only acceptance.\n\nPush authorization to the complainant now?')) return;
   if(btn){ btn.disabled=true; btn.textContent='Pushing…'; }
   try{
     const r = await API('/claims/'+claimId+'/portal/push-authorization',{method:'POST'});
-    if(r.ok){ const d=await r.json(); ndUI.toast(d.emailed?'Authorization pushed + emailed to claimant':'Authorization pushed','success'); loadClaimPortalCard(claimId, null, disputed); }
-    else { const e=await r.json().catch(()=>({})); ndUI.toast(e.detail||'Could not push','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to claimant'; } }
-  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to claimant'; } }
+    if(r.ok){ const d=await r.json(); ndUI.toast(d.emailed?'Authorization pushed + emailed to complainant':'Authorization pushed','success'); loadClaimPortalCard(claimId, null, disputed); }
+    else { const e=await r.json().catch(()=>({})); ndUI.toast(e.detail||'Could not push','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to complainant'; } }
+  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='📤 Push authorization to complainant'; } }
 }
 async function downloadConsentProof(claimId, btn){
   if(btn){ btn.disabled=true; }
@@ -5716,7 +5716,7 @@ async function issueClaimPortalLink(claimId){
   try { const r = await API('/claims/'+claimId+'/portal/ensure',{method:'POST'}); if(r.ok) d = await r.json(); } catch(e){}
   if(!d || !d.link){ ndUI.toast('Could not create the link','error'); return; }
   try { await navigator.clipboard.writeText(d.link); } catch(e){}
-  ndUI.toast('Claimant link created & copied','success');
+  ndUI.toast('Complainant link created & copied','success');
   loadClaimPortalCard(claimId, d.link);
 }
 async function emailClaimPortalLink(claimId, btn){
@@ -5724,9 +5724,9 @@ async function emailClaimPortalLink(claimId, btn){
   if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     const r = await API('/claims/'+claimId+'/portal/send-email',{method:'POST'});
-    if(r.ok){ ndUI.toast('Emailed to the claimant','success'); loadClaimPortalCard(claimId); }
-    else { const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Could not send','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to claimant'; } }
-  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to claimant'; } }
+    if(r.ok){ ndUI.toast('Emailed to the complainant','success'); loadClaimPortalCard(claimId); }
+    else { const d=await r.json().catch(()=>({})); ndUI.toast(d.detail||'Could not send','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to complainant'; } }
+  }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to complainant'; } }
 }
 
 async function loadClaimWatchers(claimId){
@@ -7708,18 +7708,18 @@ async function addReviewTpl(outcome){
 }
 
 // ── Canonical content (single source of truth for business facts) ──────────────
-// ── Claimant success-fee & Terms editor (super-admin / counsel) ──────────────
+// ── Complainant success-fee & Terms editor (super-admin / counsel) ──────────────
 async function loadClaimantTermsEditor(){
   const wrap = document.getElementById('claimantTermsEditor'); if(!wrap) return;
   let cfg = {};
   try { const r = await API('/claimant-terms'); if(r.ok) cfg = await r.json(); } catch(e){}
   const canEdit = (cfg.can_edit === true);
   const gstNote = cfg.gst_enabled
-    ? `GST is ON — <b>${cfg.gst_pct}%</b> is added on top of the fee in the claimant's card.`
-    : `GST is currently OFF (enable it in Workflow Settings) — no GST line shows to the claimant yet.`;
+    ? `GST is ON — <b>${cfg.gst_pct}%</b> is added on top of the fee in the complainant's card.`
+    : `GST is currently OFF (enable it in Workflow Settings) — no GST line shows to the complainant yet.`;
   wrap.innerHTML = `
     <div class="section-hdr" style="margin-bottom:.6rem"><div>
-      <div class="section-title" style="font-size:1rem">⚖️ Claimant Fee &amp; Terms</div>
+      <div class="section-title" style="font-size:1rem">⚖️ Complainant Fee &amp; Terms</div>
       <div class="section-sub">The success-fee % and the Terms shown to the policyholder in their consent card. <b>Counsel-owned</b> — edit the wording here; bump the version whenever it changes. Already-accepted claimants stay pinned to the version they agreed to.</div>
     </div></div>
     <div class="ccfg-card" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem 1.1rem">
@@ -7737,7 +7737,7 @@ async function loadClaimantTermsEditor(){
       ${(cfg.terms_html||'').indexOf('PLACEHOLDER')===0?'<div style="font-size:.76rem;color:var(--nd-warning-text);margin-top:.4rem">⚠️ Placeholder text — replace with counsel-approved terms before enabling live consent.</div>':''}
       <label style="display:flex;gap:.55rem;align-items:flex-start;margin-top:.8rem;font-size:.84rem;${canEdit?'':'opacity:.6'}">
         <input type="checkbox" id="ctAutosend" ${cfg.autosend_enabled?'checked':''} ${canEdit?'':'disabled'} style="margin-top:.15rem;width:17px;height:17px">
-        <span><b>Auto-email the claimant at L2.</b> When ON, the moment a claim reaches Level-2 the policyholder is automatically emailed their private dashboard link (bilingual, no fee calc). When OFF, staff still send the link manually from the claim. <span style="color:var(--nd-warning-text)">Turn ON only when you're ready to auto-contact real policyholders.</span></span>
+        <span><b>Auto-email the complainant at L2.</b> When ON, the moment a claim reaches Level-2 the policyholder is automatically emailed their private dashboard link (bilingual, no fee calc). When OFF, staff still send the link manually from the claim. <span style="color:var(--nd-warning-text)">Turn ON only when you're ready to auto-contact real policyholders.</span></span>
       </label>
       ${canEdit?`<div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;margin-top:.6rem"><span id="ctMsg" style="font-size:.8rem"></span><button class="btn btn-primary" style="font-size:.85rem" onclick="saveClaimantTerms(this)">💾 Save fee &amp; terms</button></div>`:'<div style="font-size:.76rem;color:var(--nd-text-faint);margin-top:.4rem">Super-admin only.</div>'}
     </div>`;
@@ -10464,7 +10464,7 @@ async function crmSaveNew(){
 }
 window.loadCRM=loadCRM; window.openCrmLead=openCrmLead; window.crmSaveField=crmSaveField; window.crmAddComment=crmAddComment; window.crmConvert=crmConvert; window.crmNewLeadModal=crmNewLeadModal; window.crmSaveNew=crmSaveNew; window._crmDebounce=_crmDebounce;
 
-// ══ WhatsApp Automation (claimant doc-collection via Meta Cloud API) ═════════════
+// ══ WhatsApp Automation (complainant doc-collection via Meta Cloud API) ═════════════
 async function loadWhatsapp(){
   const panel = document.getElementById('panel-whatsapp');
   if (_role !== 'super_admin') { panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">WhatsApp Automation is Super Admin only.</div>'; return; }
@@ -10762,6 +10762,19 @@ function _deskStyles(){
     border-radius:999px;padding:.15rem .6rem;font-size:.74rem;cursor:pointer;font-family:inherit;font-weight:700}
   .dk-lang[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);
     border-color:var(--nd-brand-cyan)}
+  .dk-jw{display:flex;gap:.35rem;overflow-x:auto;padding:.2rem .1rem .5rem;align-items:stretch}
+  .dk-j{flex:0 0 auto;min-width:6.6rem;max-width:8.5rem;border:1px solid var(--nd-border);
+    background:var(--nd-bg-surface);border-radius:9px;padding:.45rem .55rem;font-size:.74rem;
+    display:flex;flex-direction:column;gap:.15rem}
+  .dk-j.empty{opacity:.45}
+  .dk-j.yours{border-color:var(--nd-brand-cyan);box-shadow:inset 0 0 0 1px var(--nd-brand-cyan)}
+  .dk-j .jn{font-weight:700;color:var(--nd-text-primary);line-height:1.25}
+  .dk-j .jc{font-size:1.05rem;font-weight:800;color:var(--nd-cyan-text);line-height:1}
+  .dk-j .jd{font-size:.66rem;color:var(--nd-text-faint);line-height:1.3}
+  .dk-j .jd.none{color:var(--nd-warning-text)}
+  .dk-jgate{flex:0 0 auto;align-self:center;font-size:.62rem;font-weight:800;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--nd-text-on-cyan);background:var(--nd-brand-cyan);
+    border-radius:999px;padding:.2rem .5rem;writing-mode:horizontal-tb;white-space:nowrap}
   .dk-cov{display:flex;flex-direction:column;gap:.4rem}
   .dk-cv{display:flex;gap:.5rem;align-items:flex-start;flex-wrap:wrap;
     border:1px solid var(--nd-border-warn);background:var(--nd-warning-soft);
@@ -10804,7 +10817,10 @@ const DKT = {
        start:'Paid, winnable, not started', startHint:'The fee is in and the review says we can fight. Level-2 work has not begun on these.',
        startBtn:'Open and start', ready:'Finished — ready to move on',
        readyHint:'Every required document is in. One click moves these to the next bucket.',
-       moveAll:'Move all of them on', daysOld:'days'},
+       moveAll:'Move all of them on', daysOld:'days',
+       jTitle:'The whole journey', jHint:'Every stage a case passes through, in order. A stage with no cases is shown greyed — it is still part of the route. The cards below are only the stages that need someone today.',
+       jGate:'Level-2 starts here', jBefore:'Before Level-2', jAfter:'Level-2 work',
+       jEmpty:'empty', jNobody:'no one on duty'},
   hi: {hello:'आपका डेस्क', sub:'आज आपसे क्या ज़रूरी है, और कौन-से बकेट आपके हैं।',
        onduty:'आज आप इन पर ड्यूटी पर हैं', notonduty:'आज आपकी कोई ड्यूटी नहीं है।',
        fire:'अभी ध्यान चाहिए', fireNone:'अभी कुछ ज़रूरी नहीं है। अच्छा है।',
@@ -10822,7 +10838,10 @@ const DKT = {
        start:'फ़ीस आई, केस मज़बूत, शुरू नहीं', startHint:'फ़ीस मिल चुकी है और समीक्षा कहती है लड़ा जा सकता है। Level-2 का काम शुरू नहीं हुआ।',
        startBtn:'खोलें और शुरू करें', ready:'पूरा — आगे बढ़ाने को तैयार',
        readyHint:'सभी ज़रूरी दस्तावेज़ आ चुके हैं। एक क्लिक में अगले बकेट में चले जाएंगे।',
-       moveAll:'सबको आगे बढ़ाएँ', daysOld:'दिन'},
+       moveAll:'सबको आगे बढ़ाएँ', daysOld:'दिन',
+       jTitle:'पूरा सफ़र', jHint:'केस जिन-जिन चरणों से गुज़रता है, क्रम में। जिस चरण में कोई केस नहीं, वह हल्का दिखता है — पर वह भी रास्ते का हिस्सा है। नीचे के कार्ड सिर्फ़ उन चरणों के हैं जिन पर आज किसी की ज़रूरत है।',
+       jGate:'यहाँ से Level-2 शुरू', jBefore:'Level-2 से पहले', jAfter:'Level-2 का काम',
+       jEmpty:'खाली', jNobody:'कोई ड्यूटी पर नहीं'},
 };
 
 async function loadDesk(){
@@ -10974,7 +10993,28 @@ function deskRender(){
           : '')
     : '';
 
-  const gapHtml = covHtml + wsHtml + rdHtml;
+  // The map. Filtering the cards down to what needs a person today also hid how many stages
+  // there are and what order they run in — which is exactly the question someone asks when they
+  // see three cards and a rota offering eleven duties. So the route is drawn in full, always.
+  const jr = d.journey || [];
+  const jHtml = jr.length
+    ? '<div class="dk-sec">' + T.jTitle + '</div>'
+      + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.45rem">' + T.jHint + '</div>'
+      + '<div class="dk-jw">' + jr.map(function(x){
+          const gate = x.gate
+            ? '<span class="dk-jgate" title="' + esc(T.jGate) + '">⚖️ ' + esc(T.jGate) + '</span>'
+            : '';
+          const duty = (x.on_duty || []).length
+            ? '<span class="jd">' + esc((x.on_duty || []).join(', ')) + '</span>'
+            : '<span class="jd none">' + T.jNobody + '</span>';
+          return gate + '<div class="dk-j' + (x.total ? '' : ' empty') + (x.yours ? ' yours' : '') + '">'
+            + '<span class="jc">' + x.total + '</span>'
+            + '<span class="jn">' + x.icon + ' ' + esc(x.name) + '</span>'
+            + duty + '</div>';
+        }).join('') + '</div>'
+    : '';
+
+  const gapHtml = jHtml + covHtml + wsHtml + rdHtml;
 
   body.innerHTML =
       '<div class="section-hdr" style="align-items:flex-start"><div>'
@@ -11129,7 +11169,7 @@ function obPick(id){
     +     '<input id="obPhone" maxlength="20" style="' + _rmInp() + '"></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Their email'
     +     '<input id="obEmail" maxlength="160" style="' + _rmInp() + '"></label>'
-    +   '<label style="font-size:.78rem;font-weight:600">Insurer'
+    +   '<label style="font-size:.78rem;font-weight:600">Insurance company'
     +     '<input id="obInsurer" maxlength="120" style="' + _rmInp() + '"></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Policy no.'
     +     '<input id="obPolicy" maxlength="80" style="' + _rmInp() + '"></label>'
@@ -12058,7 +12098,7 @@ async function loadClaimActivity(cid){
 }
 window.loadClaimActivity=loadClaimActivity; window.loadClaimParties=loadClaimParties;
 
-// Email the claimant their pending documents + upload link (in-house L2 doc-collection).
+// Email the complainant their pending documents + upload link (in-house L2 doc-collection).
 async function sendDocReminderEmail(cid){
   const m=document.getElementById('docReminderMsg_'+cid);
   if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Sending…'; }

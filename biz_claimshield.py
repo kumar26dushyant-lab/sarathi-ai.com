@@ -288,7 +288,7 @@ async def create_case(claim_id: int, reason: str = "", sent_by: str = "") -> dic
     if r.status_code == 200 and str(data.get("message", "")).strip().lower() == "success":
         cs_ref = str(data.get("caseReferenceNumber", "") or "")
         await mark_case_sent(claim_id, cs_ref, sent_by=sent_by)
-        # Claim just entered L2 → open the claimant's direct portal + greet them (flag-gated,
+        # Claim just entered L2 → open the complainant's direct portal + greet them (flag-gated,
         # best-effort, never blocks the L2 move). Covers both auto and manual-push paths.
         try:
             import asyncio as _aio
@@ -344,7 +344,7 @@ async def auto_send_if_eligible(claim_id: int) -> dict:
             "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not c or c["review_outcome"] != "can_fight" or not _claim_is_paid(c):
         return {"ok": False, "error": "not_eligible_auto"}
-    # Phase 3 GATE: auto-send waits for the claimant's authorization acceptance (founder
+    # Phase 3 GATE: auto-send waits for the complainant's authorization acceptance (founder
     # decision). The MANUAL "send to ClaimShield" button calls create_case() directly and
     # deliberately bypasses this gate, so ops can still push a case without acceptance.
     try:
@@ -356,7 +356,7 @@ async def auto_send_if_eligible(claim_id: int) -> dict:
             import biz_nidaan_claimant as _cl
             st = await _cl.portal_state(claim_id)
             if not st.get("consent_accepted"):
-                # Not accepted yet → don't send. Make sure the claimant has been asked to
+                # Not accepted yet → don't send. Make sure the complainant has been asked to
                 # authorize (idempotent: ensures the portal + greeting/magic-link email).
                 try:
                     await _cl.on_claim_reached_l2(claim_id)
@@ -366,5 +366,5 @@ async def auto_send_if_eligible(claim_id: int) -> dict:
         except Exception as _ge:
             # If the acceptance check itself fails, be conservative and do NOT auto-send.
             return {"ok": False, "error": "acceptance_check_failed"}
-    return await create_case(claim_id, reason="Auto — payment + claimant authorization",
+    return await create_case(claim_id, reason="Auto — payment + complainant authorization",
                              sent_by="Auto (payment + authorization)")

@@ -74,7 +74,7 @@ async def upsert_contact(msisdn: str, *, claim_id: Optional[int] = None, account
                          opted_in: Optional[bool] = None, opt_source: str = "", language: Optional[str] = None,
                          status: Optional[str] = None, mark_inbound: bool = False,
                          mark_outbound: bool = False) -> None:
-    """Create/update a claimant WA contact. Only non-None fields are changed."""
+    """Create/update a complainant WA contact. Only non-None fields are changed."""
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("INSERT OR IGNORE INTO nidaan_wa_contacts (msisdn) VALUES (?)", (msisdn,))
@@ -97,7 +97,7 @@ async def upsert_contact(msisdn: str, *, claim_id: Optional[int] = None, account
 
 
 async def in_session_window(msisdn: str) -> bool:
-    """True if the claimant messaged us within the last 24h (free-form/text is allowed)."""
+    """True if the complainant messaged us within the last 24h (free-form/text is allowed)."""
     c = await get_contact(msisdn)
     if not c or not c.get("last_inbound_at"):
         return False
@@ -181,7 +181,7 @@ async def _reply_unlinked(msisdn: str) -> None:
 
 
 async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -> None:
-    """A claimant sent a FILE (a document). PHASE 1 HANDOFF — the intelligent pipeline goes here:
+    """A complainant sent a FILE (a document). PHASE 1 HANDOFF — the intelligent pipeline goes here:
       1. download_media → 2. right-doc + quality check (Gemini vision, against the doc we asked for)
       3. normalize_to_pdf + segment → 4. name per convention → 5. mark_doc_received / nudge if wrong
       6. sync the checklist (single source of truth) → 7. guided next-step reply.
@@ -199,7 +199,7 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -
     try:
         import biz_nidaan_notifications as _nnot
         await _nnot.notify_staff_inapp(
-            await _admin_ids(), "📎 Claimant sent a document on WhatsApp",
+            await _admin_ids(), "📎 Complainant sent a document on WhatsApp",
             f"A document arrived from {msisdn}" + (f" (claim #{claim_id})" if claim_id else "")
             + " but it could not be auto-matched to a claim — review in ops.",
             event_key="wa.doc_received", email=False, claim_id=claim_id)

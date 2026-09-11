@@ -1185,7 +1185,7 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_pay_created ON nidaan_payments(created_at);
             CREATE INDEX IF NOT EXISTS idx_pay_source  ON nidaan_payments(source);
 
-            -- ═══ NidaanPartner CLAIMANT WhatsApp (document-collection bot) ═══════════════
+            -- ═══ NidaanPartner COMPLAINANT WhatsApp (document-collection bot) ═══════════════
             -- Separate from the Sarathi premium WA. Powers the L2 document-collection automation:
             -- guided one-doc-at-a-time collection, quality/right-doc verification, daily reminders,
             -- voice guidance, cross-channel sync (the doc checklist stays the single source of truth).
@@ -1513,8 +1513,8 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN review_outcome TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_findings TEXT",
             "ALTER TABLE nidaan_claims ADD COLUMN review_delivered_at TIMESTAMP",
-            # Claimant email verification (Aug 2026, Phase 2): insured email+mobile are mandatory
-            # at every claim-creation endpoint; the email is VERIFIED when the claimant opens the
+            # Complainant email verification (Aug 2026, Phase 2): insured email+mobile are mandatory
+            # at every claim-creation endpoint; the email is VERIFIED when the complainant opens the
             # L2 authorization magic-link (no OTP at creation for mediated claims). 0=unverified.
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified INTEGER DEFAULT 0",
             "ALTER TABLE nidaan_claims ADD COLUMN insured_email_verified_at TIMESTAMP",
@@ -2520,8 +2520,8 @@ async def init_db():
                 await conn.execute(_rs_sql)
             except Exception:
                 pass
-        # Claimant Portal — legally-robust consent proof: snapshot the EXACT terms text agreed, the
-        # device (user-agent), the claimant's confirmed name, and an integrity hash over the record
+        # Complainant Portal — legally-robust consent proof: snapshot the EXACT terms text agreed, the
+        # device (user-agent), the complainant's confirmed name, and an integrity hash over the record
         # so the downloadable proof is tamper-evident (admissibility is counsel's call; we capture
         # the full audit trail an electronic-record certificate would rely on).
         for _cp_sql in (
@@ -2529,7 +2529,7 @@ async def init_db():
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_user_agent TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_hash TEXT DEFAULT ''",
-            # Authorization push: which staffer pushed the fee authorization to the claimant + when
+            # Authorization push: which staffer pushed the fee authorization to the complainant + when
             # (accountability — staff must verify the dispute amount before pushing).
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_by TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_at TIMESTAMP",
@@ -3000,14 +3000,14 @@ async def init_db():
 
         # ── nidaan_claimant_portal: the POLICYHOLDER's direct portal per claim.
         # Mediators (branch/staff/subscriber) raise a claim, but the insured/claimant owns the
-        # information. Once a claim reaches L2 (ClaimShield), the claimant gets a dashboard to
+        # information. Once a claim reaches L2 (ClaimShield), the complainant gets a dashboard to
         # track status, share documents, and give digital consent to the success-fee terms.
         # ONE dashboard, TWO entry paths (endpoint uniformity):
         #   • mediated claim  → access_token magic-link provisions the dashboard on first click,
-        #   • direct ₹499 claimant → already has an account/dashboard; access_token stays NULL,
+        #   • direct ₹499 complainant → already has an account/dashboard; access_token stays NULL,
         #     the consent simply appears as an action-card in their existing dashboard.
         # consent_* columns are the DIGITAL ACCEPTANCE record (timestamp + snapshot of the % that
-        # applied + T&C version + IP) — the enforceable proof the claimant accepted 15% + GST.
+        # applied + T&C version + IP) — the enforceable proof the complainant accepted 15% + GST.
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS nidaan_claimant_portal (
                 portal_id             INTEGER PRIMARY KEY AUTOINCREMENT,

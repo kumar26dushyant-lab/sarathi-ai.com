@@ -5848,19 +5848,19 @@ OPS_SETTING_DEFAULTS = {
     "gst_enabled": "0",
     "gst_rate": "18",
     "gst_home_state": "",
-    # ── Claimant success fee (Nidaan The Legal Consultant) — super-admin editable ─
+    # ── Complainant success fee (Nidaan The Legal Consultant) — super-admin editable ─
     # % of the amount RECOVERED from the insurer that we retain as our fee. Shown to the
-    # claimant in the L2 consent card (dispute vs recovered, fee, + GST per gst_config)
+    # complainant in the L2 consent card (dispute vs recovered, fee, + GST per gst_config)
     # and SNAPSHOT onto nidaan_claimant_portal at the moment of digital acceptance, so a
     # later % change never rewrites an already-accepted agreement (grandfathered).
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
     "claimant_terms_version": "v1",
-    # Master switch for AUTO-emailing the claimant their portal link when a claim reaches L2.
+    # Master switch for AUTO-emailing the complainant their portal link when a claim reaches L2.
     # Default OFF — staff can still issue/copy/email a link manually; flip to "1" only when the
     # founder is happy to auto-contact real policyholders.
     "claimant_autosend_enabled": "0",
-    # Phase 3 GATE: when ON (default), the AUTOMATIC push to ClaimShield waits until the claimant
+    # Phase 3 GATE: when ON (default), the AUTOMATIC push to ClaimShield waits until the complainant
     # has digitally ACCEPTED the success-fee authorization. The manual "Send to ClaimShield" button
     # always works regardless (ops override). Flip to "0" to let paid + reviewed-GO claims auto-send
     # without waiting for acceptance (the pre-Phase-3 behaviour).
@@ -5869,7 +5869,7 @@ OPS_SETTING_DEFAULTS = {
     # NidaanPartner (no auto-send, and the manual push is refused). Set OFF Aug 2026 while the
     # robust in-house L2 doc-collection model is built; flip ON in Workflow Settings to resume.
     "claimshield_routing_enabled": "1",
-    # Claimant WhatsApp doc-collection — DASHBOARD DEFAULTS (a claim can override each; claim
+    # Complainant WhatsApp doc-collection — DASHBOARD DEFAULTS (a claim can override each; claim
     # level wins when set). Times are IST 24h. cadence_hours = gap between reminders.
     "wa_doc_collection_enabled": "0",   # master switch (off until the Meta number is live)
     "wa_reminder_hour_ist": "11",       # send the daily nudge at ~11am IST
@@ -5880,13 +5880,13 @@ OPS_SETTING_DEFAULTS = {
     "wa_default_language": "hinglish",  # hinglish | hi | en
     "wa_lead_capture_enabled": "1",     # auto-record inbound unknown WhatsApp numbers as CRM leads
     "wa_journey_enabled": "1",          # live complainant journey (claim/payment WhatsApp alerts) master switch
-    # T&C shown in the claimant consent card, in BOTH languages (Hindi-default audience). The
+    # T&C shown in the complainant consent card, in BOTH languages (Hindi-default audience). The
     # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel
     # owned: edit in ops Content; bump claimant_terms_version on any change so old acceptances stay
     # pinned to the version agreed. Plain text / simple HTML.
     "claimant_terms_html": (
-        "This engagement is between you (the policyholder / claimant) and Nidaan The Legal "
+        "This engagement is between you (the policyholder / complainant) and Nidaan The Legal "
         "Consultant LLP (\"the Firm\"). The Firm will assist you in pursuing and, where possible, "
         "recovering your insurance claim.\n\n"
         "Fee: The Firm works purely on a success basis. A professional fee of 15% of the amount "
@@ -6698,7 +6698,7 @@ async def get_claims_ops(
                 r["source_kind"] = "review"
             else:
                 r["source_kind"] = "direct"
-            # Claimant portal + authorization trail (so the row shows it without opening the claim).
+            # Complainant portal + authorization trail (so the row shows it without opening the claim).
             r["portal_created"] = bool(r.get("portal_exists"))
             r["portal_opened"] = bool(r.get("portal_activated_at"))
             if r.get("consent_accepted_at"):
@@ -7701,7 +7701,7 @@ async def ensure_claim_documents_table() -> None:
             )"""
         )
         # Who uploaded it: '' (legacy/staff/subscriber) | 'claimant' (policyholder via their portal).
-        # Lets the claimant portal show ONLY the claimant's own uploads, never internal files.
+        # Lets the complainant portal show ONLY the complainant's own uploads, never internal files.
         try:
             await conn.execute("ALTER TABLE nidaan_claim_documents ADD COLUMN source TEXT DEFAULT ''")
         except Exception:
@@ -7743,7 +7743,7 @@ async def save_claim_document(
     source: str = "",
 ) -> int:
     """Record a newly uploaded document. Returns doc_id. `source`='claimant' marks a policyholder
-    upload (via the claimant portal); default '' = legacy/staff/subscriber."""
+    upload (via the complainant portal); default '' = legacy/staff/subscriber."""
     await ensure_claim_documents_table()
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(

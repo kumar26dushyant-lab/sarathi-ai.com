@@ -299,9 +299,9 @@ CAPABILITIES: list[dict] = [
     },
     {
         "id": "claimant_portal",
-        "en": {"t": "Claimant Portal — the policyholder's own dashboard",
+        "en": {"t": "Complainant Portal — the policyholder's own dashboard",
                "d": "Give the insured a private, Hindi-first page to track status, share documents, and accept fee terms.",
-               "u": "When a claim reaches L2, open its Claimant Portal card and send the link — the customer uploads docs themselves."},
+               "u": "When a claim reaches L2, open its Complainant Portal card and send the link — the customer uploads docs themselves."},
         "hi": {"t": "क्लेमेंट पोर्टल — पॉलिसीधारक का अपना डैशबोर्ड",
                "d": "बीमाधारक को एक निजी, हिंदी-प्रथम पेज दें — स्थिति देखें, दस्तावेज़ भेजें, फीस शर्तें स्वीकार करें।",
                "u": "दावा L2 पहुँचने पर उसका क्लेमेंट पोर्टल कार्ड खोलें और लिंक भेजें — ग्राहक खुद दस्तावेज़ अपलोड करता है।"},
@@ -407,8 +407,8 @@ CAPABILITIES: list[dict] = [
     # ── Content ──────────────────────────────────────────────────────────
     {
         "id": "content_editor",
-        "en": {"t": "Content & Claimant Terms",
-               "d": "Edit homepage facts, offices, and the claimant fee % + Terms (Nidaan The Legal Consultant LLP).",
+        "en": {"t": "Content & Complainant Terms",
+               "d": "Edit homepage facts, offices, and the complainant fee % + Terms (Nidaan The Legal Consultant LLP).",
                "u": "Change a business fact once — the website and chat assistant both update. Set the success-fee terms here."},
         "hi": {"t": "कंटेंट व क्लेमेंट शर्तें",
                "d": "होमपेज तथ्य, कार्यालय, और क्लेमेंट फीस % + शर्तें (Nidaan The Legal Consultant LLP) संपादित करें।",

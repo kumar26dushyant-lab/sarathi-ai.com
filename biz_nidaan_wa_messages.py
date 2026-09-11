@@ -23,7 +23,7 @@ def _lang(l: Optional[str]) -> str:
 
 
 def _reg(ctx: dict) -> str:
-    """Registration number shown to the claimant — e.g. NP-77."""
+    """Registration number shown to the complainant — e.g. NP-77."""
     return ctx.get("reg_no") or (f"NP-{ctx.get('claim_id')}" if ctx.get("claim_id") else "")
 
 
@@ -156,7 +156,7 @@ def doc_received_ok(ctx: dict, lang: str = "hinglish") -> str:
 
 
 def doc_wrong(ctx: dict, lang: str = "hinglish") -> str:
-    """The claimant sent the wrong document (asked for X, sent Y)."""
+    """The complainant sent the wrong document (asked for X, sent Y)."""
     l = _lang(lang); want = ctx.get("doc_label") or ""; got = ctx.get("looks_like") or ""
     got_s = {"hinglish": f" (yeh {got} lag raha hai)", "hi": f" (यह {got} लग रहा है)", "en": f" (this looks like {got})"}[l] if got else ""
     hi_ = {
