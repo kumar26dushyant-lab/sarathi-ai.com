@@ -2496,6 +2496,25 @@ async def init_db():
             # radar can always answer "why am I looking at this?" instead of just asserting it.
             "ALTER TABLE nidaan_radar_config ADD COLUMN custom_rules TEXT DEFAULT ''",
             "ALTER TABLE nidaan_radar_items ADD COLUMN matched_rule TEXT DEFAULT ''",
+            # ── The post-L2 pipeline ──────────────────────────────────────────────────────
+            # Everything up to L2 can be DERIVED: a review outcome and a payment are facts the
+            # system already holds. Everything after L2 cannot — "the consolidation is finished"
+            # is a judgement only the person doing it can make. So a case enters the pipeline by
+            # an explicit act and moves bucket by bucket the same way, and this column is the
+            # record of that decision. Empty = not in the pipeline, which is what keeps the
+            # stage buckets holding L2-qualified work ONLY.
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_stage TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_entered_at TIMESTAMP",
+            # Ageing is per-bucket: a case three weeks into drafting is a different problem from
+            # one three weeks into the pipeline overall.
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_stage_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_by TEXT DEFAULT ''",
+            # Who really raised this claim. A claim raised by an admin on a subscriber's behalf
+            # still belongs to the subscriber — but the office must be able to see whose hands
+            # were on it, so the actor is recorded permanently rather than implied.
+            "ALTER TABLE nidaan_claims ADD COLUMN raised_by_staff_id INTEGER",
+            "ALTER TABLE nidaan_claims ADD COLUMN raised_by_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN raised_via TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)

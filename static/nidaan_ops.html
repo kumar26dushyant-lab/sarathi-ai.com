@@ -448,6 +448,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-overview" class="panel"></div>
       <div id="panel-pipeline" class="panel" style="display:none"></div>
       <div id="panel-desk" class="panel" style="display:none"></div>
+      <div id="panel-onbehalf" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -644,7 +645,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -960,6 +961,7 @@ function buildSidebar() {
       {id:'archived', label:'🗄️ Archived',         minRank:1},
       {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
+      {id:'onbehalf', label:'🧾 Raise for a Subscriber', minRank:1},
       {id:'docsplit', label:'📄 Doc Splitter',     minRank:0},
     ]},
     {h:'People', items:[
@@ -1033,6 +1035,7 @@ function showPanel(id, fromHistory) {
     l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
     desk: loadDesk,
+    onbehalf: loadOnBehalf,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -10759,9 +10762,26 @@ function _deskStyles(){
     border-radius:999px;padding:.15rem .6rem;font-size:.74rem;cursor:pointer;font-family:inherit;font-weight:700}
   .dk-lang[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);
     border-color:var(--nd-brand-cyan)}
+  .dk-cov{display:flex;flex-direction:column;gap:.4rem}
+  .dk-cv{display:flex;gap:.5rem;align-items:flex-start;flex-wrap:wrap;
+    border:1px solid var(--nd-border-warn);background:var(--nd-warning-soft);
+    border-radius:10px;padding:.5rem .7rem;font-size:.82rem;line-height:1.5}
+  .dk-cv.hot{border-color:var(--nd-danger-text)}
+  .dk-cv b{color:var(--nd-text-primary)}
+  .dk-cvk{font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    border-radius:999px;padding:.1rem .5rem;white-space:nowrap;align-self:center;
+    background:var(--nd-bg-surface-2);color:var(--nd-warning-text);border:1px solid var(--nd-border-warn)}
+  .dk-cv.hot .dk-cvk{color:var(--nd-danger-text);border-color:var(--nd-danger-text)}
+  .dk-list{display:flex;flex-direction:column;gap:.35rem}
+  .dk-li{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;
+    border:1px solid var(--nd-border);background:var(--nd-bg-surface);
+    border-radius:9px;padding:.45rem .7rem;font-size:.82rem}
+  .dk-li .np{font-weight:800;color:var(--nd-cyan-text);cursor:pointer}
+  .dk-li .ag{margin-left:auto;font-size:.72rem;color:var(--nd-text-faint)}
   @media (max-width:640px){
     .dk-grid{grid-template-columns:1fr}
     .dk-fwho{max-width:7.5rem}
+    .dk-li .ag{margin-left:0}
   }`;
   document.head.appendChild(st);
 }
@@ -10777,7 +10797,14 @@ const DKT = {
        show:'What do I do here?', hide:'Hide', openb:'Open',
        assign:'→ Put someone on duty', assignShort:'Set duty',
        assignHint:'Assign a staff member to this bucket for a date range',
-       what:'What', doo:'Do', done:'Done when', watch:'Watch'},
+       what:'What', doo:'Do', done:'Done when', watch:'Watch',
+       cover:'Cover these buckets', coverHint:'A bucket with work and nobody who will be here to do it.',
+       cNobody:'nobody is on duty', cLeave:'on duty but on leave', cSoon:'goes on leave soon',
+       cUntil:'until', cCover:'cover named:', cWaiting:'waiting',
+       start:'Paid, winnable, not started', startHint:'The fee is in and the review says we can fight. Level-2 work has not begun on these.',
+       startBtn:'Open and start', ready:'Finished — ready to move on',
+       readyHint:'Every required document is in. One click moves these to the next bucket.',
+       moveAll:'Move all of them on', daysOld:'days'},
   hi: {hello:'आपका डेस्क', sub:'आज आपसे क्या ज़रूरी है, और कौन-से बकेट आपके हैं।',
        onduty:'आज आप इन पर ड्यूटी पर हैं', notonduty:'आज आपकी कोई ड्यूटी नहीं है।',
        fire:'अभी ध्यान चाहिए', fireNone:'अभी कुछ ज़रूरी नहीं है। अच्छा है।',
@@ -10788,7 +10815,14 @@ const DKT = {
        show:'यहाँ मुझे क्या करना है?', hide:'छुपाएँ', openb:'खोलें',
        assign:'→ किसी को ड्यूटी पर लगाएँ', assignShort:'ड्यूटी लगाएँ',
        assignHint:'इस बकेट पर किसी स्टाफ़ को तारीख़ों के लिए तैनात करें',
-       what:'क्या है', doo:'करना है', done:'पूरा कब', watch:'ध्यान रखें'},
+       what:'क्या है', doo:'करना है', done:'पूरा कब', watch:'ध्यान रखें',
+       cover:'इन बकेट पर कवर चाहिए', coverHint:'काम है, पर करने वाला कोई मौजूद नहीं।',
+       cNobody:'कोई ड्यूटी पर नहीं', cLeave:'ड्यूटी पर हैं पर छुट्टी पर', cSoon:'जल्द छुट्टी पर',
+       cUntil:'तक', cCover:'कवर:', cWaiting:'इंतज़ार में',
+       start:'फ़ीस आई, केस मज़बूत, शुरू नहीं', startHint:'फ़ीस मिल चुकी है और समीक्षा कहती है लड़ा जा सकता है। Level-2 का काम शुरू नहीं हुआ।',
+       startBtn:'खोलें और शुरू करें', ready:'पूरा — आगे बढ़ाने को तैयार',
+       readyHint:'सभी ज़रूरी दस्तावेज़ आ चुके हैं। एक क्लिक में अगले बकेट में चले जाएंगे।',
+       moveAll:'सबको आगे बढ़ाएँ', daysOld:'दिन'},
 };
 
 async function loadDesk(){
@@ -10878,16 +10912,69 @@ function deskRender(){
 
   const gaps = d.gaps || [];
   const canAssign = (_role === 'super_admin');
-  const gapHtml = gaps.length
-    ? '<div class="dk-sec">' + T.gaps + '</div><div class="dk-gap">'
-      + gaps.map(g => g.icon + ' <b>' + esc(g.name) + '</b> — ' + g.waiting).join(' &nbsp;·&nbsp; ')
-      + '<div style="margin-top:.35rem;font-size:.78rem;opacity:.85">' + T.gapsHint + '</div>'
-      + (canAssign
-          ? '<button class="dk-a" style="margin-top:.5rem;max-width:16rem;border-color:var(--nd-border-warn);color:var(--nd-warning-text)"'
-            + ' onclick="deskAssign(\'' + esc(gaps[0].key||'') + '\')">' + T.assign + '</button>'
-          : '')
-      + '</div>'
+
+  // Coverage, not just "nobody rostered". A bucket whose only person is on leave today reads as
+  // covered on the rota and is not covered in the room — that is the case that goes unnoticed,
+  // so it is named separately and ranked above an empty bucket.
+  const cov = d.coverage || [];
+  const covHtml = cov.length
+    ? '<div class="dk-sec">' + T.cover + '</div>'
+      + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.45rem">' + T.coverHint + '</div>'
+      + '<div class="dk-cov">' + cov.map(function(g){
+          const kind = g.kind === 'on_leave' ? T.cLeave : (g.kind === 'soon' ? T.cSoon : T.cNobody);
+          const hot  = (g.kind === 'on_leave');
+          const who  = (g.who || []).length ? ' — <b>' + esc((g.who || []).join(', ')) + '</b>' : '';
+          const till = g.until ? ' (' + T.cUntil + ' ' + esc(g.until) + ')' : '';
+          const cover = g.cover ? ' · ' + T.cCover + ' <b>' + esc(g.cover) + '</b>' : '';
+          return '<div class="dk-cv' + (hot ? ' hot' : '') + '">'
+            + '<span class="dk-cvk">' + esc(kind) + '</span>'
+            + '<span>' + g.icon + ' <b>' + esc(g.name) + '</b> · ' + g.waiting + ' ' + T.cWaiting
+            +   (g.stalled ? ' · ' + g.stalled + ' ' + T.stalled : '')
+            +   who + till + cover + '</span>'
+            + (canAssign
+                ? '<button class="dk-a" style="margin-left:auto;max-width:9rem" '
+                  + 'onclick="deskAssign(\'' + esc(g.key || '') + '\')">' + T.assignShort + '</button>'
+                : '')
+            + '</div>';
+        }).join('') + '</div>'
     : '';
+
+  // Money already taken with no work started against it. Named on its own because inside a stage
+  // count it is invisible, and it is the most expensive thing on this screen.
+  const ws = d.waiting_start || [];
+  const wsHtml = ws.length
+    ? '<div class="dk-sec">⚖️ ' + T.start + ' (' + (d.waiting_start_count || ws.length) + ')</div>'
+      + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.45rem">' + T.startHint + '</div>'
+      + '<div class="dk-list">' + ws.map(function(i){
+          return '<div class="dk-li"><span class="np" onclick="openClaimDrawer(' + i.claim_id + ')">NP-'
+            + i.claim_id + '</span><span>' + esc(i.who || '') + '</span>'
+            + (i.age_days != null ? '<span class="ag">' + i.age_days + ' ' + T.daysOld + '</span>' : '')
+            + '<button class="dk-a" style="max-width:9rem" onclick="cbOpenSheetFromDesk(' + i.claim_id + ')">'
+            + T.startBtn + '</button></div>';
+        }).join('') + '</div>'
+    : '';
+
+  // Buckets whose work is provably finished — the checklist is complete. One click each, or all.
+  const rd = d.ready_to_move || [];
+  const rdHtml = rd.length
+    ? '<div class="dk-sec">✅ ' + T.ready + ' (' + (d.ready_count || rd.length) + ')</div>'
+      + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.45rem">' + T.readyHint + '</div>'
+      + '<div class="dk-list">' + rd.map(function(i){
+          return '<div class="dk-li"><span class="np" onclick="openClaimDrawer(' + i.claim_id + ')">NP-'
+            + i.claim_id + '</span><span>' + esc(i.who || '') + '</span>'
+            + '<span style="font-size:.74rem;color:var(--nd-text-muted)">' + esc(i.name || '')
+            + ' → ' + esc(i.next_label || '') + '</span>'
+            + '<button class="dk-a" style="margin-left:auto;max-width:8rem" '
+            + 'onclick="deskMoveOn(' + i.claim_id + ',\'' + esc(i.next_stage || '') + '\')">'
+            + T.openb + ' →</button></div>';
+        }).join('') + '</div>'
+      + (canAssign
+          ? '<button class="dk-a" style="margin-top:.5rem;max-width:14rem" onclick="deskMoveAll(this)">'
+            + T.moveAll + '</button>'
+          : '')
+    : '';
+
+  const gapHtml = covHtml + wsHtml + rdHtml;
 
   body.innerHTML =
       '<div class="section-hdr" style="align-items:flex-start"><div>'
@@ -10925,6 +11012,173 @@ function deskAssign(key){
     }
   }, 700);
 }
+
+// Moving a case on from the desk, without making someone go and find it on the board first.
+async function deskMoveOn(id, to){
+  try{
+    const r = await API('/cases/' + id + '/pipeline/move',
+                        {method:'POST', body: JSON.stringify({to: to || '', note: ''})});
+    if (r.ok){ const d = await r.json().catch(()=>({}));
+      ndUI.toast('NP-' + id + ' → ' + (d.stage_label || ''), 'success'); loadDesk(); }
+    else { const d = await r.json().catch(()=>({})); ndUI.toast(_extractErr(d,'Could not move that'),'error'); }
+  }catch(e){ ndUI.toast('Could not move that.','error'); }
+}
+// Everything whose bucket is provably finished, in one go. Asks first: it is a bulk change to
+// real cases, and the count is stated so nobody is surprised by what it touched.
+async function deskMoveAll(btn){
+  if (!confirm('Move every case whose documents are all in to the next bucket?')) return;
+  if (btn) btn.disabled = true;
+  try{
+    const r = await API('/pipeline/auto-advance', {method:'POST'});
+    const d = await r.json().catch(()=>({}));
+    if (r.ok){ ndUI.toast((d.count || 0) + ' case(s) moved on', 'success'); loadDesk(); }
+    else { ndUI.toast(_extractErr(d,'Could not move those'),'error'); }
+  }catch(e){ ndUI.toast('Could not move those.','error'); }
+  finally { if (btn) btn.disabled = false; }
+}
+// Start L2 from the desk: jump to the board, filtered to this case, and open its sheet.
+async function cbOpenSheetFromDesk(id){
+  showPanel('board');
+  setTimeout(function(){ try{ cbOpenSheet(id); }catch(e){} }, 700);
+}
+window.deskMoveOn=deskMoveOn; window.deskMoveAll=deskMoveAll;
+window.cbOpenSheetFromDesk=cbOpenSheetFromDesk;
+
+// ══ Raising a claim for a subscriber ══════════════════════════════════════════
+// Plenty of subscribers will never open the dashboard — they ring up instead. The claim still
+// belongs to THEM (their account, their quota, their claim list); what changes is that the office
+// keyed it in. That fact is recorded on the claim rather than left implied, so six months later
+// nobody has to guess how a case with no login activity came to exist.
+let _obPicked = null;
+async function loadOnBehalf(){
+  const el = document.getElementById('panel-onbehalf');
+  if (!el) return;
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">🧾 Raise a claim for a subscriber</div>'
+    +   '<div class="section-sub">For a subscriber who would rather ring up than use the dashboard. '
+    +     'The claim goes onto their account and uses their quota — and records that you raised it.</div>'
+    + '</div></div>'
+    + '<div class="nd-card" style="padding:1rem;max-width:760px">'
+    +   '<label style="font-size:.82rem;font-weight:600;display:block">Which subscriber?'
+    +     '<input id="obSearch" placeholder="Name, firm, phone or email…" '
+    +       'oninput="obSearch()" style="' + _rmInp() + '"></label>'
+    +   '<div id="obResults" style="margin-top:.5rem"></div>'
+    +   '<div id="obForm" style="margin-top:.9rem"></div>'
+    + '</div>';
+  obSearch();
+}
+let _obTimer = null;
+function obSearch(){
+  clearTimeout(_obTimer);
+  _obTimer = setTimeout(_obDoSearch, 250);
+}
+async function _obDoSearch(){
+  const box = document.getElementById('obResults');
+  if (!box) return;
+  const q = (document.getElementById('obSearch') || {}).value || '';
+  box.innerHTML = '<div style="font-size:.8rem;color:var(--nd-text-faint)">Looking…</div>';
+  try{
+    const r = await API('/subscribers/pick?q=' + encodeURIComponent(q));
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    const rows = d.subscribers || [];
+    if (!rows.length){
+      box.innerHTML = '<div style="font-size:.8rem;color:var(--nd-text-muted)">'
+        + 'No subscriber with a live subscription matches that. Only live subscriptions can be '
+        + 'used — a claim raised against an expired one could not be honoured.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(function(x){
+      return '<button type="button" class="dk-a" style="display:block;width:100%;text-align:left;'
+        + 'max-width:none;margin-bottom:.3rem;padding:.5rem .7rem" '
+        + 'onclick="obPick(' + x.account_id + ')">'
+        + '<b>' + esc(x.label || '') + '</b>'
+        + (x.firm_name ? ' <span style="color:var(--nd-text-faint)">· ' + esc(x.firm_name) + '</span>' : '')
+        + '<span style="display:block;font-size:.72rem;color:var(--nd-text-faint);font-weight:400">'
+        +   esc(x.phone || '') + (x.email ? ' · ' + esc(x.email) : '')
+        +   (x.plan ? ' · ' + esc(x.plan) : '') + '</span></button>';
+    }).join('');
+    window._obRows = rows;
+  }catch(e){
+    box.innerHTML = '<div style="font-size:.8rem;color:var(--nd-danger-text)">Could not search.</div>';
+  }
+}
+function obPick(id){
+  _obPicked = (window._obRows || []).filter(function(x){ return x.account_id === id; })[0] || null;
+  if (!_obPicked) return;
+  const f = document.getElementById('obForm');
+  if (!f) return;
+  // The banner stays on screen for the whole form. Acting as someone else should never be a
+  // thing you can forget you are doing.
+  f.innerHTML =
+      '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);'
+    +   'color:var(--nd-warning-text);border-radius:10px;padding:.6rem .8rem;font-size:.84rem;margin-bottom:.8rem">'
+    +   '🧾 You are raising this claim <b>for ' + esc(_obPicked.label || '') + '</b>. '
+    +   'It will appear on their account and their dashboard, and the claim will record that '
+    +   '<b>you</b> raised it on their behalf.</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">'
+    +   '<label style="font-size:.78rem;font-weight:600">Patient / insured name *'
+    +     '<input id="obName" maxlength="120" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Claim type *'
+    +     '<select id="obType" style="' + _rmInp() + '">'
+    +       '<option value="">Choose…</option><option value="health">Health</option>'
+    +       '<option value="life">Life</option><option value="motor">Motor</option>'
+    +       '<option value="general">General / Other</option></select></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Their mobile'
+    +     '<input id="obPhone" maxlength="20" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Their email'
+    +     '<input id="obEmail" maxlength="160" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Insurer'
+    +     '<input id="obInsurer" maxlength="120" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Policy no.'
+    +     '<input id="obPolicy" maxlength="80" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Disputed amount ₹'
+    +     '<input id="obAmount" type="number" min="0" style="' + _rmInp() + '"></label>'
+    + '</div>'
+    + '<label style="font-size:.78rem;font-weight:600;display:block;margin-top:.6rem">'
+    +   'What happened / reason for rejection'
+    +   '<textarea id="obNotes" rows="3" maxlength="2000" style="' + _rmInp() + '"></textarea></label>'
+    + '<button class="btn btn-primary" style="margin-top:.7rem" onclick="obSubmit(this)">'
+    +   'Raise this claim →</button>'
+    + '<span id="obMsg" style="font-size:.82rem;margin-left:.6rem"></span>';
+}
+async function obSubmit(btn){
+  if (!_obPicked) return;
+  const g = function(id){ const e = document.getElementById(id); return e ? (e.value || '').trim() : ''; };
+  const msg = document.getElementById('obMsg');
+  const name = g('obName'), type = g('obType');
+  if (!name || !type){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)';
+              msg.textContent = 'The insured name and the claim type are both needed.'; }
+    return;
+  }
+  const amt = parseInt(g('obAmount'), 10);
+  const payload = {account_id: _obPicked.account_id, claim_type: type, insured_name: name,
+                   insured_phone: g('obPhone'), insured_email: g('obEmail'),
+                   insurer_name: g('obInsurer'), policy_no: g('obPolicy'),
+                   disputed_amount: (isNaN(amt) ? null : amt), notes_from_agent: g('obNotes')};
+  if (btn) btn.disabled = true;
+  if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Raising…'; }
+  try{
+    const r = await API('/subscribers/raise-claim', {method:'POST', body: JSON.stringify(payload)});
+    const d = await r.json().catch(()=>({}));
+    if (r.ok){
+      if (msg){ msg.style.color = 'var(--nd-success-text)';
+                msg.textContent = '✓ Raised NP-' + d.claim_id + ' for ' + (d.on_behalf_of || ''); }
+      ndUI.toast('NP-' + d.claim_id + ' raised for ' + (d.on_behalf_of || ''), 'success');
+      ['obName','obPhone','obEmail','obInsurer','obPolicy','obAmount','obNotes'].forEach(function(id){
+        const e = document.getElementById(id); if (e) e.value = '';
+      });
+    } else {
+      if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                msg.textContent = _extractErr(d, 'Could not raise that claim'); }
+    }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not raise that claim.'; }
+  }finally{ if (btn) btn.disabled = false; }
+}
+window.loadOnBehalf=loadOnBehalf; window.obSearch=obSearch; window.obPick=obPick; window.obSubmit=obSubmit;
 
 function deskGuide(key){
   _deskOpenGuide = (_deskOpenGuide === key) ? null : key;
@@ -11253,7 +11507,11 @@ function cbOpenSheet(claimId){
   back.innerHTML =
       '<div class="cbs" role="dialog" aria-modal="true" aria-label="Move this case">'
     + '<div class="cbs-hd"><div><h3>' + esc(who) + '</h3>'
-    +   '<div class="sub">NP-' + claimId + ' · ' + esc(it.stage_label || it.stage) + '</div></div>'
+    +   '<div class="sub">NP-' + claimId + ' · ' + esc(it.stage_label || it.stage)
+    +     (it.raised_via === 'on_behalf' && it.raised_by
+            ? ' · <span style="color:var(--nd-warning-text)">raised by ' + esc(it.raised_by)
+              + ' on the subscriber\'s behalf</span>' : '')
+    +   '</div></div>'
     +   '<button class="cbs-x" onclick="cbCloseSheet()" aria-label="Close">&times;</button></div>'
     + '<div class="cbs-sec"><div class="cbs-lab">What is this case waiting for?</div>'
     +   '<div class="cbs-opts" id="cbsOpts">'
@@ -11264,6 +11522,7 @@ function cbOpenSheet(claimId){
         }).join('')
     +   '</div>'
     +   '<div id="cbsExtra"></div></div>'
+    + _cbPipeSection(it)
     + '<div class="cbs-sec"><div class="cbs-lab">Who is handling it?</div>'
     +   '<select class="cbs-in" id="cbsStaff">'
     +   '<option value="0">Nobody yet</option>'
@@ -11283,6 +11542,89 @@ function cbOpenSheet(claimId){
   document.addEventListener('keydown', _cbEsc);
   cbPick(String(it.blocker_set || ''), true);
 }
+
+// ══ The post-L2 pipeline ══════════════════════════════════════════════════════
+// Up to L2 the stage is worked out from facts we hold. After it, nothing in the data can say
+// "the consolidation is finished" — so a case moves because a person says it moved, and this is
+// where they say it. Entering is a separate act from paying: payment buys the work, this starts it.
+const CB_BUCKETS = [
+  ['consolidation','Consolidation'], ['documentation','Documents'], ['drafting','Drafting'],
+  ['representation','With the insurer'], ['escalation','Escalation'], ['lokpal','Ombudsman'],
+  ['outcome','Outcome'], ['settlement','Settlement']
+];
+function _cbBucketName(k){
+  for (let i=0;i<CB_BUCKETS.length;i++) if (CB_BUCKETS[i][0]===k) return CB_BUCKETS[i][1];
+  return k||'';
+}
+function _cbPipeSection(it){
+  const lab = '<div class="cbs-lab">Where is it in the Level-2 process?</div>';
+  if (it.in_pipeline){
+    const nextK = it.next_stage || '';
+    const opts = CB_BUCKETS.map(function(b){
+      return '<option value="'+b[0]+'"'+(b[0]===it.stage?' selected':'')+'>'+esc(b[1])+'</option>';
+    }).join('');
+    return '<div class="cbs-sec">' + lab
+      + '<div style="font-size:.82rem;margin-bottom:.5rem">Now in <b>'+esc(_cbBucketName(it.stage))+'</b>'
+      +   (it.ready_to_move ? ' <span style="color:var(--nd-success-text);font-size:.74rem">· every required document is in</span>' : '')
+      +   (it.pipeline_by ? ' <span style="color:var(--nd-text-faint);font-size:.72rem">· last moved by '+esc(it.pipeline_by)+'</span>' : '')
+      + '</div>'
+      + (nextK
+          ? '<button class="btn btn-primary" style="width:100%;margin-bottom:.5rem" '
+            + 'onclick="cbMove('+it.claim_id+',\''+nextK+'\')">Finished here → move to '
+            + esc(_cbBucketName(nextK)) + '</button>'
+          : '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">'
+            + 'This is the last bucket. Close the case from the claim itself.</div>')
+      + '<details><summary style="font-size:.78rem;cursor:pointer;color:var(--nd-text-muted)">'
+      +   'Move somewhere else instead</summary>'
+      +   '<select class="cbs-in" id="cbsPipeTo">'+opts+'</select>'
+      +   '<input class="cbs-in" id="cbsPipeNote" maxlength="400" '
+      +     'placeholder="Why? (required when sending a case back)">'
+      +   '<button class="btn-sm btn-ghost" style="margin-top:.4rem" '
+      +     'onclick="cbMove('+it.claim_id+', document.getElementById(\'cbsPipeTo\').value, '
+      +     'document.getElementById(\'cbsPipeNote\').value)">Move this case</button>'
+      + '</details></div>';
+  }
+  if (it.l2_ready){
+    return '<div class="cbs-sec">' + lab
+      + '<div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.5rem">'
+      +   'Reviewed as winnable and the Level-2 fee is paid. The work has been bought but not started.</div>'
+      + '<button class="btn btn-primary" style="width:100%" onclick="cbStartL2('+it.claim_id+')">'
+      +   '⚖️ Start Level-2 processing →</button>'
+      + '<div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.35rem">'
+      +   'This puts the case into Consolidation, and it then moves bucket by bucket.</div></div>';
+  }
+  return '<div class="cbs-sec">' + lab
+    + '<div style="font-size:.78rem;color:var(--nd-text-muted)">'
+    +   'Not ready for Level-2 yet — a case needs a review saying it can be fought <b>and</b> the '
+    +   'Level-2 fee paid before the buckets will take it.</div></div>';
+}
+async function cbStartL2(id){
+  const msg = document.getElementById('cbsMsg');
+  if (msg){ msg.style.color='var(--nd-text-muted)'; msg.textContent='Starting…'; }
+  try{
+    const r = await API('/cases/'+id+'/pipeline/start', {method:'POST'});
+    if (r.ok){ cbCloseSheet(); await cbRefresh(); ndUI.toast('Level-2 processing started — now in Consolidation','success'); }
+    else { const d = await r.json().catch(()=>({})); if(msg){ msg.style.color='var(--nd-danger-text)';
+           msg.textContent = _extractErr(d,'Could not start that'); } }
+  }catch(e){ if(msg){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Could not start that.'; } }
+}
+async function cbMove(id, to, note){
+  const msg = document.getElementById('cbsMsg');
+  if (msg){ msg.style.color='var(--nd-text-muted)'; msg.textContent='Moving…'; }
+  try{
+    const r = await API('/cases/'+id+'/pipeline/move',
+                        {method:'POST', body: JSON.stringify({to: to||'', note: note||''})});
+    if (r.ok){
+      const d = await r.json().catch(()=>({}));
+      cbCloseSheet(); await cbRefresh();
+      ndUI.toast((d.back ? 'Sent back to ' : 'Moved to ') + (d.stage_label || ''),'success');
+    } else {
+      const d = await r.json().catch(()=>({}));
+      if(msg){ msg.style.color='var(--nd-danger-text)'; msg.textContent=_extractErr(d,'Could not move that'); }
+    }
+  }catch(e){ if(msg){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Could not move that.'; } }
+}
+window.cbStartL2=cbStartL2; window.cbMove=cbMove;
 
 function _cbEsc(e){ if (e.key === 'Escape') cbCloseSheet(); }
 

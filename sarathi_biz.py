@@ -6453,6 +6453,138 @@ async def nidaan_ops_case_assign(claim_id: int, body: _CaseAssignReq, request: R
     return res
 
 
+class _PipelineMoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to: str = Field("", max_length=24)            # "" = the next bucket
+    note: str = Field("", max_length=400)         # required when going backwards
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/pipeline/start")
+@limiter.limit("60/minute")
+async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
+    """Start Level-2 processing - the act that puts a paid, winnable case into the buckets.
+
+    Admin-only on purpose. Entering the pipeline is what commits the office to the work, and it
+    is the gate that keeps the stage buckets holding L2 cases only.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.enter_pipeline(claim_id, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
+    await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/pipeline/move")
+@limiter.limit("60/minute")
+async def nidaan_ops_pipeline_move(claim_id: int, body: _PipelineMoveReq, request: Request):
+    """Move a case to the next bucket, or to a named one. Backwards needs a reason."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.move_stage(claim_id, to=body.to, note=body.note,
+                               actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
+    await _ops_audit(request, "case.pipeline_move", "claim", claim_id,
+                     f"{res.get('from')} -> {res.get('stage')} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/pipeline/auto-advance")
+@limiter.limit("6/minute")
+async def nidaan_ops_pipeline_auto(request: Request):
+    """Move on every case whose current bucket can be PROVEN finished.
+
+    One transition qualifies today - Documents to Drafting, when the checklist is complete.
+    Everything else is a judgement, and moving a case on a guess is worse than leaving it visible.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.auto_advance_ready(actor=_actor_label(caller))
+    if res.get("count"):
+        await _ops_audit(request, "case.pipeline_auto", "claim", "",
+                         f"{res['count']} case(s) advanced")
+    return res
+
+
+# ── Raising a claim for a subscriber who will not use the dashboard ─────────────
+# Plenty of subscribers will never log in. The claim still belongs to THEM - their account, their
+# quota, their dashboard - but the office must be able to see whose hands were actually on it, so
+# the staff member is recorded on the claim permanently rather than left implied.
+
+@app.get("/nidaan/ops/api/subscribers/pick")
+async def nidaan_ops_subscriber_pick(request: Request, q: str = "", limit: int = 20):
+    """Subscribers an admin can raise a claim for. Only accounts with a LIVE subscription."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    q = (q or "").strip()
+    rows = await nidaan.search_subscribers_for_ops(q, limit=max(1, min(int(limit or 20), 50)))
+    return {"subscribers": rows, "count": len(rows)}
+
+
+class _RaiseForSubReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_id: int
+    claim_type: str = Field(..., max_length=60)
+    insured_name: str = Field(..., max_length=120)
+    insured_phone: str = Field("", max_length=20)
+    insured_email: str = Field("", max_length=160)
+    insurer_name: str = Field("", max_length=120)
+    policy_no: str = Field("", max_length=80)
+    disputed_amount: Optional[int] = None
+    notes_from_agent: str = Field("", max_length=2000)
+
+
+@app.post("/nidaan/ops/api/subscribers/raise-claim")
+@limiter.limit("30/minute")
+async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Request):
+    """Raise a claim on a subscriber's behalf, stamped with who actually raised it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    acct = await nidaan.get_account_by_id(body.account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="That subscriber does not exist.")
+    sub = await nidaan.get_active_subscription(body.account_id)
+    if not sub:
+        raise HTTPException(
+            status_code=400,
+            detail="That account has no live subscription, so a claim cannot be raised against it.")
+
+    claim_id, msg = await nidaan.submit_claim(
+        account_id=body.account_id,
+        user_id=None,
+        claim_type=body.claim_type,
+        insured_name=body.insured_name,
+        insured_phone=(body.insured_phone or "").strip(),
+        insured_email=(body.insured_email or "").strip(),
+        insurer_name=body.insurer_name,
+        policy_no=body.policy_no,
+        disputed_amount=body.disputed_amount,
+        notes_from_agent=body.notes_from_agent,
+        payment_status="subscription",
+        origin="ops_on_behalf",
+        raised_by_staff_id=caller.get("staff_id"),
+        raised_by_name=_actor_label(caller),
+        raised_via="on_behalf",
+    )
+    if not claim_id:
+        raise HTTPException(status_code=400, detail=msg or "Could not raise that claim.")
+    await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
+                     f"for account {body.account_id} ({acct.get('owner_name') or ''})"[:160])
+    return {"ok": True, "claim_id": claim_id, "message": msg,
+            "on_behalf_of": acct.get("owner_name") or acct.get("firm_name") or "",
+            "raised_by": _actor_label(caller)}
+
+
 # ── Shared design document + stakeholder feedback ────────────────────────────
 # A review surface for an operating-model document, so people who are not staff users can read it
 # and comment section by section. Deliberately narrow: it serves ONE static file, holds only what

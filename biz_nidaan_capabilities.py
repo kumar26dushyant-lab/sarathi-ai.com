@@ -344,6 +344,46 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
+        "id": "l2_pipeline",
+        "en": {"t": "Move a Level-2 case bucket by bucket",
+               "d": "A paid, winnable case is put into the pipeline by hand, then moves "
+                    "Consolidation \u2192 Documents \u2192 Drafting \u2192 With the insurer \u2192 "
+                    "Escalation \u2192 Ombudsman \u2192 Outcome \u2192 Settlement. Only cases that have "
+                    "started Level-2 appear in those buckets.",
+               "u": "Case Board \u2192 open a case \u2192 Start Level-2 processing, then Finished here."},
+        "hi": {"t": "Level-2 केस को बकेट-दर-बकेट आगे बढ़ाएँ",
+               "d": "फ़ीस मिली और केस मज़बूत है \u2014 तब उसे पाइपलाइन में डाला जाता है और वह एक-एक बकेट "
+                    "आगे बढ़ता है। बकेट में सिर्फ़ वही केस दिखते हैं जिनका Level-2 शुरू हो चुका है।",
+               "u": "Case Board \u2192 केस खोलें \u2192 Start Level-2 processing।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "cover_a_bucket",
+        "en": {"t": "Know when a bucket has nobody to work it",
+               "d": "My Desk names any bucket with work waiting and nobody who will actually be "
+                    "there \u2014 including the case where the rota shows a name but that person is "
+                    "on leave today, or goes on leave within a fortnight.",
+               "u": "My Desk \u2192 Cover these buckets \u2192 Set duty."},
+        "hi": {"t": "जानें कि किस बकेट पर कोई मौजूद नहीं",
+               "d": "My Desk बताता है कि किस बकेट में काम है पर करने वाला कोई नहीं \u2014 उस हालत में भी "
+                    "जब रोस्टर में नाम है पर वह व्यक्ति आज छुट्टी पर है।",
+               "u": "My Desk \u2192 Cover these buckets \u2192 ड्यूटी लगाएँ।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
+        "id": "raise_for_subscriber",
+        "en": {"t": "Raise a claim for a subscriber who rings up",
+               "d": "For a subscriber who will not use the dashboard. The claim goes onto their "
+                    "account and uses their own quota, and permanently records which staff member "
+                    "actually raised it.",
+               "u": "Work \u2192 Raise for a Subscriber."},
+        "hi": {"t": "फ़ोन करने वाले सब्सक्राइबर के लिए क्लेम दर्ज करें",
+               "d": "जो सब्सक्राइबर डैशबोर्ड इस्तेमाल नहीं करते, उनके लिए। क्लेम उन्हीं के खाते और कोटे में "
+                    "जाता है, और रिकॉर्ड रहता है कि किस स्टाफ़ ने दर्ज किया।",
+               "u": "Work \u2192 Raise for a Subscriber।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
         "id": "doc_splitter",
         "en": {"t": "Document Splitter",
                "d": "Upload a customer's mixed file; AI separates it into individual documents to send to authorities.",

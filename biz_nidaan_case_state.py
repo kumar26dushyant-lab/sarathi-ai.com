@@ -86,6 +86,45 @@ FLAG_LABEL = {
 # Blockers that mean the next move is OURS. Both are internal; the difference is only who.
 OURS = ("none", "internal")
 
+# ── the post-L2 pipeline ─────────────────────────────────────────────────────
+# Up to L2, the stage can be worked out: a review outcome and a payment are facts we already
+# hold. After L2 it cannot. "The consolidation is finished" is a judgement, and no column proves
+# it — so from here a case moves because a person says it moved, bucket by bucket.
+#
+# This is also the gate. A case is in a pipeline bucket ONLY once it has been put there, which is
+# what stops Drafting and Documents from filling up with the whole book. `pipeline_stage` empty
+# means "not in the pipeline"; the pre-L2 stages carry on being derived exactly as before.
+PIPELINE = ("consolidation", "documentation", "drafting", "representation",
+            "escalation", "lokpal", "outcome", "settlement")
+
+# Stages that exist before the pipeline. These stay derived.
+PRE_L2 = ("intake", "review", "conversion")
+
+
+def next_stage(stage: str) -> str:
+    """The bucket after this one. "" at the end of the line (settlement → closed is its own act)."""
+    try:
+        i = PIPELINE.index(stage)
+    except ValueError:
+        return ""
+    return PIPELINE[i + 1] if i + 1 < len(PIPELINE) else ""
+
+
+def l2_ready(claim: dict) -> bool:
+    """Is this case qualified to enter the post-L2 pipeline?
+
+    Two facts, both already recorded, both required: we reviewed it and said it can be fought,
+    AND the L2 fee was paid. Reviewing alone is not qualification — 45 live cases sit at
+    can_fight with no payment, and putting those into the pipeline would bury the work that has
+    actually been bought.
+    """
+    return ((claim.get("review_outcome") or "").lower() == "can_fight"
+            and (claim.get("l2_payment_status") or "").lower() == "paid")
+
+
+def in_pipeline(claim: dict) -> bool:
+    return (claim.get("pipeline_stage") or "").strip().lower() in PIPELINE
+
 
 def _parse(ts) -> datetime | None:
     if not ts:
@@ -164,6 +203,23 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     else:
         stage, blocker = "intake", "none"
 
+    # ── the pipeline wins, once a person has put the case in it ──────────────
+    # Derivation is a good guess about a case nobody has taken charge of. The moment someone
+    # moves a case into a bucket, the guess is no longer the truth — their decision is. Kept
+    # above the blocker override on purpose: the two are independent, and a case can be parked
+    # or waiting on the insurer while sitting in any bucket.
+    pipe = (claim.get("pipeline_stage") or "").strip().lower()
+    if pipe in PIPELINE and stage != "closed":
+        stage = pipe
+        if pipe == "representation":
+            blocker = "insurer"
+        elif pipe == "lokpal":
+            blocker = "lokpal"
+        elif pipe in ("documentation", "settlement"):
+            blocker = "complainant"
+        else:
+            blocker = "internal"
+
     # ── an explicit override beats the derivation ────────────────────────────
     # No derivation can know what someone was told on a phone call. When a person says what a
     # case is waiting for, that wins — until a park expires, at which point the case rejoins the
@@ -181,7 +237,13 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     # ── flags ────────────────────────────────────────────────────────────────
     # Age is measured from the last thing that ACTUALLY happened, not from any touch: a remark
     # or a re-read must never look like progress, or the number becomes gameable.
-    age = _days_since(last_activity or claim.get("last_status_at") or claim.get("created_at"))
+    # In the pipeline, age is measured from the moment the case entered THIS bucket. A case three
+    # weeks into drafting is a different problem from one three weeks into the pipeline, and the
+    # patience figures are per-bucket, so they have to be compared against a per-bucket clock.
+    if pipe in PIPELINE and claim.get("pipeline_stage_at"):
+        age = _days_since(claim.get("pipeline_stage_at"))
+    else:
+        age = _days_since(last_activity or claim.get("last_status_at") or claim.get("created_at"))
     patience = STAGE_PATIENCE.get(stage)
     if age is not None and patience and age > patience and stage != "closed":
         flags.append("stalled")
@@ -215,6 +277,11 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
         if left <= 90:
             flags.append("filing_window")
 
+    # Can we PROVE this bucket's work is finished? Only where a column says so. Documents is the
+    # one honest case: the checklist is complete. Everywhere else the answer is a judgement, and
+    # claiming otherwise would move cases forward on a guess.
+    ready = bool(pipe == "documentation" and docs_total and docs_done >= docs_total)
+
     return {
         "stage": stage,
         "stage_label": STAGE_LABEL.get(stage, stage),
@@ -224,6 +291,13 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
         "age_days": age,
         "patience_days": patience,
         "over_by": (age - patience) if (age is not None and patience and age > patience) else 0,
+        # Pipeline facts, so every screen answers "can this move, and to where?" the same way.
+        "in_pipeline": pipe in PIPELINE,
+        "l2_ready": l2_ready(claim),
+        "next_stage": next_stage(pipe) if pipe in PIPELINE else "",
+        "next_stage_label": STAGE_LABEL.get(next_stage(pipe), "") if pipe in PIPELINE else "",
+        "ready_to_move": ready,
+        "pipeline_by": (claim.get("pipeline_by") or ""),
     }
 
 
@@ -289,7 +363,9 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "complainant_phone, complainant_email, insured_phone, insured_email, insurer_name, "
             "status, review_outcome, l2_payment_status, disputed_amount, branch_code, "
             "assigned_to_staff_id, archived, created_at, last_status_at, "
-            "blocker, blocker_note, blocker_by, hold_until "
+            "blocker, blocker_note, blocker_by, hold_until, "
+            "pipeline_stage, pipeline_entered_at, pipeline_stage_at, pipeline_by, "
+            "raised_by_staff_id, raised_by_name, raised_via "
             "FROM nidaan_claims WHERE COALESCE(archived,0)=0 "
             "ORDER BY claim_id DESC LIMIT 2000")).fetchall()]
 
@@ -316,6 +392,8 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "blocker_by": (r.get("blocker_by") or ""),
             "hold_until": (r.get("hold_until") or ""),
             "docs": {"done": done, "total": total},
+            "raised_by": (r.get("raised_by_name") or ""),
+            "raised_via": (r.get("raised_via") or ""),
             **st,
         })
 
@@ -492,6 +570,132 @@ async def assign(claim_id: int, staff_id, *, actor: str = "") -> dict:
     return {"ok": True, "assigned_to": sid, "assigned_name": name}
 
 
+async def _pipeline_row(claim_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
+            "pipeline_stage, pipeline_stage_at, complainant_name, insured_name "
+            "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    if d.get("archived") or (d.get("status") or "") in ("closed", "withdrawn"):
+        return None
+    return d
+
+
+async def enter_pipeline(claim_id: int, *, actor: str = "") -> dict:
+    """Start L2 processing — the act that puts a case into the buckets.
+
+    Deliberately a separate decision from paying the fee. Payment says the work is bought; this
+    says the office is starting it. Refused unless the case is genuinely L2-qualified, because
+    the whole value of the buckets is that everything in them is work we have been paid to do.
+    """
+    row = await _pipeline_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case is closed or does not exist."}
+    if in_pipeline(row):
+        return {"ok": False, "error": "This case is already in the pipeline.",
+                "stage": row.get("pipeline_stage")}
+    if not l2_ready(row):
+        outcome = (row.get("review_outcome") or "").lower()
+        if outcome != "can_fight":
+            return {"ok": False,
+                    "error": "The review has not said this case can be fought yet."}
+        return {"ok": False,
+                "error": "The Level-2 fee has not been paid, so the work has not been bought yet."}
+
+    first = PIPELINE[0]
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_entered_at=CURRENT_TIMESTAMP, "
+                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_by=? WHERE claim_id=?",
+                (first, (actor or "")[:80], int(claim_id)))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("enter_pipeline failed for %s: %s", claim_id, e)
+        return {"ok": False, "error": "Could not save that. Try again."}
+
+    await _log(claim_id, "case_stage",
+               f"Level-2 processing started — now in {STAGE_LABEL[first]}", actor)
+    return {"ok": True, "stage": first, "stage_label": STAGE_LABEL[first],
+            "next_stage": next_stage(first)}
+
+
+async def move_stage(claim_id: int, *, to: str = "", note: str = "", actor: str = "") -> dict:
+    """Move a case to the next bucket, or to a named one.
+
+    Backwards is allowed on purpose. Work comes back — a draft gets returned, a document turns
+    out to be wrong — and a pipeline that only moves forward gets worked around within a week,
+    at which point it stops describing reality. Every move is logged with who made it.
+    """
+    row = await _pipeline_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case is closed or does not exist."}
+    cur = (row.get("pipeline_stage") or "").strip().lower()
+    if cur not in PIPELINE:
+        return {"ok": False,
+                "error": "This case has not started Level-2 processing yet."}
+
+    to = (to or "").strip().lower() or next_stage(cur)
+    if not to:
+        return {"ok": False,
+                "error": "This is the last bucket. Close the case from the claim itself."}
+    if to not in PIPELINE:
+        return {"ok": False, "error": "That is not a bucket a case can be in."}
+    if to == cur:
+        return {"ok": False, "error": f"This case is already in {STAGE_LABEL[cur]}."}
+
+    back = PIPELINE.index(to) < PIPELINE.index(cur)
+    if back and not (note or "").strip():
+        # Forward is routine. Backward is an exception, and an exception with no reason recorded
+        # is how the same mistake gets repeated.
+        return {"ok": False,
+                "error": "Say why this case is going back — it will be read later."}
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_stage_at=CURRENT_TIMESTAMP, "
+                "pipeline_by=? WHERE claim_id=?",
+                (to, (actor or "")[:80], int(claim_id)))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("move_stage failed for %s: %s", claim_id, e)
+        return {"ok": False, "error": "Could not save that. Try again."}
+
+    arrow = "sent back to" if back else "moved to"
+    summary = f"{STAGE_LABEL[cur]} → {arrow} {STAGE_LABEL[to]}"
+    if (note or "").strip():
+        summary += f" — {note.strip()}"
+    await _log(claim_id, "case_stage", summary, actor)
+    return {"ok": True, "stage": to, "stage_label": STAGE_LABEL[to],
+            "from": cur, "back": back, "next_stage": next_stage(to)}
+
+
+async def auto_advance_ready(*, actor: str = "system") -> dict:
+    """Move on every case whose current bucket can be PROVEN finished.
+
+    Exactly one transition qualifies today: Documents → Drafting, when the checklist is complete.
+    Nothing else is provable from a column, and moving a case on a guess is worse than leaving it
+    where a person can see it. Returns what moved so the caller can say so out loud.
+    """
+    b = await board(limit=1000)
+    moved = []
+    for it in (b.get("items") or []):
+        if it.get("in_pipeline") and it.get("ready_to_move") and it.get("next_stage"):
+            r = await move_stage(it["claim_id"], to=it["next_stage"],
+                                 actor=actor, note="every required document is in")
+            if r.get("ok"):
+                moved.append({"claim_id": it["claim_id"], "who": it.get("who") or "",
+                              "from": it["stage"], "to": r["stage"]})
+    if moved:
+        logger.info("auto-advance moved %d case(s)", len(moved))
+    return {"moved": moved, "count": len(moved)}
+
+
 async def assignable_staff() -> list[dict]:
     """Who a case can be handed to — active staff only, with their current open load.
 
@@ -518,6 +722,81 @@ async def assignable_staff() -> list[dict]:
 # The old system was folders, and people were good at it. This keeps that shape - buckets, and
 # which buckets are yours today - while the machine underneath does the counting, the clocks and
 # the flags. Nobody has to learn the words "stage" or "blocker" to use it.
+
+ADMIN_ROLES = ("super_admin", "sub_super_admin")
+
+
+async def coverage_gaps(buckets: list, rota: dict, lang: str = "en") -> list:
+    """Buckets that have work and nobody who will actually be there to do it.
+
+    Three different problems, and they are not equally urgent:
+      NOBODY    the bucket has work and no one is rostered at all.
+      ON LEAVE  everyone rostered on it is on approved leave TODAY. On paper it is covered; in
+                the room it is not. This is the one that goes unnoticed, precisely because the
+                rota still shows a name against it.
+      SOON      everyone rostered goes on leave within the fortnight and nobody else is on it.
+
+    Ordered by how much is actually waiting, so the first line is the one worth acting on.
+    """
+    import biz_nidaan as _n
+    import biz_nidaan_stage_guide as _g
+
+    on_leave_now: dict = {}
+    upcoming: dict = {}
+    try:
+        for lv in await _n.list_staff_on_leave_now():
+            on_leave_now[int(lv.get("staff_id") or 0)] = lv
+    except Exception as e:  # noqa: BLE001
+        logger.warning("coverage: leave-now lookup failed: %s", e)
+    try:
+        for lv in await _n.list_upcoming_leaves(14):
+            sid = int(lv.get("staff_id") or 0)
+            if sid and sid not in on_leave_now and sid not in upcoming:
+                upcoming[sid] = lv
+    except Exception as e:  # noqa: BLE001
+        logger.warning("coverage: upcoming-leave lookup failed: %s", e)
+
+    out = []
+    for bk in buckets:
+        key = bk.get("key")
+        waiting = bk.get("total") or 0
+        if not waiting:
+            continue                       # an empty bucket cannot be a coverage problem
+        on = rota.get(key) or []
+        ours = bk.get("ours") or 0
+        stalled = bk.get("stalled") or 0
+        # Work that is OURS outranks work someone else is holding up, and anything already
+        # overdue outranks both. Coverage is only worth chasing where the absence actually costs.
+        heat = waiting + ours * 2 + stalled * 5
+
+        if not on:
+            out.append({"key": key, **_g.label(key, lang), "kind": "nobody",
+                        "waiting": waiting, "ours": ours, "stalled": stalled,
+                        "who": [], "cover": "", "until": "", "heat": heat + 10})
+            continue
+
+        away = [x for x in on if int(x.get("staff_id") or 0) in on_leave_now]
+        if away and len(away) == len(on):
+            lv = on_leave_now[int(away[0]["staff_id"])]
+            out.append({"key": key, **_g.label(key, lang), "kind": "on_leave",
+                        "waiting": waiting, "ours": ours, "stalled": stalled,
+                        "who": [x.get("name") for x in away],
+                        "cover": lv.get("cover_name") or "",
+                        "until": lv.get("end_date") or "", "heat": heat + 40})
+            continue
+
+        soon = [x for x in on if int(x.get("staff_id") or 0) in upcoming]
+        if soon and len(soon) == len(on):
+            lv = upcoming[int(soon[0]["staff_id"])]
+            out.append({"key": key, **_g.label(key, lang), "kind": "soon",
+                        "waiting": waiting, "ours": ours, "stalled": stalled,
+                        "who": [x.get("name") for x in soon],
+                        "cover": lv.get("cover_name") or "",
+                        "until": lv.get("start_date") or "", "heat": heat})
+
+    out.sort(key=lambda g: -g["heat"])
+    return out
+
 
 async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
     """Everything one person needs on opening ops: am I on duty, what is on fire, what is mine."""
@@ -551,21 +830,38 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
             "mine": sum(1 for i in rows if staff_id and i.get("assigned_to") == int(staff_id)),
         }
 
-    buckets = []
+    # Who sees what. An admin runs the floor and needs every bucket. Everyone else gets the
+    # buckets they are rostered on - a screen showing another team's work is a screen that buries
+    # your own. A person always keeps sight of cases assigned to them by name, wherever those sit,
+    # because an assignment is a promise that outlives a rota.
+    is_admin = (role or "") in ADMIN_ROLES
+    mine_set = set(mine)
+    has_assigned = {i["stage"] for i in items
+                    if staff_id and i.get("assigned_to") == int(staff_id)}
+
+    all_buckets = []
     for st in STAGES:
         if st == "closed":
             continue
         c = _count(st)
-        if not c["total"] and st not in mine:
+        if not c["total"] and st not in mine_set:
             continue          # an empty bucket nobody is rostered on is just noise
-        buckets.append({"key": st, **_g.label(st, lang), "guide": _g.guide(st, lang),
-                        "on_duty": rota.get(st, []), "yours": st in mine, **c})
+        all_buckets.append({"key": st, **_g.label(st, lang), "guide": _g.guide(st, lang),
+                            "on_duty": rota.get(st, []), "yours": st in mine_set, **c})
+
+    if is_admin:
+        buckets = all_buckets
+    else:
+        buckets = [b for b in all_buckets
+                   if b["key"] in mine_set or b["key"] in has_assigned]
 
     # The channels a person can be rostered onto sit alongside the case buckets.
     channels = []
     for ch in ("support", "whatsapp"):
+        if not is_admin and ch not in mine_set:
+            continue
         channels.append({"key": ch, **_g.label(ch, lang), "guide": _g.guide(ch, lang),
-                         "on_duty": rota.get(ch, []), "yours": ch in mine})
+                         "on_duty": rota.get(ch, []), "yours": ch in mine_set})
 
     # ON FIRE — deliberately short. A list of forty is a list nobody reads, so this is capped and
     # every line says WHY in words, not in a flag name.
@@ -608,17 +904,48 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
 
     hot = sorted([i for i in items if i["flags"] or i.get("over_by", 0) > 0],
                  key=_heat, reverse=True)
+    # Today's list is scoped exactly like the buckets: an admin sees the floor, everyone else
+    # sees their own buckets and their own cases. Being shown work you are not allowed to touch
+    # is how a priority list stops being read.
+    if not is_admin:
+        hot = [i for i in hot
+               if i["stage"] in mine_set or (staff_id and i.get("assigned_to") == int(staff_id))]
     mine_hot = [i for i in hot if staff_id and i.get("assigned_to") == int(staff_id)]
     on_fire = (mine_hot + [i for i in hot if i not in mine_hot])[:8]
 
+    # Cases sitting in a finished bucket, waiting only for someone to press the button.
+    ready = [i for i in items if i.get("ready_to_move")
+             and (is_admin or i["stage"] in mine_set
+                  or (staff_id and i.get("assigned_to") == int(staff_id)))]
+
+    # Paid for, reviewed as winnable, and not started. This is money already taken with no work
+    # begun against it, so it is named separately rather than left inside a stage count.
+    waiting_start = [i for i in items
+                     if i.get("l2_ready") and not i.get("in_pipeline") and i["stage"] != "closed"]
+
+    # Coverage is an admin's problem to fix, so only an admin is shown it. Computed over EVERY
+    # bucket, not the visible ones, or an admin filtered to their own duties would stop seeing
+    # the floor they are responsible for.
+    coverage = await coverage_gaps(all_buckets, rota, lang) if is_admin else []
+
     return {
         "lang": lang,
+        "is_admin": is_admin,
         "my_duties": [{"key": d, **_g.label(d, lang)} for d in mine],
         "rota": rota,
-        # A duty with a case waiting and nobody rostered is the gap worth naming out loud.
-        "gaps": [{"key": k, **_g.label(k, lang), "waiting": v["total"]}
-                 for k, v in ((bk["key"], bk) for bk in buckets)
-                 if not rota.get(k) and v["total"]],
+        # Buckets with work and nobody there to do it - including the case where the rota shows
+        # a name but that person is on leave today.
+        "coverage": coverage,
+        "gaps": [{"key": g["key"], "icon": g.get("icon", ""), "name": g.get("name", ""),
+                  "waiting": g["waiting"]} for g in coverage if g["kind"] == "nobody"],
+        "ready_to_move": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],
+                           **_g.label(i["stage"], lang),
+                           "next_stage": i.get("next_stage"),
+                           "next_label": i.get("next_stage_label")} for i in ready[:8]],
+        "ready_count": len(ready),
+        "waiting_start": [{"claim_id": i["claim_id"], "who": i["who"],
+                           "age_days": i.get("age_days")} for i in waiting_start[:8]],
+        "waiting_start_count": len(waiting_start),
         "buckets": buckets,
         "channels": channels,
         "on_fire": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],

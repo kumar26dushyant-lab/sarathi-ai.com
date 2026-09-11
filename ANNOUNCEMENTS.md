@@ -1,5 +1,53 @@
 # Staff Announcement Drafts
 
+## 2026-09-11 — Level-2 cases now move bucket by bucket
+
+**Title (EN):**
+⚖️ Level-2 work now has buckets · 🧑‍💼 My Desk shows only YOUR buckets
+
+**Details (EN):**
+Until now every case sat in one long list and the system guessed which stage it was at. From today, Level-2 work moves the way you already work: one bucket at a time.
+
+• **A case enters Level-2 by hand.** When the review says we can fight it **and** the fee is paid, a super-admin or sub-super-admin opens the case and presses **Start Level-2 processing**. The case then sits in **Consolidation**.
+
+• **You move it on when your part is done.** Open the case and press **Finished here → move to …**. The order is Consolidation → Documents → Drafting → With the insurer → Escalation → Ombudsman → Outcome → Settlement. You can also send a case **back** a step — that one needs a reason, because it will be read later.
+
+• **Only Level-2 cases appear in these buckets.** A case that has not started Level-2 will not clutter your bucket. This is why the counts look smaller and truer than before.
+
+• **My Desk now shows only the buckets you are on duty for**, plus any case assigned to you by name. Super-admins and sub-super-admins still see everything. If you think a bucket is missing, you are not on duty for it — ask for the duty to be set.
+
+• **Documents → Drafting can move itself.** When every required document is in, the case shows as ready and one click moves it on.
+
+• **Leave is now visible as a problem.** If everyone on duty for a bucket is on leave today, or goes on leave within a fortnight, the super-admin is told to put someone else on it. The rota showing a name is no longer mistaken for the work being covered.
+
+• **Claims for subscribers who ring up.** A super-admin or sub-super-admin can raise a claim on a subscriber's behalf from **Work → Raise for a Subscriber**. It goes onto the subscriber's own account and uses their own quota — and the claim records who raised it.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+⚖️ Level-2 का काम अब बकेट-दर-बकेट · 🧑‍💼 My Desk पर सिर्फ़ आपके बकेट
+
+**Details (HI):**
+अब तक सारे केस एक लंबी सूची में रहते थे और सिस्टम अंदाज़ा लगाता था कि केस किस स्टेज पर है। आज से Level-2 का काम वैसे ही चलेगा जैसे आप पहले से करते आए हैं — एक बार में एक बकेट।
+
+• **केस Level-2 में हाथ से डाला जाता है।** जब समीक्षा कहे कि केस लड़ा जा सकता है **और** फ़ीस आ चुकी हो, तब सुपर-एडमिन या सब-सुपर-एडमिन केस खोलकर **Start Level-2 processing** दबाते हैं। केस **Consolidation** में आ जाता है।
+
+• **अपना हिस्सा पूरा होने पर आगे बढ़ाएँ।** केस खोलकर **Finished here → move to …** दबाएँ। क्रम है: Consolidation → दस्तावेज़ → ड्राफ़्टिंग → बीमा कंपनी के पास → एस्केलेशन → लोकपाल → नतीजा → भुगतान। केस **पीछे** भी भेजा जा सकता है — उसके लिए कारण लिखना ज़रूरी है।
+
+• **इन बकेट में सिर्फ़ Level-2 केस दिखेंगे।** जिनका Level-2 शुरू नहीं हुआ, वे आपके बकेट में नहीं आएंगे।
+
+• **My Desk पर अब सिर्फ़ वही बकेट दिखेंगे जिन पर आपकी ड्यूटी है**, और वे केस जो नाम से आपको सौंपे गए हैं। सुपर-एडमिन को सब दिखता है। कोई बकेट न दिखे तो उस पर आपकी ड्यूटी नहीं है — ड्यूटी लगवाएँ।
+
+• **दस्तावेज़ → ड्राफ़्टिंग अपने आप हो सकता है।** सभी ज़रूरी दस्तावेज़ आ जाने पर केस "तैयार" दिखेगा और एक क्लिक में आगे चला जाएगा।
+
+• **छुट्टी अब समस्या के रूप में दिखेगी।** अगर किसी बकेट पर ड्यूटी वाले सभी लोग आज छुट्टी पर हैं, या पंद्रह दिन में छुट्टी पर जा रहे हैं, तो सुपर-एडमिन को किसी और को लगाने के लिए कहा जाएगा।
+
+• **फ़ोन करने वाले सब्सक्राइबर के क्लेम।** सुपर-एडमिन/सब-सुपर-एडमिन **Work → Raise for a Subscriber** से उनके लिए क्लेम दर्ज कर सकते हैं। क्लेम उन्हीं के खाते और कोटे में जाएगा, और रिकॉर्ड रहेगा कि किसने दर्ज किया।
+
+पढ़ने के बाद 👍 करें; कोई दिक्कत हो तो ऑफ़िस IT SPOC से पूछें।
+
+---
+
 ## 2026-09-10 — Attach everything at once, and the Email Radar tells you why
 
 **Title (EN):**

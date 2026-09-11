@@ -1567,6 +1567,37 @@ async def get_active_subscription(account_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+async def search_subscribers_for_ops(q: str = "", limit: int = 20) -> list[dict]:
+    """Live-subscription accounts an admin can raise a claim for.
+
+    Restricted to accounts with an ACTIVE subscription on purpose: raising on behalf consumes the
+    subscriber's own quota, so offering an expired or cancelled account would create a claim that
+    cannot be honoured. Searchable by name, firm, phone or email — whatever the caller has to hand
+    when a subscriber rings up.
+    """
+    q = (q or "").strip()
+    sql = ("SELECT a.account_id, a.owner_name, a.firm_name, a.phone, a.email, "
+           "       s.plan, s.current_period_end "
+           "FROM nidaan_accounts a "
+           "JOIN nidaan_subscriptions s ON s.account_id = a.account_id AND s.status='active' "
+           "WHERE a.deleted_at IS NULL AND COALESCE(a.merged_into,0)=0 ")
+    params: list = []
+    if q:
+        like = f"%{q}%"
+        sql += ("AND (a.owner_name LIKE ? OR a.firm_name LIKE ? OR a.phone LIKE ? "
+                "     OR a.email LIKE ?) ")
+        params += [like, like, like, like]
+    sql += "GROUP BY a.account_id ORDER BY a.owner_name COLLATE NOCASE LIMIT ?"
+    params.append(int(limit))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(sql, params)).fetchall()]
+    for r in rows:
+        r["label"] = (r.get("owner_name") or r.get("firm_name")
+                      or r.get("phone") or f"#{r['account_id']}")
+    return rows
+
+
 async def create_subscription(
     account_id: int,
     plan: str,
@@ -2038,6 +2069,9 @@ async def submit_claim(
     complainant_role: str = "",
     associate_referrer: str = "",
     channel_partner_id=None,
+    raised_by_staff_id=None,
+    raised_by_name: str = "",
+    raised_via: str = "",
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -2075,8 +2109,9 @@ async def submit_claim(
                 claim_event_date, policy_inception_date, tpa_name, type_specific,
                 notes_from_agent, intermediary_code, intermediary_name, branch_code, payment_status, origin,
                 complainant_name, complainant_phone, complainant_email, complainant_role,
-                associate_referrer, channel_partner_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                associate_referrer, channel_partner_id,
+                raised_by_staff_id, raised_by_name, raised_via)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (account_id, user_id, claim_type, insured_name, insured_phone,
              insured_email, insurer_name, policy_no, disputed_amount,
              claim_event_date, (policy_inception_date or None), (tpa_name or "").strip(),
@@ -2085,14 +2120,22 @@ async def submit_claim(
              (branch_code or "").strip().upper(),
              payment_status, (origin or "").strip(),
              complainant_name, complainant_phone, complainant_email, complainant_role,
-             (associate_referrer or "").strip()[:120], channel_partner_id),
+             (associate_referrer or "").strip()[:120], channel_partner_id,
+             raised_by_staff_id, (raised_by_name or "").strip()[:80],
+             (raised_via or "").strip()[:24]),
         )
         claim_id = cur.lastrowid
+        # The first line of the case history should say who actually raised it. "submitted by
+        # advisor" on a claim an admin keyed in for a subscriber who never logs in is misleading
+        # later, when somebody is trying to work out where a case came from.
+        _first_note = ("Claim submitted by advisor" if not raised_by_name
+                       else f"Raised by {raised_by_name} on the subscriber's behalf")
         await conn.execute(
             """INSERT INTO nidaan_claim_status_log
                (claim_id, to_status, note, changed_by_type, changed_by_id)
-               VALUES (?, 'intimated', 'Claim submitted by advisor', 'advisor', ?)""",
-            (claim_id, account_id),
+               VALUES (?, 'intimated', ?, ?, ?)""",
+            (claim_id, _first_note, ("staff" if raised_by_name else "advisor"),
+             (raised_by_staff_id if raised_by_name else account_id)),
         )
         # Quota: only increment for subscription users (per-claim users have 1-claim hard limit via linked_claim_id)
         sub = await get_active_subscription(account_id)
