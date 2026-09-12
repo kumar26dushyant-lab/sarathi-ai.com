@@ -1,0 +1,610 @@
+<!-- Level-2 Operating Manual — served at /l2-manual behind the doc share key.
+     One page, two languages. Every string lives in CONTENT and is rendered from it, so the
+     toggle cannot leave an untranslated fragment behind — the ground rule for this site. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Level-2 Operating Manual — NidaanPartner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+  :root{
+    --paper:#f4f6f8; --card:#fff; --ink:#16202b; --ink-2:#42556a; --ink-3:#6b8199;
+    --rule:#dbe3ea; --rule-2:#c3ced8;
+    --accent:#0f6f8c; --accent-soft:#e4f0f4;
+    --signal:#a8332a; --signal-soft:#fbeceb;
+    --gate:#8a6320; --gate-soft:#faf1de;
+    --ok:#1f6b4d; --ok-soft:#e6f2ec;
+    --shadow:0 1px 2px rgba(22,32,43,.05),0 6px 18px rgba(22,32,43,.05);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --paper:#11171e; --card:#18212b; --ink:#e8eef4; --ink-2:#a9bccd; --ink-3:#7d94a8;
+    --rule:#27333f; --rule-2:#36485a;
+    --accent:#5cc2dd; --accent-soft:#12303a;
+    --signal:#f08b80; --signal-soft:#331917;
+    --gate:#d8ab5c; --gate-soft:#332812;
+    --ok:#6ac295; --ok-soft:#14291f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
+  }}
+  :root[data-theme="dark"]{
+    --paper:#11171e; --card:#18212b; --ink:#e8eef4; --ink-2:#a9bccd; --ink-3:#7d94a8;
+    --rule:#27333f; --rule-2:#36485a;
+    --accent:#5cc2dd; --accent-soft:#12303a;
+    --signal:#f08b80; --signal-soft:#331917;
+    --gate:#d8ab5c; --gate-soft:#332812;
+    --ok:#6ac295; --ok-soft:#14291f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Source Sans 3","Segoe UI",system-ui,sans-serif;font-size:17px;line-height:1.62;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:60rem;margin:0 auto;padding:2.4rem 1.25rem 5rem}
+  h1,h2,h3{font-family:Spectral,Georgia,serif;text-wrap:balance;margin:0}
+  h1{font-size:clamp(1.9rem,5vw,2.8rem);font-weight:700;line-height:1.12;letter-spacing:-.015em}
+  h2{font-size:clamp(1.3rem,3vw,1.7rem);font-weight:600;line-height:1.2}
+  h3{font-size:1.1rem;font-weight:600;margin:0 0 .3rem}
+  p{margin:0 0 .85rem;max-width:66ch}
+  .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:.6rem}
+  .lede{font-size:1.1rem;color:var(--ink-2);max-width:62ch;margin-top:.9rem}
+  header{border-bottom:2px solid var(--ink);padding-bottom:1.5rem;margin-bottom:2.2rem}
+  .meta{display:flex;gap:.4rem 1.4rem;flex-wrap:wrap;margin-top:1.1rem;font-size:.8rem;color:var(--ink-3)}
+  .meta b{color:var(--ink-2);font-weight:600}
+  .langbar{display:flex;gap:.4rem;margin-bottom:1.4rem;flex-wrap:wrap;align-items:center}
+  .langbar .lb{font-size:.72rem;color:var(--ink-3);margin-right:.2rem;font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .lang{font-family:inherit;font-size:.86rem;font-weight:700;cursor:pointer;
+    border:1px solid var(--rule-2);background:var(--card);color:var(--ink-2);
+    border-radius:999px;padding:.25rem .95rem}
+  .lang[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .lang:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  section{margin:2.8rem 0 0}
+  .shead{display:flex;align-items:center;margin-bottom:1rem;padding-bottom:.55rem;border-bottom:1px solid var(--rule)}
+  .snum{display:inline-flex;align-items:center;justify-content:center;min-width:1.65rem;height:1.65rem;
+    border-radius:50%;background:var(--ink);color:var(--paper);font-size:.82rem;font-weight:700;
+    margin-right:.6rem;flex:0 0 auto}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:1rem 1.2rem;
+    box-shadow:var(--shadow);margin:.9rem 0}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;
+    padding:.9rem 1.15rem;margin:1.1rem 0}
+  .callout.warn{border-left-color:var(--signal);background:var(--signal-soft)}
+  .callout.gate{border-left-color:var(--gate);background:var(--gate-soft)}
+  .callout p:last-child{margin-bottom:0}
+  .callout .lbl{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    display:block;margin-bottom:.35rem;color:var(--ink-2)}
+  .stage{position:relative;padding:0 0 1.5rem 1.9rem;border-left:2px solid var(--rule-2);margin-left:.55rem}
+  .stage:last-child{border-left-color:transparent;padding-bottom:.2rem}
+  .stage::before{content:attr(data-n);position:absolute;left:-.92rem;top:0;width:1.75rem;height:1.75rem;
+    border-radius:50%;background:var(--card);border:2px solid var(--rule-2);color:var(--ink-2);
+    font-size:.76rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .sname{font-family:Spectral,Georgia,serif;font-size:1.12rem;font-weight:600;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem}
+  .who{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    border:1px solid var(--rule-2);border-radius:999px;padding:.05rem .55rem;color:var(--ink-3);
+    font-family:"Source Sans 3",sans-serif}
+  .who.us{color:var(--accent);border-color:var(--accent)}
+  .g{display:grid;grid-template-columns:5.6rem 1fr;gap:.15rem .7rem;margin:.5rem 0 0;font-size:.93rem;align-items:baseline}
+  .g dt{font-size:.67rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);padding-top:.28rem}
+  .g dd{margin:0;color:var(--ink-2)}
+  .g dd.watch{color:var(--signal)}
+  .clock{font-size:.78rem;color:var(--ink-3);margin-top:.5rem}
+  .clock b{color:var(--ink-2)}
+  .gatebar{display:flex;align-items:center;gap:.7rem;margin:.2rem 0 1.5rem .55rem;padding:.7rem 1rem;
+    border:2px dashed var(--gate);border-radius:10px;background:var(--gate-soft);font-weight:600}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin:.9rem 0;min-width:32rem}
+  th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-size:.69rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);
+    border-bottom:1.5px solid var(--rule-2)}
+  td b{color:var(--ink)}
+  tbody tr:last-child td{border-bottom:none}
+  ul{margin:0 0 .9rem;padding-left:1.25rem;max-width:66ch}
+  li{margin-bottom:.4rem}
+  li::marker{color:var(--ink-3)}
+  ol.steps{list-style:none;padding-left:0;counter-reset:s;margin:0 0 .9rem;max-width:66ch}
+  ol.steps li{counter-increment:s;position:relative;padding-left:2.1rem;margin-bottom:.75rem}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:.08rem;width:1.5rem;height:1.5rem;
+    border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:.78rem;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  .btn{display:inline-block;border:1px solid var(--rule-2);border-radius:7px;padding:.05rem .5rem;
+    font-size:.85rem;font-weight:600;background:var(--card);white-space:nowrap}
+  .scn{border:1px solid var(--rule);border-radius:12px;background:var(--card);padding:1rem 1.2rem;
+    margin:.8rem 0;box-shadow:var(--shadow)}
+  .scn .q{font-family:Spectral,Georgia,serif;font-size:1.04rem;font-weight:600;margin-bottom:.5rem}
+  .scn .q::before{content:"\25B8 ";color:var(--accent)}
+  .scn p{margin-bottom:.5rem;font-size:.95rem}
+  .scn p:last-child{margin-bottom:0}
+  .tag{font-size:.67rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;
+    padding:.1rem .5rem;margin-left:.35rem;white-space:nowrap;display:inline-block}
+  .tag.manual{background:var(--gate-soft);color:var(--gate)}
+  .tag.auto{background:var(--ok-soft);color:var(--ok)}
+  .tag.gap{background:var(--signal-soft);color:var(--signal)}
+  hr.rule{border:none;border-top:1px solid var(--rule);margin:2.5rem 0 0}
+  footer{margin-top:2.8rem;padding-top:1.3rem;border-top:2px solid var(--ink);font-size:.86rem;color:var(--ink-3)}
+  .prt{margin-left:auto;font-size:.8rem;color:var(--ink-3);background:none;border:1px solid var(--rule-2);
+    border-radius:7px;padding:.25rem .7rem;cursor:pointer;font-family:inherit;font-weight:600}
+  @media (max-width:560px){
+    body{font-size:16px}
+    .wrap{padding:1.7rem 1rem 3.5rem}
+    .g{grid-template-columns:1fr;gap:.05rem}
+    .g dt{padding-top:.45rem}
+    .prt{display:none}
+  }
+  @media print{
+    .langbar,.prt{display:none}
+    body{background:#fff;color:#000;font-size:11pt}
+    .card,.scn{break-inside:avoid}
+    section{break-inside:auto}
+  }
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+/* Every visible string lives here, in both languages. Nothing is hard-coded in the markup, so
+   switching language cannot leave an English fragment stranded on a Hinglish page. */
+var C = {
+  en: {
+    dir:"Language", eyebrow:"NidaanPartner · Office Procedure",
+    title:"Level-2 Operating Manual",
+    lede:"How a paid, winnable claim travels from the day we start it to the day the money lands — who holds it at each step, how anyone knows what to do today, and what to do when something goes wrong.",
+    m1:"For:", m1v:"everyone working claims",
+    m2:"Covers:", m2v:"after the Level-2 fee is paid",
+    m3:"Screens:", m3v:"My Desk · Case Board",
+    print:"Print",
+    s1:"The model in one paragraph",
+    s1p:"A claim sits in exactly <strong>one bucket</strong> at a time. A bucket is a piece of work — the same idea as a folder in the old system. <strong>Duty</strong> says who works a bucket today. <strong>Assignment</strong> says who owns one particular claim. A claim moves to the next bucket when a person says their part is finished. Nothing moves on its own except one case we can actually prove.",
+    s1cl:"The one rule that makes it work",
+    s1cp:"A bucket contains <strong>only claims somebody has started</strong>. If a claim is in Drafting, it is genuinely being drafted. That is why you can trust a bucket count, and why opening a bucket is worth doing.",
+    s2:"Before the gate",
+    s2p1:"Nothing enters the Level-2 buckets by accident. A claim must have <strong>both</strong>:",
+    s2l1:"a review saying it <strong>can be fought</strong>, and",
+    s2l2:"the <strong>Level-2 fee paid</strong>.",
+    s2p2:"Until then it waits in <strong>Conversion</strong>. A claim that is reviewed but unpaid shows as <em>waiting on the complainant</em>. A claim that is paid but not started shows as <em>paid and winnable — Level-2 work has not been started</em>, and appears on My Desk under <span class='btn'>⚖️ Paid, winnable, not started</span>.",
+    s2cl:"Watch this list daily",
+    s2cp:"Everything on that list is money already taken with no work begun against it. It is the most expensive thing on the screen. It should be short, and it should never be old.",
+    s3:"Who is allowed to do what",
+    s3h:["Action","Who can do it","Where"],
+    s3r:[
+      ["<b>Start Level-2</b> on a claim","Super-admin, Sub-super-admin","Case Board → open the claim"],
+      ["<b>Move</b> a claim to the next bucket","Any staff member","Case Board → open the claim"],
+      ["<b>Send a claim back</b> a bucket","Any staff member <em>(reason required)</em>","Case Board → Move somewhere else"],
+      ["<b>Move everything that is ready</b>","Super-admin, Sub-super-admin","My Desk → Move all of them on"],
+      ["<b>Put someone on duty</b>","Super-admin","My Desk → Set duty"],
+      ["<b>Assign a claim</b> to a person","Any staff member","Case Board → open the claim"],
+      ["<b>Park a claim</b> / say what it waits for","Any staff member","Case Board → open the claim"]],
+    s3cl:"Why starting is restricted but moving is not",
+    s3cp:"Starting commits the office to work we have been paid for — that is a management decision. Moving a claim on is simply the person who did the work saying they have finished it. The people doing the work must not have to queue for permission to report it.",
+    s4:"Allocating work: two different things",
+    s4p:"These get confused, and they do different jobs. You will normally use both.",
+    s4h:["","Duty","Assignment"],
+    s4r:[
+      ["<b>Answers</b>","“Who works Documents this week?”","“Who owns NP-118?”"],
+      ["<b>Attached to</b>","A bucket, for a date range","One claim, until changed"],
+      ["<b>Set by</b>","Super-admin","Anyone"],
+      ["<b>Effect</b>","That bucket appears on their My Desk marked <b>YOURS TODAY</b>","That claim rises to the top of their list, in any bucket"],
+      ["<b>Use it for</b>","Everyday flow — the bucket is a queue anyone on duty can pull from","Cases that need one pair of hands: sensitive, complicated, or promised to someone"]],
+    s4p2:"Both directions are supported and both are normal: <strong>several people on one bucket</strong> (a busy Documents queue), and <strong>one person on several buckets</strong> (a small office where one person does Drafting and Escalation).",
+    s4cl:"Recommended starting rota",
+    s4cp:"Put at least one name on every bucket that has work. Where two people share a bucket, agree a simple split — for example, odd and even claim numbers, or by insurance company — because the system will not split the queue for you.",
+    s5:"The eight buckets",
+    s5p:"Each bucket below shows what it is, what you do, how you know you are finished, and what usually goes wrong. The same four lines appear on screen under <span class='btn'>What do I do here?</span>. The clock is how long the bucket should take before the claim is flagged as stalled.",
+    s5gate:"⚖️ Level-2 starts here — a claim enters at Consolidation",
+    lWhat:"What", lDo:"Do", lDone:"Done", lWatch:"Watch",
+    lUs:"Ours", lComp:"Complainant", lIns:"Insurance co.", lOmb:"Ombudsman",
+    clock:"Flagged stalled after", days:"days",
+    s5notes:{docs:"this is the one bucket that can move itself on",
+             rep:"the day 10/20/30 reminders are sent by a person, not automatically",
+             omb:"detailed steps still to be defined by the founder"},
+    stages:[
+      {n:1,ic:"📝",nm:"Consolidation",who:"us",d:5,
+       what:"Getting permission and a working email before we speak to anyone on their behalf.",
+       do:"Take the signed authorisation, get the claim email created, set the exact case category.",
+       done:"Authorisation signed, claim email working, category chosen.",
+       watch:"The category decides the whole document list. Getting it wrong means collecting the wrong papers for weeks."},
+      {n:2,ic:"📄",nm:"Documents",who:"comp",d:20,note:"docs",
+       what:"Collecting every paper this kind of case needs.",
+       do:"Ask for one document at a time. Check each one is the right paper and readable before accepting it.",
+       done:"Every required document is in, and the ones that must be originals have arrived by post.",
+       watch:"Hospitals refusing indoor case papers is common — we have a letter for that; send it instead of waiting."},
+      {n:3,ic:"✍️",nm:"Drafting",who:"us",d:5,
+       what:"Writing the case up and getting it approved inside the office.",
+       do:"Prepare the gist, then the letter to the insurance company. Send it for approval before anything goes out.",
+       done:"The draft is approved by the doctor or advocate who owns this type of case.",
+       watch:"Nothing leaves this office unapproved. A weak letter is harder to undo than a slow one."},
+      {n:4,ic:"📮",nm:"With the insurance company",who:"ins",d:35,note:"rep",
+       what:"The letter is with them and the 30-day clock is running.",
+       do:"Record their acknowledgement. Send reminders on day 10, 20 and 30 if they stay silent.",
+       done:"They settle it, or the 30 days run out and we escalate.",
+       watch:"If they raise a query the ball is back with US — answer it before their deadline, not ours."},
+      {n:5,ic:"⚖️",nm:"Escalation",who:"us",d:20,
+       what:"They said no, or said nothing. Taking it above them.",
+       do:"Go to the grievance officer, and prepare the Ombudsman filing if that also fails.",
+       done:"Either they settle, or the Ombudsman complaint is registered.",
+       watch:"The one-year window from the rejection date is the hard limit. Check it before anything else."},
+      {n:6,ic:"🏛️",nm:"Ombudsman",who:"omb",d:90,note:"omb",
+       what:"The case is with the Insurance Ombudsman.",
+       do:"Keep the filing number on the case, answer every letter the same day, prepare for the hearing.",
+       done:"An award or a dismissal has been received and recorded.",
+       watch:"Their deadlines are not negotiable. A missed reply can end the complaint."},
+      {n:7,ic:"🎯",nm:"Outcome",who:"us",d:7,
+       what:"A decision has come. Recording what it means for everyone.",
+       do:"Put the result and the awarded amount on the case, and tell the complainant yourself.",
+       done:"The result is recorded and the customer has been told by a person.",
+       watch:"Good news or bad, a person delivers it — never an automatic message."},
+      {n:8,ic:"🏦",nm:"Settlement",who:"comp",d:14,
+       what:"The money has to reach the customer, then our fee has to reach us.",
+       do:"Confirm the customer received their money, raise our fee, pay whoever brought the case.",
+       done:"Customer paid, our fee received, every share settled.",
+       watch:"Once they have their money, chasing our fee gets harder every week. Start on day one."}],
+    s6:"How a claim travels",
+    s6steps:[
+      "<strong>An admin starts it.</strong> Case Board → open the claim → <span class='btn'>⚖️ Start Level-2 processing</span>. It lands in Consolidation.",
+      "<strong>Whoever is on duty for that bucket picks it up</strong> from My Desk, or works the claim assigned to them by name.",
+      "<strong>They do the work</strong> described under <em>Do</em> for that bucket.",
+      "<strong>They check the <em>Done</em> line.</strong> If every part is true, they open the claim and press <span class='btn'>Finished here → move to …</span>.",
+      "<strong>The claim appears in the next bucket</strong> for whoever is on duty there. Its clock restarts from zero for that bucket.",
+      "<strong>Repeat</strong> until Settlement. Closing the case is done from the claim itself."],
+    s6p:"Every move is written into the case history with the name of the person who made it, so six months later it is clear who moved what and when.",
+    s6h1:"Going backwards",
+    s6p1:"Work does come back — a draft is returned, a document turns out to be the wrong one. Use <span class='btn'>Move somewhere else instead</span>, choose the earlier bucket, and <strong>write the reason</strong>. The reason is required, because an exception nobody explained is how the same mistake repeats.",
+    s6h2:"Skipping a bucket",
+    s6p2:"Allowed, using the same control — pick any bucket, not just the next one. Use it when a step genuinely does not apply (for example, the insurance company settles during the 30 days, so the case goes straight from <em>With the insurance company</em> to <em>Outcome</em>).",
+    s6h3:"The one automatic move",
+    s6p3:"When every required document is in, a claim in <strong>Documents</strong> shows as ready and can move to Drafting in one click — individually, or all at once from My Desk. This is the only automatic move, because it is the only one the system can <em>prove</em>. Everywhere else, “finished” is a judgement, and moving a claim on a guess is worse than leaving it where a person can see it.",
+    tagAuto:"Automatic", tagManual:"Manual", tagGap:"Not automated",
+    s7:"How a staff member knows what to do today",
+    s7p:"<strong>Open My Desk. It answers in order.</strong>",
+    s7steps:[
+      "<strong>Are you on duty, and for what?</strong> Named in words at the top.",
+      "<strong>The whole journey</strong> — all eleven stages, counts, who is on duty. This is the map, so you can see where your bucket sits in the process.",
+      "<strong>Needs attention now</strong> — at most eight claims, each with a plain-language reason: <em>“nothing has moved for 29 days”</em>, <em>“the one-year Ombudsman window is closing”</em>. Never a code, never a flag name.",
+      "<strong>Your buckets</strong>, with counts and a <span class='btn'>What do I do here?</span> that opens the four lines for that bucket."],
+    s7cl:"What you will and will not see",
+    s7cp:"A staff member sees <strong>only the buckets they are on duty for</strong>, plus any claim assigned to them by name. Super-admins and sub-super-admins see everything. If a bucket you expected is missing, you are not on duty for it — ask for the duty to be set.",
+    s8:"How priority is decided",
+    s8p:"The <em>Needs attention now</em> list is sorted by a fixed rule, not by anyone’s opinion. Highest first:",
+    s8h:["Weight","Condition","Why"],
+    s8r:[
+      ["<b>+500</b>","The one-year Ombudsman window is closing","A legal deadline outranks everything. Miss it and the case is over."],
+      ["<b>+100</b>","A park has expired","We chose to pause it; the pause is finished, so it is ours again."],
+      ["<b>+50</b>","Nobody outside is holding it up","If we are the blocker, only we can fix it."],
+      ["<b>+1 per day</b>","Days past that bucket’s clock","The longer it is late, the higher it climbs."]],
+    s8p2:"On top of that, <strong>your own assigned claims come first</strong> in your list. The days counted are days in <em>that bucket</em>, not days since the claim was created — three weeks in Drafting is a different problem from three weeks in the office.",
+    s9:"Overriding priority by hand",
+    s9p:"The founder or a manager will often know something the system cannot — a customer has complained, a branch partner is watching, a hearing date was brought forward. Today there are <strong>three levers</strong>, and they are used in this order.",
+    s9c:[
+      ["1. Assign it to a person","Open the claim → choose a name. That claim now sits at the <strong>top of that person’s list</strong>, in whichever bucket it is in, regardless of its score. This is the normal way to say <em>“you, this one, today.”</em>"],
+      ["2. Say what it is waiting for","Open the claim → set what it waits for. Choosing <em>Us — nothing is blocking</em> or <em>A reviewer here</em> adds weight and moves it up. Choosing <em>The complainant</em> or <em>The insurance company</em> tells everyone the ball is not in our court, and it stops competing with work we can actually do."],
+      ["3. Park the things it is competing with","To make one claim the clear top of a busy bucket, park the noise around it. A park needs a <strong>reason and a return date</strong> — the system will not create an open-ended one, because that is exactly how a case disappears for a year. On the return date it comes back by itself and flags as <em>the pause has ended</em>."]],
+    s9cl:"Known gap — worth saying plainly",
+    s9cp:"There is <strong>no “pin this to the top” flag</strong> today. Priority is either computed from the rules above, or expressed by assigning the claim to a person. If you want a real manual priority — say, a three-level <em>Normal / High / Drop everything</em> that a super-admin sets and everyone sees — that is a small addition and worth doing once you have run the model for a few weeks and know what you actually reach for.",
+    s10:"Fallbacks and awkward situations",
+    s10s:[
+      ["Nobody is on duty for a bucket that has work","My Desk shows it under <strong>Cover these buckets</strong> with the count waiting. A super-admin presses <span class='btn'>Set duty</span> right there. Until someone is rostered, the work is still visible to admins — it is not lost, just unowned."],
+      ["The person on duty is on leave today","This is the one that used to go unnoticed, because the rota still showed a name. It now appears as <strong>on duty but on leave</strong>, ranked <em>above</em> an empty bucket, with the date they return and the cover person named if the leave record has one. Put someone else on the bucket for those dates — the two duties can overlap, so you do not have to remove the original."],
+      ["Someone is going on leave next week","Shown as <strong>goes on leave soon</strong> up to a fortnight ahead, so cover is arranged before the gap rather than after. Arrange it when you see it — this list is short on purpose."],
+      ["Two people are on the same bucket — who takes which claim?","The system does not split the queue. Agree a rule in the office (odd/even claim numbers, by insurance company, or the first person to open it assigns it to themselves). <strong>Assigning a claim to yourself is the signal to the other person that you have taken it</strong> — it moves to the top of your list and shows your name on the claim."],
+      ["A claim is finished in its bucket but the next person is not ready","Move it anyway. A bucket is a queue, not a person’s inbox — the claim waiting in the next bucket is exactly how the next person knows work is coming. Holding it in your bucket hides it from the people who plan the day."],
+      ["The complainant has gone quiet and the case cannot progress","Set what it waits for to <strong>The complainant</strong>, and add a note. It stops competing with work we can actually do. If it will genuinely be weeks, <strong>park it with a return date</strong>. Do not simply leave it — an unparked silent case keeps climbing the stalled list and trains people to ignore the list."],
+      ["The hospital refuses the indoor case papers","Do not sit in Documents waiting. Send the standard letter for that refusal, note it on the case, and keep the bucket clock honest. If the wait will be long, park with a return date so it stops looking like nobody is working it."],
+      ["The one-year Ombudsman window is closing","It jumps to the top of every relevant list automatically, above everything else, with the reason spelled out. Treat it as the day’s first job regardless of what else is open. If you cannot action it, escalate to a super-admin the same day."],
+      ["The insurance company has gone silent past 30 days","The claim flags as stalled once the bucket clock runs out. <span class='tag gap'>Not automated</span> The day 10, 20 and 30 reminders are <strong>sent by a person</strong> — the system surfaces the overdue case, it does not chase them for you. Whoever is on duty for that bucket sends them and records it on the case."],
+      ["A claim was moved to the wrong bucket","Move it back using <span class='btn'>Move somewhere else instead</span> and write the reason. Nothing is lost; both moves stay in the case history. There is no need to ask anyone — it is better corrected immediately than left in the wrong queue."],
+      ["A claim has no email address and the stage runs on email","My Desk says so in words, because Consolidation, Escalation and Ombudsman all run on correspondence. Get the address before moving the claim forward — a case that reaches the Ombudsman with nowhere to send letters is stuck at the worst possible moment."],
+      ["A subscriber will not use the dashboard and rings the office","<strong>Work → Raise for a Subscriber.</strong> The claim goes onto their account, uses <strong>their own quota</strong> (never a free extra), and permanently records which staff member raised it. From there it follows the normal path — review, fee, then this manual."],
+      ["Someone leaves the company mid-case","Remove their duties, and reassign their claims to a new owner from the Case Board. An archived staff member loses all access immediately, but their claims keep their history — including every move they made."]],
+    s11:"The rhythm",
+    s11h:["When","Who","What"],
+    s11r:[
+      ["<b>Every morning</b>","Every staff member","Open My Desk. Work the <em>Needs attention now</em> list top-down, then your buckets."],
+      ["<b>Every morning</b>","Super-admin","Check <em>Cover these buckets</em> and <em>Paid, winnable, not started</em>. Both should be short."],
+      ["<b>As work finishes</b>","Whoever did it","Move the claim on. Do not batch this to the end of the day — the next bucket cannot plan around work it cannot see."],
+      ["<b>Weekly</b>","Super-admin","Set next week’s duties, covering any approved leave already visible."],
+      ["<b>Weekly</b>","Super-admin","Review anything stalled in the same bucket two weeks running — that is usually a process problem, not a person problem."]],
+    s12:"What the system does not do",
+    s12p:"Worth knowing, so nobody waits for something that is not coming.",
+    s12l:[
+      "<strong>It does not chase the insurance company.</strong> Day 10/20/30 reminders are sent by a person.",
+      "<strong>It does not move claims on by itself</strong>, except Documents → Drafting when every required document is in.",
+      "<strong>It does not split a shared bucket</strong> between two people on duty. Agree that in the office.",
+      "<strong>It has no manual priority flag</strong> yet — use assignment, the waiting-for field, and parking.",
+      "<strong>It does not decide anything with AI.</strong> Every position on every list is arithmetic over dates and values you can check."],
+    s12cl:"Still to be defined",
+    s12cp:"The <strong>Ombudsman</strong> bucket’s detailed steps, and everything after it, are waiting on the founder’s Lokpal flow. Those buckets exist and work today under the general rules above — they simply do not yet have the specific checklist the earlier buckets have.",
+    foot:"<strong>Level-2 Operating Manual</strong> — NidaanPartner.com. The four lines for every bucket also appear on screen, in English and Hindi, under <em>What do I do here?</em>"
+  },
+
+  hi: {
+    dir:"Bhasha", eyebrow:"NidaanPartner · Office ka Tarika",
+    title:"Level-2 Operating Manual",
+    lede:"Jis din hum ek paid, jeetne-layak claim shuru karte hain, us din se paisa aane tak wo kaise chalta hai — har step par kiske paas rehta hai, kisi ko kaise pata chale ki aaj kya karna hai, aur kuch galat ho jaye to kya karein.",
+    m1:"Kiske liye:", m1v:"har wo staff jo claims par kaam karta hai",
+    m2:"Kab se:", m2v:"Level-2 fee aane ke baad",
+    m3:"Screens:", m3v:"My Desk · Case Board",
+    print:"Print karein",
+    s1:"Poora model ek paragraph mein",
+    s1p:"Ek claim ek time par <strong>sirf ek bucket</strong> mein rehta hai. Bucket matlab kaam ka ek hissa — wahi cheez jo purane system mein folder thi. <strong>Duty</strong> batati hai ki aaj wo bucket kaun sambhal raha hai. <strong>Assignment</strong> batati hai ki ek particular claim ka malik kaun hai. Claim agle bucket mein tab jaata hai jab koi vyakti kahe ki uska hissa poora ho gaya. Apne aap kuch nahi chalta — sirf ek case chhod kar, jo system sach mein prove kar sakta hai.",
+    s1cl:"Ek niyam jo poore system ko sahi rakhta hai",
+    s1cp:"Bucket mein <strong>sirf wahi claim hote hain jinhe kisi ne shuru kiya hai</strong>. Agar claim Drafting mein hai, to uski drafting sach mein ho rahi hai. Isi liye bucket ki ginti par bharosa kiya ja sakta hai, aur isi liye bucket kholna kaam ka hai.",
+    s2:"Gate se pehle",
+    s2p1:"Level-2 buckets mein koi claim galti se nahi aata. Claim mein <strong>dono</strong> cheezein honi chahiye:",
+    s2l1:"review jo kahe ki claim <strong>lada ja sakta hai</strong>, aur",
+    s2l2:"<strong>Level-2 fee aa chuki ho</strong>.",
+    s2p2:"Tab tak claim <strong>Conversion</strong> mein rukta hai. Jiska review ho gaya par fee nahi aayi, wo dikhega <em>complainant ka intezaar</em>. Jiski fee aa gayi par kaam shuru nahi hua, wo dikhega <em>paid aur jeetne-layak — Level-2 ka kaam shuru nahi hua</em>, aur My Desk par <span class='btn'>⚖️ Paid, winnable, not started</span> mein aayega.",
+    s2cl:"Is list ko roz dekhein",
+    s2cp:"Is list ka har claim wo paisa hai jo aa chuka hai par uske badle kaam shuru nahi hua. Screen par yahi sabse mehnga item hai. Ye list chhoti honi chahiye, aur kabhi purani nahi honi chahiye.",
+    s3:"Kaun kya kar sakta hai",
+    s3h:["Kaam","Kaun kar sakta hai","Kahan"],
+    s3r:[
+      ["Claim par <b>Level-2 shuru</b> karna","Super-admin, Sub-super-admin","Case Board → claim kholein"],
+      ["Claim ko agle bucket mein <b>bhejna</b>","Koi bhi staff","Case Board → claim kholein"],
+      ["Claim ko <b>peeche bhejna</b>","Koi bhi staff <em>(kaaran likhna zaroori)</em>","Case Board → Move somewhere else"],
+      ["<b>Jo bhi taiyaar hai sab aage bhejna</b>","Super-admin, Sub-super-admin","My Desk → Move all of them on"],
+      ["<b>Kisi ko duty par lagana</b>","Super-admin","My Desk → Set duty"],
+      ["Claim kisi vyakti ko <b>saunpna</b>","Koi bhi staff","Case Board → claim kholein"],
+      ["Claim <b>pause karna</b> / kiska intezaar hai batana","Koi bhi staff","Case Board → claim kholein"]],
+    s3cl:"Shuru karna limited kyun, par aage badhana nahi",
+    s3cp:"Shuru karna matlab office ka commitment ki jis kaam ka paisa liya hai wo ab chalu ho raha hai — ye management ka faisla hai. Claim aage badhana matlab sirf itna ki jisne kaam kiya wo keh raha hai ki ho gaya. Jo log kaam kar rahe hain unhe apna kaam report karne ke liye permission ki line mein nahi lagna chahiye.",
+    s4:"Kaam baantna: do alag cheezein",
+    s4p:"In dono mein log confuse ho jaate hain, jabki dono ka kaam alag hai. Aam taur par aap dono use karenge.",
+    s4h:["","Duty","Assignment"],
+    s4r:[
+      ["<b>Sawaal</b>","“Is hafte Documents kaun dekh raha hai?”","“NP-118 kiska hai?”"],
+      ["<b>Kisse juda</b>","Ek bucket se, kuch tarikhon ke liye","Ek claim se, jab tak badla na jaye"],
+      ["<b>Kaun lagata hai</b>","Super-admin","Koi bhi"],
+      ["<b>Asar</b>","Wo bucket unki My Desk par <b>YOURS TODAY</b> likha dikhta hai","Wo claim unki list mein sabse upar aa jaata hai, chahe kisi bhi bucket mein ho"],
+      ["<b>Kab use karein</b>","Rozmarra ka kaam — bucket ek queue hai jisse duty wala koi bhi utha sakta hai","Wo case jinhe ek hi vyakti dekhe: nazuk, complicated, ya kisi ko waada kiya hua"]],
+    s4p2:"Dono tarike chalte hain aur dono normal hain: <strong>ek bucket par kai log</strong> (Documents ki bheed wali queue), aur <strong>ek vyakti kai buckets par</strong> (chhote office mein ek hi insaan Drafting aur Escalation dono dekhta hai).",
+    s4cl:"Shuruaat ke liye salah",
+    s4cp:"Jis bhi bucket mein kaam hai, us par kam se kam ek naam lagayein. Jahan do log ek bucket baant rahe hain, wahan aapas mein ek saaf niyam bana lein — jaise odd aur even claim number, ya bima company ke hisaab se — kyunki system aapke liye queue nahi baantega.",
+    s5:"Aath buckets",
+    s5p:"Neeche har bucket batata hai ki wo kya hai, aapko kya karna hai, kaam poora kab mana jayega, aur aam taur par kya galat hota hai. Yahi chaar lines screen par bhi <span class='btn'>What do I do here?</span> mein milti hain. Ghadi batati hai ki kitne din baad claim “aटka hua” dikhne lagega.",
+    s5gate:"⚖️ Level-2 yahan se shuru — claim Consolidation mein aata hai",
+    lWhat:"Kya hai", lDo:"Karna hai", lDone:"Poora kab", lWatch:"Dhyan",
+    lUs:"Hamare paas", lComp:"Complainant", lIns:"Bima company", lOmb:"Lokpal",
+    clock:"Atka hua dikhega", days:"din baad",
+    s5notes:{docs:"sirf yahi ek bucket khud aage badh sakta hai",
+             rep:"din 10/20/30 ke reminder aadmi bhejta hai, apne aap nahi jaate",
+             omb:"iske detailed steps founder abhi tay karenge"},
+    stages:[
+      {n:1,ic:"📝",nm:"Consolidation",who:"us",d:5,
+       what:"Kisi ki taraf se baat karne se pehle uski likhit ijaazat aur ek chalu email lena.",
+       do:"Signed authorisation lein, claim wala email banwayein, aur case ki theek category set karein.",
+       done:"Authorisation sign ho gaya, claim email chalu hai, category chun li gayi.",
+       watch:"Category hi poori document list tay karti hai. Galat chuni to hafton tak galat kagaz jama karte rahenge."},
+      {n:2,ic:"📄",nm:"Documents",who:"comp",d:20,note:"docs",
+       what:"Is tarah ke case ke liye zaroori har kagaz jama karna.",
+       do:"Ek baar mein ek hi document maangein. Lene se pehle dekh lein ki sahi kagaz hai aur padha ja sakta hai.",
+       done:"Har zaroori document aa gaya, aur jo original chahiye the wo post se pahunch gaye.",
+       watch:"Hospital ka indoor case papers dene se mana karna aam baat hai — iske liye hamare paas letter hai; intezaar ki jagah wo bhejein."},
+      {n:3,ic:"✍️",nm:"Drafting",who:"us",d:5,
+       what:"Case ko likhna aur office ke andar se approve karana.",
+       do:"Pehle gist banayein, phir bima company ke liye letter. Kuch bhi bahar bhejne se pehle approval lein.",
+       done:"Jis doctor ya advocate ka ye case-type hai, unhone draft approve kar diya.",
+       watch:"Is office se bina approval kuch bahar nahi jaata. Kamzor letter ko sudharna, dhire bhejne se kahin mushkil hai."},
+      {n:4,ic:"📮",nm:"Bima company ke paas",who:"ins",d:35,note:"rep",
+       what:"Letter unke paas hai aur 30 din ki ghadi chal rahi hai.",
+       do:"Unki acknowledgement record karein. Chup rahein to din 10, 20 aur 30 par reminder bhejein.",
+       done:"Ya to wo settle kar dete hain, ya 30 din khatam aur hum escalate karte hain.",
+       watch:"Agar unhone koi sawaal bheja to gend wapas HAMARE paas hai — unki deadline se pehle jawab dein, apni se nahi."},
+      {n:5,ic:"⚖️",nm:"Escalation",who:"us",d:20,
+       what:"Unhone mana kar diya, ya kuch jawab hi nahi diya. Ab unse upar le jaana.",
+       do:"Grievance officer ke paas jayein, aur wo bhi na chale to Lokpal ki filing taiyaar karein.",
+       done:"Ya to wo settle karte hain, ya Lokpal mein shikayat darj ho jaati hai.",
+       watch:"Rejection ki tarikh se ek saal ki limit hi asli deadline hai. Sabse pehle yahi check karein."},
+      {n:6,ic:"🏛️",nm:"Lokpal (Ombudsman)",who:"omb",d:90,note:"omb",
+       what:"Case Insurance Lokpal ke paas hai.",
+       do:"Filing number case par rakhein, unki har chitthi ka usi din jawab dein, aur hearing ki taiyari karein.",
+       done:"Award ya dismissal aa gaya aur record ho gaya.",
+       watch:"Unki deadline par koi baat-cheet nahi hoti. Ek jawab chhoot gaya to shikayat khatam ho sakti hai."},
+      {n:7,ic:"🎯",nm:"Nateeja (Outcome)",who:"us",d:7,
+       what:"Faisla aa gaya. Ab record karna ki iska matlab kiske liye kya hai.",
+       do:"Nateeja aur mili hui rakam case par likhein, aur complainant ko khud batayein.",
+       done:"Nateeja record ho gaya aur customer ko ek insaan ne bata diya.",
+       watch:"Khabar acchi ho ya buri, insaan sunata hai — kabhi automatic message nahi."},
+      {n:8,ic:"🏦",nm:"Bhugtan (Settlement)",who:"comp",d:14,
+       what:"Paisa customer tak pahunchna hai, phir hamari fees hum tak.",
+       do:"Confirm karein ki customer ko paisa mila, hamari fees raise karein, aur jo case laya tha uska hissa dein.",
+       done:"Customer ko paisa mila, hamari fees aa gayi, har hissa chukta ho gaya.",
+       watch:"Jab unke paas paisa aa jaata hai, uske baad fees maangna har hafte mushkil hota jaata hai. Pehle din se shuru karein."}],
+    s6:"Claim kaise safar karta hai",
+    s6steps:[
+      "<strong>Admin use shuru karta hai.</strong> Case Board → claim kholein → <span class='btn'>⚖️ Start Level-2 processing</span>. Claim Consolidation mein aa jaata hai.",
+      "<strong>Us bucket par jo duty par hai wo use uthata hai</strong> My Desk se, ya apne naam se saunpe gaye claim par kaam karta hai.",
+      "<strong>Wo kaam karta hai</strong> jo us bucket ki <em>Karna hai</em> line mein likha hai.",
+      "<strong>Phir <em>Poora kab</em> line check karta hai.</strong> Agar sab sach hai, claim khol kar <span class='btn'>Finished here → move to …</span> dabata hai.",
+      "<strong>Claim agle bucket mein dikhne lagta hai</strong> wahan jo duty par hai uske liye. Us bucket ke liye uski ghadi zero se shuru hoti hai.",
+      "<strong>Yahi dohrate rahein</strong> Settlement tak. Case band karna claim ke andar se hota hai."],
+    s6p:"Har move case ki history mein us vyakti ke naam ke saath likha jaata hai, taki chhe mahine baad bhi saaf rahe ki kisne kya aur kab badla.",
+    s6h1:"Peeche bhejna",
+    s6p1:"Kaam wapas aata hai — draft laut aata hai, ya koi document galat nikal jaata hai. <span class='btn'>Move somewhere else instead</span> use karein, pichhla bucket chunein, aur <strong>kaaran likhein</strong>. Kaaran zaroori hai, kyunki jis exception ki wajah kisi ne nahi batayi, wahi galti dobara hoti hai.",
+    s6h2:"Ek bucket chhod dena",
+    s6p2:"Isi control se ho sakta hai — koi bhi bucket chunein, sirf agla nahi. Tab use karein jab koi step sach mein lागू hi na ho (jaise bima company 30 din ke andar hi settle kar de, to case seedha <em>Bima company ke paas</em> se <em>Nateeja</em> mein chala jaata hai).",
+    s6h3:"Sirf ek automatic move",
+    s6p3:"Jab har zaroori document aa jaata hai, <strong>Documents</strong> wala claim “taiyaar” dikhta hai aur ek click mein Drafting mein chala jaata hai — ek-ek karke, ya My Desk se sab ek saath. Yahi ekmatra automatic move hai, kyunki sirf yahi system <em>prove</em> kar sakta hai. Baaki har jagah “poora ho gaya” ek faisla hai, aur andaaze par claim aage badhana, use saamne rakhne se zyada khatarnak hai.",
+    tagAuto:"Automatic", tagManual:"Haath se", tagGap:"Automatic nahi",
+    s7:"Staff ko kaise pata chale ki aaj kya karna hai",
+    s7p:"<strong>My Desk kholein. Wo isi kram mein jawab deta hai.</strong>",
+    s7steps:[
+      "<strong>Aap duty par hain ya nahi, aur kis cheez ki?</strong> Sabse upar shabdon mein likha hai.",
+      "<strong>Poora safar</strong> — saare gyarah stage, ginti, aur kaun duty par hai. Ye naksha hai, jisse dikhta hai ki aapka bucket poore process mein kahan baithta hai.",
+      "<strong>Abhi dhyan chahiye</strong> — zyada se zyada aath claim, har ek ke saath saaf shabdon mein wajah: <em>“29 din se kuch nahi hua”</em>, <em>“Lokpal ki ek saal wali khidki band ho rahi hai”</em>. Na koi code, na koi flag ka naam.",
+      "<strong>Aapke buckets</strong>, ginti ke saath, aur <span class='btn'>What do I do here?</span> jo us bucket ki chaar lines khol deta hai."],
+    s7cl:"Aapko kya dikhega aur kya nahi",
+    s7cp:"Staff ko <strong>sirf wahi buckets dikhte hain jin par unki duty hai</strong>, aur wo claim jo unke naam se saunpe gaye hain. Super-admin aur sub-super-admin ko sab dikhta hai. Agar koi bucket nahi dikh raha jo aapko dikhna chahiye tha, matlab us par aapki duty nahi hai — duty lagwayein.",
+    s8:"Priority kaise tay hoti hai",
+    s8p:"<em>Abhi dhyan chahiye</em> list ek tay niyam se lagti hai, kisi ki raay se nahi. Sabse upar wale pehle:",
+    s8h:["Weight","Sthiti","Kyun"],
+    s8r:[
+      ["<b>+500</b>","Lokpal ki ek saal wali khidki band ho rahi hai","Kanooni deadline sabse upar hai. Chook gaye to case hi khatam."],
+      ["<b>+100</b>","Pause ki tarikh nikal gayi","Humne hi roka tha; ab rok khatam, to phir se hamara kaam hai."],
+      ["<b>+50</b>","Bahar ka koi nahi rok raha","Agar rukawat hum hain, to sirf hum hi hata sakte hain."],
+      ["<b>+1 har din</b>","Bucket ki ghadi se kitne din upar","Jitni zyada der, utna upar chadhta jaata hai."]],
+    s8p2:"Iske upar, <strong>aapke naam wale claim pehle aate hain</strong> aapki list mein. Din <em>us bucket</em> ke gine jaate hain, claim banne se nahi — Drafting mein teen hafte aur office mein teen hafte, dono alag samasya hain.",
+    s9:"Priority ko haath se badalna",
+    s9p:"Founder ya manager ko aksar wo baat pata hoti hai jo system ko nahi — customer ne shikayat ki hai, branch partner dekh raha hai, hearing ki tarikh aage aa gayi. Abhi <strong>teen tarike</strong> hain, aur isi kram mein use hote hain.",
+    s9c:[
+      ["1. Claim kisi vyakti ko saunp dein","Claim kholein → naam chunein. Ab wo claim <strong>us vyakti ki list mein sabse upar</strong> aa jaata hai, chahe kisi bhi bucket mein ho, uske score se koi farak nahi. Yahi normal tarika hai ye kehne ka ki <em>“aap, yahi wala, aaj.”</em>"],
+      ["2. Batayein ki kiska intezaar hai","Claim kholein → set karein ki kiska intezaar hai. <em>Hamare paas — koi rukawat nahi</em> ya <em>Yahan ka reviewer</em> chunne se weight badhta hai aur claim upar aata hai. <em>Complainant</em> ya <em>Bima company</em> chunne se sabko pata chal jaata hai ki gend hamare paas nahi hai, aur wo us kaam se muqabla karna band kar deta hai jo hum sach mein kar sakte hain."],
+      ["3. Aas-paas ka kaam pause kar dein","Kisi ek claim ko bheed wale bucket mein saaf sabse upar laana ho, to uske aas-paas ka shor pause kar dein. Pause ke liye <strong>kaaran aur wapas aane ki tarikh</strong> dono zaroori hain — system bina tarikh ka pause banne hi nahi dega, kyunki theek isi tarah case saal bhar ke liye gayab ho jaate hain. Tarikh aate hi wo khud wapas aa jaata hai aur <em>pause khatam</em> dikhata hai."]],
+    s9cl:"Ek kami — saaf saaf keh dena behtar hai",
+    s9cp:"Abhi <strong>“ise sabse upar chipka do” wala koi flag nahi hai</strong>. Priority ya to upar wale niyamon se banti hai, ya claim kisi vyakti ko saunp kar batayi jaati hai. Agar aapko sach mein manual priority chahiye — jaise teen level <em>Normal / High / Sab chhod kar yeh</em> jo super-admin lagaye aur sabko dikhe — to wo chhota kaam hai, par behtar hai ki pehle kuch hafte ye model chala kar dekh lein ki aap asal mein kis cheez ke liye haath badhate hain.",
+    s10:"Fallback aur mushkil sthitiyan",
+    s10s:[
+      ["Jis bucket mein kaam hai us par koi duty par nahi hai","My Desk par wo <strong>Cover these buckets</strong> mein dikhta hai, kitna kaam ruka hai uske saath. Super-admin wahin <span class='btn'>Set duty</span> daba sakte hain. Jab tak koi nahi lagta, kaam admin ko dikhta rahta hai — gum nahi hota, bas uska koi malik nahi hota."],
+      ["Duty wala aaj chhutti par hai","Yahi wo sthiti thi jo pehle kisi ko pata hi nahi chalti thi, kyunki roster mein naam to dikhta tha. Ab ye <strong>duty par hai par chhutti par</strong> dikhta hai, khaali bucket se bhi <em>upar</em>, wapasi ki tarikh aur agar leave record mein cover ka naam hai to wo bhi. Un tarikhon ke liye kisi aur ko us bucket par laga dein — do duty ek saath chal sakti hain, purani hatani nahi padti."],
+      ["Koi agle hafte chhutti par ja raha hai","<strong>Jald chhutti par</strong> dikhta hai, do hafte pehle tak, taki cover khali jagah banne se pehle lag jaye, baad mein nahi. Jab dikhe tabhi laga dein — ye list jaan-boojh kar chhoti rakhi gayi hai."],
+      ["Ek hi bucket par do log hain — kaun sa claim kaun le?","System queue nahi baantta. Office mein niyam bana lein (odd/even claim number, bima company ke hisaab se, ya jo pehle khole wo use apne naam kar le). <strong>Claim apne naam karna hi doosre ko ishara hai ki aapne le liya</strong> — wo aapki list mein upar aa jaata hai aur claim par aapka naam dikhne lagta hai."],
+      ["Bucket ka kaam poora hai par agla vyakti taiyaar nahi","Phir bhi aage bhej dein. Bucket ek queue hai, kisi ka inbox nahi — agle bucket mein rukha claim hi to agle vyakti ko batata hai ki kaam aa raha hai. Apne bucket mein roke rakhne se wo un logon se chhup jaata hai jo din ki planning karte hain."],
+      ["Complainant chup ho gaya aur case aage nahi badh sakta","Set karein ki <strong>Complainant</strong> ka intezaar hai, aur ek note likh dein. Isse wo us kaam se muqabla karna band kar deta hai jo hum kar sakte hain. Agar sach mein hafton lagne wale hain, to <strong>wapasi ki tarikh ke saath pause kar dein</strong>. Aise hi mat chhodein — bina pause wala chup case atki hui list mein chadhta rehta hai aur log list ko anदekha karna seekh jaate hain."],
+      ["Hospital indoor case papers dene se mana kar raha hai","Documents mein baith kar intezaar mat karein. Is mana karne ke liye jo standard letter hai wo bhejein, case par note karein, aur bucket ki ghadi sach rakhein. Agar intezaar lamba hone wala hai, to wapasi ki tarikh ke saath pause kar dein taki aisa na lage ki koi kaam hi nahi kar raha."],
+      ["Lokpal ki ek saal wali khidki band ho rahi hai","Wo apne aap har zaroori list mein sabse upar chala jaata hai, baaki sab se upar, wajah saaf likhi hui. Aur kuch bhi khula ho, ise hi din ka pehla kaam manein. Agar aap khud nahi kar sakte, to usi din super-admin tak pahunchayein."],
+      ["Bima company 30 din se chup hai","Bucket ki ghadi khatam hote hi claim atka hua dikhne lagta hai. <span class='tag gap'>Automatic nahi</span> Din 10, 20 aur 30 wale reminder <strong>aadmi bhejta hai</strong> — system atke hue case ko saamne laata hai, aapke liye unka peecha nahi karta. Jo us bucket par duty par hai wahi reminder bhejta hai aur case par likh deta hai."],
+      ["Claim galat bucket mein chala gaya","<span class='btn'>Move somewhere else instead</span> se wapas le aayein aur kaaran likh dein. Kuch gum nahi hota; dono move case history mein rehte hain. Kisi se poochne ki zaroorat nahi — turant sudharna, galat queue mein chhodne se behtar hai."],
+      ["Claim par email nahi hai aur us stage ka kaam email par chalta hai","My Desk ye shabdon mein bata deta hai, kyunki Consolidation, Escalation aur Lokpal — teeno chitthi-patri par chalte hain. Claim aage badhane se pehle email lein — jo case Lokpal tak pahunch jaye aur chitthi bhejne ki jagah hi na ho, wo sabse bure waqt par atak jaata hai."],
+      ["Subscriber dashboard use nahi karna chahta aur office par phone karta hai","<strong>Work → Raise for a Subscriber.</strong> Claim unke hi account par jaata hai, <strong>unka hi quota</strong> kharch hota hai (muft mein extra nahi milta), aur hamesha ke liye record ho jaata hai ki kis staff ne darj kiya. Aage se wo normal raste par chalta hai — review, fees, phir yeh manual."],
+      ["Koi staff case ke beech mein company chhod deta hai","Unki duty hata dein, aur unke claim Case Board se kisi naye malik ko saunp dein. Archive kiye gaye staff ki saari access turant khatam ho jaati hai, par unke claim apni poori history rakhte hain — unke kiye har move ke saath."]],
+    s11:"Roz ka aur hafte ka kram",
+    s11h:["Kab","Kaun","Kya"],
+    s11r:[
+      ["<b>Roz subah</b>","Har staff","My Desk kholein. <em>Abhi dhyan chahiye</em> list upar se neeche nipatayein, phir apne buckets."],
+      ["<b>Roz subah</b>","Super-admin","<em>Cover these buckets</em> aur <em>Paid, winnable, not started</em> dekhein. Dono chhoti honi chahiye."],
+      ["<b>Kaam khatam hote hi</b>","Jisne kiya","Claim aage bhej dein. Din ke aakhir tak ikattha mat karein — agla bucket us kaam ki planning nahi kar sakta jo use dikh hi nahi raha."],
+      ["<b>Har hafte</b>","Super-admin","Agle hafte ki duty lagayein, jo approved chhutti dikh rahi hai uska cover rakh kar."],
+      ["<b>Har hafte</b>","Super-admin","Jo do hafte se ek hi bucket mein atka hai use dekhein — aksar wo process ki dikkat hoti hai, kisi vyakti ki nahi."]],
+    s12:"System kya nahi karta",
+    s12p:"Ye jaan lena zaroori hai, taki koi aisi cheez ka intezaar na kare jo aane hi nahi wali.",
+    s12l:[
+      "<strong>Ye bima company ka peecha nahi karta.</strong> Din 10/20/30 wale reminder aadmi bhejta hai.",
+      "<strong>Ye khud claim aage nahi badhata</strong>, sivay Documents → Drafting ke, jab har zaroori document aa chuka ho.",
+      "<strong>Ye ek bucket ko do duty walon mein nahi baantta.</strong> Ye office mein tay karein.",
+      "<strong>Iske paas abhi manual priority flag nahi hai</strong> — assignment, intezaar wala field, aur pause use karein.",
+      "<strong>Ye AI se koi faisla nahi karta.</strong> Har list mein har claim ki jagah tarikhon aur values ka seedha hisaab hai, jise aap khud check kar sakte hain."],
+    s12cl:"Abhi tay hona baaki hai",
+    s12cp:"<strong>Lokpal</strong> bucket ke detailed steps, aur uske baad ka sab kuch, founder ke Lokpal flow ka intezaar kar raha hai. Wo buckets aaj bhi maujood hain aur upar wale aam niyamon par kaam karte hain — bas unke paas wo khaas checklist nahi hai jo pehle wale buckets ke paas hai.",
+    foot:"<strong>Level-2 Operating Manual</strong> — NidaanPartner.com. Har bucket ki chaar lines screen par bhi milti hain, English aur Hindi mein, <em>What do I do here?</em> ke andar."
+  }
+};
+
+var LANG = (function(){
+  try { var v = localStorage.getItem('nd_l2manual_lang'); if (v === 'en' || v === 'hi') return v; }
+  catch(e){}
+  return 'hi';   /* Hinglish first: this is written for the people doing the work */
+})();
+
+function esc(s){ return String(s == null ? '' : s); }
+
+function tbl(head, rows){
+  return '<div class="tw"><table><thead><tr>' +
+    head.map(function(h){ return '<th>' + h + '</th>'; }).join('') +
+    '</tr></thead><tbody>' +
+    rows.map(function(r){
+      return '<tr>' + r.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function sec(n, title, body){
+  return '<section><div class="shead"><span class="snum">' + n + '</span><h2>' + title +
+         '</h2></div>' + body + '</section>';
+}
+
+function callout(cls, label, text){
+  return '<div class="callout ' + cls + '"><span class="lbl">' + label + '</span><p>' + text + '</p></div>';
+}
+
+function steps(list){
+  return '<ol class="steps">' + list.map(function(s){ return '<li>' + s + '</li>'; }).join('') + '</ol>';
+}
+
+function stageBlock(t, s){
+  var whoTxt = {us: t.lUs, comp: t.lComp, ins: t.lIns, omb: t.lOmb}[s.who];
+  var note = s.note ? ' · <span style="color:' +
+      (s.note === 'docs' ? 'var(--ok)' : (s.note === 'omb' ? 'var(--gate)' : 'var(--signal)')) +
+      '">' + t.s5notes[s.note] + '</span>' : '';
+  return '<div class="stage" data-n="' + s.n + '">' +
+    '<div class="sname">' + s.ic + ' ' + esc(s.nm) +
+      ' <span class="who' + (s.who === 'us' ? ' us' : '') + '">' + whoTxt + '</span></div>' +
+    '<dl class="g">' +
+      '<dt>' + t.lWhat + '</dt><dd>' + s.what + '</dd>' +
+      '<dt>' + t.lDo + '</dt><dd>' + s.do + '</dd>' +
+      '<dt>' + t.lDone + '</dt><dd>' + s.done + '</dd>' +
+      '<dt>' + t.lWatch + '</dt><dd class="watch">' + s.watch + '</dd>' +
+    '</dl>' +
+    '<div class="clock">' + t.clock + ' <b>' + s.d + ' ' + t.days + '</b>' + note + '</div></div>';
+}
+
+function render(){
+  var t = C[LANG];
+  document.title = t.title + ' — NidaanPartner';
+  document.documentElement.lang = (LANG === 'hi' ? 'hi-Latn' : 'en');
+
+  var h =
+    '<div class="langbar"><span class="lb">' + t.dir + '</span>' +
+      '<button class="lang" aria-pressed="' + (LANG === 'hi') + '" onclick="setLang(\'hi\')">Hinglish</button>' +
+      '<button class="lang" aria-pressed="' + (LANG === 'en') + '" onclick="setLang(\'en\')">English</button>' +
+      '<button class="prt" onclick="window.print()">' + t.print + '</button>' +
+    '</div>' +
+    '<header><div class="eyebrow">' + t.eyebrow + '</div>' +
+      '<h1>' + t.title + '</h1><p class="lede">' + t.lede + '</p>' +
+      '<div class="meta"><span><b>' + t.m1 + '</b> ' + t.m1v + '</span>' +
+        '<span><b>' + t.m2 + '</b> ' + t.m2v + '</span>' +
+        '<span><b>' + t.m3 + '</b> ' + t.m3v + '</span></div></header>';
+
+  h += sec(1, t.s1, '<p>' + t.s1p + '</p>' + callout('', t.s1cl, t.s1cp));
+
+  h += sec(2, t.s2,
+    '<p>' + t.s2p1 + '</p><ul><li>' + t.s2l1 + '</li><li>' + t.s2l2 + '</li></ul>' +
+    '<p>' + t.s2p2 + '</p>' + callout('warn', t.s2cl, t.s2cp));
+
+  h += sec(3, t.s3, tbl(t.s3h, t.s3r) + callout('', t.s3cl, t.s3cp));
+
+  h += sec(4, t.s4, '<p>' + t.s4p + '</p>' + tbl(t.s4h, t.s4r) +
+    '<p>' + t.s4p2 + '</p>' + callout('', t.s4cl, t.s4cp));
+
+  h += sec(5, t.s5, '<p>' + t.s5p + '</p>' +
+    '<div class="gatebar">' + t.s5gate + '</div>' +
+    t.stages.map(function(s){ return stageBlock(t, s); }).join(''));
+
+  h += sec(6, t.s6, steps(t.s6steps) + '<p>' + t.s6p + '</p>' +
+    '<h3 style="margin-top:1.5rem">' + t.s6h1 + '</h3><p>' + t.s6p1 + '</p>' +
+    '<h3 style="margin-top:1.3rem">' + t.s6h2 + '</h3><p>' + t.s6p2 + '</p>' +
+    '<h3 style="margin-top:1.3rem">' + t.s6h3 +
+      ' <span class="tag auto">' + t.tagAuto + '</span></h3><p>' + t.s6p3 + '</p>');
+
+  h += sec(7, t.s7, '<p>' + t.s7p + '</p>' + steps(t.s7steps) + callout('', t.s7cl, t.s7cp));
+
+  h += sec(8, t.s8, '<p>' + t.s8p + '</p>' + tbl(t.s8h, t.s8r) + '<p>' + t.s8p2 + '</p>');
+
+  h += sec(9, t.s9, '<p>' + t.s9p + '</p>' +
+    t.s9c.map(function(c){
+      return '<div class="card"><h3>' + c[0] + ' <span class="tag manual">' + t.tagManual +
+             '</span></h3><p>' + c[1] + '</p></div>';
+    }).join('') + callout('warn', t.s9cl, t.s9cp));
+
+  h += sec(10, t.s10, t.s10s.map(function(s){
+      return '<div class="scn"><div class="q">' + s[0] + '</div><p>' + s[1] + '</p></div>';
+    }).join(''));
+
+  h += sec(11, t.s11, tbl(t.s11h, t.s11r));
+
+  h += sec(12, t.s12, '<p>' + t.s12p + '</p><ul>' +
+    t.s12l.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>' +
+    callout('gate', t.s12cl, t.s12cp));
+
+  h += '<hr class="rule"><footer><p>' + t.foot + '</p></footer>';
+
+  document.getElementById('app').innerHTML = h;
+}
+
+function setLang(l){
+  LANG = l;
+  try { localStorage.setItem('nd_l2manual_lang', l); } catch(e){}
+  render();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+render();
+</script>

@@ -6594,7 +6594,13 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
 # team never needs the key. The page carries process design and aggregate figures - no customer
 # records - but the key still keeps it off the open web.
 
-_DOC_KEYS = {"end-to-end": "nidaan_end_to_end.html"}
+_DOC_KEYS = {
+    "end-to-end": "nidaan_end_to_end.html",
+    # The Level-2 operating manual — how a paid claim travels through the buckets. Shared with
+    # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
+    # Hinglish and English, because the people doing the work do not read release notes.
+    "l2-manual": "nidaan_l2_manual.html",
+}
 
 
 async def _doc_share_key() -> str:
@@ -6619,9 +6625,10 @@ async def _doc_access_ok(request: Request, key: str) -> bool:
         return False
 
 
-@app.get("/end-to-end", include_in_schema=False)
-async def nidaan_doc_end_to_end(request: Request, k: str = ""):
-    """The operating-model document. Shareable with a key; staff sessions open it directly."""
+async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse:
+    """One handler for every shared document, so a new one is a line in _DOC_KEYS and nothing
+    else. The access rule, the refusal page and the no-index headers stay in a single place —
+    a second copy of this is how one document quietly ends up world-readable."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     if not await _doc_access_ok(request, k):
@@ -6631,11 +6638,23 @@ async def nidaan_doc_end_to_end(request: Request, k: str = ""):
             "<p style='color:#555'>Ask whoever sent it for the full link, including the part after "
             "<code>?k=</code>. If you are on the Nidaan team, sign in to ops first and open it "
             "again.</p></div>", status_code=403)
-    f = static_dir / _DOC_KEYS["end-to-end"]
+    f = static_dir / _DOC_KEYS[slug]
     if not f.exists():
         raise HTTPException(status_code=404)
     return HTMLResponse(f.read_text(encoding="utf-8"),
                         headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+
+
+@app.get("/end-to-end", include_in_schema=False)
+async def nidaan_doc_end_to_end(request: Request, k: str = ""):
+    """The operating-model document. Shareable with a key; staff sessions open it directly."""
+    return await _serve_shared_doc(request, "end-to-end", k)
+
+
+@app.get("/l2-manual", include_in_schema=False)
+async def nidaan_doc_l2_manual(request: Request, k: str = ""):
+    """How the office runs a Level-2 claim, in Hinglish and English. Same share key."""
+    return await _serve_shared_doc(request, "l2-manual", k)
 
 
 @app.get("/nidaan/api/doc/feedback", include_in_schema=False)
