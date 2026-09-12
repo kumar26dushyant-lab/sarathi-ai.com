@@ -1187,6 +1187,21 @@ function openNotifChat() {
 document.addEventListener('click', () => { const m = document.getElementById('notifMenu'); if (m) m.style.display = 'none'; });
 
 // ── Load dashboard data ───────────────────────────────────────────────────────
+// Who is about to pay, in whatever form we have. Razorpay is already prefilled from the same
+// place, so if the checkout can address them, so can we.
+function _payWho(){
+  try{
+    if(!_meCache) return '';
+    return (_meCache.phone || _meCache.email || '').toString().trim();
+  }catch(e){ return ''; }
+}
+// Announce a checkout opening. Pairs with NidaanTrack's abandon beacon: if they close the tab
+// without paying, the abandonment now carries their number instead of being anonymous.
+function _payOpened(purpose){
+  try{ if(window.NidaanTrack) NidaanTrack.startFlow('pay', purpose, _payWho()); }catch(e){}
+}
+function _payDone(){ try{ if(window.NidaanTrack) NidaanTrack.completeFlow(); }catch(e){} }
+
 async function loadDashboard() {
   const [meRes, claimsRes] = await Promise.all([api('/nidaan/api/me'), api('/nidaan/api/claims')]);
   if (!meRes) return;
@@ -2286,7 +2301,7 @@ async function doSubscribe() {
         },
       });
       if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
-      try { if (window.NidaanTrack) NidaanTrack.startFlow('pay', 'subscription'); } catch(e){}
+      _payOpened('subscription');
       rzpSub.on('payment.failed', function(){
         msg.className = 'msg err';
         msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।'
@@ -2346,6 +2361,7 @@ async function doSubscribe() {
           ondismiss: function() { recoverPendingPayment(true); }
         },
         handler: async function(response) {
+          _payDone();   // paid - must not also count as an abandonment
           msg.className = 'msg ok';
           msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment received! Activating your plan…';
           btn.disabled = true;
@@ -2390,6 +2406,7 @@ async function doSubscribe() {
             + '<strong class="en">Payment could not be completed — you were NOT charged. Please try again.</strong>'
             + '<strong class="hi">भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।</strong></div>'; }
       });
+      _payOpened('subscription');
       rzp.open();
     }
   } catch(err) {
@@ -2766,6 +2783,7 @@ async function payClaim(claimId) {
       prefill: { name: _meCache ? _meCache.owner_name : '', email: _meCache ? _meCache.email : '', contact: _meCache ? _meCache.phone : '' },
       theme: { color: '#0891b2' },
       handler: async function(response) {
+        _payDone();   // paid - must not also count as an abandonment
         try {
           const vr = await api('/nidaan/api/claims/' + claimId + '/pay-verify', {
             method: 'POST',
@@ -2786,6 +2804,7 @@ async function payClaim(claimId) {
     rzp.on('payment.failed', function(){
       _pollClaimPaid(claimId, orderId, { attempts: 4, delay: 4000 }).then(ok => { if (!ok) { if (btn) btn.disabled = false; _claimConfirmingOverlay(claimId, orderId); } });
     });
+    _payOpened('review499');
     rzp.open();
   } catch(e) { alert('Error: ' + e.message); if (btn) btn.disabled = false; }
 }
@@ -2817,6 +2836,7 @@ async function payForReview(purchaseId) {
       },
       theme: { color: '#f59e0b' },
       handler: async function(response) {
+        _payDone();   // paid - must not also count as an abandonment
         try {
           const vr = await api('/nidaan/api/review/' + purchaseId + '/pay-verify', {
             method: 'POST',
@@ -2846,6 +2866,7 @@ async function payForReview(purchaseId) {
       alert('Payment failed: ' + response.error.description);
       if (btn) { btn.disabled = false; btn.textContent = 'Pay ₹499 Now →'; }
     });
+    _payOpened('review499');
     rzp.open();
   } catch(err) {
     alert('Error: ' + err.message);
@@ -3081,7 +3102,7 @@ if ('serviceWorker' in navigator) {
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
 <script src="/static/nidaan_support_widget.js?v=23" defer></script>
-<script src="/static/nidaan_track.js?v=1"></script>
+<script src="/static/nidaan_track.js?v=2"></script>
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>
 /* Register this dashboard's overlays so the phone Back button closes them instead of

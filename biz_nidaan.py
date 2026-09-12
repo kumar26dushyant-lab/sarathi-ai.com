@@ -1567,6 +1567,103 @@ async def get_active_subscription(account_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+async def payment_followups(days: int = 90, show: str = "open", limit: int = 200) -> list[dict]:
+    """People who reached a payment screen and never completed one.
+
+    The point of this list is a phone call. So it is keyed on the CONTACT, not the event: one row
+    per person, carrying the most recent thing that happened to them, why it failed if we know,
+    and how many times they have tried. Someone who tried three times and gave up is a different
+    conversation from someone whose UPI timed out once.
+
+    Anyone with a successful payment on the same contact drops out entirely — chasing a customer
+    who has already paid is worse than not chasing at all.
+    """
+    days = max(1, min(int(days or 90), 365))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            """
+            WITH tried AS (
+                SELECT TRIM(contact) AS contact,
+                       MAX(created_at)                                   AS last_at,
+                       MIN(created_at)                                   AS first_at,
+                       COUNT(*)                                          AS attempts,
+                       MAX(COALESCE(NULLIF(purpose,''),''))              AS purpose,
+                       MAX(COALESCE(amount_paise,0))                     AS amount_paise,
+                       MAX(COALESCE(NULLIF(ref_code,''),''))             AS ref_code,
+                       MAX(COALESCE(account_id,0))                       AS account_id,
+                       MAX(COALESCE(claim_id,0))                         AS claim_id
+                FROM nidaan_events
+                WHERE event_type IN ('pay_opened','abandoned','payment_failed','subscription_failed')
+                  AND TRIM(COALESCE(contact,'')) <> ''
+                  AND created_at >= datetime('now', ?)
+                GROUP BY TRIM(contact)
+            ),
+            paid AS (
+                SELECT DISTINCT TRIM(contact) AS contact FROM nidaan_events
+                WHERE event_type IN ('payment_success','subscription_started')
+                  AND TRIM(COALESCE(contact,'')) <> ''
+            ),
+            why AS (
+                SELECT TRIM(contact) AS contact, reason, created_at,
+                       ROW_NUMBER() OVER (PARTITION BY TRIM(contact) ORDER BY created_at DESC) AS rn
+                FROM nidaan_events
+                WHERE event_type IN ('payment_failed','subscription_failed')
+                  AND TRIM(COALESCE(reason,'')) <> ''
+            )
+            SELECT t.*, COALESCE(w.reason,'') AS reason,
+                   COALESCE(f.status,'')      AS followup_status,
+                   COALESCE(f.note,'')        AS followup_note,
+                   COALESCE(f.handled_by,'')  AS handled_by,
+                   COALESCE(f.updated_at,'')  AS handled_at,
+                   a.owner_name, a.firm_name, a.email AS acct_email, a.phone AS acct_phone
+            FROM tried t
+            LEFT JOIN paid p ON p.contact = t.contact
+            LEFT JOIN why  w ON w.contact = t.contact AND w.rn = 1
+            LEFT JOIN nidaan_payment_followups f ON f.contact = t.contact
+            LEFT JOIN nidaan_accounts a
+                   ON (a.phone = t.contact OR a.email = t.contact
+                       OR a.phone = REPLACE(t.contact,'+91','')) AND a.deleted_at IS NULL
+            WHERE p.contact IS NULL
+            ORDER BY t.last_at DESC
+            LIMIT ?
+            """, (f"-{days} days", max(1, min(int(limit or 200), 500))))).fetchall()]
+
+    out = []
+    for r in rows:
+        st = (r.get("followup_status") or "").strip()
+        if show == "open" and st in ("paid", "unreachable", "not_interested", "done"):
+            continue
+        if show == "closed" and st not in ("paid", "unreachable", "not_interested", "done"):
+            continue
+        c = (r.get("contact") or "").strip()
+        r["is_phone"] = c.replace("+", "").isdigit()
+        r["name"] = (r.get("owner_name") or r.get("firm_name") or "").strip()
+        r["amount"] = int(r.get("amount_paise") or 0) // 100
+        out.append(r)
+    return out
+
+
+async def set_payment_followup(contact: str, status: str, note: str = "",
+                               handled_by: str = "") -> bool:
+    """Record that somebody has chased this person, and how it went."""
+    contact = (contact or "").strip()
+    if not contact:
+        return False
+    status = (status or "").strip().lower()
+    if status not in ("", "trying", "paid", "unreachable", "not_interested", "done"):
+        return False
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT INTO nidaan_payment_followups (contact, status, note, handled_by, updated_at) "
+            "VALUES (?,?,?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(contact) DO UPDATE SET status=excluded.status, note=excluded.note, "
+            "handled_by=excluded.handled_by, updated_at=CURRENT_TIMESTAMP",
+            (contact, status, (note or "").strip()[:400], (handled_by or "")[:80]))
+        await conn.commit()
+    return True
+
+
 async def search_subscribers_for_ops(q: str = "", limit: int = 20) -> list[dict]:
     """Live-subscription accounts an admin can raise a claim for.
 

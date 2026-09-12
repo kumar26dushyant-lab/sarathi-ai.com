@@ -6519,6 +6519,44 @@ async def nidaan_ops_pipeline_auto(request: Request):
 # quota, their dashboard - but the office must be able to see whose hands were actually on it, so
 # the staff member is recorded on the claim permanently rather than left implied.
 
+class _PayFollowReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contact: str = Field(..., max_length=160)
+    status: str = Field("", max_length=20)
+    note: str = Field("", max_length=400)
+
+
+@app.get("/nidaan/ops/api/payments/followups")
+async def ops_payment_followups(request: Request, days: int = 90, show: str = "open"):
+    """Everyone who reached a payment screen and never completed one.
+
+    This is a call list, not a chart. One row per person, with the reason we know, so somebody
+    can pick up the phone. Anyone who has since paid drops out.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.payment_followups(days=days,
+                                          show=show if show in ("open", "closed", "all") else "open")
+    return {"followups": rows, "count": len(rows)}
+
+
+@app.post("/nidaan/ops/api/payments/followups")
+@limiter.limit("60/minute")
+async def ops_payment_followup_set(body: _PayFollowReq, request: Request):
+    """Record that somebody chased this person, and how it went."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    ok = await nidaan.set_payment_followup(body.contact, body.status, body.note,
+                                           handled_by=_actor_label(caller))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not save that.")
+    await _ops_audit(request, "payment.followup", "contact", body.contact,
+                     f"{body.status} {body.note}"[:160])
+    return {"ok": True}
+
+
 @app.get("/nidaan/ops/api/subscribers/pick")
 async def nidaan_ops_subscriber_pick(request: Request, q: str = "", limit: int = 20):
     """Subscribers an admin can raise a claim for. Only accounts with a LIVE subscription."""
@@ -26346,6 +26384,24 @@ async def main():
                     logger.error("Radar silence sweep error: %s", e)
                 await asyncio.sleep(6 * 3600)  # every 6h
         asyncio.create_task(radar_silence_loop())
+
+        # Step 6g1c2: nobody answered. A customer writing in and getting silence is the worst thing
+        # this system can produce, and it is invisible by design — the alert went out and nothing
+        # happened. So the silence becomes its own event: the rostered person is reminded, and if
+        # it is STILL unanswered three hours later the super-admins are told, because by then the
+        # problem is the rota, not the message. Worker-only, every 20 min.
+        async def unanswered_sweep_loop():
+            await asyncio.sleep(600)  # let startup settle
+            while True:
+                try:
+                    import biz_nidaan_notifications as _nnot
+                    await _nnot.sweep_unanswered()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Unanswered-conversation sweep error: %s", e)
+                await asyncio.sleep(1200)  # every 20 min
+        asyncio.create_task(unanswered_sweep_loop())
 
         # Step 6g1d: Email Radar — keep-alive: light IMAP login on dormant mailboxes so provider
         # inactivity policies never deactivate a configured account. Worker-only, daily.

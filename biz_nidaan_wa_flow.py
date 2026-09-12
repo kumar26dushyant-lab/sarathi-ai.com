@@ -232,11 +232,25 @@ async def maybe_capture_lead(msisdn: str, name: str = "") -> None:
 
 
 async def _admin_ids() -> list:
+    """Who should hear about a WhatsApp event.
+
+    Every admin, PLUS whoever is on WhatsApp duty today. The rostered person is the one who will
+    actually answer it — leaving them out meant the alert went to people who were not working the
+    inbox, while the person who was got nothing.
+    """
     async with aiosqlite.connect(DB_PATH) as conn:
         rows = await (await conn.execute(
             "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
             "AND status='active' AND deleted_at IS NULL")).fetchall()
-    return [r[0] for r in rows]
+    ids = [r[0] for r in rows]
+    try:
+        import biz_nidaan as _n
+        for sid in await _n.on_duty_rep_ids("whatsapp"):
+            if sid not in ids:
+                ids.append(sid)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("on-duty WhatsApp lookup failed: %s", e)
+    return ids
 
 
 async def handle_inbound_payload(payload: dict) -> dict:

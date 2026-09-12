@@ -384,11 +384,16 @@ async def _wd_probe(slot: int) -> Optional[bool]:
 async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                              event_key: str = "ops.notice", email: bool = True,
                              require_ack: bool = False, claim_id=None, announce_id=None,
-                             cp_id=None) -> int:
-    """Dashboard bell + web push (+ optional email) to specific staff. Never WhatsApp —
+                             cp_id=None, telegram: bool = True) -> int:
+    """Dashboard bell + web push + Telegram (+ optional email) to specific staff. Never WhatsApp —
     used for notices that must land regardless of messaging-channel state.
     require_ack=True (Item #3) marks it as a must-acknowledge update → surfaces in the
-    consolidated 'Updates for you' popup until the recipient explicitly acknowledges."""
+    consolidated 'Updates for you' popup until the recipient explicitly acknowledges.
+
+    TELEGRAM: on by default. This function is what the WhatsApp and support flows use, and it was
+    the only notify path with no Telegram mirror — so those alerts reached a bell nobody was
+    looking at and nothing else. Telegram is the channel the office actually watches; pass
+    telegram=False only for something genuinely not worth a phone buzz."""
     if not staff_ids:
         return 0
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -430,6 +435,13 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                                   html_body=body.replace("\n", "<br>"), text_body=body)
             except Exception:
                 pass
+        # Telegram last, and never allowed to break the loop: a bell that was written is a
+        # notification delivered, whether or not the phone buzz gets through.
+        if telegram:
+            try:
+                await _telegram_mirror(r["staff_id"], f"{subject}\n\n{body}", url="/nidaan/ops")
+            except Exception as e:  # noqa: BLE001
+                logger.debug("telegram mirror failed for %s: %s", r.get("staff_id"), e)
     return sent
 
 
@@ -3249,3 +3261,131 @@ async def retry_deferred_notifications() -> int:
         if ok:
             count += 1
     return count
+
+# ── Nobody answered ─────────────────────────────────────────────────
+# A customer writing in and getting silence is the worst outcome this system can produce, and it
+# is invisible by design: the alert went out, somebody was meant to pick it up, and nothing
+# happened. So the silence itself becomes an event. First the person on duty is told again, and
+# if it is still unanswered after that, it goes to the super-admins — because at that point the
+# problem is no longer the message, it is that the rota is not working.
+
+_ESCALATE_AFTER_MIN = 45        # a human has been waiting this long
+_ESCALATE_AGAIN_MIN = 180       # still waiting — now it is a management problem
+
+
+async def _unanswered_whatsapp(minutes: int) -> list:
+    """Numbers whose LAST message is theirs, older than `minutes`, still unanswered."""
+    cutoff = f"-{int(minutes)} minutes"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            """
+            SELECT m.msisdn,
+                   MAX(m.created_at) AS last_at,
+                   (SELECT body FROM nidaan_wa_messages x
+                     WHERE x.msisdn = m.msisdn ORDER BY x.created_at DESC LIMIT 1) AS last_body,
+                   (SELECT direction FROM nidaan_wa_messages x
+                     WHERE x.msisdn = m.msisdn ORDER BY x.created_at DESC LIMIT 1) AS last_dir
+            FROM nidaan_wa_messages m
+            GROUP BY m.msisdn
+            HAVING last_dir = 'in'
+               AND last_at <= datetime('now', ?)
+               AND last_at >= datetime('now', '-2 days')
+            ORDER BY last_at ASC LIMIT 25
+            """, (cutoff,))).fetchall()]
+    return rows
+
+
+async def _unanswered_support(minutes: int) -> list:
+    """Support threads escalated to a human that no staff member has answered."""
+    cutoff = f"-{int(minutes)} minutes"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            """
+            SELECT thread_id, COALESCE(NULLIF(name,''),contact) AS who, contact,
+                   sa_escalated_at, last_at
+            FROM nidaan_support_threads
+            WHERE sa_escalated_at IS NOT NULL
+              AND COALESCE(status,'') NOT IN ('closed','resolved')
+              AND sa_escalated_at <= datetime('now', ?)
+              AND sa_escalated_at >= datetime('now', '-2 days')
+            ORDER BY sa_escalated_at ASC LIMIT 25
+            """, (cutoff,))).fetchall()]
+    return rows
+
+
+async def sweep_unanswered() -> dict:
+    """Chase unanswered conversations, then escalate the ones still unanswered.
+
+    Runs on the worker. Never raises into the loop — a notification failure must not be able to
+    stop the sweep that finds the next one.
+    """
+    import biz_nidaan as _nid
+    out = {"nudged": 0, "escalated": 0}
+
+    try:
+        wa_old = await _unanswered_whatsapp(_ESCALATE_AGAIN_MIN)
+        sup_old = await _unanswered_support(_ESCALATE_AGAIN_MIN)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("unanswered sweep (escalate) query failed: %s", e)
+        wa_old, sup_old = [], []
+
+    if wa_old or sup_old:
+        try:
+            admins = [a["staff_id"] for a in await _super_admin_staff()]
+            lines = []
+            for r in wa_old:
+                lines.append(f"• WhatsApp {r['msisdn']} — waiting since {r['last_at']} UTC")
+            for r in sup_old:
+                lines.append(f"• Support #{r['thread_id']} {r['who']} — escalated {r['sa_escalated_at']} UTC")
+            n = len(wa_old) + len(sup_old)
+            await notify_staff_inapp(
+                admins,
+                f"🚨 {n} conversation(s) still unanswered after 3 hours",
+                "Somebody wrote in, it was flagged, and nobody has replied. Whoever is on duty has "
+                "already been reminded once.\n\n" + "\n".join(lines[:12]) +
+                "\n\nOpen ops → WhatsApp Automation / Customer Support.",
+                event_key="conversation.unanswered.escalated", email=True, require_ack=True)
+            out["escalated"] = n
+        except Exception as e:  # noqa: BLE001
+            logger.warning("unanswered escalation failed: %s", e)
+
+    # The gentler first pass: remind whoever is actually rostered.
+    try:
+        wa_new = [r for r in await _unanswered_whatsapp(_ESCALATE_AFTER_MIN)
+                  if r not in wa_old]
+        sup_new = [r for r in await _unanswered_support(_ESCALATE_AFTER_MIN)
+                   if r not in sup_old]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("unanswered sweep (nudge) query failed: %s", e)
+        return out
+
+    if wa_new:
+        try:
+            ids = await _nid.on_duty_rep_ids("whatsapp") or [
+                a["staff_id"] for a in await _super_admin_staff()]
+            await notify_staff_inapp(
+                ids, f"💬 {len(wa_new)} WhatsApp message(s) waiting for a reply",
+                "\n".join(f"• {r['msisdn']} — since {r['last_at']} UTC" for r in wa_new[:12]),
+                event_key="conversation.unanswered", email=False)
+            out["nudged"] += len(wa_new)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("wa nudge failed: %s", e)
+
+    if sup_new:
+        try:
+            ids = await _nid.on_duty_rep_ids("support") or [
+                a["staff_id"] for a in await _super_admin_staff()]
+            await notify_staff_inapp(
+                ids, f"🎧 {len(sup_new)} support chat(s) waiting for a human",
+                "\n".join(f"• #{r['thread_id']} {r['who']}" for r in sup_new[:12]),
+                event_key="conversation.unanswered", email=False)
+            out["nudged"] += len(sup_new)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("support nudge failed: %s", e)
+
+    if out["nudged"] or out["escalated"]:
+        logger.info("unanswered sweep: nudged=%d escalated=%d", out["nudged"], out["escalated"])
+    return out
+

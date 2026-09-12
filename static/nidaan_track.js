@@ -67,13 +67,25 @@
   // completeFlow(), we emit an 'abandoned' event with the flow's purpose.
   var _flow = null;
   var _startMap = { signup: 'signup_started', review: 'review_started', pay: 'pay_opened' };
-  function startFlow(name, purpose) {
-    _flow = { name: name, purpose: purpose || name, done: false };
-    if (_startMap[name]) event(_startMap[name], purpose ? { purpose: purpose } : {});
+  // `contact` is whatever the person has already given us by this point — a phone or an email.
+  // Without it an abandonment is an anonymous number in a chart: we know somebody walked away
+  // from a payment and we can never ring them. Carried on the flow so the abandon beacon, which
+  // fires as the tab is closing, still knows who it was.
+  function startFlow(name, purpose, contact) {
+    _flow = { name: name, purpose: purpose || name, contact: contact || '', done: false };
+    if (_startMap[name]) {
+      var x = {};
+      if (purpose) x.purpose = purpose;
+      if (contact) x.contact = contact;
+      event(_startMap[name], x);
+    }
   }
   function completeFlow() { if (_flow) _flow.done = true; }
   function abandon() {
-    if (_flow && !_flow.done) { _flow.done = true; event('abandoned', { purpose: _flow.purpose }); }
+    if (_flow && !_flow.done) {
+      _flow.done = true;
+      event('abandoned', { purpose: _flow.purpose, contact: _flow.contact || '' });
+    }
   }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') abandon();

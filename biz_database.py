@@ -1950,6 +1950,17 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_radar_sent_mailbox ON nidaan_radar_sent(mailbox_id);
 
+            -- Who has been chased about an incomplete payment, and how it went. Keyed on the
+            -- contact rather than an event, because the conversation is with a PERSON: someone
+            -- who tried three times is one follow-up, not three.
+            CREATE TABLE IF NOT EXISTS nidaan_payment_followups (
+                contact      TEXT PRIMARY KEY,          -- phone or email, as captured
+                status       TEXT DEFAULT '',           -- trying|paid|unreachable|not_interested|done
+                note         TEXT DEFAULT '',
+                handled_by   TEXT DEFAULT '',
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Radar config (single row): founder-managed priority senders + silence threshold.
             CREATE TABLE IF NOT EXISTS nidaan_radar_config (
                 id               INTEGER PRIMARY KEY CHECK (id=1),
