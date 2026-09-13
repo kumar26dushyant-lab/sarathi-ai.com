@@ -12811,6 +12811,13 @@ window.l2SendBack = l2SendBack; window.l2SendBackGo = l2SendBackGo;
 // button does not send - it opens the check, because the one thing a staffer must never do is
 // push a list of errands to a customer without reading it back.
 let _dwClaim = 0, _dwData = null, _dwPick = {}, _dwExtras = [], _dwDrop = {}, _dwMsg = '';
+// The exact payload the read-back screen showed. Send posts THIS, not a fresh reading of a
+// screen that no longer exists - the read-back replaces the modal body, so the tick-boxes
+// it was built from are gone by the time anyone presses Send.
+let _dwSnap = null;
+// Has a person typed in the message? If so it is theirs and we never overwrite it; if not,
+// it is our draft and it should follow whatever they tick.
+let _dwEdited = false;
 
 function _dwStyles(){
   if (document.getElementById('dwCss')) return;
@@ -12851,6 +12858,13 @@ function _dwStyles(){
   .dwadd input{flex:1;min-width:6rem;background:var(--nd-bg-surface-2);
     border:1px solid var(--nd-border);color:var(--nd-text-primary);border-radius:7px;
     padding:.3rem .45rem;font-size:.82rem;font-family:inherit}
+  .dwex{border:1px solid var(--nd-border);border-radius:8px;padding:.45rem .5rem;
+    margin-bottom:.4rem;background:var(--nd-bg-surface-2)}
+  .dwex-h{display:flex;align-items:center;justify-content:space-between;gap:.4rem;
+    font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.3rem}
+  .dwex input{width:100%;background:var(--nd-bg-surface);border:1px solid var(--nd-border);
+    color:var(--nd-text-primary);border-radius:7px;padding:.32rem .45rem;font-size:.82rem;
+    font-family:inherit;margin-bottom:.25rem}
   .dwta{width:100%;min-height:11rem;background:var(--nd-bg-surface-2);
     border:1px solid var(--nd-border);color:var(--nd-text-primary);border-radius:8px;
     padding:.5rem .6rem;font-size:.84rem;font-family:inherit;line-height:1.5;resize:vertical}
@@ -12873,6 +12887,7 @@ function _dwStyles(){
 async function dwOpen(claimId){
   _dwStyles();
   _dwClaim = claimId; _dwPick = {}; _dwExtras = []; _dwDrop = {}; _dwMsg = '';
+  _dwSnap = null; _dwEdited = false;
   openModal('📄 Pending documents — NP-' + claimId,
     '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>', [], true);
   try{
@@ -12953,15 +12968,20 @@ function dwRender(){
       + '</span></div>';
   }).join('');
 
+  // One person per card, with their own Remove. The three inputs used to sit in a wrapping
+  // flex row inside a narrow column, so a single person appeared as two broken half-rows and
+  // the X looked like it belonged to the wrong one.
   const extras = _dwExtras.map(function(x, i){
-    return '<div class="dwadd">'
-      + '<input placeholder="Name" value="' + esc(x.name || '') + '" '
+    return '<div class="dwex">'
+      + '<div class="dwex-h"><b>Person ' + (i + 1) + '</b>'
+      +   '<button class="l2mv d" onclick="dwExtraDel(' + i + ')">✕ Remove</button></div>'
+      + '<input placeholder="Name (optional)" value="' + esc(x.name || '') + '" '
       +   'oninput="dwExtra(' + i + ',\'name\',this.value)">'
-      + '<input placeholder="Mobile" value="' + esc(x.phone || '') + '" inputmode="numeric" '
-      +   'oninput="dwExtra(' + i + ',\'phone\',this.value)">'
-      + '<input placeholder="Email" value="' + esc(x.email || '') + '" '
+      + '<input placeholder="Mobile — 10 digits" value="' + esc(x.phone || '') + '" '
+      +   'inputmode="numeric" oninput="dwExtra(' + i + ',\'phone\',this.value)">'
+      + '<input placeholder="Email" value="' + esc(x.email || '') + '" type="email" '
       +   'oninput="dwExtra(' + i + ',\'email\',this.value)">'
-      + '<button class="dwx" title="Remove this person" onclick="dwExtraDel(' + i + ')">✕</button>'
+      + '<div class="bdsub">A mobile, an email, or both — at least one.</div>'
       + '</div>';
   }).join('');
 
@@ -13042,9 +13062,18 @@ function dwRender(){
   }
 }
 
-function dwPick(k, on){ if (on) _dwPick[k] = true; else delete _dwPick[k]; }
+function dwPick(k, on){
+  if (on) _dwPick[k] = true; else delete _dwPick[k];
+  // The words the customer reads must match the list we are asking for. Rewrite the draft to
+  // follow the ticks - unless somebody has written their own, which we never throw away.
+  if (!_dwEdited) dwRefreshDraft();
+}
 function dwDrop(role, on){ if (on) delete _dwDrop[role]; else _dwDrop[role] = true; }
-function dwTouch(){ _dwMsg = (document.getElementById('dwMsg') || {}).value || ''; }
+function dwTouch(){
+  const t = document.getElementById('dwMsg');
+  if (t && t.value !== _dwMsg) _dwEdited = true;   // their words now, not ours
+  _dwMsg = (t || {}).value || '';
+}
 function _dwKeys(){ return Object.keys(_dwPick); }
 function _dwChannels(){
   const c = [];
@@ -13153,6 +13182,7 @@ async function dwRestore(key){
 }
 
 async function dwRefreshDraft(){
+  _dwEdited = false;   // back to our draft, following the ticked list
   const keys = _dwKeys();
   if (!keys.length){ _dwMsg = ''; const t = document.getElementById('dwMsg');
                      if (t) t.value = ''; return; }
@@ -13174,8 +13204,17 @@ async function dwRefreshDraft(){
 // changing anything afterwards brings you back here rather than going out unseen.
 async function dwCheck(){
   dwTouch();
-  const payload = {doc_keys: _dwKeys(), message: _dwMsg, extras: _dwExtras,
+  const payload = {doc_keys: _dwKeys(), message: _dwMsg, extras: _dwExtras.slice(),
                    exclude: Object.keys(_dwDrop), channels: _dwChannels()};
+  if (!payload.channels.length){
+    _dwSay('Tick WhatsApp, email, or both — otherwise there is no way to send it.', false);
+    return;
+  }
+  if (!payload.doc_keys.length){
+    _dwSay('Tick at least one document before sending.', false);
+    return;
+  }
+  _dwSnap = null;
   _dwSay('Checking…', true);
   let d;
   try{
@@ -13200,6 +13239,10 @@ async function dwCheck(){
   const docs = {};
   (_dwData.docs || []).forEach(function(x){ docs[x.key] = x.label; });
 
+  // Freeze exactly what was shown. Nothing is re-read from the screen after this point.
+  _dwSnap = {doc_keys: payload.doc_keys.slice(), message: payload.message,
+             extras: payload.extras, exclude: payload.exclude.slice(),
+             channels: payload.channels.slice(), confirm: d.confirm};
   openModal('Read it back before it goes',
       '<div class="l2ban amber">This goes to a real customer, and they will act on it. Check '
     + 'the list and the numbers once — you are recorded as the person who sent it.</div>'
@@ -13216,7 +13259,7 @@ async function dwCheck(){
         ? '<div class="l2ban amber">' + d.warnings.map(esc).join('<br>') + '</div>' : '')
     + '</div><div id="dwGoMsg" style="font-size:.82rem"></div>',
     [{label:'Go back and change it', cls:'btn-ghost', fn:function(){ dwBack(); }},
-     {label:'Yes — send it', cls:'btn-primary', fn:function(){ dwSend(d.confirm); }}], true);
+     {label:'Yes — send it', cls:'btn-primary', fn:function(){ dwSend(); }}], true);
 }
 
 function dwBack(){
@@ -13226,31 +13269,90 @@ function dwBack(){
   if (t) t.value = _dwMsg;
 }
 
-async function dwSend(confirm){
+async function dwSend(){
   const m = document.getElementById('dwGoMsg');
+  if (!_dwSnap){
+    if (m){ m.style.color = 'var(--nd-danger-text)';
+            m.textContent = 'Something went out of step. Close this and check it again.'; }
+    return;
+  }
   if (m){ m.style.color = 'var(--nd-text-muted)'; m.textContent = 'Sending…'; }
   try{
+    // Post the frozen snapshot, verbatim. This is the same object the read-back screen was
+    // drawn from, so what was read is what goes.
     const r = await API('/claims/' + _dwClaim + '/doc-window/send',
-      {method:'POST', body: JSON.stringify({doc_keys: _dwKeys(), message: _dwMsg,
-        extras: _dwExtras, exclude: Object.keys(_dwDrop), channels: _dwChannels(),
-        confirm: confirm, kind: 'request'})});
+      {method:'POST', body: JSON.stringify({doc_keys: _dwSnap.doc_keys, message: _dwSnap.message,
+        extras: _dwSnap.extras, exclude: _dwSnap.exclude, channels: _dwSnap.channels,
+        confirm: _dwSnap.confirm, kind: 'request'})});
     const d = await r.json().catch(function(){ return {}; });
     if (!r.ok){
       if (m){ m.style.color = 'var(--nd-danger-text)';
               m.textContent = _l2Err(d, 'Could not send it.'); }
       return;
     }
-    closeModal();
-    ndUI.toast(d.reached_complainant
-      ? ('Sent — ' + d.delivered + ' recipient(s) reached.')
-      : ('Sent, but it did NOT reach the complainant. Check their number and email.'),
-      d.reached_complainant ? 'success' : 'error');
+    dwResult(d);
     if (typeof loadL2 === 'function' && document.getElementById('panel-l2')
         && document.getElementById('panel-l2').style.display !== 'none') loadL2();
   }catch(e){
     if (m){ m.style.color = 'var(--nd-danger-text)'; m.textContent = 'Could not send it.'; }
   }
 }
+
+// ── what actually happened ───────────────────────────────────────────────────
+// A toast cannot say who it reached and who it did not, and "who it did not" is the only part
+// that needs somebody to do something next. So the send ends on a report, per person, per
+// channel, with the reason where there is one.
+function dwResult(d){
+  const rows = d.results || [];
+  const why = {'no open WhatsApp window (they must message us first)':
+                 'they have not written to us yet, so WhatsApp will not let us start',
+               'they replied STOP': 'they asked us to stop messaging them',
+               'WhatsApp is not connected': 'our WhatsApp is not connected',
+               'send failed': 'the message would not go through'};
+  const cell = function(state){
+    if (state === 'sent') return '<span class="l2age ok">sent</span>';
+    if (!state) return '<span class="bdsub">—</span>';
+    return '<span class="l2age red" title="' + esc(state) + '">not sent</span>';
+  };
+  const reasons = [];
+  const line = function(r){
+    ['whatsapp', 'email'].forEach(function(ch){
+      if (r[ch] && r[ch] !== 'sent'){
+        reasons.push((r.name || r.role) + ' — ' + (ch === 'whatsapp' ? 'WhatsApp' : 'email')
+          + ': ' + (why[r[ch]] || r[ch]));
+      }
+    });
+    return '<tr><td style="padding:.3rem .4rem"><b>' + esc(r.name || '—') + '</b>'
+      + ' <span class="bdsub">' + esc(r.kind === 'to' ? 'we asked' : 'copied') + '</span></td>'
+      + '<td style="padding:.3rem .4rem">' + cell(r.whatsapp) + '</td>'
+      + '<td style="padding:.3rem .4rem">' + cell(r.email) + '</td></tr>';
+  };
+  const body = rows.map(line).join('');
+
+  openModal(d.reached_complainant ? '✅ Sent' : '⚠️ Sent — but not to the complainant',
+      (d.reached_complainant
+        ? '<div class="l2ban info">The person we are asking received it. Reminders will now run '
+          + 'every three days, twice, and then ask someone to phone.</div>'
+        : '<div class="l2ban red">It did NOT reach the complainant — the one person who has '
+          + 'the documents. Nothing will come back from this. Fix their mobile or email on the '
+          + 'claim and send it again.</div>')
+    + '<div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.85rem">'
+    + '<thead><tr style="text-align:left;color:var(--nd-text-muted);font-size:.72rem">'
+    + '<th style="padding:.3rem .4rem">Who</th><th style="padding:.3rem .4rem">WhatsApp</th>'
+    + '<th style="padding:.3rem .4rem">Email</th></tr></thead><tbody>' + body
+    + '</tbody></table></div>'
+    + (reasons.length
+        ? '<div class="l2sec" style="margin-top:.7rem">What did not go, and why</div>'
+          + '<ul style="font-size:.83rem;color:var(--nd-text-secondary);margin:.2rem 0 0 1rem;'
+          + 'line-height:1.6">' + reasons.map(function(x){ return '<li>' + esc(x) + '</li>'; })
+            .join('') + '</ul>'
+        : '')
+    + '<div class="bdsub" style="margin-top:.6rem">This is saved on the claim under your name, '
+    + 'so anyone can see later exactly what was asked for and who received it.</div>',
+    [{label:'Back to the documents', cls:'btn-ghost', fn:function(){ dwOpen(_dwClaim); }},
+     {label:'Done', cls:'btn-primary', fn: closeModal}], true);
+}
+window.dwResult = dwResult;
 
 async function dwPause(on){
   try{

@@ -270,13 +270,27 @@ async def preview(claim_id: int, *, doc_keys: list[str], message: str, extras=No
 
     # A document we already have, being asked for again, is how a customer loses confidence.
     ctype = claim.get("claim_type") or ""
-    have = {d["key"] for d in await _ck.effective_docs(claim_id, ctype)
-            if (d.get("row") or {}).get("received")}
+    all_docs = await _ck.effective_docs(claim_id, ctype)
+    docs_by_key = {d["key"]: d for d in all_docs}
+    have = {d["key"] for d in all_docs if (d.get("row") or {}).get("received")}
     dup = [k for k in doc_keys if k in have]
     if dup:
-        docs = {d["key"]: d for d in await _ck.effective_docs(claim_id, ctype)}
         warnings.append("You are asking again for something we already have: %s."
-                        % ", ".join((docs.get(k) or {}).get("en") or k for k in dup))
+                        % ", ".join((docs_by_key.get(k) or {}).get("en") or k for k in dup))
+
+    # A document we are asking for that the message never mentions is a document the customer
+    # will not know to send. The draft follows the ticked list on its own, but a hand-edited
+    # message can drift - and the browser is not where this should be enforced.
+    body = (message or "").lower()
+    unnamed = []
+    for k in doc_keys:
+        d = docs_by_key.get(k)
+        if d and (d.get("en") or "").lower() not in body:
+            unnamed.append(d.get("en") or k)
+    if unnamed:
+        warnings.append("The message does not mention %s. They will not know to send %s."
+                        % (", ".join(unnamed[:4]),
+                           "it" if len(unnamed) == 1 else "them"))
 
     reach = []
     for p in people:
