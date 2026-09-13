@@ -988,7 +988,6 @@ function buildSidebar() {
       {id:'board',    label:'🧭 Case Board',       minRank:0},
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
       {id:'crm',      label:'🎯 CRM',              minRank:0},
-      {id:'pipeline', label:'🗂️ Claim Pipeline',   minRank:1},
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
       {id:'claims',   label:'📋 All Claims',       minRank:1},
       {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
@@ -3512,9 +3511,29 @@ async function _getClaimBranchOpts(){
 }
 function _cfVal(id){ const e=document.getElementById(id); return e?e.value:''; }
 // Single entry point — reads every claim filter control so they compose cleanly.
+// WHO BROUGHT IT and WHAT KIND OF CUSTOMER are two different questions, and conflating them is
+// what used to hide our subscribers: a subscriber introduced by a branch is both. Kept outside
+// loadClaims' arguments because the panel rebuilds its controls on every load, so these have to
+// survive a re-render rather than be passed in and forgotten.
+let _claimOrigin = '', _claimCust = '';
 function applyClaimFilters(){
+  _claimOrigin = _cfVal('claimOriginFilter');
+  _claimCust   = _cfVal('claimCustFilter');
   loadClaims(_cfVal('claimStatusFilter'), _cfVal('claimSearch'),
              _cfVal('claimBranchFilter'), _cfVal('claimPlanFilter'), _cfVal('claimAssignFilter'));
+}
+// What kind of customer this is, from the one column that says so.
+function _claimCustKind(c){
+  const p = (c.payment_status || '').toLowerCase();
+  return p === 'subscription' ? 'subscription' : (p === 'paid' ? 'paid' : 'unpaid_lead');
+}
+// Applied in the browser: both values are already on every row, so this costs nothing and keeps
+// two more parameters off an endpoint that five screens share.
+function _filterClaimsByOriginAndCustomer(rows){
+  return (rows || []).filter(function(c){
+    return (!_claimOrigin || (c.source_kind || 'direct') === _claimOrigin)
+        && (!_claimCust   || _claimCustKind(c) === _claimCust);
+  });
 }
 // #7: L2 (can_fight) + Archived (no_scope) claim lists — review-delivered outcomes.
 // L2 is a full dashboard: metrics on top + filters + ClaimShield (L2 legal) management.
@@ -3679,7 +3698,36 @@ function _pipeCustKind(c){
   const p=(c.payment_status||'').toLowerCase();
   return p==='subscription' ? 'subscription' : (p==='paid' ? 'paid' : 'unpaid_lead');
 }
+// RETIRED. This screen never read pipeline_stage - it recomputed a stage in the browser from
+// status + payment_status + review_outcome, over ten names that match neither the buckets nor
+// case_state, with two columns hardcoded permanently empty. It has shown every claim in a bucket
+// in the wrong place since the buckets were named. Its two genuinely good ideas moved to All
+// Claims, where the data behind them actually lives.
+//
+// It is still reachable by a bookmark or an old deep link, so it says where things went rather
+// than going blank.
 async function loadPipeline(){
+  const el=document.getElementById('panel-pipeline');
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">🗂️ Claim Pipeline has moved</div>'
+    +   '<div class="section-sub">It was showing claims in the wrong stage, so it has been '
+    +     'retired. Everything it did is now somewhere that gets it right.</div>'
+    + '</div></div>'
+    + '<div class="l2ban info" style="max-width:44rem">'
+    +   '<b>Looking for where a claim has reached?</b> That is '
+    +   '<a href="#l2" onclick="showPanel(\'l2\');return false">⚖️ Level-2 → Settlement</a> '
+    +   '— it reads the real bucket, and says why each claim is waiting.</div>'
+    + '<div class="l2ban info" style="max-width:44rem">'
+    +   '<b>Looking for who brought a claim in, or which are unpaid leads?</b> Those two filters '
+    +   'are now on <a href="#claims" onclick="showPanel(\'claims\');return false">'
+    +   '📋 All Claims</a> — <i>Brought by</i> and <i>Customer</i>.</div>'
+    + '<button class="btn btn-primary" onclick="showPanel(\'claims\')">Take me to All Claims</button>'
+    + ' <button class="btn btn-ghost" onclick="showPanel(\'l2\')">⚖️ Level-2 → Settlement</button>';
+  return;
+}
+
+async function _loadPipelineRetired(){
   const el=document.getElementById('panel-pipeline');
   el.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Loading the pipeline…</p></div>';
   let d={};
@@ -3961,6 +4009,20 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
         ${branchOptsHtml}
       </select>
       ${_role!=='team_member'?'<select id="claimAssignFilter" onchange="applyClaimFilters()"><option value="">All Staff</option></select>':''}
+      <select id="claimOriginFilter" onchange="applyClaimFilters()" title="Who introduced this claim">
+        <option value="">Brought by: anyone</option>
+        <option value="branch">🏢 Branch</option>
+        <option value="staff">👤 Staff</option>
+        <option value="subscriber">💳 Self</option>
+        <option value="review">📋 ₹499</option>
+        <option value="direct">🌐 Direct</option>
+      </select>
+      <select id="claimCustFilter" onchange="applyClaimFilters()" title="What kind of customer">
+        <option value="">Customer: any</option>
+        <option value="subscription">💳 Subscriber</option>
+        <option value="paid">✅ ₹499 paid</option>
+        <option value="unpaid_lead">🟠 Lead (unpaid)</option>
+      </select>
     </div>
     <div id="claimTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading claims…</p></div></div>`;
 
@@ -3968,6 +4030,10 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (statusFilter) document.getElementById('claimStatusFilter').value = statusFilter;
   if (plan)   document.getElementById('claimPlanFilter').value = plan;
   if (branch) document.getElementById('claimBranchFilter').value = branch;
+  // The controls are rebuilt above, so put these back or they silently reset the moment
+  // somebody touches any other filter.
+  if (_claimOrigin) document.getElementById('claimOriginFilter').value = _claimOrigin;
+  if (_claimCust)   document.getElementById('claimCustFilter').value = _claimCust;
   loadClaimAutoAssignState();
   // Populate the Staff filter NON-BLOCKING (must never gate the claims list). Fire-and-forget.
   if (_role !== 'team_member') {
@@ -4017,7 +4083,8 @@ function _claimSearchDebounced(){ clearTimeout(_claimSearchTimer); _claimSearchT
 window._claimSearchDebounced=_claimSearchDebounced;  // _renderClaimResults is already global (top-level fn)
 function _renderClaimResults(){
  try {
-  const claims = _filterClaimsBySearch(_claimsCache||[]);
+  const claims = _filterClaimsBySearch(
+    _filterClaimsByOriginAndCustomer(_claimsCache || []));
   if (!claims.length) {
     document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
     return;
