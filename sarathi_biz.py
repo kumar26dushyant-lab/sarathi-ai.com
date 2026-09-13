@@ -7055,40 +7055,23 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
                         headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
 
 
-@app.get("/end-to-end", include_in_schema=False)
-async def nidaan_doc_end_to_end(request: Request, k: str = ""):
-    """The operating-model document. Shareable with a key; staff sessions open it directly."""
-    return await _serve_shared_doc(request, "end-to-end", k)
+# Every shared document gets its route from _DOC_KEYS, so adding one really is a single line up
+# there - which is what the comment on _serve_shared_doc has always claimed. It used to need a
+# hand-written six-line function as well, and six near-identical copies of an ACCESS RULE is
+# exactly where one of them eventually drifts and quietly serves a document to the world.
+def _register_doc_routes() -> None:
+    for _slug in _DOC_KEYS:
+        def _make(slug: str):
+            async def _doc(request: Request, k: str = ""):
+                return await _serve_shared_doc(request, slug, k)
+            _doc.__name__ = "nidaan_doc_" + slug.replace("-", "_")
+            _doc.__doc__ = ("Shared document '%s'. Opens with the share key, or directly for a "
+                            "signed-in staff session." % slug)
+            return _doc
+        app.get("/" + _slug, include_in_schema=False)(_make(_slug))
 
 
-@app.get("/doc-collect", include_in_schema=False)
-async def nidaan_doc_doccollect(request: Request, k: str = ""):
-    """The pending-document collection window. Same share key."""
-    return await _serve_shared_doc(request, "doc-collect", k)
-
-
-@app.get("/claims-view", include_in_schema=False)
-async def nidaan_doc_claims_view(request: Request, k: str = ""):
-    """Merging Claim Pipeline / Claims Dashboard / All Claims. Same share key."""
-    return await _serve_shared_doc(request, "claims-view", k)
-
-
-@app.get("/l2-screens", include_in_schema=False)
-async def nidaan_doc_l2_screens(request: Request, k: str = ""):
-    """The screen-by-screen walkthrough. Same share key."""
-    return await _serve_shared_doc(request, "l2-screens", k)
-
-
-@app.get("/l2-design", include_in_schema=False)
-async def nidaan_doc_l2_design(request: Request, k: str = ""):
-    """The bucket architecture, for review before it is built. Same share key."""
-    return await _serve_shared_doc(request, "l2-design", k)
-
-
-@app.get("/l2-manual", include_in_schema=False)
-async def nidaan_doc_l2_manual(request: Request, k: str = ""):
-    """How the office runs a Level-2 claim, in Hinglish and English. Same share key."""
-    return await _serve_shared_doc(request, "l2-manual", k)
+_register_doc_routes()
 
 
 @app.get("/nidaan/api/doc/feedback", include_in_schema=False)
