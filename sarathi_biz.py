@@ -6641,6 +6641,8 @@ _DOC_KEYS = {
     # The bucket architecture: every bucket, sub-state, field and movement, with a real case
     # walked through. Design only - shared so it can be argued with before anything is built.
     "l2-design": "nidaan_l2_design.html",
+    # Screen by screen: what staff actually see, click by click, including a backward move.
+    "l2-screens": "nidaan_l2_screens.html",
 }
 
 
@@ -6690,6 +6692,12 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
 async def nidaan_doc_end_to_end(request: Request, k: str = ""):
     """The operating-model document. Shareable with a key; staff sessions open it directly."""
     return await _serve_shared_doc(request, "end-to-end", k)
+
+
+@app.get("/l2-screens", include_in_schema=False)
+async def nidaan_doc_l2_screens(request: Request, k: str = ""):
+    """The screen-by-screen walkthrough. Same share key."""
+    return await _serve_shared_doc(request, "l2-screens", k)
 
 
 @app.get("/l2-design", include_in_schema=False)

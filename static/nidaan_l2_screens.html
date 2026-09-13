@@ -1,0 +1,551 @@
+<!-- Level-2 screen-by-screen walkthrough — served at /l2-screens behind the doc share key.
+     Mockups only. Nothing here is built. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Level-2 Screen Walkthrough — NidaanPartner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#eef1f5; --card:#fff; --ink:#131a22; --ink2:#46586a; --ink3:#78899a;
+    --line:#dce3e9; --line2:#c2ccd6;
+    --ac:#0b6e7f; --ac-s:#e2f0f3;
+    --warn:#96580f; --warn-s:#fbf0dc;
+    --bad:#9c3227; --bad-s:#fbeae8;
+    --good:#1c6a4a; --good-s:#e5f2ea;
+    --sh:0 1px 2px rgba(19,26,34,.05),0 8px 22px rgba(19,26,34,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16.5px;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:68rem;margin:0 auto;padding:2.4rem 1.2rem 5rem}
+  h1,h2,h3{font-family:Fraunces,Georgia,serif;margin:0;text-wrap:balance}
+  h1{font-size:clamp(2rem,5vw,3rem);font-weight:700;line-height:1.08;letter-spacing:-.02em}
+  h2{font-size:clamp(1.3rem,3vw,1.7rem);font-weight:700;line-height:1.18}
+  p{margin:0 0 .8rem;max-width:68ch}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.7rem;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ac)}
+  .lede{font-size:1.1rem;color:var(--ink2);max-width:62ch;margin-top:.9rem}
+  header{padding-bottom:1.6rem;border-bottom:3px double var(--line2);margin-bottom:2rem}
+
+  .step{margin:2.6rem 0 0}
+  .sh{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.5rem;flex-wrap:wrap}
+  .sh .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;color:#fff;
+    background:var(--ac);border-radius:5px;padding:.1rem .5rem;flex:0 0 auto}
+  .sh .who{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink3);
+    border:1px solid var(--line2);border-radius:999px;padding:.05rem .5rem}
+  .did{font-size:.95rem;color:var(--ink2);margin-bottom:.7rem;max-width:68ch}
+
+  /* ── browser chrome ── */
+  .scr{border:1px solid var(--line2);border-radius:11px;overflow:hidden;background:var(--card);
+    box-shadow:var(--sh);margin:.8rem 0 .5rem}
+  .chrome{background:var(--bg);border-bottom:1px solid var(--line);padding:.4rem .65rem;
+    display:flex;gap:.35rem;align-items:center}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--line2)}
+  .url{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink3);margin-left:.5rem;
+    background:var(--card);border:1px solid var(--line);border-radius:5px;padding:.1rem .5rem;flex:1}
+  .who2{font-size:10px;color:var(--ink3);white-space:nowrap}
+
+  .app{display:flex;min-height:250px;font-size:11.5px;line-height:1.4}
+  .side{flex:0 0 142px;border-right:1px solid var(--line);background:var(--bg);padding:.4rem .35rem}
+  .side .zh{font-family:"IBM Plex Mono",monospace;font-size:8.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--ink3);padding:.3rem .4rem .25rem}
+  .nb{display:flex;justify-content:space-between;align-items:center;gap:.2rem;
+    padding:.26rem .42rem;border-radius:5px;color:var(--ink2);margin-bottom:1px}
+  .nb .c{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--ink3)}
+  .nb.on{background:var(--ac);color:#fff} .nb.on .c{color:#fff}
+  .nb .rd{background:var(--bad);color:#fff;border-radius:999px;padding:0 .28rem;font-size:8px;font-weight:700}
+  .pane{flex:1;padding:.55rem .7rem;min-width:0;overflow:hidden}
+  .ttl{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.35rem;display:flex;
+    justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .alert{border-radius:5px;padding:.28rem .5rem;font-size:10px;font-weight:600;margin-bottom:.4rem}
+  .alert.r{background:var(--bad-s);border:1px solid var(--bad);color:var(--bad)}
+  .alert.g{background:var(--good-s);border:1px solid var(--good);color:var(--good)}
+  .alert.w{background:var(--warn-s);border:1px solid var(--warn);color:var(--warn)}
+  .alert.i{background:var(--ac-s);border:1px solid var(--ac);color:var(--ac)}
+  .tabs{display:flex;gap:.25rem;flex-wrap:wrap;margin-bottom:.4rem}
+  .tb{font-size:9.5px;border:1px solid var(--line2);border-radius:999px;padding:.08rem .45rem;color:var(--ink3)}
+  .tb.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .tools{display:flex;gap:.3rem;align-items:center;margin-bottom:.4rem;flex-wrap:wrap}
+  .sbox{flex:1;min-width:80px;border:1px solid var(--line);border-radius:5px;padding:.12rem .4rem;
+    font-size:9.5px;color:var(--ink3);background:var(--bg)}
+  .tl{font-size:9.5px;border:1px solid var(--line2);border-radius:5px;padding:.08rem .4rem;color:var(--ink3)}
+  .tw{overflow-x:auto}
+  table.g{width:100%;border-collapse:collapse;font-size:10px;min-width:30rem}
+  table.g th{text-align:left;font-size:8px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);
+    border-bottom:1px solid var(--line2);padding:.24rem .3rem;font-weight:600;white-space:nowrap}
+  table.g td{padding:.28rem .3rem;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+  table.g td b{color:var(--ink)}
+  table.g tr.hi td{background:var(--ac-s)}
+  .age{font-family:"IBM Plex Mono",monospace;font-weight:700;border-radius:4px;padding:0 .28rem;font-size:9.5px}
+  .age.ok{background:var(--good-s);color:var(--good)}
+  .age.am{background:var(--warn-s);color:var(--warn)}
+  .age.rd{background:var(--bad-s);color:var(--bad)}
+  .btn{font-size:9px;font-weight:700;border:1px solid var(--ac);color:var(--ac);border-radius:4px;
+    padding:.08rem .35rem;white-space:nowrap;display:inline-block;margin:.05rem .12rem .05rem 0}
+  .btn.p{background:var(--ac);color:#fff}
+  .btn.g{border-color:var(--line2);color:var(--ink3)}
+  .btn.d{border-color:var(--bad);color:var(--bad)}
+  .cursor{display:inline-block;transform:translateY(2px)}
+
+  /* case report bits */
+  .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:.1rem .6rem;font-size:9.5px;margin:.3rem 0 .45rem}
+  .kv b{color:var(--ink)}
+  .sect{font-size:9px;font-weight:700;color:var(--ink);margin:.4rem 0 .18rem;
+    text-transform:uppercase;letter-spacing:.05em}
+  .rem{border:1px solid var(--line);border-radius:5px;padding:.32rem .42rem;background:var(--bg);font-size:9.5px}
+  .rem div{margin-bottom:.14rem;color:var(--ink2)}
+  .rem i{color:var(--ac);font-style:normal;font-weight:600}
+  .ai{background:var(--ac-s);color:var(--ac);border-radius:4px;padding:.25rem .45rem;font-size:9.5px;
+    display:block;margin:.3rem 0}
+  .chk{font-size:9.5px;color:var(--ink2)}
+  .chk s{color:var(--good);text-decoration:none}
+
+  /* modal mock */
+  .mod{position:relative;border:1px solid var(--line2);border-radius:8px;background:var(--card);
+    box-shadow:0 10px 28px rgba(0,0,0,.2);padding:.6rem .7rem;max-width:20rem;margin:.4rem auto}
+  .mod .mt{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:.3rem}
+  .mod .fl{font-size:9px;color:var(--ink3);margin-top:.3rem}
+  .mod .inp{border:1px solid var(--line2);border-radius:5px;background:var(--bg);
+    padding:.22rem .4rem;font-size:9.5px;color:var(--ink2);margin-top:.1rem}
+  .mod .row{display:flex;gap:.3rem;justify-content:flex-end;margin-top:.5rem}
+
+  /* phone notif */
+  .phone{max-width:15rem;border:1px solid var(--line2);border-radius:12px;background:var(--bg);
+    padding:.5rem;margin:.5rem 0;box-shadow:var(--sh)}
+  .tg{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.4rem .5rem;font-size:10px}
+  .tg .h{font-weight:700;color:var(--ink);font-size:10px;margin-bottom:.15rem}
+  .tg .b{color:var(--ink2)}
+  .tg .t{font-size:8.5px;color:var(--ink3);margin-top:.2rem}
+
+  .next{display:flex;align-items:center;gap:.5rem;margin:.7rem 0 0;font-size:.9rem;color:var(--ink2);
+    background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ac);
+    border-radius:0 8px 8px 0;padding:.55rem .8rem}
+  .next b{color:var(--ink)}
+  .co{border-left:3px solid var(--ac);background:var(--ac-s);border-radius:0 10px 10px 0;
+    padding:.75rem 1rem;margin:.9rem 0}
+  .co.bad{border-left-color:var(--bad);background:var(--bad-s)}
+  .co.warn{border-left-color:var(--warn);background:var(--warn-s)}
+  .co.good{border-left-color:var(--good);background:var(--good-s)}
+  .co p:last-child{margin-bottom:0}
+  .co .l{font-family:"IBM Plex Mono",monospace;font-size:.65rem;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;display:block;margin-bottom:.28rem;color:var(--ink2)}
+  hr.r{border:none;border-top:1px solid var(--line);margin:2.4rem 0 0}
+  footer{margin-top:2.2rem;padding-top:1.1rem;border-top:3px double var(--line2);
+    font-size:.85rem;color:var(--ink3)}
+  @media (max-width:680px){
+    body{font-size:16px}
+    .wrap{padding:1.7rem 1rem 3.5rem}
+    .side{flex:0 0 110px}
+    .kv{grid-template-columns:1fr 1fr}
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Design · screen by screen · nothing built</div>
+  <h1>Level-2 Screen Walkthrough</h1>
+  <p class="lede">One claim, seven screens, two people. What the staff actually see, what they click,
+  and what happens the moment they click it — including when it goes backwards.</p>
+</header>
+
+<div class="co">
+  <span class="l">The claim we are following</span>
+  <p><b>NP-70 · SURESH BABURAO CHOUDHARI</b> — health, Aditya Birla, <b>₹4,00,000</b> disputed,
+  branch <code>PUNEICD-01</code>. Sitting in your system right now, reviewed as winnable and paid
+  for, waiting for someone to start it. Two people work it: <b>SUHANA JAIN</b> (Documents duty) and
+  <b>Dr. Ashish</b> (Medical Officer).</p>
+</div>
+
+<!-- ════════ 1 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 1</span><h2>Suhana opens her day</h2>
+    <span class="who">SUHANA JAIN · 9:10 am</span></div>
+  <p class="did">She signs into ops. She does not choose a screen — this is the landing page, and it
+  answers in order: am I on duty, what needs me, which buckets are mine.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">nidaanpartner.com/nidaan/ops</span><span class="who2">SUHANA JAIN</span></div>
+    <div class="app">
+      <div class="side">
+        <div class="zh">Work</div>
+        <div class="nb on"><span>🧑‍💼 My Day</span><span class="c">9</span></div>
+        <div class="nb"><span>🗺️ All Buckets</span><span class="c">46</span></div>
+        <div class="zh">Level-2 → Settlement</div>
+        <div class="nb"><span>📋 Live Cases</span><span class="c">4</span></div>
+        <div class="nb"><span>📄 Pending Docs</span><span class="rd">3</span><span class="c">18</span></div>
+        <div class="nb"><span>✍️ Pending Draft</span><span class="c">6</span></div>
+        <div class="nb"><span>📮 Reimbursement</span><span class="rd">2</span><span class="c">11</span></div>
+        <div class="nb"><span>⚖️ Escalation</span><span class="c">4</span></div>
+        <div class="nb"><span>🏛️ Lokpal</span><span class="c">2</span></div>
+        <div class="nb"><span>✅ Completed</span><span class="c">1</span></div>
+        <div class="nb"><span>💰 Pending Payment</span><span class="c">3</span></div>
+        <div class="nb"><span>⏸️ Hold</span><span class="c">3</span></div>
+      </div>
+      <div class="pane">
+        <div class="ttl"><span>🧑‍💼 Good morning, Suhana</span><span style="font-size:9.5px;color:var(--ink3)">English · हिंदी</span></div>
+        <div class="alert i">👤 Aaj aap <b>📄 Pending Docs</b> par duty par hain — 18 claims, 3 late</div>
+
+        <div class="sect">Aaj dhyan chahiye</div>
+        <div class="tw">
+        <table class="g">
+          <tbody>
+            <tr><td style="width:4.5rem"><b>NP-70</b></td><td>SURESH BABURAO</td>
+              <td style="color:var(--bad)">Hold khatam ho gaya — wapas aapke paas</td>
+              <td style="white-space:nowrap"><span class="btn p">Kholein</span></td></tr>
+            <tr><td><b>NP-69</b></td><td>FARHAN SHAH</td>
+              <td style="color:var(--bad)">37 din se kuch nahi hua</td>
+              <td><span class="btn p">Kholein</span></td></tr>
+            <tr><td><b>NP-142</b></td><td>RENOLD VICTOR</td>
+              <td style="color:var(--warn)">Hospital se 2 kagaz baaki</td>
+              <td><span class="btn p">Kholein</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+
+        <div class="sect" style="margin-top:.5rem">Mere bucket</div>
+        <div class="tw">
+        <table class="g">
+          <thead><tr><th>Bucket</th><th>Khule</th><th>Late</th><th>Duty</th><th></th></tr></thead>
+          <tbody>
+            <tr class="hi"><td><b>📄 Pending Docs</b></td><td>18</td>
+              <td><span class="age rd">3</span></td><td>Aap</td>
+              <td><span class="btn p">Kholein</span><span class="btn g">Yahan kya karna hai?</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co good">
+    <span class="l">What is different from today</span>
+    <p>The buckets are in the sidebar with counts, exactly like ClaimShield's folders. The red pill
+    is new: <b>3 claims in Pending Docs have gone past their clock.</b> And the reason for each is in
+    words — <em>“Hold khatam ho gaya”</em>, not a status code.</p>
+  </div>
+  <div class="next"><span class="cursor">👉</span><span>She clicks <b>📄 Pending Docs</b> in the sidebar.</span></div>
+</div>
+
+<!-- ════════ 2 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 2</span><h2>The bucket — ClaimShield's shape</h2>
+    <span class="who">SUHANA JAIN · 9:12 am</span></div>
+  <p class="did">A dense table, sub-state tabs across the top, search and Excel, and the move buttons
+  sitting <b>on the row</b> — not hidden inside a dialog.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#pending-docs</span><span class="who2">SUHANA JAIN</span></div>
+    <div class="app">
+      <div class="side">
+        <div class="zh">Level-2 → Settlement</div>
+        <div class="nb"><span>📋 Live Cases</span><span class="c">4</span></div>
+        <div class="nb on"><span>📄 Pending Docs</span><span class="rd">3</span><span class="c">18</span></div>
+        <div class="nb"><span>✍️ Pending Draft</span><span class="c">6</span></div>
+        <div class="nb"><span>📮 Reimbursement</span><span class="rd">2</span><span class="c">11</span></div>
+        <div class="nb"><span>⚖️ Escalation</span><span class="c">4</span></div>
+        <div class="nb"><span>🏛️ Lokpal</span><span class="c">2</span></div>
+        <div class="nb"><span>⏸️ Hold</span><span class="c">3</span></div>
+      </div>
+      <div class="pane">
+        <div class="ttl"><span>📄 Pending Docs · 18 claims</span>
+          <span style="font-size:9.5px;color:var(--good)">👤 On duty: SUHANA JAIN</span></div>
+        <div class="alert r">🔴 3 claims over 20 days here — the oldest is 37 days</div>
+        <div class="tabs"><span class="tb on">All 18</span><span class="tb">Waiting on complainant 11</span>
+          <span class="tb">Waiting on hospital 3</span><span class="tb">Ready 4</span></div>
+        <div class="tools"><span class="sbox">🔍 name, claim no., phone, insurance company…</span>
+          <span class="tl">⤓ Excel</span><span class="tl">10 rows ▾</span><span class="tl">☐ Select</span></div>
+        <div class="tw">
+        <table class="g">
+          <thead><tr><th>Ref</th><th>Patient</th><th>Insurance Co.</th><th>Amount</th>
+            <th>Docs</th><th>Bucket age</th><th>Origin</th><th>Actions</th></tr></thead>
+          <tbody>
+            <tr class="hi"><td><b>NP-70</b></td><td>SURESH BABURAO<br><span style="color:var(--ink3)">CHOUDHARI</span></td>
+              <td>Aditya Birla</td><td>4,00,000</td><td><b>11/11</b></td>
+              <td><span class="age rd">31d</span></td><td>Branch<br>PUNEICD-01</td>
+              <td><span class="btn p">→ Pending Draft</span><span class="btn g">Hold</span><span class="btn g">Remarks</span></td></tr>
+            <tr><td><b>NP-69</b></td><td>FARHAN SHAH</td><td>Star Health</td><td>3,22,964</td>
+              <td>6/11</td><td><span class="age rd">37d</span></td><td>Staff<br>SP-TUNSWJ</td>
+              <td><span class="btn g">Chase</span><span class="btn g">Hold</span><span class="btn g">Remarks</span></td></tr>
+            <tr><td><b>NP-142</b></td><td>RENOLD VICTOR</td><td>Care Health</td><td>3,64,000</td>
+              <td>9/11</td><td><span class="age am">22d</span></td><td>Branch<br>PUNEICD-01</td>
+              <td><span class="btn g">Chase</span><span class="btn g">Hold</span><span class="btn g">Remarks</span></td></tr>
+            <tr><td><b>NP-79</b></td><td>MANOJ KUMAR</td><td>—</td><td>4,50,000</td>
+              <td>4/11</td><td><span class="age ok">6d</span></td><td>Staff<br>SP-GADPB2</td>
+              <td><span class="btn g">Chase</span><span class="btn g">Hold</span><span class="btn g">Remarks</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co">
+    <span class="l">Read the row</span>
+    <p>NP-70 shows <b>11/11</b> documents and a green primary button — the checklist is complete, so
+    the only thing left is to send it on. NP-69 shows 6/11 and gets <b>Chase</b> instead, because
+    moving it on would be a lie. <b>The button that appears is decided by the claim's own state</b>,
+    so nobody has to remember which action is legal here.</p>
+  </div>
+  <div class="co warn">
+    <span class="l">The ₹4,50,000 case with no insurance company</span>
+    <p>NP-79 shows a dash because its insurer field currently holds a <em>person's name</em>. The new
+    picker prevents that going forward; this row makes the existing ones impossible to miss.</p>
+  </div>
+  <div class="next"><span class="cursor">👉</span><span>She clicks <b>NP-70</b> to check it before sending it on.</span></div>
+</div>
+
+<!-- ════════ 3 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 3</span><h2>The case report</h2>
+    <span class="who">SUHANA JAIN · 9:14 am</span></div>
+  <p class="did">One page, every fact, the remarks underneath — ClaimShield's best screen, with the
+  AI line added at the top.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#case/70</span><span class="who2">SUHANA JAIN</span></div>
+    <div class="pane" style="padding:.7rem .9rem">
+      <div class="ttl"><span>NP-70 · SURESH BABURAO CHOUDHARI</span>
+        <span><span class="age rd">31d in Pending Docs</span> <span class="btn g">Print</span></span></div>
+      <span class="ai">🤖 Saare 11 document aa chuke hain (aakhri kal aaya). Hospital wala refusal
+        letter kaam kar gaya. Ab isse Pending Draft me bhejna hai — koi aur rukawat nahi hai.</span>
+      <div class="kv">
+        <span>Patient <b>SURESH BABURAO CHOUDHARI</b></span>
+        <span>Complainant <b>SURESH BABURAO</b></span>
+        <span>On behalf of <b>Self</b></span>
+        <span>Insurance Co. <b>Aditya Birla</b></span>
+        <span>Claim type <b>Health · Rejection</b></span>
+        <span>Amount <b>₹4,00,000</b></span>
+        <span>Origin <b>Raised by branch · PUNEICD-01</b></span>
+        <span>Case Handler <b>SUHANA JAIN</b></span>
+        <span>Medical Officer <b>Dr. Ashish</b></span>
+        <span>Case email <b>nilamchoudhari8888@gmail.com</b></span>
+        <span>Rejection date <b>18-07-2026</b></span>
+        <span>Lokpal window <b style="color:var(--warn)">278 days left</b></span>
+      </div>
+      <div class="sect">Documents · 11 of 11</div>
+      <div class="chk"><s>✔</s> Rejection letter &nbsp; <s>✔</s> Policy copy &nbsp; <s>✔</s> Discharge summary
+        &nbsp; <s>✔</s> Hospital bills &nbsp; <s>✔</s> Indoor case papers &nbsp; <s>✔</s> ID proof
+        &nbsp; <span style="color:var(--ink3)">… 5 more</span></div>
+      <div class="sect">Remarks</div>
+      <div class="rem">
+        <div><i>12/09/2026 [ SUHANA JAIN ]</i> Indoor case papers aa gaye — file poori hai</div>
+        <div><i>11/08/2026 [ SUHANA JAIN ]</i> Hold laga diya 30 din ke liye — hospital ne mana kiya tha</div>
+        <div><i>11/08/2026 [ SUHANA JAIN ]</i> Standard refusal letter bheja hospital ko</div>
+        <div><i>28/07/2026 [ ANNAPURNA KASERA ]</i> L2 processing shuru — Live Cases me daala</div>
+      </div>
+      <div style="margin-top:.5rem">
+        <span class="btn p">Ho gaya → Pending Draft</span><span class="btn g">Remark likhein</span>
+        <span class="btn g">Document lagayein</span><span class="btn g">Hold</span>
+        <span class="btn d">Wapas Live Cases</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="co good">
+    <span class="l">Remarks is the spine</span>
+    <p>Written in Hinglish, by name, with dates — exactly as your team already writes them. The AI
+    line at the top is <b>read from these remarks and the dates</b>, not invented, which is why it
+    can say “the refusal letter worked” without anybody entering a status for it.</p>
+  </div>
+  <div class="next"><span class="cursor">👉</span><span>She clicks <b>Ho gaya → Pending Draft</b>.</span></div>
+</div>
+
+<!-- ════════ 4 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 4</span><h2>Moving it on</h2>
+    <span class="who">SUHANA JAIN · 9:15 am</span></div>
+  <p class="did">Forward is routine, so this is one short confirmation — not a form. It tells her
+  what will happen and who will be told.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#case/70</span><span class="who2">SUHANA JAIN</span></div>
+    <div style="background:rgba(0,0,0,.12);padding:1rem .6rem">
+      <div class="mod">
+        <div class="mt">NP-70 → ✍️ Pending Draft</div>
+        <div style="font-size:9.5px;color:var(--ink2)">Saare 11 document aa gaye hain, isliye yeh
+          aage ja sakta hai.</div>
+        <div class="alert i" style="margin:.4rem 0 .2rem">🔔 Dr. Ashish ko bataya jayega — draft
+          approval unke paas jayega</div>
+        <div class="fl">Remark (optional)</div>
+        <div class="inp" style="color:var(--ink3)">kuch likhna ho to…</div>
+        <div class="row"><span class="btn g">Cancel</span><span class="btn p">Haan, bhej dein</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co">
+    <span class="l">Why forward asks so little</span>
+    <p>A reason is <b>not</b> required going forward — the person who did the work is simply
+    reporting it, and making them justify finishing is how a system gets worked around. Backwards is
+    the opposite, as Screen 6 shows.</p>
+  </div>
+  <div class="next"><span class="cursor">👉</span><span>She confirms. Three things happen at once.</span></div>
+</div>
+
+<!-- ════════ 5 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 5</span><h2>What happens the moment she clicks</h2>
+    <span class="who">system · 9:15 am</span></div>
+
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start">
+    <div style="flex:1;min-width:15rem">
+      <p class="did" style="margin-bottom:.4rem"><b>1.</b> The claim leaves her bucket. Pending Docs
+      drops to 17, the red pill to 2. It appears in Pending Draft with a <b>fresh clock at zero</b> —
+      the 31 days it spent collecting papers do not follow it.</p>
+      <p class="did" style="margin-bottom:.4rem"><b>2.</b> A remark writes itself:
+      <em>“13/09/2026 [ SUHANA JAIN ] Pending Docs → Pending Draft”</em>.</p>
+      <p class="did"><b>3.</b> Dr. Ashish's phone buzzes.</p>
+    </div>
+    <div class="phone">
+      <div class="tg">
+        <div class="h">✈️ NidaanOpsBot</div>
+        <div class="b">✍️ <b>Ek draft aapke paas aaya hai</b><br><br>
+          NP-70 · SURESH BABURAO CHOUDHARI<br>
+          Aditya Birla · ₹4,00,000<br>
+          Saare 11 document poore hain.<br><br>
+          Suhana Jain ne bheja.</div>
+        <div class="t">9:15 am · Kholein →</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co warn">
+    <span class="l">And if Dr. Ashish does nothing</span>
+    <p>Day 5 the bucket clock goes amber and it climbs to the top of the Pending Draft list with
+    <em>“approval ke liye 5 din pehle bheja tha, jawab nahi aaya”</em>. Day 10 it goes red and the
+    <b>sub-super-admins</b> are told. Nobody has to remember to check.</p>
+  </div>
+</div>
+
+<!-- ════════ 6 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 6</span><h2>It goes backwards</h2>
+    <span class="who">Dr. Ashish · 11:40 am</span></div>
+  <p class="did">He reads the file and one document is the wrong admission. He sends it back — and
+  <b>this</b> is where the system asks a question.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#case/70</span><span class="who2">Dr. Ashish</span></div>
+    <div style="background:rgba(0,0,0,.12);padding:1rem .6rem">
+      <div class="mod">
+        <div class="mt" style="color:var(--bad)">NP-70 → wapas 📄 Pending Docs</div>
+        <div class="fl">Kaun sa document galat hai?</div>
+        <div class="inp">Discharge summary — galat admission ki hai (Mar 2026, chahiye Jul 2026)</div>
+        <div class="fl">Kaaran <span style="color:var(--bad)">— zaroori hai</span></div>
+        <div class="inp">Galat discharge summary. Sahi wali mangwani hai.</div>
+        <div class="alert w" style="margin:.4rem 0 .2rem">Yeh document dobara maanga jayega.
+          Baaki 10 documents waise hi rahenge.</div>
+        <div class="row"><span class="btn g">Cancel</span><span class="btn d">Wapas bhejein</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co bad">
+    <span class="l">Backwards always costs a sentence</span>
+    <p>The reason is mandatory, and it is not bureaucracy: it goes into the remarks, it goes to
+    Suhana, and it is what the complainant is told when we ask for the paper again. An exception
+    nobody explained is how the same mistake repeats next month.</p>
+  </div>
+  <div class="co">
+    <span class="l">What the system does with it</span>
+    <p>Only that <b>one checklist item is un-ticked</b> — 11/11 becomes 10/11. The other ten stay
+    ticked, so nobody re-collects papers we already hold. The claim lands back in Pending Docs at
+    <b>0 days</b>, sub-state <em>Waiting on complainant</em>, and Suhana's phone buzzes with the
+    reason in Dr. Ashish's own words.</p>
+  </div>
+</div>
+
+<!-- ════════ 7 ════════ -->
+<div class="step">
+  <div class="sh"><span class="n">SCREEN 7</span><h2>The super-admin view</h2>
+    <span class="who">Dushyant · 9:00 am, next morning</span></div>
+  <p class="did">One screen answering the question ClaimShield could never answer: <b>where is
+  everything, who has it, and what is nobody looking at?</b></p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#all-buckets</span><span class="who2">Dushyant · SUPER ADMIN</span></div>
+    <div class="app">
+      <div class="side">
+        <div class="zh">Work</div>
+        <div class="nb"><span>🧑‍💼 My Day</span><span class="c">2</span></div>
+        <div class="nb on"><span>🗺️ All Buckets</span><span class="c">46</span></div>
+        <div class="zh">Level-2 → Settlement</div>
+        <div class="nb"><span>📋 Live Cases</span><span class="c">4</span></div>
+        <div class="nb"><span>📄 Pending Docs</span><span class="rd">2</span><span class="c">18</span></div>
+        <div class="nb"><span>✍️ Pending Draft</span><span class="c">6</span></div>
+        <div class="nb"><span>📮 Reimbursement</span><span class="rd">2</span><span class="c">11</span></div>
+        <div class="nb"><span>⚖️ Escalation</span><span class="c">4</span></div>
+        <div class="nb"><span>🏛️ Lokpal</span><span class="rd">1</span><span class="c">2</span></div>
+      </div>
+      <div class="pane">
+        <div class="ttl"><span>🗺️ All Buckets · 46 live claims</span>
+          <span style="font-size:9.5px;color:var(--ink3)">Table · Kanban</span></div>
+        <div class="alert r">🚨 <b>Lokpal:</b> NP-03 ANITA — Annexure 6 pending 9 days. A missed reply can end the complaint.</div>
+        <div class="alert w">⚠️ <b>Reimbursement</b> has 11 claims and <b>nobody on duty</b> — 2 are past 30 days</div>
+        <div class="alert w">🌴 <b>Escalation:</b> TAMANNA is on duty but on leave until 18 Sep — 4 claims, 1 late</div>
+        <div class="tw">
+        <table class="g">
+          <thead><tr><th>Bucket</th><th>Claims</th><th>Late</th><th>Oldest</th><th>On duty</th><th>₹ at stake</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><b>📋 Live Cases</b></td><td>4</td><td>—</td><td>3d</td><td>ANNAPURNA</td><td>12,40,000</td><td><span class="btn g">Open</span></td></tr>
+            <tr><td><b>📄 Pending Docs</b></td><td>18</td><td><span class="age rd">2</span></td><td>38d</td><td>SUHANA</td><td>61,00,000</td><td><span class="btn g">Open</span></td></tr>
+            <tr><td><b>✍️ Pending Draft</b></td><td>6</td><td>—</td><td>4d</td><td>Dr. Ashish</td><td>19,80,000</td><td><span class="btn g">Open</span></td></tr>
+            <tr class="hi"><td><b>📮 Reimbursement</b></td><td>11</td><td><span class="age rd">2</span></td><td>44d</td>
+              <td style="color:var(--bad)"><b>nobody</b></td><td>38,20,000</td><td><span class="btn p">Set duty</span></td></tr>
+            <tr><td><b>⚖️ Escalation</b></td><td>4</td><td><span class="age am">1</span></td><td>19d</td>
+              <td style="color:var(--warn)">TAMANNA 🌴</td><td>14,60,000</td><td><span class="btn p">Set cover</span></td></tr>
+            <tr><td><b>🏛️ Lokpal</b></td><td>2</td><td><span class="age rd">1</span></td><td>96d</td><td>DIMPLE</td><td>7,10,000</td><td><span class="btn g">Open</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="co good">
+    <span class="l">This is the whole point</span>
+    <p>Three lines at the top, and the floor is understood: one legal deadline about to be missed,
+    one bucket holding <b>₹38 lakh with nobody on it</b>, and one covered on paper by somebody who is
+    on leave. In ClaimShield every one of those numbers existed — spread across eleven screens that
+    nobody opened unless they already suspected something was wrong.</p>
+  </div>
+</div>
+
+<hr class="r">
+<footer>
+  <p><strong>Level-2 Screen Walkthrough · draft 1</strong> — NidaanPartner. Mockups only; nothing
+  here is built. Real claims, real staff names, real amounts — so the screens can be argued with as
+  if they were live.</p>
+</footer>
+
+</div>
