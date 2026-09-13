@@ -1950,6 +1950,18 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_radar_sent_mailbox ON nidaan_radar_sent(mailbox_id);
 
+            -- What a repeating alert has already said, so it cannot say it again forever.
+            -- A sweep that re-checks every 20 minutes will re-find the same unanswered chat every
+            -- 20 minutes; without this it becomes noise, and noise is worse than silence because
+            -- people mute the channel and then miss the real one.
+            CREATE TABLE IF NOT EXISTS nidaan_alert_dedup (
+                alert_key   TEXT PRIMARY KEY,      -- e.g. "wa_unanswered:919289131616"
+                sent_count  INTEGER DEFAULT 0,
+                first_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                muted       INTEGER DEFAULT 0      -- said enough; stays quiet until it resolves
+            );
+
             -- Who has been chased about an incomplete payment, and how it went. Keyed on the
             -- contact rather than an event, because the conversation is with a PERSON: someone
             -- who tried three times is one follow-up, not three.

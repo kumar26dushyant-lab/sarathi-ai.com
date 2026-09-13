@@ -451,6 +451,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-desk" class="panel" style="display:none"></div>
       <div id="panel-onbehalf" class="panel" style="display:none"></div>
       <div id="panel-payfollow" class="panel" style="display:none"></div>
+      <div id="panel-leave" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -647,7 +648,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -963,7 +964,7 @@ function buildSidebar() {
       {id:'archived', label:'🗄️ Archived',         minRank:1},
       {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
-      {id:'onbehalf', label:'🧾 Raise for a Subscriber', minRank:1},
+      {id:'onbehalf', label:'🧾 Raise for a Subscriber', minRank:0},
       {id:'payfollow',label:'📞 Payment Follow-up', minRank:1},
       {id:'docsplit', label:'📄 Doc Splitter',     minRank:0},
     ]},
@@ -972,7 +973,8 @@ function buildSidebar() {
       {id:'staff',    label:'👤 Staff',            minRank:2},
     ]},
     {h:'HR', items:[
-      {id:'leavehistory', label:'🌴 Leave History', minRank:2},
+      {id:'leave',        label:'🌴 Leave & WFH',   minRank:0},
+      {id:'leavehistory', label:'📅 Leave History', minRank:2},
     ]},
     {h:'Communication', items:[
       {id:'whatsapp', label:'💬 WhatsApp Automation', minRank:1},
@@ -1040,6 +1042,7 @@ function showPanel(id, fromHistory) {
     desk: loadDesk,
     onbehalf: loadOnBehalf,
     payfollow: loadPayFollow,
+    leave: loadLeavePanel,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -1212,7 +1215,6 @@ async function loadTasks() {
       <div id="overviewMyQuickTasks"></div>
     </div>
     <div id="tasksDash" style="margin-bottom:1.1rem"></div>
-    <div id="tasksLeave" style="margin-bottom:1.1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem"></div>
     <div id="tasksRegistry" style="margin-top:1.25rem"></div>
     <div id="tasksWidgets" style="margin-top:1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
       <div class="nd-card" style="padding:1rem;color:var(--nd-text-faint);font-size:.85rem">Loading…</div>
@@ -1288,10 +1290,23 @@ function myFocusScroll(secId){
   const el = document.getElementById(secId);
   if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
-function tasksJumpLeave(){
-  const el = document.getElementById('tasksLeave');
-  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+function tasksJumpLeave(){ showPanel('leave'); }
+
+// Leave & WFH lives under HR now. The panel supplies the mount the renderer expects, so the
+// renderer itself did not have to change.
+async function loadLeavePanel(){
+  const el = document.getElementById('panel-leave');
+  if (!el) return;
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">\ud83c\udf34 Leave &amp; WFH</div>'
+    +   '<div class="section-sub">Apply for leave or working-from-home, see where your requests '
+    +     'have reached, and see who is away today.</div>'
+    + '</div></div>'
+    + '<div id="tasksLeave" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem"></div>';
+  try{ await loadLeaveSection(); }catch(e){}
 }
+window.loadLeavePanel = loadLeavePanel;
 
 // ── Leave (P4) ───────────────────────────────────────────────────────────────
 const LEAVE_PILL = {
@@ -2514,7 +2529,7 @@ function tasksTopSearch(v){ _registryState.q=v; _applyTaskSearchMode(v); clearTi
 // No more scrolling past everything to find what you searched. Restored when cleared.
 function _applyTaskSearchMode(q){
   const searching = !!(q && q.trim());
-  const map = {tasksQuickTop:'', tasksDash:'', tasksLeave:'grid', tasksWidgets:'grid'};
+  const map = {tasksQuickTop:'', tasksDash:'', tasksWidgets:'grid'};
   for (const id in map){
     const el = document.getElementById(id);
     if (el) el.style.display = searching ? 'none' : map[id];
@@ -11949,6 +11964,7 @@ const _WAI_SENDER = {
   system:   {label:'Automatic update', cls:'wai-out-sys'}
 };
 
+let _waiOnDuty = false, _waiMayReply = false;
 async function waiLoadList(keepSel){
   _waiStyles();
   const el = document.getElementById('waiList'); if(!el) return;
@@ -11956,6 +11972,8 @@ async function waiLoadList(keepSel){
   try{ const r = await API('/wa/conversations?scope='+encodeURIComponent(_waiScope)+'&limit=60');
        if(!r.ok) throw 0; d = await r.json(); }
   catch(e){ el.innerHTML = '<div style="padding:1rem;font-size:.82rem;color:var(--nd-danger-text)">Could not load conversations.</div>'; return; }
+  // Whether this person may answer is decided by the server and simply reported here.
+  _waiOnDuty = !!d.on_duty; _waiMayReply = !!d.may_reply;
   const list = d.conversations || [], k = d.counters || {};
   const ct = document.getElementById('waiCounts');
   if (ct) ct.innerHTML =
@@ -12026,7 +12044,10 @@ async function waiOpen(msisdn){
       ? '<div style="font-size:.74rem;color:var(--nd-text-muted)">You can reply freely for another <b>'+hrs+'h '+mins+'m</b> (WhatsApp allows free replies for 24 hours after the customer writes).</div>'
       : '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);color:var(--nd-warning-text);padding:.55rem .7rem;border-radius:10px;font-size:.78rem">The 24-hour reply window has closed. WhatsApp will not deliver a normal message now — reach them with an approved template from <b>Bulk campaign</b> below.</div>';
 
-  const canType = w.open && !stopped;
+  // Reading and replying are different rights. A sub-super-admin who is not on WhatsApp duty
+  // can see everything and answer nothing - so say that, rather than offering a button that 403s.
+  const mayReply = _waiMayReply || (_role === 'super_admin') || !!_waiOnDuty;
+  const canType = w.open && !stopped && mayReply;
   const vv = c.verified || {};
   const verifyNote = vv.ok
     ? '<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--nd-success-text);padding:.5rem .7rem;border-radius:10px;font-size:.78rem">✅ <b>Identity confirmed</b> — this person entered the code we emailed to their registered address ('+esc(vv.role||'')+'). It is safe to discuss their case.</div>'
@@ -12053,9 +12074,13 @@ async function waiOpen(msisdn){
     + '<div style="padding:.7rem .9rem;border-top:1px solid var(--nd-border);display:flex;flex-direction:column;gap:.5rem">'
     +   verifyNote
     +   windowNote
+    +   (!mayReply ? '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);'
+    +     'color:var(--nd-warning-text);padding:.5rem .7rem;border-radius:10px;font-size:.78rem">'
+    +     '<b>You can read this, but not reply.</b> Replying is for whoever is on WhatsApp duty '
+    +     'today, so the customer hears one voice. Ask a super-admin to put you on the roster.</div>' : '')
     +   (!isHuman && canType ? '<div style="font-size:.74rem;color:var(--nd-text-faint)">Sending a message here takes the conversation over, so the AI stops replying.</div>' : '')
     +   '<div style="display:flex;gap:.5rem;align-items:flex-end">'
-    +     '<textarea id="waiBox" rows="2" placeholder="'+(canType?'Write your reply…':'You cannot reply right now')+'" '+(canType?'':'disabled')
+    +     '<textarea id="waiBox" rows="2" placeholder="'+(canType?'Write your reply…':(mayReply?'You cannot reply right now':'Read-only - you are not on WhatsApp duty'))+'" '+(canType?'':'disabled')
     +       ' style="flex:1;resize:vertical;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border);border-radius:10px;padding:.5rem .65rem;font-size:.85rem;font-family:inherit"></textarea>'
     +     '<button class="btn btn-primary" '+(canType?'':'disabled')+' onclick="waiSend(this)">Send</button>'
     +   '</div>'

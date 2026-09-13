@@ -3315,6 +3315,85 @@ async def _unanswered_support(minutes: int) -> list:
     return rows
 
 
+# ── How often an alert is allowed to repeat ─────────────────────────────────
+# A sweep that re-checks every 20 minutes re-finds the same unanswered chat every 20 minutes. Said
+# often enough, an alert stops being information and becomes noise — and the cost of noise is not
+# irritation, it is that people mute the channel and then miss the one that mattered.
+#
+# So every repeating alert says its piece a fixed number of times, spaced out, and then goes quiet
+# until the thing it is about actually changes. The work does not disappear: it stays on the
+# morning list and on the bucket counts, which is where standing problems belong.
+
+_ALERT_MAX_SENDS = 2          # say it, then say it once more
+_ALERT_MIN_GAP_MIN = 360      # and leave 6 hours between
+
+
+async def _alert_allowed(alert_key: str) -> bool:
+    """May this alert speak right now? Records the send if so."""
+    from datetime import timedelta as _td
+    now = datetime.utcnow()
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            row = await (await conn.execute(
+                "SELECT sent_count, last_at, muted FROM nidaan_alert_dedup WHERE alert_key=?",
+                (alert_key,))).fetchone()
+            if row:
+                if int(row["muted"] or 0):
+                    return False
+                if int(row["sent_count"] or 0) >= _ALERT_MAX_SENDS:
+                    await conn.execute(
+                        "UPDATE nidaan_alert_dedup SET muted=1 WHERE alert_key=?", (alert_key,))
+                    await conn.commit()
+                    logger.info("alert %s has said enough - muting until it resolves", alert_key)
+                    return False
+                try:
+                    last = datetime.strptime(str(row["last_at"])[:19], "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    last = now - _td(days=1)
+                if now - last < _td(minutes=_ALERT_MIN_GAP_MIN):
+                    return False
+                await conn.execute(
+                    "UPDATE nidaan_alert_dedup SET sent_count=sent_count+1, "
+                    "last_at=CURRENT_TIMESTAMP WHERE alert_key=?", (alert_key,))
+            else:
+                await conn.execute(
+                    "INSERT INTO nidaan_alert_dedup (alert_key, sent_count) VALUES (?,1)",
+                    (alert_key,))
+            await conn.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        # If the memory is broken, prefer speaking to going silent - but log it loudly.
+        logger.warning("alert dedup failed for %s: %s", alert_key, e)
+        return True
+
+
+async def _alert_clear(alert_key: str) -> None:
+    """The thing resolved. Forget it, so a future recurrence is heard fresh."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute("DELETE FROM nidaan_alert_dedup WHERE alert_key=?", (alert_key,))
+            await conn.commit()
+    except Exception:
+        pass
+
+
+async def _alert_clear_resolved(prefix: str, live_keys: set) -> int:
+    """Forget every remembered alert under `prefix` that is no longer happening."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            rows = await (await conn.execute(
+                "SELECT alert_key FROM nidaan_alert_dedup WHERE alert_key LIKE ?",
+                (prefix + "%",))).fetchall()
+            gone = [r[0] for r in rows if r[0] not in live_keys]
+            for k in gone:
+                await conn.execute("DELETE FROM nidaan_alert_dedup WHERE alert_key=?", (k,))
+            await conn.commit()
+        return len(gone)
+    except Exception:
+        return 0
+
+
 async def sweep_unanswered() -> dict:
     """Chase unanswered conversations, then escalate the ones still unanswered.
 
@@ -3322,7 +3401,7 @@ async def sweep_unanswered() -> dict:
     stop the sweep that finds the next one.
     """
     import biz_nidaan as _nid
-    out = {"nudged": 0, "escalated": 0}
+    out = {"nudged": 0, "escalated": 0, "silenced": 0}
 
     try:
         wa_old = await _unanswered_whatsapp(_ESCALATE_AGAIN_MIN)
@@ -3330,6 +3409,31 @@ async def sweep_unanswered() -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("unanswered sweep (escalate) query failed: %s", e)
         wa_old, sup_old = [], []
+
+    # Anything that WAS being chased and is no longer in the list has been answered. Forget it, so
+    # if the same number goes quiet again next month it is heard fresh rather than staying muted.
+    live = set(["esc:wa:" + r["msisdn"] for r in wa_old] +
+               ["esc:sup:%s" % r["thread_id"] for r in sup_old])
+    await _alert_clear_resolved("esc:", live)
+
+    # Keep the FULL old list: it is what stops a three-hour-old conversation being treated as a
+    # fresh 45-minute one further down. Filtering it for de-duplication and then reusing the
+    # filtered version would silence the escalation and start nudging instead - which is exactly
+    # the spam it was meant to prevent, wearing a different hat.
+    wa_old_all, sup_old_all = list(wa_old), list(sup_old)
+
+    _wa_old, _sup_old = [], []
+    for r in wa_old:
+        if await _alert_allowed("esc:wa:" + r["msisdn"]):
+            _wa_old.append(r)
+        else:
+            out["silenced"] += 1
+    for r in sup_old:
+        if await _alert_allowed("esc:sup:%s" % r["thread_id"]):
+            _sup_old.append(r)
+        else:
+            out["silenced"] += 1
+    wa_old, sup_old = _wa_old, _sup_old
 
     if wa_old or sup_old:
         try:
@@ -3354,12 +3458,18 @@ async def sweep_unanswered() -> dict:
     # The gentler first pass: remind whoever is actually rostered.
     try:
         wa_new = [r for r in await _unanswered_whatsapp(_ESCALATE_AFTER_MIN)
-                  if r not in wa_old]
+                  if r not in wa_old_all]
         sup_new = [r for r in await _unanswered_support(_ESCALATE_AFTER_MIN)
-                   if r not in sup_old]
+                   if r not in sup_old_all]
     except Exception as e:  # noqa: BLE001
         logger.warning("unanswered sweep (nudge) query failed: %s", e)
         return out
+
+    live_n = set(["nudge:wa:" + r["msisdn"] for r in wa_new] +
+                 ["nudge:sup:%s" % r["thread_id"] for r in sup_new])
+    await _alert_clear_resolved("nudge:", live_n)
+    wa_new = [r for r in wa_new if await _alert_allowed("nudge:wa:" + r["msisdn"])]
+    sup_new = [r for r in sup_new if await _alert_allowed("nudge:sup:%s" % r["thread_id"])]
 
     if wa_new:
         try:
@@ -3385,7 +3495,8 @@ async def sweep_unanswered() -> dict:
         except Exception as e:  # noqa: BLE001
             logger.warning("support nudge failed: %s", e)
 
-    if out["nudged"] or out["escalated"]:
-        logger.info("unanswered sweep: nudged=%d escalated=%d", out["nudged"], out["escalated"])
+    if out["nudged"] or out["escalated"] or out["silenced"]:
+        logger.info("unanswered sweep: nudged=%d escalated=%d already-said=%d",
+                    out["nudged"], out["escalated"], out["silenced"])
     return out
 

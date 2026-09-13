@@ -6562,7 +6562,9 @@ async def nidaan_ops_subscriber_pick(request: Request, q: str = "", limit: int =
     """Subscribers an admin can raise a claim for. Only accounts with a LIVE subscription."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    # Any staff member can raise a claim for a subscriber who rings the office - it is everyday
+    # work, and making it an admin privilege just means the call gets transferred.
+    _require_staff(request, "team_member")
     q = (q or "").strip()
     rows = await nidaan.search_subscribers_for_ops(q, limit=max(1, min(int(limit or 20), 50)))
     return {"subscribers": rows, "count": len(rows)}
@@ -6587,7 +6589,7 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
     """Raise a claim on a subscriber's behalf, stamped with who actually raised it."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    caller = _require_staff(request, "team_member")
     acct = await nidaan.get_account_by_id(body.account_id)
     if not acct:
         raise HTTPException(status_code=404, detail="That subscriber does not exist.")
@@ -6803,6 +6805,29 @@ async def _require_wa_inbox(request: Request) -> dict:
                                "Ask a super-admin to add you to the roster.")
 
 
+async def _require_wa_reply(request: Request) -> dict:
+    """READING the inbox and REPLYING in it are different privileges.
+
+    Every admin can read, because they need to see what customers are being told. Replying is
+    narrower: a super-admin, or whoever is actually rostered on WhatsApp today. A customer should
+    get one voice, from the person holding the conversation - not four admins answering at once
+    because they all happened to have the screen open.
+    """
+    caller = await _require_wa_inbox(request)
+    role = (caller or {}).get("role") or ""
+    if role == "super_admin":
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(
+        status_code=403,
+        detail="You can read this inbox, but replying is for whoever is on WhatsApp duty today. "
+               "Ask a super-admin to put you on the roster if you need to answer.")
+
+
 def _wa_number_or_400(msisdn: str) -> str:
     """E.164 digits only. Rejects anything else before it reaches a query or the Graph API."""
     import re as _re_wa
@@ -6817,11 +6842,20 @@ async def nidaan_ops_wa_conversations(request: Request, scope: str = "all", limi
     """Conversation list: one row per number, newest first, with owner + unread + reply window."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    await _require_wa_inbox(request)
+    caller = await _require_wa_inbox(request)
     import biz_nidaan_wa_inbox as _inbox
     scope = scope if scope in ("all", "unread", "human", "bot", "stopped", "verified") else "all"
+    # The screen needs to know whether THIS person may answer, so it can show a read-only notice
+    # instead of a Send button that would be refused.
+    _on_duty = False
+    try:
+        _on_duty = int((caller or {}).get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp")
+    except Exception:
+        pass
     return {"conversations": await _inbox.conversations(limit=limit, scope=scope),
-            "counters": await _inbox.counters()}
+            "counters": await _inbox.counters(),
+            "may_reply": ((caller or {}).get("role") == "super_admin") or _on_duty,
+            "on_duty": _on_duty}
 
 
 @app.get("/nidaan/ops/api/wa/thread/{msisdn}")
@@ -6847,7 +6881,7 @@ async def nidaan_ops_wa_owner(msisdn: str, body: _WaOwnerReq, request: Request):
     """Take a conversation over from the bot, or hand it back."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = await _require_wa_inbox(request)
+    caller = await _require_wa_reply(request)
     import biz_nidaan_wa_inbox as _inbox
     res = await _inbox.set_owner(_wa_number_or_400(msisdn), human=body.human,
                                  by_id=str(caller.get("staff_id") or ""),
@@ -6870,7 +6904,7 @@ async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
     """Send a staffer's own WhatsApp reply, attributed to the real person behind the session."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = await _require_wa_inbox(request)
+    caller = await _require_wa_reply(request)
     import biz_nidaan_wa_inbox as _inbox
     res = await _inbox.send_human(_wa_number_or_400(msisdn), body.text,
                                   staff_id=str(caller.get("staff_id") or ""),
