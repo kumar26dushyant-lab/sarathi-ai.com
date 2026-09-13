@@ -6565,6 +6565,32 @@ modal was the only one with no exit at all and gained an X plus "Not now".
 
 ---
 
+## A97 — [NIDAAN] NOTIFICATION CONTROL CENTRE (queued, founder Sep 13 2026)
+
+One super-admin screen owning **who receives what, on which channel**, with a per-claim override
+that beats it.
+
+**Grid:** rows = `event_key`, columns = web bell / Telegram / email / WhatsApp, cells = audience
+(super-admin, sub-super-admin, the bucket's on-duty staff, the assigned staff, the claim's
+parties).
+
+**Precedence, in order:** (1) a per-claim setting somebody changed by hand wins; (2) otherwise
+the global grid; (3) **consent beats both, always** — WhatsApp STOP and email unsubscribe are
+never overridden by any setting or any person. That last one is a legal line, not a preference.
+
+**Why:** the rules live in four places today — `biz_nidaan_notifications._super_admin_staff`,
+`biz_nidaan_notify_policy`, per-call-site `email=True/False`, and `_notify_move`'s unstaffed
+fallback — so "why did fourteen people get that email?" has no single answer and switching one
+off means hunting every call site.
+
+**Shape:** `nidaan_notify_rules` + `nidaan_claim_notify`, one resolver
+`who_gets(event_key, channel, claim_id=None)` that every notify path goes through, a
+"what would happen" preview before saving, and full audit. **Migrate the existing call sites to
+the resolver before shipping the screen** — a half-migrated policy is worse than a spread-out
+one, because it looks authoritative and is not.
+
+---
+
 ## A96 — [NIDAAN] THE FOUR WORK SCREENS, DECIDED (Sep 13 2026)
 
 Surveyed before answering. **Keep My Desk · fold Case Board into Level-2 → Settlement · retire

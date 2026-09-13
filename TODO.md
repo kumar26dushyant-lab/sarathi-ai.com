@@ -83,6 +83,36 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
   exit saved a phone number first, so a rejected number was a dead end). All 19 tagged for
   Escape. *(25 checks on a live-DB copy + 6 live on NP-112 itself.)*
 
+### 🔵 QUEUED (founder, Sep 13 2026) — 🔔 Notification Control Centre
+One super-admin screen that owns **who receives what, on which channel** — and a per-claim
+override that beats it.
+
+**The grid.** Rows = every event we can raise (`event_key`: `bucket.move`, `bucket.sent_back`,
+`doc.call_due`, `cp.pending`, `payment.*`, `support.*`, `wa.*`, `task.*`, `leave.*`, `radar.*`…).
+Columns = every channel (**web bell · Telegram · email · WhatsApp**). Cells = who
+(**super-admin · sub-super-admin · the bucket's on-duty staff · the assigned staff · the claim's
+parties**). A super-admin ticks the grid; nothing else in the app decides this any more.
+
+**Precedence — the rule that matters, in order:**
+1. **Per-claim setting wins**, whenever somebody has changed it on that claim by hand.
+2. Otherwise the **global grid** decides.
+3. Consent always wins over both: WhatsApp STOP and email unsubscribe are never overridden by
+   any setting, by anybody. That is a legal line, not a preference.
+
+**Why it is needed:** the rules are currently spread across `biz_nidaan_notifications`
+(`_super_admin_staff`, `notify_staff_inapp(..., email=)`), `biz_nidaan_notify_policy`,
+per-call-site `email=True/False` flags, and `_notify_move`'s own fallback — so "why did fourteen
+people get that email?" has no single place to look, and turning one thing off means finding
+every call site. This screen becomes that single place.
+
+**Build notes:** new table `nidaan_notify_rules` (event_key, channel, audience, on) +
+`nidaan_claim_notify` (claim_id, event_key, channel, audience, on, set_by, set_at) for the
+override; one resolver `who_gets(event_key, channel, claim_id=None)` that every notify call goes
+through; a "what would happen" preview per event so a super-admin can see the effect before
+saving; and every change audited. **Nothing ships until the existing call sites are migrated to
+the resolver** — a half-migrated policy is worse than the spread-out one, because it looks
+authoritative and is not.
+
 ### 🧭 DECIDED (Sep 13 2026) — what happens to My Desk / Case Board / Claim Pipeline
 Surveyed all four work screens before answering. **Keep My Desk. Fold Case Board into Level-2 → Settlement. Retire Claim Pipeline.**
 - **Claim Pipeline goes.** 81 lines, read-only, and it *never reads `pipeline_stage`* — it recomputes a stage in the browser from status+payment+outcome using ten names that match neither the buckets nor `case_state`. Two columns (`drafting`, `escalation`) are hardcoded empty placeholders. Its own header still claims it "replaces the split Dashboard/All Claims/L2 views". **Worth keeping:** the *Brought by* (source_kind) and *Customer* (subscription/₹499/unpaid-lead) filters, and unpaid leads — all three belong in the merged claims view.
