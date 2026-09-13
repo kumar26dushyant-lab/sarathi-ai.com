@@ -6526,6 +6526,45 @@ document without a reason.
 
 ---
 
+## A95b — [NIDAAN] NP-112: ONE FACT, TWO ANSWERS — AND NO MORE WALLS (Sep 13 2026)
+
+**What the founder hit.** NP-112 showed as paid on L2 Claims and "the Level-2 fee has not been
+paid" the moment anybody tried to hand it over.
+
+**Why.** The claim screens' `_uPay()` has always treated three things as a covered Level-2:
+`l2_payment_status='paid'` OR `payment_status='paid'` OR `payment_status='subscription'` — the
+three routes the work is actually sold through. `l2_ready()` accepted only the first. NP-112 is a
+subscription. Of 72 `can_fight` claims, **23 are subscriptions and 14 otherwise paid**: the
+office saw 23 qualified claims where it should have seen 60, and the pending-handover list
+showed 23 instead of 59.
+
+**The fix.** One definition, `biz_nidaan_buckets.l2_fee_covered()`. `case_state.l2_ready()` held
+a second copy of the rule and now calls that one — two copies is how the split happened.
+
+**The follow-on the LIVE test caught and the unit tests could not.** `l2_fee_covered()` reads
+`payment_status`, but `_claim_row`, `_handover_row`, `readiness()`, `_CLAIM_COLS` and
+`case_state`'s row query all selected only `l2_payment_status`. The unit tests built their rows
+with `SELECT *`, so they passed; the endpoint's rows did not have the column, so NP-112 still
+failed. `pending_handover()` also had the single-route rule hardcoded in its SQL WHERE clause.
+**Lesson: a rule that reads a column is only as good as every query that feeds it — test it on
+the endpoint, not only on the function.**
+
+**NOTHING BLOCKS A MOVE.** Founder's rule, stated twice. `hand_over()`, `start_l2()` and the
+forward-move field check all collect what is outstanding, return it for the screen to list, and
+let the person through on a written reason. Where it lands: the claim (`l2_handover_by`,
+`l2_handover_note`), the Level-2 team (`l2_handover_checks._open`), and the timeline
+(`STARTED WITH THESE STILL OPEN…`, `[left blank: …]`). Only two things still ask for a sentence —
+no comment at all, and a park with no return date — and both ask rather than forbid.
+
+**EVERY POPUP HAS A WAY OUT.** The shared `#modal` had no close button at all: it relied on a
+backdrop click (useless on a phone) and on the caller's buttons, so a dialog whose buttons all
+*did* something was a trap. Now a sticky X, a global Escape handler, and a Close that is appended
+whenever the caller's buttons contain no exit. All 19 hand-built overlays audited
+(`scratchpad/audit_overlays.py`) and tagged `data-ov="1"` for Escape; the one-time onboarding
+modal was the only one with no exit at all and gained an X plus "Not now".
+
+---
+
 ## A96 — [NIDAAN] THE FOUR WORK SCREENS, DECIDED (Sep 13 2026)
 
 Surveyed before answering. **Keep My Desk · fold Case Board into Level-2 → Settlement · retire

@@ -50,6 +50,39 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - ✅ **Checklist is per-claim, not per-type.** `pending_required_docs`/`checklist_status` walked the TYPE TEMPLATE and looked rows up by key, so a doc added for one case was invisible to the chase, the dashboard and the pay-gate. Both now walk one merged list (`effective_docs`). **Channel Partner added to `get_claim_parties`** — the one party it never resolved, approved partners only.
 - 🟢 **NEXT:** claim communication redesign (complainant + CC every channel), claim panel redesign (one popup, no scrolling), **the three-into-one claims view** (decision below), Intake as a rosterable duty, update `/l2-manual` to the current bucket names.
 
+### 🔴 FOUND ON NP-112 (founder, Sep 13 2026) — two definitions of one fact, and a wall
+- ✅ **The screens disagreed about who had paid.** The claim screens have always shown "L2
+  covered" when the **L2 fee is paid OR the claim came in on a subscription OR the claim itself
+  is paid** — three routes we genuinely sell the work through. `l2_ready()` accepted only
+  `l2_payment_status='paid'`. NP-112 is a **subscription** claim: the subscriber had already
+  paid, L2 Claims said so, and the handover refused it. Not rare — **of 72 can_fight claims, 23
+  are subscriptions and 14 otherwise paid**, so the office was seeing 23 qualified where it
+  should have seen 60. One definition now (`l2_fee_covered`), and `case_state`'s second copy of
+  the rule now calls it instead of restating it. **Pending-handover list: 23 → 59.**
+- ✅ **The live smoke test then caught what the unit tests could not:** four queries selected
+  `l2_payment_status` but not `payment_status`, so the new rule read `None` and NP-112 *still*
+  failed inside the handover. Unit rows came from `SELECT *`; the endpoint's did not.
+  `pending_handover()` also had the old single-route rule hardcoded in its SQL `WHERE`.
+- ✅ **NOTHING BLOCKS A MOVE** (founder's rule, stated twice). Handover no longer refuses on
+  payment / readiness / unticked questions; Start Level-2 no longer refuses on payment /
+  readiness / missing handover; a forward move with required fields blank no longer refuses.
+  Each collects what is outstanding, **shows it**, and lets the person through on a written
+  reason — which lands on the claim with their name, travels to Level-2 in
+  `l2_handover_checks._open`, and is written onto the timeline (`STARTED WITH THESE STILL
+  OPEN…`, `[left blank: …]`). The only two things that still ask for a sentence are the two that
+  would make the move meaningless without one: **no comment at all**, and **a park with no
+  return date**. Both ask; neither forbids. And the ask now names the blank fields in the same
+  breath, instead of making somebody write a note, press again, and only then learn what was
+  blank.
+- ✅ **Every popup has a way out.** The shared modal had **no close button** — it closed on a
+  backdrop click and on whatever buttons the caller passed, so a dialog whose buttons all *do*
+  something was a trap (which is what the handover dialog was on a phone). Now: an **X** that
+  stays put while the body scrolls, **Escape** closes the top-most overlay, and the footer
+  **always** carries a Close even when the caller passes none. Audited all **19** hand-built
+  overlays — 18 already had an X or Cancel; the one-time onboarding modal had neither (its only
+  exit saved a phone number first, so a rejected number was a dead end). All 19 tagged for
+  Escape. *(25 checks on a live-DB copy + 6 live on NP-112 itself.)*
+
 ### 🧭 DECIDED (Sep 13 2026) — what happens to My Desk / Case Board / Claim Pipeline
 Surveyed all four work screens before answering. **Keep My Desk. Fold Case Board into Level-2 → Settlement. Retire Claim Pipeline.**
 - **Claim Pipeline goes.** 81 lines, read-only, and it *never reads `pipeline_stage`* — it recomputes a stage in the browser from status+payment+outcome using ten names that match neither the buckets nor `case_state`. Two columns (`drafting`, `escalation`) are hardcoded empty placeholders. Its own header still claims it "replaces the split Dashboard/All Claims/L2 views". **Worth keeping:** the *Brought by* (source_kind) and *Customer* (subscription/₹499/unpaid-lead) filters, and unpaid leads — all three belong in the merged claims view.

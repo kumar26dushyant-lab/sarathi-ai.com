@@ -1,5 +1,36 @@
 # Staff Announcement Drafts
 
+## 2026-09-13 (3) — Nothing stops a claim moving any more
+
+**Title (EN):**
+✅ A claim can always move — you just say why · ✕ Every popup now closes
+
+**Details (EN):**
+• **Some claims were being refused as "Level-2 fee not paid" when the fee WAS paid.** If a claim came in on a subscription, the subscriber had already paid — but the handover screen did not count that and turned it away. It does now. **59 claims are waiting to be handed over, where the screen used to show 23.** Nothing changed about who paid; we were only looking at one of the three ways people pay us.
+
+• **No screen will stop you moving a claim any more.** Not the handover, not Start Level-2, not moving between buckets. If something is missing, the screen tells you exactly what — and then lets you move it anyway, as long as you write why. Your words and your name go onto the claim, and the team picking it up sees both. This is deliberate: a locked door only teaches people to go around it; your note is the thing the next person can actually use.
+
+• **Two things will still ask you for a sentence**, because without one they mean nothing: moving a claim with no comment at all, and pausing a claim without saying when it should come back.
+
+• **Every popup now has an ✕ in the corner**, and the Escape key closes it. Some windows had no way out except finishing what they asked — on a phone that meant reloading the page. If you ever find one that traps you, tell the IT SPOC; it is a bug, not how it is meant to work.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+✅ क्लेम अब कहीं नहीं रुकेगा — बस कारण लिखिए · ✕ हर पॉपअप अब बंद होता है
+
+**Details (HI):**
+• **कुछ क्लेम "Level-2 फ़ीस नहीं मिली" कहकर रोके जा रहे थे, जबकि फ़ीस मिल चुकी थी।** अगर क्लेम सब्सक्रिप्शन से आया है तो सब्सक्राइबर पहले ही भुगतान कर चुका है — पर हैंडओवर स्क्रीन उसे गिनती नहीं थी। अब गिनती है। **अब 59 क्लेम हैंडओवर के लिए दिख रहे हैं, जहाँ पहले 23 दिखते थे।** किसी के भुगतान में कोई बदलाव नहीं हुआ; हम तीन में से सिर्फ़ एक तरीक़ा देख रहे थे।
+
+• **अब कोई स्क्रीन आपको क्लेम आगे बढ़ाने से नहीं रोकेगी।** न हैंडओवर, न Start Level-2, न एक बकेट से दूसरे बकेट में ले जाना। कुछ छूट रहा हो तो स्क्रीन आपको साफ़-साफ़ बताएगी कि क्या — और फिर भी आगे बढ़ने देगी, बस कारण लिख दीजिए। आपके शब्द और आपका नाम क्लेम पर दर्ज होंगे, और आगे काम करने वाले को दोनों दिखेंगे। यह जान-बूझकर है: बंद दरवाज़ा सिर्फ़ लोगों को घुमावदार रास्ता सिखाता है; आपका नोट वह चीज़ है जो अगले व्यक्ति के असल काम आती है।
+
+• **दो चीज़ों पर अब भी एक वाक्य माँगा जाएगा**, क्योंकि उनके बिना उनका कोई मतलब ही नहीं: बिना किसी कमेंट के क्लेम हटाना, और बिना वापसी की तारीख़ बताए क्लेम को रोकना।
+
+• **हर पॉपअप के कोने में अब ✕ है**, और Escape दबाने पर भी बंद होता है। कुछ विंडो से निकलने का कोई रास्ता ही नहीं था सिवाय उनका काम पूरा करने के — फ़ोन पर इसका मतलब था पेज दोबारा लोड करना। अगर कोई विंडो आपको फँसाए तो IT SPOC को बताइए; वह बग है, ऐसा होना नहीं चाहिए।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-13 (2) — Asking for pending documents is now one screen
 
 **Title (EN):**
