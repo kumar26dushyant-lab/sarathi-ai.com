@@ -6764,6 +6764,8 @@ _DOC_KEYS = {
     "l2-design": "nidaan_l2_design.html",
     # Screen by screen: what staff actually see, click by click, including a backward move.
     "l2-screens": "nidaan_l2_screens.html",
+    # Merging the three claim screens into one. Discussion only.
+    "claims-view": "nidaan_claims_view.html",
 }
 
 
@@ -6813,6 +6815,12 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
 async def nidaan_doc_end_to_end(request: Request, k: str = ""):
     """The operating-model document. Shareable with a key; staff sessions open it directly."""
     return await _serve_shared_doc(request, "end-to-end", k)
+
+
+@app.get("/claims-view", include_in_schema=False)
+async def nidaan_doc_claims_view(request: Request, k: str = ""):
+    """Merging Claim Pipeline / Claims Dashboard / All Claims. Same share key."""
+    return await _serve_shared_doc(request, "claims-view", k)
 
 
 @app.get("/l2-screens", include_in_schema=False)

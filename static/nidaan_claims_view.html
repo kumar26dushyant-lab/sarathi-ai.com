@@ -1,0 +1,285 @@
+<!-- Merging Claim Pipeline / Claims Dashboard / All Claims — served at /claims-view.
+     Discussion document. Nothing here is built. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>One Claims View — NidaanPartner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#eef1f5; --card:#fff; --ink:#131a22; --ink2:#46586a; --ink3:#78899a;
+    --line:#dce3e9; --line2:#c2ccd6;
+    --ac:#0b6e7f; --ac-s:#e2f0f3;
+    --warn:#96580f; --warn-s:#fbf0dc;
+    --bad:#9c3227; --bad-s:#fbeae8;
+    --good:#1c6a4a; --good-s:#e5f2ea;
+    --sh:0 1px 2px rgba(19,26,34,.05),0 8px 22px rgba(19,26,34,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16.5px;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:64rem;margin:0 auto;padding:2.4rem 1.2rem 5rem}
+  h1,h2,h3{font-family:Fraunces,Georgia,serif;margin:0;text-wrap:balance}
+  h1{font-size:clamp(2rem,5vw,3rem);font-weight:700;line-height:1.08;letter-spacing:-.02em}
+  h2{font-size:clamp(1.3rem,3vw,1.7rem);font-weight:700;line-height:1.18}
+  h3{font-size:1.08rem;font-weight:700;margin-bottom:.25rem}
+  p{margin:0 0 .8rem;max-width:68ch}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.7rem;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ac)}
+  .lede{font-size:1.1rem;color:var(--ink2);max-width:62ch;margin-top:.9rem}
+  header{padding-bottom:1.6rem;border-bottom:3px double var(--line2);margin-bottom:2rem}
+  section{margin:2.9rem 0 0}
+  .sh{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.8rem}
+  .sh .n{font-family:"IBM Plex Mono",monospace;font-size:.76rem;font-weight:600;color:var(--ac);
+    border:1px solid var(--ac);border-radius:5px;padding:.05rem .4rem;flex:0 0 auto}
+  .co{border-left:3px solid var(--ac);background:var(--ac-s);border-radius:0 10px 10px 0;
+    padding:.8rem 1.05rem;margin:1rem 0}
+  .co.bad{border-left-color:var(--bad);background:var(--bad-s)}
+  .co.warn{border-left-color:var(--warn);background:var(--warn-s)}
+  .co.good{border-left-color:var(--good);background:var(--good-s)}
+  .co p:last-child{margin-bottom:0}
+  .co .l{font-family:"IBM Plex Mono",monospace;font-size:.65rem;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;display:block;margin-bottom:.28rem;color:var(--ink2)}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.d{width:100%;border-collapse:collapse;font-size:.9rem;margin:.8rem 0;min-width:33rem}
+  table.d th{text-align:left;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink3);border-bottom:1.5px solid var(--line2);padding:.45rem .55rem}
+  table.d td{padding:.45rem .55rem;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+  table.d td b{color:var(--ink)}
+  table.d tbody tr:last-child td{border-bottom:none}
+  ul,ol{margin:0 0 .85rem;padding-left:1.2rem;max-width:68ch}
+  li{margin-bottom:.35rem}
+  code{font-family:"IBM Plex Mono",monospace;font-size:.85em;background:var(--ac-s);color:var(--ac);
+    padding:.06em .38em;border-radius:4px}
+  .scr{border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--card);
+    box-shadow:var(--sh);margin:1rem 0;font-size:11.5px;line-height:1.4}
+  .chrome{background:var(--bg);border-bottom:1px solid var(--line);padding:.4rem .6rem;
+    display:flex;gap:.35rem;align-items:center}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line2)}
+  .url{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink3);margin-left:.4rem}
+  .pane{padding:.6rem .75rem}
+  .ttl{font-size:13px;font-weight:700;margin-bottom:.4rem}
+  .tabs{display:flex;gap:.25rem;flex-wrap:wrap;margin-bottom:.45rem}
+  .tb{font-size:9.5px;border:1px solid var(--line2);border-radius:999px;padding:.08rem .45rem;color:var(--ink3)}
+  .tb.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .trail{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.3rem;margin:.4rem 0}
+  .tc{border:1px solid var(--line);border-radius:6px;padding:.3rem .42rem;background:var(--bg)}
+  .tc .k{font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .tc .v{font-size:10px;font-weight:600;color:var(--ink)}
+  .tc.hot{border-color:var(--bad)} .tc.hot .v{color:var(--bad)}
+  .tc.ok{border-color:var(--good)} .tc.ok .v{color:var(--good)}
+  .chain{display:flex;gap:.2rem;align-items:center;flex-wrap:wrap;font-size:9.5px;margin:.35rem 0}
+  .cs{border:1px solid var(--line2);border-radius:4px;padding:.05rem .35rem;color:var(--ink3);white-space:nowrap}
+  .cs.done{border-color:var(--good);color:var(--good)}
+  .cs.now{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:700}
+  .q{border:1px solid var(--line2);border-radius:10px;padding:.8rem 1.05rem;margin:.7rem 0;background:var(--card)}
+  .q .qn{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ac);font-weight:600}
+  .q .qt{font-family:Fraunces,Georgia,serif;font-size:1.02rem;font-weight:700;margin:.1rem 0 .3rem}
+  .q p{font-size:.92rem;margin-bottom:0;color:var(--ink2)}
+  hr.r{border:none;border-top:1px solid var(--line);margin:2.5rem 0 0}
+  footer{margin-top:2.3rem;padding-top:1.1rem;border-top:3px double var(--line2);
+    font-size:.85rem;color:var(--ink3)}
+  @media (max-width:640px){ body{font-size:16px} .wrap{padding:1.7rem 1rem 3.5rem} }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Discussion · nothing built</div>
+  <h1>One Claims View</h1>
+  <p class="lede">Claim Pipeline, Claims Dashboard and All Claims are three drawings of the same
+  data. What a claim actually needs is one place that shows its whole chain — where it came from,
+  who touched it, what was paid, and where it is now.</p>
+</header>
+
+<!-- 1 -->
+<section>
+  <div class="sh"><span class="n">01</span><h2>You are right, and here is the proof</h2></div>
+  <p>I checked before answering. <strong>All three screens call the same endpoint.</strong></p>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>Screen</th><th>Calls</th><th>What it draws</th></tr></thead>
+    <tbody>
+      <tr><td><b>Claims Dashboard</b></td><td><code>/claims?limit=500</code></td>
+        <td>Counter tiles, then a list of active claims</td></tr>
+      <tr><td><b>Claim Pipeline</b></td><td><code>/claims?limit=400</code></td>
+        <td>The same claims as columns by stage, filtered by origin</td></tr>
+      <tr><td><b>All Claims</b></td><td><code>/claims?…filters</code></td>
+        <td>The same claims as a table, a board or cards, plus archive and bulk actions</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="co">
+    <span class="l">So the difference is not the data</span>
+    <p>It is only the <em>shape</em>. One counts, one columns, one tabulates — over an identical
+    list. That is three places to keep in step, three places to fix a bug, and three places a
+    person has to check before they believe they have seen everything.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section>
+  <div class="sh"><span class="n">02</span><h2>What each actually contributes</h2></div>
+  <p>Before merging anything, what would genuinely be lost:</p>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>From</th><th>Worth keeping</th><th>Becomes</th></tr></thead>
+    <tbody>
+      <tr><td>Claims Dashboard</td><td>The counters — how many, how much, how many stuck</td>
+        <td>A strip across the top of the one view</td></tr>
+      <tr><td>Claim Pipeline</td><td>Seeing the shape — where claims pile up</td>
+        <td>The <b>Board</b> view, one of three</td></tr>
+      <tr><td>All Claims</td><td>Search, filters, archive, bulk actions, the dense table</td>
+        <td>The <b>Table</b> view and the toolbar</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="co good">
+    <span class="l">Nothing is lost</span>
+    <p>Every capability survives. What disappears is the <em>choice of which screen to open</em>,
+    which was never a useful decision for anybody to make.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section>
+  <div class="sh"><span class="n">03</span><h2>The proposal: one section, three views</h2></div>
+  <p>A single <strong>📋 Claims</strong> entry. Counters on top, one toolbar, three ways to look at
+  the same list — and the view you last used is remembered, so it stops being a decision.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#claims</span></div>
+    <div class="pane">
+      <div class="ttl">📋 Claims</div>
+      <div class="trail">
+        <div class="tc"><div class="k">All claims</div><div class="v">124</div></div>
+        <div class="tc"><div class="k">In Level-2</div><div class="v">2</div></div>
+        <div class="tc hot"><div class="k">Paid, not started</div><div class="v">21</div></div>
+        <div class="tc hot"><div class="k">Winnable, unpaid</div><div class="v">45</div></div>
+        <div class="tc"><div class="k">Disputed value</div><div class="v">₹2.1 Cr</div></div>
+        <div class="tc ok"><div class="k">Recovered</div><div class="v">₹0</div></div>
+      </div>
+      <div class="tabs"><span class="tb on">Table</span><span class="tb">Board</span>
+        <span class="tb">Cards</span>
+        <span class="tb" style="margin-left:.5rem">🔍 search</span>
+        <span class="tb">Stage ▾</span><span class="tb">Origin ▾</span><span class="tb">Paid ▾</span>
+        <span class="tb">Insurance Co. ▾</span><span class="tb">⤓ Excel</span></div>
+      <div style="font-size:10px;color:var(--ink3)">Table · Board · Cards draw the same rows.
+        Filters and search apply to all three.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section>
+  <div class="sh"><span class="n">04</span><h2>The chain — the part you actually asked for</h2></div>
+  <p>“Origin, chain, where it comes from” is the real request. Today that is scattered: origin on
+  one screen, payment on another, Level-2 position on a third. It should be one strip on the claim,
+  readable in a glance, in the order the claim actually happened.</p>
+
+  <div class="scr">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="url">…/ops#claim/70</span></div>
+    <div class="pane">
+      <div class="ttl">NP-70 · SURESH BABURAO CHOUDHARI · ₹4,00,000</div>
+      <div class="chain">
+        <span class="cs done">Raised by branch PUNEICD-01</span><span>→</span>
+        <span class="cs done">Free review</span><span>→</span>
+        <span class="cs done">Reviewed: can fight</span><span>→</span>
+        <span class="cs done">L2 fee paid ₹499</span><span>→</span>
+        <span class="cs now">📋 Live Cases · 2d</span><span>→</span>
+        <span class="cs">Pending Docs</span><span>→</span>
+        <span class="cs">…</span><span>→</span>
+        <span class="cs">Finished</span>
+      </div>
+      <div class="trail">
+        <div class="tc"><div class="k">Origin</div><div class="v">Branch PUNEICD-01</div></div>
+        <div class="tc"><div class="k">Channel partner</div><div class="v">VANDANA SOLANKI</div></div>
+        <div class="tc"><div class="k">Case handler</div><div class="v">SUHANA JAIN</div></div>
+        <div class="tc"><div class="k">Medical Officer</div><div class="v">Dr. Ashish</div></div>
+        <div class="tc"><div class="k">Insurance Co.</div><div class="v">Aditya Birla</div></div>
+        <div class="tc"><div class="k">Paid so far</div><div class="v">₹499 + ₹499</div></div>
+        <div class="tc"><div class="k">Documents</div><div class="v">3 / 11</div></div>
+        <div class="tc hot"><div class="k">Lokpal window</div><div class="v">278 days</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--ink3)">Below this: remarks, documents, payments,
+        notifications sent, and every move — one page, nothing to go and find.</div>
+    </div>
+  </div>
+
+  <div class="co good">
+    <span class="l">Why the chain matters more than the counters</span>
+    <p>A counter tells you how many. The chain tells you <em>how this one got here</em> — which is
+    the question asked when a branch partner rings, when a payment is queried, or when somebody
+    wants to know why a case has taken four months. That answer currently requires opening three
+    screens and remembering what was on the first.</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section>
+  <div class="sh"><span class="n">05</span><h2>What I would be careful about</h2></div>
+  <ul>
+    <li><strong>Muscle memory.</strong> People have learned where things are, however inefficient.
+      I would keep the old menu entries for a fortnight, pointing at the new view with a one-line
+      note, rather than removing them overnight.</li>
+    <li><strong>One screen doing everything gets slow.</strong> 124 claims is nothing; 5,000 is not.
+      The table must page and the counters must be a separate, cached query, or the merge trades
+      three fast screens for one slow one.</li>
+    <li><strong>Permissions differ today.</strong> All Claims is admin-only; the Dashboard is open to
+      everyone. Merging means deciding that once — my suggestion: everyone sees the view, and the
+      admin-only <em>actions</em> (archive, bulk, re-attribute) stay admin-only.</li>
+  </ul>
+  <div class="co warn">
+    <span class="l">The one real risk</span>
+    <p>Merging three screens into one is easy to start and easy to leave half-done, at which point
+    there are <em>four</em>. If we do it, the old three come out in the same release the new one
+    goes in — with the fortnight of redirects, and then they are gone.</p>
+  </div>
+</section>
+
+<!-- 6 -->
+<section>
+  <div class="sh"><span class="n">06</span><h2>Questions</h2></div>
+  <div class="q"><div class="qn">Q11</div><div class="qt">Does L2 Claims merge too?</div>
+    <p>There is also an <strong>L2 Claims</strong> entry. Under the bucket system its job is largely
+    taken over by Level-2 → Settlement. My instinct: fold it into the one Claims view as a saved
+    filter, and let the buckets own the working screens. Agree?</p></div>
+  <div class="q"><div class="qn">Q12</div><div class="qt">What belongs on the counter strip?</div>
+    <p>I have guessed: all claims, in Level-2, paid-not-started, winnable-unpaid, disputed value,
+    recovered. Those are the numbers I would watch — but they are yours to choose.</p></div>
+  <div class="q"><div class="qn">Q13</div><div class="qt">Archived — a filter or a place?</div>
+    <p>Archived is its own menu entry today. Inside one view it could simply be a filter
+    (<em>Show: active · archived · all</em>), which removes another entry from the sidebar.</p></div>
+</section>
+
+<hr class="r">
+<footer>
+  <p><strong>One Claims View</strong> — discussion draft for NidaanPartner. Nothing here is built.
+  The Level-2 bucket engine is being built separately and does not depend on this decision.</p>
+</footer>
+
+</div>
