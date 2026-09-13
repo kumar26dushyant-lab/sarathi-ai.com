@@ -7005,6 +7005,9 @@ _DOC_KEYS = {
     "l2-screens": "nidaan_l2_screens.html",
     # Merging the three claim screens into one. Discussion only.
     "claims-view": "nidaan_claims_view.html",
+    # How a bucket joins the flow: order as the spine, routes as shortcuts, and what a bucket
+    # does when a claim lands in it. Discussion only.
+    "bucket-flow": "nidaan_bucket_flow.html",
     # The pending-document window - the one a claim lives or dies in. Discussion only.
     "doc-collect": "nidaan_doccollect.html",
 }
