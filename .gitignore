@@ -73,3 +73,9 @@ prelaunch_run*.txt
 
 # Doc Splitter working job files (shared across workers, runtime only)
 var/
+
+# ── UI flow tests (Playwright browsers are ~300MB; never committed) ───────────
+node_modules/
+uitest/node_modules/
+uitest/.playwright/
+uitest/screenshots/

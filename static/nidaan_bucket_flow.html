@@ -110,7 +110,7 @@
 <div class="wrap">
 
 <header>
-  <div class="eyebrow">Discussion · nothing built</div>
+  <div class="eyebrow">Discussion · answered 13 Sep · nothing built yet</div>
   <h1>Buckets that know their neighbours</h1>
   <p class="lede">You asked how a new bucket joins the flow — what sits above it, what sits below
   it, what happens when a claim lands in it, and what it must carry before it leaves. Here is what
@@ -323,9 +323,70 @@
   <p>I would like to build the first one before we start on buckets, not after.</p>
 </section>
 
+<!-- 5b -->
+<section>
+  <div class="sh"><span class="n">5b</span><h2>Answered — 13 Sep</h2></div>
+  <div class="co good"><span class="l">Decided</span>
+  <p><b>Q1 Order is the flow.</b> Drag to arrange; above and below are decided for you.<br>
+  <b>Q2 A bucket CAN genuinely fork.</b> Completed → Pending Payment or CP Payment is a real
+  decision, not a shortcut.<br>
+  <b>Q3 Prepare, never send.</b> An on-arrival action puts the message in front of a person.<br>
+  <b>Q4 Dragging is allowed, with preventive action</b> — see below.<br>
+  <b>Q5 The browser flow test is built first.</b></p></div>
+
+  <h3>What Q2 changes</h3>
+  <p>A fork is not the same as a shortcut, and the screen must not make them look alike. So:</p>
+  <ul>
+    <li>The order still gives the <strong>default</strong> next bucket — the one the button
+    offers when there is nothing to decide.</li>
+    <li>A bucket may declare <strong>additional real nexts</strong>. When it has more than one,
+    the single "→ Pending Draft" button becomes a short list of equal choices, each named,
+    and the person picks. No default is pre-selected, because a fork means somebody has to
+    decide and a pre-selected answer is how a decision gets made by accident.</li>
+    <li><strong>Shortcuts stay visibly different</strong> — they sit under "somewhere else",
+    the way they do today. A fork is part of the flow; a shortcut is a departure from it.</li>
+  </ul>
+  <div class="co"><span class="l">Which means</span>
+  <p>Completed would declare two nexts: Pending Payment and CP Payment. Staff in Completed see
+  two buttons, both named, neither pre-chosen — and whichever they press still carries the
+  comment every move carries.</p></div>
+
+  <h3>The guard rails Q4 asked for</h3>
+  <p>You are right that a careless drag could disturb live work, so dragging is not just allowed
+  and hoped for. Four things, in the order they take effect:</p>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th></th><th>Guard</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><b>1</b></td><td><b>Some positions are structural and simply cannot move</b></td>
+        <td>The entry bucket stays first. The terminal bucket stays last. A park bucket sits
+        outside the line entirely — it is a pause, not a step. Dragging these is refused with
+        the reason, because they are not preferences, they are what the engine means by
+        "beginning", "end" and "paused".</td></tr>
+      <tr><td><b>2</b></td><td><b>You see the consequence before you commit</b></td>
+        <td>Let go of a bucket and nothing is saved yet. A panel says exactly what changes:
+        <em>"Pending Documents holds 4 claims. After this, moving them on sends them to
+        Reimbursement instead of Pending Draft."</em> Save or cancel. Live work is never
+        rearranged by a gesture alone.</td></tr>
+      <tr><td><b>3</b></td><td><b>One-click undo, for a day</b></td>
+        <td>Every save keeps the previous order. "Put it back the way it was" restores it
+        exactly, with no thinking required — which is what you want at the moment you realise
+        you have dragged something badly.</td></tr>
+      <tr><td><b>4</b></td><td><b>Claims never move; only the bucket does</b></td>
+        <td>A claim stays exactly where it is. What changes is where it goes NEXT, and the claim
+        shows that plainly rather than hiding it.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="co warn"><span class="l">The one thing I will not add</span>
+  <p>A rule that refuses a reorder because claims are in the way. That would mean the busier the
+  office gets, the less it can correct its own process — exactly backwards. Show the
+  consequence, make it reversible, and let the person decide.</p></div>
+</section>
+
 <!-- 6 -->
 <section>
-  <div class="sh"><span class="n">06</span><h2>What I need from you</h2></div>
+  <div class="sh"><span class="n">06</span><h2>The questions, as asked</h2></div>
 
   <div class="q"><span class="qn">Q1</span>
     <div class="qt">Is the order the flow, or do you want to draw the lines yourself?</div>
