@@ -426,10 +426,24 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
     return dict(r) if r else None
 
 
+def l2_fee_covered(claim: dict) -> bool:
+    """Has the Level-2 work been paid for - by ANY of the three routes we sell it through?
+
+    A subscriber has already paid through their plan; a direct customer pays the L2 fee; a
+    per-claim customer has a paid claim. All three are covered, and the claim screens have always
+    said so. This used to accept only `l2_payment_status == 'paid'`, so a subscription claim read
+    as covered on L2 Claims and as unpaid the moment somebody tried to hand it over - two answers
+    to one question, which is the bug NP-112 surfaced.
+    """
+    return ((claim.get("l2_payment_status") or "").lower() == "paid"
+            or (claim.get("payment_status") or "").lower() in ("paid", "subscription"))
+
+
 def l2_ready(claim: dict) -> bool:
-    """Reviewed as winnable AND the Level-2 fee paid. Both, or the buckets do not take it."""
+    """Reviewed as winnable, and the work paid for. This DESCRIBES a claim - it no longer
+    forbids anything. Nothing that is not ready is refused; it is moved with a reason."""
     return ((claim.get("review_outcome") or "").lower() == "can_fight"
-            and (claim.get("l2_payment_status") or "").lower() == "paid")
+            and l2_fee_covered(claim))
 
 
 async def claim_fields(claim_id: int) -> dict:
@@ -501,29 +515,17 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
     if (row.get("pipeline_stage") or "").strip():
         return {"ok": False, "error": "This case has already started Level-2.",
                 "bucket": row.get("pipeline_stage")}
-    if not l2_ready(row):
-        if (row.get("review_outcome") or "").lower() != "can_fight":
-            return {"ok": False, "error": "The review has not said this case can be fought yet."}
-        return {"ok": False,
-                "error": "The Level-2 fee has not been paid, so the work has not been bought yet."}
-
-    # Intake signs for a claim before Level-2 can begin on it. Without this a claim could drift
-    # into the buckets with nobody having looked at it, and nobody to ask when something turns
-    # out to be missing three weeks later.
-    if not force and not row.get("l2_handover_at"):
-        return {"ok": False, "needs_handover": True,
-                "error": "This claim has not been handed over to Level-2 yet. Someone on intake "
-                         "duty moves it across from L2 Claims first."}
-
-    # Everything Level-2 runs on must be true BEFORE the claim enters the buckets. A gap here
-    # costs weeks once the work is under way, and by then the person who could have fixed it in
-    # ten seconds has moved on. `force` exists for a super-admin who knows better.
-    if not force:
-        rd = await readiness(claim_id)
-        if rd.get("ok") and rd.get("blocks"):
-            return {"ok": False, "readiness": rd,
-                    "error": "Not ready to start: " + "; ".join(
-                        "%s - %s" % (b["label"], b["detail"]) for b in rd["blocks"][:3])}
+    # Again: nothing here refuses. What is outstanding is collected and recorded on the claim.
+    concerns = []
+    if (row.get("review_outcome") or "").lower() != "can_fight":
+        concerns.append("The review has not said this case can be fought yet.")
+    if not l2_fee_covered(row):
+        concerns.append("No Level-2 fee recorded - not on the claim, not a subscription.")
+    if not row.get("l2_handover_at"):
+        concerns.append("Nobody on intake handed this over - it was started directly.")
+    rd = await readiness(claim_id)
+    for b in (rd.get("blocks") or []):
+        concerns.append("%s - %s" % (b["label"], b["detail"]))
 
     entry = None
     for b in await buckets():
@@ -543,21 +545,28 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
             "pipeline_by=?, pipeline_from='' WHERE claim_id=?",
             (entry["bucket_key"], default_sub, (actor or "")[:80], int(claim_id)))
         await c.commit()
-    await _log(claim_id, "Level-2 processing started - now in %s" % entry["name_en"], actor)
+    note = "Level-2 processing started - now in %s" % entry["name_en"]
+    if concerns:
+        note += " | STARTED WITH THESE STILL OPEN: " + "; ".join(concerns[:4])
+    await _log(claim_id, note, actor)
     await _notify_move(claim_id, to_key=entry["bucket_key"], to_name=entry["name_en"],
                        from_name="To start", kind="forward",
                        reason=(row.get("l2_handover_note") or ""), actor=actor,
                        who=(row.get("complainant_name") or row.get("insured_name") or "").strip())
-    return {"ok": True, "bucket": entry["bucket_key"], "name": entry["name_en"], "sub": default_sub}
+    return {"ok": True, "bucket": entry["bucket_key"], "name": entry["name_en"],
+            "sub": default_sub, "concerns": concerns}
 
 
 async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                hold_until: str = "", actor: str = "", force: bool = False) -> dict:
-    """Move a claim to another bucket, if the configuration allows that route.
+    """Move a claim to any other bucket.
 
-    Refuses when the route is not configured, when a reason is required and missing, when a
-    required field is still blank, or when a park has no return date. Each refusal says exactly
-    what is wrong - a refusal a person cannot act on is just a locked door.
+    NO MOVE IS EVER REFUSED FOR BEING UNTIDY. A route that is not in the configuration is allowed
+    and recorded as off the usual path; a required field still blank is allowed once the person
+    says why. The only two things that stop a move are the ones that would make it meaningless:
+    no comment at all (the next bucket would learn nothing) and a park with no return date (an
+    open-ended park is how a case disappears for a year). Both of those ask for one sentence, and
+    that sentence is the thing the next person actually reads.
     """
     row = await _claim_row(claim_id)
     if not row or row.get("archived") or (row.get("status") or "") in ("closed", "withdrawn"):
@@ -597,18 +606,32 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     else:
         kind = rule.get("kind", "forward")
 
+    # What is still blank, worked out BEFORE we ask for the comment - so the one prompt can say
+    # both things at once. Leaving a bucket forwards means finishing it; going back or parking is
+    # explicitly not finishing, so blank fields only matter on the way forward.
+    missing = await missing_required(claim_id, cur_key) if kind == "forward" else []
+
     # GROUND RULE: every move carries a comment, forwards as well as backwards.
     #
     # The person receiving the claim in the next bucket starts cold. They need to know what was
     # done, what is still pending and what to do next - and the only person who can tell them is
     # the one letting go of it. A bucket system without this degenerates into claims appearing
     # in queues with no explanation, which is exactly the silence it was built to end.
+    #
+    # Note what this is NOT: it is not a gate on the claim being tidy. Nothing here refuses a
+    # move because a field is blank or a bucket was skipped. It asks for one sentence, and that
+    # sentence is the thing the next person actually reads.
     if not (reason or "").strip() and not force:
         if kind == "back":
             return {"ok": False,
                     "error": "Say what is wrong - the person who sent it forward needs to know."}
         if kind == "park":
             return {"ok": False, "error": "Say why this is being paused."}
+        if missing:
+            names = ", ".join(m["label"] for m in missing[:4])
+            return {"ok": False, "missing": missing, "needs_override": True,
+                    "error": "Still blank: %s. You can move it anyway - say why, and the next "
+                             "bucket will see your note." % names}
         return {"ok": False,
                 "error": "Add a note for the next bucket - what you did, and what is still pending."}
 
@@ -624,14 +647,7 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     else:
         day = ""
 
-    # Leaving a bucket forwards means finishing it. Going backwards or parking is explicitly NOT
-    # finishing, so the required fields are only enforced on the way forward.
-    if kind == "forward" and not force:
-        missing = await missing_required(claim_id, cur_key)
-        if missing:
-            names = ", ".join(m["label"] for m in missing[:4])
-            return {"ok": False, "missing": missing,
-                    "error": "Fill these before moving on: %s" % names}
+    # (`missing` was worked out above, before the comment prompt, so one ask covers both.)
 
     subs = await substates(to_key)
     sub = (sub or "").strip()
@@ -668,6 +684,10 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                                  " (off the usual path)" if off_route else "")
     if day:
         summary += " until %s" % day
+    # A field that was still blank when the claim moved on is part of the record, not a footnote.
+    # The next bucket should not have to discover it.
+    if missing:
+        summary += " [left blank: %s]" % ", ".join(m["label"] for m in missing[:4])
     if (reason or "").strip():
         summary += " - %s" % reason.strip()
     await _log(claim_id, summary, actor)
@@ -1288,24 +1308,36 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
     if row.get("l2_handover_at"):
         return {"ok": False, "error": "This claim was already handed over by %s."
                 % (row.get("l2_handover_by") or "someone")}
-    if not l2_ready(row):
-        if (row.get("review_outcome") or "").lower() != "can_fight":
-            return {"ok": False, "error": "The review has not said this case can be fought yet."}
-        return {"ok": False, "error": "The Level-2 fee has not been paid yet."}
-
+    # NOTHING BELOW REFUSES THE MOVE. Everything that is wrong is collected, shown to the
+    # person doing it, and written onto the claim with their name - so the Level-2 team opens it
+    # knowing exactly what was outstanding and who decided to send it anyway. A wall here only
+    # taught people to route around the system; a recorded reason is what the next person can
+    # actually act on.
+    concerns = []
+    if (row.get("review_outcome") or "").lower() != "can_fight":
+        concerns.append("The review has not said this case can be fought yet.")
+    if not l2_fee_covered(row):
+        concerns.append("No Level-2 fee recorded - not on the claim, not a subscription.")
     rd = await readiness(claim_id)
-    if not force and rd.get("blocks"):
-        return {"ok": False, "readiness": rd,
-                "error": "Fix these first: " + "; ".join(
-                    "%s - %s" % (b["label"], b["detail"]) for b in rd["blocks"][:3])}
+    for b in (rd.get("blocks") or []):
+        concerns.append("%s - %s" % (b["label"], b["detail"]))
 
-    # The two judgement questions are not optional: they are the whole point of a human handover.
     checks = checks or {}
-    for k in ("ack_docs_plan", "ack_contactable"):
-        if not checks.get(k):
-            return {"ok": False, "error": "Answer both questions before handing this over."}
+    unanswered = [q for q in ("ack_docs_plan", "ack_contactable") if not checks.get(q)]
+    if unanswered:
+        concerns.append("Handed over without confirming: %s" % ", ".join(
+            {"ack_docs_plan": "that we know which documents this case needs",
+             "ack_contactable": "that someone has actually spoken to the complainant"}[q]
+            for q in unanswered))
+
+    # The COMMENT is the one thing that is genuinely required, and it always was: the Level-2
+    # team picks this up cold. When something is outstanding the note has to say why anyway.
     if not (note or "").strip():
-        return {"ok": False,
+        if concerns:
+            return {"ok": False, "concerns": concerns, "readiness": rd,
+                    "error": "Some things are still outstanding. You can hand it over anyway - "
+                             "say why in the note, and the Level-2 team will see it."}
+        return {"ok": False, "concerns": [], "readiness": rd,
                 "error": "Add a short note for the Level-2 team - they pick this up cold."}
 
     try:
@@ -1314,7 +1346,9 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
                 "UPDATE nidaan_claims SET l2_handover_at=CURRENT_TIMESTAMP, l2_handover_by=?, "
                 "l2_handover_note=?, l2_handover_checks=? WHERE claim_id=?",
                 ((actor or "")[:80], (note or "").strip()[:600],
-                 _json.dumps(checks)[:2000], int(claim_id)))
+                 # What was NOT confirmed travels with the handover. Level-2 opening this claim
+                 # can see both what intake checked and what they knowingly left open.
+                 _json.dumps({**checks, "_open": concerns[:8]})[:2000], int(claim_id)))
             await c.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("handover failed for %s: %s", claim_id, e)

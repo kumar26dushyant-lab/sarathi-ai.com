@@ -6466,21 +6466,19 @@ class _PipelineMoveReq(BaseModel):
 @app.post("/nidaan/ops/api/cases/{claim_id}/pipeline/start")
 @limiter.limit("60/minute")
 async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
-    """Start Level-2 processing - the act that puts a paid, winnable case into the buckets.
+    """Start Level-2 processing - the act that puts a case into the buckets.
 
-    Admin-only on purpose. Entering the pipeline is what commits the office to the work, and it
-    is the gate that keeps the stage buckets holding L2 cases only.
+    It does not refuse a case for being untidy. Whatever is still outstanding is recorded on the
+    claim's timeline so the Level-2 team opens it knowing exactly what was left open and who
+    started it anyway. The only refusals are the two that would make the act meaningless: the
+    case is closed, or it is already in a bucket.
     """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    # Intake duty, not admins: starting a paid case is everyday work for whoever is rostered.
+    # Intake duty, not admins: starting a case is everyday work for whoever is rostered.
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    # Only a super-admin may start a claim that has not passed its readiness checks, and the
-    # override is recorded like any other act.
-    _force = ((request.query_params.get("force") or "") == "1"
-              and (caller or {}).get("role") == "super_admin")
-    res = await _bk.start_l2(claim_id, actor=_actor_label(caller), force=_force)
+    res = await _bk.start_l2(claim_id, actor=_actor_label(caller))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
     await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
@@ -6789,7 +6787,11 @@ async def ops_case_handover(claim_id: int, body: _HandoverReq, request: Request)
     res = await _bk.hand_over(claim_id, note=body.note, checks=body.checks,
                               actor=_actor_label(caller), force=_force)
     if not res.get("ok"):
-        raise HTTPException(status_code=400, detail=res.get("error") or "Could not hand that over")
+        # Send back WHAT is outstanding, not only that something is - the dialog lists it, so
+        # nobody has to go looking across three screens for what we already knew.
+        raise HTTPException(status_code=400, detail={
+            "error": res.get("error") or "Could not hand that over",
+            "concerns": res.get("concerns") or []})
     await _ops_audit(request, "l2.handover", "claim", claim_id,
                      f"gaps={res.get('acknowledged_gaps')} {body.note}"[:160])
     return res

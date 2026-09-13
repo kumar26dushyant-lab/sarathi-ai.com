@@ -202,7 +202,17 @@ select.form-input option{background:#1e293b}
 .modal-bg.open{display:flex}
 .modal{background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:16px;padding:1.75rem;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
 .modal.modal-lg{max-width:min(960px,96vw);padding:2rem}
-.modal h3{font-size:1rem;font-weight:800;color:var(--nd-text-primary);margin-bottom:1.25rem}
+.modal h3{font-size:1rem;font-weight:800;color:var(--nd-text-primary);margin:0;
+  flex:1;min-width:0;padding-right:.5rem}
+/* The title and the way out, on one line, always in the same corner. Sticky so the X stays
+   reachable on a phone even when the body scrolls — which is exactly when it is needed. */
+.modal-head{display:flex;align-items:flex-start;gap:.5rem;margin-bottom:1.25rem;
+  position:sticky;top:-1.75rem;background:var(--nd-bg-base-2);padding:1.75rem 0 .6rem;
+  margin-top:-1.75rem;z-index:2}
+.modal-x{background:none;border:0;color:var(--nd-text-faint);font-size:1.6rem;line-height:1;
+  cursor:pointer;padding:0 .2rem;flex:0 0 auto;font-family:inherit;border-radius:6px}
+.modal-x:hover{color:var(--nd-text-primary);background:var(--nd-bg-surface)}
+.modal-x:focus-visible{outline:2px solid var(--nd-brand-cyan);outline-offset:2px}
 .modal-footer{display:flex;gap:.65rem;justify-content:flex-end;margin-top:1.25rem}
 
 /* ── REVENUE SPLIT ── */
@@ -496,8 +506,12 @@ select.form-input option{background:#1e293b}
 
 <!-- ══════════ MODAL ══════════ -->
 <div class="modal-bg" id="modalBg">
-  <div class="modal" id="modal">
-    <h3 id="modalTitle">Modal</h3>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="modal-x" type="button" onclick="closeModal()" aria-label="Close"
+              title="Close (Esc)">&times;</button>
+    </div>
     <div id="modalBody"></div>
     <div class="modal-footer" id="modalFooter"></div>
   </div>
@@ -695,10 +709,16 @@ function showStaffOnboardModal(currentPhone, alreadyLinked) {
   if (bg) bg.remove();
   bg = document.createElement('div');
   bg.id = 'staffOnboardBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.innerHTML = `
     <div style="background:var(--nd-bg-base);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:520px;width:100%;padding:1.75rem;max-height:92vh;overflow-y:auto">
-      <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:.35rem;color:var(--nd-cyan-text)">✈️ Set up your notifications — one time</h2>
+      <div style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.35rem">
+        <h2 style="font-size:1.25rem;font-weight:700;margin:0;flex:1;color:var(--nd-cyan-text)">✈️ Set up your notifications — one time</h2>
+        <button onclick="document.getElementById('staffOnboardBg').remove()" aria-label="Close"
+                title="Close" style="background:none;border:0;color:var(--nd-text-faint);
+                font-size:1.6rem;line-height:1;cursor:pointer;padding:0 .2rem;font-family:inherit">&times;</button>
+      </div>
       <p style="font-size:.9rem;color:var(--nd-text-secondary);margin-bottom:1rem">
         NidaanPartner ops notifications (task assigned, mentions, approvals) now run on
         <b>Telegram</b> — it's official, instant and reliable, with nothing to re-pair.
@@ -721,6 +741,11 @@ function showStaffOnboardModal(currentPhone, alreadyLinked) {
              style="width:100%;padding:.65rem .85rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);border-radius:8px;color:var(--nd-text-primary);font-size:.95rem;margin-bottom:.85rem">
       <button onclick="confirmStaffOnboard()" style="width:100%;background:#22c55e;color:#0a1628;padding:.85rem;border:none;border-radius:8px;font-weight:700;font-size:.95rem;cursor:pointer">
         ✓ Got it — don't show this again
+      </button>
+      <button onclick="document.getElementById('staffOnboardBg').remove()"
+              style="width:100%;background:none;border:0;color:var(--nd-text-muted);
+              padding:.55rem;font-size:.85rem;cursor:pointer;font-family:inherit;margin-top:.3rem">
+        Not now — remind me next time
       </button>
       <div style="font-size:.72rem;color:var(--nd-text-faint);text-align:center;margin-top:.5rem">You can always manage this from <b>Telegram Bot</b> in the menu.</div>
     </div>`;
@@ -789,6 +814,7 @@ async function openProfile(){
     </div>`;
   let bg = document.getElementById('profileBg'); if (bg) bg.remove();
   bg = document.createElement('div'); bg.id='profileBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick=(e)=>{ if(e.target===bg) bg.remove(); };
   bg.innerHTML = `
@@ -849,6 +875,7 @@ async function setMyLanguage(lang){
 function openAnnounceModal(){
   let bg = document.getElementById('announceBg'); if (bg) bg.remove();
   bg = document.createElement('div'); bg.id='announceBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick=(e)=>{ if(e.target===bg) bg.remove(); };
   const inp='width:100%;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.88rem';
@@ -1627,6 +1654,7 @@ async function openLeaveModal(kind){
 
   const bg = document.createElement('div');
   bg.id = 'leaveModalBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
   const inp = 'width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;padding:.5rem .65rem;border-radius:6px;font-size:.85rem';
@@ -1948,6 +1976,7 @@ async function openQuickTaskModal(presetClaimId){
 
   const bg = document.createElement('div');
   bg.id = 'quickTaskModalBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
 
@@ -3868,6 +3897,7 @@ function opsSendToClaimShield(claimId){
     : `<div style="font-size:.8rem;color:var(--nd-success-text);background:rgba(52,211,153,.12);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.8rem">✓ ${esc(basis)}. This creates a Level-2 case at ClaimShield.</div>`;
   let ov=document.getElementById('csSendOv'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='csSendOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:440px;width:100%;padding:1.2rem">
@@ -6246,6 +6276,7 @@ function openReattributeModal(id){
   const curName = a.ref_name || (a.branch_code ? a.branch_code : 'Direct (no referrer)');
   const curCode = a.branch_code ? esc(a.branch_code) : '—';
   const ov=document.createElement('div'); ov.id='raOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
     <div style="font-size:1.1rem;font-weight:800;margin-bottom:.3rem">🏷️ Fix referral — #${id} ${esc(a.owner_name||'')}</div>
@@ -6285,6 +6316,7 @@ window.openReattributeModal=openReattributeModal; window.doReattribute=doReattri
 // Claim-level attribution override (takes precedence over the account; clear = use account).
 function openClaimReattributeModal(claimId){
   const ov=document.createElement('div'); ov.id='craOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
     <div style="font-size:1.1rem;font-weight:800;margin-bottom:.3rem">🏷️ Fix referral — Claim #${claimId}</div>
@@ -6328,6 +6360,7 @@ async function openMarkPaidModal(id){
   const baseP=['silver','gold','platinum'];
   const opts=baseP.map(p=>`<option value="${p}"${p===acct.plan?' selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('');
   const ov=document.createElement('div'); ov.id='mpOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid rgba(34,197,94,.4);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
     <div style="font-size:1.1rem;font-weight:800;color:var(--nd-success-text);margin-bottom:.3rem">💰 Mark paid — #${id} ${esc(acct.owner_name||'')}</div>
@@ -6403,6 +6436,7 @@ function confirmDeleteAccounts(ids){
   const listHtml=accts.map(a=>`<li style="margin:.2rem 0">#${a.account_id} — <b>${esc(a.owner_name)}</b> &lt;${esc(a.email)}&gt;</li>`).join('');
   const ov=document.createElement('div');
   ov.id='delModalOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`
     <div style="background:var(--nd-bg-base-2);border:1px solid rgba(239,68,68,.45);border-radius:14px;max-width:480px;width:100%;padding:1.5rem">
@@ -6569,6 +6603,7 @@ async function openAccountDrawer(accountId, initialTab = 'summary') {
   if (!drawer) {
     drawer = document.createElement('div');
     drawer.id = 'acctDrawer';
+    drawer.setAttribute('data-ov','1');
     drawer.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:300;display:flex;justify-content:flex-end';
     drawer.onclick = (e) => { if (e.target === drawer) closeAccountDrawer(); };
     drawer.innerHTML = `
@@ -6876,6 +6911,7 @@ async function viewClaimDocs(claimId, btn) {
 // ── SA/Admin edit of Claim info + Advisor info (from the claim drawer) ─────────
 function _editOverlay(title, innerHtml){
   const ov=document.createElement('div'); ov.id='editEntityOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto';
   ov.innerHTML='<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:440px;width:100%;padding:1.2rem;max-height:90vh;overflow-y:auto">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><b style="font-size:1.05rem">'+title+'</b><button onclick="document.getElementById(\'editEntityOv\').remove()" style="background:none;border:none;color:var(--nd-text-muted);font-size:1.4rem;cursor:pointer">×</button></div>'
@@ -8661,6 +8697,7 @@ async function openSupportThread(id){
   }).join('');
   const ov = document.createElement('div');
   ov.id='supModal';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`
     <div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column">
@@ -8952,17 +8989,42 @@ async function loadCCActivity(){
 function openModal(title, bodyHtml, buttons=[], wide=false) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
-  document.getElementById('modalFooter').innerHTML = buttons.map(b=>
+  // A dialog with no way out is a trap. If the caller passed no buttons — or passed only
+  // buttons that DO something — there is still a Close here, so there is always a way back.
+  const hasExit = buttons.some(b => /^(cancel|close|not now|go back|keep it)/i
+    .test((b.label || '').replace(/[^a-z ]/gi, '').trim()));
+  const all = (!buttons.length || !hasExit)
+    ? buttons.concat([{label:'Close', cls:'btn-ghost', fn: closeModal}])
+    : buttons;
+  document.getElementById('modalFooter').innerHTML = all.map(b=>
     `<button class="btn ${b.cls}">${b.label}</button>`).join('');
   document.getElementById('modalFooter').querySelectorAll('button').forEach((btn,i)=>{
-    btn.onclick = buttons[i].fn;
+    btn.onclick = all[i].fn;
   });
   const modalEl = document.getElementById('modal');
   if (wide) modalEl.classList.add('modal-lg'); else modalEl.classList.remove('modal-lg');
   document.getElementById('modalBg').classList.add('open');
   // Close on backdrop click
   document.getElementById('modalBg').onclick = e => { if(e.target===document.getElementById('modalBg')) closeModal(); };
+  // Focus the dialog so Escape reaches it and a screen reader announces it.
+  setTimeout(()=>{ const x = modalEl.querySelector('.modal-x'); if (x) x.focus(); }, 30);
 }
+
+// Escape closes the top-most thing that is open. Registered once, for every dialog in the app —
+// including the ones built as their own overlays, which is why it looks for those too.
+(function(){
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    // A dropdown or a menu inside a dialog gets first refusal.
+    const open = document.querySelector('.modal-bg.open');
+    if (open){ closeModal(); return; }
+    // Hand-built overlays, newest (top-most) first.
+    const ovs = Array.from(document.querySelectorAll('[data-ov="1"]'));
+    if (ovs.length){ ovs[ovs.length - 1].remove(); return; }
+    const dbg = document.getElementById('drawerBg');
+    if (dbg && dbg.classList.contains('open') && typeof closeDrawer === 'function') closeDrawer();
+  });
+})();
 
 function closeModal() {
   document.getElementById('modal').classList.remove('modal-lg');
@@ -9251,6 +9313,7 @@ function _showAckModal(pending){
         </div>
       </div></div>`).join('');
   const ov = document.createElement('div'); ov.id='ndAckModal';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(2,12,27,.82);display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="max-width:480px;width:100%;max-height:82vh;display:flex;flex-direction:column;background:var(--nd-bg-base-2);border:1px solid rgba(34,211,238,.4);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
      <div style="padding:1rem 1.2rem;background:linear-gradient(135deg,#0e2a63,#0b7fa3);color:#fff">
@@ -9417,6 +9480,7 @@ function _showPushHelp(){
     ? ['Tap the <b>lock 🔒 / tune ⚙️</b> icon on the left of the address bar','Open <b>Site settings</b> (or <b>Permissions</b>)','Set <b>Notifications</b> to <b>Allow</b>','Reload this page, then tap <b>Enable</b>']
     : ['Open your browser\'s <b>site settings</b> for this page','Find <b>Notifications</b> / <b>Permissions</b>','Set it to <b>Allow</b>','Reload this page, then tap <b>Enable</b>'];
   const ov=document.createElement('div'); ov.id='pushHelpModal';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(2,12,27,.82);display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML='<div style="max-width:420px;width:100%;background:var(--nd-bg-base-2);border:1px solid rgba(124,58,237,.5);border-radius:16px;overflow:hidden">'
     +'<div style="padding:1rem 1.2rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;font-weight:800">🔔 Turn on notifications</div>'
@@ -9469,6 +9533,7 @@ function _showNotifDetail(id){
   if(!n){ return; }
   let ov=document.getElementById('notifDetailBg'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='notifDetailBg';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(2,12,27,.82);display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
   ov.innerHTML=`<div style="max-width:480px;width:100%;max-height:82vh;display:flex;flex-direction:column;background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
@@ -10303,6 +10368,7 @@ async function genPaymentLink(){
 function _plShareOverlay(url, amount, name, phone){
   const wa='https://wa.me/'+(phone?('91'+phone):'')+'?text='+encodeURIComponent('Namaste'+(name?(' '+name):'')+'! Nidaan Partner — kripya ₹'+amount+' ka payment yahan karein: '+url);
   const ov=document.createElement('div');
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
   ov.innerHTML='<div style="max-width:430px;width:100%;background:var(--nd-bg-base-2);border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
     +'<div style="font-weight:800;color:var(--nd-text-primary);font-size:1.05rem;margin-bottom:.5rem">🔗 Payment link ready — ₹'+amount+'</div>'
@@ -10773,6 +10839,7 @@ async function tgInstantLink(staffId, name){
   // Show a small modal with the link + copy + share.
   let bg = document.getElementById('tgLinkBg'); if (bg) bg.remove();
   bg = document.createElement('div'); bg.id='tgLinkBg';
+  bg.setAttribute('data-ov','1');
   bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem';
   bg.onclick=(e)=>{ if(e.target===bg) bg.remove(); };
   bg.innerHTML = `<div style="background:var(--nd-bg-base);border:1px solid var(--nd-border-strong);border-radius:14px;max-width:460px;width:100%;padding:1.5rem">
@@ -10931,6 +10998,7 @@ async function crmAddComment(id){
 async function crmConvert(id){ if(!confirm('Mark this lead as WON?')) return; const r=await API('/crm/leads/'+id+'/convert',{method:'POST'}); if(r.ok){ openCrmLead(id); if(_currentPanel==='crm') loadCRM(); } }
 function crmNewLeadModal(){
   const ov=document.createElement('div'); ov.id='crmNewOv';
+  ov.setAttribute('data-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:460px;width:100%;padding:1.5rem;max-height:90vh;overflow-y:auto">
     <div style="font-size:1.1rem;font-weight:800;margin-bottom:.8rem">🎯 New lead</div>
@@ -12658,15 +12726,19 @@ async function hoSend(force){
     checks[x.key] = !!(e && e.checked);
   });
   const note = (document.getElementById('hoNote') || {}).value || '';
+  // An unticked question does NOT stop the handover. It becomes something the note has to
+  // answer, and what was left unconfirmed travels to the Level-2 team with the claim.
   const miss = (_hoQ.d.questions || []).filter(function(x){ return x.required && !checks[x.key]; });
-  if (miss.length){
-    if (msg){ msg.style.color = 'var(--nd-danger-text)';
-      msg.textContent = 'Answer both questions first — they are the reason a person does this step.'; }
-    return;
-  }
   if (!note.trim()){
-    if (msg){ msg.style.color = 'var(--nd-danger-text)';
-      msg.textContent = 'Add a note for the Level-2 team.'; }
+    if (msg){
+      msg.style.color = 'var(--nd-danger-text)';
+      msg.textContent = miss.length
+        ? ('You have not confirmed: ' + miss.map(function(x){ return x.label; }).join('; ')
+           + '. You can still hand it over — say why in the note and Level-2 will see it.')
+        : 'Add a note for the Level-2 team.';
+    }
+    const n = document.getElementById('hoNote');
+    if (n) n.focus();
     return;
   }
   if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Handing over…'; }
@@ -12682,7 +12754,13 @@ async function hoSend(force){
       if (typeof loadL2 === 'function' && document.getElementById('panel-l2')
           && document.getElementById('panel-l2').style.display !== 'none') await loadL2();
     } else if (msg){
-      msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not hand that over');
+      msg.style.color = 'var(--nd-danger-text)';
+      // The server sends back WHAT is outstanding, not just that something is. Show all of it —
+      // one vague line is what sends somebody hunting through three screens.
+      const cs = d.concerns || (d.detail && d.detail.concerns) || [];
+      msg.innerHTML = esc(_l2Err(d, 'Could not hand that over'))
+        + (cs.length ? '<ul style="margin:.3rem 0 0 1rem;font-weight:400">'
+            + cs.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '');
     }
   }catch(e){
     if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not hand that over.'; }
