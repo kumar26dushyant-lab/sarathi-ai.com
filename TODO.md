@@ -83,6 +83,30 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
   exit saved a phone number first, so a rejected number was a dead end). All 19 tagged for
   Escape. *(25 checks on a live-DB copy + 6 live on NP-112 itself.)*
 
+### 🟢 COURSE CORRECTION (founder, Sep 13 2026) — copy ClaimShield, add the visibility
+> *"why we are making it complicated... we only create visibility and proper notifications
+> that's it"* — and: the bucket designer is a once-or-twice exercise, not a product.
+
+**What the office actually needs:** the ClaimShield process they already know, with the one
+thing ClaimShield never gave them — **when a claim sits in a bucket, why is it sitting there,
+and how many others like it?**
+
+- ✅ **Every claim says WHY it is waiting.** One plain sentence per row, from facts already
+  computed: the closing one-year window first, then a pause and its date, then documents, then a
+  required field still blank, then who-we-are-waiting-for-and-how-long. Plus **the comment the
+  last person left when they moved it**. Replaced the Origin column — nobody triages by origin.
+- ✅ **Every bucket says what is IN it**, not just how many: ours to move · short of documents
+  · past the limit · window closing. A count is the size of the pile; this is a briefing.
+- ✅ **Reimbursement retired** (founder: drop it — documents now arrive through the many intake
+  channels). Retired, not deleted, so it can come back. `pending_draft` now goes onward to
+  `escalation`; **no bucket left without a way onward**. Test bucket removed.
+- ❌ **DROPPED, deliberately:** drag-to-reorder, declared forks, on-arrival action lists, exit
+  conditions. The buckets get set up once or twice and then never touched — building a process
+  designer for a once-a-year act is the complexity the founder is objecting to. The existing
+  designer already creates, renames, retires and reorders by sort_order; that is enough.
+- 🟢 **NEXT:** notifications to match — the other half of *"visibility and proper
+  notifications"*. See the Notification Control Centre below.
+
 ### 🔵 QUEUED (founder, Sep 13 2026) — 🔔 Notification Control Centre
 One super-admin screen that owns **who receives what, on which channel** — and a per-claim
 override that beats it.
