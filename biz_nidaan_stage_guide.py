@@ -185,14 +185,66 @@ DUTY_LABEL = {
 }
 
 
+# The bucket each first-generation stage became. The words above were written for the old names;
+# this is what keeps them attached to the right bucket.
+BUCKET_ALIAS = {
+    "live_cases": "consolidation", "pending_docs": "documentation",
+    "pending_draft": "drafting", "reimbursement": "representation",
+    "completed": "outcome", "pending_payment": "settlement",
+}
+
+
+def _alias(key: str) -> str:
+    return BUCKET_ALIAS.get(key, key)
+
+
 def guide(key: str, lang: str = "en") -> dict:
     """The four lines for one bucket. Falls back to English, then to empty."""
-    g = STAGE_GUIDE.get(key) or CHANNEL_GUIDE.get(key) or {}
+    g = (STAGE_GUIDE.get(key) or CHANNEL_GUIDE.get(key)
+         or STAGE_GUIDE.get(_alias(key)) or CHANNEL_GUIDE.get(_alias(key)) or {})
     return g.get(lang if lang in ("en", "hi") else "en") or g.get("en") or {}
 
 
 def label(key: str, lang: str = "en") -> dict:
     """{icon, name} for one bucket, in the requested language."""
-    d = DUTY_LABEL.get(key) or {}
+    d = DUTY_LABEL.get(key) or DUTY_LABEL.get(_alias(key)) or {}
     return {"icon": d.get("icon", "•"),
             "name": d.get(lang if lang in ("en", "hi") else "en") or d.get("en") or key}
+
+
+async def guide_for_bucket(key: str, lang: str = "en") -> dict:
+    """The same four lines, but a super-admin's own words win.
+
+    The Bucket Designer lets the office write what a bucket is for. If they have, that is what
+    staff should read - the text here is the starting point, not the authority.
+    """
+    base = dict(guide(key, lang))
+    try:
+        import biz_nidaan_buckets as _bk
+        b = await _bk.bucket(key)
+        if b:
+            for col, field in (("guide_what", "what"), ("guide_do", "do"),
+                               ("guide_done", "done"), ("guide_watch", "watch")):
+                v = (b.get(col) or "").strip()
+                if v:
+                    base[field] = v
+    except Exception:
+        pass
+    return base
+
+
+async def label_for_bucket(key: str, lang: str = "en") -> dict:
+    """{icon, name}, with the bucket table's own name and icon winning."""
+    out = label(key, lang)
+    try:
+        import biz_nidaan_buckets as _bk
+        b = await _bk.bucket(key)
+        if b:
+            if (b.get("icon") or "").strip():
+                out["icon"] = b["icon"].strip()
+            nm = (b.get("name_hi") if lang == "hi" else b.get("name_en")) or b.get("name_en")
+            if (nm or "").strip():
+                out["name"] = nm.strip()
+    except Exception:
+        pass
+    return out

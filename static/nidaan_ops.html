@@ -12845,6 +12845,7 @@ async function cbRefresh(){
 
 function cbRender(d){
   _cbLast = d;
+  _cbSetBuckets(d.buckets);
   const L = d.labels || {stage:{}, blocker:{}, flag:{}};
   const byB = d.by_blocker || {}, byS = d.by_stage || {}, byF = d.by_flag || {};
 
@@ -13089,21 +13090,25 @@ function cbOpenSheet(claimId){
 // Up to L2 the stage is worked out from facts we hold. After it, nothing in the data can say
 // "the consolidation is finished" — so a case moves because a person says it moved, and this is
 // where they say it. Entering is a separate act from paying: payment buys the work, this starts it.
-const CB_BUCKETS = [
-  ['consolidation','Consolidation'], ['documentation','Documents'], ['drafting','Drafting'],
-  ['representation','With the insurer'], ['escalation','Escalation'], ['lokpal','Ombudsman'],
-  ['outcome','Outcome'], ['settlement','Settlement']
-];
+// The buckets come from the server with every board load, because they are DATA - a super-admin
+// can rename one, retire one or invent one in the Bucket Designer at any moment. This used to be
+// a hard-coded list here, and after the buckets were renamed the "move somewhere else" dropdown
+// offered six places that no longer existed.
+let CB_BUCKETS = [];
+function _cbSetBuckets(list){
+  CB_BUCKETS = (list || []).map(function(b){ return [b.key, b.name || b.key, b.icon || '']; });
+}
 function _cbBucketName(k){
   for (let i=0;i<CB_BUCKETS.length;i++) if (CB_BUCKETS[i][0]===k) return CB_BUCKETS[i][1];
-  return k||'';
+  return (k || '').replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
 }
 function _cbPipeSection(it){
   const lab = '<div class="cbs-lab">Where is it in the Level-2 process?</div>';
   if (it.in_pipeline){
     const nextK = it.next_stage || '';
     const opts = CB_BUCKETS.map(function(b){
-      return '<option value="'+b[0]+'"'+(b[0]===it.stage?' selected':'')+'>'+esc(b[1])+'</option>';
+      return '<option value="'+esc(b[0])+'"'+(b[0]===it.stage?' selected':'')+'>'
+        + esc((b[2] ? b[2] + ' ' : '') + b[1]) + '</option>';
     }).join('');
     return '<div class="cbs-sec">' + lab
       + '<div style="font-size:.82rem;margin-bottom:.5rem">Now in <b>'+esc(_cbBucketName(it.stage))+'</b>'

@@ -6390,6 +6390,10 @@ async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str 
                           flag=flag.strip(), assigned_to=_me, limit=limit)
     out["staff"] = await _cs.assignable_staff()
     out["me"] = caller.get("staff_id") or caller.get("sub")
+    # The bucket list travels with the board so the screen never keeps its own copy of the stage
+    # names. It used to, and that copy went stale the moment the buckets were renamed - the
+    # "move somewhere else" dropdown then offered six buckets that no longer existed.
+    out["buckets"] = [{"key": k, **_cs.stage_label(k, "en")} for k in _cs.PIPELINE]
     return out
 
 
@@ -9156,11 +9160,16 @@ async def ops_support_reps_get(request: Request):
     # Labels travel with the list so the roster screen never keeps its own copy of the duty names.
     # It used to, and that copy knew only "support" and "whatsapp" — so My Desk could point at a
     # bucket nobody could actually be rostered onto.
-    import biz_nidaan_stage_guide as _sg
-    return {"reps": await nidaan.list_support_reps(duty if duty in nidaan.DUTIES else None),
-            "duties": list(nidaan.DUTIES),
-            "stage_duties": list(nidaan.STAGE_DUTIES),
-            "duty_labels": {k: _sg.label(k, "en") for k in nidaan.DUTIES}}
+    # The duty list comes from the BUCKET TABLE, so a bucket created in the Bucket Designer is
+    # something you can roster somebody onto the same minute - and the roster can never again be
+    # offering a name the rest of the system has stopped using.
+    import biz_nidaan_case_state as _cs
+    await _cs.refresh_vocab()
+    keys = list(await nidaan.duty_keys())
+    return {"reps": await nidaan.list_support_reps(duty if duty in keys else None),
+            "duties": keys,
+            "stage_duties": [k for k in keys if k not in ("support", "whatsapp")],
+            "duty_labels": {k: _cs.stage_label(k, "en") for k in keys}}
 
 
 class OpsSupportRepReq(BaseModel):

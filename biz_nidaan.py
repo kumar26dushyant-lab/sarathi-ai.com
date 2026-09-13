@@ -3099,9 +3099,56 @@ async def is_within_business_hours() -> bool:
 # from a system where work lived in folders, and "which folders are mine today" is the question
 # they already know how to answer. A duty here IS a bucket, so the rota tells someone which
 # buckets to work without anyone having to learn a new idea.
-DUTIES = ("support", "whatsapp",
-          "intake", "review", "conversion", "consolidation", "documentation", "drafting",
-          "representation", "escalation", "lokpal", "outcome", "settlement")
+# The pre-L2 duties are fixed: they are stages of our own process, not buckets. Everything
+# after them is a BUCKET, and buckets are data - so the rest of this list is read from
+# nidaan_buckets at call time rather than written out here. That is the whole point of the
+# Bucket Designer: a bucket somebody creates on Tuesday must be something you can roster
+# somebody onto on Tuesday, without a release.
+FIXED_DUTIES = ("support", "whatsapp", "intake", "review", "conversion")
+
+# The first-generation names, kept so a duty row restored from an old backup still resolves.
+# migrate_legacy_stages() rewrites them on boot; this is the belt to that braces.
+LEGACY_DUTY_ALIAS = {
+    "consolidation": "live_cases", "documentation": "pending_docs",
+    "drafting": "pending_draft", "representation": "reimbursement",
+    "outcome": "completed", "settlement": "pending_payment",
+}
+
+
+async def duty_keys() -> tuple:
+    """Every duty someone can be rostered on: the fixed ones, then one per live bucket."""
+    keys = list(FIXED_DUTIES)
+    try:
+        import biz_nidaan_buckets as _bk
+        for b in await _bk.buckets():
+            if b["bucket_key"] not in keys:
+                keys.append(b["bucket_key"])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("duty_keys could not read buckets: %s", e)
+    return tuple(keys)
+
+
+async def duty_choices() -> list:
+    """The rota dropdown: key + the name staff actually see on the bucket."""
+    out = [{"key": k, "label": k.replace("_", " ").title()} for k in FIXED_DUTIES]
+    try:
+        import biz_nidaan_buckets as _bk
+        for b in await _bk.buckets():
+            if b["bucket_key"] in FIXED_DUTIES:
+                continue
+            out.append({"key": b["bucket_key"],
+                        "label": ("%s %s" % (b.get("icon") or "",
+                                             b.get("name_en") or b["bucket_key"])).strip()})
+    except Exception as e:  # noqa: BLE001
+        logger.warning("duty_choices could not read buckets: %s", e)
+    return out
+
+
+# Kept for callers that need a synchronous list. The bucket half is the seed vocabulary; use
+# duty_keys() wherever the answer must include buckets created since.
+DUTIES = FIXED_DUTIES + ("live_cases", "pending_docs", "pending_draft", "reimbursement",
+                         "escalation", "lokpal", "completed", "pending_payment", "cp_payment",
+                         "finished", "hold")
 
 # Duties that correspond to a case stage (the rest are conversation channels).
 STAGE_DUTIES = DUTIES[2:]
@@ -3113,7 +3160,9 @@ async def add_support_rep(staff_id: int, start_date: str, end_date: str,
         raise ValueError("bad_date_format")
     if end_date < start_date:
         raise ValueError("end_before_start")
-    if duty not in DUTIES:
+    # DUTIES is the seed list; the real answer is the bucket table, so a bucket created a minute
+    # ago can be rostered without waiting for a release.
+    if duty not in await duty_keys():
         raise ValueError("bad_duty")
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
@@ -3157,17 +3206,29 @@ async def list_support_reps(duty: Optional[str] = None) -> list[dict]:
 
 
 async def on_duty_rep_ids(duty: str = "support") -> list[int]:
-    """staff_ids on the given duty right now (today within range, IST, active staff)."""
+    """staff_ids on the given duty right now (today within range, IST, active staff).
+
+    Also matches the duty's first-generation name. A roster row that predates the bucket rename
+    must not read as "nobody on duty" - that turns a staffed bucket into a silent one, and the
+    notification then goes to the admins saying nobody is watching it.
+    """
     today = _now_ist().strftime("%Y-%m-%d")
+    names = {duty}
+    for old, new in LEGACY_DUTY_ALIAS.items():
+        if new == duty:
+            names.add(old)
+        if old == duty:
+            names.add(new)
+    ph = ",".join("?" * len(names))
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            """SELECT DISTINCT r.staff_id FROM nidaan_support_reps r
+            f"""SELECT DISTINCT r.staff_id FROM nidaan_support_reps r
                JOIN nidaan_staff s ON s.staff_id = r.staff_id
                WHERE r.start_date <= ? AND r.end_date >= ?
-                 AND COALESCE(r.duty,'support') = ?
+                 AND COALESCE(r.duty,'support') IN ({ph})
                  AND s.status='active' AND s.deleted_at IS NULL""",
-            (today, today, duty))).fetchall()
+            (today, today, *sorted(names)))).fetchall()
         return [r["staff_id"] for r in rows]
 
 

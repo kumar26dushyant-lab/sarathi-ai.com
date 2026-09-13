@@ -41,15 +41,80 @@ logger = logging.getLogger("nidaan.case_state")
 DB_PATH = db.DB_PATH
 
 # ── the journey ──────────────────────────────────────────────────────────────
-STAGES = ("intake", "review", "conversion", "consolidation", "documentation", "drafting",
-          "representation", "escalation", "lokpal", "outcome", "settlement", "closed")
+# The three stages before Level-2 are ours and stay derived. Everything after is a BUCKET, and
+# buckets live in nidaan_buckets - so these are seed values only. refresh_vocab() replaces them
+# from the table on every board()/desk() call, which is what keeps this file and the Bucket
+# Designer from ever again holding two different names for the same place.
+PRE_STAGES = ("intake", "review", "conversion")
+SEED_BUCKETS = ("live_cases", "pending_docs", "pending_draft", "reimbursement", "escalation",
+                "lokpal", "completed", "pending_payment", "cp_payment", "finished", "hold")
+
+STAGES = PRE_STAGES + SEED_BUCKETS + ("closed",)
 
 STAGE_LABEL = {
     "intake": "Intake", "review": "Review", "conversion": "Conversion",
-    "consolidation": "Consolidation", "documentation": "Documents", "drafting": "Drafting",
-    "representation": "With the insurer", "escalation": "Escalation", "lokpal": "Ombudsman",
-    "outcome": "Outcome", "settlement": "Settlement", "closed": "Closed",
+    "live_cases": "Live Cases", "pending_docs": "Pending Documents",
+    "pending_draft": "Pending Draft", "reimbursement": "Reimbursement",
+    "escalation": "Escalation", "lokpal": "Lokpal", "completed": "Completed",
+    "pending_payment": "Pending Payment", "cp_payment": "CP Payment",
+    "finished": "Finished", "hold": "On Hold", "closed": "Closed",
 }
+
+# The name and icon the office gave each bucket, filled by refresh_vocab(). These win over the
+# wording written into biz_nidaan_stage_guide, because a bucket somebody renamed must read by its
+# new name everywhere - and the buckets invented after that file was written have no wording
+# there at all, which is how raw keys ended up on the journey map.
+STAGE_ICON: dict = {}
+STAGE_LABEL_HI: dict = {}
+# The four lines of guidance a super-admin wrote for a bucket, cached by refresh_vocab(). Their
+# words beat the built-in wording - that is the point of letting them write it.
+STAGE_GUIDE_OWN: dict = {}
+
+# What a bucket is waiting for, which is what decides the blocker when a case sits in one. Read
+# from the bucket's own waits_on column by refresh_vocab(); these are the seeded answers.
+STAGE_WAITS = {
+    "pending_docs": "complainant", "reimbursement": "insurer", "lokpal": "lokpal",
+    "pending_payment": "complainant", "cp_payment": "internal", "hold": "hold",
+}
+
+
+async def refresh_vocab() -> None:
+    """Reload the stage vocabulary from the bucket table.
+
+    Cheap (one indexed read of eleven rows) and called at the top of the two screens that need
+    it. If it fails we keep the seeded names rather than blanking the board.
+    """
+    try:
+        import biz_nidaan_buckets as _bk
+        rows = await _bk.buckets()
+        if not rows:
+            return
+        keys = [r["bucket_key"] for r in rows]
+        global STAGES, PIPELINE
+        STAGES = PRE_STAGES + tuple(keys) + ("closed",)
+        PIPELINE = tuple(keys)
+        for r in rows:
+            STAGE_LABEL[r["bucket_key"]] = r.get("name_en") or r["bucket_key"]
+            if (r.get("name_hi") or "").strip():
+                STAGE_LABEL_HI[r["bucket_key"]] = r["name_hi"].strip()
+            if (r.get("icon") or "").strip():
+                STAGE_ICON[r["bucket_key"]] = r["icon"].strip()
+            own = {f: (r.get(c) or "").strip()
+                   for c, f in (("guide_what", "what"), ("guide_do", "do"),
+                                ("guide_done", "done"), ("guide_watch", "watch"))
+                   if (r.get(c) or "").strip()}
+            if own:
+                STAGE_GUIDE_OWN[r["bucket_key"]] = own
+            w = (r.get("waits_on") or "").strip()
+            if r.get("is_park"):
+                w = "hold"
+            if w and w in BLOCKERS:
+                STAGE_WAITS[r["bucket_key"]] = w
+            amber = int(r.get("amber_days") or 0)
+            if amber > 0:
+                STAGE_PATIENCE[r["bucket_key"]] = amber
+    except Exception as e:  # noqa: BLE001
+        logger.warning("stage vocabulary refresh failed, keeping the seeded names: %s", e)
 
 # Who we are waiting for. `none` means us.
 BLOCKERS = ("none", "complainant", "insurer", "lokpal", "internal", "hold")
@@ -65,9 +130,10 @@ BLOCKER_LABEL = {
 # How long a stage should take before it is worth looking at. Days.
 # Deliberately generous — a flag that fires on everything is a flag nobody reads.
 STAGE_PATIENCE = {
-    "intake": 2, "review": 5, "conversion": 7, "consolidation": 5,
-    "documentation": 20, "drafting": 5, "representation": 35,
-    "escalation": 20, "lokpal": 90, "outcome": 7, "settlement": 14,
+    "intake": 2, "review": 5, "conversion": 7, "live_cases": 5,
+    "pending_docs": 20, "pending_draft": 5, "reimbursement": 35,
+    "escalation": 20, "lokpal": 90, "completed": 7, "pending_payment": 14,
+    "cp_payment": 14, "finished": 365, "hold": 365,
 }
 
 FLAG_LABEL = {
@@ -95,11 +161,35 @@ OURS = ("none", "internal")
 # This is also the gate. A case is in a pipeline bucket ONLY once it has been put there, which is
 # what stops Drafting and Documents from filling up with the whole book. `pipeline_stage` empty
 # means "not in the pipeline"; the pre-L2 stages carry on being derived exactly as before.
-PIPELINE = ("consolidation", "documentation", "drafting", "representation",
-            "escalation", "lokpal", "outcome", "settlement")
+PIPELINE = SEED_BUCKETS
 
 # Stages that exist before the pipeline. These stay derived.
-PRE_L2 = ("intake", "review", "conversion")
+PRE_L2 = PRE_STAGES
+
+
+def stage_label(key: str, lang: str = "en") -> dict:
+    """{icon, name} for any stage - a bucket or one of the three stages before Level-2.
+
+    The bucket table wins, because that is what the office edits. The built-in wording is the
+    fallback, and it carries the Hindi for the buckets that predate the designer.
+    """
+    import biz_nidaan_stage_guide as _g
+    base = _g.label(key, lang)
+    name = (STAGE_LABEL_HI.get(key) if lang == "hi" else None) or STAGE_LABEL.get(key)
+    if not name or name == key:
+        name = base.get("name")
+    # Still nothing readable? Make a name out of the key rather than showing the key itself.
+    if not name or name == key:
+        name = key.replace("_", " ").title()
+    return {"icon": STAGE_ICON.get(key) or base.get("icon") or "•", "name": name}
+
+
+def stage_guide_text(key: str, lang: str = "en") -> dict:
+    """The four lines staff read about a bucket, with the office's own words on top."""
+    import biz_nidaan_stage_guide as _g
+    out = dict(_g.guide(key, lang) or {})
+    out.update(STAGE_GUIDE_OWN.get(key) or {})
+    return out
 
 
 def next_stage(stage: str) -> str:
@@ -181,11 +271,11 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     elif status in ("closed", "withdrawn", "resolved_lost"):
         stage, blocker = "closed", "none"
     elif status == "resolved_won":
-        stage, blocker = "settlement", "complainant"
+        stage, blocker = "pending_payment", "complainant"
     elif outcome == "no_scope":
         stage, blocker = "closed", "none"
     elif status == "in_negotiation":
-        stage, blocker = "representation", "insurer"
+        stage, blocker = "reimbursement", "insurer"
     elif outcome == "can_fight":
         # Everything here is pre-pipeline by definition: a case that HAS been started is caught by
         # the pipeline override further down. So this branch never reaches past Conversion.
@@ -218,15 +308,12 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     # above the blocker override on purpose: the two are independent, and a case can be parked
     # or waiting on the insurer while sitting in any bucket.
     pipe = (claim.get("pipeline_stage") or "").strip().lower()
-    if pipe in PIPELINE and stage != "closed":
+    if pipe and pipe in PIPELINE and stage != "closed":
         stage = pipe
-        if pipe == "representation":
-            blocker = "insurer"
-        elif pipe == "lokpal":
-            blocker = "lokpal"
-        elif pipe in ("documentation", "settlement"):
-            blocker = "complainant"
-        else:
+        # Who we are waiting for is the bucket's own answer (its waits_on), not a rule written
+        # out here - otherwise a bucket created in the designer would have no blocker at all.
+        blocker = STAGE_WAITS.get(pipe, "internal")
+        if blocker == "none":
             blocker = "internal"
 
     # ── an explicit override beats the derivation ────────────────────────────
@@ -281,7 +368,8 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     # When intake starts capturing the insurer's rejection date (it must, for this clock to mean
     # anything), it is read here first and the proxy falls away.
     rej = _parse(claim.get("rejection_date")) or _parse(claim.get("claim_event_date"))
-    if rej and stage not in ("closed", "settlement", "outcome"):
+    if rej and stage not in ("closed", "pending_payment", "cp_payment", "completed",
+                             "finished"):
         left = 365 - (datetime.utcnow() - rej).days
         if left <= 90:
             flags.append("filing_window")
@@ -289,7 +377,7 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
     # Can we PROVE this bucket's work is finished? Only where a column says so. Documents is the
     # one honest case: the checklist is complete. Everywhere else the answer is a judgement, and
     # claiming otherwise would move cases forward on a guess.
-    ready = bool(pipe == "documentation" and docs_total and docs_done >= docs_total)
+    ready = bool(pipe == "pending_docs" and docs_total and docs_done >= docs_total)
 
     return {
         "stage": stage,
@@ -365,6 +453,9 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
     holding up, oldest first.
     """
     limit = max(1, min(int(limit or 300), 1000))
+    # The buckets are editable, so their names, clocks and waits-on can have changed since this
+    # process started. One small read keeps the board honest.
+    await refresh_vocab()
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
@@ -779,7 +870,7 @@ async def coverage_gaps(buckets: list, rota: dict, lang: str = "en") -> list:
         heat = waiting + ours * 2 + stalled * 5
 
         if not on:
-            out.append({"key": key, **_g.label(key, lang), "kind": "nobody",
+            out.append({"key": key, **stage_label(key, lang), "kind": "nobody",
                         "waiting": waiting, "ours": ours, "stalled": stalled,
                         "who": [], "cover": "", "until": "", "heat": heat + 10})
             continue
@@ -787,7 +878,7 @@ async def coverage_gaps(buckets: list, rota: dict, lang: str = "en") -> list:
         away = [x for x in on if int(x.get("staff_id") or 0) in on_leave_now]
         if away and len(away) == len(on):
             lv = on_leave_now[int(away[0]["staff_id"])]
-            out.append({"key": key, **_g.label(key, lang), "kind": "on_leave",
+            out.append({"key": key, **stage_label(key, lang), "kind": "on_leave",
                         "waiting": waiting, "ours": ours, "stalled": stalled,
                         "who": [x.get("name") for x in away],
                         "cover": lv.get("cover_name") or "",
@@ -797,7 +888,7 @@ async def coverage_gaps(buckets: list, rota: dict, lang: str = "en") -> list:
         soon = [x for x in on if int(x.get("staff_id") or 0) in upcoming]
         if soon and len(soon) == len(on):
             lv = upcoming[int(soon[0]["staff_id"])]
-            out.append({"key": key, **_g.label(key, lang), "kind": "soon",
+            out.append({"key": key, **stage_label(key, lang), "kind": "soon",
                         "waiting": waiting, "ours": ours, "stalled": stalled,
                         "who": [x.get("name") for x in soon],
                         "cover": lv.get("cover_name") or "",
@@ -855,7 +946,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
         c = _count(st)
         if not c["total"] and st not in mine_set:
             continue          # an empty bucket nobody is rostered on is just noise
-        all_buckets.append({"key": st, **_g.label(st, lang), "guide": _g.guide(st, lang),
+        all_buckets.append({"key": st, **stage_label(st, lang), "guide": stage_guide_text(st, lang),
                             "on_duty": rota.get(st, []), "yours": st in mine_set, **c})
 
     if is_admin:
@@ -872,7 +963,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
     journey = []
     for st in PRE_L2 + PIPELINE:
         c = _count(st)
-        journey.append({"key": st, **_g.label(st, lang),
+        journey.append({"key": st, **stage_label(st, lang),
                         "total": c["total"], "ours": c["ours"], "stalled": c["stalled"],
                         "on_duty": [x["name"] for x in rota.get(st, [])],
                         "yours": st in mine_set,
@@ -884,7 +975,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
     for ch in ("support", "whatsapp"):
         if not is_admin and ch not in mine_set:
             continue
-        channels.append({"key": ch, **_g.label(ch, lang), "guide": _g.guide(ch, lang),
+        channels.append({"key": ch, **stage_label(ch, lang), "guide": stage_guide_text(ch, lang),
                          "on_duty": rota.get(ch, []), "yours": ch in mine_set})
 
     # ON FIRE — deliberately short. A list of forty is a list nobody reads, so this is capped and
@@ -894,7 +985,8 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
             return "the pause has ended - it is ours again"
         if "filing_window" in i["flags"]:
             return "the one-year Ombudsman window is closing"
-        if "no_email" in i["flags"] and i["stage"] in ("consolidation", "representation", "escalation", "lokpal"):
+        if "no_email" in i["flags"] and i["stage"] in ("live_cases", "reimbursement",
+                                                       "escalation", "lokpal"):
             return "no email address, and this stage runs on email"
         if i["blocker"] in OURS and i.get("over_by", 0) > 0:
             return "waiting on us for %d days longer than it should" % i["over_by"]
@@ -957,7 +1049,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
     return {
         "lang": lang,
         "is_admin": is_admin,
-        "my_duties": [{"key": d, **_g.label(d, lang)} for d in mine],
+        "my_duties": [{"key": d, **stage_label(d, lang)} for d in mine],
         "rota": rota,
         # Buckets with work and nobody there to do it - including the case where the rota shows
         # a name but that person is on leave today.
@@ -965,7 +1057,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
         "gaps": [{"key": g["key"], "icon": g.get("icon", ""), "name": g.get("name", ""),
                   "waiting": g["waiting"]} for g in coverage if g["kind"] == "nobody"],
         "ready_to_move": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],
-                           **_g.label(i["stage"], lang),
+                           **stage_label(i["stage"], lang),
                            "next_stage": i.get("next_stage"),
                            "next_label": i.get("next_stage_label")} for i in ready[:8]],
         "ready_count": len(ready),
@@ -976,7 +1068,7 @@ async def desk(staff_id, role: str = "", lang: str = "en") -> dict:
         "journey": journey,
         "channels": channels,
         "on_fire": [{"claim_id": i["claim_id"], "who": i["who"], "stage": i["stage"],
-                     **_g.label(i["stage"], lang),
+                     **stage_label(i["stage"], lang),
                      "why": _why(i), "age_days": i.get("age_days"),
                      "mine": bool(staff_id and i.get("assigned_to") == int(staff_id))}
                     for i in on_fire],

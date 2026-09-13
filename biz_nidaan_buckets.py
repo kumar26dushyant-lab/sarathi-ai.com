@@ -1004,7 +1004,12 @@ _LEGACY_STAGES = {
 
 
 async def migrate_legacy_stages() -> int:
-    """Rewrite any first-generation stage name as its bucket. Returns how many moved."""
+    """Rewrite any first-generation stage name as its bucket - on claims AND on the duty roster.
+
+    The roster matters as much as the claims. A duty row still reading "consolidation" means
+    on_duty_rep_ids("live_cases") finds nobody, so every arrival in that bucket is escalated to
+    the admins with the note "nobody is on duty here" - while somebody is.
+    """
     n = 0
     try:
         async with aiosqlite.connect(DB_PATH) as c:
@@ -1013,6 +1018,13 @@ async def migrate_legacy_stages() -> int:
                     continue
                 cur = await c.execute(
                     "UPDATE nidaan_claims SET pipeline_stage=? WHERE pipeline_stage=?", (new, old))
+                n += cur.rowcount or 0
+                cur = await c.execute(
+                    "UPDATE nidaan_support_reps SET duty=? WHERE COALESCE(duty,'')=?", (new, old))
+                n += cur.rowcount or 0
+                cur = await c.execute(
+                    "UPDATE nidaan_claims SET pipeline_from=? WHERE COALESCE(pipeline_from,'')=?",
+                    (new, old))
                 n += cur.rowcount or 0
             await c.commit()
     except Exception as e:  # noqa: BLE001
