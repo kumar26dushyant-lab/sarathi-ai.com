@@ -6481,6 +6481,69 @@ recorded), super-admins are alerted bell+Telegram+email, and `list_partners(...,
 include_proposed_by=)` keeps the proposer's own pending entry visible — otherwise it vanished on
 save, looked like a failure, and the second attempt hit the duplicate guard.
 
+---
+
+## A95 — [NIDAAN] THE PENDING-DOCUMENT WINDOW (Sep 13 2026)
+
+**Modules:** `biz_nidaan_doc_request.py` (new), `biz_nidaan_doc_checklist.py` (made per-claim).
+**Tables:** `nidaan_doc_requests` (one receipt per ask), `nidaan_doc_chase` (the clock, per claim).
+**Checklist columns added:** `custom_label`, `added_by`, `removed_at`, `removed_by`,
+`removed_reason`.
+**Opened from:** the document count on any Level-2 row.
+
+**The checklist is per CLAIM now.** It was template-only: `pending_required_docs()` and
+`checklist_status()` both walked `doc_template_for(claim_type)` and looked rows up by key, so a
+row added outside the template was never visited — invisible to the chase, to the complainant's
+dashboard and to the pay-gate. Both now walk one merged list, `effective_docs()` = template +
+added − removed, which is the de-dup-by-construction the module's docstring always claimed.
+
+**Four rules:**
+* **Removal is never a DELETE.** A reason is required and the row stays with `removed_at` set —
+  "why did we stop asking for the FIR?" is a question somebody asks three months later.
+* **We ask the complainant and copy every other channel** — subscriber, branch / My Business,
+  channel partner, staff. `get_claim_parties()` gained the **channel partner**, the one party it
+  never resolved; APPROVED partners only, since an unapproved name must never receive a
+  complainant's documents. Typed-in mobiles and emails are validated server-side, not only in the
+  browser.
+* **Nothing goes out unchecked.** `preview()` returns what will be sent, to whom, and a SHA-256
+  stamp over (claim, doc list, message, recipients, channels). `send()` refuses without that exact
+  stamp → editing the wording or adding a recipient after the read-back returns 409. The receipt
+  records who read it back, which documents, and what reached each recipient.
+* **Nudging stops and becomes a phone call.** `NUDGE_GAP_DAYS=3`, `MAX_NUDGES=2`, then `call_due`
+  + bell/Telegram to the bucket's duty staff. Every nudge carries *"if you have already shared all
+  the required documents, please ignore this message"* in EN and HI. `log_call()` needs a note and
+  closes the chase; everything arriving switches the clock off. Hourly worker `run_chase()`.
+
+**Two bugs the tests caught before shipping:** the new checklist migration loop executed the
+PREVIOUS loop's variable (`_rs_sql`), so it added no columns at all and — every ALTER being
+wrapped in `except: pass` — failed in complete silence; and `channels=[]` was read as "not
+specified" and defaulted to sending on both, when a staffer who unticks both has said *do not
+send*.
+
+**Tested:** 54 checks on a copy of the live DB (WhatsApp and email stubbed) + 28 against the live
+app, including that a `team_member` can use it (chasing is intake work) but cannot remove a
+document without a reason.
+
+---
+
+## A96 — [NIDAAN] THE FOUR WORK SCREENS, DECIDED (Sep 13 2026)
+
+Surveyed before answering. **Keep My Desk · fold Case Board into Level-2 → Settlement · retire
+Claim Pipeline.**
+
+* **Claim Pipeline** (`panel-pipeline`, 81 lines) never reads `pipeline_stage` at all — it
+  recomputes a stage client-side from `status`+`payment_status`+`review_outcome` over ten names
+  that match neither the buckets nor `case_state`; `drafting` and `escalation` are hardcoded empty
+  placeholders. Keep its *Brought by* / *Customer* attribution filters and its unpaid-lead column;
+  they belong in the merged claims view.
+* **Case Board** is `board()`, which `desk()` already calls — My Desk is literally
+  `board(limit=1000)` re-sliced. Its blocker dimension is now the bucket's own `waits_on`.
+* **My Desk** is the only owner of: on-duty chips, leave-coverage alerts (nobody / on leave /
+  on leave within a fortnight, with the covering name), the on-fire list with prose reasons, the
+  journey map, and the EN/हिंदी toggle.
+
+---
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),

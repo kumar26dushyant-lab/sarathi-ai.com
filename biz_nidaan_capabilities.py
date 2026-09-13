@@ -344,6 +344,43 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
+        "id": "doc_window",
+        "en": {"t": "Ask a complainant for the documents we are missing",
+               "d": "One screen: what the claim still needs, who the ask goes to, and the exact "
+                    "words. The standard list comes from the claim type and you can add anything "
+                    "else this case needs; removing something asks why, and your reason stays on "
+                    "the claim. Documents that arrive turn green. Everyone involved \u2014 the "
+                    "subscriber, the branch, the channel partner \u2014 is copied, and you can "
+                    "add or remove any mobile or email. Before it goes you read it back once, "
+                    "and you are recorded as the person who sent it.",
+               "u": "Level-2 \u2192 Settlement \u2192 click the document count on any row."},
+        "hi": {"t": "\u0936\u093f\u0915\u093e\u092f\u0924\u0915\u0930\u094d\u0924\u093e \u0938\u0947 \u092c\u093e\u0915\u0940 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u092e\u093e\u0901\u0917\u0947\u0902",
+               "d": "\u090f\u0915 \u0939\u0940 \u0938\u094d\u0915\u094d\u0930\u0940\u0928 \u092a\u0930: \u0915\u094d\u092f\u093e \u092c\u093e\u0915\u0940 \u0939\u0948, \u0915\u093f\u0938\u0947 \u092d\u0947\u091c\u0928\u093e \u0939\u0948, \u0914\u0930 \u0915\u094d\u092f\u093e \u0932\u093f\u0916\u0928\u093e \u0939\u0948\u0964 "
+                    "\u0938\u094d\u091f\u0948\u0902\u0921\u0930\u094d\u0921 \u0932\u093f\u0938\u094d\u091f \u0915\u094d\u0932\u0947\u092e \u091f\u093e\u0907\u092a \u0938\u0947 \u0906\u0924\u0940 \u0939\u0948; \u0907\u0938 \u0915\u0947\u0938 \u0915\u094b \u091c\u094b \u0914\u0930 \u091a\u093e\u0939\u093f\u090f \u0935\u0939 \u091c\u094b\u0921\u093c \u0932\u0940\u091c\u093f\u090f\u0964 "
+                    "\u0939\u091f\u093e\u0928\u0947 \u092a\u0930 \u0915\u093e\u0930\u0923 \u092a\u0942\u091b\u093e \u091c\u093e\u090f\u0917\u093e \u0914\u0930 \u0935\u0939 \u0915\u094d\u0932\u0947\u092e \u092a\u0930 \u0926\u0930\u094d\u091c \u0930\u0939\u0947\u0917\u093e\u0964 \u091c\u094b \u0906 \u0917\u092f\u093e \u0935\u0939 \u0939\u0930\u093e \u0939\u094b \u091c\u093e\u0924\u093e \u0939\u0948\u0964 "
+                    "\u092d\u0947\u091c\u0928\u0947 \u0938\u0947 \u092a\u0939\u0932\u0947 \u090f\u0915 \u092c\u093e\u0930 \u092a\u0922\u093c\u0915\u0930 \u092a\u0941\u0937\u094d\u091f\u093f \u0915\u0930\u0928\u0940 \u0939\u094b\u0917\u0940, \u0914\u0930 \u092d\u0947\u091c\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u0928\u093e\u092e \u0926\u0930\u094d\u091c \u0939\u094b\u0924\u093e \u0939\u0948\u0964",
+               "u": "Level-2 \u2192 Settlement \u2192 \u0915\u093f\u0938\u0940 \u092d\u0940 \u0930\u094b \u092a\u0930 \u0921\u0949\u0915\u094d\u092f\u0942\u092e\u0947\u0902\u091f \u0915\u093e\u0909\u0902\u091f \u092a\u0930 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0947\u0902\u0964"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "doc_chase",
+        "en": {"t": "Reminders that stop, and become a phone call",
+               "d": "After an ask goes out we remind every three days \u2014 twice. Then we stop "
+                    "sending and put it on your bell and Telegram to PHONE them, because a "
+                    "fourth identical message is what makes somebody stop reading us "
+                    "altogether. Every reminder says: if you have already shared all the "
+                    "documents, please ignore this message. Write down what they said on the "
+                    "call and the chase closes.",
+               "u": "It runs by itself; the window shows the next reminder date."},
+        "hi": {"t": "\u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930 \u0930\u0941\u0915\u0924\u0947 \u0939\u0948\u0902, \u092b\u093f\u0930 \u092b\u093c\u094b\u0928 \u0915\u0930\u0928\u093e \u0939\u094b\u0924\u093e \u0939\u0948",
+               "d": "\u092e\u093e\u0901\u0917 \u092d\u0947\u091c\u0928\u0947 \u0915\u0947 \u092c\u093e\u0926 \u0939\u0930 \u0924\u0940\u0928 \u0926\u093f\u0928 \u092e\u0947\u0902 \u092f\u093e\u0926 \u0926\u093f\u0932\u093e\u0924\u0947 \u0939\u0948\u0902 \u2014 \u0938\u093f\u0930\u094d\u092b\u093c \u0926\u094b \u092c\u093e\u0930\u0964 \u0909\u0938\u0915\u0947 \u092c\u093e\u0926 \u092d\u0947\u091c\u0928\u093e \u092c\u0902\u0926 "
+                    "\u0914\u0930 \u0906\u092a\u0915\u094b \u092c\u0947\u0932 \u0914\u0930 \u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u092a\u0930 \u092b\u093c\u094b\u0928 \u0915\u0930\u0928\u0947 \u0915\u094b \u0915\u0939\u093e \u091c\u093e\u090f\u0917\u093e \u2014 \u091a\u094c\u0925\u093e \u0935\u0948\u0938\u093e \u0939\u0940 \u092e\u0948\u0938\u0947\u091c \u0932\u094b\u0917\u094b\u0902 \u0938\u0947 "
+                    "\u0939\u092e\u093e\u0930\u093e \u092a\u0922\u093c\u0928\u093e \u0939\u0940 \u091b\u0941\u0921\u093c\u093e \u0926\u0947\u0924\u093e \u0939\u0948\u0964 \u0939\u0930 \u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930 \u092e\u0947\u0902 \u0932\u093f\u0916\u093e \u0939\u094b\u0924\u093e \u0939\u0948: \u092f\u0926\u093f \u0906\u092a \u0938\u092d\u0940 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c "
+                    "\u092d\u0947\u091c \u091a\u0941\u0915\u0947 \u0939\u0948\u0902 \u0924\u094b \u0907\u0938 \u0938\u0902\u0926\u0947\u0936 \u0915\u094b \u0928\u091c\u093c\u0930\u0905\u0902\u0926\u093e\u091c\u093c \u0915\u0930\u0947\u0902\u0964",
+               "u": "\u092f\u0939 \u0916\u0941\u0926 \u091a\u0932\u0924\u093e \u0939\u0948; \u0905\u0917\u0932\u0940 \u0924\u093e\u0930\u0940\u0916\u093c \u0935\u093f\u0902\u0921\u094b \u092e\u0947\u0902 \u0926\u093f\u0916\u0924\u0940 \u0939\u0948\u0964"},
+        "telegram": True, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "bucket_designer",
         "en": {"t": "Change the Level-2 process yourself",
                "d": "Create a bucket, rename one, change how many days before it turns amber or "

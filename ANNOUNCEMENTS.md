@@ -1,5 +1,44 @@
 # Staff Announcement Drafts
 
+## 2026-09-13 (2) — Asking for pending documents is now one screen
+
+**Title (EN):**
+📄 One screen to ask for the documents a claim is still missing
+
+**Details (EN):**
+• **Open it from the document count** on any row in Level-2 → Settlement (the "3/6" you already look at). One screen shows what is still needed, who the ask goes to, and exactly what they will read.
+
+• **The list is yours to fix.** The standard list comes from the claim type — correct the type at the top if it is wrong and the list follows. Add anything else this case needs. Remove anything that does not apply; it will ask you **why**, and your reason stays on the claim under your name, so the next person knows we stopped asking on purpose.
+
+• **Documents that have arrived turn green** and drop out of the ask automatically. You never ask twice for something we already have.
+
+• **Everyone involved is copied.** The complainant is the person we ask — they have the documents. The subscriber, the branch, the channel partner and the assigned staff are copied in. You can add any extra mobile or email, and take it away again. If we have no way to reach somebody, the screen says so instead of hiding it.
+
+• **The Send button does not send.** It shows you the final list, exactly who it reaches on which number, and the exact words — and only then offers to send. Please actually read it: you are recorded as the person who sent it, and the customer will go and do what it says. If you change anything after that screen, it will bring you back to check again.
+
+• **Reminders stop on their own.** We remind every three days, twice. After that we stop sending and it appears on your bell and Telegram asking you to **phone** them — a fourth identical message just makes people stop reading us. Every reminder tells them: *if you have already shared all the documents, please ignore this message.* When you have called, write down what they said; that closes it and stops somebody else calling the same person tomorrow.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📄 बाकी दस्तावेज़ माँगने के लिए अब एक ही स्क्रीन
+
+**Details (HI):**
+• **किसी भी रो पर डॉक्युमेंट काउंट पर क्लिक कीजिए** (Level-2 → Settlement में वही "3/6" जो आप पहले से देखते हैं)। एक ही स्क्रीन पर: क्या बाकी है, किसे भेजना है, और उन्हें क्या पढ़ने को मिलेगा।
+
+• **लिस्ट आप ठीक कर सकते हैं।** स्टैंडर्ड लिस्ट क्लेम टाइप से आती है — ऊपर टाइप ग़लत हो तो सुधार दीजिए, लिस्ट अपने आप बदल जाएगी। इस केस को जो और चाहिए वह जोड़ लीजिए। जो लागू नहीं होता उसे हटा दीजिए — **कारण पूछा जाएगा**, और वह कारण आपके नाम के साथ क्लेम पर दर्ज रहेगा, ताकि अगले व्यक्ति को पता रहे कि हमने जान-बूझकर माँगना बंद किया।
+
+• **जो दस्तावेज़ आ गए वे हरे हो जाते हैं** और माँग से अपने आप निकल जाते हैं। जो हमारे पास है वह दोबारा कभी नहीं माँगा जाएगा।
+
+• **सभी संबंधित पक्ष CC में रहते हैं।** माँग शिकायतकर्ता से होती है — दस्तावेज़ उन्हीं के पास हैं। सब्सक्राइबर, ब्रांच, चैनल पार्टनर और असाइन्ड स्टाफ़ को कॉपी भेजी जाती है। कोई और मोबाइल या ईमेल जोड़ भी सकते हैं और हटा भी सकते हैं। जिससे संपर्क का कोई रास्ता नहीं है, स्क्रीन वह छिपाती नहीं, साफ़ बता देती है।
+
+• **Send बटन सीधे भेजता नहीं है।** पहले दिखाता है: आख़िरी लिस्ट, किस नंबर पर किसे जाएगा, और बिल्कुल वही शब्द — उसके बाद ही भेजने को कहता है। कृपया सच में पढ़िए: भेजने वाले के रूप में आपका नाम दर्ज होता है, और ग्राहक उसी के अनुसार काम करेगा। उस स्क्रीन के बाद कुछ भी बदला तो वह आपको दोबारा जाँचने के लिए वापस ले आएगी।
+
+• **रिमाइंडर अपने आप रुक जाते हैं।** हर तीन दिन में, सिर्फ़ दो बार। उसके बाद भेजना बंद और आपकी बेल तथा टेलीग्राम पर आएगा कि **फ़ोन कीजिए** — चौथा वैसा ही मैसेज लोगों से हमारा पढ़ना ही छुड़ा देता है। हर रिमाइंडर में लिखा होता है: *यदि आप सभी दस्तावेज़ भेज चुके हैं तो इस संदेश को नज़रअंदाज़ करें।* फ़ोन करने के बाद जो बात हुई वह लिख दीजिए; इससे मामला बंद हो जाता है और कोई दूसरा कल उसी व्यक्ति को फिर फ़ोन नहीं करेगा।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-13 — Anyone can add a Channel Partner · the office can change its own process
 
 **Title (EN):**
