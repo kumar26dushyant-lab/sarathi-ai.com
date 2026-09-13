@@ -917,20 +917,7 @@
         <div class="field">
           <label class="en">Insurance Company</label>
           <label class="hi">बीमा कंपनी</label>
-          <select id="insurerPick" onchange="_onInsurerPick()">
-            <option value="">-- Select insurer --</option>
-            <option>LIC of India</option><option>HDFC Life</option><option>ICICI Prudential Life</option>
-            <option>SBI Life</option><option>Max Life</option><option>Bajaj Allianz Life</option>
-            <option>Kotak Life</option><option>Tata AIA Life</option><option>PNB MetLife</option>
-            <option>Aditya Birla Sun Life</option><option>Star Health</option><option>HDFC ERGO</option>
-            <option>ICICI Lombard</option><option>Bajaj Allianz General</option><option>Care Health</option>
-            <option>Niva Bupa (Max Bupa)</option><option>New India Assurance</option><option>Tata AIG</option>
-            <option>Reliance General</option><option>Cholamandalam MS</option><option>SBI General</option>
-            <option>National Insurance</option><option>Oriental Insurance</option><option>United India Insurance</option>
-            <option>ManipalCigna</option><option>Digit Insurance</option><option>Acko</option>
-            <option>Future Generali</option><option>Liberty General</option>
-            <option value="__other">Other (type name)</option>
-          </select>
+          <select id="insurerPick" onchange="_onInsurerPick()"></select>
           <input type="text" id="insurerOther" placeholder="Type the insurance company name" autocomplete="off"
                  style="display:none;margin-top:.45rem" oninput="document.getElementById('insurerName').value=this.value">
           <input type="hidden" id="insurerName">
@@ -3102,7 +3089,9 @@ if ('serviceWorker' in navigator) {
 <script src="/static/nidaan_install.js?v=1"></script>
 <script>window.NIDAAN_SUPPORT_MODE='support';</script>
 <script src="/static/nidaan_support_widget.js?v=23" defer></script>
+<script src="/static/nidaan_insurers.js?v=1"></script>
 <script src="/static/nidaan_track.js?v=2"></script>
+<script>try{NidaanInsurers.fill('insurerPick');}catch(e){}</script>
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>
 /* Register this dashboard's overlays so the phone Back button closes them instead of

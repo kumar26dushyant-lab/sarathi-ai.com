@@ -23,6 +23,7 @@ try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.cla
 <meta name="apple-mobile-web-app-title" content="Nidaan Ops">
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="/static/_err.js?v=1"></script>
+<script src="/static/nidaan_insurers.js?v=1"></script>
 <script src="/static/nidaan_partner_claims.js?v=4"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
@@ -4265,7 +4266,7 @@ async function loadMyBusiness() {
         <input id="mbcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="${hi?'ग्राहक मोबाइल (10 अंक)':'Customer mobile (10-digit)'}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
         <input id="mbcEmail" type="email" placeholder="${hi?'ग्राहक का ईमेल (ज़रूरी)':'Customer email (required)'}">
         <select id="mbcType"><option value="">${hi?'क्लेम प्रकार…':'Claim type…'}</option><option value="health">${hi?'स्वास्थ्य':'Health'}</option><option value="life">${hi?'जीवन':'Life'}</option><option value="motor">${hi?'मोटर':'Motor'}</option><option value="general">${hi?'सामान्य / अन्य':'General / Other'}</option></select>
-        <input id="mbcInsurer" placeholder="${hi?'बीमा कंपनी (वैकल्पिक)':'Insurance company (optional)'}">
+        <span id="mbcInsurerBox" style="display:inline-block;min-width:13rem"></span>
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
         <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'चैनल पार्टनर (वैकल्पिक)…':'Channel Partner (optional)…'}</option></select>
@@ -4295,6 +4296,7 @@ async function loadMyBusiness() {
 
     <div id="mbTeamWrap" style="margin-top:1.4rem"></div>`;
 
+  try{ NidaanInsurers.mount('mbcInsurerBox', {style:'width:100%'}); }catch(e){}
   NidaanPartnerClaims.init({
     mount: 'mbClaimsWrap',
     getClaims: () => window._mbClaims || [],
@@ -4413,7 +4415,7 @@ async function mbRaiseClaim(){
   const btn=g('mbcSubmit'); btn.disabled=true; const ob=btn.textContent; btn.textContent=hi?'जमा हो रहा है…':'Submitting…';
   msg.style.color='#94a3b8'; msg.textContent=hi?'जमा हो रहा है…':'Submitting…';
   const body={insured_name:name, insured_phone:phone, insured_email:email, claim_type:type,
-    insurer_name:(g('mbcInsurer').value||'').trim(), policy_no:(g('mbcPolicy').value||'').trim(),
+    insurer_name:(function(){try{return NidaanInsurers.value('mbcInsurerBox');}catch(e){return '';}})(), policy_no:(g('mbcPolicy').value||'').trim(),
     disputed_amount: g('mbcAmount').value?parseInt(g('mbcAmount').value,10):null,
     notes:(g('mbcNotes').value||'').trim(),
     channel_partner_id:((g('mbcAssociate')&&g('mbcAssociate').value)?parseInt(g('mbcAssociate').value,10):null)};
@@ -4448,9 +4450,10 @@ async function mbRaiseClaim(){
   }
   btn.disabled=false; btn.textContent=ob;
   msg.style.color='#4ade80'; msg.textContent=(hi?'✓ क्लेम दर्ज हुआ — समीक्षा के बाद स्थिति यहाँ दिखेगी।':'✓ Claim raised — its review status will show below.')+attachMsg;
-  ['mbcName','mbcPhone','mbcEmail','mbcType','mbcInsurer','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
+  ['mbcName','mbcPhone','mbcEmail','mbcType','mbcAmount','mbcPolicy','mbcNotes'].forEach(id=>{const e=g(id); if(e) e.value='';});
   _mbcFiles=[]; mbcRenderFiles();
   _mbcRejFile=null; mbcRenderRej();
+  try{ NidaanInsurers.mount('mbcInsurerBox', {style:'width:100%'}); }catch(e){}
   mbLoadClaims(); setTimeout(()=>{msg.textContent='';},5000);
 }
 
@@ -11173,7 +11176,7 @@ function obPick(id){
     +   '<label style="font-size:.78rem;font-weight:600">Their email'
     +     '<input id="obEmail" maxlength="160" style="' + _rmInp() + '"></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Insurance company'
-    +     '<input id="obInsurer" maxlength="120" style="' + _rmInp() + '"></label>'
+    +     '<span id="obInsurerBox" style="display:block"></span></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Policy no.'
     +     '<input id="obPolicy" maxlength="80" style="' + _rmInp() + '"></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Disputed amount ₹'
@@ -11185,6 +11188,7 @@ function obPick(id){
     + '<button class="btn btn-primary" style="margin-top:.7rem" onclick="obSubmit(this)">'
     +   'Raise this claim →</button>'
     + '<span id="obMsg" style="font-size:.82rem;margin-left:.6rem"></span>';
+  try{ NidaanInsurers.mount('obInsurerBox', {style: _rmInp()}); }catch(e){}
 }
 async function obSubmit(btn){
   if (!_obPicked) return;
@@ -11199,7 +11203,9 @@ async function obSubmit(btn){
   const amt = parseInt(g('obAmount'), 10);
   const payload = {account_id: _obPicked.account_id, claim_type: type, insured_name: name,
                    insured_phone: g('obPhone'), insured_email: g('obEmail'),
-                   insurer_name: g('obInsurer'), policy_no: g('obPolicy'),
+                   insurer_name: (function(){ try{ return NidaanInsurers.value('obInsurerBox'); }
+                                                catch(e){ return ''; } })(),
+                   policy_no: g('obPolicy'),
                    disputed_amount: (isNaN(amt) ? null : amt), notes_from_agent: g('obNotes')};
   if (btn) btn.disabled = true;
   if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Raising…'; }
@@ -11210,7 +11216,7 @@ async function obSubmit(btn){
       if (msg){ msg.style.color = 'var(--nd-success-text)';
                 msg.textContent = '✓ Raised NP-' + d.claim_id + ' for ' + (d.on_behalf_of || ''); }
       ndUI.toast('NP-' + d.claim_id + ' raised for ' + (d.on_behalf_of || ''), 'success');
-      ['obName','obPhone','obEmail','obInsurer','obPolicy','obAmount','obNotes'].forEach(function(id){
+      ['obName','obPhone','obEmail','obPolicy','obAmount','obNotes'].forEach(function(id){
         const e = document.getElementById(id); if (e) e.value = '';
       });
     } else {
