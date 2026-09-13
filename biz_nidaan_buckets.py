@@ -347,20 +347,24 @@ async def bucket(key: str) -> Optional[dict]:
     return dict(r) if r else None
 
 
-async def substates(key: str) -> list[dict]:
+async def substates(key: str, include_inactive: bool = False) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
-        return [dict(r) for r in await (await c.execute(
-            "SELECT * FROM nidaan_bucket_substates WHERE bucket_key=? AND active=1 "
-            "ORDER BY sort_order, sub_id", (key,))).fetchall()]
+        q = "SELECT * FROM nidaan_bucket_substates WHERE bucket_key=?"
+        if not include_inactive:
+            q += " AND active=1"
+        q += " ORDER BY sort_order, sub_id"
+        return [dict(r) for r in await (await c.execute(q, (key,))).fetchall()]
 
 
-async def fields(key: str) -> list[dict]:
+async def fields(key: str, include_inactive: bool = False) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
-        return [dict(r) for r in await (await c.execute(
-            "SELECT * FROM nidaan_bucket_fields WHERE bucket_key=? AND active=1 "
-            "ORDER BY sort_order, field_id", (key,))).fetchall()]
+        q = "SELECT * FROM nidaan_bucket_fields WHERE bucket_key=?"
+        if not include_inactive:
+            q += " AND active=1"
+        q += " ORDER BY sort_order, field_id"
+        return [dict(r) for r in await (await c.execute(q, (key,))).fetchall()]
 
 
 async def moves_from(key: str) -> list[dict]:
@@ -1431,3 +1435,307 @@ async def _notify_sender_back(claim_id: int, *, to_name: str, reason: str,
             event_key="bucket.sent_back", email=False, claim_id=claim_id)
     except Exception as e:  # noqa: BLE001
         logger.warning("send-back notification failed for %s: %s", claim_id, e)
+
+
+# ── the bucket designer ──────────────────────────────────────────────────────
+# A super-admin owns the office process. Renaming a bucket, adding a step, inventing a field or
+# opening a route must not need a deploy - and, more importantly, must not need me.
+#
+# Two rules run through all of it:
+#   NOTHING IS EVER DELETED WHILE IT HOLDS WORK. A bucket with claims in it, or a field with
+#   answers recorded against it, is DEACTIVATED - it stops appearing on new work and keeps every
+#   value already captured. Deleting would silently destroy the history a case is argued from.
+#   EVERY CHANGE IS ATTRIBUTED. The process is as auditable as the claims that move through it.
+
+_SAFE_KEY = _re.compile(r"^[a-z][a-z0-9_]{1,38}$")
+_FIELD_TYPES = ("text", "textarea", "date", "number", "money", "yesno", "choice")
+_WAITS = ("none", "complainant", "insurer", "lokpal", "internal")
+
+
+def _key_from(name: str, existing: set) -> str:
+    """A machine key from a human name, unique among what already exists."""
+    base = _re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")[:38]
+    if not base or not base[0].isalpha():
+        base = "b_" + base
+    base = base[:38]
+    key, n = base, 2
+    while key in existing:
+        key = "%s_%d" % (base[:35], n)
+        n += 1
+    return key
+
+
+async def _bucket_in_use(bucket_key: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as c:
+        r = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claims WHERE pipeline_stage=? "
+            "AND COALESCE(archived,0)=0", (bucket_key,))).fetchone()
+    return int(r[0] or 0)
+
+
+async def save_bucket(*, bucket_key: str = "", name_en: str = "", name_hi: str = "",
+                      icon: str = "", colour: str = "", amber_days=None, red_days=None,
+                      waits_on: str = "", sort_order=None, active=None,
+                      guide: Optional[dict] = None, actor: str = "") -> dict:
+    """Create or update a bucket. An empty bucket_key creates one."""
+    name_en = (name_en or "").strip()
+    if not bucket_key and not name_en:
+        return {"ok": False, "error": "Give the bucket a name."}
+    if waits_on and waits_on not in _WAITS:
+        return {"ok": False, "error": "That is not something a case can wait for."}
+    try:
+        amber = int(amber_days) if amber_days not in (None, "") else None
+        red = int(red_days) if red_days not in (None, "") else None
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "The day counts must be numbers."}
+    if amber is not None and red is not None and red and amber and amber > red:
+        return {"ok": False,
+                "error": "Amber must come before red - a bucket cannot turn red before it warns."}
+
+    g = guide or {}
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        if bucket_key:
+            row = await (await c.execute(
+                "SELECT bucket_key FROM nidaan_buckets WHERE bucket_key=?", (bucket_key,))).fetchone()
+            if not row:
+                return {"ok": False, "error": "That bucket does not exist."}
+            sets, params = [], []
+            for col, val in (("name_en", name_en or None), ("name_hi", name_hi or None),
+                             ("icon", icon or None), ("colour", colour or None),
+                             ("waits_on", waits_on or None)):
+                if val is not None:
+                    sets.append("%s=?" % col)
+                    params.append(val)
+            for col, val in (("amber_days", amber), ("red_days", red),
+                             ("sort_order", sort_order)):
+                if val is not None:
+                    sets.append("%s=?" % col)
+                    params.append(int(val))
+            if active is not None:
+                # Deactivating a bucket that still holds work would hide live claims.
+                if not int(active):
+                    n = await _bucket_in_use(bucket_key)
+                    if n:
+                        return {"ok": False,
+                                "error": "%d claim(s) are in this bucket. Move them first - "
+                                         "turning it off would hide live work." % n}
+                sets.append("active=?")
+                params.append(1 if int(active) else 0)
+            for k, col in (("what", "guide_what"), ("do", "guide_do"),
+                           ("done", "guide_done"), ("watch", "guide_watch")):
+                if k in g:
+                    sets.append("%s=?" % col)
+                    params.append((g.get(k) or "")[:600])
+            if not sets:
+                return {"ok": True, "bucket_key": bucket_key, "unchanged": True}
+            sets.append("updated_at=CURRENT_TIMESTAMP")
+            params.append(bucket_key)
+            await c.execute("UPDATE nidaan_buckets SET %s WHERE bucket_key=?" % ", ".join(sets),
+                            params)
+            await c.commit()
+            logger.info("bucket %s edited by %s", bucket_key, actor)
+            return {"ok": True, "bucket_key": bucket_key}
+
+        existing = {r[0] for r in await (await c.execute(
+            "SELECT bucket_key FROM nidaan_buckets")).fetchall()}
+        key = _key_from(name_en, existing)
+        if sort_order is None:
+            r = await (await c.execute(
+                "SELECT COALESCE(MAX(sort_order),0)+10 FROM nidaan_buckets")).fetchone()
+            sort_order = int(r[0] or 10)
+        await c.execute(
+            "INSERT INTO nidaan_buckets (bucket_key,name_en,name_hi,icon,colour,sort_order,"
+            "amber_days,red_days,waits_on,guide_what,guide_do,guide_done,guide_watch) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (key, name_en, name_hi or "", icon or "", colour or "teal", int(sort_order),
+             amber if amber is not None else 10, red if red is not None else 20,
+             waits_on or "internal",
+             (g.get("what") or "")[:600], (g.get("do") or "")[:600],
+             (g.get("done") or "")[:600], (g.get("watch") or "")[:600]))
+        await c.commit()
+    logger.info("bucket %s created by %s", key, actor)
+    return {"ok": True, "bucket_key": key, "created": True}
+
+
+async def save_substate(*, bucket_key: str, sub_key: str = "", name_en: str = "",
+                        name_hi: str = "", amber_days=None, red_days=None, waits_on: str = "",
+                        sort_order=None, is_default=None, active=None, actor: str = "") -> dict:
+    """Create or update a step inside a bucket."""
+    if not await bucket(bucket_key):
+        return {"ok": False, "error": "That bucket does not exist."}
+    name_en = (name_en or "").strip()
+    if not sub_key and not name_en:
+        return {"ok": False, "error": "Give the step a name."}
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        if sub_key:
+            row = await (await c.execute(
+                "SELECT sub_id FROM nidaan_bucket_substates WHERE bucket_key=? AND sub_key=?",
+                (bucket_key, sub_key))).fetchone()
+            if not row:
+                return {"ok": False, "error": "That step does not exist."}
+            if active is not None and not int(active):
+                n = await (await c.execute(
+                    "SELECT COUNT(*) FROM nidaan_claims WHERE pipeline_stage=? AND pipeline_sub=? "
+                    "AND COALESCE(archived,0)=0", (bucket_key, sub_key))).fetchone()
+                if int(n[0] or 0):
+                    return {"ok": False,
+                            "error": "%d claim(s) are on this step. Move them first." % int(n[0])}
+            sets, params = [], []
+            for col, val in (("name_en", name_en or None), ("name_hi", name_hi or None),
+                             ("waits_on", waits_on or None)):
+                if val is not None:
+                    sets.append("%s=?" % col); params.append(val)
+            for col, val in (("amber_days", amber_days), ("red_days", red_days),
+                             ("sort_order", sort_order)):
+                if val not in (None, ""):
+                    sets.append("%s=?" % col); params.append(int(val))
+            if is_default is not None:
+                sets.append("is_default=?"); params.append(1 if int(is_default) else 0)
+            if active is not None:
+                sets.append("active=?"); params.append(1 if int(active) else 0)
+            if not sets:
+                return {"ok": True, "sub_key": sub_key, "unchanged": True}
+            params += [bucket_key, sub_key]
+            await c.execute("UPDATE nidaan_bucket_substates SET %s WHERE bucket_key=? AND sub_key=?"
+                            % ", ".join(sets), params)
+            if is_default is not None and int(is_default):
+                await c.execute("UPDATE nidaan_bucket_substates SET is_default=0 "
+                                "WHERE bucket_key=? AND sub_key<>?", (bucket_key, sub_key))
+            await c.commit()
+            return {"ok": True, "sub_key": sub_key}
+
+        existing = {r[0] for r in await (await c.execute(
+            "SELECT sub_key FROM nidaan_bucket_substates WHERE bucket_key=?",
+            (bucket_key,))).fetchall()}
+        key = _key_from(name_en, existing)
+        if sort_order is None:
+            r = await (await c.execute(
+                "SELECT COALESCE(MAX(sort_order),0)+10 FROM nidaan_bucket_substates "
+                "WHERE bucket_key=?", (bucket_key,))).fetchone()
+            sort_order = int(r[0] or 10)
+        await c.execute(
+            "INSERT INTO nidaan_bucket_substates (bucket_key,sub_key,name_en,name_hi,sort_order,"
+            "amber_days,red_days,waits_on,is_default) VALUES (?,?,?,?,?,?,?,?,?)",
+            (bucket_key, key, name_en, name_hi or "", int(sort_order),
+             (int(amber_days) if amber_days not in (None, "") else None),
+             (int(red_days) if red_days not in (None, "") else None),
+             waits_on or "", 1 if is_default else 0))
+        if is_default:
+            await c.execute("UPDATE nidaan_bucket_substates SET is_default=0 "
+                            "WHERE bucket_key=? AND sub_key<>?", (bucket_key, key))
+        await c.commit()
+    return {"ok": True, "sub_key": key, "created": True}
+
+
+async def save_field(*, bucket_key: str, field_key: str = "", label_en: str = "",
+                     label_hi: str = "", field_type: str = "text", choices: str = "",
+                     hint: str = "", required_exit=None, sort_order=None, active=None,
+                     actor: str = "") -> dict:
+    """Create or update a field captured in a bucket."""
+    if not await bucket(bucket_key):
+        return {"ok": False, "error": "That bucket does not exist."}
+    label_en = (label_en or "").strip()
+    if not field_key and not label_en:
+        return {"ok": False, "error": "Give the field a label."}
+    if field_type and field_type not in _FIELD_TYPES:
+        return {"ok": False, "error": "That is not a kind of field we can store."}
+    if field_type == "choice" and not (choices or "").strip() and not field_key:
+        return {"ok": False, "error": "A choice field needs its options, one per line."}
+
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        if field_key:
+            row = await (await c.execute(
+                "SELECT field_id FROM nidaan_bucket_fields WHERE bucket_key=? AND field_key=?",
+                (bucket_key, field_key))).fetchone()
+            if not row:
+                return {"ok": False, "error": "That field does not exist."}
+            sets, params = [], []
+            for col, val in (("label_en", label_en or None), ("label_hi", label_hi or None),
+                             ("field_type", field_type or None), ("hint", hint or None)):
+                if val is not None:
+                    sets.append("%s=?" % col); params.append(val)
+            if choices is not None and choices != "":
+                sets.append("choices=?"); params.append(choices)
+            if required_exit is not None:
+                sets.append("required_exit=?"); params.append(1 if int(required_exit) else 0)
+            if sort_order not in (None, ""):
+                sets.append("sort_order=?"); params.append(int(sort_order))
+            if active is not None:
+                # A field with answers is retired, never removed: those answers are case history.
+                sets.append("active=?"); params.append(1 if int(active) else 0)
+            if not sets:
+                return {"ok": True, "field_key": field_key, "unchanged": True}
+            params += [bucket_key, field_key]
+            await c.execute("UPDATE nidaan_bucket_fields SET %s WHERE bucket_key=? AND field_key=?"
+                            % ", ".join(sets), params)
+            await c.commit()
+            return {"ok": True, "field_key": field_key}
+
+        existing = {r[0] for r in await (await c.execute(
+            "SELECT field_key FROM nidaan_bucket_fields")).fetchall()}
+        key = _key_from(label_en, existing)
+        if sort_order is None:
+            r = await (await c.execute(
+                "SELECT COALESCE(MAX(sort_order),0)+10 FROM nidaan_bucket_fields "
+                "WHERE bucket_key=?", (bucket_key,))).fetchone()
+            sort_order = int(r[0] or 10)
+        await c.execute(
+            "INSERT INTO nidaan_bucket_fields (bucket_key,field_key,label_en,label_hi,field_type,"
+            "choices,hint,required_exit,sort_order) VALUES (?,?,?,?,?,?,?,?,?)",
+            (bucket_key, key, label_en, label_hi or "", field_type or "text",
+             choices or "", hint or "", 1 if required_exit else 0, int(sort_order)))
+        await c.commit()
+    return {"ok": True, "field_key": key, "created": True}
+
+
+async def field_usage(field_key: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as c:
+        r = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_fields WHERE field_key=? "
+            "AND TRIM(COALESCE(value,''))<>''", (field_key,))).fetchone()
+    return int(r[0] or 0)
+
+
+async def save_route(*, from_key: str, to_key: str, kind: str = "forward",
+                     needs_reason=None, remove: bool = False, actor: str = "") -> dict:
+    """Open or close a route between two buckets.
+
+    Closing one does not trap anything: a move to an unlisted bucket is still allowed, it simply
+    stops being offered as a usual next step and is recorded as off the usual path.
+    """
+    if from_key == to_key:
+        return {"ok": False, "error": "A bucket cannot lead to itself."}
+    if not await bucket(from_key) or not await bucket(to_key):
+        return {"ok": False, "error": "One of those buckets does not exist."}
+    if kind not in ("forward", "back", "park", "resume"):
+        return {"ok": False, "error": "That is not a kind of move."}
+    async with aiosqlite.connect(DB_PATH) as c:
+        if remove:
+            await c.execute("DELETE FROM nidaan_bucket_moves WHERE from_key=? AND to_key=?",
+                            (from_key, to_key))
+        else:
+            await c.execute(
+                "INSERT INTO nidaan_bucket_moves (from_key,to_key,kind,needs_reason,sort_order) "
+                "VALUES (?,?,?,?,0) ON CONFLICT(from_key,to_key) DO UPDATE SET "
+                "kind=excluded.kind, needs_reason=excluded.needs_reason",
+                (from_key, to_key, kind, 1 if needs_reason else 0))
+        await c.commit()
+    return {"ok": True}
+
+
+async def designer_view() -> dict:
+    """The whole process, plus how much work each part is holding - because that is what decides
+    whether something can be changed freely or has to be retired carefully."""
+    out = []
+    for b in await buckets(include_inactive=True):
+        subs = await substates(b["bucket_key"], include_inactive=True)
+        flds = await fields(b["bucket_key"], include_inactive=True)
+        for f in flds:
+            f["answers"] = await field_usage(f["field_key"])
+        out.append({**b, "claims": await _bucket_in_use(b["bucket_key"]),
+                    "substates": subs, "fields": flds,
+                    "moves": await moves_from(b["bucket_key"])})
+    return {"buckets": out, "field_types": list(_FIELD_TYPES), "waits_on": list(_WAITS)}

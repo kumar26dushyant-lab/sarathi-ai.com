@@ -452,6 +452,8 @@ select.form-input option{background:#1e293b}
       <div id="panel-onbehalf" class="panel" style="display:none"></div>
       <div id="panel-payfollow" class="panel" style="display:none"></div>
       <div id="panel-leave" class="panel" style="display:none"></div>
+      <div id="panel-cp" class="panel" style="display:none"></div>
+      <div id="panel-bdesign" class="panel" style="display:none"></div>
       <div id="panel-l2" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
@@ -649,7 +651,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','cp','bdesign','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -972,6 +974,7 @@ function buildSidebar() {
     ]},
     {h:'People', items:[
       {id:'branches', label:'🏢 Branches',         minRank:1},
+      {id:'cp',       label:'🤝 Channel Partners', minRank:0},
       {id:'staff',    label:'👤 Staff',            minRank:2},
     ]},
     {h:'HR', items:[
@@ -990,6 +993,7 @@ function buildSidebar() {
     ]},
     {h:'Configuration', items:[
       {id:'settings', label:'⚙️ Workflow Settings', minRank:2},
+      {id:'bdesign',  label:'🧩 Bucket Designer',  minRank:2},
       {id:'plans',    label:'💳 Plans & Billing',   minRank:2},
       {id:'content',  label:'📝 Content',           minRank:2},
       {id:'guide',    label:'✨ All Features (Listen)', minRank:0},
@@ -1045,6 +1049,8 @@ function showPanel(id, fromHistory) {
     onbehalf: loadOnBehalf,
     payfollow: loadPayFollow,
     leave: loadLeavePanel,
+    cp: loadCpPanel,
+    bdesign: loadBucketDesigner,
     l2: loadL2,
     board: loadCaseBoard,
     accounts: loadAccounts,
@@ -7818,6 +7824,437 @@ async function saveClaimantTerms(btn){
   }catch(e){ if(msg){ msg.style.color='#f87171'; msg.textContent='Network error'; } }
   finally{ if(btn) btn.disabled=false; }
 }
+
+// Channel Partners get their own screen, open to every staff member, because the people who
+// meet partners are not the people with admin rights. Proposing is open; APPROVING is not.
+async function loadCpPanel(){
+  const el = document.getElementById('panel-cp');
+  if (!el) return;
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">🤝 Channel Partners</div>'
+    +   '<div class="section-sub">Agents who send us business but stay off the record as '
+    +     'subscribers. Anyone can add one — a super-admin approves it before it can be put '
+    +     'on a claim.</div>'
+    + '</div></div><div id="cpEditor"></div>';
+  await loadChannelPartners();
+}
+window.loadCpPanel = loadCpPanel;
+
+// One confirm dialog, worded properly, for anything that turns something off. Native confirm()
+// cannot be styled, cannot be read on a phone, and cannot carry the sentence that actually
+// matters - what happens to the work already recorded.
+function ndConfirm(title, body, onYes, yesLabel){
+  openModal(title,
+    '<div style="font-size:.88rem;color:var(--nd-text-secondary);line-height:1.5">'
+      + esc(body) + '</div>',
+    [{label:'Cancel', cls:'btn-ghost', fn: closeModal},
+     {label: yesLabel || 'Yes, do it', cls:'btn-primary',
+      fn: function(){ closeModal(); onYes(); }}], false);
+}
+window.ndConfirm = ndConfirm;
+
+// ══ Bucket Designer ═══════════════════════════════════════════════════════════
+// The Level-2 process is data, not code - so the person who runs the office can change it.
+// Rename a bucket, add a step, invent a field, open a route: all of it here, no deploy, no me.
+//
+// The one rule this screen exists to enforce: NOTHING IS DELETED WHILE IT HOLDS WORK. A bucket
+// with claims in it, or a field somebody has already answered, is turned OFF - it stops
+// appearing on new work and keeps every answer already recorded, because that record is what a
+// case gets argued from later. Things turned off stay listed here, greyed, and can come back.
+let _bdData = null, _bdOpen = '';
+
+function _bdStyles(){
+  if (document.getElementById('bdCss')) return;
+  const st = document.createElement('style'); st.id = 'bdCss';
+  st.textContent = `
+  .bdrow{border-bottom:1px solid var(--nd-border);padding:.32rem 0;font-size:.84rem;
+    display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}
+  .bdrow .nm{flex:1;min-width:8rem;color:var(--nd-text-primary)}
+  .bdrow.off .nm{color:var(--nd-text-faint)}
+  .bdsub{font-size:.74rem;color:var(--nd-text-faint);font-weight:400}
+  .bdcard{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;
+    padding:.65rem .8rem;margin-bottom:.5rem}
+  .bdcard.off{opacity:.62}
+  .bdhd{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+  .bdhd .t{font-size:.95rem;font-weight:800;color:var(--nd-text-primary)}
+  .bdmeta{font-size:.75rem;color:var(--nd-text-muted);font-variant-numeric:tabular-nums}
+  .bdgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:0 .6rem}
+  .bdedit{border-top:1px dashed var(--nd-border);margin-top:.6rem;padding-top:.6rem}
+  .bdchk{display:flex;gap:.4rem;align-items:flex-start;font-size:.84rem;margin-top:.3rem;
+    color:var(--nd-text-secondary)}
+  .bdchk input{margin-top:.2rem;flex:0 0 auto}
+  @media (max-width:640px){ .bdhd .bdmeta{width:100%;margin-left:0 !important} }`;
+  document.head.appendChild(st);
+}
+
+async function loadBucketDesigner(){
+  _l2Styles(); _bdStyles();
+  const el = document.getElementById('panel-bdesign');
+  if (!el) return;
+  if (!el.dataset.ready){
+    el.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading the process…</p></div>';
+    el.dataset.ready = '1';
+  }
+  try{
+    const r = await API('/buckets/designer');
+    if (!r.ok) throw new Error('load');
+    _bdData = await r.json();
+  }catch(e){
+    el.innerHTML = '<div class="empty"><div class="ei">⚠️</div>'
+      + '<p>Could not load the process. This screen is for super-admins only.</p>'
+      + '<button class="btn btn-primary" onclick="loadBucketDesigner()">Try again</button></div>';
+    return;
+  }
+  bdRender();
+}
+
+function bdRender(){
+  const el = document.getElementById('panel-bdesign');
+  if (!el) return;
+  const bs = (_bdData && _bdData.buckets) || [];
+  const live = bs.filter(function(b){ return b.active; }).length;
+
+  const cards = bs.map(function(b){
+    const open = _bdOpen === b.bucket_key;
+    const steps = (b.substates || []).filter(function(s){ return s.active; }).length;
+    const flds  = (b.fields || []).filter(function(f){ return f.active; }).length;
+    return '<div class="bdcard' + (b.active ? '' : ' off') + '">'
+      + '<div class="bdhd">'
+      +   '<span style="font-size:1.05rem">' + esc(b.icon || '•') + '</span>'
+      +   '<span class="t">' + esc(b.name_en) + '</span>'
+      +   (b.name_hi ? '<span class="bdsub">' + esc(b.name_hi) + '</span>' : '')
+      +   (b.is_entry ? '<span class="l2age ok">claims start here</span>' : '')
+      +   (b.is_park ? '<span class="l2age amber">paused work</span>' : '')
+      +   (b.is_terminal ? '<span class="l2age ok">the end</span>' : '')
+      +   (b.active ? '' : '<span class="l2age red">turned off</span>')
+      +   '<span class="bdmeta" style="margin-left:auto">'
+      +     b.claims + ' claim' + (b.claims === 1 ? '' : 's') + ' · '
+      +     steps + ' step' + (steps === 1 ? '' : 's') + ' · '
+      +     flds + ' field' + (flds === 1 ? '' : 's') + ' · '
+      +     (b.moves || []).length + ' next step'
+      +     ((b.moves || []).length === 1 ? '' : 's') + '</span>'
+      +   (b.active
+          ? '<button class="l2mv g" onclick="bdToggle(\'' + b.bucket_key + '\')">'
+            + (open ? 'Close' : '✏️ Change') + '</button>'
+          : '<button class="l2mv" onclick="bdBucketOn(\'' + b.bucket_key
+            + '\')">Turn back on</button>')
+      + '</div>'
+      + '<div class="bdsub" style="margin-top:.15rem">Turns amber after ' + b.amber_days
+      +   ' day' + (b.amber_days === 1 ? '' : 's') + ', red after ' + b.red_days
+      +   ' · waiting on ' + esc(_bdWaitName(b.waits_on)) + '</div>'
+      + (open && b.active ? bdEditor(b) : '')
+      + '</div>';
+  }).join('');
+
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">🧩 Bucket Designer</div>'
+    +   '<div class="section-sub">The Level-2 process itself — ' + live + ' bucket'
+    +     (live === 1 ? '' : 's') + ' in use. Every change here takes effect straight away, for '
+    +     'everybody.</div>'
+    + '</div><button class="btn-sm btn-ghost" onclick="loadBucketDesigner()">🔄 Refresh</button></div>'
+    + '<div class="l2ban info">Nothing here is ever deleted while it holds work. A bucket with '
+    +   'claims in it, or a field somebody has already filled, is <b>turned off</b> instead — it '
+    +   'disappears from new work, keeps everything already recorded, and can be turned back on.</div>'
+    + cards
+    + '<button class="btn btn-primary" style="margin-top:.4rem" onclick="bdNewBucket()">'
+    +   '+ New bucket</button>';
+}
+
+function bdToggle(k){ _bdOpen = (_bdOpen === k) ? '' : k; bdRender(); }
+
+function _bdGet(k){
+  return ((_bdData && _bdData.buckets) || [])
+    .filter(function(x){ return x.bucket_key === k; })[0] || {};
+}
+function _bdWaitName(w){
+  return ({none:'nobody — it just sits', complainant:'the complainant',
+           insurer:'the insurance company', lokpal:'the forum',
+           internal:'us — our own work'})[w] || (w || 'us');
+}
+function _bdTypeName(t){
+  return ({text:'short text', textarea:'long text', date:'a date', number:'a number',
+           money:'an amount', yesno:'yes / no', choice:'pick from a list'})[t] || t;
+}
+function _bdInp(id, label, val, type, hint){
+  return '<div class="l2fld"><label>' + esc(label) + '</label>'
+    + '<input id="' + id + '" type="' + (type || 'text') + '" value="'
+    + esc(val === null || val === undefined ? '' : val) + '">'
+    + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
+}
+function _bdTxt(id, label, val){
+  return '<div class="l2fld"><label>' + esc(label) + '</label>'
+    + '<textarea id="' + id + '" rows="2" maxlength="600">' + esc(val || '') + '</textarea></div>';
+}
+function _bdV(id){ const e = document.getElementById(id); return e ? e.value : ''; }
+function _bdN(id){ const v = _bdV(id).trim(); return v === '' ? null : (parseInt(v, 10) || 0); }
+function _bdChk(id){ const e = document.getElementById(id); return (e && e.checked) ? 1 : 0; }
+
+function _bdSay(k, txt, ok){
+  const m = document.getElementById('bd_msg_' + k);
+  if (m){ m.style.color = ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)';
+          m.textContent = txt; }
+  if (!m || ok) ndUI.toast(txt, ok ? 'success' : 'error');
+}
+
+async function _bdPost(path, body, k, okMsg){
+  try{
+    const r = await API('/buckets/designer/' + path, {method:'POST', body: JSON.stringify(body)});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){ _bdSay(k, okMsg || 'Saved.', true); await loadBucketDesigner(); return true; }
+    _bdSay(k, _l2Err(d, 'Could not save that.'), false);
+  }catch(e){ _bdSay(k, 'Could not save that.', false); }
+  return false;
+}
+
+function bdEditor(b){
+  const k = b.bucket_key;
+  const waits = (_bdData.waits_on || []).map(function(w){
+    return '<option value="' + w + '"' + (b.waits_on === w ? ' selected' : '') + '>'
+      + esc(_bdWaitName(w)) + '</option>'; }).join('');
+
+  const subs = (b.substates || []).map(function(s){
+    return '<div class="bdrow' + (s.active ? '' : ' off') + '">'
+      + '<span class="nm">' + esc(s.name_en)
+      +   (s.is_default ? ' <span class="l2age ok">starts here</span>' : '')
+      +   (s.active ? '' : ' <span class="l2age red">off</span>')
+      +   (s.amber_days ? ' <span class="bdsub">own clock ' + s.amber_days + '/'
+          + (s.red_days || s.amber_days) + 'd</span>' : '') + '</span>'
+      + (s.active
+          ? '<button class="l2mv g" onclick="bdSubEdit(\'' + k + '\',\'' + s.sub_key
+            + '\')">Change</button><button class="l2mv d" onclick="bdSubOff(\'' + k + '\',\''
+            + s.sub_key + '\')">Turn off</button>'
+          : '<button class="l2mv" onclick="bdSubOn(\'' + k + '\',\'' + s.sub_key
+            + '\')">Turn back on</button>')
+      + '</div>';
+  }).join('') || '<div class="bdsub">No steps — this bucket is one single place.</div>';
+
+  const flds = (b.fields || []).map(function(f){
+    return '<div class="bdrow' + (f.active ? '' : ' off') + '">'
+      + '<span class="nm">' + esc(f.label_en)
+      +   ' <span class="bdsub">' + esc(_bdTypeName(f.field_type)) + '</span>'
+      +   (f.required_exit ? ' <span class="l2age red">must be filled</span>' : '')
+      +   (f.active ? '' : ' <span class="l2age red">off</span>')
+      +   (f.answers ? ' <span class="bdsub">' + f.answers + ' answered</span>' : '') + '</span>'
+      + (f.active
+          ? '<button class="l2mv g" onclick="bdFieldEdit(\'' + k + '\',\'' + f.field_key
+            + '\')">Change</button><button class="l2mv d" onclick="bdFieldOff(\'' + k + '\',\''
+            + f.field_key + '\',' + (f.answers || 0) + ')">Turn off</button>'
+          : '<button class="l2mv" onclick="bdFieldOn(\'' + k + '\',\'' + f.field_key
+            + '\')">Turn back on</button>')
+      + '</div>';
+  }).join('') || '<div class="bdsub">Nothing is written down in this bucket yet.</div>';
+
+  const KIND = {forward:'onward', back:'backwards', park:'pause it', resume:'back to work'};
+  const routes = (b.moves || []).map(function(m){
+    return '<div class="bdrow"><span class="nm">' + esc(m.icon || '→') + ' ' + esc(m.name_en)
+      + ' <span class="bdsub">' + esc(KIND[m.kind] || m.kind) + '</span></span>'
+      + '<button class="l2mv d" onclick="bdRouteOff(\'' + k + '\',\'' + m.to_key
+      + '\')">Remove</button></div>';
+  }).join('') || '<div class="bdsub">No usual next steps set.</div>';
+
+  const others = (_bdData.buckets || []).filter(function(x){
+    return x.active && x.bucket_key !== k
+      && !(b.moves || []).some(function(m){ return m.to_key === x.bucket_key; }); });
+
+  return '<div class="bdedit">'
+    + '<div class="bdgrid">'
+    +   _bdInp('bd_en_' + k, 'Name staff see', b.name_en)
+    +   _bdInp('bd_hi_' + k, 'Same name in Hinglish', b.name_hi)
+    +   _bdInp('bd_ic_' + k, 'Icon', b.icon)
+    +   _bdInp('bd_am_' + k, 'Turn amber after (days)', b.amber_days, 'number')
+    +   _bdInp('bd_rd_' + k, 'Turn red after (days)', b.red_days, 'number')
+    +   '<div class="l2fld"><label>While a claim sits here, who are we waiting for?</label>'
+    +     '<select id="bd_wo_' + k + '">' + waits + '</select></div>'
+    + '</div>'
+    + '<div class="l2sec">What staff are told about this bucket</div>'
+    + _bdTxt('bd_gw_' + k, 'What it is', b.guide_what)
+    + _bdTxt('bd_gd_' + k, 'What you do here', b.guide_do)
+    + _bdTxt('bd_gn_' + k, 'It is done when…', b.guide_done)
+    + _bdTxt('bd_gc_' + k, 'Watch out for', b.guide_watch)
+    + '<button class="l2mv p" onclick="bdSaveBucket(\'' + k + '\')">Save this bucket</button>'
+    + (b.claims
+        ? '<span class="bdsub" style="margin-left:.4rem">' + b.claims + ' claim(s) are in here, '
+          + 'so it cannot be turned off until they are moved.</span>'
+        : '<button class="l2mv d" style="margin-left:.3rem" onclick="bdBucketOff(\'' + k
+          + '\')">Turn this bucket off</button>')
+
+    + '<div class="l2sec" style="margin-top:.9rem">Steps inside this bucket</div>' + subs
+    + '<button class="l2mv g" style="margin-top:.35rem" onclick="bdSubEdit(\'' + k + '\',\'\')">'
+    +   '+ Add a step</button>'
+
+    + '<div class="l2sec" style="margin-top:.9rem">What we write down in this bucket</div>' + flds
+    + '<button class="l2mv g" style="margin-top:.35rem" onclick="bdFieldEdit(\'' + k + '\',\'\')">'
+    +   '+ Add a field</button>'
+
+    + '<div class="l2sec" style="margin-top:.9rem">Usual next steps</div>' + routes
+    + '<div class="bdsub" style="margin:.25rem 0 .35rem">These are only the buttons offered '
+    +   'first. Staff can still move a claim to any bucket at any time — it is simply recorded '
+    +   'as off the usual path.</div>'
+    + (others.length
+        ? '<div style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center">'
+          + '<select id="bd_rt_' + k + '" style="' + _rmInp() + ';width:auto;max-width:13rem;margin:0">'
+          + others.map(function(x){
+              return '<option value="' + x.bucket_key + '">' + esc(x.name_en) + '</option>';
+            }).join('')
+          + '</select>'
+          + '<select id="bd_rk_' + k + '" style="' + _rmInp() + ';width:auto;max-width:10rem;margin:0">'
+          + '<option value="forward">onward</option><option value="back">backwards</option>'
+          + '<option value="park">pause it</option><option value="resume">back to work</option>'
+          + '</select><button class="l2mv g" onclick="bdRouteAdd(\'' + k + '\')">+ Add</button></div>'
+        : '')
+    + '<div id="bd_msg_' + k + '" style="font-size:.82rem;margin-top:.45rem"></div>'
+    + '</div>';
+}
+
+function bdSaveBucket(k){
+  const name = _bdV('bd_en_' + k).trim();
+  if (!name){ _bdSay(k, 'A bucket needs a name staff can read.', false); return; }
+  _bdPost('bucket', {bucket_key: k, name_en: name, name_hi: _bdV('bd_hi_' + k),
+    icon: _bdV('bd_ic_' + k), waits_on: _bdV('bd_wo_' + k),
+    amber_days: _bdN('bd_am_' + k), red_days: _bdN('bd_rd_' + k),
+    guide: {what: _bdV('bd_gw_' + k), do: _bdV('bd_gd_' + k),
+            done: _bdV('bd_gn_' + k), watch: _bdV('bd_gc_' + k)}}, k, 'Bucket saved.');
+}
+
+function bdNewBucket(){
+  openModal('New bucket',
+      '<div class="l2ban info">A bucket is a place a claim sits while somebody does one kind of '
+    + 'work on it. Give it a name staff will recognise.</div>'
+    + _bdInp('nb_en', 'Name staff see', '', 'text', 'e.g. Waiting for insurer reply')
+    + _bdInp('nb_hi', 'Same name in Hinglish (optional)', '')
+    + _bdInp('nb_ic', 'Icon (optional)', '📁')
+    + _bdInp('nb_am', 'Turn amber after (days)', 10, 'number')
+    + _bdInp('nb_rd', 'Turn red after (days)', 20, 'number')
+    + '<div class="bdsub" style="margin-top:.3rem">The new bucket starts empty and with no '
+    + 'routes. Open it afterwards to add steps, fields and its usual next steps.</div>'
+    + '<div id="bd_msg_new" style="font-size:.82rem;margin-top:.4rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn: closeModal},
+     {label:'Create bucket', cls:'btn-primary', fn:function(){
+       if (!_bdV('nb_en').trim()){ _bdSay('new', 'Give the bucket a name first.', false); return; }
+       _bdPost('bucket', {name_en: _bdV('nb_en').trim(), name_hi: _bdV('nb_hi'),
+         icon: _bdV('nb_ic'), amber_days: _bdN('nb_am'), red_days: _bdN('nb_rd')},
+         'new', 'Bucket created.').then(function(ok){ if (ok) closeModal(); });
+     }}], false);
+}
+
+function bdBucketOff(k){
+  const b = _bdGet(k);
+  ndConfirm('Turn off "' + (b.name_en || k) + '"?',
+    'It disappears from the workspace and from the move menus. Nothing already recorded is lost, '
+    + 'and you can turn it back on from this screen whenever you want.',
+    function(){ _bdPost('bucket', {bucket_key: k, active: 0}, k, 'Bucket turned off.'); },
+    'Turn it off');
+}
+function bdBucketOn(k){ _bdPost('bucket', {bucket_key: k, active: 1}, k, 'Bucket is back on.'); }
+
+function bdSubEdit(bk, sk){
+  const b = _bdGet(bk);
+  const s = (b.substates || []).filter(function(x){ return x.sub_key === sk; })[0] || {};
+  openModal(sk ? 'Change step' : 'New step in ' + (b.name_en || ''),
+      '<div class="l2ban info">A step says where inside this bucket the claim has reached — like '
+    + '"Annexure 5 sent" before "reply received".</div>'
+    + _bdInp('sd_en', 'Name staff see', s.name_en || '')
+    + _bdInp('sd_hi', 'Same name in Hinglish (optional)', s.name_hi || '')
+    + _bdInp('sd_am', 'Its own amber (days)', s.amber_days || '', 'number')
+    + _bdInp('sd_rd', 'Its own red (days)', s.red_days || '', 'number',
+        'Leave both blank to use the bucket’s clock. A step with its own deadline — an Annexure '
+        + 'waiting for a reply, say — usually needs a shorter one.')
+    + '<label class="bdchk"><input type="checkbox" id="sd_df"' + (s.is_default ? ' checked' : '')
+    + '><span>A claim arriving in this bucket starts on this step</span></label>'
+    + '<div id="bd_msg_sub" style="font-size:.82rem;margin-top:.4rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn: closeModal},
+     {label:'Save step', cls:'btn-primary', fn:function(){
+       if (!_bdV('sd_en').trim()){ _bdSay('sub', 'Give the step a name.', false); return; }
+       _bdPost('substate', {bucket_key: bk, sub_key: sk, name_en: _bdV('sd_en').trim(),
+         name_hi: _bdV('sd_hi'), amber_days: _bdN('sd_am'), red_days: _bdN('sd_rd'),
+         is_default: _bdChk('sd_df')}, 'sub', 'Step saved.')
+         .then(function(ok){ if (ok) closeModal(); });
+     }}], false);
+}
+
+function bdSubOff(bk, sk){
+  ndConfirm('Turn this step off?',
+    'It stops being offered on new work. If a claim is sitting on it right now you will be told '
+    + 'to move those claims first. You can turn it back on from this screen.',
+    function(){ _bdPost('substate', {bucket_key: bk, sub_key: sk, active: 0}, bk,
+                        'Step turned off.'); }, 'Turn it off');
+}
+function bdSubOn(bk, sk){
+  _bdPost('substate', {bucket_key: bk, sub_key: sk, active: 1}, bk, 'Step is back on.');
+}
+
+function bdFieldEdit(bk, fk){
+  const b = _bdGet(bk);
+  const f = (b.fields || []).filter(function(x){ return x.field_key === fk; })[0] || {};
+  const types = (_bdData.field_types || []).map(function(t){
+    return '<option value="' + t + '"' + (f.field_type === t ? ' selected' : '') + '>'
+      + esc(_bdTypeName(t)) + '</option>'; }).join('');
+  openModal(fk ? 'Change field' : 'New field in ' + (b.name_en || ''),
+      '<div class="l2ban info">A field is one thing staff write down while the claim is in this '
+    + 'bucket — a date, an amount, a note.</div>'
+    + _bdInp('fd_en', 'Label staff see', f.label_en || '')
+    + _bdInp('fd_hi', 'Same label in Hinglish (optional)', f.label_hi || '')
+    + '<div class="l2fld"><label>What kind of answer</label><select id="fd_ty">' + types
+    + '</select></div>'
+    + '<div class="l2fld"><label>If it is a list, the choices — one per line</label>'
+    + '<textarea id="fd_ch" rows="3" maxlength="2000">' + esc(f.choices || '') + '</textarea></div>'
+    + _bdInp('fd_hn', 'Small hint shown under it (optional)', f.hint || '')
+    + '<label class="bdchk"><input type="checkbox" id="fd_rq"'
+    + (f.required_exit ? ' checked' : '')
+    + '><span>Must be filled before the claim can move on from this bucket</span></label>'
+    + (f.answers ? '<div class="l2ban amber" style="margin-top:.5rem">' + f.answers + ' claim'
+        + (f.answers === 1 ? ' has' : 's have') + ' an answer here already. Renaming is safe — '
+        + 'those answers stay exactly as they are.</div>' : '')
+    + '<div id="bd_msg_fld" style="font-size:.82rem;margin-top:.4rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn: closeModal},
+     {label:'Save field', cls:'btn-primary', fn:function(){
+       if (!_bdV('fd_en').trim()){ _bdSay('fld', 'Give the field a label.', false); return; }
+       if (_bdV('fd_ty') === 'choice' && !_bdV('fd_ch').trim()){
+         _bdSay('fld', 'A list needs its choices, one per line.', false); return; }
+       _bdPost('field', {bucket_key: bk, field_key: fk, label_en: _bdV('fd_en').trim(),
+         label_hi: _bdV('fd_hi'), field_type: _bdV('fd_ty'), choices: _bdV('fd_ch'),
+         hint: _bdV('fd_hn'), required_exit: _bdChk('fd_rq')}, 'fld', 'Field saved.')
+         .then(function(ok){ if (ok) closeModal(); });
+     }}], false);
+}
+
+function bdFieldOff(bk, fk, answers){
+  ndConfirm('Turn this field off?',
+    answers
+      ? (answers + ' claim(s) already have an answer recorded here. Those answers are kept — the '
+         + 'field simply stops appearing on new work, and you can turn it back on.')
+      : 'It stops appearing on new work. You can turn it back on from this screen.',
+    function(){ _bdPost('field', {bucket_key: bk, field_key: fk, active: 0}, bk,
+                        'Field turned off.'); }, 'Turn it off');
+}
+function bdFieldOn(bk, fk){
+  _bdPost('field', {bucket_key: bk, field_key: fk, active: 1}, bk, 'Field is back on.');
+}
+
+function bdRouteAdd(bk){
+  // Every move already demands a comment, so every route is marked as needing one - the rule
+  // lives in one place and a new route cannot quietly opt out of it.
+  _bdPost('route', {from_key: bk, to_key: _bdV('bd_rt_' + bk), kind: _bdV('bd_rk_' + bk),
+    needs_reason: 1}, bk, 'Next step added.');
+}
+
+function bdRouteOff(bk, to){
+  ndConfirm('Remove this as a usual next step?',
+    'Staff can still move a claim there at any time — it just stops being offered first, and is '
+    + 'recorded as off the usual path.',
+    function(){ _bdPost('route', {from_key: bk, to_key: to, remove: true}, bk,
+                        'Next step removed.'); }, 'Remove it');
+}
+
+window.loadBucketDesigner = loadBucketDesigner; window.bdToggle = bdToggle;
+window.bdSaveBucket = bdSaveBucket; window.bdNewBucket = bdNewBucket;
+window.bdBucketOff = bdBucketOff; window.bdBucketOn = bdBucketOn;
+window.bdSubEdit = bdSubEdit; window.bdSubOff = bdSubOff; window.bdSubOn = bdSubOn;
+window.bdFieldEdit = bdFieldEdit; window.bdFieldOff = bdFieldOff; window.bdFieldOn = bdFieldOn;
+window.bdRouteAdd = bdRouteAdd; window.bdRouteOff = bdRouteOff;
+
 
 // ── Channel Partners (CP) ───────────────────────────────────────────────────
 // Agents who send us business but stay off the record as subscribers. A sub-admin can propose

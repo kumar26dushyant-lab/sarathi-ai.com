@@ -6542,6 +6542,142 @@ class _BucketFieldReq(BaseModel):
     value: str = Field("", max_length=8000)
 
 
+class _BucketSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field("", max_length=40)
+    name_en: str = Field("", max_length=60)
+    name_hi: str = Field("", max_length=60)
+    icon: str = Field("", max_length=8)
+    colour: str = Field("", max_length=16)
+    amber_days: Optional[int] = None
+    red_days: Optional[int] = None
+    waits_on: str = Field("", max_length=20)
+    sort_order: Optional[int] = None
+    active: Optional[int] = None
+    guide: dict = Field(default_factory=dict)
+
+
+class _SubSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field(..., max_length=40)
+    sub_key: str = Field("", max_length=40)
+    name_en: str = Field("", max_length=60)
+    name_hi: str = Field("", max_length=60)
+    amber_days: Optional[int] = None
+    red_days: Optional[int] = None
+    waits_on: str = Field("", max_length=20)
+    sort_order: Optional[int] = None
+    is_default: Optional[int] = None
+    active: Optional[int] = None
+
+
+class _FieldSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field(..., max_length=40)
+    field_key: str = Field("", max_length=60)
+    label_en: str = Field("", max_length=80)
+    label_hi: str = Field("", max_length=80)
+    field_type: str = Field("text", max_length=16)
+    choices: str = Field("", max_length=2000)
+    hint: str = Field("", max_length=300)
+    required_exit: Optional[int] = None
+    sort_order: Optional[int] = None
+    active: Optional[int] = None
+
+
+class _RouteSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_key: str = Field(..., max_length=40)
+    to_key: str = Field(..., max_length=40)
+    kind: str = Field("forward", max_length=12)
+    needs_reason: Optional[int] = None
+    remove: bool = False
+
+
+@app.get("/nidaan/ops/api/buckets/designer")
+async def ops_bucket_designer(request: Request):
+    """The whole process, with how much work each part holds. Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    return await _bk.designer_view()
+
+
+@app.post("/nidaan/ops/api/buckets/designer/bucket")
+@limiter.limit("60/minute")
+async def ops_bucket_save(body: _BucketSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_bucket(
+        bucket_key=body.bucket_key, name_en=body.name_en, name_hi=body.name_hi, icon=body.icon,
+        colour=body.colour, amber_days=body.amber_days, red_days=body.red_days,
+        waits_on=body.waits_on, sort_order=body.sort_order, active=body.active,
+        guide=body.guide, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design", "bucket", res.get("bucket_key", ""),
+                     f"{body.name_en} active={body.active}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/substate")
+@limiter.limit("60/minute")
+async def ops_bucket_sub_save(body: _SubSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_substate(
+        bucket_key=body.bucket_key, sub_key=body.sub_key, name_en=body.name_en,
+        name_hi=body.name_hi, amber_days=body.amber_days, red_days=body.red_days,
+        waits_on=body.waits_on, sort_order=body.sort_order, is_default=body.is_default,
+        active=body.active, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_sub", "bucket", body.bucket_key,
+                     f"{body.name_en or body.sub_key}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/field")
+@limiter.limit("60/minute")
+async def ops_bucket_field_save(body: _FieldSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_field(
+        bucket_key=body.bucket_key, field_key=body.field_key, label_en=body.label_en,
+        label_hi=body.label_hi, field_type=body.field_type, choices=body.choices,
+        hint=body.hint, required_exit=body.required_exit, sort_order=body.sort_order,
+        active=body.active, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_field", "bucket", body.bucket_key,
+                     f"{body.label_en or body.field_key}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/route")
+@limiter.limit("60/minute")
+async def ops_bucket_route_save(body: _RouteSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_route(from_key=body.from_key, to_key=body.to_key, kind=body.kind,
+                                needs_reason=body.needs_reason, remove=body.remove,
+                                actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_route", "bucket", body.from_key,
+                     f"{'removed' if body.remove else body.kind} -> {body.to_key}")
+    return res
+
+
 @app.get("/nidaan/ops/api/buckets/config")
 async def ops_buckets_config(request: Request):
     """Every bucket, its steps, its fields and its routes - one call, so the workspace can draw
@@ -8672,7 +8808,12 @@ async def ops_cp_list(request: Request, approved_only: bool = False):
     import biz_nidaan_channel_partners as _cp
     is_admin = (caller or {}).get("role") in ("super_admin", "sub_super_admin")
     if approved_only or not is_admin:
-        return {"partners": await _cp.list_partners(approved_only=True), "can_approve": False}
+        # A staffer sees the selectable list plus anything they proposed themselves, so their
+        # own pending entry does not disappear the moment they add it.
+        return {"partners": await _cp.list_partners(
+            approved_only=True,
+            include_proposed_by=None if approved_only else (caller or {}).get("staff_id")),
+            "can_approve": False}
     return {"partners": await _cp.list_partners(),
             "pending": await _cp.pending_count(),
             "can_approve": (caller or {}).get("role") == "super_admin"}
@@ -8681,12 +8822,19 @@ async def ops_cp_list(request: Request, approved_only: bool = False):
 @app.post("/nidaan/ops/api/channel-partners")
 @limiter.limit("30/minute")
 async def ops_cp_create(body: _CpReq, request: Request):
-    """Propose a Channel Partner. A sub-admin's entry starts PENDING and is invisible in the
-    claim form until a super-admin approves it; a super-admin's own entry is approved on
-    creation and recorded as approved by them."""
+    """Propose a Channel Partner.
+
+    ANY staff member may propose one - they are the people who meet partners. It starts PENDING
+    and is invisible on the claim form until a super-admin approves it; a super-admin's own entry
+    is approved on creation and recorded as approved by them.
+
+    This used to require sub_super_admin AND lived on a super-admin-only screen, so in practice
+    only super-admins could create one - and their own entries auto-approve. The approval step
+    existed and never ran.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    caller = _require_staff(request, "team_member")
     import biz_nidaan_channel_partners as _cp
     res = await _cp.create_partner(
         name=body.name, email=body.email, phone=body.phone, company=body.company,

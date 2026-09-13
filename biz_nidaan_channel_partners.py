@@ -6,8 +6,8 @@ Nidaan subscriber. They ask one of our staff to file the claim; we still need to
 introduced it so commission can be settled and referrals tracked.
 
 The control that matters here is the approval gate. A CP is a name that money will eventually be
-paid against, so a sub-admin can PROPOSE one but only a super-admin can approve it, and we record
-WHICH super-admin did — an unapproved CP is invisible in the claim form, so it can never quietly
+paid against, so ANY staff member can PROPOSE one - they are the people who actually meet the
+partners - but only a super-admin can approve it, and we record WHICH super-admin did — an unapproved CP is invisible in the claim form, so it can never quietly
 appear on a claim. A super-admin creating one approves it in the same act (recorded as such).
 """
 from __future__ import annotations
@@ -35,12 +35,21 @@ def _clean_email(v: str) -> str:
     return v if ("@" in v and "." in v.split("@")[-1]) else ""
 
 
-async def list_partners(*, approved_only: bool = False) -> list[dict]:
-    """All CPs (admin view), or only the selectable ones (staff view)."""
+async def list_partners(*, approved_only: bool = False,
+                        include_proposed_by: Optional[int] = None) -> list[dict]:
+    """All CPs (admin view), or only the selectable ones (staff view).
+
+    A staffer who proposed a partner also sees their OWN proposal while it waits - otherwise it
+    vanishes the moment they add it, they assume it failed, and they add it again.
+    """
     q = "SELECT * FROM nidaan_channel_partners"
     params: tuple = ()
     if approved_only:
-        q += " WHERE status='approved'"
+        if include_proposed_by:
+            q += " WHERE (status='approved' OR created_by_staff_id=?)"
+            params = (int(include_proposed_by),)
+        else:
+            q += " WHERE status='approved'"
     q += " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, name COLLATE NOCASE"
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
