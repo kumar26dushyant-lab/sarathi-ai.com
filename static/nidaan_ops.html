@@ -11576,37 +11576,110 @@ function l2RenderStart(){
     + '</div>';
   if (!_l2Wait.length){ m.innerHTML = head; return; }
   const rows = _l2Wait.map(function(x){
+    // Readiness decides what this row offers. A claim that cannot be worked should not present
+    // a Start button as though it can - it should present the reason it cannot.
+    const blocks = x.blocks || [], fixes = x.fixes || [];
+    const state = blocks.length ? 'red' : (fixes.length ? 'amber' : 'ok');
+    const label = blocks.length ? (blocks.length + ' blocking')
+                : (fixes.length ? (fixes.length + ' missing') : 'Ready');
+    const act = blocks.length
+      ? '<button class="l2mv d" onclick="l2Why(' + x.claim_id + ')">Why not?</button>'
+      : '<button class="l2mv p" onclick="l2Start(' + x.claim_id + ',this)">⚖️ Start Level-2</button>';
     return '<tr>'
       + '<td><b>NP-' + x.claim_id + '</b></td>'
       + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
-      + '<td>' + esc(x.insurer || '—') + '</td>'
+      + '<td>' + (x.insurer ? esc(x.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
       + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
       + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '') + '</td>'
       + '<td><span class="l2age ' + ((x.waiting_days||0) > 14 ? 'red' : ((x.waiting_days||0) > 7 ? 'amber' : 'ok'))
       +   '">' + (x.waiting_days == null ? '—' : x.waiting_days + 'd') + '</span></td>'
-      + '<td style="white-space:nowrap">'
-      +   '<button class="l2mv p" onclick="l2Start(' + x.claim_id + ',this)">⚖️ Start Level-2</button>'
+      + '<td><button class="l2mv ' + (state === 'red' ? 'd' : (state === 'amber' ? 'g' : 'g'))
+      +   '" onclick="l2Why(' + x.claim_id + ')">'
+      +   (state === 'ok' ? '✓ ' : '⚠ ') + label + '</button></td>'
+      + '<td style="white-space:nowrap">' + act
       +   '<button class="l2mv g" onclick="openClaimDrawer(' + x.claim_id + ')">Open claim</button>'
       + '</td></tr>';
   }).join('');
+  const notReady = _l2Wait.filter(function(x){ return (x.blocks||[]).length; }).length;
   m.innerHTML = head
+    + (notReady ? '<div class="l2ban red">⛔ ' + notReady + ' cannot be started yet — something '
+        + 'essential is missing. Press <b>Why not?</b> on the row to see exactly what.</div>' : '')
     + '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
     + '<th>Insurance Co.</th><th style="text-align:right">Disputed</th><th>Origin</th>'
-    + '<th>Waiting</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    + '<th>Waiting</th><th>Ready?</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
-async function l2Start(claimId, btn){
+async function l2Start(claimId, btn, force){
   if (_l2Busy) return;
-  if (!confirm('Start Level-2 processing on NP-' + claimId + '?\n\nIt moves into the first bucket '
-      + 'and whoever is on duty there picks it up.')) return;
+  if (!force && !confirm('Start Level-2 processing on NP-' + claimId + '?\n\nIt moves into the first '
+      + 'bucket and whoever is on duty there picks it up.')) return;
   _l2Busy = true; if (btn) btn.disabled = true;
   try{
-    const r = await API('/cases/' + claimId + '/pipeline/start', {method:'POST'});
+    const r = await API('/cases/' + claimId + '/pipeline/start' + (force ? '?force=1' : ''), {method:'POST'});
     const d = await r.json().catch(function(){ return {}; });
-    if (r.ok){ ndUI.toast('NP-' + claimId + ' → ' + (d.name || 'started'), 'success'); await loadL2(); }
-    else ndUI.toast(_l2Err(d, 'Could not start that'), 'error');
+    if (r.ok){
+      try{ closeModal(); }catch(e){}
+      ndUI.toast('NP-' + claimId + ' \u2192 ' + (d.name || 'started'), 'success');
+      await loadL2();
+    } else {
+      // A refusal here is almost always a readiness gap, and the useful response is to show
+      // exactly what is missing rather than a toast the person cannot act on.
+      ndUI.toast(_l2Err(d, 'Could not start that'), 'error');
+      l2Why(claimId);
+    }
   }catch(e){ ndUI.toast('Could not start that.', 'error'); }
   finally{ _l2Busy = false; if (btn) btn.disabled = false; }
+}
+
+// What is missing, and who to ring about it. Opened from the row, and from a refused start.
+async function l2Why(claimId){
+  openModal('NP-' + claimId + ' \u2014 ready for Level-2?',
+    '<div class="empty"><div class="ei">\u23f3</div><p>Checking\u2026</p></div>', [], false);
+  let d = null;
+  try{
+    const r = await API('/cases/' + claimId + '/readiness');
+    if (r.ok) d = await r.json();
+  }catch(e){}
+  const body = document.getElementById('modalBody');
+  if (!d || !d.ok){
+    body.innerHTML = '<div class="empty"><div class="ei">\u26a0\ufe0f</div><p>Could not check.</p></div>';
+    return;
+  }
+  const line = function(i){
+    const tone = i.ok ? 'var(--nd-success-text)'
+      : (i.severity === 'block' ? 'var(--nd-danger-text)' : 'var(--nd-warning-text)');
+    return '<div style="display:flex;gap:.5rem;padding:.38rem 0;border-bottom:1px solid var(--nd-border)">'
+      + '<span style="color:' + tone + ';font-weight:800">' + (i.ok ? '\u2713' : (i.severity === 'block' ? '\u26d4' : '\u26a0')) + '</span>'
+      + '<span style="flex:1;min-width:0">'
+      +   '<span style="font-weight:600;color:var(--nd-text-primary)">' + esc(i.label) + '</span>'
+      +   (i.detail ? '<div style="font-size:.8rem;color:var(--nd-text-muted)">' + esc(i.detail) + '</div>' : '')
+      +   (!i.ok && i.fix ? '<div style="font-size:.76rem;color:var(--nd-text-faint)">' + esc(i.fix) + '</div>' : '')
+      + '</span></div>';
+  };
+  const blocks = (d.blocks || []), fixes = (d.fixes || []);
+  const okItems = (d.items || []).filter(function(i){ return i.ok; });
+  body.innerHTML =
+      '<div class="l2ban ' + (blocks.length ? 'red' : (fixes.length ? 'amber' : 'info')) + '">'
+    +   (blocks.length
+        ? '\u26d4 This claim cannot start until the items below are fixed.'
+        : (fixes.length
+          ? '\u26a0 It can start, but these will cost time later if they are not sorted now.'
+          : '\u2713 Everything Level-2 needs is present.'))
+    + '</div>'
+    + '<div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.4rem">'
+    +   'Came in as: <b>' + esc(d.origin || '\u2014') + '</b></div>'
+    + (blocks.length ? '<div class="l2sec">Must be fixed first</div>' + blocks.map(line).join('') : '')
+    + (fixes.length ? '<div class="l2sec">Should be sorted now</div>' + fixes.map(line).join('') : '')
+    + '<details style="margin-top:.6rem"><summary style="cursor:pointer;font-size:.82rem;color:var(--nd-text-muted)">'
+    +   'Show the ' + okItems.length + ' that are fine</summary>' + okItems.map(line).join('') + '</details>'
+    + '<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.7rem">'
+    +   '<button class="l2mv g" onclick="closeModal();openClaimDrawer(' + claimId + ')">Open the claim to fix</button>'
+    +   (blocks.length
+        ? (_role === 'super_admin'
+          ? '<button class="l2mv d" onclick="l2Start(' + claimId + ',null,true)">Start anyway (recorded)</button>'
+          : '')
+        : '<button class="l2mv p" onclick="l2Start(' + claimId + ',null,true)">\u2696\ufe0f Start Level-2</button>')
+    + '</div>';
 }
 
 // ── one bucket ───────────────────────────────────────────────────────────────
@@ -12000,7 +12073,7 @@ async function l2SetSub(sub, el){
 window.loadL2 = loadL2; window.l2Pick = l2Pick; window.l2Sub = l2Sub; window.l2Search = l2Search;
 window.l2Export = l2Export; window.l2Start = l2Start; window.l2Move = l2Move;
 window.l2MoveMenu = l2MoveMenu; window.l2Open = l2Open; window.l2Field = l2Field;
-window.l2SetSub = l2SetSub; window.l2MoveFromCase = l2MoveFromCase;
+window.l2SetSub = l2SetSub; window.l2MoveFromCase = l2MoveFromCase; window.l2Why = l2Why;
 window.l2MoveMenuCase = l2MoveMenuCase;
 
 function deskGuide(key){

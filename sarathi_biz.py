@@ -6472,7 +6472,11 @@ async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
     # Intake duty, not admins: starting a paid case is everyday work for whoever is rostered.
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    res = await _bk.start_l2(claim_id, actor=_actor_label(caller))
+    # Only a super-admin may start a claim that has not passed its readiness checks, and the
+    # override is recorded like any other act.
+    _force = ((request.query_params.get("force") or "") == "1"
+              and (caller or {}).get("role") == "super_admin")
+    res = await _bk.start_l2(claim_id, actor=_actor_label(caller), force=_force)
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
     await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
@@ -6580,7 +6584,26 @@ async def ops_bucket_waiting(request: Request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    return {"claims": await _bk.waiting_to_start()}
+    rows = await _bk.waiting_to_start()
+    rd = await _bk.readiness_many([r["claim_id"] for r in rows])
+    for r in rows:
+        x = rd.get(r["claim_id"]) or {}
+        r["ready"] = x.get("ready", False)
+        r["can_start"] = x.get("can_start", True)
+        r["missing_count"] = x.get("missing_count", 0)
+        r["blocks"] = x.get("blocks", [])
+        r["fixes"] = x.get("fixes", [])
+    return {"claims": rows}
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/readiness")
+async def ops_case_readiness(claim_id: int, request: Request):
+    """What is still missing before this claim can be worked in the buckets."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.readiness(claim_id)
 
 
 @app.get("/nidaan/ops/api/cases/{claim_id}/bucket")

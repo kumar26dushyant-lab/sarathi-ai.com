@@ -488,7 +488,7 @@ async def _log(claim_id: int, summary: str, actor: str) -> None:
         logger.warning("bucket log failed for %s: %s", claim_id, e)
 
 
-async def start_l2(claim_id: int, *, actor: str = "") -> dict:
+async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> dict:
     """Put a paid, winnable claim into the entry bucket. The act that begins Level-2 work."""
     row = await _claim_row(claim_id)
     if not row or row.get("archived") or (row.get("status") or "") in ("closed", "withdrawn"):
@@ -501,6 +501,16 @@ async def start_l2(claim_id: int, *, actor: str = "") -> dict:
             return {"ok": False, "error": "The review has not said this case can be fought yet."}
         return {"ok": False,
                 "error": "The Level-2 fee has not been paid, so the work has not been bought yet."}
+
+    # Everything Level-2 runs on must be true BEFORE the claim enters the buckets. A gap here
+    # costs weeks once the work is under way, and by then the person who could have fixed it in
+    # ten seconds has moved on. `force` exists for a super-admin who knows better.
+    if not force:
+        rd = await readiness(claim_id)
+        if rd.get("ok") and rd.get("blocks"):
+            return {"ok": False, "readiness": rd,
+                    "error": "Not ready to start: " + "; ".join(
+                        "%s - %s" % (b["label"], b["detail"]) for b in rd["blocks"][:3])}
 
     entry = None
     for b in await buckets():
@@ -949,3 +959,196 @@ async def migrate_legacy_stages() -> int:
     if n:
         logger.info("migrated %d claim(s) from first-generation stage names to buckets", n)
     return n
+
+
+# ── is this claim fit to start? ──────────────────────────────────────────────
+# Everything Level-2 runs on has to be true BEFORE a claim enters the buckets, because each of
+# these gaps costs weeks once the work is under way: a complainant nobody can reach, an insurance
+# company recorded as a person's name, no authorisation to act, a channel we cannot copy in.
+#
+# Two severities, and the difference matters.
+#   BLOCK  the work literally cannot proceed - no way to reach anyone, or no company to write to.
+#   FIX    the work can start but this must be sorted, and it is named loudly until it is.
+#
+# The checks name the CHANNEL too, because "no mobile number" is useless without "whose".
+
+import re as _re
+
+_PHONE_RX = _re.compile(r"^(?:\+?91[\-\s]?)?[6-9]\d{9}$")
+_EMAIL_RX = _re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
+# Words that show up when somebody types a person into the insurance-company box. Not a
+# guarantee, but it catches the common case and asks a human to look.
+_NOT_A_COMPANY = _re.compile(
+    r"\b(insurance|assurance|general|health|life|bupa|allianz|lombard|ergo|tokio|sompo|"
+    r"gic|lic|acko|digit|niva|star|care|manipal|chola|shriram|magma|navi|zuno|united|"
+    r"oriental|national|reliance|iffco|royal|universal|future|liberty|kotak|birla|"
+    r"metlife|hdfc|icici|sbi|tata|max|pnb|new india)\b", _re.I)
+
+
+def _clean_phone(v: str) -> str:
+    return _re.sub(r"[^\d+]", "", (v or "").strip())
+
+
+def looks_like_a_person(name: str) -> bool:
+    """Two or three capitalised words and no insurance vocabulary - almost certainly a person."""
+    n = (name or "").strip()
+    if not n:
+        return False
+    if _NOT_A_COMPANY.search(n):
+        return False
+    words = [w for w in _re.split(r"\s+", n) if w]
+    return 1 < len(words) <= 4
+
+
+async def readiness(claim_id: int) -> dict:
+    """What is still missing before this claim can be worked in the buckets.
+
+    Returns every check with a severity, what is wrong, and - where we can - which channel to
+    ring about it. Nothing here guesses: each item is a fact that is present or absent.
+    """
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT claim_id, account_id, claim_type, insured_name, insured_phone, insured_email, "
+            "complainant_name, complainant_phone, complainant_email, insurer_name, policy_no, "
+            "disputed_amount, branch_code, channel_partner_id, origin, raised_by_name, raised_via, "
+            "review_outcome, l2_payment_status, pipeline_stage "
+            "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
+        if not r:
+            return {"ok": False, "error": "not_found"}
+        row = dict(r)
+
+        branch = None
+        if (row.get("branch_code") or "").strip():
+            b = await (await c.execute(
+                "SELECT branch_code, name, contact_email, contact_phone FROM nidaan_branches "
+                "WHERE branch_code=?", (row["branch_code"].strip(),))).fetchone()
+            branch = dict(b) if b else None
+
+        cp = None
+        if row.get("channel_partner_id"):
+            p = await (await c.execute(
+                "SELECT cp_id, name, email, phone FROM nidaan_channel_partners WHERE cp_id=?",
+                (row["channel_partner_id"],))).fetchone()
+            cp = dict(p) if p else None
+
+        acct = None
+        if row.get("account_id"):
+            a = await (await c.execute(
+                "SELECT account_id, owner_name, firm_name, email, phone FROM nidaan_accounts "
+                "WHERE account_id=?", (row["account_id"],))).fetchone()
+            acct = dict(a) if a else None
+
+        portal = await (await c.execute(
+            "SELECT consent_accepted_at, access_token FROM nidaan_claimant_portal "
+            "WHERE claim_id=? ORDER BY portal_id DESC LIMIT 1", (int(claim_id),))).fetchone()
+        portal = dict(portal) if portal else None
+
+        docs = await (await c.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN COALESCE(received,0)=1 THEN 1 ELSE 0 END) AS done "
+            "FROM nidaan_claim_doc_checklist WHERE claim_id=? AND COALESCE(required,1)=1",
+            (int(claim_id),))).fetchone()
+        docs = dict(docs) if docs else {"total": 0, "done": 0}
+
+    items = []
+
+    def add(key, label, sev, ok, detail="", fix=""):
+        items.append({"key": key, "label": label, "severity": sev, "ok": bool(ok),
+                      "detail": detail, "fix": fix})
+
+    # ── reaching the complainant ─────────────────────────────────────────────
+    ph = _clean_phone(row.get("complainant_phone") or row.get("insured_phone") or "")
+    em = (row.get("complainant_email") or row.get("insured_email") or "").strip()
+    ph_ok = bool(_PHONE_RX.match(ph))
+    em_ok = bool(_EMAIL_RX.match(em))
+
+    add("complainant_phone", "Complainant's mobile", "fix", ph_ok,
+        ("Not recorded" if not ph else ("Does not look like an Indian mobile: " + ph)) if not ph_ok else ph,
+        "Edit the claim and correct the mobile number.")
+    add("complainant_email", "Complainant's email", "fix", em_ok,
+        ("Not recorded" if not em else ("Does not look like an email: " + em)) if not em_ok else em,
+        "Consolidation, Escalation and Lokpal all run on email - get one before those stages.")
+    # One of the two is the hard floor: with neither, nobody can be told anything at all.
+    add("reachable", "Some way to reach the complainant", "block", ph_ok or em_ok,
+        "" if (ph_ok or em_ok) else "No usable mobile and no usable email",
+        "Ask the channel who brought the case for a working contact.")
+
+    # ── the insurance company ────────────────────────────────────────────────
+    ins = (row.get("insurer_name") or "").strip()
+    if not ins:
+        add("insurer", "Insurance company", "block", False, "Not recorded",
+            "Pick it from the list on the claim - it decides who we write to.")
+    elif looks_like_a_person(ins):
+        add("insurer", "Insurance company", "block", False,
+            "\"%s\" looks like a person, not a company" % ins,
+            "Someone typed a name into this field. Pick the real company from the list.")
+    else:
+        add("insurer", "Insurance company", "fix", True, ins)
+
+    add("policy_no", "Policy number", "fix", bool((row.get("policy_no") or "").strip()),
+        (row.get("policy_no") or "").strip() or "Not recorded")
+    add("amount", "Disputed amount", "fix", bool(row.get("disputed_amount")),
+        ("Rs %s" % row["disputed_amount"]) if row.get("disputed_amount") else "Not recorded",
+        "The fee is a percentage of this, so it cannot stay blank.")
+
+    # ── permission to act ────────────────────────────────────────────────────
+    consent = bool(portal and portal.get("consent_accepted_at"))
+    add("authorization", "Signed authorisation", "fix", consent,
+        ("Accepted " + str(portal["consent_accepted_at"])[:10]) if consent
+        else ("Link issued, not yet accepted" if portal else "No portal link issued yet"),
+        "Open the claim and push the authorisation to the complainant.")
+
+    # ── the documents ────────────────────────────────────────────────────────
+    total = int(docs.get("total") or 0)
+    done = int(docs.get("done") or 0)
+    add("checklist", "Document checklist", "fix", total > 0,
+        ("%d of %d collected" % (done, total)) if total else "No checklist generated yet",
+        "The checklist comes from the claim type - set the type on the claim.")
+
+    # ── the channel that brought it, so they can be copied in ────────────────
+    chans = []
+    if branch:
+        chans.append(("branch", "Branch %s" % (branch.get("name") or branch.get("branch_code")),
+                      branch.get("contact_phone"), branch.get("contact_email")))
+    if cp:
+        chans.append(("cp", "Channel partner %s" % (cp.get("name") or cp.get("cp_id")),
+                      cp.get("phone"), cp.get("email")))
+    if acct:
+        chans.append(("subscriber", "Subscriber %s" % (acct.get("owner_name")
+                                                       or acct.get("firm_name") or ""),
+                      acct.get("phone"), acct.get("email")))
+    for kind, label, cph, cem in chans:
+        cph_ok = bool(_PHONE_RX.match(_clean_phone(cph or "")))
+        cem_ok = bool(_EMAIL_RX.match((cem or "").strip()))
+        add("channel_" + kind, label, "fix", cph_ok or cem_ok,
+            (", ".join([x for x in [(_clean_phone(cph or "") if cph_ok else ""),
+                                    ((cem or "").strip() if cem_ok else "")] if x])
+             or "No usable phone or email on record"),
+            "They are copied on every update, so a bad contact means they hear nothing.")
+    if not chans:
+        add("channel_none", "Where it came from", "fix", True, "Direct - no channel to copy in")
+
+    blocks = [i for i in items if i["severity"] == "block" and not i["ok"]]
+    fixes = [i for i in items if i["severity"] == "fix" and not i["ok"]]
+    return {
+        "ok": True,
+        "claim_id": int(claim_id),
+        "ready": not blocks and not fixes,
+        "can_start": not blocks,
+        "blocks": blocks, "fixes": fixes, "items": items,
+        "missing_count": len(blocks) + len(fixes),
+        "origin": _origin_of(row),
+    }
+
+
+async def readiness_many(claim_ids: list) -> dict:
+    """Readiness for a list of claims, for the To-start table."""
+    out = {}
+    for cid in (claim_ids or [])[:300]:
+        try:
+            out[cid] = await readiness(cid)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("readiness failed for %s: %s", cid, e)
+    return out
