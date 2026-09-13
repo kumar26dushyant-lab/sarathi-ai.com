@@ -419,6 +419,8 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
         c.row_factory = aiosqlite.Row
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
+            # payment_status too: a subscription IS a paid Level-2, and l2_fee_covered() reads it.
+            "payment_status, "
             "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
             "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by, "
             "l2_handover_note "
@@ -767,7 +769,8 @@ _CLAIM_COLS = (
     "c.claim_id, c.account_id, c.claim_type, c.insured_name, c.complainant_name, "
     "c.complainant_phone, c.complainant_email, c.insured_phone, c.insured_email, "
     "c.insurer_name, c.policy_no, c.disputed_amount, c.branch_code, c.status, "
-    "c.review_outcome, c.l2_payment_status, c.assigned_to_staff_id, c.created_at, "
+    "c.review_outcome, c.l2_payment_status, c.payment_status, c.assigned_to_staff_id, "
+    "c.created_at, "
     "c.pipeline_stage, c.pipeline_sub, c.pipeline_stage_at, c.pipeline_entered_at, "
     "c.pipeline_by, c.pipeline_from, c.hold_until, c.raised_by_name, c.raised_via, "
     "c.channel_partner_id, c.origin"
@@ -1107,7 +1110,7 @@ async def readiness(claim_id: int) -> dict:
             "SELECT claim_id, account_id, claim_type, insured_name, insured_phone, insured_email, "
             "complainant_name, complainant_phone, complainant_email, insurer_name, policy_no, "
             "disputed_amount, branch_code, channel_partner_id, origin, raised_by_name, raised_via, "
-            "review_outcome, l2_payment_status, pipeline_stage "
+            "review_outcome, l2_payment_status, payment_status, pipeline_stage "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
         if not r:
             return {"ok": False, "error": "not_found"}
@@ -1267,6 +1270,7 @@ async def _handover_row(claim_id: int) -> Optional[dict]:
         c.row_factory = aiosqlite.Row
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
+            "payment_status, "
             "pipeline_stage, l2_handover_at, l2_handover_by, l2_handover_note "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
@@ -1393,7 +1397,10 @@ async def pending_handover(limit: int = 300) -> list:
             "SELECT %s FROM nidaan_claims c WHERE COALESCE(c.archived,0)=0 "
             "AND COALESCE(c.pipeline_stage,'')='' AND c.l2_handover_at IS NULL "
             "AND LOWER(COALESCE(c.review_outcome,''))='can_fight' "
-            "AND LOWER(COALESCE(c.l2_payment_status,''))='paid' "
+            # All three routes we sell the work through, matching l2_fee_covered(). The old
+            # single-route test hid every subscription claim from this list.
+            "AND (LOWER(COALESCE(c.l2_payment_status,''))='paid' "
+            "     OR LOWER(COALESCE(c.payment_status,'')) IN ('paid','subscription')) "
             "ORDER BY c.created_at ASC LIMIT ?" % _CLAIM_COLS, (int(limit),))).fetchall()]
     return [{"claim_id": r["claim_id"],
              "who": (r.get("complainant_name") or r.get("insured_name") or "").strip(),

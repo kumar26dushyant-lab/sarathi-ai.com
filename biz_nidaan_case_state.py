@@ -204,13 +204,25 @@ def next_stage(stage: str) -> str:
 def l2_ready(claim: dict) -> bool:
     """Is this case qualified to enter the post-L2 pipeline?
 
-    Two facts, both already recorded, both required: we reviewed it and said it can be fought,
-    AND the L2 fee was paid. Reviewing alone is not qualification — 45 live cases sit at
-    can_fight with no payment, and putting those into the pipeline would bury the work that has
-    actually been bought.
+    Two facts, both already recorded: we reviewed it and said it can be fought, and the work has
+    been paid for - by ANY of the three routes we sell it through (a paid L2 fee, a paid claim,
+    or a subscription the customer is already paying for).
+
+    This file used to hold its own copy of that rule, accepting only `l2_payment_status='paid'`.
+    Two copies of one rule is how the screens came to disagree about NP-112, so there is one
+    copy now and it lives with the buckets.
+
+    It DESCRIBES a claim; it forbids nothing. A case that is not ready is not refused - it moves
+    with a reason, and the reason goes on the claim.
     """
-    return ((claim.get("review_outcome") or "").lower() == "can_fight"
-            and (claim.get("l2_payment_status") or "").lower() == "paid")
+    if (claim.get("review_outcome") or "").lower() != "can_fight":
+        return False
+    try:
+        import biz_nidaan_buckets as _bk
+        return _bk.l2_fee_covered(claim)
+    except Exception:
+        return ((claim.get("l2_payment_status") or "").lower() == "paid"
+                or (claim.get("payment_status") or "").lower() in ("paid", "subscription"))
 
 
 def in_pipeline(claim: dict) -> bool:
@@ -675,6 +687,7 @@ async def _pipeline_row(claim_id: int) -> dict | None:
         c.row_factory = aiosqlite.Row
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
+            "payment_status, "
             "pipeline_stage, pipeline_stage_at, complainant_name, insured_name "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     if not r:
