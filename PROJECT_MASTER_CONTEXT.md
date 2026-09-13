@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 12, 2026. Newest work is at the BOTTOM — read **A93** first, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 13, 2026. Newest work is at the BOTTOM — read **A93** first, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -6414,4 +6414,39 @@ No DB **column** contains "claimant", so the rename carried zero data risk. Veri
 
 ### Wording for Tier II/III
 "Insurer" → **"Insurance Company"** on every form a complainant fills (dashboard claim form, free intake, branch raise, My Business, raise-for-subscriber). Hindi बीमाकर्ता (formal) → बीमा कंपनी (everyday). Internal ops tables keep "Insurer" — staff use the shorthand daily and the column is narrow.
+
+---
+
+## A94 — [NIDAAN] THE LEVEL-2 BUCKET SYSTEM (Sep 13 2026)
+
+**Module:** `biz_nidaan_buckets.py`. **Tables:** `nidaan_buckets`, `nidaan_bucket_substates`,
+`nidaan_bucket_fields`, `nidaan_bucket_moves`, `nidaan_claim_fields`.
+**Claim columns:** `pipeline_stage` (= bucket key), `pipeline_sub`, `pipeline_stage_at`,
+`pipeline_from` (where a park returns to), `pipeline_by`, `l2_handover_at/_by/_note/_checks`.
+
+**The two ideas that carry it.** (1) The BUCKET owns the claim, not a person — so leave,
+departure or a role change cannot strand work. (2) Buckets are DATA — names, clocks, sub-states,
+fields and routes all in tables, seeded once and owned by the super-admin thereafter. Nothing in
+the module hard-codes a bucket name.
+
+**The flow.** All Claims → (review delivered) → **L2 Claims** → intake **hands over** with
+probing questions, a note and their name → **To start** → **Start Level-2** → Live Cases →
+Pending Docs → Pending Draft → Reimbursement → Escalation → Lokpal → Completed →
+Pending Payment → CP Payment → Finished. Hold parks from anywhere and returns itself.
+
+**Rules that matter and must not be quietly dropped:**
+* **Every move carries a comment** — forwards too. The next person starts cold.
+* **Any bucket, any direction** — routes rank the buttons, they do not fence the claim in;
+  off-route moves are recorded as such.
+* **Required fields block only FORWARD moves** — going back or parking is not finishing.
+* **Readiness gate before handover**: BLOCK (unreachable complainant, no insurance company)
+  vs FIX (everything else, consciously acknowledged and stored with the handover).
+* **A park always needs a return date.** Open-ended parks are how a case disappears for a year.
+* **Arrivals notify the receiving bucket's duty staff**; unstaffed → super-admins, and it says so.
+* `biz_av_scan._MAX_SCAN_BYTES` must stay between the app upload cap and clamd's StreamMaxLength.
+
+**Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
+`/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
+`/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
+`/doc-collect` (pending-document window — open discussion), `/end-to-end` (original operating model).
 
