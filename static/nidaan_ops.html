@@ -11857,9 +11857,13 @@ async function l2Move(claimId, toKey, presetReason){
   }).join('');
 
   openModal((dest.icon || '') + ' NP-' + claimId + ' → ' + dest.name_en,
-      (rule.kind === 'back'
+      (rule.off_route
+        ? '<div class="l2ban amber" style="margin-bottom:.6rem">This is <b>not the usual '
+          + 'next step</b> from here. That is allowed - it is simply recorded as off the '
+          + 'usual path, so the history shows it was deliberate.</div>'
+        : (rule.kind === 'back'
         ? '<div class="l2ban amber" style="margin-bottom:.6rem">This sends the claim backwards. '
-          + 'The reason goes into the remarks and is read later.</div>' : '')
+          + 'The reason goes into the remarks and is read later.</div>' : ''))
     + (isPark
         ? '<div class="l2ban info" style="margin-bottom:.6rem">A pause needs a date it comes back. '
           + 'On that date the claim returns to <b>' + esc((_l2Bucket(_l2Sel)||{}).name_en || '')
@@ -11920,25 +11924,40 @@ async function _l2Send(claimId, toKey, body){
 }
 
 function l2MoveMenu(claimId){
+  // Any bucket, any time. The configured routes decide what is listed FIRST; everything else is
+  // still offered, because a claim moved in error has to be moveable back without asking anyone.
   const b = _l2Bucket(_l2Sel) || {};
-  const mv = (b.moves || []);
-  if (!mv.length){ ndUI.toast('No routes are configured from here.', 'error'); return; }
+  const routed = {};
+  (b.moves || []).forEach(function(m){ routed[m.to_key] = m; });
+  const all = (_l2Cfg.buckets || []).filter(function(x){ return x.bucket_key !== _l2Sel; });
+  if (!all.length){ ndUI.toast('There is nowhere to move this.', 'error'); return; }
+
+  const btn = function(x, m){
+    const cls = !m ? 'g' : (m.kind === 'back' ? 'd' : (m.kind === 'forward' ? 'p' : 'g'));
+    return '<button class="l2mv ' + cls
+      + '" style="display:block;width:100%;text-align:left;margin-bottom:.25rem"'
+      + ' onclick="closeModal();l2Move(' + claimId + ',\'' + x.bucket_key + '\')">'
+      + (x.icon || '') + ' ' + esc(x.name_en)
+      + (!m ? ' <span style="opacity:.65;font-weight:400">- off the usual path</span>' : '')
+      + '</button>';
+  };
   const group = function(kind, label){
-    const rows = mv.filter(function(m){ return m.kind === kind; });
+    const rows = all.filter(function(x){
+      return routed[x.bucket_key] && routed[x.bucket_key].kind === kind; });
     if (!rows.length) return '';
     return '<div class="l2sec">' + label + '</div>'
-      + rows.map(function(m){
-          return '<button class="l2mv ' + (kind === 'back' ? 'd' : (kind === 'forward' ? 'p' : 'g'))
-            + '" style="display:block;width:100%;text-align:left;margin-bottom:.25rem"'
-            + ' onclick="closeModal();l2Move(' + claimId + ',\'' + m.to_key + '\')">'
-            + (m.icon || '') + ' ' + esc(m.name_en)
-            + (m.needs_reason ? ' <span style="opacity:.7;font-weight:400">· needs a reason</span>' : '')
-            + '</button>';
-        }).join('');
+      + rows.map(function(x){ return btn(x, routed[x.bucket_key]); }).join('');
   };
+  const others = all.filter(function(x){ return !routed[x.bucket_key]; });
+
   openModal('Move NP-' + claimId,
-    group('forward', 'Onward') + group('park', 'Pause') + group('resume', 'Back to work')
-    + group('back', 'Send backwards'), [], false);
+      '<div class="l2ban info">Any bucket, any time. The usual next steps come first - anything '
+    + 'else is allowed and simply recorded as off the usual path. Every move needs a note.</div>'
+    + group('forward', 'Onward') + group('park', 'Pause') + group('resume', 'Back to work')
+    + group('back', 'Send backwards')
+    + (others.length ? '<div class="l2sec">Anywhere else</div>'
+        + others.map(function(x){ return btn(x, null); }).join('') : ''),
+    [], false);
 }
 
 // ── the case report ──────────────────────────────────────────────────────────

@@ -416,7 +416,8 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
             "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
-            "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by "
+            "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by, "
+            "l2_handover_note "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
 
@@ -539,6 +540,10 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
             (entry["bucket_key"], default_sub, (actor or "")[:80], int(claim_id)))
         await c.commit()
     await _log(claim_id, "Level-2 processing started - now in %s" % entry["name_en"], actor)
+    await _notify_move(claim_id, to_key=entry["bucket_key"], to_name=entry["name_en"],
+                       from_name="To start", kind="forward",
+                       reason=(row.get("l2_handover_note") or ""), actor=actor,
+                       who=(row.get("complainant_name") or row.get("insured_name") or "").strip())
     return {"ok": True, "bucket": entry["bucket_key"], "name": entry["name_en"], "sub": default_sub}
 
 
@@ -567,12 +572,26 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     allowed = {m["to_key"]: m for m in await moves_from(cur_key)}
     rule = allowed.get(to_key)
     src = await bucket(cur_key) or {}
-    if not rule and not force:
-        return {"ok": False,
-                "error": "A case in %s cannot move to %s. A super-admin can open that route in "
-                         "the bucket designer." % (src.get("name_en", cur_key),
-                                                   dest.get("name_en", to_key))}
-    kind = (rule or {}).get("kind", "forward")
+
+    # ANY BUCKET, ANY TIME. The configured routes describe the normal path and decide which
+    # button is offered first - they do not fence the claim in. Work goes wrong: a claim is
+    # moved in error, a step turns out not to apply, something has to jump. Refusing that would
+    # only teach people to work around the system, and then it stops describing reality.
+    #
+    # An off-route move is still recorded as exactly that, so the history shows it was unusual.
+    off_route = rule is None
+    if off_route:
+        order = [b["bucket_key"] for b in await buckets()]
+        try:
+            kind = "back" if order.index(to_key) < order.index(cur_key) else "forward"
+        except ValueError:
+            kind = "forward"
+        if dest.get("is_park"):
+            kind = "park"
+        elif src.get("is_park"):
+            kind = "resume"
+    else:
+        kind = rule.get("kind", "forward")
 
     # GROUND RULE: every move carries a comment, forwards as well as backwards.
     #
@@ -641,13 +660,24 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
 
     verb = {"back": "sent back to", "park": "parked in",
             "resume": "resumed into"}.get(kind, "moved to")
-    summary = "%s -> %s %s" % (src.get("name_en", cur_key), verb, dest["name_en"])
+    summary = "%s -> %s %s%s" % (src.get("name_en", cur_key), verb, dest["name_en"],
+                                 " (off the usual path)" if off_route else "")
     if day:
         summary += " until %s" % day
     if (reason or "").strip():
         summary += " - %s" % reason.strip()
     await _log(claim_id, summary, actor)
-    return {"ok": True, "bucket": to_key, "name": dest["name_en"], "sub": sub, "kind": kind}
+
+    who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    await _notify_move(claim_id, to_key=to_key, to_name=dest["name_en"],
+                       from_name=src.get("name_en", cur_key), kind=kind,
+                       reason=reason, actor=actor, who=who)
+    if kind == "back":
+        await _notify_sender_back(claim_id, to_name=dest["name_en"], reason=reason,
+                                  actor=actor, who=who)
+
+    return {"ok": True, "bucket": to_key, "name": dest["name_en"], "sub": sub, "kind": kind,
+            "off_route": off_route}
 
 
 async def set_substate(claim_id: int, sub: str, *, actor: str = "") -> dict:
@@ -1321,3 +1351,83 @@ async def pending_handover(limit: int = 300) -> list:
              "amount": r.get("disputed_amount") or 0,
              "origin": _origin_of(r),
              "waiting_days": _days_since(r.get("created_at"))} for r in rows]
+
+
+# ── telling the next bucket ──────────────────────────────────────────────────
+# A claim arriving in a queue nobody is watching is the failure this whole system exists to
+# prevent. So every move tells the people on duty for the bucket it lands in - and, when a claim
+# is sent BACK, the person who sent it forward, because they are the one who has to fix it.
+#
+# Never raises into a move: a notification that fails must not undo work that succeeded.
+
+async def _notify_move(claim_id: int, *, to_key: str, to_name: str, from_name: str,
+                       kind: str, reason: str, actor: str, who: str = "") -> None:
+    try:
+        import biz_nidaan as _n
+        import biz_nidaan_notifications as _nnot
+    except Exception:
+        return
+    try:
+        ids = list(await _n.on_duty_rep_ids(to_key))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("on-duty lookup failed for %s: %s", to_key, e)
+        ids = []
+
+    # Nobody rostered on the receiving bucket is itself worth knowing, so it goes to the admins
+    # rather than nowhere.
+    unstaffed = not ids
+    if unstaffed:
+        try:
+            ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
+        except Exception:
+            ids = []
+    if not ids:
+        return
+
+    label = "NP-%s%s" % (claim_id, (" · " + who) if who else "")
+    if kind == "back":
+        head = "↩ %s sent back to %s" % (label, to_name)
+    elif kind == "park":
+        head = "⏸ %s paused" % label
+    elif kind == "resume":
+        head = "▶ %s is back from hold, in %s" % (label, to_name)
+    else:
+        head = "→ %s arrived in %s" % (label, to_name)
+
+    body = ("From: %s\nMoved by: %s\n\n%s" % (from_name, actor or "staff",
+                                              (reason or "").strip() or "(no note)"))
+    if unstaffed:
+        body += ("\n\n⚠ Nobody is on duty for %s, so this went to the admins instead."
+                 % to_name)
+    try:
+        await _nnot.notify_staff_inapp(
+            ids, head, body, event_key="bucket.move", email=False, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("move notification failed for %s: %s", claim_id, e)
+
+
+async def _notify_sender_back(claim_id: int, *, to_name: str, reason: str,
+                              actor: str, who: str = "") -> None:
+    """A claim going backwards should reach the person who sent it forward - they are the one
+    who can fix whatever is wrong, and otherwise they never find out."""
+    try:
+        import biz_nidaan_notifications as _nnot
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT actor FROM nidaan_claim_activity WHERE claim_id=? AND kind='case_bucket' "
+                "AND actor <> ? ORDER BY act_id DESC LIMIT 1", (int(claim_id), actor or ""))).fetchone()
+            if not r or not (r["actor"] or "").strip():
+                return
+            prev = r["actor"].strip()
+            s = await (await c.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE name=? AND status='active' "
+                "AND deleted_at IS NULL LIMIT 1", (prev,))).fetchone()
+        if not s:
+            return
+        await _nnot.notify_staff_inapp(
+            [s[0]], "↩ NP-%s%s came back to %s" % (claim_id, (" · " + who) if who else "", to_name),
+            "%s sent it back.\n\n%s" % (actor or "Someone", (reason or "").strip() or "(no note)"),
+            event_key="bucket.sent_back", email=False, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("send-back notification failed for %s: %s", claim_id, e)
