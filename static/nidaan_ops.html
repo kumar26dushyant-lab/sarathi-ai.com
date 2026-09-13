@@ -452,6 +452,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-onbehalf" class="panel" style="display:none"></div>
       <div id="panel-payfollow" class="panel" style="display:none"></div>
       <div id="panel-leave" class="panel" style="display:none"></div>
+      <div id="panel-l2" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -648,7 +649,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -953,6 +954,7 @@ function buildSidebar() {
   // Grouped into clear zones. A zone header shows only if it has ≥1 visible item.
   const zones = [
     {h:'Work', items:[
+      {id:'l2',       label:'⚖️ Level-2 → Settlement', minRank:0},
       {id:'desk',     label:'🧑‍💼 My Desk',          minRank:0},
       {id:'board',    label:'🧭 Case Board',       minRank:0},
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
@@ -1043,6 +1045,7 @@ function showPanel(id, fromHistory) {
     onbehalf: loadOnBehalf,
     payfollow: loadPayFollow,
     leave: loadLeavePanel,
+    l2: loadL2,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -11356,6 +11359,649 @@ async function pfSave(contact){
   }catch(e){ if(msg){ msg.style.color='var(--nd-danger-text)'; msg.textContent='Could not save.'; } }
 }
 window.loadPayFollow=loadPayFollow; window.pfSet=pfSet; window.pfMark=pfMark; window.pfSave=pfSave;
+
+// ══ LEVEL-2 → SETTLEMENT ══════════════════════════════════════════════════════
+// ClaimShield's shape: a folder list down the left, one dense table on the right, and the move
+// buttons ON the row rather than buried in a dialog. Everything here is drawn from the server's
+// bucket configuration, so a bucket a super-admin adds later appears without a line of new code.
+let _l2Cfg = null, _l2Sel = '', _l2Sub = '', _l2Q = '', _l2Counts = {},
+    _l2Rows = [], _l2Wait = [], _l2Busy = false, _l2Rows2 = null;
+
+function _l2Styles(){
+  if (document.getElementById('l2Css')) return;
+  const st = document.createElement('style'); st.id = 'l2Css';
+  st.textContent = `
+  .l2wrap{display:flex;gap:.85rem;align-items:flex-start}
+  .l2rail{flex:0 0 13.5rem;position:sticky;top:.5rem}
+  .l2rh{font-size:.63rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--nd-text-faint);padding:.4rem .5rem .3rem}
+  .l2b{display:flex;align-items:center;gap:.4rem;width:100%;text-align:left;font-family:inherit;
+    background:none;border:1px solid transparent;border-radius:8px;padding:.4rem .55rem;
+    color:var(--nd-text-secondary);font-size:.86rem;cursor:pointer;margin-bottom:2px}
+  .l2b:hover{background:var(--nd-bg-surface);border-color:var(--nd-border)}
+  .l2b[aria-pressed="true"]{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan);
+    border-color:var(--nd-brand-cyan);font-weight:700}
+  .l2b .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .l2b .ct{font-size:.76rem;opacity:.75;font-variant-numeric:tabular-nums}
+  .l2b[aria-pressed="true"] .ct{opacity:.95}
+  .l2b .rd{background:var(--nd-danger-text);color:#fff;border-radius:999px;padding:0 .32rem;
+    font-size:.64rem;font-weight:800;line-height:1.4}
+  .l2main{flex:1;min-width:0}
+  .l2hd{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;flex-wrap:wrap;
+    margin-bottom:.5rem}
+  .l2ttl{font-size:1.1rem;font-weight:800;color:var(--nd-text-primary)}
+  .l2duty{font-size:.78rem;color:var(--nd-text-muted)}
+  .l2duty b{color:var(--nd-success-text)}
+  .l2duty .none{color:var(--nd-warning-text);font-weight:700}
+  .l2ban{border-radius:9px;padding:.45rem .7rem;font-size:.82rem;margin-bottom:.55rem;font-weight:600}
+  .l2ban.red{background:var(--nd-danger-soft,rgba(248,113,113,.12));
+    border:1px solid var(--nd-danger-text);color:var(--nd-danger-text)}
+  .l2ban.amber{background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);
+    color:var(--nd-warning-text)}
+  .l2ban.info{background:var(--nd-bg-surface);border:1px solid var(--nd-border);
+    color:var(--nd-text-muted);font-weight:400}
+  .l2tabs{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.5rem}
+  .l2tab{font-size:.78rem;font-family:inherit;border:1px solid var(--nd-border-strong);
+    background:var(--nd-bg-surface);color:var(--nd-text-muted);border-radius:999px;
+    padding:.14rem .62rem;cursor:pointer}
+  .l2tab[aria-pressed="true"]{background:var(--nd-text-primary);color:var(--nd-bg-base);
+    border-color:var(--nd-text-primary);font-weight:700}
+  .l2tools{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem}
+  .l2srch{flex:1;min-width:11rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);
+    color:var(--nd-text-primary);border-radius:8px;padding:.38rem .6rem;font-size:.84rem;
+    font-family:inherit}
+  .l2age{font-variant-numeric:tabular-nums;font-weight:800;border-radius:5px;padding:.05rem .38rem;
+    font-size:.78rem;white-space:nowrap}
+  .l2age.ok{background:var(--nd-success-soft,rgba(52,211,153,.14));color:var(--nd-success-text)}
+  .l2age.amber{background:var(--nd-warning-soft);color:var(--nd-warning-text)}
+  .l2age.red{background:var(--nd-danger-soft,rgba(248,113,113,.14));color:var(--nd-danger-text)}
+  .l2mv{font-size:.74rem;font-weight:700;font-family:inherit;border:1px solid var(--nd-brand-cyan);
+    color:var(--nd-cyan-text);background:none;border-radius:6px;padding:.14rem .45rem;
+    cursor:pointer;white-space:nowrap;margin:.08rem .15rem .08rem 0}
+  .l2mv.p{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan)}
+  .l2mv.g{border-color:var(--nd-border-strong);color:var(--nd-text-muted)}
+  .l2mv.d{border-color:var(--nd-danger-text);color:var(--nd-danger-text)}
+  .l2mv:disabled{opacity:.5;cursor:not-allowed}
+  .l2warn{font-size:.72rem;color:var(--nd-warning-text)}
+  .l2lok{font-size:.72rem;font-weight:700;color:var(--nd-danger-text)}
+  /* case report */
+  .l2cr{display:flex;flex-direction:column;gap:.7rem}
+  .l2kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.3rem .8rem}
+  .l2kv .k{font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--nd-text-faint)}
+  .l2kv .v{font-size:.86rem;font-weight:600;color:var(--nd-text-primary);word-break:break-word}
+  .l2sec{font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--nd-text-faint);margin:.3rem 0 .1rem}
+  .l2fld{display:flex;flex-direction:column;gap:.12rem;margin-bottom:.5rem}
+  .l2fld label{font-size:.76rem;font-weight:600;color:var(--nd-text-secondary)}
+  .l2fld .req{color:var(--nd-danger-text)}
+  .l2fld input,.l2fld textarea,.l2fld select{width:100%;background:var(--nd-bg-surface-2);
+    border:1px solid var(--nd-border);color:var(--nd-text-primary);border-radius:8px;
+    padding:.38rem .55rem;font-size:.85rem;font-family:inherit}
+  .l2fld .hint{font-size:.7rem;color:var(--nd-text-faint)}
+  .l2rem{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:9px;
+    padding:.5rem .65rem;max-height:15rem;overflow-y:auto;font-size:.8rem}
+  .l2rem .r{margin-bottom:.28rem;color:var(--nd-text-secondary);line-height:1.45}
+  .l2rem .w{color:var(--nd-cyan-text);font-weight:700}
+  @media (max-width:820px){
+    .l2wrap{flex-direction:column}
+    .l2rail{flex:1 1 auto;width:100%;position:static;display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.25rem}
+    .l2rh{grid-column:1/-1}
+  }`;
+  document.head.appendChild(st);
+}
+
+// One place that turns a server error into something a person can act on.
+function _l2Err(d, fallback){
+  try { return _extractErr(d, fallback); } catch(e){ return (d && d.detail) || fallback; }
+}
+
+async function loadL2(){
+  _l2Styles();
+  const el = document.getElementById('panel-l2');
+  if (!el) return;
+  if (!el.dataset.ready){
+    el.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading the workspace…</p></div>';
+    el.dataset.ready = '1';
+  }
+  try{
+    const [cf, ct] = await Promise.all([
+      API('/buckets/config').then(r => r.ok ? r.json() : null),
+      API('/buckets/counts').then(r => r.ok ? r.json() : {counts:{}, waiting_to_start:0})
+    ]);
+    if (!cf) throw 0;
+    _l2Cfg = cf; _l2Counts = ct.counts || {}; _l2Cfg.waiting = ct.waiting_to_start || 0;
+    // Who is on duty for each bucket. The rota uses the same keys as the buckets, so staffing a
+    // bucket IS rostering that duty - no second concept to keep in step.
+    try{
+      const rr = await API('/support/reps');
+      if (rr.ok){
+        const reps = (await rr.json()).reps || [];
+        const rota = {};
+        reps.filter(function(x){ return x.on_duty; }).forEach(function(x){
+          const k = x.duty || '';
+          (rota[k] = rota[k] || []).push({name: x.staff_name || ('#' + x.staff_id)});
+        });
+        window._deskRota = rota;
+      }
+    }catch(e){ window._deskRota = window._deskRota || {}; }
+  }catch(e){
+    el.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load the workspace.</p>'
+      + '<button class="btn btn-primary" onclick="loadL2()">Try again</button></div>';
+    return;
+  }
+  if (!_l2Sel) _l2Sel = 'start';
+  l2Shell();
+  l2Load();
+}
+
+function l2Shell(){
+  const el = document.getElementById('panel-l2');
+  const bs = (_l2Cfg.buckets || []);
+  const rail = bs.map(function(b){
+    const c = _l2Counts[b.bucket_key] || {total:0, red:0, amber:0};
+    const late = (c.red || 0);
+    return '<button class="l2b" aria-pressed="' + (_l2Sel === b.bucket_key) + '"'
+      + ' onclick="l2Pick(\'' + b.bucket_key + '\')">'
+      + '<span>' + (b.icon || '') + '</span>'
+      + '<span class="nm">' + esc(b.name_en) + '</span>'
+      + (late ? '<span class="rd" title="past its clock">' + late + '</span>' : '')
+      + '<span class="ct">' + (c.total || 0) + '</span></button>';
+  }).join('');
+
+  el.innerHTML =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">⚖️ Level-2 → Settlement</div>'
+    +   '<div class="section-sub">Every paid, winnable claim and where it has reached. '
+    +     'A bucket owns its claims, so nobody going on leave can strand work.</div>'
+    + '</div><button class="btn-sm btn-ghost" onclick="loadL2()">🔄 Refresh</button></div>'
+    + '<div class="l2wrap">'
+    +   '<div class="l2rail">'
+    +     '<div class="l2rh">Start here</div>'
+    +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'start') + '" onclick="l2Pick(\'start\')">'
+    +       '<span>📥</span><span class="nm">To start</span>'
+    +       (_l2Cfg.waiting ? '<span class="rd">' + _l2Cfg.waiting + '</span>' : '')
+    +     '</button>'
+    +     '<div class="l2rh">The buckets</div>' + rail
+    +   '</div>'
+    +   '<div class="l2main" id="l2Main"><div class="empty"><p>Loading…</p></div></div>'
+    + '</div>';
+}
+
+function l2Pick(key){
+  if (_l2Sel !== key){ _l2Sel = key; _l2Sub = ''; _l2Q = ''; }
+  l2Shell();
+  l2Load();
+}
+
+function _l2Bucket(key){
+  return (_l2Cfg.buckets || []).filter(function(b){ return b.bucket_key === key; })[0] || null;
+}
+
+async function l2Load(){
+  const m = document.getElementById('l2Main');
+  if (!m) return;
+  m.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  if (_l2Sel === 'start'){
+    try{
+      const r = await API('/buckets/waiting-to-start');
+      _l2Wait = r.ok ? ((await r.json()).claims || []) : [];
+    }catch(e){ _l2Wait = []; }
+    l2RenderStart();
+    return;
+  }
+  try{
+    const qs = '?sub=' + encodeURIComponent(_l2Sub) + '&q=' + encodeURIComponent(_l2Q);
+    const r = await API('/buckets/' + encodeURIComponent(_l2Sel) + '/claims' + qs);
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    _l2Rows = d.items || []; _l2Rows2 = d;
+  }catch(e){
+    m.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load this bucket.</p></div>';
+    return;
+  }
+  l2RenderBucket();
+}
+
+// ── the entry queue ──────────────────────────────────────────────────────────
+function l2RenderStart(){
+  const m = document.getElementById('l2Main');
+  const head =
+      '<div class="l2hd"><div class="l2ttl">📥 To start · ' + _l2Wait.length + '</div></div>'
+    + '<div class="l2ban ' + (_l2Wait.length ? 'amber' : 'info') + '">'
+    +   (_l2Wait.length
+        ? 'Reviewed as winnable and the Level-2 fee is paid — but nobody has started the work. '
+          + 'This is money already taken. It should be a short list.'
+        : 'Nothing waiting. Every paid, winnable claim has been started.')
+    + '</div>';
+  if (!_l2Wait.length){ m.innerHTML = head; return; }
+  const rows = _l2Wait.map(function(x){
+    return '<tr>'
+      + '<td><b>NP-' + x.claim_id + '</b></td>'
+      + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
+      + '<td>' + esc(x.insurer || '—') + '</td>'
+      + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
+      + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '') + '</td>'
+      + '<td><span class="l2age ' + ((x.waiting_days||0) > 14 ? 'red' : ((x.waiting_days||0) > 7 ? 'amber' : 'ok'))
+      +   '">' + (x.waiting_days == null ? '—' : x.waiting_days + 'd') + '</span></td>'
+      + '<td style="white-space:nowrap">'
+      +   '<button class="l2mv p" onclick="l2Start(' + x.claim_id + ',this)">⚖️ Start Level-2</button>'
+      +   '<button class="l2mv g" onclick="openClaimDrawer(' + x.claim_id + ')">Open claim</button>'
+      + '</td></tr>';
+  }).join('');
+  m.innerHTML = head
+    + '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
+    + '<th>Insurance Co.</th><th style="text-align:right">Disputed</th><th>Origin</th>'
+    + '<th>Waiting</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+async function l2Start(claimId, btn){
+  if (_l2Busy) return;
+  if (!confirm('Start Level-2 processing on NP-' + claimId + '?\n\nIt moves into the first bucket '
+      + 'and whoever is on duty there picks it up.')) return;
+  _l2Busy = true; if (btn) btn.disabled = true;
+  try{
+    const r = await API('/cases/' + claimId + '/pipeline/start', {method:'POST'});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){ ndUI.toast('NP-' + claimId + ' → ' + (d.name || 'started'), 'success'); await loadL2(); }
+    else ndUI.toast(_l2Err(d, 'Could not start that'), 'error');
+  }catch(e){ ndUI.toast('Could not start that.', 'error'); }
+  finally{ _l2Busy = false; if (btn) btn.disabled = false; }
+}
+
+// ── one bucket ───────────────────────────────────────────────────────────────
+function l2RenderBucket(){
+  const m = document.getElementById('l2Main');
+  const b = _l2Bucket(_l2Sel);
+  if (!b){ m.innerHTML = '<div class="empty"><p>That bucket no longer exists.</p></div>'; return; }
+  const d = _l2Rows2 || {};
+  const subs = b.substates || [];
+  const sc = d.sub_counts || {};
+
+  const tabs = subs.length
+    ? '<div class="l2tabs">'
+      + '<button class="l2tab" aria-pressed="' + (!_l2Sub) + '" onclick="l2Sub(\'\')">All '
+      +   (d.matching || 0) + '</button>'
+      + subs.map(function(s){
+          return '<button class="l2tab" aria-pressed="' + (_l2Sub === s.sub_key) + '"'
+            + ' onclick="l2Sub(\'' + s.sub_key + '\')">' + esc(s.name_en)
+            + ' ' + (sc[s.sub_key] || 0) + '</button>';
+        }).join('') + '</div>'
+    : '';
+
+  let ban = '';
+  if (d.red) ban = '<div class="l2ban red">🔴 ' + d.red + ' claim' + (d.red > 1 ? 's have' : ' has')
+    + ' gone past ' + (b.red_days || 0) + ' days here — oldest ' + (_l2Rows[0] ? _l2Rows[0].days : 0) + ' days</div>';
+  else if (d.late) ban = '<div class="l2ban amber">🟡 ' + d.late + ' need looking at</div>';
+
+  const guide = '<div class="l2ban info"><b>' + esc(b.guide_what || '') + '</b>'
+    + (b.guide_do ? ' — ' + esc(b.guide_do) : '') + '</div>';
+
+  const head =
+      '<div class="l2hd"><div class="l2ttl">' + (b.icon || '') + ' ' + esc(b.name_en)
+    +   ' · ' + (d.matching || 0) + '</div>'
+    +   '<div class="l2duty">' + _l2DutyLine(b.bucket_key) + '</div></div>'
+    + ban + guide + tabs
+    + '<div class="l2tools">'
+    +   '<input class="l2srch" id="l2Q" placeholder="Search name, claim no., phone, insurance company…" '
+    +     'value="' + esc(_l2Q) + '" oninput="l2Search(this.value)">'
+    +   '<button class="btn-sm btn-ghost" onclick="l2Export()">⤓ Excel</button>'
+    + '</div>';
+
+  if (!_l2Rows.length){
+    m.innerHTML = head + '<div class="empty"><div class="ei">✅</div><p>Nothing here'
+      + (_l2Q ? ' matching that search' : '') + '.</p></div>';
+    return;
+  }
+  m.innerHTML = head + l2Table(b);
+}
+
+function _l2DutyLine(key){
+  // The rota uses the same keys as the buckets, so a bucket is staffed by rostering that duty.
+  const on = (window._deskRota && window._deskRota[key]) || null;
+  if (on && on.length) return '👤 On duty: <b>' + on.map(function(x){ return esc(x.name); }).join(', ') + '</b>';
+  return '<span class="none">👤 Nobody on duty</span>';
+}
+
+function l2Table(b){
+  const rows = _l2Rows.map(function(i){
+    const mv = (b.moves || []);
+    const fwd = mv.filter(function(x){ return x.kind === 'forward'; })[0];
+    const others = mv.filter(function(x){ return x !== fwd; });
+    const btns =
+        (fwd ? '<button class="l2mv p" onclick="l2Move(' + i.claim_id + ',\'' + fwd.to_key + '\')">→ '
+              + esc(fwd.name_en) + '</button>' : '')
+      + (others.length ? '<button class="l2mv g" onclick="l2MoveMenu(' + i.claim_id + ')">Move…</button>' : '')
+      + '<button class="l2mv g" onclick="l2Open(' + i.claim_id + ')">Open</button>';
+    const lok = (i.lokpal_days_left != null && i.lokpal_days_left <= 90)
+      ? '<div class="l2lok">⏳ Lokpal window ' + i.lokpal_days_left + 'd</div>' : '';
+    const docs = i.docs_total
+      ? '<span class="' + (i.docs_ready ? 'l2age ok' : '') + '">' + i.docs_done + '/' + i.docs_total + '</span>'
+      : '—';
+    return '<tr>'
+      + '<td><b>NP-' + i.claim_id + '</b>' + lok + '</td>'
+      + '<td>' + esc(i.who || '(no name)')
+      +   (i.insured && i.insured !== i.who ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">'
+          + esc(i.insured) + '</div>' : '') + '</td>'
+      + '<td>' + esc(i.insurer || '<span class="l2warn">not recorded</span>') + '</td>'
+      + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
+      + '<td>' + docs + '</td>'
+      + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
+      + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
+      + '<td style="font-size:.76rem;color:var(--nd-text-muted)">' + esc(i.origin || '') + '</td>'
+      + '<td style="white-space:nowrap">' + btns + '</td></tr>';
+  }).join('');
+  return '<div class="table-wrap"><table><thead><tr>'
+    + '<th>Ref</th><th>Complainant</th><th>Insurance Co.</th><th style="text-align:right">Disputed</th>'
+    + '<th>Docs</th>' + (b.substates && b.substates.length ? '<th>Step</th>' : '')
+    + '<th>In bucket</th><th>Origin</th><th></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+let _l2QT = null;
+function l2Search(v){ _l2Q = v; clearTimeout(_l2QT); _l2QT = setTimeout(l2Load, 300); }
+function l2Sub(s){ _l2Sub = s; l2Load(); }
+
+function l2Export(){
+  if (!_l2Rows.length) return;
+  const b = _l2Bucket(_l2Sel) || {};
+  const head = ['Ref','Complainant','Insured','Phone','Insurance Company','Policy','Disputed',
+                'Docs','Step','Days in bucket','Origin','Last moved by'];
+  const rows = _l2Rows.map(function(i){
+    return ['NP-' + i.claim_id, i.who, i.insured, i.phone, i.insurer, i.policy_no, i.amount,
+            (i.docs_total ? i.docs_done + '/' + i.docs_total : ''), i.sub_name,
+            (i.days == null ? '' : i.days), i.origin, i.moved_by];
+  });
+  const csv = [head].concat(rows).map(function(r){
+    return r.map(function(c){ return '"' + String(c == null ? '' : c).replace(/"/g,'""') + '"'; }).join(',');
+  }).join('\r\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
+  a.download = 'nidaan-' + (b.bucket_key || 'bucket') + '-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+// ── moving a claim ───────────────────────────────────────────────────────────
+// Forward is one confirmation. Anything else asks for what it needs FIRST, rather than letting a
+// person press a button and be refused — a refusal you could have predicted is a design failure.
+function _l2Rule(fromKey, toKey){
+  const b = _l2Bucket(fromKey) || {};
+  return (b.moves || []).filter(function(m){ return m.to_key === toKey; })[0] || null;
+}
+
+async function l2Move(claimId, toKey, presetReason){
+  const rule = _l2Rule(_l2Sel, toKey);
+  if (!rule){ ndUI.toast('That move is not allowed from here.', 'error'); return; }
+  const dest = _l2Bucket(toKey) || {};
+  const isPark = !!dest.is_park;
+  const needsReason = !!rule.needs_reason;
+  const subs = dest.substates || [];
+
+  // Nothing to ask? Confirm and go.
+  if (!isPark && !needsReason && subs.length <= 1){
+    if (!confirm('Move NP-' + claimId + ' to ' + dest.name_en + '?')) return;
+    return _l2Send(claimId, toKey, {});
+  }
+
+  const min = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const subOpts = subs.map(function(s){
+    return '<option value="' + s.sub_key + '"' + (s.is_default ? ' selected' : '') + '>'
+      + esc(s.name_en) + '</option>';
+  }).join('');
+
+  openModal((dest.icon || '') + ' NP-' + claimId + ' → ' + dest.name_en,
+      (rule.kind === 'back'
+        ? '<div class="l2ban amber" style="margin-bottom:.6rem">This sends the claim backwards. '
+          + 'The reason goes into the remarks and is read later.</div>' : '')
+    + (isPark
+        ? '<div class="l2ban info" style="margin-bottom:.6rem">A pause needs a date it comes back. '
+          + 'On that date the claim returns to <b>' + esc((_l2Bucket(_l2Sel)||{}).name_en || '')
+          + '</b> by itself.</div>' : '')
+    + (subs.length > 1
+        ? '<div class="l2fld"><label>Which step?</label><select id="l2mSub">' + subOpts + '</select></div>'
+        : '')
+    + (isPark
+        ? '<div class="l2fld"><label>Comes back on <span class="req">*</span></label>'
+          + '<input type="date" id="l2mDate" min="' + min + '"></div>' : '')
+    + '<div class="l2fld"><label>Reason' + (needsReason ? ' <span class="req">*</span>' : ' (optional)')
+      + '</label><textarea id="l2mWhy" rows="3" maxlength="400">'
+      + esc(presetReason || '') + '</textarea></div>'
+    + '<div id="l2mMsg" style="font-size:.82rem"></div>',
+    [{label:'Move', cls:'btn-primary', fn:function(){
+        const g = function(id){ const e = document.getElementById(id); return e ? e.value : ''; };
+        _l2Send(claimId, toKey, {sub: g('l2mSub'), reason: g('l2mWhy'), hold_until: g('l2mDate')});
+      }}], false);
+}
+
+async function _l2Send(claimId, toKey, body){
+  if (_l2Busy) return;
+  _l2Busy = true;
+  const msg = document.getElementById('l2mMsg');
+  if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Moving…'; }
+  try{
+    const r = await API('/cases/' + claimId + '/bucket/move',
+      {method:'POST', body: JSON.stringify({to: toKey, sub: body.sub || '',
+        reason: body.reason || '', hold_until: body.hold_until || ''})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){
+      try{ closeModal(); }catch(e){}
+      ndUI.toast('NP-' + claimId + ' → ' + (d.name || ''), 'success');
+      await loadL2();
+    } else {
+      const txt = _l2Err(d, 'Could not move that');
+      if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = txt; }
+      else ndUI.toast(txt, 'error');
+    }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not move that.'; }
+    else ndUI.toast('Could not move that.', 'error');
+  }finally{ _l2Busy = false; }
+}
+
+function l2MoveMenu(claimId){
+  const b = _l2Bucket(_l2Sel) || {};
+  const mv = (b.moves || []);
+  if (!mv.length){ ndUI.toast('No routes are configured from here.', 'error'); return; }
+  const group = function(kind, label){
+    const rows = mv.filter(function(m){ return m.kind === kind; });
+    if (!rows.length) return '';
+    return '<div class="l2sec">' + label + '</div>'
+      + rows.map(function(m){
+          return '<button class="l2mv ' + (kind === 'back' ? 'd' : (kind === 'forward' ? 'p' : 'g'))
+            + '" style="display:block;width:100%;text-align:left;margin-bottom:.25rem"'
+            + ' onclick="closeModal();l2Move(' + claimId + ',\'' + m.to_key + '\')">'
+            + (m.icon || '') + ' ' + esc(m.name_en)
+            + (m.needs_reason ? ' <span style="opacity:.7;font-weight:400">· needs a reason</span>' : '')
+            + '</button>';
+        }).join('');
+  };
+  openModal('Move NP-' + claimId,
+    group('forward', 'Onward') + group('park', 'Pause') + group('resume', 'Back to work')
+    + group('back', 'Send backwards'), [], false);
+}
+
+// ── the case report ──────────────────────────────────────────────────────────
+let _l2Case = null;
+
+async function l2Open(claimId){
+  openModal('NP-' + claimId, '<div class="empty"><div class="ei">⏳</div><p>Opening…</p></div>', [], true);
+  let st = null, claim = null, rem = [];
+  try{
+    const [a, b] = await Promise.all([
+      API('/cases/' + claimId + '/bucket').then(function(r){ return r.ok ? r.json() : null; }),
+      API('/claims/' + claimId).then(function(r){ return r.ok ? r.json() : null; })
+    ]);
+    st = a; claim = b && (b.claim || b);
+  }catch(e){}
+  if (!st){
+    document.getElementById('modalBody').innerHTML =
+      '<div class="empty"><div class="ei">⚠️</div><p>Could not open this case.</p></div>';
+    return;
+  }
+  try{
+    const r = await API('/claims/' + claimId + '/activity');
+    if (r.ok){ const d = await r.json(); rem = d.activity || d.items || []; }
+  }catch(e){}
+  _l2Case = {claim_id: claimId, st: st, claim: claim || {}};
+  l2CaseRender(rem);
+}
+
+function l2CaseRender(rem){
+  const c = _l2Case.claim || {}, st = _l2Case.st || {}, id = _l2Case.claim_id;
+  const body = document.getElementById('modalBody');
+  const title = document.getElementById('modalTitle');
+  const who = (c.complainant_name || c.insured_name || '').trim() || '(name not recorded)';
+  if (title) title.textContent = 'NP-' + id + ' · ' + who;
+
+  if (!st.in_pipeline){
+    body.innerHTML = '<div class="l2ban info">This case has not started Level-2 yet.</div>'
+      + (st.l2_ready
+        ? '<button class="btn btn-primary" onclick="l2Start(' + id + ',this)">⚖️ Start Level-2</button>'
+        : '<div class="l2ban amber">It needs a review saying it can be fought <b>and</b> the '
+          + 'Level-2 fee paid before the buckets will take it.</div>');
+    return;
+  }
+
+  const subOpts = (st.substates || []).map(function(s){
+    return '<option value="' + s.sub_key + '"' + (st.sub === s.sub_key ? ' selected' : '') + '>'
+      + esc(s.name_en) + '</option>';
+  }).join('');
+
+  const flds = (st.fields || []).map(function(f){
+    const v = (st.values || {})[f.field_key] || '';
+    const req = f.required_exit ? ' <span class="req">*</span>' : '';
+    let input;
+    if (f.field_type === 'textarea')
+      input = '<textarea rows="3" id="lf_' + f.field_key + '" maxlength="8000" '
+        + 'onchange="l2Field(\'' + f.field_key + '\',this.value,this)">' + esc(v) + '</textarea>';
+    else if (f.field_type === 'choice'){
+      const opts = (f.choices || '').split('\n').filter(Boolean);
+      input = '<select id="lf_' + f.field_key + '" onchange="l2Field(\'' + f.field_key + '\',this.value,this)">'
+        + '<option value="">—</option>'
+        + opts.map(function(o){ return '<option' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('')
+        + '</select>';
+    } else if (f.field_type === 'yesno')
+      input = '<select id="lf_' + f.field_key + '" onchange="l2Field(\'' + f.field_key + '\',this.value,this)">'
+        + '<option value="">—</option><option' + (v === 'yes' ? ' selected' : '') + '>yes</option>'
+        + '<option' + (v === 'no' ? ' selected' : '') + '>no</option></select>';
+    else
+      input = '<input type="' + (f.field_type === 'date' ? 'date'
+             : (f.field_type === 'number' || f.field_type === 'money' ? 'number' : 'text'))
+        + '" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
+        + 'onchange="l2Field(\'' + f.field_key + '\',this.value,this)">';
+    return '<div class="l2fld"><label>' + esc(f.label_en) + req + '</label>' + input
+      + (f.hint ? '<div class="hint">' + esc(f.hint) + '</div>' : '') + '</div>';
+  }).join('');
+
+  const miss = (st.missing_required || []);
+  const remHtml = (rem || []).slice(0, 40).map(function(r){
+    const when = (r.created_at || r.at || '').toString().slice(0, 16).replace('T', ' ');
+    return '<div class="r"><span class="w">' + esc(when) + ' [ ' + esc(r.actor || 'system') + ' ]</span> '
+      + esc(r.summary || r.note || '') + '</div>';
+  }).join('') || '<div style="color:var(--nd-text-faint)">Nothing recorded yet.</div>';
+
+  const mv = (st.moves || []);
+  const fwd = mv.filter(function(m){ return m.kind === 'forward'; })[0];
+
+  body.innerHTML =
+      '<div class="l2cr">'
+    + '<div class="l2ban ' + (st.age_state === 'red' ? 'red' : (st.age_state === 'amber' ? 'amber' : 'info')) + '">'
+    +   (st.bucket_icon || '') + ' <b>' + esc(st.bucket_name) + '</b>'
+    +   (st.sub_name ? ' · ' + esc(st.sub_name) : '')
+    +   ' · ' + (st.days == null ? '—' : st.days + ' days here')
+    +   (st.hold_until ? ' · comes back ' + esc(st.hold_until) : '')
+    +   (st.lokpal_days_left != null && st.lokpal_days_left <= 90
+        ? ' · <span class="l2lok">⏳ Lokpal window ' + st.lokpal_days_left + ' days</span>' : '')
+    + '</div>'
+    + (miss.length
+        ? '<div class="l2ban amber">Before this can move on: <b>'
+          + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
+    + '<div class="l2kv">'
+    +   '<div><div class="k">Complainant</div><div class="v">' + esc(who) + '</div></div>'
+    +   '<div><div class="k">Insured</div><div class="v">' + esc(c.insured_name || '—') + '</div></div>'
+    +   '<div><div class="k">Insurance Co.</div><div class="v">' + esc(c.insurer_name || '—') + '</div></div>'
+    +   '<div><div class="k">Disputed</div><div class="v">'
+    +     (c.disputed_amount ? '₹' + Number(c.disputed_amount).toLocaleString('en-IN') : '—') + '</div></div>'
+    +   '<div><div class="k">Phone</div><div class="v">' + esc(c.complainant_phone || c.insured_phone || '—') + '</div></div>'
+    +   '<div><div class="k">Last moved by</div><div class="v">' + esc(st.moved_by || '—') + '</div></div>'
+    + '</div>'
+    + '<div><div class="l2sec">What this bucket is for</div>'
+    +   '<div style="font-size:.84rem;color:var(--nd-text-secondary)">'
+    +   '<b>' + esc((st.guide || {}).what || '') + '</b><br>' + esc((st.guide || {}).do || '')
+    +   '<br><span style="color:var(--nd-warning-text)">⚠ ' + esc((st.guide || {}).watch || '') + '</span></div></div>'
+    + ((st.substates || []).length
+        ? '<div class="l2fld"><label>Step inside this bucket</label>'
+          + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select></div>' : '')
+    + (flds ? '<div><div class="l2sec">Recorded here</div>' + flds + '</div>' : '')
+    + '<div><div class="l2sec">Remarks</div><div class="l2rem">' + remHtml + '</div></div>'
+    + '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
+    +   (fwd ? '<button class="l2mv p" onclick="l2MoveFromCase(\'' + fwd.to_key + '\')">'
+            + '→ ' + esc(fwd.name_en) + '</button>' : '')
+    +   '<button class="l2mv g" onclick="l2MoveMenuCase()">Move somewhere else…</button>'
+    +   '<button class="l2mv g" onclick="openClaimDrawer(' + id + ')">Full claim</button>'
+    + '</div>'
+    + '<div id="l2cMsg" style="font-size:.82rem"></div>'
+    + '</div>';
+}
+
+function l2MoveFromCase(to){
+  const id = _l2Case.claim_id;
+  const keep = _l2Sel; _l2Sel = (_l2Case.st || {}).bucket || _l2Sel;
+  l2Move(id, to); _l2Sel = keep;
+}
+function l2MoveMenuCase(){
+  const id = _l2Case.claim_id;
+  const keep = _l2Sel; _l2Sel = (_l2Case.st || {}).bucket || _l2Sel;
+  l2MoveMenu(id); _l2Sel = keep;
+}
+
+async function l2Field(key, value, el){
+  const id = _l2Case && _l2Case.claim_id;
+  if (!id) return;
+  const msg = document.getElementById('l2cMsg');
+  try{
+    const r = await API('/cases/' + id + '/bucket/field',
+      {method:'POST', body: JSON.stringify({field_key: key, value: String(value == null ? '' : value)})});
+    if (r.ok){
+      if (el){ el.style.borderColor = 'var(--nd-success-text)';
+               setTimeout(function(){ el.style.borderColor = ''; }, 900); }
+      // Keep the "before this can move on" banner honest as fields are filled.
+      const st = await API('/cases/' + id + '/bucket').then(function(x){ return x.ok ? x.json() : null; });
+      if (st){ _l2Case.st = st; }
+      if (msg){ msg.style.color = 'var(--nd-success-text)'; msg.textContent = 'Saved';
+                setTimeout(function(){ if (msg) msg.textContent = ''; }, 1200); }
+    } else {
+      const d = await r.json().catch(function(){ return {}; });
+      if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not save'); }
+    }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not save.'; }
+  }
+}
+
+async function l2SetSub(sub, el){
+  const id = _l2Case && _l2Case.claim_id;
+  if (!id) return;
+  const msg = document.getElementById('l2cMsg');
+  try{
+    const r = await API('/cases/' + id + '/bucket/substate',
+      {method:'POST', body: JSON.stringify({sub: sub})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){
+      if (msg){ msg.style.color = 'var(--nd-success-text)'; msg.textContent = 'Step changed'; }
+      const st = await API('/cases/' + id + '/bucket').then(function(x){ return x.ok ? x.json() : null; });
+      if (st) _l2Case.st = st;
+      await l2Load();
+    } else if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not change the step'); }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not change the step.'; }
+  }
+}
+
+window.loadL2 = loadL2; window.l2Pick = l2Pick; window.l2Sub = l2Sub; window.l2Search = l2Search;
+window.l2Export = l2Export; window.l2Start = l2Start; window.l2Move = l2Move;
+window.l2MoveMenu = l2MoveMenu; window.l2Open = l2Open; window.l2Field = l2Field;
+window.l2SetSub = l2SetSub; window.l2MoveFromCase = l2MoveFromCase;
+window.l2MoveMenuCase = l2MoveMenuCase;
 
 function deskGuide(key){
   _deskOpenGuide = (_deskOpenGuide === key) ? null : key;
