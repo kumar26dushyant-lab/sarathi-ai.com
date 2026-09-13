@@ -1067,6 +1067,44 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_nidaan_doc_checklist_claim
                 ON nidaan_claim_doc_checklist(claim_id);
 
+            -- One document request, as it was actually pushed. This is the receipt: WHO sent it,
+            -- to whom, on which channel, with exactly what wording and asking for exactly which
+            -- documents. Staff are sending a customer a list of things to go and find, so if the
+            -- list was wrong, or went to the wrong number, the answer to "who sent this?" has to
+            -- be a name, not a guess.
+            CREATE TABLE IF NOT EXISTS nidaan_doc_requests (
+                req_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id      INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
+                doc_keys      TEXT DEFAULT '',      -- newline-separated checklist keys asked for
+                message       TEXT DEFAULT '',      -- the exact text that went out
+                channels      TEXT DEFAULT '',      -- 'whatsapp,email'
+                recipients    TEXT DEFAULT '',      -- JSON: [{role,name,phone,email,to|cc}]
+                sent_by_staff_id INTEGER,
+                sent_by       TEXT DEFAULT '',
+                kind          TEXT DEFAULT 'request',  -- request | rerequest | nudge | call
+                result        TEXT DEFAULT '',      -- JSON: per-recipient delivery outcome
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_nidaan_doc_requests_claim
+                ON nidaan_doc_requests(claim_id, created_at DESC);
+
+            -- The chase clock for one claim. Nudges go out every few days and then STOP being a
+            -- nudge and become a phone call for a person to make - because the fourth identical
+            -- WhatsApp message is not persistence, it is noise, and the founder has already told
+            -- us what repeated automatic reminders feel like on the receiving end.
+            CREATE TABLE IF NOT EXISTS nidaan_doc_chase (
+                claim_id      INTEGER PRIMARY KEY REFERENCES nidaan_claims(claim_id),
+                nudges        INTEGER DEFAULT 0,
+                last_nudge_at TIMESTAMP,
+                next_nudge_at TIMESTAMP,
+                paused        INTEGER DEFAULT 0,
+                call_due      INTEGER DEFAULT 0,    -- 1 = nudging is over, somebody must phone
+                call_done_at  TIMESTAMP,
+                call_by       TEXT DEFAULT '',
+                call_note     TEXT DEFAULT '',
+                updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Claim status history
             CREATE TABLE IF NOT EXISTS nidaan_claim_status_log (
                 log_id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2638,6 +2676,22 @@ async def init_db():
         ):
             try:
                 await conn.execute(_rs_sql)
+            except Exception:
+                pass
+        # The checklist was template-only: every row came from the claim type, so a document a
+        # particular case happens to need had nowhere to live. These five columns make the
+        # checklist per-claim - a staffer can ADD what this case needs (custom_label), and REMOVE
+        # something with a reason. Removal is never a DELETE: the row stays with removed_at set,
+        # because "why did we stop asking for the FIR?" is a question somebody asks later.
+        for _dc_sql in (
+            "ALTER TABLE nidaan_claim_doc_checklist ADD COLUMN custom_label TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claim_doc_checklist ADD COLUMN added_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claim_doc_checklist ADD COLUMN removed_at TIMESTAMP",
+            "ALTER TABLE nidaan_claim_doc_checklist ADD COLUMN removed_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claim_doc_checklist ADD COLUMN removed_reason TEXT DEFAULT ''",
+        ):
+            try:
+                await conn.execute(_dc_sql)
             except Exception:
                 pass
         # Complainant Portal — legally-robust consent proof: snapshot the EXACT terms text agreed, the

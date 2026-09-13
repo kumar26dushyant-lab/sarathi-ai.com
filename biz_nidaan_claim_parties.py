@@ -35,6 +35,7 @@ ROLE_LABEL = {
     "complainant": "Complainant",
     "subscriber": "Subscriber",
     "branch": "Branch / My Business",
+    "channel_partner": "Channel Partner",
     "staff": "Staff",
 }
 # Where each party updates their own details (used in the "we're missing X" ask).
@@ -42,6 +43,7 @@ ROLE_PROFILE_URL = {
     "complainant": "/nidaan/dashboard",
     "subscriber": "/nidaan/dashboard",
     "branch": "/nidaan/branch",
+    "channel_partner": "",   # a CP has no login - staff keep their details
     "staff": "/nidaan/ops",
 }
 
@@ -75,7 +77,8 @@ async def get_claim_parties(claim_id: int) -> list[dict]:
             row = await (await c.execute(
                 "SELECT claim_id, account_id, branch_code, insured_name, insured_phone, "
                 "insured_email, complainant_name, complainant_phone, complainant_email, "
-                "assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+                "channel_partner_id, assigned_to_staff_id "
+                "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
         if not row:
             return []
         claim = dict(row)
@@ -119,7 +122,20 @@ async def get_claim_parties(claim_id: int) -> list[dict]:
                 _add("branch", br.get("name") or code, br.get("contact_phone"),
                      br.get("contact_email"), branch_code=code)
 
-        # 4) Staff — the SP- referrer and/or the assigned handler.
+        # 4) Channel Partner — the agent who introduced the case. They have no login, so they
+        #    are reachable only on the phone and email we hold for them. APPROVED partners only:
+        #    an unapproved name must never receive a complainant's documents.
+        if claim.get("channel_partner_id"):
+            try:
+                import biz_nidaan_channel_partners as _cp
+                cp = await _cp.get_partner(int(claim["channel_partner_id"]))
+                if cp and cp.get("status") == "approved":
+                    _add("channel_partner", cp.get("name"), cp.get("phone"), cp.get("email"),
+                         cp_id=cp.get("cp_id"))
+            except Exception:
+                pass
+
+        # 5) Staff — the SP- referrer and/or the assigned handler.
         staff_ids: list[int] = []
         if code.startswith("SP-"):
             try:

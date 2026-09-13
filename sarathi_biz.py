@@ -7385,6 +7385,232 @@ async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
     return res
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  THE PENDING-DOCUMENT WINDOW
+#
+#  A staffer looks at what a claim is still missing, fixes the list, decides who to ask, reads it
+#  back once, and pushes it. Every endpoint below is one step of that, and every one of them is
+#  open to any staff member - the people doing intake are the people who chase documents.
+#
+#  The one thing that is NOT open: sending. /doc-window/send refuses unless it is handed the
+#  checksum that /doc-window/preview returned for exactly this list, this wording and these
+#  recipients. So "check again before you send" is enforced here, not only in the browser, and
+#  the row it writes records who read it back.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _DocAddReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(..., min_length=1, max_length=120)
+    required: bool = True
+
+
+class _DocRemoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_key: str = Field(..., min_length=1, max_length=60)
+    reason: str = Field("", max_length=400)
+
+
+class _DocTypeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_type: str = Field(..., min_length=1, max_length=40)
+
+
+class _DocExtraReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("", max_length=80)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=160)
+
+
+class _DocPreviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_keys: list[str] = Field(default_factory=list, max_length=80)
+    message: str = Field("", max_length=4000)
+    extras: list[_DocExtraReq] = Field(default_factory=list, max_length=20)
+    exclude: list[str] = Field(default_factory=list, max_length=20)
+    # None = the caller did not say, so both. [] = they unticked both, so neither, and the
+    # preview says so rather than quietly sending anyway.
+    channels: Optional[list[str]] = Field(None, max_length=4)
+
+
+class _DocSendReq(_DocPreviewReq):
+    confirm: str = Field(..., min_length=8, max_length=64)
+    kind: str = Field("request", max_length=16)
+
+
+class _DocDraftReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_keys: list[str] = Field(default_factory=list, max_length=80)
+    kind: str = Field("request", max_length=16)
+    note: str = Field("", max_length=1000)
+
+
+class _DocCallReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field(..., min_length=1, max_length=600)
+
+
+class _DocPauseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    paused: bool = True
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/doc-window")
+async def ops_doc_window(claim_id: int, request: Request):
+    """Everything the window draws: the list, what was removed and why, who we can reach, the
+    chase clock, and the last few asks that went out."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.window(claim_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("error") or "Not found")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/type")
+@limiter.limit("30/minute")
+async def ops_doc_window_type(claim_id: int, body: _DocTypeReq, request: Request):
+    """Correct the claim type. The document list follows from it, so this re-seeds the standard
+    list - without touching anything already received or added by hand."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.set_claim_type(claim_id, body.claim_type, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not change it")
+    await _ops_audit(request, "doc.type", "claim", str(claim_id), body.claim_type)
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/add")
+@limiter.limit("60/minute")
+async def ops_doc_window_add(claim_id: int, body: _DocAddReq, request: Request):
+    """Ask this claim for something the standard list does not cover."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.add_custom_doc(claim_id, body.label, by=_actor_label(caller),
+                                   required=body.required)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not add it")
+    await _ops_audit(request, "doc.add", "claim", str(claim_id), body.label[:120])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/remove")
+@limiter.limit("60/minute")
+async def ops_doc_window_remove(claim_id: int, body: _DocRemoveReq, request: Request):
+    """Take a document off this claim's list. The reason is required and is kept for good - the
+    row is never deleted, because "why did we stop asking for the FIR?" gets asked later."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.remove_doc(claim_id, body.doc_key, by=_actor_label(caller),
+                               reason=body.reason)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not remove it")
+    await _ops_audit(request, "doc.remove", "claim", str(claim_id),
+                     f"{body.doc_key}: {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/restore")
+@limiter.limit("60/minute")
+async def ops_doc_window_restore(claim_id: int, body: _DocRemoveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.restore_doc(claim_id, body.doc_key, by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail="That is not on the removed list.")
+    await _ops_audit(request, "doc.restore", "claim", str(claim_id), body.doc_key)
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/draft")
+@limiter.limit("60/minute")
+async def ops_doc_window_draft(claim_id: int, body: _DocDraftReq, request: Request):
+    """The suggested wording, with the chosen documents named. A starting point staff edit."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return {"message": await _dr.draft_message(claim_id, body.doc_keys, kind=body.kind,
+                                               note=body.note)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/preview")
+@limiter.limit("60/minute")
+async def ops_doc_window_preview(claim_id: int, body: _DocPreviewReq, request: Request):
+    """Exactly what will go out and to whom, with anything wrong with it stated plainly."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.preview(claim_id, doc_keys=body.doc_keys, message=body.message,
+                             extras=[e.model_dump() for e in body.extras],
+                             exclude=body.exclude, channels=body.channels)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/send")
+@limiter.limit("20/minute")
+async def ops_doc_window_send(claim_id: int, body: _DocSendReq, request: Request):
+    """Push the ask. Refused unless `confirm` is the checksum preview() gave for this exact
+    list, wording and set of recipients - so nothing reaches a customer unread."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.send(claim_id, doc_keys=body.doc_keys, message=body.message,
+                         confirm=body.confirm,
+                         extras=[e.model_dump() for e in body.extras],
+                         exclude=body.exclude, channels=body.channels,
+                         actor=_actor_label(caller),
+                         actor_staff_id=(caller or {}).get("staff_id"), kind=body.kind)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409 if res.get("stale") else 400,
+                            detail=res.get("error") or "Could not send it")
+    await _ops_audit(request, "doc.request", "claim", str(claim_id),
+                     f"{len(body.doc_keys)} doc(s) to {res.get('delivered')} recipient(s)")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/pause")
+@limiter.limit("30/minute")
+async def ops_doc_window_pause(claim_id: int, body: _DocPauseReq, request: Request):
+    """Stop (or restart) the automatic reminders on this claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.pause_chase(claim_id, paused=body.paused, actor=_actor_label(caller))
+    await _ops_audit(request, "doc.chase", "claim", str(claim_id),
+                     "paused" if body.paused else "resumed")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/called")
+@limiter.limit("30/minute")
+async def ops_doc_window_called(claim_id: int, body: _DocCallReq, request: Request):
+    """The phone call happened. What they said is what stops the next person calling them
+    again tomorrow, so the note is required."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.log_call(claim_id, note=body.note, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not record it")
+    await _ops_audit(request, "doc.called", "claim", str(claim_id), body.note[:160])
+    return res
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/wa/start")
 @limiter.limit("30/minute")
 async def nidaan_ops_wa_start(claim_id: int, request: Request):
@@ -26849,6 +27075,26 @@ async def main():
                     logger.error("parked-claim wake error: %s", e)
                 await asyncio.sleep(3600)
         asyncio.create_task(bucket_wake_loop())
+
+        # Step 6g1c1c: chase the documents a claim is still missing - three days between nudges,
+        # and after two of them we STOP sending and ask a person to pick up the phone. A fourth
+        # identical WhatsApp is not persistence, it is the thing that makes a customer stop
+        # reading anything we send. Worker-only, hourly; the clock itself is per claim, so the
+        # pass is cheap and usually does nothing.
+        async def doc_chase_loop():
+            await asyncio.sleep(540)
+            while True:
+                try:
+                    import biz_nidaan_doc_request as _drw
+                    r = await _drw.run_chase()
+                    if any(r.values()):
+                        logger.info("doc chase: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("doc chase error: %s", e)
+                await asyncio.sleep(3600)
+        asyncio.create_task(doc_chase_loop())
 
         # Step 6g1c2: nobody answered. A customer writing in and getting silence is the worst thing
         # this system can produce, and it is invisible by design — the alert went out and nothing

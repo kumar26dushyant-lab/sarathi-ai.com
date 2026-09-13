@@ -291,18 +291,124 @@ async def _rows(claim_id: int) -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def effective_docs(claim_id: int, claim_type: str) -> list[dict]:
+    """The documents THIS claim actually needs: the type's template, plus anything a staffer
+    added for this case, minus anything a staffer removed (with their reason).
+
+    One list, used by pending_required_docs() and checklist_status() alike, so the dashboard,
+    the WhatsApp nudge and the pay-gate can never disagree about what is outstanding.
+    """
+    rows = {r["doc_key"]: r for r in await _rows(claim_id)}
+    out, seen = [], set()
+    for d in doc_template_for(claim_type):
+        r = rows.get(d["key"])
+        if r and r.get("removed_at"):
+            continue
+        seen.add(d["key"])
+        out.append({**d, "custom": False, "row": r})
+    # Anything on the claim that the template does not know about. A custom row carries its own
+    # label, because there is no template entry to read one from.
+    for key, r in rows.items():
+        if key in seen or r.get("removed_at"):
+            continue
+        lbl = (r.get("custom_label") or "").strip() or key.replace("_", " ").title()
+        out.append({"key": key, "en": lbl, "hi": lbl,
+                    "why": "Asked for on this case.", "why_hi": "\u0907\u0938 \u0915\u0947\u0938 \u092a\u0930 \u092e\u093e\u0901\u0917\u093e \u0917\u092f\u093e\u0964",
+                    "required": bool(r.get("required")), "conditional": False,
+                    "custom": True, "added_by": r.get("added_by") or "", "row": r})
+    return out
+
+
+async def removed_docs(claim_id: int) -> list[dict]:
+    """What was taken off this claim's list, who took it off and why - a removal is a decision
+    somebody has to be able to explain later."""
+    return [{"doc_key": r["doc_key"], "label": (r.get("custom_label") or "").strip(),
+             "by": r.get("removed_by") or "", "at": r.get("removed_at"),
+             "reason": r.get("removed_reason") or ""}
+            for r in await _rows(claim_id) if r.get("removed_at")]
+
+
+async def add_custom_doc(claim_id: int, label: str, *, by: str, required: bool = True) -> dict:
+    """Ask this claim for something the template never anticipated."""
+    label = (label or "").strip()[:120]
+    if not label:
+        return {"ok": False, "error": "Say what document you need."}
+    key = "x_" + "".join(ch if ch.isalnum() else "_" for ch in label.lower()).strip("_")[:48]
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        existing = await (await conn.execute(
+            "SELECT doc_key, removed_at FROM nidaan_claim_doc_checklist WHERE claim_id=? "
+            "AND doc_key=?", (claim_id, key))).fetchone()
+        if existing and not existing["removed_at"]:
+            return {"ok": False, "error": "That is already on the list."}
+        if existing:
+            # It was removed before and is being asked for again - revive the same row so the
+            # history of both decisions stays on one line.
+            await conn.execute(
+                "UPDATE nidaan_claim_doc_checklist SET removed_at=NULL, removed_by='', "
+                "removed_reason='', custom_label=?, required=?, added_by=?, "
+                "updated_at=datetime('now') WHERE claim_id=? AND doc_key=?",
+                (label, 1 if required else 0, (by or "")[:80], claim_id, key))
+        else:
+            await conn.execute(
+                "INSERT INTO nidaan_claim_doc_checklist (claim_id, doc_key, required, "
+                "conditional, received, custom_label, added_by) VALUES (?,?,?,0,0,?,?)",
+                (claim_id, key, 1 if required else 0, label, (by or "")[:80]))
+        await conn.commit()
+    return {"ok": True, "doc_key": key, "label": label}
+
+
+async def remove_doc(claim_id: int, doc_key: str, *, by: str, reason: str) -> dict:
+    """Take a document off this claim's list. A reason is required - the next person needs to
+    know we stopped asking on purpose, not by accident. The row is kept, never deleted."""
+    reason = (reason or "").strip()
+    if not reason:
+        return {"ok": False, "error": "Say why this is no longer needed."}
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        r = await (await conn.execute(
+            "SELECT received FROM nidaan_claim_doc_checklist WHERE claim_id=? AND doc_key=?",
+            (claim_id, doc_key))).fetchone()
+        if r is None:
+            # A template item nobody has touched yet has no row. Create one, already removed, so
+            # the decision is recorded rather than silently applied.
+            await conn.execute(
+                "INSERT INTO nidaan_claim_doc_checklist (claim_id, doc_key, required, "
+                "conditional, received, removed_at, removed_by, removed_reason) "
+                "VALUES (?,?,0,0,0,datetime('now'),?,?)",
+                (claim_id, doc_key, (by or "")[:80], reason[:400]))
+        else:
+            await conn.execute(
+                "UPDATE nidaan_claim_doc_checklist SET removed_at=datetime('now'), removed_by=?, "
+                "removed_reason=?, updated_at=datetime('now') WHERE claim_id=? AND doc_key=?",
+                ((by or "")[:80], reason[:400], claim_id, doc_key))
+        await conn.commit()
+    return {"ok": True}
+
+
+async def restore_doc(claim_id: int, doc_key: str, *, by: str) -> dict:
+    """Put a removed document back on the list."""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_claim_doc_checklist SET removed_at=NULL, removed_by='', "
+            "removed_reason='', added_by=?, updated_at=datetime('now') "
+            "WHERE claim_id=? AND doc_key=? AND removed_at IS NOT NULL",
+            ((by or "")[:80], claim_id, doc_key))
+        await conn.commit()
+    return {"ok": cur.rowcount > 0}
+
+
 async def pending_required_docs(claim_id: int, claim_type: str) -> list[dict]:
     """The still-missing REQUIRED docs — the single source for de-dup + pay-gate.
     Returns enriched doc dicts (key + labels + why) so callers can render asks."""
-    rows = {r["doc_key"]: r for r in await _rows(claim_id)}
     pending = []
-    for d in doc_template_for(claim_type):
-        r = rows.get(d["key"])
+    for d in await effective_docs(claim_id, claim_type):
+        r = d.get("row")
         # required if the template says so OR the reviewer marked it required
         is_required = (r["required"] == 1) if r else d["required"]
         received = (r["received"] == 1) if r else False
         if is_required and not received:
-            pending.append(d)
+            pending.append({k: v for k, v in d.items() if k != "row"})
     return pending
 
 
@@ -347,11 +453,10 @@ async def checklist_status(claim_id: int, claim_type: str) -> dict:
                     f"SELECT doc_id, original_name FROM nidaan_claim_documents WHERE doc_id IN ({ph})",
                     doc_ids)).fetchall():
                 names[dr["doc_id"]] = dr["original_name"]
-    tmpl = doc_template_for(claim_type)
     required_total = received_required = 0
     items = []
-    for d in tmpl:
-        r = rows.get(d["key"])
+    for d in await effective_docs(claim_id, claim_type):
+        r = d.pop("row", None)
         is_required = (r["required"] == 1) if r else d["required"]
         received = (r["received"] == 1) if r else False
         via = r["received_via"] if r else None
