@@ -6638,6 +6638,9 @@ _DOC_KEYS = {
     # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
     # Hinglish and English, because the people doing the work do not read release notes.
     "l2-manual": "nidaan_l2_manual.html",
+    # The bucket architecture: every bucket, sub-state, field and movement, with a real case
+    # walked through. Design only - shared so it can be argued with before anything is built.
+    "l2-design": "nidaan_l2_design.html",
 }
 
 
@@ -6687,6 +6690,12 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
 async def nidaan_doc_end_to_end(request: Request, k: str = ""):
     """The operating-model document. Shareable with a key; staff sessions open it directly."""
     return await _serve_shared_doc(request, "end-to-end", k)
+
+
+@app.get("/l2-design", include_in_schema=False)
+async def nidaan_doc_l2_design(request: Request, k: str = ""):
+    """The bucket architecture, for review before it is built. Same share key."""
+    return await _serve_shared_doc(request, "l2-design", k)
 
 
 @app.get("/l2-manual", include_in_schema=False)

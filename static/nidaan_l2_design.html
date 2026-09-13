@@ -1,0 +1,737 @@
+<!-- Level-2 bucket architecture — served at /l2-design behind the doc share key.
+     Design document. Nothing in here is built. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Level-2 Bucket Architecture — NidaanPartner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#eef1f5; --card:#fff; --ink:#131a22; --ink2:#46586a; --ink3:#78899a;
+    --line:#dce3e9; --line2:#c2ccd6;
+    --ac:#0b6e7f; --ac-s:#e2f0f3;
+    --warn:#96580f; --warn-s:#fbf0dc;
+    --bad:#9c3227; --bad-s:#fbeae8;
+    --good:#1c6a4a; --good-s:#e5f2ea;
+    --sh:0 1px 2px rgba(19,26,34,.05),0 8px 22px rgba(19,26,34,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0e131a; --card:#161e27; --ink:#e6edf3; --ink2:#a5b7c7; --ink3:#798b9b;
+    --line:#242f3a; --line2:#34434e;
+    --ac:#4fc3d6; --ac-s:#0d2c33;
+    --warn:#dfa84e; --warn-s:#2d2311;
+    --bad:#ef8b7f; --bad-s:#2e1816;
+    --good:#62bf95; --good-s:#11271d;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16.5px;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:66rem;margin:0 auto;padding:2.4rem 1.2rem 5rem}
+  h1,h2,h3,h4{font-family:Fraunces,Georgia,serif;margin:0;text-wrap:balance}
+  h1{font-size:clamp(2rem,5vw,3rem);font-weight:700;line-height:1.08;letter-spacing:-.02em}
+  h2{font-size:clamp(1.35rem,3vw,1.8rem);font-weight:700;line-height:1.18}
+  h3{font-size:1.1rem;font-weight:700;margin-bottom:.25rem}
+  p{margin:0 0 .8rem;max-width:68ch}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.7rem;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ac)}
+  .lede{font-size:1.1rem;color:var(--ink2);max-width:62ch;margin-top:.9rem}
+  header{padding-bottom:1.6rem;border-bottom:3px double var(--line2);margin-bottom:1.4rem}
+  nav.toc{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:2rem}
+  nav.toc a{font-size:.78rem;font-weight:600;text-decoration:none;color:var(--ink2);
+    border:1px solid var(--line2);border-radius:999px;padding:.15rem .6rem;background:var(--card)}
+  nav.toc a:hover{border-color:var(--ac);color:var(--ac)}
+  section{margin:3rem 0 0;scroll-margin-top:1rem}
+  .sh{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.8rem}
+  .sh .n{font-family:"IBM Plex Mono",monospace;font-size:.76rem;font-weight:600;color:var(--ac);
+    border:1px solid var(--ac);border-radius:5px;padding:.05rem .4rem;flex:0 0 auto}
+  .co{border-left:3px solid var(--ac);background:var(--ac-s);border-radius:0 10px 10px 0;
+    padding:.8rem 1.05rem;margin:1rem 0}
+  .co.bad{border-left-color:var(--bad);background:var(--bad-s)}
+  .co.warn{border-left-color:var(--warn);background:var(--warn-s)}
+  .co.good{border-left-color:var(--good);background:var(--good-s)}
+  .co p:last-child{margin-bottom:0}
+  .co .l{font-family:"IBM Plex Mono",monospace;font-size:.65rem;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;display:block;margin-bottom:.3rem;color:var(--ink2)}
+
+  /* flow map */
+  .flow{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem;
+    box-shadow:var(--sh);margin:1.1rem 0;overflow-x:auto}
+  .frow{display:flex;align-items:stretch;gap:.4rem;min-width:44rem;margin-bottom:.5rem}
+  .fb{flex:1;border:1.5px solid var(--line2);border-radius:9px;padding:.45rem .5rem;text-align:center;
+    background:var(--bg);min-width:0}
+  .fb .nm{font-size:.78rem;font-weight:700;color:var(--ink);line-height:1.25}
+  .fb .sub{font-size:.62rem;color:var(--ink3);margin-top:.1rem;line-height:1.3}
+  .fb.t1{border-color:var(--ac)}   .fb.t1 .nm{color:var(--ac)}
+  .fb.t2{border-color:var(--warn)} .fb.t2 .nm{color:var(--warn)}
+  .fb.t3{border-color:var(--good)} .fb.t3 .nm{color:var(--good)}
+  .arr{align-self:center;color:var(--ink3);font-size:1rem;flex:0 0 auto}
+  .back{font-size:.72rem;color:var(--bad);text-align:center;margin:.15rem 0 .5rem;min-width:44rem}
+  .hold{border:1.5px dashed var(--ink3);border-radius:9px;padding:.4rem .6rem;text-align:center;
+    font-size:.76rem;color:var(--ink2);margin-top:.3rem;min-width:44rem}
+
+  /* bucket cards */
+  .bk{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--ac);
+    border-radius:10px;padding:.9rem 1.1rem;box-shadow:var(--sh);margin:.8rem 0}
+  .bk.t2{border-left-color:var(--warn)} .bk.t3{border-left-color:var(--good)}
+  .bk .bh{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+  .bk .bt{font-family:Fraunces,Georgia,serif;font-size:1.1rem;font-weight:700}
+  .bk .clk{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink3);white-space:nowrap}
+  .bk .wh{font-size:.9rem;color:var(--ink2);margin:.25rem 0 .5rem}
+  dl.g{display:grid;grid-template-columns:6.6rem 1fr;gap:.18rem .7rem;margin:0;font-size:.88rem}
+  dl.g dt{font-family:"IBM Plex Mono",monospace;font-size:.63rem;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink3);padding-top:.3rem}
+  dl.g dd{margin:0;color:var(--ink2)}
+  .st{display:inline-block;font-size:.7rem;font-weight:600;border:1px solid var(--line2);
+    border-radius:999px;padding:.05rem .45rem;margin:.1rem .15rem .1rem 0;color:var(--ink2);
+    background:var(--bg)}
+  .st.now{border-color:var(--ac);color:var(--ac)}
+  .fld{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;
+    background:var(--ac-s);color:var(--ac);border-radius:4px;padding:.05rem .35rem;margin:.1rem .15rem 0 0}
+
+  /* journey */
+  .jn{border-left:2px solid var(--line2);margin-left:.6rem;padding-left:1.4rem;position:relative}
+  .jstep{position:relative;padding-bottom:1.2rem}
+  .jstep::before{content:attr(data-d);position:absolute;left:-2.32rem;top:.1rem;width:1.5rem;height:1.5rem;
+    border-radius:50%;background:var(--ac);color:#fff;font-family:"IBM Plex Mono",monospace;
+    font-size:.6rem;font-weight:600;display:flex;align-items:center;justify-content:center}
+  .jstep.warnstep::before{background:var(--warn)}
+  .jstep.badstep::before{background:var(--bad)}
+  .jstep.goodstep::before{background:var(--good)}
+  .jstep .jt{font-weight:700;color:var(--ink);font-size:.98rem}
+  .jstep .jw{font-size:.9rem;color:var(--ink2);margin-top:.1rem}
+  .jstep .jn2{font-size:.8rem;color:var(--ink3);margin-top:.2rem;
+    border-left:2px solid var(--line2);padding-left:.55rem}
+  .jstep .ping{display:inline-block;font-size:.72rem;font-weight:600;background:var(--ac-s);
+    color:var(--ac);border-radius:4px;padding:.05rem .4rem;margin-top:.25rem}
+  .jstep .ping.w{background:var(--warn-s);color:var(--warn)}
+  .jstep .ping.b{background:var(--bad-s);color:var(--bad)}
+
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.d{width:100%;border-collapse:collapse;font-size:.9rem;margin:.8rem 0;min-width:34rem}
+  table.d th{text-align:left;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink3);border-bottom:1.5px solid var(--line2);padding:.45rem .55rem}
+  table.d td{padding:.45rem .55rem;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+  table.d td b{color:var(--ink)}
+  table.d tbody tr:last-child td{border-bottom:none}
+  ul,ol{margin:0 0 .85rem;padding-left:1.2rem;max-width:68ch}
+  li{margin-bottom:.35rem}
+  code{font-family:"IBM Plex Mono",monospace;font-size:.85em;background:var(--ac-s);color:var(--ac);
+    padding:.06em .38em;border-radius:4px}
+  hr.r{border:none;border-top:1px solid var(--line);margin:2.6rem 0 0}
+  footer{margin-top:2.4rem;padding-top:1.2rem;border-top:3px double var(--line2);
+    font-size:.85rem;color:var(--ink3)}
+  @media (max-width:640px){
+    body{font-size:16px}
+    .wrap{padding:1.7rem 1rem 3.5rem}
+    dl.g{grid-template-columns:1fr;gap:.05rem}
+    dl.g dt{padding-top:.45rem}
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Design · draft 3 · nothing built</div>
+  <h1>Level-2 Bucket Architecture</h1>
+  <p class="lede">Every bucket, every sub-state, every field, and every way a claim can move —
+  forwards, backwards and sideways. Written against your ClaimShield names, with a real
+  NidaanPartner case walked through end to end.</p>
+</header>
+
+<nav class="toc">
+  <a href="#map">The map</a><a href="#buckets">The 11 buckets</a><a href="#roles">Who is on a case</a>
+  <a href="#journey">A real case</a><a href="#tofro">To and fro</a><a href="#notify">Notifications</a>
+  <a href="#scen">Scenarios</a><a href="#build">What gets built</a>
+</nav>
+
+<!-- ══ MAP ══ -->
+<section id="map">
+  <div class="sh"><span class="n">01</span><h2>The map</h2></div>
+  <p>Eleven buckets, your names. A claim sits in exactly one at a time, and the bucket owns it —
+  so nobody leaving, changing role or going on leave can strand a case.</p>
+
+  <div class="flow">
+    <div class="frow">
+      <div class="fb t1"><div class="nm">📋 Live Cases</div><div class="sub">just entered L2 · gist</div></div>
+      <span class="arr">→</span>
+      <div class="fb t1"><div class="nm">📄 Pending Docs</div><div class="sub">collecting papers</div></div>
+      <span class="arr">→</span>
+      <div class="fb t1"><div class="nm">✍️ Pending Draft</div><div class="sub">write + approve</div></div>
+      <span class="arr">→</span>
+      <div class="fb t2"><div class="nm">📮 Reimbursement</div><div class="sub">filed with the company</div></div>
+    </div>
+    <div class="back">↑ back: wrong gist · papers rejected · draft returned ↑</div>
+    <div class="frow">
+      <div class="fb t2"><div class="nm">⚖️ Escalation</div><div class="sub">grievance officer</div></div>
+      <span class="arr">→</span>
+      <div class="fb t2"><div class="nm">🏛️ Lokpal</div><div class="sub">Ombudsman</div></div>
+      <span class="arr">→</span>
+      <div class="fb t3"><div class="nm">✅ Completed</div><div class="sub">result recorded</div></div>
+      <span class="arr">→</span>
+      <div class="fb t3"><div class="nm">💰 Pending Payment</div><div class="sub">customer's money</div></div>
+    </div>
+    <div class="back">↑ back: company reopens · query raised · settlement disputed ↑</div>
+    <div class="frow">
+      <div class="fb t3"><div class="nm">🤝 CP Payment</div><div class="sub">partner's share</div></div>
+      <span class="arr">→</span>
+      <div class="fb t3"><div class="nm">🏁 Finished</div><div class="sub">closed, nothing owed</div></div>
+      <div class="fb" style="visibility:hidden"></div>
+      <div class="fb" style="visibility:hidden"></div>
+    </div>
+    <div class="hold">⏸️ <b>Hold</b> — a side-park reachable from <b>any</b> bucket. Needs a reason and
+      a return date; on that date the claim goes back to the bucket it came from, by itself.</div>
+  </div>
+
+  <div class="co good">
+    <span class="l">A claim can settle at any point</span>
+    <p>Most do not reach Lokpal. If the company pays during Reimbursement or after the grievance
+    officer, the claim jumps straight to <b>Completed</b> — the later buckets are skipped, not
+    marched through. The map is the longest possible road, not the compulsory one.</p>
+  </div>
+</section>
+
+<!-- ══ BUCKETS ══ -->
+<section id="buckets">
+  <div class="sh"><span class="n">02</span><h2>The eleven buckets, in detail</h2></div>
+  <p>Each card: what it is, its internal steps, what gets captured there, when it is finished, and
+  where it can go — both directions.</p>
+
+  <div class="bk">
+    <div class="bh"><span class="bt">📋 Live Cases</span><span class="clk">amber 5d · red 10d</span></div>
+    <div class="wh">A claim whose Level-2 fee is paid and which someone on <b>Intake duty</b> has
+      started. The first real work: build the case gist.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd>None.</dd>
+      <dt>Capture</dt><dd><span class="fld">gist: patient</span><span class="fld">complainant</span>
+        <span class="fld">on behalf of</span><span class="fld">claim type</span>
+        <span class="fld">claim no.</span><span class="fld">policy no.</span>
+        <span class="fld">insurance company</span><span class="fld">hospital</span>
+        <span class="fld">admission / discharge</span><span class="fld">diagnosis</span>
+        <span class="fld">rejection reason + date</span><span class="fld">case email + password</span>
+        <span class="fld">consultation %</span><span class="fld">CF amount</span></dd>
+      <dt>Done when</dt><dd>The gist is complete and the document checklist for this claim type has been generated.</dd>
+      <dt>Goes to</dt><dd><b>Pending Docs</b> (papers missing) · <b>Pending Draft</b> (everything already on file)</dd>
+      <dt>Comes back</dt><dd>From Pending Docs or Pending Draft when the gist itself is wrong.</dd>
+    </dl>
+  </div>
+
+  <div class="bk">
+    <div class="bh"><span class="bt">📄 Pending Docs</span><span class="clk">amber 20d · red 35d</span></div>
+    <div class="wh">Collecting every paper this kind of claim needs, from the complainant and the hospital.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Waiting on complainant</span>
+        <span class="st">Waiting on hospital</span><span class="st">Ready</span></dd>
+      <dt>Capture</dt><dd><span class="fld">checklist ticks</span><span class="fld">uploaded files</span>
+        <span class="fld">originals received by post</span><span class="fld">hospital refusal letter sent</span></dd>
+      <dt>Done when</dt><dd>Every required document is in — the one thing the system can prove, so this is the one automatic move.</dd>
+      <dt>Goes to</dt><dd><b>Pending Draft</b> · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>From Pending Draft when a paper turns out to be wrong or unreadable.</dd>
+    </dl>
+  </div>
+
+  <div class="bk">
+    <div class="bh"><span class="bt">✍️ Pending Draft</span><span class="clk">amber 5d · red 10d</span></div>
+    <div class="wh">Writing the case up and getting it approved inside the office before anything leaves.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Drafting</span><span class="st">With Medical Officer / Advocate</span>
+        <span class="st">Draft Query</span><span class="st">Approved</span></dd>
+      <dt>Capture</dt><dd><span class="fld">draft — English</span><span class="fld">draft — Hindi</span>
+        <span class="fld">approved by</span><span class="fld">approved on</span><span class="fld">query raised</span></dd>
+      <dt>Done when</dt><dd>The Medical Officer (or Advocate, on a non-medical claim) has approved the draft.</dd>
+      <dt>Goes to</dt><dd><b>Reimbursement</b> · back to <b>Pending Docs</b> · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>From Reimbursement when the company rejects the submission on a defect in our own file.</dd>
+    </dl>
+  </div>
+
+  <div class="bk t2">
+    <div class="bh"><span class="bt">📮 Reimbursement</span><span class="clk">amber 30d · red 45d</span></div>
+    <div class="wh">The file is with the insurance company and the 30-day clock is running.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Reimbursement Pending</span><span class="st">Submitted</span>
+        <span class="st">Reimbursement Query</span></dd>
+      <dt>Capture</dt><dd><span class="fld">submitted on</span><span class="fld">courier / POD no.</span>
+        <span class="fld">acknowledgement</span><span class="fld">their query + our reply</span>
+        <span class="fld">reminder 10 / 20 / 30 sent</span></dd>
+      <dt>Done when</dt><dd>They settle it, or the 30 days pass with no acceptable answer.</dd>
+      <dt>Goes to</dt><dd><b>Escalation</b> · <b>Completed</b> (they paid) · back to <b>Pending Draft</b> · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>From Escalation if the company reopens the file.</dd>
+    </dl>
+    <div class="co warn" style="margin:.6rem 0 0">
+      <span class="l">A query flips who is waiting</span>
+      <p>When the company raises a query the ball is back with <b>us</b>. The sub-state changes to
+      <em>Reimbursement Query</em>, the clock restarts, and the claim jumps to the top of the
+      handler's list — because their deadline is now the one that matters.</p>
+    </div>
+  </div>
+
+  <div class="bk t2">
+    <div class="bh"><span class="bt">⚖️ Escalation</span><span class="clk">amber 15d · red 25d</span></div>
+    <div class="wh">The company said no, or said nothing. Taking it above them.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Escalation Pending</span><span class="st">Escalation Query</span>
+        <span class="st">Escalated</span></dd>
+      <dt>Capture</dt><dd><span class="fld">escalation date</span><span class="fld">grievance ref</span>
+        <span class="fld">reminders 1 / 2 / 3</span><span class="fld">their reply</span></dd>
+      <dt>Done when</dt><dd>They settle, or the grievance route is exhausted and the Lokpal complaint is prepared.</dd>
+      <dt>Goes to</dt><dd><b>Lokpal</b> · <b>Completed</b> (settled) · back to <b>Reimbursement</b> · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>From Lokpal if the complaint is returned for a defect before registration.</dd>
+    </dl>
+    <div class="co bad" style="margin:.6rem 0 0">
+      <span class="l">The hard deadline</span>
+      <p>One year from the <b>rejection date</b> to reach the Ombudsman. From this bucket onwards the
+      days remaining are shown on the row, and at 90 days left the claim outranks everything else on
+      every list in the office.</p>
+    </div>
+  </div>
+
+  <div class="bk t2">
+    <div class="bh"><span class="bt">🏛️ Lokpal</span><span class="clk">amber 60d · red 120d</span></div>
+    <div class="wh">The case is with the Insurance Ombudsman. The longest bucket, and the one with the most steps.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Lokpal Pending</span><span class="st">Lokpal Registered</span>
+        <span class="st">Annexure 5 Pending</span><span class="st">Annexure 5 Replied</span>
+        <span class="st">Annexure 6 Pending</span><span class="st">Annexure 6 Replied</span>
+        <span class="st">Hearing</span></dd>
+      <dt>Capture</dt><dd><span class="fld">BHP number</span><span class="fld">registration date</span>
+        <span class="fld">Annexure 5 date</span><span class="fld">Annexure 5 reply date</span>
+        <span class="fld">Annexure 6 date</span><span class="fld">Annexure 6 reply date</span>
+        <span class="fld">hearing date</span><span class="fld">dispatch POD</span></dd>
+      <dt>Done when</dt><dd>An award or a dismissal has been received and recorded.</dd>
+      <dt>Goes to</dt><dd><b>Completed</b> · back to <b>Escalation</b> (returned before registration) · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>Rarely. Only if Completed was recorded in error.</dd>
+    </dl>
+    <div class="co warn" style="margin:.6rem 0 0">
+      <span class="l">Annexure dates drive the alarm</span>
+      <p>An Annexure with a date and no reply is the single most dangerous state in the system —
+      a missed reply can end the complaint. <em>Annexure 5 Pending</em> and <em>Annexure 6 Pending</em>
+      go amber at <b>5 days</b> and red at <b>8</b>, regardless of the bucket's own 60-day clock.</p>
+    </div>
+  </div>
+
+  <div class="bk t3">
+    <div class="bh"><span class="bt">✅ Completed</span><span class="clk">amber 7d · red 14d</span></div>
+    <div class="wh">A decision has come. Recording what it means, and telling the complainant — by a person.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Hearing</span><span class="st">Escalation Settlement</span>
+        <span class="st">Consent</span></dd>
+      <dt>Capture</dt><dd><span class="fld">completion type</span><span class="fld">completion date</span>
+        <span class="fld">result — won / lost / partial</span><span class="fld">settlement amount</span>
+        <span class="fld">complainant informed on</span><span class="fld">informed by</span></dd>
+      <dt>Done when</dt><dd>The result is recorded <b>and</b> the complainant has been told by a human.</dd>
+      <dt>Goes to</dt><dd><b>Pending Payment</b> (we won something) · <b>Finished</b> (lost — nothing to collect)</dd>
+      <dt>Comes back</dt><dd>From Pending Payment if the award is challenged or the figure was wrong.</dd>
+    </dl>
+  </div>
+
+  <div class="bk t3">
+    <div class="bh"><span class="bt">💰 Pending Payment</span><span class="clk">amber 14d · red 30d</span></div>
+    <div class="wh">The customer's money has to arrive, then our fee. Two different chases in one bucket.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Pending Payment</span><span class="st">Part Payment</span>
+        <span class="st">Disputed Payment</span></dd>
+      <dt>Capture</dt><dd><span class="fld">customer payment date</span><span class="fld">settlement amount</span>
+        <span class="fld">CF amount</span><span class="fld">consultation %</span>
+        <span class="fld">processing fee (PF) paid / unpaid</span><span class="fld">PF transaction no.</span>
+        <span class="fld">CF transaction no.</span><span class="fld">cheque no. + amount</span>
+        <span class="fld">part payment received</span><span class="fld">amount pending</span></dd>
+      <dt>Done when</dt><dd>The customer confirms receipt and our fee is in.</dd>
+      <dt>Goes to</dt><dd><b>CP Payment</b> (a partner is owed) · <b>Finished</b> (nobody owed) · <b>Hold</b></dd>
+      <dt>Comes back</dt><dd>From CP Payment if the customer's payment is reversed or disputed later.</dd>
+    </dl>
+    <div class="co warn" style="margin:.6rem 0 0">
+      <span class="l">Start on day one</span>
+      <p>Once the customer has their money, chasing our fee gets harder every week. The clock here
+      starts on the <b>customer payment date</b>, not the day we noticed.</p>
+    </div>
+  </div>
+
+  <div class="bk t3">
+    <div class="bh"><span class="bt">🤝 CP Payment</span><span class="clk">amber 10d · red 20d</span></div>
+    <div class="wh">Paying the channel partner, branch or staff member who brought the case their share.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd><span class="st">Payable</span><span class="st">Paid</span></dd>
+      <dt>Capture</dt><dd><span class="fld">CP name + code</span><span class="fld">share %</span>
+        <span class="fld">amount payable</span><span class="fld">paid on</span><span class="fld">transaction no.</span></dd>
+      <dt>Done when</dt><dd>Every share is settled.</dd>
+      <dt>Goes to</dt><dd><b>Finished</b></dd>
+      <dt>Comes back</dt><dd>From Finished only to correct a payment recorded in error.</dd>
+    </dl>
+  </div>
+
+  <div class="bk t3">
+    <div class="bh"><span class="bt">🏁 Finished</span><span class="clk">no clock</span></div>
+    <div class="wh">Nothing is owed in any direction. The case is closed but fully readable — gist, remarks, drafts, documents, amounts.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd>None.</dd>
+      <dt>Goes to</dt><dd>Nowhere. Reopening requires a super-admin and leaves a remark.</dd>
+    </dl>
+  </div>
+
+  <div class="bk">
+    <div class="bh"><span class="bt">⏸️ Hold</span><span class="clk">wakes on its date</span></div>
+    <div class="wh">A deliberate pause. Reachable from any bucket and always remembers where it came from.</div>
+    <dl class="g">
+      <dt>Sub-states</dt><dd>None.</dd>
+      <dt>Capture</dt><dd><span class="fld">reason (required)</span><span class="fld">return date (required)</span>
+        <span class="fld">parked by</span><span class="fld">came from</span></dd>
+      <dt>Done when</dt><dd>The return date arrives — the claim goes back to its original bucket on its own and flags as <em>the pause has ended</em>.</dd>
+      <dt>Goes to</dt><dd>Whichever bucket it came from. A person can also pull it back early.</dd>
+    </dl>
+    <div class="co bad" style="margin:.6rem 0 0">
+      <span class="l">No open-ended holds, ever</span>
+      <p>The form will not create one. A pause with no end date is exactly how a case disappears for
+      a year, and it is the single most common way a bucket system rots.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ROLES ══ -->
+<section id="roles">
+  <div class="sh"><span class="n">03</span><h2>Who is on a case</h2></div>
+  <p>ClaimShield shows Manager · CP · Case Handler · Medical Officer. Taking your answer to Q8:</p>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>On the case</th><th>What it means</th><th>How it is set</th></tr></thead>
+    <tbody>
+      <tr><td><b>Origin</b><br><span style="font-size:.8rem;color:var(--ink3)">(was “Manager”)</span></td>
+        <td>How the case came in — a <em>trail</em>, not a person to chase:<br>
+          <span class="st">Subscriber raised — <em>name</em></span>
+          <span class="st">Raised for subscriber — <em>staff</em></span>
+          <span class="st">Raised by branch — <em>branch</em></span>
+          <span class="st">Raised by staff — <em>staff</em></span>
+          <span class="st">Direct</span></td>
+        <td>Recorded automatically at intake. Never edited — it is history.</td></tr>
+      <tr><td><b>Channel Partner</b></td><td>The CP whose share is paid at the end.</td>
+        <td>Chosen at intake; a super-admin can correct it.</td></tr>
+      <tr><td><b>Case Handler</b></td><td>The staff member currently doing the work.</td>
+        <td>Optional. The <b>bucket</b> owns the claim; a handler is named only when a case needs one pair of hands.</td></tr>
+      <tr><td><b>Medical Officer</b><br><b>/ Advocate</b></td>
+        <td>Approves the draft. <b>Medical Officer</b> on medical claims, <b>Advocate</b> on non-medical.</td>
+        <td>Set when the claim enters Pending Draft. The field renames itself by claim type.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="co">
+    <span class="l">Why origin is a trail and not an owner</span>
+    <p>A marketing person who brought a case in six months ago should not appear to be responsible
+    for drafting it. Separating <em>where it came from</em> from <em>who is working it</em> is what
+    lets the bucket own the claim without losing the attribution that pays the partner.</p>
+  </div>
+</section>
+
+<!-- ══ JOURNEY ══ -->
+<section id="journey">
+  <div class="sh"><span class="n">04</span><h2>A real case, end to end</h2></div>
+  <p><b>NP-70 · SURESH BABURAO CHOUDHARI</b> — health claim, Aditya Birla, <b>₹4,00,000</b> disputed,
+  came in through branch <code>PUNEICD-01</code>, reviewed as winnable, Level-2 fee paid. It is
+  sitting in our system right now waiting for someone to start it. Here is what would happen under
+  this design.</p>
+
+  <div class="jn">
+    <div class="jstep" data-d="D0">
+      <div class="jt">Intake duty starts it → 📋 Live Cases</div>
+      <div class="jw">Anyone on <b>Intake duty</b> sees it under “paid, winnable, not started” and
+        presses <b>Start Level-2</b>.</div>
+      <div class="jn2">Remark written automatically: <em>“L2 processing started by ANNAPURNA KASERA”</em></div>
+      <span class="ping">🔔 Telegram → whoever is on duty for Live Cases</span>
+    </div>
+
+    <div class="jstep" data-d="D1">
+      <div class="jt">The gist is built</div>
+      <div class="jw">Handler fills patient, complainant, hospital, admission/discharge, diagnosis,
+        rejection reason and date, the claim email, consultation % and CF amount. The
+        <b>insurance company is picked from the list</b> — not typed.</div>
+      <div class="jn2">Claim type <em>health</em> → the health document checklist is generated: 11 papers.</div>
+    </div>
+
+    <div class="jstep warnstep" data-d="D1">
+      <div class="jt">→ 📄 Pending Docs <span style="font-weight:400;color:var(--ink3)">· Waiting on complainant</span></div>
+      <div class="jw">3 of 11 papers are already on file. The complainant is asked for the rest, one
+        at a time, on WhatsApp.</div>
+      <span class="ping">🔔 Complainant gets the first document request</span>
+    </div>
+
+    <div class="jstep badstep" data-d="D14">
+      <div class="jt">The hospital refuses the indoor case papers</div>
+      <div class="jw">Sub-state changes to <b>Waiting on hospital</b>. The standard refusal letter is
+        sent and recorded. Because this will take weeks, the handler <b>parks it to Hold</b> with a
+        return date of D+30 and the reason typed in.</div>
+      <div class="jn2">Remark: <em>“14/09 [ SUHANA JAIN ] Hospital ne indoor papers dene se mana kiya — refusal letter bheja”</em></div>
+      <span class="ping w">⏸️ Leaves the active list. Nobody is chased about it while it is parked.</span>
+    </div>
+
+    <div class="jstep" data-d="D44">
+      <div class="jt">Hold expires → back to 📄 Pending Docs, by itself</div>
+      <div class="jw">No one has to remember. The claim reappears flagged <em>the pause has ended</em>,
+        at the top of the Pending Docs list.</div>
+      <span class="ping">🔔 Telegram → Pending Docs duty</span>
+    </div>
+
+    <div class="jstep goodstep" data-d="D47">
+      <div class="jt">Last paper arrives → 📄 shows <b>Ready</b></div>
+      <div class="jw">11 of 11. This is the one thing the system can prove, so the claim shows as
+        ready and moves to Pending Draft <b>on one click</b> — or automatically, if you switch that on.</div>
+    </div>
+
+    <div class="jstep" data-d="D48">
+      <div class="jt">→ ✍️ Pending Draft <span style="font-weight:400;color:var(--ink3)">· Drafting</span></div>
+      <div class="jw">Gist and letter written in English and Hindi, side by side, as in ClaimShield.
+        Sub-state → <b>With Medical Officer</b>. Dr. Ashish is the Medical Officer on this claim.</div>
+      <span class="ping">🔔 Dr. Ashish told the draft is waiting</span>
+    </div>
+
+    <div class="jstep warnstep" data-d="D53">
+      <div class="jt">Nothing has happened for 5 days</div>
+      <div class="jw">The bucket clock turns amber. The claim rises to the top of the Drafting list with
+        a plain reason: <em>“sent for approval 5 days ago, no answer”</em>.</div>
+      <span class="ping w">🔔 Reminder to the duty person · at 10 days the super-admins are told</span>
+    </div>
+
+    <div class="jstep" data-d="D55">
+      <div class="jt">Approved → 📮 Reimbursement <span style="font-weight:400;color:var(--ink3)">· Submitted</span></div>
+      <div class="jw">File couriered to Aditya Birla. POD number recorded. The 30-day clock starts.</div>
+      <div class="jn2">Reminders are scheduled for day 10, 20 and 30 — sent by a person, shown on their list on the day.</div>
+    </div>
+
+    <div class="jstep badstep" data-d="D71">
+      <div class="jt">The company raises a query → the ball comes back to us</div>
+      <div class="jw">Sub-state → <b>Reimbursement Query</b>. Because the waiting party flips from
+        <em>them</em> to <em>us</em>, the claim jumps to the top of the handler's list immediately —
+        their deadline now governs, not ours.</div>
+      <span class="ping b">🔺 Highest priority until the query is answered</span>
+    </div>
+
+    <div class="jstep" data-d="D85">
+      <div class="jt">30 days up, no settlement → ⚖️ Escalation <span style="font-weight:400;color:var(--ink3)">· Escalation Pending</span></div>
+      <div class="jw">Grievance officer approached. Escalation date recorded.
+        <b>Lokpal window: 240 days left</b> is now shown on every view of this claim.</div>
+    </div>
+
+    <div class="jstep warnstep" data-d="D112">
+      <div class="jt">Grievance route exhausted → 🏛️ Lokpal <span style="font-weight:400;color:var(--ink3)">· Lokpal Pending</span></div>
+      <div class="jw">Complaint prepared and dispatched. BHP number captured on registration; sub-state → <b>Lokpal Registered</b>.</div>
+    </div>
+
+    <div class="jstep badstep" data-d="D140">
+      <div class="jt">Annexure 5 arrives — the most dangerous moment</div>
+      <div class="jw">Sub-state → <b>Annexure 5 Pending</b>, with its own 5-day clock that ignores the
+        bucket's 60-day one. Replied on D143 → <b>Annexure 5 Replied</b>.</div>
+      <span class="ping b">🔺 Amber at 5 days, red at 8. A missed reply can end the complaint.</span>
+    </div>
+
+    <div class="jstep goodstep" data-d="D190">
+      <div class="jt">Hearing → award → ✅ Completed <span style="font-weight:400;color:var(--ink3)">· Hearing</span></div>
+      <div class="jw">Result <b>WON</b>, settlement <b>₹3,20,000</b> recorded. The bucket is not
+        finished until a person has told SURESH — the system will not send that message itself.</div>
+      <span class="ping">🔔 Complainant informed by SUHANA JAIN · recorded on the case</span>
+    </div>
+
+    <div class="jstep" data-d="D191">
+      <div class="jt">→ 💰 Pending Payment <span style="font-weight:400;color:var(--ink3)">· Pending Payment</span></div>
+      <div class="jw">Customer payment date recorded when the money lands. Our fee raised —
+        consultation 15% of ₹3,20,000 = <b>₹48,000</b> + GST. PF transaction number captured.</div>
+    </div>
+
+    <div class="jstep warnstep" data-d="D205">
+      <div class="jt">Only part of the fee arrives</div>
+      <div class="jw">Sub-state → <b>Part Payment</b>. Part received and amount pending are both
+        recorded, and the claim stays on the chase list with the balance showing.</div>
+    </div>
+
+    <div class="jstep goodstep" data-d="D218">
+      <div class="jt">Balance in → 🤝 CP Payment → 🏁 Finished</div>
+      <div class="jw">Branch <code>PUNEICD-01</code>'s share calculated and paid, transaction number
+        recorded. Nothing is owed in any direction; the case closes with its whole history intact.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TO AND FRO ══ -->
+<section id="tofro">
+  <div class="sh"><span class="n">05</span><h2>To and fro — every backward path</h2></div>
+  <p>Forward is routine and needs no reason. <b>Backward always needs a reason</b>, because an
+  exception nobody explained is how the same mistake repeats. Every move, both directions, writes a
+  remark with the name of who did it.</p>
+
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>From → To</th><th>Why it happens</th><th>What the system does</th></tr></thead>
+    <tbody>
+      <tr><td><b>Pending Docs → Live Cases</b></td><td>The gist is wrong — wrong claim type, wrong rejection date, wrong company.</td>
+        <td>The document checklist is <b>regenerated</b> from the corrected claim type. Papers already collected are kept and re-matched.</td></tr>
+      <tr><td><b>Pending Draft → Pending Docs</b></td><td>A paper is unreadable, expired, or the wrong document entirely.</td>
+        <td>That checklist item is un-ticked and the complainant is asked again for that one item.</td></tr>
+      <tr><td><b>Reimbursement → Pending Draft</b></td><td>The company returned the file on a defect in our own submission.</td>
+        <td>Sub-state resets to Drafting. The 30-day clock is abandoned, not paused — a resubmission starts a fresh one.</td></tr>
+      <tr><td><b>Escalation → Reimbursement</b></td><td>The company reopens the file and asks for it again.</td>
+        <td>A new 30-day clock. The escalation record is kept, so the second escalation is faster.</td></tr>
+      <tr><td><b>Lokpal → Escalation</b></td><td>The complaint is returned before registration for a defect.</td>
+        <td>BHP number cleared. The <b>one-year window keeps counting</b> — it never resets.</td></tr>
+      <tr><td><b>Pending Payment → Completed</b></td><td>The award figure was recorded wrong, or is challenged.</td>
+        <td>Amounts unlocked for correction. Any fee already raised is flagged for review.</td></tr>
+      <tr><td><b>CP Payment → Pending Payment</b></td><td>The customer's payment is reversed or disputed after the fact.</td>
+        <td>Partner payment held. If it was already paid, it is flagged as recoverable rather than silently written off.</td></tr>
+      <tr><td><b>Any → Hold</b></td><td>A genuine wait of weeks — hospital, court date, complainant abroad.</td>
+        <td>Reason and return date required. Leaves the active lists; returns to its <b>original</b> bucket on the date.</td></tr>
+      <tr><td><b>Finished → anywhere</b></td><td>Closed in error.</td>
+        <td><b>Super-admin only</b>, reason required, remark written. Deliberately awkward.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="co bad">
+    <span class="l">The one thing that never moves backwards</span>
+    <p>The <b>one-year Lokpal window</b>, counted from the insurer's rejection date. It is not
+    affected by holds, by going back a bucket, or by the company reopening the file. Wherever the
+    claim is, the days remaining are shown, and at 90 left it outranks everything in the office.</p>
+  </div>
+</section>
+
+<!-- ══ NOTIFY ══ -->
+<section id="notify">
+  <div class="sh"><span class="n">06</span><h2>How notifications flow</h2></div>
+  <p>This is the layer ClaimShield never had — and the reason a claim could sit in a bucket for 571
+  days with nobody noticing.</p>
+
+  <h3 style="margin-top:1.2rem">Who hears what</h3>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>Event</th><th>Goes to</th><th>Channel</th></tr></thead>
+    <tbody>
+      <tr><td>A claim enters a bucket</td><td>Whoever is on duty for that bucket</td><td>Telegram + bell</td></tr>
+      <tr><td>Every morning, 8am IST</td><td>Each staff member — their buckets, ordered</td><td>Telegram</td></tr>
+      <tr><td>A bucket clock goes <b>amber</b></td><td>Duty person</td><td>Their morning list, flagged</td></tr>
+      <tr><td>A bucket clock goes <b>red</b></td><td>Duty person + <b>sub-super-admins</b></td><td>Telegram + bell</td></tr>
+      <tr><td>Annexure pending &gt; 5 days</td><td>Duty + sub-super-admins, immediately</td><td>Telegram + bell + email</td></tr>
+      <tr><td>Lokpal window &lt; 90 days</td><td>Everyone on the case + all admins</td><td>Telegram + bell + email, daily</td></tr>
+      <tr><td>Nobody on duty for a bucket with work</td><td>Super-admins</td><td>Morning list</td></tr>
+      <tr><td>Duty person is on leave today</td><td>Super-admins</td><td>Morning list, ranked above an empty bucket</td></tr>
+      <tr><td>WhatsApp / support message unanswered 45 min</td><td>Duty person</td><td>Telegram + bell</td></tr>
+      <tr><td>Still unanswered at 3 hours</td><td><b>Super-admins</b></td><td>Telegram + bell + email, must acknowledge</td></tr>
+      <tr><td>Result recorded (won or lost)</td><td>Complainant — <b>by a person</b></td><td>Never automatic</td></tr>
+      <tr><td>Fee received / partner paid</td><td>Super-admins + the partner</td><td>Telegram + email</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="co good">
+    <span class="l">Already live</span>
+    <p>The unanswered-conversation ladder — 45 minutes to the duty person, 3 hours to the
+    super-admins — was built and deployed this week. The same mechanism drives bucket ageing, so
+    that part is proven rather than promised.</p>
+  </div>
+
+  <h3 style="margin-top:1.4rem">The escalation ladder, in one line</h3>
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:.85rem;background:var(--card);
+     border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem;overflow-x:auto;white-space:nowrap">
+    duty person → (amber) duty person again → (red) + sub-super-admin → (critical) + super-admin → (window) everyone
+  </p>
+  <p>Nothing skips a rung. A super-admin is never the first to hear about a routine delay — that is
+  how an escalation loses its meaning.</p>
+</section>
+
+<!-- ══ SCENARIOS ══ -->
+<section id="scen">
+  <div class="sh"><span class="n">07</span><h2>If this happens, then what</h2></div>
+  <div class="tw">
+  <table class="d">
+    <thead><tr><th>If…</th><th>then…</th><th>and if that fails…</th></tr></thead>
+    <tbody>
+      <tr><td>The complainant stops replying on WhatsApp</td>
+        <td>Sub-state → Waiting on complainant. Reminders taper: daily 3 days, then every 3rd day.</td>
+        <td>After 14 days the branch or CP who brought the case is asked to reach them. After 21, the case is parked with a date.</td></tr>
+      <tr><td>The hospital refuses papers</td>
+        <td>Refusal letter sent and recorded; sub-state → Waiting on hospital.</td>
+        <td>Park to Hold with a date. It returns on its own — it does not quietly rot in Pending Docs.</td></tr>
+      <tr><td>The Medical Officer does not approve</td>
+        <td>Amber at 5 days, and the claim tops the Drafting list with the reason spelled out.</td>
+        <td>Red at 10 → sub-super-admins. They reassign the approval or chase directly.</td></tr>
+      <tr><td>The company neither pays nor replies</td>
+        <td>Reminders on day 10, 20, 30 appear on the duty person's list on those days.</td>
+        <td>Day 30 → the claim shows <em>ready for Escalation</em> and will not go quiet.</td></tr>
+      <tr><td>The complainant has no email and the stage needs one</td>
+        <td>Flagged in words before the claim can leave Live Cases.</td>
+        <td>The claim cannot enter Escalation without it — that correspondence has nowhere to go.</td></tr>
+      <tr><td>The duty person goes on leave mid-bucket</td>
+        <td>Bucket flagged <em>on duty but on leave</em> above an empty bucket, with the return date.</td>
+        <td>Super-admin rosters cover. <b>Nothing is orphaned</b> — the bucket owns the claims, not the person.</td></tr>
+      <tr><td>Two people work the same bucket</td>
+        <td>Either can take a claim by putting their name on it; the rest stays a shared queue.</td>
+        <td>If both take the same one, the second sees the first's name already on it.</td></tr>
+      <tr><td>A staff member leaves the company</td>
+        <td>Duties removed, access severed the same hour.</td>
+        <td>Their claims stay exactly where they are. Their remarks stay readable, with their name.</td></tr>
+      <tr><td>The Lokpal window drops under 90 days</td>
+        <td>Top of every list, above everything, days remaining on the row.</td>
+        <td>Daily to everyone on the case and all admins until it is filed or the case is closed.</td></tr>
+      <tr><td>Our fee is only part paid</td>
+        <td>Sub-state → Part Payment, balance shown, stays on the chase list.</td>
+        <td>Disputed Payment if the customer contests it — that is a conversation, not a chase.</td></tr>
+      <tr><td>A claim is moved to the wrong bucket</td>
+        <td>Move it back with a reason. Both moves stay in the remarks.</td>
+        <td>No approval needed. Correcting it immediately beats leaving it in the wrong queue.</td></tr>
+      <tr><td>Everyone is off and a bucket has red claims</td>
+        <td>Coverage box names it to the super-admins before the day starts.</td>
+        <td>Red claims still appear on every admin's list — work is never invisible just because it is unowned.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ══ BUILD ══ -->
+<section id="build">
+  <div class="sh"><span class="n">08</span><h2>What gets built</h2></div>
+  <ol>
+    <li><strong>Buckets become data</strong>, not code — name, icon, colour, order, clocks,
+      sub-states, fields, exit rules, allowed next buckets. This is the largest piece and the one
+      that must be done carefully, because live claims move through it.</li>
+    <li><strong>The bucket pages</strong> — ClaimShield's layout: dense table, inline move buttons,
+      sub-state tabs, search, Excel export, rows-per-page, colour per bucket.</li>
+    <li><strong>The case report</strong> — one page, every field above, the remarks log, the bilingual draft.</li>
+    <li><strong>The visibility layer</strong> — bucket age coloured and sorted, menu badges, the
+      morning list, the escalation ladder. <em>Partly built already.</em></li>
+    <li><strong>Intake duty</strong> — a new rosterable duty that can move claims from “paid,
+      winnable, not started” into Live Cases.</li>
+    <li><strong>Medical Officer / Advocate</strong> as a real role on the claim, renaming itself by claim type.</li>
+    <li><strong>The bucket designer</strong> — the super-admin screen that edits everything in item 1.</li>
+  </ol>
+
+  <div class="co">
+    <span class="l">Order I would suggest</span>
+    <p>Items 1–4 together, because they are one coherent change and splitting them would leave the
+    team with half a workspace. Then 5 and 6, which are small. Then 7, once the shape has been used
+    for a few weeks and you know which fields you actually reach for.</p>
+  </div>
+
+  <div class="co warn">
+    <span class="l">Still open</span>
+    <p><b>Sub-states</b> — I have proposed them for Pending Docs, Pending Draft, Reimbursement,
+    Escalation, Lokpal, Completed, Pending Payment and CP Payment. You said you would tell me if any
+    others need them; equally, tell me if any of these are more than you want.</p>
+    <p style="margin-top:.5rem"><b>Clocks</b> — every amber/red figure above is my proposal, not your
+    number. These decide who gets chased and when, so they are worth an argument.</p>
+  </div>
+</section>
+
+<hr class="r">
+<footer>
+  <p><strong>Level-2 Bucket Architecture · draft 3</strong> — NidaanPartner. Design only; nothing
+  here is built. Bucket names are yours, from ClaimShield. Clocks, sub-states and field lists are
+  proposals and all of them are still open.</p>
+</footer>
+
+</div>
