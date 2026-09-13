@@ -11972,6 +11972,23 @@ function _l2Styles(){
   .l2mv.d{border-color:var(--nd-danger-text);color:var(--nd-danger-text)}
   .l2mv:disabled{opacity:.5;cursor:not-allowed}
   .l2warn{font-size:.72rem;color:var(--nd-warning-text)}
+  /* The answer to "what is this waiting for?" - the widest column, because it is the one
+     being read. The quoted line under it is what the last person said when they moved it. */
+  .l2why{font-size:.8rem;color:var(--nd-text-secondary);line-height:1.4;min-width:13rem;
+    max-width:22rem}
+  .l2why .nt{font-size:.74rem;color:var(--nd-text-faint);margin-top:.12rem;font-style:italic}
+  .l2why .nt .by{font-style:normal}
+  .l2sum{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;margin-bottom:.55rem;
+    font-size:.8rem}
+  .l2sum .pill{border:1px solid var(--nd-border-strong);border-radius:999px;
+    padding:.08rem .55rem;color:var(--nd-text-muted);white-space:nowrap}
+  .l2sum .pill b{color:var(--nd-text-primary)}
+  .l2sum .pill.red{border-color:var(--nd-danger-text);color:var(--nd-danger-text)}
+  .l2sum .pill.red b{color:var(--nd-danger-text)}
+  .l2sum .pill.amber{border-color:var(--nd-border-warn);color:var(--nd-warning-text)}
+  .l2sum .pill.amber b{color:var(--nd-warning-text)}
+  .l2sum .pill.ok{border-color:var(--nd-success-text);color:var(--nd-success-text)}
+  .l2sum .pill.ok b{color:var(--nd-success-text)}
   .l2lok{font-size:.72rem;font-weight:700;color:var(--nd-danger-text)}
   /* case report */
   .l2cr{display:flex;flex-direction:column;gap:.7rem}
@@ -12262,6 +12279,24 @@ function l2RenderBucket(){
     + ' gone past ' + (b.red_days || 0) + ' days here — oldest ' + (_l2Rows[0] ? _l2Rows[0].days : 0) + ' days</div>';
   else if (d.late) ban = '<div class="l2ban amber">🟡 ' + d.late + ' need looking at</div>';
 
+  // What is actually IN this bucket, not just how many. A count tells you the size of the
+  // pile; these tell you what to do with it, which is the thing the office says the old
+  // system never gave them.
+  const pill = function(n, label, cls){
+    return n ? '<span class="pill ' + (cls || '') + '"><b>' + n + '</b> ' + label + '</span>' : '';
+  };
+  const sum = (d.matching || 0)
+    ? '<div class="l2sum">'
+      + '<span class="pill"><b>' + d.matching + '</b> in this bucket</span>'
+      + pill(d.closing_window, 'window closing', 'red')
+      + pill(d.red, 'past the limit', 'red')
+      + pill(d.late - (d.red || 0), 'need looking at', 'amber')
+      + pill(d.ours, 'ours to move', 'ok')
+      + pill(d.docs_short, 'short of documents')
+      + pill(d.blocked_fields, 'missing something we need')
+      + '</div>'
+    : '';
+
   const guide = '<div class="l2ban info"><b>' + esc(b.guide_what || '') + '</b>'
     + (b.guide_do ? ' — ' + esc(b.guide_do) : '') + '</div>';
 
@@ -12269,6 +12304,7 @@ function l2RenderBucket(){
       '<div class="l2hd"><div class="l2ttl">' + (b.icon || '') + ' ' + esc(b.name_en)
     +   ' · ' + (d.matching || 0) + '</div>'
     +   '<div class="l2duty">' + _l2DutyLine(b.bucket_key) + '</div></div>'
+    + sum
     + ban + guide + tabs
     + '<div class="l2tools">'
     +   '<input class="l2srch" id="l2Q" placeholder="Search name, claim no., phone, insurance company…" '
@@ -12321,13 +12357,19 @@ function l2Table(b){
       + '<td>' + docs + '</td>'
       + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
       + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
-      + '<td style="font-size:.76rem;color:var(--nd-text-muted)">' + esc(i.origin || '') + '</td>'
+      // The column the office opens this screen to read. It replaced Origin, which is on
+      // the claim itself and which nobody triages by.
+      + '<td class="l2why">' + esc(i.why || '')
+      +   (i.note ? '<div class="nt">“' + esc(i.note) + '”'
+          + (i.note_by ? ' <span class="by">— ' + esc(i.note_by) + '</span>' : '')
+          + '</div>' : '')
+      + '</td>'
       + '<td style="white-space:nowrap">' + btns + '</td></tr>';
   }).join('');
   return '<div class="table-wrap"><table><thead><tr>'
     + '<th>Ref</th><th>Complainant</th><th>Insurance Co.</th><th style="text-align:right">Disputed</th>'
     + '<th>Docs</th>' + (b.substates && b.substates.length ? '<th>Step</th>' : '')
-    + '<th>In bucket</th><th>Origin</th><th></th>'
+    + '<th>In bucket</th><th>Why it is waiting</th><th></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 

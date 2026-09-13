@@ -832,6 +832,104 @@ async def _lokpal_days_left(r: dict, vals: dict) -> Optional[int]:
     return 365 - (_today_ist() - d).days
 
 
+# ── saying why a claim is sitting here ───────────────────────────────────────
+# This is the whole reason the office is moving off ClaimShield. There, a claim sat in a bucket
+# and nobody could tell you what it was waiting for without opening it. Every fact needed to
+# answer that is already on the row - who we are waiting for, how long, what is missing, what
+# the last person said. It just has to be said out loud.
+
+_WAIT_WORDS = {
+    "complainant": "the complainant",
+    "insurer": "the insurance company",
+    "lokpal": "the forum",
+    "internal": "us",
+    "none": "nobody",
+}
+
+
+def _why_here(item: dict, note: str, missing: list) -> tuple:
+    """One sentence for WHY, a few words for WHAT IS PENDING.
+
+    Ordered by what actually decides the next action, not by what is easiest to compute: a
+    closing Lokpal window outranks everything, then a pause with a date, then documents, then a
+    required field, then the plain "who are we waiting for and how long".
+    """
+    days = item.get("days")
+    who = _WAIT_WORDS.get(item.get("waits_on") or "internal", "us")
+    dn, dt = item.get("docs_done") or 0, item.get("docs_total") or 0
+    state = item.get("age_state") or "ok"
+
+    # The clock that never resets.
+    left = item.get("lokpal_days_left")
+    if left is not None and left <= 30:
+        return (("The one-year window closes in %d days." % left) if left > 0
+                else "The one-year window has CLOSED.", "file at the forum")
+
+    if item.get("hold_until"):
+        return ("Paused until %s." % str(item["hold_until"])[:10], "nothing until then")
+
+    if dt and dn < dt:
+        short = dt - dn
+        # Documents come from the COMPLAINANT. They are who has them and who the document window
+        # asks. The bucket's waits_on is about who owes the next move on the CASE - a different
+        # question, and using it here told staff to chase the insurance company for the
+        # complainant's hospital bills.
+        base = ("None of the %d document(s) have arrived yet." % dt if dn == 0
+                else "Still waiting for %d of the %d document(s)." % (short, dt))
+        base += " We are asking the complainant."
+        if state == "red":
+            base += " Asked %d days ago, nothing back." % (days or 0)
+        return (base, "%d document(s) from the complainant" % short)
+
+    if missing:
+        names = ", ".join(m["label"] for m in missing[:2])
+        return ("Cannot move on until %s %s recorded."
+                % (names, "is" if len(missing) == 1 else "are"),
+                "fill in %s" % names)
+
+    step = (item.get("sub_name") or "").strip()
+    if state == "red":
+        return ("Waiting on %s for %d days - past the %d-day limit."
+                % (who, days or 0, item.get("red_days") or 0),
+                ("chase %s" % who) if who != "us" else "this is ours to move")
+    if state == "amber":
+        return ("Waiting on %s for %d days." % (who, days or 0),
+                ("chase %s" % who) if who != "us" else "ours to move")
+    if step:
+        return ("On '%s', waiting on %s." % (step, who), step.lower())
+    if who == "us":
+        return ("Ours to move - here %s." % (("%d day(s)" % days) if days else "since today"),
+                "our next step")
+    return ("Waiting on %s%s." % (who, (" for %d day(s)" % days) if days else ""),
+            "waiting on %s" % who)
+
+
+async def _last_notes(claim_ids: list) -> dict:
+    """The comment the last person left when they moved each claim. Every move carries one, so
+    this is never empty for a claim that got here by being moved."""
+    if not claim_ids:
+        return {}
+    out: dict = {}
+    ph = ",".join("?" * len(claim_ids))
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = await (await c.execute(
+            "SELECT claim_id, summary, actor, created_at FROM nidaan_claim_activity "
+            "WHERE claim_id IN (%s) AND kind='case_bucket' ORDER BY act_id DESC" % ph,
+            [int(i) for i in claim_ids])).fetchall()
+    for r in rows:
+        d = dict(r)
+        if d["claim_id"] in out:
+            continue
+        txt = (d.get("summary") or "").strip()
+        # The summary is "From -> to - the comment". The comment is what a person wants to read.
+        if " - " in txt:
+            txt = txt.split(" - ", 1)[1].strip()
+        out[d["claim_id"]] = {"note": txt[:300], "by": (d.get("actor") or "").strip(),
+                              "at": d.get("created_at")}
+    return out
+
+
 async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
                 limit: int = 300) -> dict:
     """The claims in one bucket, ready to draw as a table.
@@ -908,6 +1006,19 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "created_at": r.get("created_at"),
         })
 
+    # WHY each one is sitting here, and WHAT is outstanding. Computed after the loop so the
+    # notes and the missing-field lookups happen once for the page rather than once per row.
+    notes = await _last_notes([i["claim_id"] for i in items])
+    for i in items:
+        miss = await missing_required(i["claim_id"], i["bucket"])
+        why, pending = _why_here(i, (notes.get(i["claim_id"]) or {}).get("note", ""), miss)
+        n = notes.get(i["claim_id"]) or {}
+        i["why"] = why
+        i["pending"] = pending
+        i["note"] = n.get("note", "")
+        i["note_by"] = n.get("by", "")
+        i["missing_n"] = len(miss)
+
     order = {"red": 0, "amber": 1, "ok": 2}
     items.sort(key=lambda i: (order.get(i["age_state"], 3), -(i["days"] or 0)))
 
@@ -915,10 +1026,19 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
     for i in items:
         sub_counts[i["sub"]] = sub_counts.get(i["sub"], 0) + 1
 
+    # A one-line summary for the top of the bucket: what is in here, and what needs a person.
+    ours = sum(1 for i in items if (i.get("waits_on") or "internal") == "internal")
     return {"items": items[:limit], "matching": len(items),
             "sub_counts": sub_counts,
             "late": sum(1 for i in items if i["age_state"] in ("red", "amber")),
-            "red": sum(1 for i in items if i["age_state"] == "red")}
+            "red": sum(1 for i in items if i["age_state"] == "red"),
+            "ours": ours,
+            "docs_short": sum(1 for i in items
+                              if (i.get("docs_total") or 0) and not i.get("docs_ready")),
+            "blocked_fields": sum(1 for i in items if i.get("missing_n")),
+            "closing_window": sum(1 for i in items
+                                  if i.get("lokpal_days_left") is not None
+                                  and i["lokpal_days_left"] <= 30)}
 
 
 async def counts() -> dict:
