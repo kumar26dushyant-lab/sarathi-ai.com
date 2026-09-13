@@ -6596,6 +6596,80 @@ async def ops_bucket_waiting(request: Request):
     return {"claims": rows}
 
 
+class _HandoverReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field("", max_length=600)
+    checks: dict = Field(default_factory=dict)
+
+
+class _UndoHandoverReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field("", max_length=400)
+
+
+@app.get("/nidaan/ops/api/l2/pending-handover")
+async def ops_l2_pending_handover(request: Request):
+    """Qualified for Level-2 but not yet handed across. Shown on L2 Claims."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    rows = await _bk.pending_handover()
+    rd = await _bk.readiness_many([r["claim_id"] for r in rows])
+    for r in rows:
+        x = rd.get(r["claim_id"]) or {}
+        r["ready"] = x.get("ready", False)
+        r["can_hand_over"] = x.get("can_start", True)
+        r["missing_count"] = x.get("missing_count", 0)
+        r["blocks"] = x.get("blocks", [])
+        r["fixes"] = x.get("fixes", [])
+    return {"claims": rows}
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/handover-questions")
+async def ops_case_handover_questions(claim_id: int, request: Request):
+    """What intake must confirm before handing this claim across."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.probing_questions(claim_id)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/handover")
+@limiter.limit("60/minute")
+async def ops_case_handover(claim_id: int, body: _HandoverReq, request: Request):
+    """Hand a claim to Level-2, with the mover's name on it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    _force = ((request.query_params.get("force") or "") == "1"
+              and (caller or {}).get("role") == "super_admin")
+    res = await _bk.hand_over(claim_id, note=body.note, checks=body.checks,
+                              actor=_actor_label(caller), force=_force)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not hand that over")
+    await _ops_audit(request, "l2.handover", "claim", claim_id,
+                     f"gaps={res.get('acknowledged_gaps')} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/handover/undo")
+@limiter.limit("30/minute")
+async def ops_case_handover_undo(claim_id: int, body: _UndoHandoverReq, request: Request):
+    """Pull a claim back out of the Level-2 waiting list. Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.undo_handover(claim_id, reason=body.reason, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not undo that")
+    await _ops_audit(request, "l2.handover_undo", "claim", claim_id, body.reason[:160])
+    return res
+
+
 @app.get("/nidaan/ops/api/cases/{claim_id}/readiness")
 async def ops_case_readiness(claim_id: int, request: Request):
     """What is still missing before this claim can be worked in the buckets."""

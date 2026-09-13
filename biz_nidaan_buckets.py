@@ -416,7 +416,7 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
             "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
-            "hold_until, complainant_name, insured_name "
+            "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
 
@@ -501,6 +501,14 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
             return {"ok": False, "error": "The review has not said this case can be fought yet."}
         return {"ok": False,
                 "error": "The Level-2 fee has not been paid, so the work has not been bought yet."}
+
+    # Intake signs for a claim before Level-2 can begin on it. Without this a claim could drift
+    # into the buckets with nobody having looked at it, and nobody to ask when something turns
+    # out to be missing three weeks later.
+    if not force and not row.get("l2_handover_at"):
+        return {"ok": False, "needs_handover": True,
+                "error": "This claim has not been handed over to Level-2 yet. Someone on intake "
+                         "duty moves it across from L2 Claims first."}
 
     # Everything Level-2 runs on must be true BEFORE the claim enters the buckets. A gap here
     # costs weeks once the work is under way, and by then the person who could have fixed it in
@@ -875,20 +883,29 @@ async def counts() -> dict:
 
 
 async def waiting_to_start(limit: int = 200) -> list:
-    """Paid and winnable, and nobody has started it. Money already taken with no work begun."""
+    """Handed across by intake, and not yet begun.
+
+    Being QUALIFIED for Level-2 is not the same as being handed over: somebody on intake duty has
+    to look the file over and sign for it first. This list is the ones that have been signed for -
+    so the days counted here are days since the handover, which is the clock the Level-2 team is
+    actually answerable for.
+    """
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
-            "SELECT %s FROM nidaan_claims c WHERE COALESCE(c.archived,0)=0 "
-            "AND COALESCE(c.pipeline_stage,'')='' AND LOWER(COALESCE(c.review_outcome,''))='can_fight' "
-            "AND LOWER(COALESCE(c.l2_payment_status,''))='paid' "
-            "ORDER BY c.created_at ASC LIMIT ?" % _CLAIM_COLS, (int(limit),))).fetchall()]
+            "SELECT %s, c.l2_handover_at, c.l2_handover_by, c.l2_handover_note "
+            "FROM nidaan_claims c WHERE COALESCE(c.archived,0)=0 "
+            "AND COALESCE(c.pipeline_stage,'')='' AND c.l2_handover_at IS NOT NULL "
+            "ORDER BY c.l2_handover_at ASC LIMIT ?" % _CLAIM_COLS, (int(limit),))).fetchall()]
     return [{"claim_id": r["claim_id"],
              "who": (r.get("complainant_name") or r.get("insured_name") or "").strip(),
              "insurer": (r.get("insurer_name") or "").strip(),
              "amount": r.get("disputed_amount") or 0,
              "origin": _origin_of(r),
-             "waiting_days": _days_since(r.get("created_at"))} for r in rows]
+             "handed_by": r.get("l2_handover_by") or "",
+             "handed_at": r.get("l2_handover_at") or "",
+             "handover_note": r.get("l2_handover_note") or "",
+             "waiting_days": _days_since(r.get("l2_handover_at"))} for r in rows]
 
 
 async def for_claim(claim_id: int) -> dict:
@@ -1152,3 +1169,144 @@ async def readiness_many(claim_ids: list) -> dict:
         except Exception as e:  # noqa: BLE001
             logger.warning("readiness failed for %s: %s", cid, e)
     return out
+
+
+# ── the handover from L1 to L2 ───────────────────────────────────────────────
+# Two steps, deliberately, because they are two different decisions made by two different people.
+#
+#   1. HAND OVER   Intake duty checks the file over, answers the probing questions, signs their
+#                  name to it and passes it across. The claim appears in "To start".
+#   2. START       Whoever works the first bucket picks it up and begins.
+#
+# Merging them would mean a claim could drift into Level-2 with nobody having looked at it, and
+# nobody to ask when something turns out to be missing three weeks later. The handover record is
+# the answer to "who said this was ready?".
+
+import json as _json
+
+
+async def _handover_row(claim_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
+            "pipeline_stage, l2_handover_at, l2_handover_by, l2_handover_note "
+            "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
+    return dict(r) if r else None
+
+
+async def probing_questions(claim_id: int) -> dict:
+    """What intake must confirm before handing a claim across.
+
+    Built from the readiness check, so the questions are always about THIS claim: a blocker has to
+    be fixed, and everything merely missing has to be consciously acknowledged rather than
+    skipped. The answers are stored with the handover, which is what makes the sign-off mean
+    something later.
+    """
+    rd = await readiness(claim_id)
+    if not rd.get("ok"):
+        return rd
+    qs = []
+    for i in rd.get("fixes", []):
+        qs.append({"key": i["key"], "label": i["label"], "detail": i["detail"],
+                   "why": i.get("fix", ""), "required": False})
+    # Two questions that no automatic check can answer, and both cost weeks when wrong.
+    qs.append({"key": "ack_docs_plan", "required": True,
+               "label": "Do we know which documents this case needs, and has the complainant been told?",
+               "detail": "", "why": "Documents are the longest wait in Level-2. Starting without a "
+                                    "plan for them is how a case sits for forty days."})
+    qs.append({"key": "ack_contactable", "required": True,
+               "label": "Has someone actually spoken to the complainant recently?",
+               "detail": "", "why": "A number on file is not the same as a number that answers."})
+    return {"ok": True, "claim_id": int(claim_id), "readiness": rd, "questions": qs,
+            "can_hand_over": rd.get("can_start", False)}
+
+
+async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = None,
+                    actor: str = "", force: bool = False) -> dict:
+    """Intake hands the claim to Level-2, with their name on it."""
+    row = await _handover_row(claim_id)
+    if not row or row.get("archived") or (row.get("status") or "") in ("closed", "withdrawn"):
+        return {"ok": False, "error": "That case is closed or does not exist."}
+    if row.get("l2_handover_at"):
+        return {"ok": False, "error": "This claim was already handed over by %s."
+                % (row.get("l2_handover_by") or "someone")}
+    if not l2_ready(row):
+        if (row.get("review_outcome") or "").lower() != "can_fight":
+            return {"ok": False, "error": "The review has not said this case can be fought yet."}
+        return {"ok": False, "error": "The Level-2 fee has not been paid yet."}
+
+    rd = await readiness(claim_id)
+    if not force and rd.get("blocks"):
+        return {"ok": False, "readiness": rd,
+                "error": "Fix these first: " + "; ".join(
+                    "%s - %s" % (b["label"], b["detail"]) for b in rd["blocks"][:3])}
+
+    # The two judgement questions are not optional: they are the whole point of a human handover.
+    checks = checks or {}
+    for k in ("ack_docs_plan", "ack_contactable"):
+        if not checks.get(k):
+            return {"ok": False, "error": "Answer both questions before handing this over."}
+    if not (note or "").strip():
+        return {"ok": False,
+                "error": "Add a short note for the Level-2 team - they pick this up cold."}
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "UPDATE nidaan_claims SET l2_handover_at=CURRENT_TIMESTAMP, l2_handover_by=?, "
+                "l2_handover_note=?, l2_handover_checks=? WHERE claim_id=?",
+                ((actor or "")[:80], (note or "").strip()[:600],
+                 _json.dumps(checks)[:2000], int(claim_id)))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("handover failed for %s: %s", claim_id, e)
+        return {"ok": False, "error": "Could not save that. Try again."}
+
+    gaps = len(rd.get("fixes", []))
+    await _log(claim_id,
+               "Handed to Level-2 by %s%s - %s" % (actor or "staff",
+                                                   (" (%d gap(s) acknowledged)" % gaps) if gaps else "",
+                                                   (note or "").strip()),
+               actor)
+    return {"ok": True, "handed_by": actor, "acknowledged_gaps": gaps}
+
+
+async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> dict:
+    """Pull a claim back out of the Level-2 waiting list. Super-admin only, and recorded."""
+    row = await _handover_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    if not row.get("l2_handover_at"):
+        return {"ok": False, "error": "This claim has not been handed over."}
+    if (row.get("pipeline_stage") or "").strip():
+        return {"ok": False,
+                "error": "Level-2 work has already started on this claim - move it in the "
+                         "workspace instead."}
+    if not (reason or "").strip():
+        return {"ok": False, "error": "Say why it is being pulled back."}
+    async with aiosqlite.connect(DB_PATH) as c:
+        await c.execute(
+            "UPDATE nidaan_claims SET l2_handover_at=NULL, l2_handover_by='', "
+            "l2_handover_note='', l2_handover_checks='' WHERE claim_id=?", (int(claim_id),))
+        await c.commit()
+    await _log(claim_id, "Pulled back out of the Level-2 waiting list - %s" % reason.strip(), actor)
+    return {"ok": True}
+
+
+async def pending_handover(limit: int = 300) -> list:
+    """Qualified for Level-2 but not yet handed across. This is what L2 Claims shows."""
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT %s FROM nidaan_claims c WHERE COALESCE(c.archived,0)=0 "
+            "AND COALESCE(c.pipeline_stage,'')='' AND c.l2_handover_at IS NULL "
+            "AND LOWER(COALESCE(c.review_outcome,''))='can_fight' "
+            "AND LOWER(COALESCE(c.l2_payment_status,''))='paid' "
+            "ORDER BY c.created_at ASC LIMIT ?" % _CLAIM_COLS, (int(limit),))).fetchall()]
+    return [{"claim_id": r["claim_id"],
+             "who": (r.get("complainant_name") or r.get("insured_name") or "").strip(),
+             "insurer": (r.get("insurer_name") or "").strip(),
+             "amount": r.get("disputed_amount") or 0,
+             "origin": _origin_of(r),
+             "waiting_days": _days_since(r.get("created_at"))} for r in rows]

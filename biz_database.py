@@ -2628,6 +2628,13 @@ async def init_db():
             # it must return to when the hold expires.
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_sub TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_from TEXT DEFAULT ''",
+            # The handover from L1 to L2. A claim does not drift into Level-2 - somebody on
+            # intake duty checks it over, signs their name to it and hands it across. If
+            # something is found missing later, this says who said it was ready.
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_note TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_checks TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)

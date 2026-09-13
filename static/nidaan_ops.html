@@ -453,6 +453,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-payfollow" class="panel" style="display:none"></div>
       <div id="panel-leave" class="panel" style="display:none"></div>
       <div id="panel-l2" class="panel" style="display:none"></div>
+      <div id="panel-handover" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -649,7 +650,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','handover','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -963,6 +964,7 @@ function buildSidebar() {
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
       {id:'claims',   label:'📋 All Claims',       minRank:1},
       {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
+      {id:'handover', label:'📤 Hand to Level-2',  minRank:0},
       {id:'archived', label:'🗄️ Archived',         minRank:1},
       {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
@@ -1046,6 +1048,7 @@ function showPanel(id, fromHistory) {
     payfollow: loadPayFollow,
     leave: loadLeavePanel,
     l2: loadL2,
+    handover: loadHandover,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -11571,8 +11574,9 @@ function l2RenderStart(){
     + '<div class="l2ban ' + (_l2Wait.length ? 'amber' : 'info') + '">'
     +   (_l2Wait.length
         ? 'Reviewed as winnable and the Level-2 fee is paid — but nobody has started the work. '
-          + 'This is money already taken. It should be a short list.'
-        : 'Nothing waiting. Every paid, winnable claim has been started.')
+          + 'The days counted here are days since the handover.'
+        : 'Nothing waiting. Claims arrive here once somebody on intake duty hands them over '
+          + 'from the Hand to Level-2 screen.')
     + '</div>';
   if (!_l2Wait.length){ m.innerHTML = head; return; }
   const rows = _l2Wait.map(function(x){
@@ -11590,7 +11594,9 @@ function l2RenderStart(){
       + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
       + '<td>' + (x.insurer ? esc(x.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
       + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
-      + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '') + '</td>'
+      + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '')
+      +   (x.handed_by ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">handed over by '
+          + esc(x.handed_by) + '</div>' : '') + '</td>'
       + '<td><span class="l2age ' + ((x.waiting_days||0) > 14 ? 'red' : ((x.waiting_days||0) > 7 ? 'amber' : 'ok'))
       +   '">' + (x.waiting_days == null ? '—' : x.waiting_days + 'd') + '</span></td>'
       + '<td><button class="l2mv ' + (state === 'red' ? 'd' : (state === 'amber' ? 'g' : 'g'))
@@ -12075,6 +12081,175 @@ window.l2Export = l2Export; window.l2Start = l2Start; window.l2Move = l2Move;
 window.l2MoveMenu = l2MoveMenu; window.l2Open = l2Open; window.l2Field = l2Field;
 window.l2SetSub = l2SetSub; window.l2MoveFromCase = l2MoveFromCase; window.l2Why = l2Why;
 window.l2MoveMenuCase = l2MoveMenuCase;
+
+// ══ Handing a claim from L1 to L2 ═════════════════════════════════════════════
+// Two steps, two people. Intake checks the file over and signs for it; the Level-2 team then
+// picks it up and starts. This is the first half — and the signature is the point of it, because
+// when something turns out to be missing in three weeks, this says who said it was ready.
+let _hoWait = [];
+
+async function loadHandover(){
+  _l2Styles();
+  const el = document.getElementById('panel-handover');
+  if (!el) return;
+  el.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  try{
+    const r = await API('/l2/pending-handover');
+    if (!r.ok) throw 0;
+    _hoWait = (await r.json()).claims || [];
+  }catch(e){
+    el.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p>'
+      + '<button class="btn btn-primary" onclick="loadHandover()">Try again</button></div>';
+    return;
+  }
+  hoRender();
+}
+
+function hoRender(){
+  const el = document.getElementById('panel-handover');
+  const blocked = _hoWait.filter(function(x){ return (x.blocks||[]).length; }).length;
+  const head =
+      '<div class="section-hdr"><div>'
+    +   '<div class="section-title">⚖️ L2 Claims — ready to hand over</div>'
+    +   '<div class="section-sub">Reviewed as winnable and the Level-2 fee is paid. Someone on '
+    +     'intake duty checks each file over and hands it to Level-2 — their name stays on it.</div>'
+    + '</div><button class="btn-sm btn-ghost" onclick="loadHandover()">🔄 Refresh</button></div>';
+
+  if (!_hoWait.length){
+    el.innerHTML = head + '<div class="empty"><div class="ei">✅</div>'
+      + '<p>Nothing waiting to be handed over.</p>'
+      + '<p style="font-size:.82rem;color:var(--nd-text-muted)">Everything paid and winnable has '
+      + 'already been passed to Level-2.</p></div>';
+    return;
+  }
+
+  const rows = _hoWait.map(function(x){
+    const blocks = x.blocks || [], fixes = x.fixes || [];
+    const label = blocks.length ? (blocks.length + ' blocking')
+                : (fixes.length ? (fixes.length + ' to check') : 'Ready');
+    const state = blocks.length ? 'red' : (fixes.length ? 'amber' : 'ok');
+    return '<tr>'
+      + '<td><b>NP-' + x.claim_id + '</b></td>'
+      + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
+      + '<td>' + (x.insurer ? esc(x.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
+      + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
+      + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '') + '</td>'
+      + '<td><span class="l2age ' + ((x.waiting_days||0) > 14 ? 'red' : ((x.waiting_days||0) > 7 ? 'amber' : 'ok'))
+      +   '">' + (x.waiting_days == null ? '—' : x.waiting_days + 'd') + '</span></td>'
+      + '<td><button class="l2mv ' + (state === 'red' ? 'd' : 'g') + '" onclick="l2Why(' + x.claim_id + ')">'
+      +   (state === 'ok' ? '✓ ' : '⚠ ') + label + '</button></td>'
+      + '<td style="white-space:nowrap">'
+      +   '<button class="l2mv ' + (blocks.length ? 'g' : 'p') + '" onclick="hoOpen(' + x.claim_id + ')">'
+      +     '→ Hand to Level-2</button>'
+      +   '<button class="l2mv g" onclick="openClaimDrawer(' + x.claim_id + ')">Open</button>'
+      + '</td></tr>';
+  }).join('');
+
+  el.innerHTML = head
+    + (blocked ? '<div class="l2ban red">⛔ ' + blocked + ' cannot be handed over yet — something '
+        + 'essential is missing. Open the claim and fix it, or press the warning to see what.</div>' : '')
+    + '<div class="l2ban info">Handing a claim over is a decision, not a formality. You are saying '
+    +   'the Level-2 team can pick this up cold and get on with it.</div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
+    + '<th>Insurance Co.</th><th style="text-align:right">Disputed</th><th>Origin</th>'
+    + '<th>Waiting</th><th>Checks</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// ── the probing questions ────────────────────────────────────────────────────
+let _hoQ = null;
+
+async function hoOpen(claimId){
+  openModal('Hand NP-' + claimId + ' to Level-2',
+    '<div class="empty"><div class="ei">⏳</div><p>Checking the file…</p></div>', [], true);
+  let d = null;
+  try{
+    const r = await API('/cases/' + claimId + '/handover-questions');
+    if (r.ok) d = await r.json();
+  }catch(e){}
+  const body = document.getElementById('modalBody');
+  if (!d || !d.ok){
+    body.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not check this claim.</p></div>';
+    return;
+  }
+  _hoQ = {claim_id: claimId, d: d};
+  const rd = d.readiness || {};
+  const blocks = rd.blocks || [];
+
+  const q = (d.questions || []).map(function(x){
+    return '<label style="display:flex;gap:.5rem;align-items:flex-start;padding:.45rem 0;'
+      + 'border-bottom:1px solid var(--nd-border);cursor:pointer">'
+      + '<input type="checkbox" id="ho_' + x.key + '" style="margin-top:.25rem">'
+      + '<span style="flex:1;min-width:0">'
+      +   '<span style="font-weight:600;color:var(--nd-text-primary)">' + esc(x.label) + '</span>'
+      +   (x.required ? ' <span class="req">*</span>' : '')
+      +   (x.detail ? '<div style="font-size:.8rem;color:var(--nd-warning-text)">' + esc(x.detail) + '</div>' : '')
+      +   (x.why ? '<div style="font-size:.76rem;color:var(--nd-text-faint)">' + esc(x.why) + '</div>' : '')
+      + '</span></label>';
+  }).join('');
+
+  body.innerHTML =
+      (blocks.length
+        ? '<div class="l2ban red">⛔ This claim cannot be handed over yet:<br>'
+          + blocks.map(function(b){ return '• <b>' + esc(b.label) + '</b> — ' + esc(b.detail); }).join('<br>')
+          + '</div>'
+        : '<div class="l2ban info">Confirm what you have checked. Anything you tick is recorded '
+          + 'against your name, so the Level-2 team knows what was looked at.</div>')
+    + '<div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.3rem">'
+    +   'Came in as: <b>' + esc(rd.origin || '—') + '</b></div>'
+    + '<div class="l2sec">Please confirm</div>' + q
+    + '<div class="l2fld" style="margin-top:.7rem"><label>Note for the Level-2 team <span class="req">*</span></label>'
+    +   '<textarea id="hoNote" rows="3" maxlength="600" placeholder="What they need to know before '
+    +     'they pick this up — anything unusual, anything still being chased…"></textarea>'
+    +   '<div class="hint">They start this cold. A sentence here saves a phone call later.</div></div>'
+    + '<div id="hoMsg" style="font-size:.82rem;margin-top:.4rem"></div>'
+    + '<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.7rem">'
+    +   (blocks.length
+        ? '<button class="l2mv g" onclick="closeModal();openClaimDrawer(' + claimId + ')">Open the claim to fix</button>'
+          + (_role === 'super_admin'
+            ? '<button class="l2mv d" onclick="hoSend(true)">Hand over anyway (recorded)</button>' : '')
+        : '<button class="l2mv p" onclick="hoSend(false)">→ Hand to Level-2</button>')
+    + '</div>';
+}
+
+async function hoSend(force){
+  if (!_hoQ) return;
+  const id = _hoQ.claim_id;
+  const msg = document.getElementById('hoMsg');
+  const checks = {};
+  (_hoQ.d.questions || []).forEach(function(x){
+    const e = document.getElementById('ho_' + x.key);
+    checks[x.key] = !!(e && e.checked);
+  });
+  const note = (document.getElementById('hoNote') || {}).value || '';
+  const miss = (_hoQ.d.questions || []).filter(function(x){ return x.required && !checks[x.key]; });
+  if (miss.length){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)';
+      msg.textContent = 'Answer both questions first — they are the reason a person does this step.'; }
+    return;
+  }
+  if (!note.trim()){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)';
+      msg.textContent = 'Add a note for the Level-2 team.'; }
+    return;
+  }
+  if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Handing over…'; }
+  try{
+    const r = await API('/cases/' + id + '/handover' + (force ? '?force=1' : ''),
+      {method:'POST', body: JSON.stringify({note: note, checks: checks})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){
+      closeModal();
+      ndUI.toast('NP-' + id + ' handed to Level-2', 'success');
+      await loadHandover();
+    } else if (msg){
+      msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not hand that over');
+    }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not hand that over.'; }
+  }
+}
+
+window.loadHandover = loadHandover; window.hoOpen = hoOpen; window.hoSend = hoSend;
 
 function deskGuide(key){
   _deskOpenGuide = (_deskOpenGuide === key) ? null : key;
