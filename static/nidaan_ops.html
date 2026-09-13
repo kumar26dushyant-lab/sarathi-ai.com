@@ -12981,7 +12981,10 @@ function _cbSheetStyles(){
   st.textContent = `
   .cbs-back{position:fixed;inset:0;background:rgba(2,8,16,.62);z-index:9000;display:flex;
     align-items:center;justify-content:center;padding:1rem}
-  .cbs{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:14px;
+  /* A floating dialog needs an OPAQUE ground. --nd-bg-surface is 3% white on a dark page (4.5%
+     slate on a light one) - correct for a card sitting ON the page, see-through for a sheet
+     floating above it. Every other modal here uses --nd-bg-base-2; so does this one now. */
+  .cbs{background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);border-radius:14px;
     width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 18px 50px rgba(0,0,0,.35)}
   .cbs-hd{padding:.85rem 1rem;border-bottom:1px solid var(--nd-border);display:flex;
     justify-content:space-between;align-items:flex-start;gap:.6rem;position:sticky;top:0;
