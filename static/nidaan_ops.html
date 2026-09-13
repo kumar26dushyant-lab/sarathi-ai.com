@@ -11030,10 +11030,16 @@ window.loadCRM=loadCRM; window.openCrmLead=openCrmLead; window.crmSaveField=crmS
 // ══ WhatsApp Automation (complainant doc-collection via Meta Cloud API) ═════════════
 async function loadWhatsapp(){
   const panel = document.getElementById('panel-whatsapp');
-  if (_role !== 'super_admin') { panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">WhatsApp Automation is Super Admin only.</div>'; return; }
   panel.innerHTML = '<div style="padding:1.5rem">Loading…</div>';
   const r = await API('/wa/overview');
-  if (!r.ok) { panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">Failed to load</div>'; return; }
+  if (!r.ok) {
+    panel.innerHTML = '<div style="padding:2rem;color:var(--nd-danger-text)">'
+      + (r.status === 403
+          ? 'The WhatsApp inbox is open to super-admins, sub-super-admins, and whoever is on '
+            + 'WhatsApp duty today. Ask a super-admin to put you on the rota.'
+          : 'Could not load the WhatsApp screen.') + '</div>';
+    return;
+  }
   const d = await r.json();
   const s = d.settings || {};
   const h = d.health || {};
@@ -11048,12 +11054,13 @@ async function loadWhatsapp(){
        </div>`
     : `<div style="background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.4);border-radius:12px;padding:1rem;margin-bottom:1rem">
          <div style="font-weight:800;color:#a16207">⏳ Not connected yet — awaiting Meta setup for number <b>9183686384</b></div>
+         ${!d.can_configure ? '<div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.4rem">A super-admin has to finish connecting the number before messages can be sent or received.</div>' : `
          <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.5rem;line-height:1.7">
            1. Verify the number in Meta → set display name <b>"NidaanPartner"</b>.<br>
            2. Add to server <code>biz.env</code>: ${(d.env_needed||[]).map(k=>`<code>${esc(k)}</code>`).join(' · ')}<br>
            3. Meta → Webhooks → callback URL <code>https://nidaanpartner.com/nidaan/api/wa/webhook</code>, subscribe to <b>messages</b>.
          </div>
-         <div style="font-size:.78rem;color:var(--nd-text-faint);margin-top:.5rem">Webhook verify token ${d.webhook_ready?'is set ✓':'not set yet'}.</div>
+         <div style="font-size:.78rem;color:var(--nd-text-faint);margin-top:.5rem">Webhook verify token ${d.webhook_ready?'is set ✓':'not set yet'}.</div>`}
        </div>`;
 
   const stat = (label,val,color)=>`<div style="flex:1;min-width:120px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.85rem 1rem"><div style="font-size:1.5rem;font-weight:800;color:${color}">${val}</div><div style="font-size:.74rem;color:var(--nd-text-muted)">${label}</div></div>`;
@@ -11090,6 +11097,7 @@ async function loadWhatsapp(){
       <div class="wai-pane wai-thread-pane" id="waiThread"><div style="padding:2rem;text-align:center;color:var(--nd-text-faint);font-size:.85rem">Pick a conversation on the left to read it.</div></div>
     </div>
 
+    ${!d.can_configure ? '' : `
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
       <div class="section-title" style="font-size:1rem;margin-bottom:.6rem">⚙️ Doc-collection defaults <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— any claim can override these; claim-level wins</span></div>
       <div style="display:flex;gap:1.1rem;flex-wrap:wrap;align-items:end;font-size:.84rem">
@@ -11105,7 +11113,7 @@ async function loadWhatsapp(){
         <button class="btn btn-primary" onclick="saveWaSettings()">Save defaults</button>
       </div>
       <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
-    </div>
+    </div>`}
 
     <details style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.9rem 1rem;margin-bottom:1.2rem">
       <summary style="cursor:pointer;font-weight:800;font-size:.95rem;list-style:none">🔒 How the bot keeps customer information safe <span style="font-size:.74rem;color:var(--nd-text-faint);font-weight:400">&mdash; read this once</span></summary>
@@ -11135,6 +11143,7 @@ async function loadWhatsapp(){
       </div>
     </details>
 
+    ${!d.can_configure ? '' : `
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
       <div class="section-title" style="font-size:1rem;margin-bottom:.2rem">📣 Bulk campaign</div>
       <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">Sends to <b>opted-in</b> contacts only (anyone who replied STOP is always skipped). Contacts in an open 24-hour chat get the full message now; others need an <b>approved template</b> name (cold sends). Leave the template blank to reach only currently-active chats.</div>
@@ -11179,10 +11188,11 @@ async function loadWhatsapp(){
       </div>
       <div id="wcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
       <div id="wcList" style="margin-top:.9rem"></div>
-    </div>
+    </div>`}
 
 `;
-  waLoadCampaigns();
+  // Campaigns are a super-admin screen; asking for the list as anybody else is a guaranteed 403.
+  if (d.can_configure) waLoadCampaigns();
   waiLoadList().then(function(){ if (_waiSel) waiOpen(_waiSel); });
   waiStartPoll();
 }

@@ -6245,12 +6245,19 @@ async def nidaan_ops_reattribute_claim(claim_id: int, body: NidaanReattributeReq
 
 @app.get("/nidaan/ops/api/wa/overview")
 async def nidaan_ops_wa_overview(request: Request):
-    """Super-admin WhatsApp-automation overview: config/number status, opt-in counts, recent
-    messages, and the doc-collection schedule defaults. Skeleton — populates live once the
-    Meta number is configured."""
+    """The WhatsApp screen's header: number status, opt-in counts, recent messages and the
+    doc-collection defaults.
+
+    Open to everyone who may read the inbox - super-admins, sub-super-admins and whoever is
+    rostered on WhatsApp today - because it is the same oversight, and none of it is a secret:
+    `env_needed` is a list of variable NAMES, never their values, and the message bodies are the
+    conversations those same people are allowed to read. CHANGING any of it stays super-admin,
+    which its own endpoint enforces.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "super_admin")
+    caller = await _require_wa_inbox(request)
+    _is_sa = (caller or {}).get("role") == "super_admin"
     import biz_nidaan_whatsapp as _nwa
     configured = _nwa.is_configured()
     health = await _nwa.number_health() if configured else {"configured": False}
@@ -6271,6 +6278,10 @@ async def nidaan_ops_wa_overview(request: Request):
     return {"configured": configured, "webhook_ready": bool(_nwa.verify_token()),
             "health": health, "settings": settings, "contacts": contacts,
             "messages": msg_counts, "recent": recent,
+            # The screen uses this to decide whether to draw the settings and campaign controls
+            # at all. It is a convenience for the screen, never the security boundary - every
+            # one of those endpoints checks the caller itself.
+            "can_configure": _is_sa,
             "env_needed": ["WA_NIDAAN_ACCESS_TOKEN", "WA_NIDAAN_PHONE_NUMBER_ID",
                            "WA_NIDAAN_WABA_ID", "WA_NIDAAN_APP_SECRET", "WA_NIDAAN_VERIFY_TOKEN"]}
 
