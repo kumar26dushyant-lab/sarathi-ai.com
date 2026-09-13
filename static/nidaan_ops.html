@@ -453,7 +453,6 @@ select.form-input option{background:#1e293b}
       <div id="panel-payfollow" class="panel" style="display:none"></div>
       <div id="panel-leave" class="panel" style="display:none"></div>
       <div id="panel-l2" class="panel" style="display:none"></div>
-      <div id="panel-handover" class="panel" style="display:none"></div>
       <div id="panel-board" class="panel" style="display:none"></div>
       <div id="panel-mybiz" class="panel" style="display:none"></div>
       <div id="panel-tasks" class="panel" style="display:none"></div>
@@ -650,7 +649,7 @@ async function bootApp() {
   buildSidebar();
   // Land on Tasks by default; honour a valid #panel from the URL (back/forward,
   // bookmarks) so navigation is restorable.
-  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','handover','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
+  const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
   const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
@@ -964,7 +963,6 @@ function buildSidebar() {
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
       {id:'claims',   label:'📋 All Claims',       minRank:1},
       {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
-      {id:'handover', label:'📤 Hand to Level-2',  minRank:0},
       {id:'archived', label:'🗄️ Archived',         minRank:1},
       {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
@@ -1041,14 +1039,13 @@ function showPanel(id, fromHistory) {
     docsplit: loadDocSplit,
     radar: loadRadar,
     claims: loadClaims,
-    l2claims: () => loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'),
+    l2claims: () => { loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'); _l2LoadReadiness(); },
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
     desk: loadDesk,
     onbehalf: loadOnBehalf,
     payfollow: loadPayFollow,
     leave: loadLeavePanel,
     l2: loadL2,
-    handover: loadHandover,
     board: loadCaseBoard,
     accounts: loadAccounts,
     branches: loadBranches,
@@ -3694,6 +3691,20 @@ window.loadPipeline=loadPipeline; window.pipeSetOrigin=pipeSetOrigin; window.pip
 function _l2Eligible(c){ return c.l2_payment_status==='paid' || c.payment_status==='paid' || c.payment_status==='subscription'; }
 function _reloadL2(){ loadOutcomeClaims('l2claims','can_fight','⚖️ Level-2 (L2) Claims','Reviewed GO — ready for legal action · ClaimShield status'); }
 
+// Readiness for every claim on this screen, so the Move-to-Level-2 cell can say what is missing
+// before anybody presses it. Loaded once per render, not per row.
+async function _l2LoadReadiness(){
+  try{
+    const r = await API('/l2/pending-handover');
+    if (!r.ok) return;
+    const rows = (await r.json()).claims || [];
+    const m = {};
+    rows.forEach(function(x){ m[x.claim_id] = x; });
+    _l2HO = m;
+    if (document.getElementById('oc_l2claims_wrap')) _renderOutcome('l2claims');
+  }catch(e){}
+}
+
 async function loadOutcomeClaims(key, outcome, title, sub){
   const el = document.getElementById('panel-'+key);
   const isL2 = key==='l2claims';
@@ -3767,7 +3778,7 @@ function _renderOutcome(key){
   if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows); return; }
   if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows); return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
+    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Level-2</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
         if(isL2){
@@ -3780,6 +3791,26 @@ function _renderOutcome(key){
             csCell=`<td>${_due?'<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.25rem;white-space:nowrap">Awaiting branch ₹499 + GST L2 fee</div>':''}<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id})">⚖️ Send to CS</button></td>`;
           }
         }
+        // The move into Level-2 lives on this row, because this is the screen somebody is looking
+        // at when they decide a claim is ready. A new screen for it was the wrong answer.
+        let l2Cell = '';
+        if(isL2){
+          const st = _l2HO[c.claim_id];
+          if(c.pipeline_stage){
+            l2Cell = `<td style="font-size:.72rem"><span style="color:var(--nd-success-text);font-weight:700">▶ In Level-2</span><br><span style="color:var(--nd-text-faint)">${esc(c.pipeline_stage.replace(/_/g,' '))}</span></td>`;
+          } else if(c.l2_handover_at){
+            l2Cell = `<td style="font-size:.72rem"><span style="color:var(--nd-cyan-text);font-weight:700">✓ Handed over</span>${c.l2_handover_by?`<br><span style="color:var(--nd-text-faint)">👤 ${esc(c.l2_handover_by)}</span>`:''}<br><button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.1rem .4rem" onclick="event.stopPropagation();showPanel('l2')">Open workspace</button></td>`;
+          } else if(!_l2Eligible(c)){
+            l2Cell = `<td style="font-size:.7rem;color:var(--nd-text-faint)">Fee not paid yet</td>`;
+          } else {
+            const bad = st && st.blocks ? st.blocks.length : 0;
+            const gap = st && st.fixes ? st.fixes.length : 0;
+            l2Cell = `<td style="white-space:nowrap">`
+              + (bad ? `<div style="color:var(--nd-danger-text);font-size:.66rem;margin-bottom:.2rem">⛔ ${bad} blocking</div>`
+                     : (gap ? `<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.2rem">⚠ ${gap} to check</div>` : ''))
+              + `<button class="btn ${bad?'btn-ghost':'btn-primary'}" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();hoOpen(${c.claim_id})">→ Move to Level-2</button></td>`;
+          }
+        }
         return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
         <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
         <td>${esc(c.insured_name)} ${_payBadge(c.payment_status)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>
@@ -3787,7 +3818,7 @@ function _renderOutcome(key){
         <td>₹${fmt(c.disputed_amount||0)}</td>`
         + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
              + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
-             + csCell:'')
+             + csCell + l2Cell:'')
         + `<td style="font-size:.78rem">${_subscriberCell(c)}</td>`
         + `<td style="font-size:.78rem">${_referredByCell(c)}</td>`
         + `<td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
@@ -11586,9 +11617,12 @@ function l2RenderStart(){
     const state = blocks.length ? 'red' : (fixes.length ? 'amber' : 'ok');
     const label = blocks.length ? (blocks.length + ' blocking')
                 : (fixes.length ? (fixes.length + ' missing') : 'Ready');
-    const act = blocks.length
+    const act = (blocks.length
       ? '<button class="l2mv d" onclick="l2Why(' + x.claim_id + ')">Why not?</button>'
-      : '<button class="l2mv p" onclick="l2Start(' + x.claim_id + ',this)">⚖️ Start Level-2</button>';
+      : '<button class="l2mv p" onclick="l2Start(' + x.claim_id + ',this)">⚖️ Start Level-2</button>')
+      // Level-2 can refuse a handover. Sending it back with a reason is how intake finds out
+      // what they missed, rather than the claim sitting here while nobody says anything.
+      + '<button class="l2mv d" onclick="l2SendBack(' + x.claim_id + ')">↩ Send back</button>';
     return '<tr>'
       + '<td><b>NP-' + x.claim_id + '</b></td>'
       + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
@@ -11815,11 +11849,6 @@ async function l2Move(claimId, toKey, presetReason){
   const needsReason = !!rule.needs_reason;
   const subs = dest.substates || [];
 
-  // Nothing to ask? Confirm and go.
-  if (!isPark && !needsReason && subs.length <= 1){
-    if (!confirm('Move NP-' + claimId + ' to ' + dest.name_en + '?')) return;
-    return _l2Send(claimId, toKey, {});
-  }
 
   const min = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   const subOpts = subs.map(function(s){
@@ -11841,13 +11870,27 @@ async function l2Move(claimId, toKey, presetReason){
     + (isPark
         ? '<div class="l2fld"><label>Comes back on <span class="req">*</span></label>'
           + '<input type="date" id="l2mDate" min="' + min + '"></div>' : '')
-    + '<div class="l2fld"><label>Reason' + (needsReason ? ' <span class="req">*</span>' : ' (optional)')
-      + '</label><textarea id="l2mWhy" rows="3" maxlength="400">'
-      + esc(presetReason || '') + '</textarea></div>'
+    + '<div class="l2fld"><label>'
+      + (rule.kind === 'back' ? 'What is wrong?' : (isPark ? 'Why is it being paused?'
+         : 'Note for the next bucket'))
+      + ' <span class="req">*</span></label>'
+      + '<textarea id="l2mWhy" rows="3" maxlength="400" placeholder="'
+      + (rule.kind === 'back' ? 'What the previous person needs to fix…'
+         : (isPark ? 'What we are waiting for…'
+            : 'What you did, and what is still pending for them…'))
+      + '">' + esc(presetReason || '') + '</textarea>'
+      + '<div class="hint">They pick this up cold. One sentence saves a phone call.</div></div>'
     + '<div id="l2mMsg" style="font-size:.82rem"></div>',
     [{label:'Move', cls:'btn-primary', fn:function(){
         const g = function(id){ const e = document.getElementById(id); return e ? e.value : ''; };
-        _l2Send(claimId, toKey, {sub: g('l2mSub'), reason: g('l2mWhy'), hold_until: g('l2mDate')});
+        const why = (g('l2mWhy') || '').trim();
+        const msg = document.getElementById('l2mMsg');
+        if (!why){
+          if (msg){ msg.style.color = 'var(--nd-danger-text)';
+            msg.textContent = 'Add a note — the next person starts cold.'; }
+          return;
+        }
+        _l2Send(claimId, toKey, {sub: g('l2mSub'), reason: why, hold_until: g('l2mDate')});
       }}], false);
 }
 
@@ -12086,74 +12129,7 @@ window.l2MoveMenuCase = l2MoveMenuCase;
 // Two steps, two people. Intake checks the file over and signs for it; the Level-2 team then
 // picks it up and starts. This is the first half — and the signature is the point of it, because
 // when something turns out to be missing in three weeks, this says who said it was ready.
-let _hoWait = [];
-
-async function loadHandover(){
-  _l2Styles();
-  const el = document.getElementById('panel-handover');
-  if (!el) return;
-  el.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
-  try{
-    const r = await API('/l2/pending-handover');
-    if (!r.ok) throw 0;
-    _hoWait = (await r.json()).claims || [];
-  }catch(e){
-    el.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load.</p>'
-      + '<button class="btn btn-primary" onclick="loadHandover()">Try again</button></div>';
-    return;
-  }
-  hoRender();
-}
-
-function hoRender(){
-  const el = document.getElementById('panel-handover');
-  const blocked = _hoWait.filter(function(x){ return (x.blocks||[]).length; }).length;
-  const head =
-      '<div class="section-hdr"><div>'
-    +   '<div class="section-title">⚖️ L2 Claims — ready to hand over</div>'
-    +   '<div class="section-sub">Reviewed as winnable and the Level-2 fee is paid. Someone on '
-    +     'intake duty checks each file over and hands it to Level-2 — their name stays on it.</div>'
-    + '</div><button class="btn-sm btn-ghost" onclick="loadHandover()">🔄 Refresh</button></div>';
-
-  if (!_hoWait.length){
-    el.innerHTML = head + '<div class="empty"><div class="ei">✅</div>'
-      + '<p>Nothing waiting to be handed over.</p>'
-      + '<p style="font-size:.82rem;color:var(--nd-text-muted)">Everything paid and winnable has '
-      + 'already been passed to Level-2.</p></div>';
-    return;
-  }
-
-  const rows = _hoWait.map(function(x){
-    const blocks = x.blocks || [], fixes = x.fixes || [];
-    const label = blocks.length ? (blocks.length + ' blocking')
-                : (fixes.length ? (fixes.length + ' to check') : 'Ready');
-    const state = blocks.length ? 'red' : (fixes.length ? 'amber' : 'ok');
-    return '<tr>'
-      + '<td><b>NP-' + x.claim_id + '</b></td>'
-      + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
-      + '<td>' + (x.insurer ? esc(x.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
-      + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
-      + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '') + '</td>'
-      + '<td><span class="l2age ' + ((x.waiting_days||0) > 14 ? 'red' : ((x.waiting_days||0) > 7 ? 'amber' : 'ok'))
-      +   '">' + (x.waiting_days == null ? '—' : x.waiting_days + 'd') + '</span></td>'
-      + '<td><button class="l2mv ' + (state === 'red' ? 'd' : 'g') + '" onclick="l2Why(' + x.claim_id + ')">'
-      +   (state === 'ok' ? '✓ ' : '⚠ ') + label + '</button></td>'
-      + '<td style="white-space:nowrap">'
-      +   '<button class="l2mv ' + (blocks.length ? 'g' : 'p') + '" onclick="hoOpen(' + x.claim_id + ')">'
-      +     '→ Hand to Level-2</button>'
-      +   '<button class="l2mv g" onclick="openClaimDrawer(' + x.claim_id + ')">Open</button>'
-      + '</td></tr>';
-  }).join('');
-
-  el.innerHTML = head
-    + (blocked ? '<div class="l2ban red">⛔ ' + blocked + ' cannot be handed over yet — something '
-        + 'essential is missing. Open the claim and fix it, or press the warning to see what.</div>' : '')
-    + '<div class="l2ban info">Handing a claim over is a decision, not a formality. You are saying '
-    +   'the Level-2 team can pick this up cold and get on with it.</div>'
-    + '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
-    + '<th>Insurance Co.</th><th style="text-align:right">Disputed</th><th>Origin</th>'
-    + '<th>Waiting</th><th>Checks</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
-}
+let _l2HO = {};   // claim_id -> readiness, for the Move-to-Level-2 cell
 
 // ── the probing questions ────────────────────────────────────────────────────
 let _hoQ = null;
@@ -12239,8 +12215,11 @@ async function hoSend(force){
     const d = await r.json().catch(function(){ return {}; });
     if (r.ok){
       closeModal();
-      ndUI.toast('NP-' + id + ' handed to Level-2', 'success');
-      await loadHandover();
+      ndUI.toast('NP-' + id + ' moved to Level-2 — it is now in To start', 'success');
+      // Refresh whichever screen the person is actually looking at.
+      if (document.getElementById('oc_l2claims_wrap')){ _reloadL2(); _l2LoadReadiness(); }
+      if (typeof loadL2 === 'function' && document.getElementById('panel-l2')
+          && document.getElementById('panel-l2').style.display !== 'none') await loadL2();
     } else if (msg){
       msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not hand that over');
     }
@@ -12249,7 +12228,40 @@ async function hoSend(force){
   }
 }
 
-window.loadHandover = loadHandover; window.hoOpen = hoOpen; window.hoSend = hoSend;
+// Level-2 refusing a handover. The comment is the whole point: intake only learns what they
+// missed if somebody tells them, and "it came back" on its own teaches nobody anything.
+async function l2SendBack(claimId){
+  openModal('\u21a9 Send NP-' + claimId + ' back to L2 Claims',
+      '<div class="l2ban amber">This returns the claim to the L2 Claims list. Whoever handed it '
+    + 'over will see your reason, so say what is actually missing.</div>'
+    + '<div class="l2fld"><label>What is missing or wrong? <span class="req">*</span></label>'
+    + '<textarea id="sbWhy" rows="3" maxlength="400" placeholder="e.g. No signed authorisation, '
+    + 'and the mobile number on file is switched off."></textarea></div>'
+    + '<div id="sbMsg" style="font-size:.82rem"></div>',
+    [{label:'Send back', cls:'btn-primary', fn:function(){ l2SendBackGo(claimId); }}], false);
+}
+
+async function l2SendBackGo(claimId){
+  const msg = document.getElementById('sbMsg');
+  const why = ((document.getElementById('sbWhy') || {}).value || '').trim();
+  if (!why){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)';
+      msg.textContent = 'Say what is missing \u2014 that is the only way intake finds out.'; }
+    return;
+  }
+  if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Sending back\u2026'; }
+  try{
+    const r = await API('/cases/' + claimId + '/handover/undo',
+      {method:'POST', body: JSON.stringify({reason: why})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){ closeModal(); ndUI.toast('NP-' + claimId + ' sent back to L2 Claims', 'success'); await loadL2(); }
+    else if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not send it back'); }
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not send it back.'; }
+  }
+}
+window.l2SendBack = l2SendBack; window.l2SendBackGo = l2SendBackGo;
+window.hoOpen = hoOpen; window.hoSend = hoSend;
 
 function deskGuide(key){
   _deskOpenGuide = (_deskOpenGuide === key) ? null : key;

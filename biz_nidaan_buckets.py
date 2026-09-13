@@ -573,10 +573,21 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                          "the bucket designer." % (src.get("name_en", cur_key),
                                                    dest.get("name_en", to_key))}
     kind = (rule or {}).get("kind", "forward")
-    needs_reason = bool((rule or {}).get("needs_reason"))
 
-    if needs_reason and not (reason or "").strip():
-        return {"ok": False, "error": "Say why - it goes into the remarks and is read later."}
+    # GROUND RULE: every move carries a comment, forwards as well as backwards.
+    #
+    # The person receiving the claim in the next bucket starts cold. They need to know what was
+    # done, what is still pending and what to do next - and the only person who can tell them is
+    # the one letting go of it. A bucket system without this degenerates into claims appearing
+    # in queues with no explanation, which is exactly the silence it was built to end.
+    if not (reason or "").strip() and not force:
+        if kind == "back":
+            return {"ok": False,
+                    "error": "Say what is wrong - the person who sent it forward needs to know."}
+        if kind == "park":
+            return {"ok": False, "error": "Say why this is being paused."}
+        return {"ok": False,
+                "error": "Add a note for the next bucket - what you did, and what is still pending."}
 
     # Parking always needs a date. An open-ended pause is how a case disappears for a year.
     if dest.get("is_park"):
