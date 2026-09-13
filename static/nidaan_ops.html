@@ -12225,9 +12225,14 @@ function l2Table(b){
       + '<button class="l2mv g" onclick="l2Open(' + i.claim_id + ')">Open</button>';
     const lok = (i.lokpal_days_left != null && i.lokpal_days_left <= 90)
       ? '<div class="l2lok">⏳ Lokpal window ' + i.lokpal_days_left + 'd</div>' : '';
+    // The docs count is where somebody is already looking when they decide to chase, so that
+    // is the door into the pending-document window rather than a button somewhere else.
     const docs = i.docs_total
-      ? '<span class="' + (i.docs_ready ? 'l2age ok' : '') + '">' + i.docs_done + '/' + i.docs_total + '</span>'
-      : '—';
+      ? '<button class="l2mv ' + (i.docs_ready ? 'g' : '') + '" title="Open the pending '
+        + 'documents" onclick="dwOpen(' + i.claim_id + ')">'
+        + (i.docs_ready ? '✅ ' : '📄 ') + i.docs_done + '/' + i.docs_total
+        + '</button>'
+      : '<button class="l2mv g" onclick="dwOpen(' + i.claim_id + ')">📄 Docs</button>';
     return '<tr>'
       + '<td><b>NP-' + i.claim_id + '</b>' + lok + '</td>'
       + '<td>' + esc(i.who || '(no name)')
@@ -12717,6 +12722,500 @@ async function l2SendBackGo(claimId){
   }
 }
 window.l2SendBack = l2SendBack; window.l2SendBackGo = l2SendBackGo;
+
+// ══ The pending-document window ═══════════════════════════════════════════════
+// The screen from the founder's drawing. Three columns of one idea each:
+//
+//   WHAT WE STILL NEED  ·  WHO IT GOES TO  ·  WHAT WE WILL SAY
+//
+// Received documents go green and drop out of the ask. Anything can be added; anything can be
+// removed, always with a reason. Numbers and emails can be added AND taken away. And the Send
+// button does not send - it opens the check, because the one thing a staffer must never do is
+// push a list of errands to a customer without reading it back.
+let _dwClaim = 0, _dwData = null, _dwPick = {}, _dwExtras = [], _dwDrop = {}, _dwMsg = '';
+
+function _dwStyles(){
+  if (document.getElementById('dwCss')) return;
+  const st = document.createElement('style'); st.id = 'dwCss';
+  st.textContent = `
+  .dwcols{display:grid;grid-template-columns:1.15fr .85fr 1fr;gap:.8rem;align-items:start}
+  .dwcol{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;
+    padding:.6rem .7rem}
+  .dwh{font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--nd-text-faint);margin-bottom:.4rem;display:flex;gap:.4rem;align-items:baseline}
+  .dwh .n{color:var(--nd-text-muted);letter-spacing:0;font-weight:600;text-transform:none;
+    font-size:.72rem}
+  .dwd{display:flex;gap:.5rem;align-items:flex-start;padding:.4rem 0;
+    border-bottom:1px solid var(--nd-border)}
+  .dwd:last-child{border-bottom:0}
+  .dwd.got{background:var(--nd-success-soft,rgba(52,211,153,.1));border-radius:7px;
+    padding:.4rem .45rem;border-bottom:0;margin-bottom:.15rem}
+  .dwd input[type=checkbox]{margin-top:.22rem;flex:0 0 auto}
+  .dwd .t{flex:1;min-width:0;font-size:.85rem;color:var(--nd-text-primary);line-height:1.35}
+  .dwd .w{display:block;font-size:.72rem;color:var(--nd-text-faint);margin-top:.05rem}
+  .dwd.got .t{color:var(--nd-success-text);font-weight:600}
+  .dwx{background:none;border:0;color:var(--nd-text-faint);cursor:pointer;font-size:.95rem;
+    line-height:1;padding:.1rem .25rem;flex:0 0 auto}
+  .dwx:hover{color:var(--nd-danger-text)}
+  .dwp{display:flex;gap:.45rem;align-items:flex-start;padding:.38rem 0;
+    border-bottom:1px solid var(--nd-border);font-size:.83rem}
+  .dwp:last-child{border-bottom:0}
+  .dwp .who{flex:1;min-width:0}
+  .dwp .ro{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--nd-text-faint)}
+  .dwp .ct{font-size:.76rem;color:var(--nd-text-muted);word-break:break-word}
+  .dwp .gap{font-size:.74rem;color:var(--nd-warning-text)}
+  .dwtag{font-size:.64rem;font-weight:800;border-radius:4px;padding:.02rem .3rem;
+    background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan)}
+  .dwtag.cc{background:var(--nd-bg-surface-2);color:var(--nd-text-muted);
+    border:1px solid var(--nd-border-strong)}
+  .dwadd{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.4rem}
+  .dwadd input{flex:1;min-width:6rem;background:var(--nd-bg-surface-2);
+    border:1px solid var(--nd-border);color:var(--nd-text-primary);border-radius:7px;
+    padding:.3rem .45rem;font-size:.82rem;font-family:inherit}
+  .dwta{width:100%;min-height:11rem;background:var(--nd-bg-surface-2);
+    border:1px solid var(--nd-border);color:var(--nd-text-primary);border-radius:8px;
+    padding:.5rem .6rem;font-size:.84rem;font-family:inherit;line-height:1.5;resize:vertical}
+  .dwchk{display:flex;gap:1rem;flex-wrap:wrap;font-size:.82rem;margin:.4rem 0;
+    color:var(--nd-text-secondary)}
+  .dwchk label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
+  .dwchase{font-size:.8rem;color:var(--nd-text-muted);margin-top:.5rem;line-height:1.5}
+  .dwrow{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem}
+  .dwsel{background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);
+    color:var(--nd-text-primary);border-radius:7px;padding:.28rem .5rem;font-size:.83rem;
+    font-family:inherit}
+  .dwprev{font-size:.85rem;line-height:1.5}
+  .dwprev .box{background:var(--nd-bg-surface);border:1px solid var(--nd-border);
+    border-radius:8px;padding:.5rem .6rem;white-space:pre-wrap;max-height:14rem;overflow-y:auto;
+    font-size:.82rem;color:var(--nd-text-secondary);margin:.3rem 0}
+  @media (max-width:900px){ .dwcols{grid-template-columns:1fr} }`;
+  document.head.appendChild(st);
+}
+
+async function dwOpen(claimId){
+  _dwStyles();
+  _dwClaim = claimId; _dwPick = {}; _dwExtras = []; _dwDrop = {}; _dwMsg = '';
+  openModal('📄 Pending documents — NP-' + claimId,
+    '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>', [], true);
+  try{
+    const r = await API('/claims/' + claimId + '/doc-window');
+    if (!r.ok) throw new Error('load');
+    _dwData = await r.json();
+  }catch(e){
+    document.getElementById('modalBody').innerHTML =
+      '<div class="empty"><div class="ei">⚠️</div><p>Could not open this claim\'s documents.</p></div>';
+    return;
+  }
+  // Everything still outstanding is ticked to begin with — that is the ask staff make nine
+  // times out of ten, and unticking is easier than hunting.
+  (_dwData.docs || []).forEach(function(d){ if (!d.received) _dwPick[d.key] = true; });
+  _dwMsg = '';
+  dwRender();
+  dwRefreshDraft();
+}
+
+function dwRender(){
+  const d = _dwData || {};
+  const body = document.getElementById('modalBody');
+  if (!body) return;
+  const docs = d.docs || [];
+  const got = docs.filter(function(x){ return x.received; });
+  const need = docs.filter(function(x){ return !x.received; });
+
+  const typeSel = '<select class="dwsel" id="dwType" onchange="dwSetType()">'
+    + (d.types || []).map(function(t){
+        return '<option value="' + esc(t) + '"' + (t === d.claim_type ? ' selected' : '') + '>'
+          + esc(t) + '</option>'; }).join('') + '</select>';
+
+  const docRow = function(x){
+    const on = !!_dwPick[x.key];
+    return '<div class="dwd' + (x.received ? ' got' : '') + '">'
+      + (x.received ? '<span style="margin-top:.1rem">✅</span>'
+                    : '<input type="checkbox" id="dwc_' + esc(x.key) + '"' + (on ? ' checked' : '')
+                      + ' onchange="dwPick(\'' + esc(x.key) + '\',this.checked)">')
+      + '<span class="t">' + esc(x.label)
+      +   (x.custom ? ' <span class="bdsub">added by ' + esc(x.added_by || 'staff') + '</span>' : '')
+      +   (x.received ? ' <span class="bdsub">· arrived by ' + esc(x.received_via || 'upload')
+          + '</span>' : '')
+      +   (x.why && !x.received ? '<span class="w">' + esc(x.why) + '</span>' : '')
+      + '</span>'
+      + '<button class="dwx" title="Remove from this claim" onclick="dwRemove(\'' + esc(x.key)
+      +   '\',\'' + esc(x.label).replace(/'/g, "\\'") + '\')">✕</button>'
+      + '</div>';
+  };
+
+  const removed = (d.removed || []).length
+    ? '<details style="margin-top:.5rem"><summary style="font-size:.76rem;cursor:pointer;'
+      + 'color:var(--nd-text-muted)">' + d.removed.length + ' taken off this claim</summary>'
+      + d.removed.map(function(x){
+          return '<div style="font-size:.76rem;color:var(--nd-text-faint);padding:.25rem 0;'
+            + 'border-bottom:1px solid var(--nd-border)">'
+            + esc(x.label || x.doc_key) + ' — <i>' + esc(x.reason) + '</i><br>'
+            + esc(x.by || 'someone') + (x.at ? ' · ' + esc(String(x.at).slice(0, 16)) : '')
+            + ' <button class="l2mv g" onclick="dwRestore(\'' + esc(x.doc_key)
+            + '\')">Put it back</button></div>'; }).join('')
+      + '</details>'
+    : '';
+
+  const people = (d.recipients || []).map(function(p, i){
+    const off = !!_dwDrop[p.role];
+    const ways = [];
+    if (p.phone) ways.push('📱 ' + esc(p.phone));
+    if (p.email) ways.push('✉️ ' + esc(p.email));
+    return '<div class="dwp"' + (off ? ' style="opacity:.45"' : '') + '>'
+      + '<input type="checkbox"' + (off ? '' : ' checked') + ' style="margin-top:.25rem"'
+      +   ' onchange="dwDrop(\'' + esc(p.role) + '\',this.checked)">'
+      + '<span class="who"><span class="ro">' + esc(p.label) + '</span> '
+      +   '<span class="dwtag' + (p.kind === 'to' ? '' : ' cc') + '">'
+      +     (p.kind === 'to' ? 'we ask' : 'copied') + '</span><br>'
+      +   '<b>' + esc(p.name || '—') + '</b>'
+      +   (ways.length ? '<div class="ct">' + ways.join(' · ') + '</div>'
+                       : '<div class="gap">no phone or email on file — add one below, or fix '
+                         + 'it on the claim</div>')
+      + '</span></div>';
+  }).join('');
+
+  const extras = _dwExtras.map(function(x, i){
+    return '<div class="dwadd">'
+      + '<input placeholder="Name" value="' + esc(x.name || '') + '" '
+      +   'oninput="dwExtra(' + i + ',\'name\',this.value)">'
+      + '<input placeholder="Mobile" value="' + esc(x.phone || '') + '" inputmode="numeric" '
+      +   'oninput="dwExtra(' + i + ',\'phone\',this.value)">'
+      + '<input placeholder="Email" value="' + esc(x.email || '') + '" '
+      +   'oninput="dwExtra(' + i + ',\'email\',this.value)">'
+      + '<button class="dwx" title="Remove this person" onclick="dwExtraDel(' + i + ')">✕</button>'
+      + '</div>';
+  }).join('');
+
+  const ch = d.chase || {};
+  const chase = ch.call_due
+    ? '<div class="l2ban amber">📞 Reminders have stopped — this one needs a phone call now. '
+      + '<button class="l2mv p" onclick="dwCall()">I called them</button></div>'
+    : (ch.armed && ch.next_nudge_at
+        ? '<div class="dwchase">🔔 Reminding automatically — next on <b>'
+          + esc(String(ch.next_nudge_at).slice(0, 10)) + '</b> (' + (ch.nudges || 0) + ' of '
+          + (ch.max_nudges || 2) + ' sent). After that we stop and ask someone to phone.'
+          + ' <button class="l2mv g" onclick="dwPause(true)">Stop reminders</button></div>'
+        : (ch.paused
+            ? '<div class="dwchase">🔕 Automatic reminders are off. '
+              + '<button class="l2mv g" onclick="dwPause(false)">Turn them back on</button></div>'
+            : '<div class="dwchase">Reminders start once an ask goes out.</div>'));
+
+  const hist = (d.history || []).length
+    ? '<details style="margin-top:.5rem"><summary style="font-size:.76rem;cursor:pointer;'
+      + 'color:var(--nd-text-muted)">What we have already asked ('
+      + d.history.length + ')</summary>'
+      + d.history.map(function(h){
+          const reached = (h.result || []).filter(function(r){
+            return r.whatsapp === 'sent' || r.email === 'sent'; }).length;
+          return '<div style="font-size:.76rem;color:var(--nd-text-faint);padding:.25rem 0;'
+            + 'border-bottom:1px solid var(--nd-border)">'
+            + esc(String(h.created_at || '').slice(0, 16)) + ' · <b>' + esc(h.sent_by || '—')
+            + '</b> asked for ' + (h.doc_keys || []).length + ' document(s) · reached '
+            + reached + ' · ' + esc(h.kind || 'request') + '</div>'; }).join('')
+      + '</details>'
+    : '';
+
+  body.innerHTML =
+      '<div class="dwrow">'
+    +   '<span style="font-size:.83rem;color:var(--nd-text-muted)">Claim type</span>' + typeSel
+    +   '<span class="bdsub">the list below follows from this — correct it first if it is wrong</span>'
+    + '</div>'
+    + '<div class="dwcols">'
+
+    + '<div class="dwcol"><div class="dwh">What we still need'
+    +   '<span class="n">' + got.length + ' in · ' + need.length + ' to go</span></div>'
+    +   (need.length ? need.map(docRow).join('')
+                     : '<div class="bdsub">Everything on the list has arrived.</div>')
+    +   (got.length ? '<div class="dwh" style="margin-top:.6rem">Already in</div>'
+                    + got.map(docRow).join('') : '')
+    +   '<div class="dwadd"><input id="dwNew" placeholder="Something else this case needs…" '
+    +     'maxlength="120" onkeydown="if(event.key===\'Enter\')dwAdd()">'
+    +     '<button class="l2mv g" onclick="dwAdd()">+ Add</button></div>'
+    +   removed
+    + '</div>'
+
+    + '<div class="dwcol"><div class="dwh">Who it goes to</div>'
+    +   people
+    +   '<div class="dwh" style="margin-top:.6rem">Anyone else</div>'
+    +   (extras || '<div class="bdsub">Nobody added.</div>')
+    +   '<button class="l2mv g" style="margin-top:.35rem" onclick="dwExtraAdd()">'
+    +     '+ Add a mobile or email</button>'
+    + '</div>'
+
+    + '<div class="dwcol"><div class="dwh">What we will say</div>'
+    +   '<div class="dwchk">'
+    +     '<label><input type="checkbox" id="dwWa" checked onchange="dwTouch()"> WhatsApp</label>'
+    +     '<label><input type="checkbox" id="dwEm" checked onchange="dwTouch()"> Email</label>'
+    +     '<button class="l2mv g" onclick="dwRefreshDraft()">↻ Rewrite from the ticked list</button>'
+    +   '</div>'
+    +   '<textarea class="dwta" id="dwMsg" maxlength="4000" oninput="dwTouch()">'
+    +     esc(_dwMsg) + '</textarea>'
+    +   '<div class="bdsub" style="margin-top:.3rem">Edit it freely — this is what they read.</div>'
+    +   chase + hist
+    + '</div></div>'
+
+    + '<div id="dwSay" style="font-size:.83rem;margin-top:.5rem"></div>';
+
+  const foot = document.getElementById('modalFooter');
+  if (foot){
+    foot.innerHTML = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
+      + '<button class="btn btn-primary" onclick="dwCheck()">Check it, then send →</button>';
+  }
+}
+
+function dwPick(k, on){ if (on) _dwPick[k] = true; else delete _dwPick[k]; }
+function dwDrop(role, on){ if (on) delete _dwDrop[role]; else _dwDrop[role] = true; }
+function dwTouch(){ _dwMsg = (document.getElementById('dwMsg') || {}).value || ''; }
+function _dwKeys(){ return Object.keys(_dwPick); }
+function _dwChannels(){
+  const c = [];
+  if ((document.getElementById('dwWa') || {}).checked) c.push('whatsapp');
+  if ((document.getElementById('dwEm') || {}).checked) c.push('email');
+  return c;
+}
+function _dwSay(t, ok){
+  const el = document.getElementById('dwSay');
+  if (el){ el.style.color = ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)';
+           el.textContent = t; }
+  else ndUI.toast(t, ok ? 'success' : 'error');
+}
+
+function dwExtraAdd(){ _dwExtras.push({name:'', phone:'', email:''}); dwRender(); }
+function dwExtraDel(i){ _dwExtras.splice(i, 1); dwRender(); }
+function dwExtra(i, f, v){ if (_dwExtras[i]) _dwExtras[i][f] = v; }
+
+async function dwReload(msg){
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window');
+    if (r.ok){
+      _dwData = await r.json();
+      // Keep the ticks on anything still outstanding that the person had chosen.
+      const live = {};
+      (_dwData.docs || []).forEach(function(d){ if (!d.received && _dwPick[d.key]) live[d.key] = true; });
+      _dwPick = live;
+      dwRender();
+      if (msg) _dwSay(msg, true);
+      return true;
+    }
+  }catch(e){}
+  _dwSay('Could not refresh the list.', false);
+  return false;
+}
+
+async function dwSetType(){
+  const t = (document.getElementById('dwType') || {}).value || '';
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/type',
+      {method:'POST', body: JSON.stringify({claim_type: t})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ _dwSay(_l2Err(d, 'Could not change the claim type.'), false); return; }
+    // A different type means a different standard list, so start the ticks fresh.
+    _dwPick = {};
+    await dwReload('Claim type set to ' + t + ' — the list now matches.');
+    (_dwData.docs || []).forEach(function(x){ if (!x.received) _dwPick[x.key] = true; });
+    dwRender(); dwRefreshDraft();
+  }catch(e){ _dwSay('Could not change the claim type.', false); }
+}
+
+async function dwAdd(){
+  const el = document.getElementById('dwNew');
+  const label = ((el || {}).value || '').trim();
+  if (!label){ _dwSay('Type what you need first.', false); return; }
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/add',
+      {method:'POST', body: JSON.stringify({label: label, required: true})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ _dwSay(_l2Err(d, 'Could not add it.'), false); return; }
+    if (d.doc_key) _dwPick[d.doc_key] = true;
+    await dwReload('Added.');
+  }catch(e){ _dwSay('Could not add it.', false); }
+}
+
+function dwRemove(key, label){
+  // A removal is a decision somebody has to be able to explain later, so it carries a reason
+  // and the reason is kept for good.
+  const prev = document.getElementById('modalBody').innerHTML;
+  openModal('Remove "' + label + '" from this claim?',
+      '<div class="l2ban info">It comes off the list and we stop asking for it. Nothing is '
+    + 'deleted — your reason stays on the claim, so the next person knows we stopped on '
+    + 'purpose.</div>'
+    + '<div class="l2fld"><label>Why is it not needed? <span class="req">*</span></label>'
+    + '<textarea id="dwRmWhy" rows="2" maxlength="400" placeholder="e.g. The FIR already '
+    + 'covers this."></textarea></div>'
+    + '<div id="dwRmMsg" style="font-size:.82rem"></div>',
+    [{label:'Keep it', cls:'btn-ghost', fn:function(){ dwOpen(_dwClaim); }},
+     {label:'Remove it', cls:'btn-primary', fn:async function(){
+       const why = ((document.getElementById('dwRmWhy') || {}).value || '').trim();
+       const m = document.getElementById('dwRmMsg');
+       if (!why){ if (m){ m.style.color = 'var(--nd-danger-text)';
+         m.textContent = 'Say why — the next person needs to know we stopped on purpose.'; }
+         return; }
+       try{
+         const r = await API('/claims/' + _dwClaim + '/doc-window/remove',
+           {method:'POST', body: JSON.stringify({doc_key: key, reason: why})});
+         const d = await r.json().catch(function(){ return {}; });
+         if (!r.ok){ if (m){ m.style.color = 'var(--nd-danger-text)';
+           m.textContent = _l2Err(d, 'Could not remove it.'); } return; }
+         delete _dwPick[key];
+         await dwOpen(_dwClaim);
+         _dwSay('Removed, with your reason on the claim.', true);
+       }catch(e){ if (m){ m.style.color = 'var(--nd-danger-text)';
+         m.textContent = 'Could not remove it.'; } }
+     }}], false);
+}
+
+async function dwRestore(key){
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/restore',
+      {method:'POST', body: JSON.stringify({doc_key: key, reason: ''})});
+    if (r.ok){ _dwPick[key] = true; await dwReload('Back on the list.'); }
+    else _dwSay('Could not put it back.', false);
+  }catch(e){ _dwSay('Could not put it back.', false); }
+}
+
+async function dwRefreshDraft(){
+  const keys = _dwKeys();
+  if (!keys.length){ _dwMsg = ''; const t = document.getElementById('dwMsg');
+                     if (t) t.value = ''; return; }
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/draft',
+      {method:'POST', body: JSON.stringify({doc_keys: keys, kind:'request'})});
+    if (!r.ok) return;
+    const d = await r.json();
+    _dwMsg = d.message || '';
+    const t = document.getElementById('dwMsg');
+    if (t) t.value = _dwMsg;
+  }catch(e){}
+}
+
+// ── the check ────────────────────────────────────────────────────────────────
+// This is the step the founder asked for: before anything reaches a customer, show the staffer
+// exactly what goes out and to whom, and make them say yes to THAT. The server issues a token
+// for this exact list, wording and set of recipients, and refuses to send without it — so
+// changing anything afterwards brings you back here rather than going out unseen.
+async function dwCheck(){
+  dwTouch();
+  const payload = {doc_keys: _dwKeys(), message: _dwMsg, extras: _dwExtras,
+                   exclude: Object.keys(_dwDrop), channels: _dwChannels()};
+  _dwSay('Checking…', true);
+  let d;
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/preview',
+      {method:'POST', body: JSON.stringify(payload)});
+    d = await r.json();
+    if (!r.ok){ _dwSay(_l2Err(d, 'Could not check it.'), false); return; }
+  }catch(e){ _dwSay('Could not check it.', false); return; }
+
+  if (!d.ok){
+    _dwSay((d.problems || ['Something is wrong with this ask.'])[0], false);
+    return;
+  }
+
+  const to = (d.recipients || []).filter(function(p){ return p.kind === 'to' && p.ways.length; });
+  const cc = (d.recipients || []).filter(function(p){ return p.kind === 'cc' && p.ways.length; });
+  const line = function(p){
+    return '<div style="padding:.15rem 0"><b>' + esc(p.name || p.label) + '</b> '
+      + '<span class="bdsub">' + esc(p.label) + '</span><br>'
+      + '<span class="bdsub">' + esc(p.ways.join(' · ')) + '</span></div>';
+  };
+  const docs = {};
+  (_dwData.docs || []).forEach(function(x){ docs[x.key] = x.label; });
+
+  openModal('Read it back before it goes',
+      '<div class="l2ban amber">This goes to a real customer, and they will act on it. Check '
+    + 'the list and the numbers once — you are recorded as the person who sent it.</div>'
+    + '<div class="dwprev">'
+    + '<b>' + (d.doc_keys || []).length + ' document(s) we are asking for</b>'
+    + '<div class="box">' + (d.doc_keys || []).map(function(k){
+        return '• ' + esc(docs[k] || k); }).join('\n') + '</div>'
+    + '<b>We are asking</b>' + to.map(line).join('')
+    + (cc.length ? '<b style="display:block;margin-top:.4rem">Copied in (' + cc.length + ')</b>'
+                 + cc.map(line).join('') : '')
+    + '<b style="display:block;margin-top:.4rem">On ' + esc(d.channels.join(' and ')) + '</b>'
+    + '<div class="box">' + esc(d.message) + '</div>'
+    + ((d.warnings || []).length
+        ? '<div class="l2ban amber">' + d.warnings.map(esc).join('<br>') + '</div>' : '')
+    + '</div><div id="dwGoMsg" style="font-size:.82rem"></div>',
+    [{label:'Go back and change it', cls:'btn-ghost', fn:function(){ dwBack(); }},
+     {label:'Yes — send it', cls:'btn-primary', fn:function(){ dwSend(d.confirm); }}], true);
+}
+
+function dwBack(){
+  openModal('📄 Pending documents — NP-' + _dwClaim, '<div class="empty"><p>…</p></div>', [], true);
+  dwRender();
+  const t = document.getElementById('dwMsg');
+  if (t) t.value = _dwMsg;
+}
+
+async function dwSend(confirm){
+  const m = document.getElementById('dwGoMsg');
+  if (m){ m.style.color = 'var(--nd-text-muted)'; m.textContent = 'Sending…'; }
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/send',
+      {method:'POST', body: JSON.stringify({doc_keys: _dwKeys(), message: _dwMsg,
+        extras: _dwExtras, exclude: Object.keys(_dwDrop), channels: _dwChannels(),
+        confirm: confirm, kind: 'request'})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      if (m){ m.style.color = 'var(--nd-danger-text)';
+              m.textContent = _l2Err(d, 'Could not send it.'); }
+      return;
+    }
+    closeModal();
+    ndUI.toast(d.reached_complainant
+      ? ('Sent — ' + d.delivered + ' recipient(s) reached.')
+      : ('Sent, but it did NOT reach the complainant. Check their number and email.'),
+      d.reached_complainant ? 'success' : 'error');
+    if (typeof loadL2 === 'function' && document.getElementById('panel-l2')
+        && document.getElementById('panel-l2').style.display !== 'none') loadL2();
+  }catch(e){
+    if (m){ m.style.color = 'var(--nd-danger-text)'; m.textContent = 'Could not send it.'; }
+  }
+}
+
+async function dwPause(on){
+  try{
+    const r = await API('/claims/' + _dwClaim + '/doc-window/pause',
+      {method:'POST', body: JSON.stringify({paused: !!on})});
+    if (r.ok) await dwReload(on ? 'Reminders stopped.' : 'Reminders back on.');
+  }catch(e){ _dwSay('Could not change the reminders.', false); }
+}
+
+function dwCall(){
+  openModal('What did they say?',
+      '<div class="l2ban info">Write down what they told you. It is what stops somebody else '
+    + 'calling the same person again tomorrow.</div>'
+    + '<div class="l2fld"><label>The call <span class="req">*</span></label>'
+    + '<textarea id="dwCallNote" rows="3" maxlength="600" placeholder="e.g. Spoke to him — the '
+    + 'hospital is still preparing the final bill, he will send it on Monday."></textarea></div>'
+    + '<div id="dwCallMsg" style="font-size:.82rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn:function(){ dwOpen(_dwClaim); }},
+     {label:'Save', cls:'btn-primary', fn:async function(){
+       const note = ((document.getElementById('dwCallNote') || {}).value || '').trim();
+       const m = document.getElementById('dwCallMsg');
+       if (!note){ if (m){ m.style.color = 'var(--nd-danger-text)';
+         m.textContent = 'Write down what they said.'; } return; }
+       try{
+         const r = await API('/claims/' + _dwClaim + '/doc-window/called',
+           {method:'POST', body: JSON.stringify({note: note})});
+         const d = await r.json().catch(function(){ return {}; });
+         if (!r.ok){ if (m){ m.style.color = 'var(--nd-danger-text)';
+           m.textContent = _l2Err(d, 'Could not record it.'); } return; }
+         await dwOpen(_dwClaim);
+         _dwSay('Recorded against your name.', true);
+       }catch(e){ if (m){ m.style.color = 'var(--nd-danger-text)';
+         m.textContent = 'Could not record it.'; } }
+     }}], false);
+}
+
+window.dwOpen = dwOpen; window.dwPick = dwPick; window.dwDrop = dwDrop; window.dwTouch = dwTouch;
+window.dwAdd = dwAdd; window.dwRemove = dwRemove; window.dwRestore = dwRestore;
+window.dwSetType = dwSetType; window.dwRefreshDraft = dwRefreshDraft;
+window.dwExtraAdd = dwExtraAdd; window.dwExtraDel = dwExtraDel; window.dwExtra = dwExtra;
+window.dwCheck = dwCheck; window.dwBack = dwBack; window.dwSend = dwSend;
+window.dwPause = dwPause; window.dwCall = dwCall;
+
 window.hoOpen = hoOpen; window.hoSend = hoSend;
 
 function deskGuide(key){
