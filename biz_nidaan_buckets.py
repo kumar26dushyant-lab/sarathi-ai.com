@@ -320,10 +320,17 @@ async def ensure_seeded() -> dict:
                 moves.append((k, "hold", "park", 1))
                 moves.append(("hold", k, "resume", 0))
             for j, (f, t, kind, reason) in enumerate(moves):
+                # Never seed a route whose far end has been retired: re-introducing a way
+                # into a bucket the office has switched off is the same resurrection bug
+                # wearing a different hat. (The tombstone in save_route covers a route removed
+                # by hand; this covers a whole bucket being turned off.)
                 cur = await c.execute(
                     "INSERT OR IGNORE INTO nidaan_bucket_moves "
-                    "(from_key,to_key,kind,needs_reason,sort_order) VALUES (?,?,?,?,?)",
-                    (f, t, kind, reason, j))
+                    "(from_key,to_key,kind,needs_reason,sort_order) "
+                    "SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM nidaan_buckets "
+                    "  WHERE bucket_key=? AND active=1) "
+                    "AND EXISTS(SELECT 1 FROM nidaan_buckets WHERE bucket_key=? AND active=1)",
+                    (f, t, kind, reason, j, f, t))
                 made["moves"] += cur.rowcount or 0
             await c.commit()
     except Exception as e:  # noqa: BLE001
@@ -380,7 +387,7 @@ async def moves_from(key: str) -> list[dict]:
         return [dict(r) for r in await (await c.execute(
             "SELECT m.*, b.name_en, b.name_hi, b.icon FROM nidaan_bucket_moves m "
             "JOIN nidaan_buckets b ON b.bucket_key=m.to_key AND b.active=1 "
-            "WHERE m.from_key=? ORDER BY "
+            "WHERE m.from_key=? AND m.kind <> 'removed' ORDER BY "
             "CASE m.kind WHEN 'forward' THEN 0 WHEN 'resume' THEN 1 "
             "            WHEN 'back' THEN 2 ELSE 3 END, m.sort_order", (key,))).fetchall()]
 
@@ -1893,8 +1900,14 @@ async def save_route(*, from_key: str, to_key: str, kind: str = "forward",
         return {"ok": False, "error": "That is not a kind of move."}
     async with aiosqlite.connect(DB_PATH) as c:
         if remove:
-            await c.execute("DELETE FROM nidaan_bucket_moves WHERE from_key=? AND to_key=?",
-                            (from_key, to_key))
+            # A TOMBSTONE, not a delete. The seed runs on every boot with INSERT OR IGNORE,
+            # so a deleted row would simply come back and the decision would be undone by the
+            # next deploy - which is exactly what happened when Reimbursement was retired. The
+            # row stays, marked removed, and its primary key is what keeps the seed out.
+            await c.execute(
+                "INSERT INTO nidaan_bucket_moves (from_key,to_key,kind,needs_reason,sort_order) "
+                "VALUES (?,?,'removed',0,0) ON CONFLICT(from_key,to_key) DO UPDATE SET "
+                "kind='removed'", (from_key, to_key))
         else:
             await c.execute(
                 "INSERT INTO nidaan_bucket_moves (from_key,to_key,kind,needs_reason,sort_order) "
