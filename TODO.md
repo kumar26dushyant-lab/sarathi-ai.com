@@ -48,7 +48,26 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - ✅ **📄 Pending-document window** (`biz_nidaan_doc_request.py`, opened from the docs count on any L2 row). Three columns from the founder's drawing: **what we still need · who it goes to · what we will say**. Claim type at the top (correcting it re-seeds the standard list without touching anything received or added by hand); arrived docs go green; add anything; remove anything **with a reason that is kept on the claim under the remover's name**. Recipients = every channel the claim came through, complainant as TO and everyone else CC'd, extra mobiles/emails **add AND remove**, all validated server-side. **The Send button does not send** — it opens the read-back, and the server issues a checksum for that exact list+wording+recipients and refuses without it, so editing anything afterwards returns you to the check. 54 checks on a live-DB copy + 28 live.
 - ✅ **The chase stops and becomes a phone call** — 3 days, twice, then bell+Telegram to the bucket's duty staff to phone; note required, and it closes the chase. Every nudge carries *"if you have already shared all the required documents, please ignore this message"* in EN+HI. Everything arriving switches the clock off.
 - ✅ **Checklist is per-claim, not per-type.** `pending_required_docs`/`checklist_status` walked the TYPE TEMPLATE and looked rows up by key, so a doc added for one case was invisible to the chase, the dashboard and the pay-gate. Both now walk one merged list (`effective_docs`). **Channel Partner added to `get_claim_parties`** — the one party it never resolved, approved partners only.
-- 🟢 **NEXT:** claim communication redesign (complainant + CC every channel), claim panel redesign (one popup, no scrolling), **the three-into-one claims view** (decision below), Intake as a rosterable duty, update `/l2-manual` to the current bucket names.
+- ✅ **THE WHOLE JOURNEY VERIFIED END TO END** (Sep 14) — one real claim walked
+  L2 Claims → handover → refused and sent back → handed again → Start Level-2 → Live Cases →
+  Pending Docs → Pending Draft → Escalation → Lokpal → Completed → Pending Payment →
+  CP Payment → Finished → pulled back → parked → woke itself → jumped off the usual path.
+  **61 checks, all passing**: every move refused without a comment, every move told somebody,
+  every step landed on a real sub-state, and the claim's whole story reads back with a name
+  against each line. Business-critical flow is sound.
+- ✅ **`/l2-manual` rewritten** — it still described Consolidation / Documents / Drafting /
+  With the insurance company / Ombudsman / Outcome / Settlement, none of which exist, and had no
+  CP Payment or Finished at all. Both languages rebuilt against the nine real buckets with the
+  amber-day counts read from the database.
+- ✅ **Intake IS a rosterable duty** — done as a side-effect of the duty-vocabulary repair;
+  staff #8 is on it now.
+- ✅ **Claim Pipeline retired**, its two good ideas (*Brought by* / *Customer* + unpaid leads)
+  moved into All Claims first. Claims Dashboard stays: it is the only claims screen a
+  `team_member` can open.
+- 🟢 **NEXT:** claim panel redesign (one popup, no scrolling), claim communication redesign
+  (complainant + CC every channel), Notification Control Centre, folding Claims Dashboard in.
+
+### 🔵 QUEUED (founder, Sep 13 2026) — 🔔 Notification Control Centre
 
 ### 🔴 FOUND ON NP-112 (founder, Sep 13 2026) — two definitions of one fact, and a wall
 - ✅ **The screens disagreed about who had paid.** The claim screens have always shown "L2
