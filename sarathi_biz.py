@@ -27095,6 +27095,30 @@ async def main():
                 await asyncio.sleep(3600)
         asyncio.create_task(doc_chase_loop())
 
+        # Step 6g1c1d: what has gone QUIET. A claim nobody moves raises no move notification -
+        # by definition - and that is exactly the case the office loses claims in. Once a day,
+        # each person on duty gets one message about what has gone stale in their bucket, saying
+        # WHY each claim is stuck in the same words the screen uses. Silent when there is
+        # nothing to say; an all-clear every morning is how people learn to ignore the ones that
+        # matter.
+        async def bucket_standing_loop():
+            await asyncio.sleep(660)
+            while True:
+                try:
+                    import biz_nidaan_buckets as _bks
+                    # 9am IST, checked hourly rather than slept for 24h - the worker restarts on
+                    # every deploy, and a fixed timer would drift to whenever that happened.
+                    if _bks._now_ist().hour == 9:
+                        r = await _bks.standing_alerts()
+                        if r.get("sent"):
+                            logger.info("standing bucket alerts: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("standing bucket alert error: %s", e)
+                await asyncio.sleep(1800)
+        asyncio.create_task(bucket_standing_loop())
+
         # Step 6g1c2: nobody answered. A customer writing in and getting silence is the worst thing
         # this system can produce, and it is invisible by design — the alert went out and nothing
         # happened. So the silence becomes its own event: the rostered person is reminded, and if

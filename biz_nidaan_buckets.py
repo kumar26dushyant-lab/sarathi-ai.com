@@ -40,6 +40,12 @@ def _today_ist():
     return datetime.now(IST).date()
 
 
+def _now_ist():
+    """The server runs on CEST, the database on UTC and the office on IST. Anything that means
+    'today' or 'this hour' to a person has to be asked in IST."""
+    return datetime.now(IST)
+
+
 # ── the seed ─────────────────────────────────────────────────────────────────
 # Written once into empty tables. Re-seeding never overwrites an edit — it only fills in what has
 # never existed — so a super-admin's changes survive every restart and every deploy.
@@ -1912,3 +1918,106 @@ async def designer_view() -> dict:
                     "substates": subs, "fields": flds,
                     "moves": await moves_from(b["bucket_key"])})
     return {"buckets": out, "field_types": list(_FIELD_TYPES), "waits_on": list(_WAITS)}
+
+
+# ── telling people what has gone quiet ───────────────────────────────────────
+# A claim that nobody moves raises no move notification, by definition. That is the exact case
+# the office loses claims in, so it gets its own daily sweep. One message per person, only what
+# has gone stale, and silence when there is nothing worth saying.
+
+async def _digest_lines(items: list, limit: int = 8) -> list:
+    """The claims, worst first, each as one line a person can act on."""
+    out = []
+    for i in items[:limit]:
+        head = "NP-%s" % i["claim_id"]
+        who = (i.get("who") or "").strip()
+        if who:
+            head += " \u00b7 " + who
+        out.append("%s (%sd)\n   %s" % (head, i.get("days") or 0, i.get("why") or ""))
+    if len(items) > limit:
+        out.append("\u2026and %d more." % (len(items) - limit))
+    return out
+
+
+async def standing_alerts(force: bool = False) -> dict:
+    """Once a day: what has gone stale, to whoever is on duty for that bucket.
+
+    Returns what it did, so the worker can log something meaningful rather than 'ran'.
+    """
+    import biz_nidaan as _n
+    import biz_nidaan_notifications as _nnot
+
+    today = _today_ist().isoformat()
+    sent, skipped, unstaffed = 0, 0, []
+    for b in await buckets():
+        if b.get("is_terminal") or b.get("is_park"):
+            continue
+        key = b["bucket_key"]
+        d = await board(key)
+        stale = [i for i in (d.get("items") or []) if i.get("age_state") in ("amber", "red")]
+        # Silence is the default. Nothing to say means nothing is sent - an "all clear" every
+        # morning is how people learn to ignore the ones that matter.
+        if not stale:
+            continue
+
+        red = [i for i in stale if i["age_state"] == "red"]
+        try:
+            ids = list(await _n.on_duty_rep_ids(key))
+        except Exception:
+            ids = []
+
+        # Nobody rostered: only the RED ones are worth waking an admin for, and the message says
+        # plainly that the bucket has no one on it - which is the real problem to fix.
+        note = ""
+        if not ids:
+            if not red:
+                continue
+            unstaffed.append(key)
+            try:
+                ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
+            except Exception:
+                ids = []
+            stale = red
+            note = ("\n\n\u26a0 Nobody is on duty for %s, so this came to the admins."
+                    % b["name_en"])
+        if not ids:
+            continue
+
+        head = "%s %s \u2014 %d need looking at" % (b.get("icon") or "", b["name_en"], len(stale))
+        if red:
+            head += " (%d past the limit)" % len(red)
+        body = "\n\n".join(await _digest_lines(stale)) + note
+
+        for sid in ids:
+            # One per person per bucket per day. The key carries the date, so yesterday's
+            # message never suppresses today's and today's can never be sent twice.
+            akey = "bucket_stale:%s:%s:%s" % (key, sid, today)
+            if not force and not await _alert_once(akey):
+                skipped += 1
+                continue
+            try:
+                await _nnot.notify_staff_inapp([sid], head.strip(), body,
+                                               event_key="bucket.stale", email=False)
+                sent += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning("standing alert failed for %s/%s: %s", key, sid, e)
+
+    if unstaffed:
+        logger.info("standing alerts: buckets with nobody on duty: %s", unstaffed)
+    return {"sent": sent, "already_sent_today": skipped, "unstaffed": unstaffed}
+
+
+async def _alert_once(alert_key: str) -> bool:
+    """True the first time this key is seen, False every time after. The dedup table is already
+    how the rest of the app stops an alert repeating; this reuses it rather than inventing a
+    second way to remember."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            cur = await c.execute(
+                "INSERT OR IGNORE INTO nidaan_alert_dedup (alert_key, sent_count, last_at) "
+                "VALUES (?, 1, CURRENT_TIMESTAMP)", (alert_key,))
+            await c.commit()
+            return (cur.rowcount or 0) > 0
+    except Exception as e:  # noqa: BLE001
+        logger.warning("alert dedup failed for %s: %s", alert_key, e)
+        return False
