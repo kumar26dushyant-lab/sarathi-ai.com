@@ -1,5 +1,36 @@
 # Staff Announcement Drafts
 
+## 2026-09-13 — Anyone can add a Channel Partner · the office can change its own process
+
+**Title (EN):**
+🤝 Channel Partners: anyone can add one · 🧩 Super-admins can now change the Level-2 process
+
+**Details (EN):**
+• **You can now add a Channel Partner yourself.** It is a new item in the menu under **People → 🤝 Channel Partners**. You are the people who actually meet these partners, so you should not have to ask someone else to type the name in. Add the name, company, mobile and email.
+
+• **It waits for approval, and that is deliberate.** A partner you add sits as **awaiting approval** and cannot be put on a claim until a super-admin approves it — this is a name commission gets paid against, so who approved it is recorded. You will keep seeing your own entry in the list while it waits, so you know it went through. Do not add it a second time.
+
+• **For super-admins: 🧩 Bucket Designer** (under Configuration). You can now change the Level-2 process yourself — create a bucket, rename one, change how many days before it goes amber or red, write what staff are told the bucket is for, add or retire the steps inside it and the things we write down in it, and open or close the usual next steps. No waiting for a release.
+
+• **Nothing is ever deleted while it holds work.** A bucket with claims in it will refuse to be turned off and tell you how many are inside. A field somebody has already filled in is **turned off**, never removed — every answer already recorded stays exactly as it is, because that record is what we argue a case from. Anything turned off stays on the screen, greyed, and comes back with one click.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🤝 Channel Partner अब कोई भी जोड़ सकता है · 🧩 सुपर-एडमिन खुद प्रोसेस बदल सकते हैं
+
+**Details (HI):**
+• **अब Channel Partner आप खुद जोड़ सकते हैं।** मेन्यू में **People → 🤝 Channel Partners** नया विकल्प है। पार्टनर से मिलते तो आप ही हैं, इसलिए नाम लिखवाने के लिए किसी और पर निर्भर रहने की ज़रूरत नहीं। नाम, कंपनी, मोबाइल और ईमेल भर दीजिए।
+
+• **मंज़ूरी का इंतज़ार रहेगा, और यह जान-बूझकर है।** आपका जोड़ा नाम **awaiting approval** पर रहेगा और सुपर-एडमिन की मंज़ूरी से पहले किसी क्लेम पर नहीं लगेगा — इसी नाम पर कमीशन जाता है, इसलिए किसने मंज़ूरी दी यह दर्ज होता है। इंतज़ार के दौरान आपका भेजा नाम आपको सूची में दिखता रहेगा, ताकि पता रहे कि गया है। दोबारा मत जोड़िए।
+
+• **सुपर-एडमिन के लिए: 🧩 Bucket Designer** (Configuration में)। अब Level-2 प्रोसेस आप खुद बदल सकते हैं — नया बकेट बनाएँ, नाम बदलें, कितने दिन बाद अंबर या रेड हो यह तय करें, स्टाफ़ को बकेट के बारे में क्या बताना है वह लिखें, अंदर के स्टेप और जो जानकारी हम लिखते हैं उन्हें जोड़ें या बंद करें, और अगला कदम खोलें या हटाएँ। रिलीज़ का इंतज़ार नहीं।
+
+• **जिसमें काम पड़ा है वह कभी डिलीट नहीं होगा।** जिस बकेट में क्लेम हैं वह बंद नहीं होगा और बता देगा कि अंदर कितने हैं। जिस फ़ील्ड का जवाब कोई भर चुका है वह सिर्फ़ **बंद** होगा, हटेगा नहीं — भरे हुए सारे जवाब वैसे के वैसे रहेंगे, क्योंकि केस की बहस उसी रिकॉर्ड पर होती है। बंद की गई चीज़ स्क्रीन पर धुँधली दिखती रहेगी और एक क्लिक में वापस आ जाएगी।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-12 — We now say "complainant", and you can see the whole journey
 
 **Title (EN):**

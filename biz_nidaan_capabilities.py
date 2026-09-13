@@ -344,17 +344,54 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
+        "id": "bucket_designer",
+        "en": {"t": "Change the Level-2 process yourself",
+               "d": "Create a bucket, rename one, change how many days before it turns amber or "
+                    "red, write what staff are told it is for, add or retire the steps inside it "
+                    "and the fields captured in it, and open or close the usual next steps \u2014 "
+                    "all without a release. Nothing is ever deleted while it holds work: a bucket "
+                    "with claims refuses to be turned off, and a field somebody has already "
+                    "answered is turned off instead, keeping every answer already recorded.",
+               "u": "Bucket Designer \u2192 Change on any bucket."},
+        "hi": {"t": "Level-2 प्रोसेस खुद बदलें",
+               "d": "नया बकेट बनाएँ, नाम बदलें, कितने दिन बाद अंबर/रेड हो यह तय करें, स्टाफ़ को क्या बताना है "
+                    "वह लिखें, अंदर के स्टेप और फ़ील्ड जोड़ें या बंद करें, और अगला कदम खोलें या हटाएँ \u2014 "
+                    "बिना किसी रिलीज़ के। जिसमें काम पड़ा है वह कभी डिलीट नहीं होता: क्लेम वाला बकेट बंद "
+                    "नहीं होगा, और जिस फ़ील्ड का जवाब भरा जा चुका है वह सिर्फ़ बंद होगा \u2014 जवाब सुरक्षित रहेंगे।",
+               "u": "Bucket Designer \u2192 किसी बकेट पर Change।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
+        "id": "propose_channel_partner",
+        "en": {"t": "Propose a Channel Partner",
+               "d": "Any staff member can add a partner who sends us business \u2014 they are the "
+                    "people who actually meet them. It waits as PENDING and cannot be put on a "
+                    "claim until a super-admin approves it, and who approved it is recorded, "
+                    "because this is a name commission gets paid against. You keep seeing your "
+                    "own proposal while it waits.",
+               "u": "Channel Partners \u2192 + Add partner."},
+        "hi": {"t": "Channel Partner का नाम भेजें",
+               "d": "जो पार्टनर हमें काम भेजते हैं, उनका नाम कोई भी स्टाफ़ जोड़ सकता है \u2014 मिलते तो वही हैं। "
+                    "नाम PENDING रहेगा और सुपर-एडमिन की मंज़ूरी से पहले किसी क्लेम पर नहीं लगेगा, और किसने "
+                    "मंज़ूरी दी यह दर्ज होता है, क्योंकि इसी नाम पर कमीशन जाता है। आपका भेजा नाम आपको दिखता रहेगा।",
+               "u": "Channel Partners \u2192 + Add partner।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "l2_pipeline",
         "en": {"t": "Move a Level-2 case bucket by bucket",
-               "d": "A paid, winnable case is put into the pipeline by hand, then moves "
-                    "Consolidation \u2192 Documents \u2192 Drafting \u2192 With the insurer \u2192 "
-                    "Escalation \u2192 Ombudsman \u2192 Outcome \u2192 Settlement. Only cases that have "
-                    "started Level-2 appear in those buckets.",
-               "u": "Case Board \u2192 open a case \u2192 Start Level-2 processing, then Finished here."},
+               "d": "A paid, winnable case is handed over from L2 Claims, then moves "
+                    "Live Cases \u2192 Pending Documents \u2192 Pending Draft \u2192 Reimbursement \u2192 "
+                    "Escalation \u2192 Lokpal \u2192 Completed \u2192 Pending Payment \u2192 Finished. "
+                    "Only cases whose Level-2 has been started appear in those buckets, and every "
+                    "move \u2014 forward, back, or straight to any other bucket \u2014 needs a note "
+                    "saying what is done and what is still pending.",
+               "u": "Level-2 \u2192 Settlement \u2192 pick a bucket \u2192 Move."},
         "hi": {"t": "Level-2 केस को बकेट-दर-बकेट आगे बढ़ाएँ",
-               "d": "फ़ीस मिली और केस मज़बूत है \u2014 तब उसे पाइपलाइन में डाला जाता है और वह एक-एक बकेट "
-                    "आगे बढ़ता है। बकेट में सिर्फ़ वही केस दिखते हैं जिनका Level-2 शुरू हो चुका है।",
-               "u": "Case Board \u2192 केस खोलें \u2192 Start Level-2 processing।"},
+               "d": "फ़ीस मिली और केस मज़बूत है \u2014 तब L2 Claims से हैंडओवर होकर केस पाइपलाइन में आता है "
+                    "और एक-एक बकेट आगे बढ़ता है। बकेट में सिर्फ़ वही केस दिखते हैं जिनका Level-2 शुरू हो "
+                    "चुका है, और हर मूव पर \u2014 आगे, पीछे, या किसी भी बकेट में \u2014 कमेंट ज़रूरी है।",
+               "u": "Level-2 \u2192 Settlement \u2192 बकेट चुनें \u2192 Move।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {

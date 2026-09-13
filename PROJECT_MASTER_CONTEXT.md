@@ -6445,6 +6445,42 @@ Pending Payment → CP Payment → Finished. Hold parks from anywhere and return
 * **Arrivals notify the receiving bucket's duty staff**; unstaffed → super-admins, and it says so.
 * `biz_av_scan._MAX_SCAN_BYTES` must stay between the app upload cap and clamd's StreamMaxLength.
 
+**The super-admin owns the process — 🧩 Bucket Designer** (ops → Configuration, `minRank:2`).
+`GET /buckets/designer` returns every bucket *including inactive ones*, each with `claims`
+(how many live claims it holds), its sub-states, its fields (each carrying `answers` = how many
+claims have filled it in) and its routes. Four POSTs — `/buckets/designer/bucket|substate|field|
+route` — create, edit, retire and restore, all `super_admin` and all audited. Backed by
+`save_bucket()`, `save_substate()`, `save_field()`, `save_route()`, `field_usage()`,
+`designer_view()`; `substates()`/`fields()` gained `include_inactive`, used only here.
+
+**The rule the designer exists to enforce: NOTHING IS DELETED WHILE IT HOLDS WORK.**
+* A bucket holding live claims **refuses** to be turned off, and the error says how many.
+* A sub-state with a claim sitting on it **refuses** to be turned off.
+* A field somebody has answered is **turned off**, never removed — every `nidaan_claim_fields`
+  row survives, because that record is what the case is argued from later.
+* Retired things stay listed in the designer, greyed, and come back on one click.
+* Closing a route traps nothing — any bucket is still reachable, it just stops being offered
+  first. Routes created here are all `needs_reason=1`, so the comment rule cannot be opted out
+  of by adding a new route.
+* Guard rails: amber must precede red, `waits_on` and field types come from fixed lists
+  (`_WAITS`, `_FIELD_TYPES`), a choice field needs its choices, a bucket cannot lead to itself,
+  keys are machine-generated from the name and de-duplicated (`_key_from`).
+
+**Tested:** 46 checks against a copy of the live DB (`test_designer.py`) + 22 against the live
+app (`smoke_designer.py`) + the existing 32-check `smoke_live.py` re-run clean. Note both live
+smoke tests need `set -a && . ./biz.env && set +a` or every call is a 401 with a misleading
+"0 buckets".
+
+**Channel Partner approval — the gate existed and never ran (fixed Sep 13 2026).**
+`ops_cp_create` required `sub_super_admin` **and** the only editor lived inside the
+super-admin-only **Content** panel, so in practice only super-admins could create a partner —
+and a super-admin's own entry auto-approves. Now: the endpoint takes `team_member`, CPs have
+their own screen (**🤝 Channel Partners**, People, `minRank:0`), anyone else's proposal starts
+PENDING and is invisible on the claim form until a super-admin approves (who approved is
+recorded), super-admins are alerted bell+Telegram+email, and `list_partners(...,
+include_proposed_by=)` keeps the proposer's own pending entry visible — otherwise it vanished on
+save, looked like a failure, and the second attempt hit the duplicate guard.
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
