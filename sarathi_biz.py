@@ -6469,9 +6469,10 @@ async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
     """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
-    import biz_nidaan_case_state as _cs
-    res = await _cs.enter_pipeline(claim_id, actor=_actor_label(caller))
+    # Intake duty, not admins: starting a paid case is everyday work for whoever is rostered.
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.start_l2(claim_id, actor=_actor_label(caller))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
     await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
@@ -6485,9 +6486,8 @@ async def nidaan_ops_pipeline_move(claim_id: int, body: _PipelineMoveReq, reques
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
-    import biz_nidaan_case_state as _cs
-    res = await _cs.move_stage(claim_id, to=body.to, note=body.note,
-                               actor=_actor_label(caller))
+    import biz_nidaan_buckets as _bk
+    res = await _bk.move(claim_id, body.to, reason=body.note, actor=_actor_label(caller))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
     await _ops_audit(request, "case.pipeline_move", "claim", claim_id,
@@ -6518,6 +6518,125 @@ async def nidaan_ops_pipeline_auto(request: Request):
 # Plenty of subscribers will never log in. The claim still belongs to THEM - their account, their
 # quota, their dashboard - but the office must be able to see whose hands were actually on it, so
 # the staff member is recorded on the claim permanently rather than left implied.
+
+class _BucketMoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to: str = Field(..., max_length=40)
+    sub: str = Field("", max_length=40)
+    reason: str = Field("", max_length=400)
+    hold_until: str = Field("", max_length=10)
+
+
+class _BucketSubReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sub: str = Field(..., max_length=40)
+
+
+class _BucketFieldReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field_key: str = Field(..., max_length=60)
+    value: str = Field("", max_length=8000)
+
+
+@app.get("/nidaan/ops/api/buckets/config")
+async def ops_buckets_config(request: Request):
+    """Every bucket, its steps, its fields and its routes - one call, so the workspace can draw
+    the whole system without knowing any of it in advance."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    cfg = await _bk.config()
+    cfg["counts"] = await _bk.counts()
+    return cfg
+
+
+@app.get("/nidaan/ops/api/buckets/counts")
+async def ops_buckets_counts(request: Request):
+    """Sidebar numbers: how many in each bucket and how many have gone past their clock."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return {"counts": await _bk.counts(),
+            "waiting_to_start": len(await _bk.waiting_to_start())}
+
+
+@app.get("/nidaan/ops/api/buckets/{bucket_key}/claims")
+async def ops_bucket_claims(bucket_key: str, request: Request, sub: str = "",
+                            q: str = "", limit: int = 300):
+    """The claims in one bucket, most overdue first."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit)
+
+
+@app.get("/nidaan/ops/api/buckets/waiting-to-start")
+async def ops_bucket_waiting(request: Request):
+    """Paid and winnable, and nobody has begun. The most expensive list in the office."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return {"claims": await _bk.waiting_to_start()}
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/bucket")
+async def ops_case_bucket(claim_id: int, request: Request):
+    """Where this claim is, what it needs, and where it may go - for the case report."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.for_claim(claim_id)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/move")
+@limiter.limit("60/minute")
+async def ops_case_bucket_move(claim_id: int, body: _BucketMoveReq, request: Request):
+    """Move a claim between buckets. The engine decides whether the route is allowed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.move(claim_id, body.to, sub=body.sub, reason=body.reason,
+                         hold_until=body.hold_until, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
+    await _ops_audit(request, "bucket.move", "claim", claim_id,
+                     f"{body.to} {body.sub} {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/substate")
+@limiter.limit("60/minute")
+async def ops_case_bucket_sub(claim_id: int, body: _BucketSubReq, request: Request):
+    """Move a claim between steps inside its bucket."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.set_substate(claim_id, body.sub, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/field")
+@limiter.limit("120/minute")
+async def ops_case_bucket_field(claim_id: int, body: _BucketFieldReq, request: Request):
+    """Record one field captured in a bucket."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.set_field(claim_id, body.field_key, body.value, _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    return res
+
 
 class _PayFollowReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -26435,6 +26554,31 @@ async def main():
                     logger.error("Radar silence sweep error: %s", e)
                 await asyncio.sleep(6 * 3600)  # every 6h
         asyncio.create_task(radar_silence_loop())
+
+        # Step 6g1c1: the L2 bucket system. Seeding is idempotent and never overwrites an edit,
+        # so this is safe on every boot; the legacy-stage migration matches nothing once it has
+        # run once. Both are cheap and both must happen before anything serves a bucket page.
+        try:
+            import biz_nidaan_buckets as _bk
+            await _bk.ensure_seeded()
+            await _bk.migrate_legacy_stages()
+        except Exception as e:
+            logger.error("bucket setup failed: %s", e)
+
+        # Step 6g1c1b: parked claims come back on their own date. Without this a park is just a
+        # tidier way of losing a case. Worker-only, hourly - a date only turns over once a day.
+        async def bucket_wake_loop():
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    import biz_nidaan_buckets as _bkw
+                    await _bkw.wake_parked()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("parked-claim wake error: %s", e)
+                await asyncio.sleep(3600)
+        asyncio.create_task(bucket_wake_loop())
 
         # Step 6g1c2: nobody answered. A customer writing in and getting silence is the worst thing
         # this system can produce, and it is invisible by design — the alert went out and nothing

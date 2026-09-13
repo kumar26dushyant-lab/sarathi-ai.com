@@ -1950,6 +1950,91 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_radar_sent_mailbox ON nidaan_radar_sent(mailbox_id);
 
+            -- ── THE L2 BUCKET SYSTEM ────────────────────────────────────────────────
+            -- Buckets are DATA, not code, so a super-admin can reshape the office process
+            -- without a deploy. Everything a bucket is - its name in two languages, its clock,
+            -- its internal steps, the fields captured in it and where a claim may go next -
+            -- lives in these five tables.
+            CREATE TABLE IF NOT EXISTS nidaan_buckets (
+                bucket_key     TEXT PRIMARY KEY,        -- live_cases, pending_docs, ...
+                name_en        TEXT NOT NULL,
+                name_hi        TEXT DEFAULT '',
+                icon           TEXT DEFAULT '',
+                colour         TEXT DEFAULT '',         -- teal|amber|green|grey, as in ClaimShield
+                sort_order     INTEGER DEFAULT 0,
+                amber_days     INTEGER DEFAULT 10,      -- past this it needs looking at
+                red_days       INTEGER DEFAULT 20,      -- past this somebody senior is told
+                waits_on       TEXT DEFAULT 'internal', -- none|complainant|insurer|lokpal|internal
+                is_entry       INTEGER DEFAULT 0,       -- where a claim lands when L2 starts
+                is_terminal    INTEGER DEFAULT 0,       -- Finished: nothing follows
+                is_park        INTEGER DEFAULT 0,       -- Hold: remembers where it came from
+                guide_what     TEXT DEFAULT '', guide_do    TEXT DEFAULT '',
+                guide_done     TEXT DEFAULT '', guide_watch TEXT DEFAULT '',
+                guide_what_hi  TEXT DEFAULT '', guide_do_hi    TEXT DEFAULT '',
+                guide_done_hi  TEXT DEFAULT '', guide_watch_hi TEXT DEFAULT '',
+                active         INTEGER DEFAULT 1,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- A bucket's internal steps. Lokpal is not one place - it is Pending, Registered,
+            -- Annexure 5, Annexure 6, Hearing - and an Annexure awaiting reply needs its own,
+            -- much shorter clock than the bucket it sits in.
+            CREATE TABLE IF NOT EXISTS nidaan_bucket_substates (
+                sub_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_key  TEXT NOT NULL,
+                sub_key     TEXT NOT NULL,
+                name_en     TEXT NOT NULL,
+                name_hi     TEXT DEFAULT '',
+                sort_order  INTEGER DEFAULT 0,
+                amber_days  INTEGER,                    -- NULL = inherit the bucket's clock
+                red_days    INTEGER,
+                waits_on    TEXT DEFAULT '',            -- '' = inherit
+                is_default  INTEGER DEFAULT 0,
+                active      INTEGER DEFAULT 1,
+                UNIQUE(bucket_key, sub_key)
+            );
+
+            -- What gets captured in each bucket. A field can be required before a claim may
+            -- leave, which is how "done" stops being an opinion.
+            CREATE TABLE IF NOT EXISTS nidaan_bucket_fields (
+                field_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_key    TEXT NOT NULL,
+                field_key     TEXT NOT NULL,
+                label_en      TEXT NOT NULL,
+                label_hi      TEXT DEFAULT '',
+                field_type    TEXT DEFAULT 'text',      -- text|textarea|date|number|money|yesno|choice
+                choices       TEXT DEFAULT '',          -- newline-separated, for choice
+                hint          TEXT DEFAULT '',
+                required_exit INTEGER DEFAULT 0,
+                sort_order    INTEGER DEFAULT 0,
+                active        INTEGER DEFAULT 1,
+                UNIQUE(bucket_key, field_key)
+            );
+
+            -- Where a claim may go from here. Absence of a row means the move is not offered;
+            -- a super-admin can open any route without touching code.
+            CREATE TABLE IF NOT EXISTS nidaan_bucket_moves (
+                from_key     TEXT NOT NULL,
+                to_key       TEXT NOT NULL,
+                kind         TEXT DEFAULT 'forward',    -- forward|back|park|resume
+                needs_reason INTEGER DEFAULT 0,
+                sort_order   INTEGER DEFAULT 0,
+                PRIMARY KEY (from_key, to_key)
+            );
+
+            -- The answers themselves, per claim. Kept apart from nidaan_claims so a super-admin
+            -- inventing a field never means an ALTER TABLE on the busiest table in the system.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_fields (
+                claim_id   INTEGER NOT NULL,
+                field_key  TEXT NOT NULL,
+                value      TEXT DEFAULT '',
+                updated_by TEXT DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, field_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_claim_fields_claim ON nidaan_claim_fields(claim_id);
+
             -- What a repeating alert has already said, so it cannot say it again forever.
             -- A sweep that re-checks every 20 minutes will re-find the same unanswered chat every
             -- 20 minutes; without this it becomes noise, and noise is worse than silence because
@@ -2538,6 +2623,11 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN raised_by_staff_id INTEGER",
             "ALTER TABLE nidaan_claims ADD COLUMN raised_by_name TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN raised_via TEXT DEFAULT ''",
+            # The bucket model reuses pipeline_stage as the bucket key. These two are what it
+            # adds: which internal step the claim is on, and - for a parked claim - the bucket
+            # it must return to when the hold expires.
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_sub TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_from TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)
