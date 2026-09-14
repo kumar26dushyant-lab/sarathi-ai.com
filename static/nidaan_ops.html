@@ -13023,6 +13023,9 @@ window.l2DocsTick = l2DocsTick; window.l2DocsNeeded = l2DocsNeeded;
 let _dcClaim = 0, _dcAfter = null;
 
 function _dcStyles(){
+  // Same gap: opened from the claim panel, before the Level-2 screen, its buttons were unstyled.
+  if (typeof _l2Styles === 'function') _l2Styles();
+  if (typeof _bdStyles === 'function') _bdStyles();
   if (document.getElementById('dcCss')) return;
   const st = document.createElement('style'); st.id = 'dcCss';
   st.textContent = `
@@ -13258,6 +13261,10 @@ const CSR_CHOICES = {
 };
 
 function _csrStyles(){
+  // The buttons here use the Level-2 and designer styles, which otherwise load only when those
+  // screens are opened - so a gist opened from My Desk showed bare browser buttons.
+  if (typeof _l2Styles === 'function') _l2Styles();
+  if (typeof _bdStyles === 'function') _bdStyles();
   if (document.getElementById('csrCss')) return;
   const st = document.createElement('style'); st.id = 'csrCss';
   // ClaimShield's layout - a dense grid, the label above its box, one Submit in the middle -
@@ -13506,7 +13513,7 @@ async function csrReport(claimId){
     +   C('Complainant Contact', d.complainant_phone) + C('Handed to Level-2 by', d.handed_over_by)
     +   C('Channel Partner', d.channel_partner) + C('Insurance company', d.insurer_name)
     +   C('Claim Number', f.insurer_claim_no) + C('Claim Amount', _csrMoney(d.disputed_amount))
-    +   C('Case Rejection Reason', f.rejection_type) + C('Documents confirmed by', d.docs_complete_by)
+    +   C('Case Rejection Reason', f.rejection_reason) + C('Documents confirmed by', d.docs_complete_by)
     + '</div>'
     + '<div class="rm"><b>Remarks :</b>' + (remarks ? '<ul>' + remarks + '</ul>' : ' —') + '</div>'
     + '<div class="two">'

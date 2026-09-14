@@ -6866,6 +6866,15 @@ async def ops_case_report(claim_id: int, request: Request):
             link = "%s/nidaan/claim/magic?token=%s" % (_cl._public_base(), p["access_token"])
     except Exception:
         link = ""
+    # "Complainant", as the founder asked for everywhere a person reads. Remarks written before the
+    # rename on 12 Sep still say "claimant"; this changes what is SHOWN and printed, never what is
+    # stored - the history stays exactly as it was written.
+    import re as _re
+    _cw = _re.compile(r"\b([Cc])laimant(s?)\b")
+    for a in acts:
+        for k in ("summary", "actor"):
+            if a.get(k):
+                a[k] = _cw.sub(lambda m: m.group(1) + "omplainant" + m.group(2), a[k])
     return {
         "claim_id": claim_id,
         "created_at": claim.get("created_at"),
