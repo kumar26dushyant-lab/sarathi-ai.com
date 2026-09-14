@@ -390,10 +390,9 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
     require_ack=True (Item #3) marks it as a must-acknowledge update → surfaces in the
     consolidated 'Updates for you' popup until the recipient explicitly acknowledges.
 
-    TELEGRAM: on by default. This function is what the WhatsApp and support flows use, and it was
-    the only notify path with no Telegram mirror — so those alerts reached a bell nobody was
-    looking at and nothing else. Telegram is the channel the office actually watches; pass
-    telegram=False only for something genuinely not worth a phone buzz."""
+    TELEGRAM: on by default, sent by the bell itself (_record_notification mirrors every staff
+    bell). Do NOT mirror again after calling this - that is how every alert buzzed twice or three
+    times from 12 Sep to 14 Sep. Pass telegram=False only for something not worth a phone buzz."""
     if not staff_ids:
         return 0
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -412,7 +411,7 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
                 status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
-                announce_id=announce_id, cp_id=cp_id)
+                announce_id=announce_id, cp_id=cp_id, telegram=telegram)
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
@@ -435,13 +434,6 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                                   html_body=body.replace("\n", "<br>"), text_body=body)
             except Exception:
                 pass
-        # Telegram last, and never allowed to break the loop: a bell that was written is a
-        # notification delivered, whether or not the phone buzz gets through.
-        if telegram:
-            try:
-                await _telegram_mirror(r["staff_id"], f"{subject}\n\n{body}", url="/nidaan/ops")
-            except Exception as e:  # noqa: BLE001
-                logger.debug("telegram mirror failed for %s: %s", r.get("staff_id"), e)
     return sent
 
 
@@ -718,6 +710,9 @@ async def set_comm_lang(account_id: int, lang: str) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 #  Notification log helpers
 # ═════════════════════════════════════════════════════════════════════════════
+_BG_TASKS: set = set()
+
+
 async def _record_notification(**kw) -> int:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         cur = await conn.execute("""
@@ -739,7 +734,8 @@ async def _record_notification(**kw) -> int:
               kw.get("announce_id")))
         await conn.commit()
         notif_id = cur.lastrowid
-    # Web Push + Telegram mirror: only for a real staff dashboard notification.
+    # Web Push + Telegram mirror: only for a real staff dashboard notification. This is THE
+    # Telegram copy of a staff bell - nothing else should mirror the same bell again.
     if (kw.get("channel") == CHANNEL_DASHBOARD
             and kw.get("recipient_type") == RECIPIENT_STAFF
             and kw.get("recipient_id")):
@@ -783,17 +779,44 @@ async def _record_notification(**kw) -> int:
                     {"text": "✅ Approve", "callback_data": f"cpa:{_cpid}:approve"},
                     {"text": "✕ Reject", "callback_data": f"cpa:{_cpid}:reject"},
                 ]]
-            asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
-                                                 NIDAAN_BASE_URL + url, _tg_btns))
+            if kw.get("telegram", True) is not False:
+                _t = asyncio.create_task(_telegram_mirror(kw.get("recipient_id"), _tg_text,
+                                                          NIDAAN_BASE_URL + url, _tg_btns))
+                # Held until it finishes: an unreferenced task can be collected mid-send.
+                _BG_TASKS.add(_t)
+                _t.add_done_callback(_BG_TASKS.discard)
         except Exception:
             pass
     return notif_id
+
+
+# The same words to the same person within this many seconds is a repeat, never news. Two paths
+# reaching one event used to buzz every phone twice; this is the last line that stops it.
+_TG_REPEAT_S = 120
+_TG_RECENT: dict = {}
+
+
+def _tg_is_repeat(staff_id, text: str) -> bool:
+    import hashlib as _h
+    import time as _t
+    now = _t.monotonic()
+    for k in [k for k, ts in _TG_RECENT.items() if now - ts > _TG_REPEAT_S]:
+        _TG_RECENT.pop(k, None)
+    key = (str(staff_id), _h.sha256((text or "").encode("utf-8")).hexdigest())
+    if key in _TG_RECENT:
+        return True
+    _TG_RECENT[key] = now
+    return False
 
 
 async def _telegram_mirror(staff_id: int, text: str, url: str, buttons: list = None) -> None:
     """Best-effort Telegram delivery for a staff notification. Silent when the bot
     isn't configured or the staffer hasn't linked — those aren't errors.
     `buttons` = extra inline-keyboard rows (e.g. announcement reaction buttons)."""
+    if _tg_is_repeat(staff_id, text):
+        logger.info("Telegram repeat to staff %s suppressed (same text within %ss)",
+                    staff_id, _TG_REPEAT_S)
+        return
     try:
         import biz_nidaan_telegram as _tg
         ok, err = await _tg.notify_staff(staff_id, text, url=url, extra_buttons=buttons)
@@ -835,8 +858,7 @@ async def on_support_escalated(thread_id: int) -> None:
         cline = f"\nContact: {contact}" if contact else ""
         body = f"{who} — website chat.{cline}\n\n\"{q[:300]}\"\n\n{tail}"
         await notify_staff_inapp(ids, subject, body, event_key="support.escalated", email=True)
-        for sid in ids:
-            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+        # Telegram goes out from notify_staff_inapp itself - a loop here sent it twice.
     except Exception as e:
         logger.warning("on_support_escalated failed: %s", e)
 
@@ -866,8 +888,7 @@ async def on_support_customer_reply(thread_id: int) -> None:
         subject = f"💬 New reply from {who[:40]} — Ticket #{thread_id}"
         body = f"{who} replied on their support chat:\n\n\"{q[:300]}\"\n\nOpen the Support inbox in ops to respond."
         await notify_staff_inapp(ids, subject, body, event_key="support.customer_reply", email=True)
-        for sid in ids:
-            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+        # Telegram goes out from notify_staff_inapp itself - a loop here sent it twice.
     except Exception as e:
         logger.warning("on_support_customer_reply failed: %s", e)
 
@@ -920,8 +941,6 @@ async def run_support_sla_escalation(minutes: int = 30) -> int:
                     f"office hours.{cline}\n\nPlease step in or reassign. Open the Support inbox in ops.")
             await notify_staff_inapp(sa_ids, subject, body,
                                      event_key="support.sla_escalation", email=True)
-            for sid in sa_ids:
-                await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await conn.execute(
                     "UPDATE nidaan_support_threads SET sa_escalated_at=CURRENT_TIMESTAMP WHERE thread_id=?",
@@ -1040,8 +1059,7 @@ async def run_health_alert_sweep() -> int:
         body = ("The server crossed a health threshold:\n\n" + "\n".join("• " + m for _, m in due)
                 + "\n\nOpen ops → App Health to check.")
         await notify_staff_inapp(ids, subject, body, event_key="health.alert", email=True)
-        for sid in ids:
-            await _telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
+        # Telegram goes out from notify_staff_inapp itself - a loop here sent it twice.
         for k, _m in due:
             _HEALTH_ALERT_COOLDOWN[k] = now
         logger.warning("⚠️ Health alert sent to super-admins: %s", [k for k, _ in due])
@@ -1676,15 +1694,8 @@ async def on_claim_filed(claim_id: int, account_id: int):
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
                   f"Open: /admin?account={account_id}"),
             claim_id=claim_id, account_id=account_id)
-    # Telegram mirror for the team (the bell alone is easy to miss).
-    for a in admins:
-        try:
-            await _telegram_mirror(a["staff_id"],
-                                  f"🆕 New claim #{_cn(claim_id)} — {claim.get('insured_name','')}\n"
-                                  f"{claim.get('claim_type','')} · {claim.get('owner_name','')}",
-                                  url="/nidaan/ops")
-        except Exception:
-            pass
+    # The Telegram copy goes out with each bell above (dispatch writes a staff bell, and every
+    # staff bell mirrors) - a loop here sent the team a second, shorter one.
     # Subscriber: friendly confirmation (slower — sends email/WhatsApp).
     prefs = await get_subscriber_prefs(account_id)
     if prefs.get("wa_opt_in"):
@@ -1778,11 +1789,6 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
                                  claim_id=claim_id)
     except Exception as e:
         logger.warning("on_ops_claim_raised inapp failed for claim %s: %s", claim_id, e)
-    for sid in ids:
-        try:
-            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
-        except Exception:
-            pass
     # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
     try:
         import biz_nidaan_wa_orchestrator as _orch
@@ -1820,11 +1826,6 @@ async def on_claimant_accepted(claim_id: int):
                                  claim_id=claim_id)
     except Exception as e:
         logger.warning("on_claimant_accepted inapp failed for claim %s: %s", claim_id, e)
-    for sid in ids:
-        try:
-            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
-        except Exception:
-            pass
 
 
 async def on_moved_to_l2(claim_id: int):
@@ -1976,7 +1977,29 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
 
 async def on_branch_l2_paid(claim_id: int, branch_code: str):
     """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
-    — alert SA/Admin that the case is queued for the legal team."""
+    — alert SA/Admin that the case is queued for the legal team.
+
+    ONCE per payment. Seven places call this (the branch's verify, ops' verify, the free advance,
+    two webhook events, the payment link, reconcile) and the branch verify plus the webhook both
+    fire for one payment - NP-151's complainant was thanked twice. Keyed on the claim's own
+    payment id, so a genuinely new payment after a reset still announces itself."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            _pr = await (await conn.execute(
+                "SELECT COALESCE(NULLIF(l2_payment_id,''), l2_paid_at, '') FROM nidaan_claims "
+                "WHERE claim_id=?", (claim_id,))).fetchone()
+            _key = "l2_queued:%s:%s" % (claim_id, (_pr[0] if _pr else "") or "")
+            _cur = await conn.execute(
+                "INSERT OR IGNORE INTO nidaan_alert_dedup (alert_key, sent_count, last_at) "
+                "VALUES (?, 1, CURRENT_TIMESTAMP)", (_key,))
+            await conn.commit()
+            if not (_cur.rowcount or 0):
+                logger.info("on_branch_l2_paid: claim %s already announced (%s) - skipped",
+                            claim_id, _key)
+                return
+    except Exception as e:  # noqa: BLE001
+        # If the guard itself fails, announce: a doubled alert is better than a lost one.
+        logger.warning("on_branch_l2_paid once-guard failed for claim %s: %s", claim_id, e)
     # Give the L2 case an owner so it doesn't sit idle. No-op if already assigned or
     # if auto-assign is off (SA assigns manually).
     try:
@@ -2012,11 +2035,6 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
         await notify_staff_inapp(ids, subj, body, event_key="claim.l2_queued", email=True)
     except Exception as e:
         logger.warning("on_branch_l2_paid inapp failed: %s", e)
-    for sid in ids:
-        try:
-            await _telegram_mirror(sid, f"{subj}\n\n{body}", url="/nidaan/ops")
-        except Exception:
-            pass
     # Complainant payment-thanks on WhatsApp (branch/ops claim — the customer is not the
     # account-holder here, so no collision with any subscriber-facing confirmation).
     try:

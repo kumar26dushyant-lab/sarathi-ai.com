@@ -56,6 +56,61 @@ def sending_as(sender: str, name: str = "", staff_id: str = ""):
         _SENDER.reset(tok)
 
 
+# ── what a template actually said ───────────────────────────────────────────
+# The approved wording lives at Meta. One call returns every template, so it is read once and kept
+# for six hours; a failed read is retried after ten minutes rather than on every send.
+_TMPL_TTL_S = 6 * 3600
+_TMPL_RETRY_S = 600
+_TMPL_CACHE: dict = {"at": -1e9, "by": {}}
+
+
+async def _template_bodies() -> dict:
+    import time as _t
+    now = _t.monotonic()
+    if now - _TMPL_CACHE["at"] < (_TMPL_TTL_S if _TMPL_CACHE["by"] else _TMPL_RETRY_S):
+        return _TMPL_CACHE["by"]
+    _TMPL_CACHE["at"] = now
+    waba = (os.getenv("WA_NIDAAN_WABA_ID") or "").strip()
+    if not (waba and _token()):
+        return _TMPL_CACHE["by"]
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(f"{GRAPH}/{waba}/message_templates",
+                            params={"fields": "name,language,components", "limit": 250},
+                            headers={"Authorization": f"Bearer {_token()}"})
+        by = {}
+        for t in (r.json() or {}).get("data") or []:
+            for comp in t.get("components") or []:
+                if (comp.get("type") or "").upper() == "BODY" and comp.get("text"):
+                    by[(t.get("name") or "", t.get("language") or "")] = comp["text"]
+        if by:
+            _TMPL_CACHE["by"] = by
+        else:
+            _TMPL_CACHE["at"] = now - _TMPL_TTL_S + _TMPL_RETRY_S
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not read template wording from Meta: %s", e)
+        _TMPL_CACHE["at"] = now - _TMPL_TTL_S + _TMPL_RETRY_S
+    return _TMPL_CACHE["by"]
+
+
+async def template_text(template: dict) -> str:
+    """The words a customer received for a template send: the approved body with this message's
+    values in place. Falls back to the values alone when the wording cannot be read."""
+    name = (template or {}).get("name") or ""
+    lang = ((template or {}).get("language") or {}).get("code") or ""
+    params = []
+    for comp in (template or {}).get("components") or []:
+        if (comp.get("type") or "").lower() == "body":
+            params = [str(p.get("text") or "") for p in comp.get("parameters") or []]
+    body = (await _template_bodies()).get((name, lang), "")
+    if body:
+        def _fill(m):
+            i = int(m.group(1)) - 1
+            return params[i] if 0 <= i < len(params) else m.group(0)
+        return re.sub(r"\{\{(\d+)\}\}", _fill, body)
+    return (" · ".join(p for p in params if p)) if params else ""
+
+
 async def _log_outbound(payload: dict, res: dict) -> None:
     """Record one outbound message. Best-effort: a logging failure must never break a send."""
     try:
@@ -64,6 +119,12 @@ async def _log_outbound(payload: dict, res: dict) -> None:
         mtype = str(payload.get("type") or "")
         tmpl = ((payload.get("template") or {}).get("name") or "") if mtype == "template" else ""
         body = ((payload.get("text") or {}).get("body") or "") if mtype == "text" else ""
+        if mtype == "template":
+            # What the customer READ, not just which template - so the inbox can show it.
+            try:
+                body = await template_text(payload.get("template") or {})
+            except Exception:  # noqa: BLE001
+                body = ""
         media_id = ""
         for k in ("audio", "document", "image", "video"):
             if isinstance(payload.get(k), dict) and payload[k].get("id"):

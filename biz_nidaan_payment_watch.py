@@ -144,11 +144,7 @@ async def _alert(snap: dict) -> None:
         if ids:
             await _nnot.notify_staff_inapp(ids, "⚠️ Payment watchdog alert", body,
                                            event_key="payment.watchdog", email=True)
-            for sid in ids:
-                try:
-                    await _nnot._telegram_mirror(sid, body, url="/nidaan/ops")
-                except Exception:
-                    pass
+            # notify_staff_inapp sends the Telegram too; a loop here used to send a second.
     except Exception as e:  # noqa: BLE001
         logger.warning("pay_watch alert failed: %s", e)
 

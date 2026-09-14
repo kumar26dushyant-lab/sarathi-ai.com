@@ -14952,9 +14952,15 @@ async function waiOpen(msisdn){
   const stopped = (c.status==='stopped');
 
   const bubbles = (d.messages||[]).map(function(m){
+    // A template shows the words the customer read, with its name as a small label. Messages sent
+    // before 14 Sep recorded only the name, and say so rather than pretending.
+    const tLabel = m.template_name
+      ? '<div style="font-size:.66rem;color:var(--nd-text-muted);margin-bottom:.2rem">Approved template · '
+        + esc(m.template_name) + '</div>' : '';
     const body = (m.body||'').trim() || (
       m.msg_type==='image'?'📷 Photo': m.msg_type==='document'?'📄 File':
-      m.msg_type==='audio'?'🎤 Voice note': m.template_name?('Template: '+m.template_name):'—');
+      m.msg_type==='audio'?'🎤 Voice note':
+      m.template_name?'(the wording of this message was not recorded - it was sent before we started keeping it)':'—');
     if (m.direction==='in')
       return '<div class="wai-b wai-in"><div class="wai-who" style="color:var(--nd-success-text)">'+esc(nm)+'</div>'+esc(body)
            + '<div class="wai-meta">'+_waiTime(m.created_at)+'</div></div>';
@@ -14962,7 +14968,7 @@ async function waiOpen(msisdn){
     const who = m.sender==='human' ? (m.sender_name||'Team member') : s.label;
     const st = m.status==='failed' ? '<span style="color:var(--nd-danger-text)"> · not delivered</span>'
              : m.status==='read' ? ' · read' : m.status==='delivered' ? ' · delivered' : '';
-    return '<div class="wai-b wai-out '+s.cls+'"><div class="wai-who">'+esc(who)+'</div>'+esc(body)
+    return '<div class="wai-b wai-out '+s.cls+'"><div class="wai-who">'+esc(who)+'</div>'+tLabel+esc(body)
          + '<div class="wai-meta">'+_waiTime(m.created_at)+st+'</div></div>';
   }).join('') || '<div style="margin:auto;color:var(--nd-text-faint);font-size:.82rem">No messages yet.</div>';
 

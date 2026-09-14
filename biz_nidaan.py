@@ -2010,10 +2010,15 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
             return False
         if row["l2_payment_status"] == "paid":
             return True  # idempotent — already queued
-        await conn.execute(
+        # Conditional, so the branch's verify and Razorpay's webhook arriving together cannot both
+        # pass the check above and both record the payment (status log, GST line) twice.
+        _cur = await conn.execute(
             "UPDATE nidaan_claims SET l2_payment_status='paid', l2_fee_paid=?, "
             "l2_payment_id=?, l2_paid_at=CURRENT_TIMESTAMP, last_status_at=CURRENT_TIMESTAMP "
-            "WHERE claim_id=?", (int(fee or 0), (payment_id or "")[:80], claim_id))
+            "WHERE claim_id=? AND COALESCE(l2_payment_status,'')<>'paid'",
+            (int(fee or 0), (payment_id or "")[:80], claim_id))
+        if not (_cur.rowcount or 0):
+            return True  # the other path won the race — already queued
         note = (f"Branch L2 fee Rs.{int(fee)} paid — queued for legal" if fee
                 else "Branch sent to Level-2 (no charge) — queued for legal")
         await conn.execute(

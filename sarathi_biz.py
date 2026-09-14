@@ -8039,8 +8039,8 @@ async def _crm_notify_assignment(lead_id: int, owner_staff_id: int, lead_name: s
         import biz_nidaan_notifications as _nnot
         subj = f"🎯 New lead assigned: {lead_name}"
         body = f"{by} assigned you a CRM lead: {lead_name} (#{lead_id}).\nOpen ops → CRM to work it."
+        # notify_staff_inapp sends the Telegram too - a second call here buzzed twice.
         await _nnot.notify_staff_inapp([owner_staff_id], subj, body, event_key="crm.assigned", email=True)
-        await _nnot._telegram_mirror(owner_staff_id, f"{subj}\n\n{body}", url="/nidaan/ops")
     except Exception:
         pass
 

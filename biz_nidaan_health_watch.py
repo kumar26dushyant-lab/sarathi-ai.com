@@ -152,10 +152,6 @@ async def _send_alert(items: list) -> None:
         logger.warning("health watch: no super-admin to alert")
         return
     import biz_nidaan_notifications as _nnot
+    # notify_staff_inapp sends the Telegram too; a loop here used to send it a second time.
     await _nnot.notify_staff_inapp(ids, subject, body, event_key="health.subsystem",
                                    email=bool(broke or still))
-    for sid in ids:
-        try:
-            await _nnot._telegram_mirror(sid, f"{subject}\n\n{body}", url="/nidaan/ops")
-        except Exception:
-            pass
