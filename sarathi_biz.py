@@ -6656,7 +6656,9 @@ class _BucketSubReq(BaseModel):
 class _BucketFieldReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     field_key: str = Field(..., max_length=60)
-    value: str = Field("", max_length=8000)
+    # A formatted legal draft runs well past 8,000 characters; set_field enforces the real
+    # per-type limit and refuses rather than truncating.
+    value: str = Field("", max_length=60000)
 
 
 class _BucketSaveReq(BaseModel):
@@ -6793,6 +6795,176 @@ async def ops_bucket_route_save(body: _RouteSaveReq, request: Request):
     await _ops_audit(request, "bucket.design_route", "bucket", body.from_key,
                      f"{'removed' if body.remove else body.kind} -> {body.to_key}")
     return res
+
+
+# The claim's own columns the gist form edits. Deliberately short: the gist is Level-2 work done
+# by whoever is on duty, so it can correct the facts of the case - but NOT the phone and email
+# that messages go to, which stay with the admin-only claim edit.
+_GIST_CORE = {
+    "insured_name": 120, "complainant_name": 120, "insurer_name": 120,
+    "policy_no": 80, "policy_inception_date": 10, "disputed_amount": 12,
+}
+
+
+class _GistSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    core: dict = Field(default_factory=dict)
+    fields: dict = Field(default_factory=dict)
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/report")
+async def ops_case_report(claim_id: int, request: Request):
+    """Everything the Initial Claim Assessment Sheet and the Case Report print, in one call.
+
+    It reads every field from every bucket, so the report grows on its own as each bucket's work
+    is done - which is exactly how the ClaimShield case report behaves.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    import biz_nidaan_buckets as _bk
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        r = await (await c.execute(
+            "SELECT c.*, s.name AS handler_name FROM nidaan_claims c "
+            "LEFT JOIN nidaan_staff s ON s.staff_id=c.assigned_to_staff_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+        if not r:
+            raise HTTPException(404, "Claim not found")
+        claim = dict(r)
+        cp = None
+        if claim.get("channel_partner_id"):
+            cp = await (await c.execute(
+                "SELECT name FROM nidaan_channel_partners WHERE cp_id=?",
+                (claim["channel_partner_id"],))).fetchone()
+        # Remarks: what PEOPLE said, oldest first - the same list ClaimShield prints. Automated
+        # entries are left out; they would bury the three lines somebody actually wrote.
+        acts = [dict(x) for x in await (await c.execute(
+            "SELECT created_at, actor, summary, kind FROM nidaan_claim_activity "
+            "WHERE claim_id=? AND COALESCE(actor,'') NOT IN ('','system','bot','automatic nudge') "
+            "ORDER BY act_id ASC LIMIT 300", (claim_id,))).fetchall()]
+    vals = await _bk.claim_fields(claim_id)
+    labels, rich = {}, set()
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        for k, lab, ft in await (await c.execute(
+                "SELECT field_key, label_en, field_type FROM nidaan_bucket_fields")).fetchall():
+            labels.setdefault(k, lab)
+            if ft == "richtext":
+                rich.add(k)
+    # Sanitised on the way OUT as well as in. Drafts saved before they became rich text went in
+    # as plain text and were never cleaned; the screens now render these as HTML - inside the
+    # ops page, where a staff session is live - so nothing unsanitised may reach them.
+    for k in rich:
+        if vals.get(k):
+            vals[k] = _bk.sanitize_rich(vals[k])
+    link = ""
+    try:
+        import biz_nidaan_claimant as _cl
+        p = await _cl.get_portal(claim_id)
+        if p and p.get("access_token"):
+            link = "%s/nidaan/claim/magic?token=%s" % (_cl._public_base(), p["access_token"])
+    except Exception:
+        link = ""
+    return {
+        "claim_id": claim_id,
+        "created_at": claim.get("created_at"),
+        "handler": claim.get("handler_name") or "",
+        "insured_name": claim.get("insured_name") or "",
+        "insured_phone": claim.get("insured_phone") or "",
+        "complainant_name": claim.get("complainant_name") or "",
+        "complainant_phone": claim.get("complainant_phone") or claim.get("insured_phone") or "",
+        "claim_kind": claim.get("claim_type") or "",
+        "disputed_amount": claim.get("disputed_amount"),
+        "policy_no": claim.get("policy_no") or "",
+        "policy_inception_date": claim.get("policy_inception_date") or "",
+        "insurer_name": claim.get("insurer_name") or "",
+        "channel_partner": (cp[0] if cp else "") or "",
+        "raised_by": claim.get("raised_by_name") or "",
+        "handed_over_by": claim.get("l2_handover_by") or "",
+        "docs_complete_by": claim.get("docs_complete_by") or "",
+        "bucket": claim.get("pipeline_stage") or "",
+        "upload_link": link,
+        "fields": vals,
+        "labels": labels,
+        "remarks": acts,
+    }
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/gist")
+@limiter.limit("60/minute")
+async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
+    """The gist form and the draft form, saved in one go.
+
+    `core` corrects the case's own facts (patient, complainant, policy, company, amount) - the
+    short list in _GIST_CORE and nothing else. `fields` are the gist and draft answers, each one
+    validated and, for the drafts, sanitised by set_field. Every change is audited by name.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    who = _actor_label(caller)
+    import biz_nidaan_buckets as _bk
+    changed = []
+
+    core = {k: v for k, v in (body.core or {}).items() if k in _GIST_CORE}
+    unknown = [k for k in (body.core or {}) if k not in _GIST_CORE]
+    if unknown:
+        raise HTTPException(400, "These cannot be changed from the gist: %s" % ", ".join(unknown))
+    if core:
+        sets, vals = [], []
+        for k, v in core.items():
+            v = "" if v is None else str(v).strip()
+            if len(v) > _GIST_CORE[k]:
+                raise HTTPException(400, "%s is too long." % k.replace("_", " "))
+            if k in ("insured_name", "complainant_name"):
+                v = nidaan._capname(v)
+            elif k == "disputed_amount":
+                if v == "":
+                    v = None
+                else:
+                    try:
+                        v = int(float(v))
+                    except ValueError:
+                        raise HTTPException(400, "The claim amount must be a number.")
+                    if v < 0 or v > 100000000:
+                        raise HTTPException(400, "That claim amount is not believable.")
+            elif k == "policy_inception_date" and v:
+                import re as _re
+                if not _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+                    raise HTTPException(400, "The policy date must be a date.")
+            sets.append("%s=?" % k)
+            vals.append(v)
+            changed.append(k)
+        import aiosqlite as _aio
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            cur = await c.execute("UPDATE nidaan_claims SET %s WHERE claim_id=?" % ", ".join(sets),
+                                  (*vals, claim_id))
+            await c.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "Claim not found")
+
+    errors = []
+    for k, v in (body.fields or {}).items():
+        res = await _bk.set_field(claim_id, str(k)[:60], "" if v is None else str(v), actor=who)
+        if res.get("ok"):
+            changed.append(k)
+        else:
+            errors.append("%s: %s" % (k, res.get("error")))
+    if errors and not changed:
+        raise HTTPException(400, "; ".join(errors))
+
+    if changed:
+        try:
+            await nidaan.record_claim_activity(
+                claim_id, "gist", actor=who,
+                summary="Case details updated by %s (%d item%s)" % (
+                    who, len(changed), "" if len(changed) == 1 else "s"))
+        except Exception:
+            pass
+        await _ops_audit(request, "claim.gist", "claim", str(claim_id),
+                         ", ".join(changed)[:160])
+    return {"ok": True, "saved": changed, "errors": errors}
 
 
 @app.get("/nidaan/ops/api/buckets/config")

@@ -169,14 +169,27 @@ _FIELDS = {
         ("cf_amount", "CF amount", "CF राशि", "money", 0, ""),
         ("review_fee_status", "Review fee (PF)", "रिव्यू फ़ीस (PF)", "choice", 0, ""),
         ("review_pf_txn", "PF transaction no.", "PF ट्रांज़ैक्शन नं.", "text", 0, ""),
+        # From the ClaimShield gist form. The INSURER's claim number, not ClaimShield's case id.
+        ("insurer_claim_no", "Claim number", "क्लेम नंबर", "text", 0,
+         "The insurance company's own claim number, e.g. CIR/2026/201112/1282847"),
+        # ClaimShield's "Claim Type" is the kind of DISPUTE, not health/motor/life.
+        ("rejection_type", "Claim type", "क्लेम का प्रकार", "choice", 0,
+         "Rejection, deduction or delay in process"),
+        ("gist_comments", "Comments", "टिप्पणी", "textarea", 0, ""),
+        # The complainant's relationship to the PATIENT. Not complainant_role, which records who
+        # raised the claim and is read by attribution and routing.
+        ("relationship", "On behalf of", "किसकी ओर से", "choice", 0,
+         "The complainant's relationship to the patient"),
     ],
     "pending_docs": [
         ("originals_received", "Originals received by post", "ओरिजिनल डाक से मिले", "yesno", 0, ""),
         ("hospital_letter_sent", "Hospital refusal letter sent", "अस्पताल को पत्र भेजा", "yesno", 0, ""),
     ],
     "pending_draft": [
-        ("draft_en", "Draft — English", "ड्राफ़्ट — अंग्रेज़ी", "textarea", 1, ""),
-        ("draft_hi", "Draft — Hindi", "ड्राफ़्ट — हिंदी", "textarea", 0, ""),
+        # ClaimShield: "Draft" goes to the insurance company, "Lokpal Draft" to the Ombudsman.
+        # Formatted text (bold / italic / underline), sanitised on the server.
+        ("draft_en", "Draft", "ड्राफ़्ट", "richtext", 1, ""),
+        ("draft_hi", "Lokpal Draft", "लोकपाल ड्राफ़्ट", "richtext", 0, ""),
         ("approved_by", "Approved by", "किसने अप्रूव किया", "text", 1,
          "The Medical Officer, or the Advocate on a non-medical claim"),
         ("approved_on", "Approved on", "कब अप्रूव हुआ", "date", 0, ""),
@@ -226,6 +239,7 @@ _FIELDS = {
         ("cf_txn", "CF transaction no.", "CF ट्रांज़ैक्शन नं.", "text", 0, ""),
         ("cheque_no", "Cheque number", "चेक नंबर", "text", 0, ""),
         ("cheque_amount", "Cheque amount", "चेक राशि", "money", 0, ""),
+        ("bank_name", "Bank name", "बैंक का नाम", "text", 0, ""),
         ("part_received", "Part payment received", "आंशिक भुगतान मिला", "money", 0, ""),
         ("amount_pending", "Amount pending", "बाकी राशि", "money", 0, ""),
     ],
@@ -238,6 +252,8 @@ _FIELDS = {
 }
 
 _CHOICES = {
+    "rejection_type": "Rejection\nDeduction\nDelay in process\nPart settlement\nOther",
+    "relationship": "Self\nSpouse\nChildren\nParent\nSibling\nOther",
     "review_fee_status": "Paid\nUnpaid",
     "pf_status": "Paid\nUnpaid",
     "completion_type": "Hearing\nEscalation Settlement\nConsent",
@@ -272,6 +288,14 @@ _MOVES = [
 # Hold is reachable from anywhere real, and always returns where it came from.
 _PARKABLE = ("live_cases", "pending_docs", "pending_draft", "reimbursement",
              "escalation", "lokpal", "pending_payment", "cp_payment")
+
+
+# Labels and types the seed once wrote and has since corrected. Applied only where the row still
+# carries the OLD seeded text - so a super-admin who renamed a field keeps their name.
+_SEED_CORRECTIONS = [
+    ("pending_draft", "draft_en", "Draft \u2014 English", "Draft", "\u0921\u094d\u0930\u093e\u092b\u093c\u094d\u091f", "richtext"),
+    ("pending_draft", "draft_hi", "Draft \u2014 Hindi", "Lokpal Draft", "\u0932\u094b\u0915\u092a\u093e\u0932 \u0921\u094d\u0930\u093e\u092b\u093c\u094d\u091f", "richtext"),
+]
 
 
 async def ensure_seeded() -> dict:
@@ -319,6 +343,11 @@ async def ensure_seeded() -> dict:
             for k in _PARKABLE:
                 moves.append((k, "hold", "park", 1))
                 moves.append(("hold", k, "resume", 0))
+            for bkey, fkey, old_label, new_label, new_hi, new_type in _SEED_CORRECTIONS:
+                await c.execute(
+                    "UPDATE nidaan_bucket_fields SET label_en=?, label_hi=?, field_type=? "
+                    "WHERE bucket_key=? AND field_key=? AND label_en=?",
+                    (new_label, new_hi, new_type, bkey, fkey, old_label))
             for j, (f, t, kind, reason) in enumerate(moves):
                 # Never seed a route whose far end has been retired: re-introducing a way
                 # into a bucket the office has switched off is the same resurrection bug
@@ -469,6 +498,66 @@ async def claim_fields(claim_id: int) -> dict:
     return {r[0]: r[1] for r in rows}
 
 
+# The formatting a draft may carry, and nothing else. Rich text is shown back to staff on the
+# case report, so anything outside this list - a script, an event handler, an iframe, a style that
+# hides text - would be stored and handed to the next person who opens the case.
+_RICH_TAGS = {"b", "strong", "i", "em", "u", "br", "p", "div", "span", "ul", "ol", "li"}
+
+
+def sanitize_rich(html: str) -> str:
+    """Keep bold / italic / underline, paragraphs, line breaks and lists. Drop every attribute,
+    every other tag, and the contents of script and style outright."""
+    import html as _h
+    from html.parser import HTMLParser
+
+    out: list = []
+
+    class _S(HTMLParser):
+        skip = 0
+
+        def handle_starttag(self, tag, attrs):
+            t = tag.lower()
+            if t in ("script", "style", "iframe", "object", "embed", "template", "noscript"):
+                self.skip += 1
+                return
+            if not self.skip and t in _RICH_TAGS:
+                out.append("<%s>" % t)          # every attribute dropped, always
+
+        def handle_startendtag(self, tag, attrs):
+            if not self.skip and tag.lower() == "br":
+                out.append("<br>")
+
+        def handle_endtag(self, tag):
+            t = tag.lower()
+            if t in ("script", "style", "iframe", "object", "embed", "template", "noscript"):
+                self.skip = max(0, self.skip - 1)
+                return
+            if not self.skip and t in _RICH_TAGS and t != "br":
+                out.append("</%s>" % t)
+
+        def handle_data(self, data):
+            if not self.skip:
+                out.append(_h.escape(data, quote=False))
+
+        def handle_entityref(self, name):
+            if not self.skip:
+                out.append("&%s;" % name)
+
+        def handle_charref(self, name):
+            if not self.skip:
+                out.append("&#%s;" % name)
+
+    p = _S(convert_charrefs=False)
+    p.feed(html or "")
+    p.close()
+    return "".join(out).strip()
+
+
+# How much a field may hold. A full legal draft with its formatting runs well past 8,000
+# characters - the old single limit cut the end off a letter with no error at all.
+_FIELD_MAX = {"richtext": 60000, "textarea": 20000}
+
+
 async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") -> dict:
     """Record one answer.
 
@@ -477,16 +566,26 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") 
     """
     async with aiosqlite.connect(DB_PATH) as c:
         known = await (await c.execute(
-            "SELECT 1 FROM nidaan_bucket_fields WHERE field_key=? AND active=1 LIMIT 1",
+            "SELECT field_type FROM nidaan_bucket_fields WHERE field_key=? AND active=1 LIMIT 1",
             (field_key,))).fetchone()
         if not known:
             return {"ok": False, "error": "That field is not part of any bucket."}
+        ftype = known[0] or "text"
+        val = (value or "").strip()
+        if ftype == "richtext":
+            val = sanitize_rich(val)
+        limit = _FIELD_MAX.get(ftype, 2000)
+        if len(val) > limit:
+            # Refuse rather than cut: a truncated legal draft looks complete and is not.
+            return {"ok": False,
+                    "error": "That is too long to save (%d characters; the limit is %d)."
+                             % (len(val), limit)}
         await c.execute(
             "INSERT INTO nidaan_claim_fields (claim_id, field_key, value, updated_by, updated_at) "
             "VALUES (?,?,?,?,CURRENT_TIMESTAMP) "
             "ON CONFLICT(claim_id, field_key) DO UPDATE SET value=excluded.value, "
             "updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP",
-            (int(claim_id), field_key, (value or "").strip()[:8000], (actor or "")[:80]))
+            (int(claim_id), field_key, val, (actor or "")[:80]))
         await c.commit()
     return {"ok": True}
 
@@ -1643,7 +1742,7 @@ async def _notify_sender_back(claim_id: int, *, to_name: str, reason: str,
 #   EVERY CHANGE IS ATTRIBUTED. The process is as auditable as the claims that move through it.
 
 _SAFE_KEY = _re.compile(r"^[a-z][a-z0-9_]{1,38}$")
-_FIELD_TYPES = ("text", "textarea", "date", "number", "money", "yesno", "choice")
+_FIELD_TYPES = ("text", "textarea", "richtext", "date", "number", "money", "yesno", "choice")
 _WAITS = ("none", "complainant", "insurer", "lokpal", "internal")
 
 

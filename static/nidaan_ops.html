@@ -5541,6 +5541,8 @@ async function openClaimDrawer(claimId) {
       <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Everything attached to this claim, and the checklist it answers. Attach a paper here yourself when it arrives by hand, post or email.</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button class="btn-sm btn-primary" onclick="docsOpen(${c.claim_id})">📂 Open documents &amp; attach</button>
+        <button class="btn-sm btn-ghost" onclick="csrSheet(${c.claim_id})">📄 Assessment sheet</button>
+        <button class="btn-sm btn-ghost" onclick="csrReport(${c.claim_id})">📋 Case report</button>
         ${c.docs_complete_at ? `<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ All received — ${esc(c.docs_complete_by||'staff')}</span>` : ''}
       </div>
     </div>
@@ -12735,6 +12737,14 @@ function l2CaseRender(rem){
     +   '<div><div class="k">Phone</div><div class="v">' + esc(c.complainant_phone || c.insured_phone || '—') + '</div></div>'
     +   '<div><div class="k">Last moved by</div><div class="v">' + esc(st.moved_by || '—') + '</div></div>'
     + '</div>'
+    // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
+    // bucket's job is the strong button.
+    + '<div class="csrtools" style="margin:.1rem 0 .2rem">'
+    +   '<button class="l2mv ' + (st.bucket === 'live_cases' ? 'p' : 'g') + '" onclick="csrGist(' + id + ')">\u270d\ufe0f Gist</button>'
+    +   '<button class="l2mv ' + (st.bucket === 'pending_draft' ? 'p' : 'g') + '" onclick="csrDraft(' + id + ')">\ud83d\udcdd Draft</button>'
+    +   '<button class="l2mv g" onclick="csrSheet(' + id + ')">\ud83d\udcc4 Assessment sheet</button>'
+    +   '<button class="l2mv g" onclick="csrReport(' + id + ')">\ud83d\udccb Case report</button>'
+    + '</div>'
     + '<div><div class="l2sec">What this bucket is for</div>'
     +   '<div style="font-size:.84rem;color:var(--nd-text-secondary)">'
     +   '<b>' + esc((st.guide || {}).what || '') + '</b><br>' + esc((st.guide || {}).do || '')
@@ -13184,6 +13194,346 @@ async function docsMarkDone(on){
 }
 
 window.docsOpen = docsOpen; window.docsUpload = docsUpload; window.docsMarkDone = docsMarkDone;
+
+// ══ The ClaimShield case record ═══════════════════════════════════════════════
+// Four screens, laid out the way the office already knows them from ClaimShield:
+//
+//   Gist form                        - filled in Live Cases
+//   Draft form                       - Draft (to the insurance company) and Lokpal Draft
+//   Initial Claim Assessment Sheet   - the printable page the gist produces
+//   Case Report                      - everything on the case, growing as each bucket's work is done
+//
+// The two forms save through ONE endpoint, and the two printable pages read from ONE endpoint,
+// so a fact typed once appears everywhere it is printed.
+let _csr = null;          // the report payload for the claim being worked on
+let _csrClaim = 0;
+
+// Where each ClaimShield label lives. `core` is a column on the claim; everything else is a
+// bucket field. The order is ClaimShield's, row by row.
+const CSR_GIST = [
+  ['Patient Name', 'core', 'insured_name'],
+  ['Complainant name', 'core', 'complainant_name'],
+  ['On Behalf of', 'field', 'relationship', 'choice'],
+  ['Claim Type', 'field', 'rejection_type', 'choice'],
+  ['Claim Amount', 'core', 'disputed_amount', 'number'],
+  ['Policy Number', 'core', 'policy_no'],
+  ['Claim Number', 'field', 'insurer_claim_no'],
+  ['Date of Policy Inception', 'core', 'policy_inception_date', 'date'],
+  ['Company Name', 'core', 'insurer_name', 'insurer'],
+  ['Hospital Name', 'field', 'hospital_name'],
+  ['Date of Admission', 'field', 'admission_date', 'date'],
+  ['Date of Discharge', 'field', 'discharge_date', 'date'],
+  ['Diagnosis', 'field', 'diagnosis'],
+  ['Patient complain', 'field', 'patient_complaint'],
+  ['Rejection Reason', 'field', 'rejection_reason'],
+  ['Rejection date', 'field', 'rejection_date', 'date'],
+  ['Comments', 'field', 'gist_comments'],
+  ['Email ID', 'field', 'case_email'],
+  ['Email Password', 'field', 'case_email_password'],
+  ['Consultation charge %', 'field', 'consultation_pct', 'number'],
+  ['CF Amount', 'field', 'cf_amount', 'number'],
+];
+// The draft form repeats the facts of the case above the two drafts, exactly as ClaimShield does.
+const CSR_DRAFT_FACTS = [
+  ['Patient Name', 'core', 'insured_name'],
+  ['Complainant name', 'core', 'complainant_name'],
+  ['Claim Type', 'field', 'rejection_type', 'choice'],
+  ['Claim Amount', 'core', 'disputed_amount', 'number'],
+  ['Policy Number', 'core', 'policy_no'],
+  ['Claim Number', 'field', 'insurer_claim_no'],
+  ['Date of Policy', 'core', 'policy_inception_date', 'date'],
+  ['Company Name', 'core', 'insurer_name', 'insurer'],
+  ['Hospital Name', 'field', 'hospital_name'],
+  ['Date of Admission', 'field', 'admission_date', 'date'],
+  ['Date of Discharge', 'field', 'discharge_date', 'date'],
+  ['Diagnosis', 'field', 'diagnosis'],
+  ['Patient complain', 'field', 'patient_complaint'],
+  ['Rejection Reason', 'field', 'rejection_reason'],
+  ['Rejection date', 'field', 'rejection_date', 'date'],
+  ['Comments', 'field', 'gist_comments'],
+];
+const CSR_CHOICES = {
+  relationship: ['None', 'Self', 'Spouse', 'Children', 'Parent', 'Sibling', 'Other'],
+  rejection_type: ['None', 'Rejection', 'Deduction', 'Delay in process', 'Part settlement', 'Other'],
+};
+
+function _csrStyles(){
+  if (document.getElementById('csrCss')) return;
+  const st = document.createElement('style'); st.id = 'csrCss';
+  // ClaimShield's layout - a dense grid, the label above its box, one Submit in the middle -
+  // drawn in this app's own colours so it reads in light mode as well as dark.
+  st.textContent = `
+  .csrg{display:grid;gap:.7rem 1rem}
+  .csrg.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .csrg.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .csrf label{display:block;font-size:.76rem;font-weight:700;color:var(--nd-text-primary);
+    margin-bottom:.3rem}
+  .csrf input,.csrf select{width:100%;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);
+    border:1px solid var(--nd-border-strong);border-radius:8px;padding:.5rem .65rem;font-size:.86rem;
+    font-family:inherit}
+  .csrf input:focus,.csrf select:focus,.csred:focus{outline:2px solid var(--nd-brand-cyan);
+    outline-offset:1px}
+  .csrsub{display:flex;justify-content:center;margin-top:1rem}
+  .csrrt{margin-top:.9rem}
+  .csrrt>label{display:block;font-size:.76rem;font-weight:700;color:var(--nd-text-primary);
+    margin-bottom:.3rem}
+  .csrbar{display:flex;gap:.2rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border-strong);
+    border-bottom:0;border-radius:8px 8px 0 0;padding:.3rem .45rem}
+  .csrbar button{background:none;border:1px solid transparent;border-radius:5px;cursor:pointer;
+    color:var(--nd-text-primary);font-family:inherit;font-size:.86rem;width:1.9rem;height:1.7rem}
+  .csrbar button:hover{border-color:var(--nd-border-strong)}
+  .csred{min-height:9rem;max-height:22rem;overflow-y:auto;background:#fff;color:#111;
+    border:1px solid var(--nd-border-strong);border-radius:0 0 8px 8px;padding:.6rem .75rem;
+    font-size:.88rem;line-height:1.55}
+  .csrtools{display:flex;gap:.3rem;flex-wrap:wrap;margin:.2rem 0 .6rem}
+  @media (max-width:900px){ .csrg.c4{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:640px){ .csrg.c3,.csrg.c4{grid-template-columns:1fr} }`;
+  document.head.appendChild(st);
+}
+
+async function _csrLoad(claimId){
+  _csrClaim = claimId;
+  const r = await API('/cases/' + claimId + '/report');
+  if (!r.ok) throw new Error('load');
+  _csr = await r.json();
+  return _csr;
+}
+
+function _csrVal(kind, key){
+  if (!_csr) return '';
+  if (kind === 'core') return _csr[key] == null ? '' : String(_csr[key]);
+  const v = (_csr.fields || {})[key];
+  return v == null ? '' : String(v);
+}
+
+function _csrInput(f){
+  const [label, kind, key, type] = f;
+  const id = 'csr_' + kind + '_' + key;
+  const v = _csrVal(kind, key);
+  let ctl;
+  if (type === 'choice'){
+    const opts = CSR_CHOICES[key] || ['None'];
+    const cur = v || 'None';
+    ctl = '<select id="' + id + '">' + opts.map(function(o){
+      return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('')
+      + (opts.indexOf(cur) < 0 ? '<option selected>' + esc(cur) + '</option>' : '') + '</select>';
+  } else if (type === 'insurer'){
+    ctl = '<input id="' + id + '" list="csrIns" value="' + esc(v) + '">';
+  } else {
+    ctl = '<input id="' + id + '" type="' + (type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text'))
+      + '" value="' + esc(type === 'date' ? v.slice(0, 10) : v) + '"' + (type === 'number' ? ' step="any"' : '') + '>';
+  }
+  return '<div class="csrf"><label for="' + id + '">' + esc(label) + '</label>' + ctl + '</div>';
+}
+
+function _csrInsurerList(){
+  const list = (window.NidaanInsurers && NidaanInsurers.list) || [];
+  return '<datalist id="csrIns">' + list.map(function(n){
+    return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
+}
+
+function _csrCollect(fields){
+  const core = {}, flds = {};
+  fields.forEach(function(f){
+    const [, kind, key, type] = f;
+    const el = document.getElementById('csr_' + kind + '_' + key);
+    if (!el) return;
+    let v = (el.value || '').trim();
+    if (type === 'choice' && v === 'None') v = '';
+    if (kind === 'core') core[key] = v; else flds[key] = v;
+  });
+  return {core: core, fields: flds};
+}
+
+async function _csrSave(payload, msgId, okText){
+  const m = document.getElementById(msgId);
+  if (m){ m.style.color = 'var(--nd-text-muted)'; m.textContent = 'Saving…'; }
+  try{
+    const r = await API('/cases/' + _csrClaim + '/gist', {method:'POST', body: JSON.stringify(payload)});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      if (m){ m.style.color = 'var(--nd-danger-text)'; m.textContent = _l2Err(d, 'Could not save.'); }
+      return false;
+    }
+    if (m){
+      m.style.color = (d.errors && d.errors.length) ? 'var(--nd-warning-text)' : 'var(--nd-success-text)';
+      m.textContent = okText + ((d.errors && d.errors.length) ? ' Not saved: ' + d.errors.join('; ') : '');
+    }
+    await _csrLoad(_csrClaim);
+    return true;
+  }catch(e){
+    if (m){ m.style.color = 'var(--nd-danger-text)'; m.textContent = 'Could not save.'; }
+    return false;
+  }
+}
+
+// ── the gist form ────────────────────────────────────────────────────────────
+async function csrGist(claimId){
+  _csrStyles();
+  openModal('Gist — NP-' + claimId, '<div class="empty"><p>Loading…</p></div>', [], true);
+  try{ await _csrLoad(claimId); }
+  catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the gist.</p></div>'; return; }
+  document.getElementById('modalBody').innerHTML =
+      _csrInsurerList()
+    + '<div class="csrg c3">' + CSR_GIST.map(_csrInput).join('') + '</div>'
+    + '<div class="csrsub"><button class="btn btn-primary" onclick="csrGistSave()">Submit</button></div>'
+    + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
+    +   '<button class="l2mv g" onclick="csrSheet(' + claimId + ')">📄 Initial Claim Assessment Sheet</button>'
+    +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
+    + '</div>'
+    + '<div id="csrMsg" style="font-size:.84rem;text-align:center"></div>';
+}
+async function csrGistSave(){
+  await _csrSave(_csrCollect(CSR_GIST), 'csrMsg',
+    'Saved. The assessment sheet and case report now show it.');
+}
+
+// ── the draft form ───────────────────────────────────────────────────────────
+function _csrRichHTML(v){
+  v = v || '';
+  // Every draft reaching the screen has been through the server's sanitiser on the way OUT, so
+  // its text is already escaped - escaping it again here would print "&amp;" for every "&".
+  // Drafts typed before the editor existed are plain text: keep their line breaks.
+  if (!/<(p|div|br|ul|ol|li)\b/i.test(v)) return v.replace(/\n/g, '<br>');
+  return v;
+}
+function _csrEditor(id, label, value){
+  return '<div class="csrrt"><label>' + esc(label) + '</label>'
+    + '<div class="csrbar">'
+    +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
+    +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
+    +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+    + '</div>'
+    + '<div class="csred" id="' + id + '" contenteditable="true">' + _csrRichHTML(value) + '</div></div>';
+}
+async function csrDraft(claimId){
+  _csrStyles();
+  openModal('Draft — NP-' + claimId, '<div class="empty"><p>Loading…</p></div>', [], true);
+  try{ await _csrLoad(claimId); }
+  catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the draft.</p></div>'; return; }
+  document.getElementById('modalBody').innerHTML =
+      _csrInsurerList()
+    + '<div class="csrg c4">' + CSR_DRAFT_FACTS.map(_csrInput).join('') + '</div>'
+    + _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'))
+    + _csrEditor('csrDraftLp', 'Lokpal Draft', _csrVal('field', 'draft_hi'))
+    + '<div class="csrsub"><button class="btn btn-primary" onclick="csrDraftSave()">Submit</button></div>'
+    + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
+    +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
+    + '</div>'
+    + '<div id="csrMsg" style="font-size:.84rem;text-align:center"></div>';
+}
+async function csrDraftSave(){
+  const p = _csrCollect(CSR_DRAFT_FACTS);
+  // The server keeps bold, italic, underline, paragraphs and lists, and strips everything else.
+  p.fields.draft_en = (document.getElementById('csrDraftEn') || {}).innerHTML || '';
+  p.fields.draft_hi = (document.getElementById('csrDraftLp') || {}).innerHTML || '';
+  await _csrSave(p, 'csrMsg', 'Saved. The case report shows both drafts.');
+}
+
+// ── the printable pages ──────────────────────────────────────────────────────
+function _csrDate(v){
+  v = String(v || '').slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  return m ? m[3] + '-' + m[2] + '-' + m[1] : v;
+}
+function _csrMoney(v){ return (v == null || v === '') ? '' : String(v); }
+function _csrPrint(title, bodyHtml){
+  const w = window.open('', '_blank');
+  if (!w){ ndUI.toast('Your browser blocked the new window. Allow pop-ups for this site and try again.', 'error'); return; }
+  const logo = location.origin + '/static/nidaan_logo.png';
+  w.document.open();
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title>'
+    + '<style>'
+    + 'body{font-family:Inter,Arial,Helvetica,sans-serif;color:#111;margin:0;background:#fff}'
+    + '.pg{max-width:1200px;margin:0 auto;padding:28px 40px}'
+    + '.hd{display:flex;align-items:center;gap:24px;margin-bottom:22px}'
+    + '.hd img{height:92px}.hd h1{flex:1;text-align:center;font-weight:400;font-size:26px;letter-spacing:.02em;margin:0}'
+    + '.ln{margin:0 0 12px;font-size:14px}.ln b{font-weight:700}'
+    + '.two{display:grid;grid-template-columns:1fr 1fr;gap:6px 40px;font-size:12.5px}'
+    + '.two div{margin:0 0 6px}.two b{font-weight:700}'
+    + '.bar{background:#e8f5e9;padding:8px 10px;font-size:12px;margin:6px 0 10px}'
+    + '.rm{font-size:12px;margin:4px 0 12px}.rm ul{margin:4px 0 0 18px;padding:0}'
+    + '.dr{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}'
+    + '.dr>div{border:1px solid #ccc;min-height:240px;padding:10px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}'
+    + '.dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px;font-weight:700;margin-top:10px}'
+    + '.act{position:fixed;top:12px;right:14px}.act button{font:inherit;padding:6px 12px;cursor:pointer}'
+    + '@media print{.act{display:none}.pg{padding:0}}'
+    + '</style></head><body><div class="act"><button onclick="window.print()">Print</button></div>'
+    + '<div class="pg">' + bodyHtml.replace('%%LOGO%%', logo) + '</div></body></html>');
+  w.document.close();
+}
+
+async function csrSheet(claimId){
+  try{ await _csrLoad(claimId); }catch(e){ ndUI.toast('Could not load the case.', 'error'); return; }
+  const d = _csr, f = d.fields || {};
+  const L = function(label, v){ return '<p class="ln"><b>' + esc(label) + ':</b> ' + esc(v || '') + '</p>'; };
+  const rej = [ _csrDate(f.rejection_date), f.rejection_reason ].filter(Boolean).join(' ');
+  _csrPrint('Initial Claim Assessment Sheet — NP-' + claimId,
+      '<div class="hd"><img src="%%LOGO%%" alt="Nidaan"><h1>INITIAL CLAIM ASSESSMENT SHEET</h1></div>'
+    + L('NAME OF PATIENT', d.insured_name)
+    + L('NAME OF COMPLAINANT', d.complainant_name)
+    + L('RELATIONSHIP', f.relationship)
+    + L('Type of Claim / Rejection / Deduction', f.rejection_type)
+    + '<p class="ln"><b>Claim Amount:</b>' + esc(_csrMoney(d.disputed_amount)) + '</p>'
+    + L('POLICY NUMBER', d.policy_no)
+    + L('CLAIM NUMBER', f.insurer_claim_no)
+    + L('DATE OF INCEPTION OF FIRST POLICY', _csrDate(d.policy_inception_date))
+    + L('COMPANY NAME', d.insurer_name)
+    + L('HOSPITAL NAME', f.hospital_name)
+    + '<p class="ln"><b>DOA:</b> ' + esc(_csrDate(f.admission_date)) + ' <b>DOD:</b> ' + esc(_csrDate(f.discharge_date)) + '</p>'
+    + L('DIAGNOSIS', f.diagnosis)
+    + L('PATIENT COMPLAINS DURING ADMISSION', f.patient_complaint)
+    + L('REJECTION REASON DATED', rej)
+    + L('COMMENTS GIVEN BY', f.gist_comments));
+}
+
+async function csrReport(claimId){
+  try{ await _csrLoad(claimId); }catch(e){ ndUI.toast('Could not load the case.', 'error'); return; }
+  const d = _csr, f = d.fields || {};
+  const C = function(label, v){ return '<div><b>' + esc(label) + ' :</b> ' + esc(v == null ? '' : v) + '</div>'; };
+  const remarks = (d.remarks || []).map(function(r){
+    return '<li>' + esc(_csrDate(r.created_at)) + ' - [ ' + esc(r.actor || '') + ' ] - ' + esc(r.summary || '') + '</li>';
+  }).join('');
+  _csrPrint('Case Report — NP-' + claimId,
+      '<div class="two">'
+    +   C('Case Number', 'NP-' + claimId) + C('Case Handler', d.handler)
+    + '</div>'
+    + '<div class="bar"><b>Customer Upload Link:</b> '
+    +   (d.upload_link ? '<a href="' + esc(d.upload_link) + '">' + esc(d.upload_link) + '</a>' : 'Not Available') + '</div>'
+    + '<div class="two">'
+    +   C('Initial Case Date', _csrDate(d.created_at)) + C('Patient Name', d.insured_name)
+    +   C('Patient Contact', d.insured_phone) + C('Complainant Name', d.complainant_name)
+    +   C('Complainant Contact', d.complainant_phone) + C('Handed to Level-2 by', d.handed_over_by)
+    +   C('Channel Partner', d.channel_partner) + C('Insurance company', d.insurer_name)
+    +   C('Claim Number', f.insurer_claim_no) + C('Claim Amount', _csrMoney(d.disputed_amount))
+    +   C('Case Rejection Reason', f.rejection_type) + C('Documents confirmed by', d.docs_complete_by)
+    + '</div>'
+    + '<div class="rm"><b>Remarks :</b>' + (remarks ? '<ul>' + remarks + '</ul>' : ' —') + '</div>'
+    + '<div class="two">'
+    +   C('Consultation Charge', f.consultation_pct) + C('Processing Fees', f.pf_status || f.review_fee_status)
+    +   C('Cheque Amount', f.cheque_amount) + C('Cheque Number', f.cheque_no)
+    +   C('Bank Name', f.bank_name) + C('CF Amount', f.cf_amount)
+    +   C('PF Transaction Number', f.pf_txn || f.review_pf_txn) + C('CF Transaction Number', f.cf_txn)
+    +   C('Medical Officer', f.approved_by) + C('Approved On', _csrDate(f.approved_on))
+    +   C('Claim Type', f.rejection_type) + C('Policy Number', d.policy_no)
+    +   C('Policy Inception', _csrDate(d.policy_inception_date)) + C('Hospital Name', f.hospital_name)
+    +   C('Admission Date', _csrDate(f.admission_date)) + C('Discharge Date', _csrDate(f.discharge_date))
+    +   C('Diagnosis', f.diagnosis) + C('Patient Complain', f.patient_complaint)
+    +   C('Rejection Reason', f.rejection_reason) + C('Rejection Date', _csrDate(f.rejection_date))
+    + '</div>'
+    + '<div class="dl"><div>Draft :</div><div>Lokpal Draft :</div></div>'
+    + '<div class="dr"><div>' + _csrRichHTML(f.draft_en) + '</div><div>' + _csrRichHTML(f.draft_hi) + '</div></div>'
+    + '<div class="two" style="margin-top:12px">'
+    +   C('Case Email', f.case_email) + C('Email Password', f.case_email_password)
+    +   C('Escalation Date', _csrDate(f.escalation_date)) + C('BHP Number', f.bhp_number)
+    +   C('Settlement Amount', f.settlement_amount) + C('Completion', [f.completion_type, f.result].filter(Boolean).join(' · '))
+    + '</div>');
+}
+
+window.csrGist = csrGist; window.csrGistSave = csrGistSave;
+window.csrDraft = csrDraft; window.csrDraftSave = csrDraftSave;
+window.csrSheet = csrSheet; window.csrReport = csrReport;
+
 
 
 // ══ The pending-document window ═══════════════════════════════════════════════
