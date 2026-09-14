@@ -120,7 +120,10 @@ async function assertEscapable(page, label) {
   if (!info) { chk(false, `${label}: a dialog should be open and is not`); return false; }
   chk(info.hasX, `${label}: has an ✕ in the corner`);
   chk(info.exit, `${label}: has a button that leaves`, `buttons were: ${info.btns.join(' / ')}`);
-  // And Escape genuinely closes it.
+  // And Escape genuinely closes it. The "Updates for you" popup can open over everything part-way
+  // through a run, and Escape rightly closes THAT first, being on top. Press its "Later" -
+  // which only closes it on this screen and records nothing - so the Escape reaches the dialog.
+  await page.evaluate(() => { if (typeof _ackClose === 'function') _ackClose(); });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   const stillOpen = await page.evaluate(() => !!document.querySelector('.modal-bg.open'));
