@@ -2673,6 +2673,11 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_by TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_note TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN l2_handover_checks TEXT DEFAULT ''",
+            # "All documents received" - a person's statement, with their name, that the papers
+            # for this claim are complete. It is what lets a claim leave L2 Claims for Level-2,
+            # so by the time it is in Live Cases the gist can be built from what is there.
+            "ALTER TABLE nidaan_claims ADD COLUMN docs_complete_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN docs_complete_by TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)

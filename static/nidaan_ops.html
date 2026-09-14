@@ -3886,12 +3886,20 @@ function _renderOutcome(key){
           } else if(!_l2Eligible(c)){
             l2Cell = `<td style="font-size:.7rem;color:var(--nd-text-faint)">Fee not paid yet</td>`;
           } else {
-            const bad = st && st.blocks ? st.blocks.length : 0;
-            const gap = st && st.fixes ? st.fixes.length : 0;
-            l2Cell = `<td style="white-space:nowrap">`
-              + (bad ? `<div style="color:var(--nd-danger-text);font-size:.66rem;margin-bottom:.2rem">⛔ ${bad} blocking</div>`
-                     : (gap ? `<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.2rem">⚠ ${gap} to check</div>` : ''))
-              + `<button class="btn ${bad?'btn-ghost':'btn-primary'}" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();hoOpen(${c.claim_id})">→ Move to Level-2</button></td>`;
+            // Documents are gathered HERE, before Level-2. The tick says they are all in, and
+            // only then does the Move button open - so Live Cases starts with the papers it needs
+            // for the gist. Ticking records the person's name.
+            const done = !!c.docs_complete_at;
+            l2Cell = `<td style="white-space:nowrap" onclick="event.stopPropagation()">`
+              + `<label style="display:flex;gap:.3rem;align-items:center;font-size:.7rem;cursor:pointer;margin-bottom:.25rem;color:${done?'var(--nd-success-text)':'var(--nd-text-secondary)'}">`
+              +   `<input type="checkbox"${done?' checked':''} onchange="l2DocsTick(${c.claim_id},this.checked)">`
+              +   `All documents received</label>`
+              + (done ? `<div style="font-size:.64rem;color:var(--nd-text-faint);margin-bottom:.25rem">✔ ${esc(c.docs_complete_by||'')}</div>` : '')
+              + `<button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.12rem .4rem;margin-bottom:.25rem" onclick="docsOpen(${c.claim_id},_reloadL2)">📂 Documents</button><br>`
+              + (done
+                  ? `<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="hoOpen(${c.claim_id})">→ Move to Level-2</button>`
+                  : `<button class="btn btn-ghost" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap;opacity:.55" title="Tick 'All documents received' first" onclick="l2DocsNeeded(${c.claim_id})">→ Move to Level-2</button>`)
+              + `</td>`;
           }
         }
         return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
@@ -5499,12 +5507,21 @@ async function openClaimDrawer(claimId) {
           ${c.insured_email
             ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
             : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No complainant email — use ✏️ Edit above to add one.</span>`}
-          ${c.insured_phone
+          ${(c.complainant_phone || c.insured_phone)
             ? `<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(${c.claim_id})">💬 Start WhatsApp collection</button>`
             : ''}
           <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem"></span>
         </div>
-        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Guided one-doc-at-a-time on WhatsApp + email — both read the same checklist. WhatsApp free-form delivers once the complainant has messaged the number (24h session); a cold start needs an approved template.</div>
+        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Asks the complainant one document at a time. If they have never written to us, the first message goes as our approved WhatsApp template; once they reply, the guided chat carries on from their answer.</div>
+      </div>
+    </div>
+    <!-- Every paper on the claim, and a way to attach more. -->
+    <div class="drawer-section">
+      <h4>📂 Documents</h4>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Everything attached to this claim, and the checklist it answers. Attach a paper here yourself when it arrives by hand, post or email.</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="btn-sm btn-primary" onclick="docsOpen(${c.claim_id})">📂 Open documents &amp; attach</button>
+        ${c.docs_complete_at ? `<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ All received — ${esc(c.docs_complete_by||'staff')}</span>` : ''}
       </div>
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
@@ -12408,12 +12425,12 @@ function l2Table(b){
       ? '<div class="l2lok">⏳ Lokpal window ' + i.lokpal_days_left + 'd</div>' : '';
     // The docs count is where somebody is already looking when they decide to chase, so that
     // is the door into the pending-document window rather than a button somewhere else.
-    const docs = i.docs_total
-      ? '<button class="l2mv ' + (i.docs_ready ? 'g' : '') + '" title="Open the pending '
-        + 'documents" onclick="dwOpen(' + i.claim_id + ')">'
-        + (i.docs_ready ? '✅ ' : '📄 ') + i.docs_done + '/' + i.docs_total
-        + '</button>'
-      : '<button class="l2mv g" onclick="dwOpen(' + i.claim_id + ')">📄 Docs</button>';
+    // By Level-2 the papers were gathered before the handover, so this opens EVERY document -
+    // what you need to build the gist - rather than the window that asks for missing ones. That
+    // window is still one click away inside it, for the day the insurer asks for something new.
+    const docs = '<button class="l2mv ' + (i.docs_ready ? 'g' : '') + '" title="All documents on this claim" '
+      + 'onclick="docsOpen(' + i.claim_id + ')">📂 '
+      + (i.docs_total ? i.docs_done + '/' + i.docs_total : 'Documents') + '</button>';
     return '<tr>'
       + '<td><b>NP-' + i.claim_id + '</b>' + lok + '</td>'
       + '<td>' + esc(i.who || '(no name)')
@@ -12607,11 +12624,15 @@ async function l2Open(claimId){
       '<div class="empty"><div class="ei">⚠️</div><p>Could not open this case.</p></div>';
     return;
   }
+  let files = [];
   try{
-    const r = await API('/claims/' + claimId + '/activity');
+    const [r, rf] = await Promise.all([
+      API('/claims/' + claimId + '/activity'),
+      API('/claims/' + claimId + '/documents')]);
     if (r.ok){ const d = await r.json(); rem = d.activity || d.items || []; }
+    if (rf.ok){ files = (await rf.json()).docs || []; }
   }catch(e){}
-  _l2Case = {claim_id: claimId, st: st, claim: claim || {}};
+  _l2Case = {claim_id: claimId, st: st, claim: claim || {}, files: files};
   l2CaseRender(rem);
 }
 
@@ -12701,7 +12722,24 @@ function l2CaseRender(rem){
     + ((st.substates || []).length
         ? '<div class="l2fld"><label>Step inside this bucket</label>'
           + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select></div>' : '')
-    + (flds ? '<div><div class="l2sec">Recorded here</div>' + flds + '</div>' : '')
+    // Every paper on the claim, right above the fields they are read into. Each opens in its own
+    // tab, so the gist being typed below is never lost to go and look at one.
+    + '<div><div class="l2sec">Documents \u00b7 ' + (_l2Case.files || []).length + '</div>'
+    +   ((_l2Case.files || []).length
+          ? '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
+            + (_l2Case.files || []).map(function(f){
+                return '<a class="l2mv g" href="' + esc(f.url) + '" target="_blank" rel="noopener" '
+                  + 'title="' + esc(f.original_name || '') + '">'
+                  + (/pdf/i.test(f.mime_type || '') ? '\ud83d\udcc4 ' : '\ud83d\uddbc\ufe0f ')
+                  + esc((f.original_name || 'document').slice(0, 34)) + '</a>';
+              }).join('')
+            + '</div>'
+          : '<div class="bdsub">Nothing attached. Documents are normally complete before a claim '
+            + 'reaches Level-2 \u2014 attach any that arrived late below.</div>')
+    +   '<button class="l2mv g" style="margin-top:.35rem" onclick="docsOpen(' + id + ')">'
+    +     '\ud83d\udcce Attach or check the list</button>'
+    + '</div>'
+    + (flds ? '<div><div class="l2sec">The gist \u2014 recorded here</div>' + flds + '</div>' : '')
     + '<div><div class="l2sec">Remarks</div><div class="l2rem">' + remHtml + '</div></div>'
     + '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
     +   (fwd ? '<button class="l2mv p" onclick="l2MoveFromCase(\'' + fwd.to_key + '\')">'
@@ -12919,6 +12957,214 @@ async function l2SendBackGo(claimId){
   }
 }
 window.l2SendBack = l2SendBack; window.l2SendBackGo = l2SendBackGo;
+
+// The L2 Claims tick, straight from the row.
+async function l2DocsTick(claimId, on){
+  try{
+    const r = await API('/cases/' + claimId + '/docs-complete',
+      {method:'POST', body: JSON.stringify({done: !!on})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_l2Err(d, 'Could not save that.'), 'error'); }
+    else ndUI.toast(on ? 'NP-' + claimId + ': all documents received \u2014 it can move to Level-2 now'
+                       : 'NP-' + claimId + ': taken back', 'success');
+  }catch(e){ ndUI.toast('Could not save that.', 'error'); }
+  if (typeof _reloadL2 === 'function') _reloadL2();
+}
+// The Move button before the tick: say why, and offer the fastest way to fix it.
+function l2DocsNeeded(claimId){
+  openModal('Documents first',
+      '<div class="l2ban amber">Documents are collected here in L2 Claims, before Level-2, so Live '
+    + 'Cases starts with everything it needs to prepare the gist.</div>'
+    + '<p style="font-size:.88rem;color:var(--nd-text-secondary)">Tick <b>All documents received</b> '
+    + 'on the row once every paper is in. Your name is recorded against it.</p>',
+    [{label:'Open the documents', cls:'btn-primary', fn:function(){ docsOpen(claimId, _reloadL2); }},
+     {label:'Close', cls:'btn-ghost', fn: closeModal}], false);
+}
+window.l2DocsTick = l2DocsTick; window.l2DocsNeeded = l2DocsNeeded;
+
+// ══ Documents on a claim ══════════════════════════════════════════════════════
+// Every paper attached to the claim, in one place, with a way to attach more. Used from the
+// claim panel, from L2 Claims and from every Level-2 bucket - so the answer to "what do we have
+// on this case?" is always the same screen.
+//
+// Before Level-2 it also carries the "All documents received" tick: the founder's rule is that
+// papers are gathered in L2 Claims, and only once they are complete does the claim move on - so
+// that Live Cases can build the gist from what is already there.
+let _dcClaim = 0, _dcAfter = null;
+
+function _dcStyles(){
+  if (document.getElementById('dcCss')) return;
+  const st = document.createElement('style'); st.id = 'dcCss';
+  st.textContent = `
+  .dcgrid{display:grid;grid-template-columns:1.2fr .8fr;gap:.8rem;align-items:start}
+  .dcbox{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;
+    padding:.6rem .7rem}
+  .dch{font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--nd-text-faint);margin-bottom:.4rem}
+  .dcf{display:flex;gap:.5rem;align-items:center;padding:.4rem 0;border-bottom:1px solid var(--nd-border);
+    font-size:.84rem}
+  .dcf:last-child{border-bottom:0}
+  .dcf .nm{flex:1;min-width:0;color:var(--nd-text-primary);word-break:break-word}
+  .dcf .mt{font-size:.72rem;color:var(--nd-text-faint);display:block}
+  .dcl{display:flex;gap:.45rem;align-items:center;padding:.3rem 0;font-size:.82rem;
+    border-bottom:1px solid var(--nd-border)}
+  .dcl:last-child{border-bottom:0}
+  .dcl.got{color:var(--nd-success-text)}
+  .dcl.miss{color:var(--nd-text-secondary)}
+  .dcup{border:1.5px dashed var(--nd-border-strong);border-radius:10px;padding:.65rem;
+    margin-top:.6rem;background:var(--nd-bg-surface-2)}
+  .dcup select,.dcup input[type=file]{width:100%;font-size:.82rem;margin-top:.25rem;
+    font-family:inherit;color:var(--nd-text-primary)}
+  .dcup select{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:7px;
+    padding:.3rem .45rem}
+  .dcdone{display:flex;gap:.55rem;align-items:flex-start;border-radius:10px;padding:.65rem .75rem;
+    margin-bottom:.7rem;border:1.5px solid var(--nd-border-strong);background:var(--nd-bg-surface)}
+  .dcdone.on{border-color:var(--nd-success-text);background:var(--nd-success-soft,rgba(52,211,153,.1))}
+  .dcdone input{margin-top:.2rem;width:1.1rem;height:1.1rem;flex:0 0 auto;cursor:pointer}
+  .dcdone b{color:var(--nd-text-primary)}
+  @media (max-width:760px){ .dcgrid{grid-template-columns:1fr} }`;
+  document.head.appendChild(st);
+}
+
+function _dcSize(n){
+  n = Number(n) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+
+async function docsOpen(claimId, after){
+  _dcStyles();
+  _dcClaim = claimId; _dcAfter = after || null;
+  openModal('📂 Documents — NP-' + claimId,
+    '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>', [], true);
+  await docsRender();
+}
+
+async function docsRender(msg, ok){
+  const body = document.getElementById('modalBody');
+  if (!body) return;
+  let files = [], win = null, claim = {};
+  try{
+    const [rf, rw, rc] = await Promise.all([
+      API('/claims/' + _dcClaim + '/documents'),
+      API('/claims/' + _dcClaim + '/doc-window'),
+      API('/claims/' + _dcClaim)]);
+    if (rf.ok) files = (await rf.json()).docs || [];
+    if (rw.ok) win = await rw.json();
+    if (rc.ok) claim = await rc.json();
+  }catch(e){}
+  claim = claim.claim || claim;
+  const list = (win && win.docs) || [];
+  const got = list.filter(function(d){ return d.received; });
+  const miss = list.filter(function(d){ return !d.received; });
+  const inL2 = !!(claim.pipeline_stage);
+  const done = !!(claim.docs_complete_at);
+
+  const fileRows = files.length
+    ? files.map(function(f){
+        return '<div class="dcf"><span>' + (/pdf/i.test(f.mime_type || '') ? '📄' : '🖼️') + '</span>'
+          + '<span class="nm">' + esc(f.original_name || 'document')
+          +   '<span class="mt">' + _dcSize(f.file_size) + ' · '
+          +   esc(String(f.uploaded_at || '').slice(0, 16)) + '</span></span>'
+          + '<a class="l2mv g" href="' + esc(f.url) + '" target="_blank" rel="noopener">Open</a>'
+          + '</div>';
+      }).join('')
+    : '<div class="bdsub">Nothing attached yet.</div>';
+
+  const checkRows = list.length
+    ? got.map(function(d){ return '<div class="dcl got">✅ ' + esc(d.label) + '</div>'; }).join('')
+      + miss.map(function(d){ return '<div class="dcl miss">○ ' + esc(d.label) + '</div>'; }).join('')
+    : '<div class="bdsub">No checklist for this claim type yet.</div>';
+
+  const opts = '<option value="">Not on the list — just attach it</option>'
+    + list.map(function(d){
+        return '<option value="' + esc(d.key) + '">' + (d.received ? '✅ ' : '')
+          + esc(d.label) + '</option>'; }).join('');
+
+  // Before Level-2 this is the gate the founder asked for. After it, the claim has already been
+  // through, so the tick is shown as a fact rather than offered as a control.
+  const doneBox = inL2
+    ? (done ? '<div class="dcdone on"><span>✅</span><span><b>All documents received</b> '
+          + '— marked by ' + esc(claim.docs_complete_by || 'staff') + ' before Level-2 began.'
+          + '</span></div>' : '')
+    : '<label class="dcdone' + (done ? ' on' : '') + '">'
+      + '<input type="checkbox" id="dcDone"' + (done ? ' checked' : '')
+      +   ' onchange="docsMarkDone(this.checked)">'
+      + '<span><b>All documents received</b><br>'
+      + (done ? '<span class="bdsub">Marked by ' + esc(claim.docs_complete_by || 'staff')
+                + '. The claim can now move to Level-2.</span>'
+              : '<span class="bdsub">Tick this once every paper is in. Only then can the claim '
+                + 'move to Level-2 — so Live Cases starts with everything it needs for the '
+                + 'gist. Your name is recorded.</span>')
+      + (miss.length && !done ? '<br><span style="color:var(--nd-warning-text);font-size:.78rem">'
+          + miss.length + ' document(s) on the list are still missing.</span>' : '')
+      + '</span></label>';
+
+  body.innerHTML = doneBox
+    + '<div class="dcgrid">'
+    +   '<div class="dcbox"><div class="dch">Attached · ' + files.length + '</div>' + fileRows
+    +     '<div class="dcup">'
+    +       '<div style="font-size:.8rem;font-weight:700;color:var(--nd-text-primary)">📎 Attach a document</div>'
+    +       '<label style="font-size:.76rem;color:var(--nd-text-muted);display:block;margin-top:.35rem">Which document is this?</label>'
+    +       '<select id="dcKey">' + opts + '</select>'
+    +       '<input type="file" id="dcFile" multiple accept=".pdf,.jpg,.jpeg,.png,.docx">'
+    +       '<button class="l2mv p" style="margin-top:.45rem" onclick="docsUpload(this)">Attach</button>'
+    +       '<div class="bdsub" style="margin-top:.3rem">PDF, JPG, PNG or DOCX. Every file is virus-scanned.</div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
+    +     checkRows
+    +     '<button class="l2mv g" style="margin-top:.5rem" onclick="closeModal();dwOpen(' + _dcClaim + ')">'
+    +       '📨 Ask the complainant for what is missing</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div id="dcMsg" style="font-size:.83rem;margin-top:.5rem"></div>';
+
+  if (msg){
+    const m = document.getElementById('dcMsg');
+    if (m){ m.style.color = ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)'; m.textContent = msg; }
+  }
+}
+
+async function docsUpload(btn){
+  const inp = document.getElementById('dcFile');
+  const key = (document.getElementById('dcKey') || {}).value || '';
+  if (!inp || !inp.files || !inp.files.length){
+    return docsRender('Choose a file first.', false);
+  }
+  const fd = new FormData();
+  for (let i = 0; i < inp.files.length; i++) fd.append('files', inp.files[i]);
+  fd.append('doc_key', key);
+  if (btn){ btn.disabled = true; btn.textContent = 'Attaching…'; }
+  try{
+    // FormData must set its own multipart boundary, so this goes around API(), which would
+    // force a JSON content type onto it.
+    const r = await fetch('/nidaan/ops/api/claims/' + _dcClaim + '/documents/upload',
+      {method: 'POST', headers: {'Authorization': 'Bearer ' + _token}, body: fd});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ return docsRender(_l2Err(d, 'Could not attach it.'), false); }
+    await docsRender('Attached ' + d.count + ' file(s)' + (key ? ' — marked received.' : '.'), true);
+    if (typeof _dcAfter === 'function') _dcAfter();
+  }catch(e){
+    docsRender('Could not attach it.', false);
+  }
+}
+
+async function docsMarkDone(on){
+  try{
+    const r = await API('/cases/' + _dcClaim + '/docs-complete',
+      {method:'POST', body: JSON.stringify({done: !!on})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok) return docsRender(_l2Err(d, 'Could not save that.'), false);
+    await docsRender(on ? 'Marked — this claim can now move to Level-2.'
+                        : 'Taken back — the claim will stay in L2 Claims.', true);
+    if (typeof _dcAfter === 'function') _dcAfter();
+  }catch(e){ docsRender('Could not save that.', false); }
+}
+
+window.docsOpen = docsOpen; window.docsUpload = docsUpload; window.docsMarkDone = docsMarkDone;
+
 
 // ══ The pending-document window ═══════════════════════════════════════════════
 // The screen from the founder's drawing. Three columns of one idea each:
@@ -14430,8 +14676,18 @@ async function startWaCollection(cid){
   if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Starting…'; }
   let r; try{ r=await API('/claims/'+cid+'/wa/start',{method:'POST'}); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
   const d=await r.json().catch(()=>({}));
-  if(r.ok){ if(m){ m.style.color='var(--nd-success-text)'; m.textContent = d.complete ? '✓ All docs already in' : (d.asked ? '✓ WhatsApp sent — asked for the next document' : '✓ Sent'); } }
-  else { if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ '+(d.detail||'Failed'); } }
+  // Say who was asked, on which number, for what - so "sent" means something a person can check.
+  if(r.ok && d.ok){
+    if(m){
+      m.style.color='var(--nd-success-text)';
+      m.textContent = '✓ Asked ' + (d.who || 'the complainant') + ' on WhatsApp (' + (d.to || '') + ') for: '
+        + (d.first_doc || 'the next document')
+        + (d.pending > 1 ? ' — then the other ' + (d.pending - 1) + ' one by one as they reply' : '')
+        + (d.mode === 'template' ? '. They have not written to us before, so this went as our approved first message.' : '.');
+    }
+  } else {
+    if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ ' + _l2Err(d, 'Could not start WhatsApp collection.'); }
+  }
 }
 window.startWaCollection=startWaCollection;
 

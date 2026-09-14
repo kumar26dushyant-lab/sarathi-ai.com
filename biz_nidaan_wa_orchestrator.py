@@ -49,9 +49,14 @@ async def _claim_for_msisdn(msisdn: str) -> dict | None:
             (msisdn,))).fetchone()
         cid = link["claim_id"] if link else None
         if not cid and d10:
+            # The COMPLAINANT first - they are who we ask for documents, so they are who
+            # replies. This matched insured_phone only, so a complainant who is not the insured
+            # would write back and land on no claim at all.
             r = await (await c.execute(
-                "SELECT claim_id FROM nidaan_claims WHERE REPLACE(REPLACE(insured_phone,' ',''),'-','') "
-                "LIKE ? ORDER BY claim_id DESC LIMIT 1", (f"%{d10}",))).fetchone()
+                "SELECT claim_id FROM nidaan_claims WHERE "
+                "REPLACE(REPLACE(COALESCE(complainant_phone,''),' ',''),'-','') LIKE ? "
+                "OR REPLACE(REPLACE(COALESCE(insured_phone,''),' ',''),'-','') LIKE ? "
+                "ORDER BY claim_id DESC LIMIT 1", (f"%{d10}", f"%{d10}"))).fetchone()
             cid = r["claim_id"] if r else None
         if not cid:
             return None
@@ -250,7 +255,16 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: b
     if not force and await _asked_recently(claim_id, doc["key"]):
         return {"ok": True, "skipped": "asked_recently", "asked": doc["key"]}
     await _set_awaiting(claim_id, doc["key"])
-    await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc, lang=lang)))
+    sent = await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc, lang=lang)))
+    # Only a message that actually went counts as asked. This used to mark the claim asked and
+    # write "Asked for: X" whatever happened - so a refused message read on the timeline as a
+    # delivered one, and the retry then skipped itself as "asked recently".
+    if not (sent or {}).get("ok"):
+        await _activity(claim_id, "doc_reminder",
+                        f"WhatsApp NOT delivered — {doc.get('en')}: {(sent or {}).get('error') or 'refused'}",
+                        channel="whatsapp")
+        return {"ok": False, "error": (sent or {}).get("error") or "send_failed",
+                "asked": doc["key"]}
     await _mark_asked(claim_id)
     await _activity(claim_id, "doc_reminder", f"Asked for: {doc.get('en')} ({done}/{total})", channel="whatsapp")
     return {"ok": True, "asked": doc["key"]}
@@ -417,18 +431,74 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
 
 
 async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
-    """Ops-triggered start: greet the complainant + ask the first pending doc. Free-form delivers only
-    inside a 24h session; a cold start needs an approved template (returns needs_template hint)."""
+    """Staff pressed "Start WhatsApp collection". Ask the COMPLAINANT for the first missing document.
+
+    Two cases, because Meta allows two different kinds of message:
+      * they have written to us in the last 24 hours -> the guided, one-document-at-a-time chat
+      * they have not -> the APPROVED np_doc_reminder template, naming the first missing document.
+        Free text to a cold number is refused outright; the template is the only way in. When
+        they reply, the 24-hour window opens and the guided chat takes over from their answer.
+
+    Returns exactly what happened, including when nothing was delivered, so the screen can say so.
+    """
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         r = await (await c.execute(
-            "SELECT insured_phone FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
-    if not r or not (r["insured_phone"] or "").strip():
+            "SELECT claim_id, complainant_name, complainant_phone, insured_name, insured_phone, "
+            "claim_type, account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not r:
+        return {"ok": False, "error": "no_claim"}
+    claim = dict(r)
+    # The complainant first, exactly as the document window and every other message does.
+    phone = (claim.get("complainant_phone") or claim.get("insured_phone") or "").strip()
+    who = (claim.get("complainant_name") or claim.get("insured_name") or "").strip()
+    if not phone:
         return {"ok": False, "error": "no_phone"}
-    msisdn = _wa.normalize_msisdn(r["insured_phone"])
-    res = await start_or_continue(msisdn)
-    await _activity(claim_id, "doc_collection_start", f"WhatsApp doc-collection started by {by}")
-    return res
+    msisdn = _wa.normalize_msisdn(phone)
+    masked = "…" + msisdn[-4:]
+
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        ct = await (await c.execute(
+            "SELECT status FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
+    if ct and dict(ct).get("status") == "stopped":
+        await _activity(claim_id, "doc_collection_start",
+                        f"WhatsApp not started by {by} — {who or 'the complainant'} replied STOP")
+        return {"ok": False, "error": "opted_out", "to": masked, "who": who}
+
+    pending = await _ck.pending_required_docs(claim_id, claim.get("claim_type") or "")
+    if not pending:
+        return {"ok": False, "error": "nothing_pending", "to": masked, "who": who}
+
+    # Tie this number to THIS claim, so whatever they send back lands here - whichever of the
+    # claim's two phone numbers it was.
+    try:
+        await _link_contact(msisdn, claim)
+    except Exception:
+        pass
+
+    import biz_nidaan_wa_flow as _flow
+    if await _flow.in_session_window(msisdn):
+        res = await start_or_continue(msisdn, force_ask=True)
+        mode = "chat"
+    else:
+        doc = pending[0]
+        # Remember what we asked for, so a photo sent in reply is filed against the right paper.
+        await _set_awaiting(claim_id, doc["key"])
+        res = await wa_journey(claim_id, "doc_reminder",
+                               {"doc_label": doc.get("en") or doc["key"]})
+        mode = "template"
+        if (res or {}).get("ok"):
+            await _mark_asked(claim_id)
+
+    ok = bool((res or {}).get("ok"))
+    first = (pending[0].get("en") or pending[0]["key"])
+    await _activity(claim_id, "doc_collection_start",
+                    ("WhatsApp doc-collection started by %s — asked %s (%s) for: %s"
+                     % (by, who or "the complainant", masked, first)) if ok else
+                    ("WhatsApp doc-collection NOT started by %s — %s" % (by, (res or {}).get("error"))))
+    return {"ok": ok, "mode": mode, "to": masked, "who": who, "first_doc": first,
+            "pending": len(pending), "error": (res or {}).get("error")}
 
 
 async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict:

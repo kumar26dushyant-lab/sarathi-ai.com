@@ -1403,7 +1403,7 @@ async def _handover_row(claim_id: int) -> Optional[dict]:
         c.row_factory = aiosqlite.Row
         r = await (await c.execute(
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
-            "payment_status, "
+            "payment_status, docs_complete_at, docs_complete_by, "
             "pipeline_stage, l2_handover_at, l2_handover_by, l2_handover_note "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
@@ -1445,6 +1445,15 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
     if row.get("l2_handover_at"):
         return {"ok": False, "error": "This claim was already handed over by %s."
                 % (row.get("l2_handover_by") or "someone")}
+    # Documents are gathered HERE, in L2 Claims, before the handover - so that Level-2 starts
+    # with the papers already in and can build the gist from them. The founder's rule: once a
+    # person has ticked "all documents received", the claim can move. Ticking it is one click,
+    # and it records whose word it is.
+    if not row.get("docs_complete_at"):
+        return {"ok": False, "needs_docs": True,
+                "error": "Tick 'All documents received' first. Documents are collected here, "
+                         "before Level-2, so the gist can be prepared from them."}
+
     # NOTHING BELOW REFUSES THE MOVE. Everything that is wrong is collected, shown to the
     # person doing it, and written onto the claim with their name - so the Level-2 team opens it
     # knowing exactly what was outstanding and who decided to send it anyway. A wall here only

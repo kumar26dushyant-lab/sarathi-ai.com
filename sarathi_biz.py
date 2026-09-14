@@ -4156,6 +4156,110 @@ async def nidaan_ops_delete_claim_doc(claim_id: int, doc_id: int, request: Reque
     return {"ok": True}
 
 
+@app.post("/nidaan/ops/api/claims/{claim_id}/documents/upload")
+@limiter.limit("30/minute")
+async def ops_upload_any_claim_doc(claim_id: int, request: Request,
+                                   files: list[UploadFile] = File(...),
+                                   doc_key: str = Form("")):
+    """Attach documents to ANY claim.
+
+    The only staff upload used to be scoped to claims the staffer raised under their own My
+    Business code, so on every other claim there was no way to put a paper on it at all. Same
+    guards as every other upload - batch limits, size, type, magic bytes, the virus scan.
+
+    `doc_key` says which checklist document this is, so the upload turns that line green
+    instead of sitting unlabelled in a list. Optional: a file that is not on the list is still
+    worth keeping.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id, claim_type FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+    if not r:
+        raise HTTPException(404, "Claim not found")
+    account_id, ctype = r["account_id"], r["claim_type"] or ""
+    doc_key = (doc_key or "").strip()[:60]
+    if doc_key:
+        import biz_nidaan_doc_checklist as _ck
+        known = {d["key"] for d in await _ck.effective_docs(claim_id, ctype)}
+        if doc_key not in known:
+            raise HTTPException(400, "That is not a document on this claim's list.")
+    _guard_upload_batch(files)
+    saved = []
+    mb = _MAX_DOC_SIZE // (1024 * 1024)
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} is larger than {mb} MB.")
+        if f.content_type not in _ALLOWED_MIME:
+            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    # The first file answers the checklist line it was uploaded against.
+    if doc_key and saved:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.mark_doc_received(claim_id, doc_key, via="staff",
+                                    doc_id=saved[0]["doc_id"])
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "doc_upload", actor=_actor_label(caller),
+            summary="Attached %d document(s)%s" % (
+                len(saved), (" as " + doc_key.replace("_", " ")) if doc_key else ""))
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.doc_upload", "claim", str(claim_id),
+                     f"{len(saved)} file(s) {doc_key}"[:160])
+    return {"uploaded": saved, "count": len(saved), "doc_key": doc_key}
+
+
+class _DocsCompleteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    done: bool = True
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/docs-complete")
+@limiter.limit("60/minute")
+async def ops_docs_complete(claim_id: int, body: _DocsCompleteReq, request: Request):
+    """"All documents received" - ticked or unticked, with the name of whoever did it.
+
+    This is what lets a claim leave L2 Claims for Level-2. Unticking it is allowed and recorded
+    too: a mark somebody can set must be one they can take back.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    who = _actor_label(caller)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        cur = await _c.execute(
+            "UPDATE nidaan_claims SET docs_complete_at=%s, docs_complete_by=? WHERE claim_id=?"
+            % ("CURRENT_TIMESTAMP" if body.done else "NULL"),
+            ((who if body.done else "")[:80], claim_id))
+        await _c.commit()
+    if not cur.rowcount:
+        raise HTTPException(404, "Claim not found")
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "docs_complete", actor=who,
+            summary=("All documents marked received by %s" % who) if body.done
+            else ("'All documents received' taken back by %s" % who))
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.docs_complete", "claim", str(claim_id),
+                     "done" if body.done else "undone")
+    return {"ok": True, "done": body.done, "by": who if body.done else ""}
+
+
 @app.get("/nidaan/ops/api/review-requests/{purchase_id}/documents")
 async def ops_get_review_docs(purchase_id: int, request: Request):
     """Staff: get uploaded documents for a ₹499 review purchase."""
@@ -7618,16 +7722,27 @@ async def nidaan_ops_wa_start(claim_id: int, request: Request):
     approved template. sub_super_admin+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    caller = _require_staff(request, "sub_super_admin")
+    # Intake work, so the same people who open the document window beside it.
+    caller = _require_staff(request, "team_member")
     import biz_nidaan_whatsapp as _nwa
     if not _nwa.is_configured():
-        raise HTTPException(status_code=503, detail="WhatsApp number not configured")
+        raise HTTPException(status_code=503, detail="WhatsApp is not connected yet.")
     import biz_nidaan_wa_orchestrator as _orch
     res = await _orch.start_for_claim(claim_id, by=_actor_label(caller))
     if not res.get("ok"):
-        _m = {"no_phone": "This claim has no complainant phone.",
-              "no_claim": "Claim/claimant not found."}
-        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not start"))
+        # Anything that was not delivered is a failure, said in words a staffer can act on.
+        # This used to return 200 for a message Meta had refused, and the screen said "Sent".
+        err = str(res.get("error") or "")
+        _m = {"no_phone": "This claim has no phone number for the complainant. Add one on the claim.",
+              "no_claim": "Claim not found.",
+              "opted_out": "The complainant replied STOP, so WhatsApp will not message them. Use email or call.",
+              "nothing_pending": "Every required document is already in — nothing to ask for.",
+              "human_takeover": "A staff member is handling this chat by hand, so the bot is paused."}
+        detail = _m.get(err)
+        if not detail:
+            detail = ("WhatsApp refused the message to %s: %s"
+                      % (res.get("to") or "the complainant", err or "no reason given"))
+        raise HTTPException(status_code=400, detail=detail)
     return res
 
 
