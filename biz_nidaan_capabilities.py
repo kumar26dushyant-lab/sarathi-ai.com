@@ -336,11 +336,11 @@ CAPABILITIES: list[dict] = [
         "en": {"t": "Put someone on duty for any stage",
                "d": "The duty rota covers every bucket \u2014 Review, Conversion, Documents, Drafting, "
                     "With the insurer, Escalation, Ombudsman, Settlement \u2014 not just the two chat "
-                    "channels. Whoever you roster sees that bucket marked YOURS TODAY on My Desk.",
-               "u": "My Desk \u2192 Set duty on any bucket, or Support \u2192 duty roster."},
+                    "channels. Whoever you roster sees that bucket under On duty today on Level-2 \u2192 Settlement.",
+               "u": "Level-2 \u2192 Settlement \u2192 Set duty on any bucket, or Support \u2192 duty roster."},
         "hi": {"t": "\u0915\u093f\u0938\u0940 \u092d\u0940 \u0938\u094d\u091f\u0947\u091c \u0915\u0940 \u0921\u094d\u092f\u0942\u091f\u0940 \u0932\u0917\u093e\u090f\u0902",
-               "d": "\u0921\u094d\u092f\u0942\u091f\u0940 \u0930\u094b\u0938\u094d\u091f\u0930 \u0905\u092c \u0939\u0930 \u092c\u0915\u0947\u091f \u0915\u0947 \u0932\u093f\u090f \u0939\u0948 \u2014 \u0938\u093f\u0930\u094d\u092b \u091a\u0948\u091f \u0915\u0947 \u0932\u093f\u090f \u0928\u0939\u0940\u0902\u0964 \u091c\u093f\u0938\u0947 \u0932\u0917\u093e\u090f\u0902\u0917\u0947 \u0909\u0938\u0947 My Desk \u092a\u0930 YOURS TODAY \u0926\u093f\u0916\u0947\u0917\u093e\u0964",
-               "u": "My Desk \u2192 Set duty, \u092f\u093e Support \u2192 duty roster\u0964"},
+               "d": "\u0921\u094d\u092f\u0942\u091f\u0940 \u0930\u094b\u0938\u094d\u091f\u0930 \u0905\u092c \u0939\u0930 \u092c\u0915\u0947\u091f \u0915\u0947 \u0932\u093f\u090f \u0939\u0948 \u2014 \u0938\u093f\u0930\u094d\u092b \u091a\u0948\u091f \u0915\u0947 \u0932\u093f\u090f \u0928\u0939\u0940\u0902\u0964 \u091c\u093f\u0938\u0947 \u0932\u0917\u093e\u090f\u0902\u0917\u0947 \u0909\u0938\u0947 Level-2 \u2192 Settlement \u092a\u0930 On duty today \u0926\u093f\u0916\u0947\u0917\u093e\u0964",
+               "u": "Level-2 \u2192 Settlement \u2192 Set duty, \u092f\u093e Support \u2192 duty roster\u0964"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
@@ -453,14 +453,14 @@ CAPABILITIES: list[dict] = [
     {
         "id": "cover_a_bucket",
         "en": {"t": "Know when a bucket has nobody to work it",
-               "d": "My Desk names any bucket with work waiting and nobody who will actually be "
+               "d": "Level-2 \u2192 Settlement names any bucket with work waiting and nobody who will actually be "
                     "there \u2014 including the case where the rota shows a name but that person is "
                     "on leave today, or goes on leave within a fortnight.",
-               "u": "My Desk \u2192 Cover these buckets \u2192 Set duty."},
+               "u": "Level-2 \u2192 Settlement \u2192 Today strip \u2192 not covered \u2192 Set duty."},
         "hi": {"t": "जानें कि किस बकेट पर कोई मौजूद नहीं",
-               "d": "My Desk बताता है कि किस बकेट में काम है पर करने वाला कोई नहीं \u2014 उस हालत में भी "
+               "d": "Level-2 \u2192 Settlement बताता है कि किस बकेट में काम है पर करने वाला कोई नहीं \u2014 उस हालत में भी "
                     "जब रोस्टर में नाम है पर वह व्यक्ति आज छुट्टी पर है।",
-               "u": "My Desk \u2192 Cover these buckets \u2192 ड्यूटी लगाएँ।"},
+               "u": "Level-2 \u2192 Settlement \u2192 Today \u2192 not covered \u2192 ड्यूटी लगाएँ।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {

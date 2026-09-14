@@ -23,7 +23,7 @@
  * ───────────────────────────────────────────────────────────────────────────── */
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 
 const arg = (n, d) => {
   const hit = process.argv.find(a => a.startsWith(`--${n}=`));
@@ -33,6 +33,10 @@ const has = n => process.argv.includes(`--${n}`);
 
 const BASE = arg('base', 'https://nidaanpartner.com');
 const HEADED = has('headed');
+// --local-html=../static/nidaan_ops.html serves a local build of the ops page in place of the live
+// one, while every API call still goes to the live server - so a screen change is proved in a
+// real browser against real data BEFORE it is deployed. The test only reads, so this is safe.
+const LOCAL_HTML = arg('local-html', '');
 const SHOTS = 'screenshots';
 
 const pass = [], fail = [];
@@ -68,6 +72,11 @@ print(json.dumps({"t": n.create_staff_token(r[0], r[2], r[1]), "name": r[1], "ro
 
 async function openOps(browser, who) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  if (LOCAL_HTML) {
+    const html = readFileSync(LOCAL_HTML, 'utf8');
+    await ctx.route(u => u.pathname === '/nidaan/ops',
+                    r => r.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }));
+  }
   // Seed the session exactly as a real login does, before any script runs.
   await ctx.addInitScript(tok => {
     try { localStorage.setItem('nidaan_ops_token', tok); } catch (e) {}
@@ -144,7 +153,7 @@ async function run() {
   /* ── 1. every panel opens, and none of them throws ───────────────────────── */
   console.log('── every screen opens ──');
   let { ctx, page, errors } = await openOps(browser, sa);
-  const panels = ['desk', 'l2', 'board', 'bdesign', 'whatsapp', 'cp', 'claims',
+  const panels = ['l2', 'bdesign', 'whatsapp', 'cp', 'claims',
                   'l2claims', 'onbehalf', 'leave', 'payfollow', 'support', 'radar'];
   for (const p of panels) {
     errors.length = 0;
@@ -159,11 +168,60 @@ async function run() {
   }
   await shot(page, 'panels');
 
+  /* ── 1b. My Desk and Case Board live inside Level-2 -> Settlement (14 Sep) ── */
+  console.log('\n── the whole line in one screen ──');
+  errors.length = 0;
+  const menu = await page.evaluate(() =>
+    [...document.querySelectorAll('.nav-item')].map(n => n.dataset.panel));
+  chk(!menu.includes('desk') && !menu.includes('board'), 'My Desk and Case Board are gone from the menu');
+  await page.goto(`${BASE}/nidaan/ops`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.l2rail', { timeout: 30000 }).catch(() => {});
+  chk(await page.evaluate(() => _currentPanel === 'l2'), 'the day starts on Level-2 -> Settlement');
+  const rail = await page.evaluate(() => [...document.querySelectorAll('.l2rail .l2b .nm')].map(e => e.textContent));
+  chk(rail.includes('All open claims'), 'the rail offers All open claims');
+  chk(rail.includes('Review') && rail.includes('Conversion'), 'and the stages before Level-2', rail.join(' | '));
+  chk(await page.evaluate(() => !!document.querySelector('.l2today')), 'the Today strip (was My Desk) is on top');
+  await page.evaluate(() => l2Pick('all'));
+  // Wait for the list itself, not a fixed time: the workspace can redraw once more after loading.
+  await page.waitForFunction(() => document.querySelectorAll('#l2Main .cb-card').length > 0
+                                   && document.querySelectorAll('#l2Main .cb-tile').length === 4,
+                             null, { timeout: 25000 }).catch(() => {});
+  const all = await page.evaluate(() => ({
+    cards: document.querySelectorAll('#l2Main .cb-card').length,
+    tiles: document.querySelectorAll('#l2Main .cb-tile').length,
+    mine: [...document.querySelectorAll('#l2Main .cb-chip')].some(b => /Only mine/.test(b.textContent)) }));
+  chk(all.cards > 0 && all.tiles === 4, `All open claims lists the claims (${all.cards}) with the four numbers`);
+  chk(all.mine, 'with the Only mine filter');
+  await page.evaluate(() => l2Pick('pre:review'));
+  await page.waitForTimeout(2500);
+  const rv = await page.evaluate(() => [...document.querySelectorAll('#l2Main .cb-card .cb-b-stage')]
+    .map(e => e.textContent));
+  chk(rv.length > 0 && rv.every(t => t === 'Review'), `Review shows only Review claims (${rv.length})`);
+  const firstCard = await page.evaluate(() => {
+    const b = document.querySelector('#l2Main .cb-act[onclick^="cbOpenSheet"]');
+    if (!b) return false; b.click(); return true; });
+  if (firstCard) {
+    await page.waitForTimeout(500);
+    chk(await page.evaluate(() => !!document.getElementById('cbsBack')), 'Change status or owner opens');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('cbsBack')), 'and Escape closes it');
+  }
+  await page.evaluate(() => showPanel('board'));
+  await page.waitForTimeout(2500);
+  chk(await page.evaluate(() => _currentPanel === 'l2' && _l2Sel === 'all'),
+      'an old Case Board link opens All open claims');
+  await page.evaluate(() => showPanel('desk'));
+  await page.waitForTimeout(1500);
+  chk(await page.evaluate(() => _currentPanel === 'l2'), 'an old My Desk link opens Level-2');
+  chk(errors.length === 0, 'the whole-line screen throws no script error', errors[0]);
+
   /* ── 2. the Bucket Designer opens a bucket and its dialogs escape ────────── */
   console.log('\n── bucket designer ──');
   errors.length = 0;
   await page.evaluate(() => window.showPanel && window.showPanel('bdesign'));
-  await page.waitForTimeout(1400);
+  await page.waitForFunction(() => document.querySelectorAll('.bdcard').length > 0, null,
+                             { timeout: 15000 }).catch(() => {});
   const nBuckets = await page.evaluate(() => document.querySelectorAll('.bdcard').length);
   chk(nBuckets >= 5, `the designer lists the buckets (${nBuckets})`);
   const firstKey = await page.evaluate(() => {
@@ -452,7 +510,7 @@ async function run() {
   console.log('\n── as a sub-super-admin ──');
   await ctx.close();
   ({ ctx, page, errors } = await openOps(browser, ss));
-  for (const p of ['whatsapp', 'l2', 'desk', 'cp']) {
+  for (const p of ['whatsapp', 'l2', 'cp']) {
     errors.length = 0;
     const st = await openPanel(page, p);
     const txt = st.text || '';

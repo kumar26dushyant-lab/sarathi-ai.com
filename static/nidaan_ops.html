@@ -667,8 +667,9 @@ async function bootApp() {
   // bookmarks) so navigation is restorable.
   const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','cp','bdesign','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
-  // My Desk is where a day starts: on duty, on fire, and which buckets are yours.
-  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'desk';
+  // The day starts on the assembly line: Level-2 -> Settlement carries what My Desk showed
+  // (on duty, cover gaps, on fire) above the whole line of claims.
+  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'l2';
   showPanel(initial, true);
   try { history.replaceState({panel: initial}, '', '#' + initial); } catch(e){}
   // Notification bell — load + poll every 45s.
@@ -984,8 +985,8 @@ function buildSidebar() {
   const zones = [
     {h:'Work', items:[
       {id:'l2',       label:'⚖️ Level-2 → Settlement', minRank:0},
-      {id:'desk',     label:'🧑‍💼 My Desk',          minRank:0},
-      {id:'board',    label:'🧭 Case Board',       minRank:0},
+      // My Desk and Case Board folded into Level-2 -> Settlement (founder, 14 Sep). Old links to
+      // them still work - showPanel() sends them here.
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
       {id:'crm',      label:'🎯 CRM',              minRank:0},
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
@@ -1047,6 +1048,12 @@ function buildSidebar() {
 }
 
 function showPanel(id, fromHistory) {
+  // My Desk and Case Board live inside Level-2 -> Settlement now. A bookmark, a notification or
+  // an old button pointing at either lands on the same work in its new home.
+  if (id === 'desk' || id === 'board'){
+    if (id === 'board'){ try{ _l2Sel = 'all'; }catch(e){} }
+    id = 'l2';
+  }
   _currentPanel = id;
   // Record a history entry so browser Back/Forward moves between panels
   // (instead of dropping out of the portal). Skip when we're responding to a
@@ -9400,7 +9407,7 @@ function pulseAnnounce(list){
 
   // If the staffer is looking at a screen that lists claims, bring the new one into it — but
   // never while a drawer or modal is open, since that would yank the page out from under them.
-  const claimPanels = ['board','pipeline','overview','claims','tasks'];
+  const claimPanels = ['l2','pipeline','overview','claims','tasks'];
   if (claimPanels.includes(_currentPanel) && !_ndOverlayOpen()) {
     try { showPanel(_currentPanel, true); } catch(e){}
   }
@@ -12034,6 +12041,7 @@ window.loadPayFollow=loadPayFollow; window.pfSet=pfSet; window.pfMark=pfMark; wi
 // ClaimShield's shape: a folder list down the left, one dense table on the right, and the move
 // buttons ON the row rather than buried in a dialog. Everything here is drawn from the server's
 // bucket configuration, so a bucket a super-admin adds later appears without a line of new code.
+let _l2Line = null, _l2Today = null, _l2TodayOpen = false;
 let _l2Cfg = null, _l2Sel = '', _l2Sub = '', _l2Q = '', _l2Counts = {},
     _l2Rows = [], _l2Wait = [], _l2Busy = false, _l2Rows2 = null;
 
@@ -12111,6 +12119,21 @@ function _l2Styles(){
   .l2sum .pill.ok{border-color:var(--nd-success-text);color:var(--nd-success-text)}
   .l2sum .pill.ok b{color:var(--nd-success-text)}
   .l2lok{font-size:.72rem;font-weight:700;color:var(--nd-danger-text)}
+  .l2today{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0 0 .7rem;
+    padding:.5rem .65rem;border:1px solid var(--nd-border);border-radius:10px;
+    background:var(--nd-bg-surface)}
+  .l2tk{font-size:.74rem;font-weight:700;color:var(--nd-text-muted);margin-right:.1rem}
+  .l2tchip{font:inherit;font-size:.78rem;border:1px solid var(--nd-border-strong);border-radius:999px;
+    padding:.12rem .6rem;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);cursor:pointer}
+  .l2tchip.red{border-color:var(--nd-danger-text);color:var(--nd-danger-text)}
+  .l2tchip.amber{border-color:var(--nd-border-warn);color:var(--nd-warning-text)}
+  .l2tchip.ok{border-color:var(--nd-success-text);color:var(--nd-success-text);cursor:default}
+  .l2tdet{flex-basis:100%;display:flex;flex-direction:column;gap:.25rem;margin-top:.3rem}
+  .l2tr{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.8rem;
+    padding:.3rem .2rem;border-top:1px solid var(--nd-border);color:var(--nd-text-secondary)}
+  .l2tr .k{font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--nd-warning-text)}
+  .l2tr .k.red{color:var(--nd-danger-text)}
   /* case report */
   .l2cr{display:flex;flex-direction:column;gap:.7rem}
   .l2kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.3rem .8rem}
@@ -12152,12 +12175,17 @@ async function loadL2(){
     el.dataset.ready = '1';
   }
   try{
-    const [cf, ct] = await Promise.all([
+    const [cf, ct, lb, dk] = await Promise.all([
       API('/buckets/config').then(r => r.ok ? r.json() : null),
-      API('/buckets/counts').then(r => r.ok ? r.json() : {counts:{}, waiting_to_start:0})
+      API('/buckets/counts').then(r => r.ok ? r.json() : {counts:{}, waiting_to_start:0}),
+      // The whole line's counts - the stages before Level-2 live here (was Case Board).
+      API('/cases/board?limit=1').then(r => r.ok ? r.json() : null).catch(function(){ return null; }),
+      // Today's strip (was My Desk). Never allowed to stop the workspace opening.
+      API('/desk?lang=en').then(r => r.ok ? r.json() : null).catch(function(){ return null; })
     ]);
     if (!cf) throw 0;
     _l2Cfg = cf; _l2Counts = ct.counts || {}; _l2Cfg.waiting = ct.waiting_to_start || 0;
+    _l2Line = lb; _l2Today = dk;
     // Who is on duty for each bucket. The rota uses the same keys as the buckets, so staffing a
     // bucket IS rostering that duty - no second concept to keep in step.
     try{
@@ -12177,7 +12205,8 @@ async function loadL2(){
       + '<button class="btn btn-primary" onclick="loadL2()">Try again</button></div>';
     return;
   }
-  if (!_l2Sel) _l2Sel = 'start';
+  // Opens on the whole line - the view Case Board used to give.
+  if (!_l2Sel) _l2Sel = 'all';
   l2Shell();
   l2Load();
 }
@@ -12196,27 +12225,113 @@ function l2Shell(){
       + '<span class="ct">' + (c.total || 0) + '</span></button>';
   }).join('');
 
+  // Before Level-2: the stages a claim passes through on the way in (Review, Conversion...).
+  // Counted by the same engine Case Board used, in the order the line runs.
+  const ln = _l2Line || {};
+  const byS = ln.by_stage || {}, lab = ((ln.labels || {}).stage) || {};
+  const bucketKeys = bs.map(function(b){ return b.bucket_key; });
+  const pre = (ln.stage_order || []).filter(function(k){
+    return bucketKeys.indexOf(k) < 0 && k !== 'hold';
+  });
+  const preIcon = {intake:'📝', review:'🔎', conversion:'💰'};
+  const preRail = pre.map(function(k){
+    return '<button class="l2b" aria-pressed="' + (_l2Sel === 'pre:' + k) + '"'
+      + ' onclick="l2Pick(\'pre:' + k + '\')">'
+      + '<span>' + (preIcon[k] || '•') + '</span>'
+      + '<span class="nm">' + esc(lab[k] || k) + '</span>'
+      + '<span class="ct">' + (byS[k] || 0) + '</span></button>';
+  }).join('');
+  const held = byS.hold || 0;
+
   el.innerHTML =
       '<div class="section-hdr"><div>'
     +   '<div class="section-title">⚖️ Level-2 → Settlement</div>'
-    +   '<div class="section-sub">Every paid, winnable claim and where it has reached. '
-    +     'A bucket owns its claims, so nobody going on leave can strand work.</div>'
+    +   '<div class="section-sub">The whole line: every open claim, the stage it has reached, and '
+    +     'who we are waiting for. Each bucket does its part and passes the claim on.</div>'
     + '</div><button class="btn-sm btn-ghost" onclick="loadL2()">🔄 Refresh</button></div>'
+    + _l2TodayHtml()
     + '<div class="l2wrap">'
     +   '<div class="l2rail">'
+    +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'all') + '" onclick="l2Pick(\'all\')">'
+    +       '<span>🗂️</span><span class="nm">All open claims</span>'
+    +       '<span class="ct">' + (ln.open_total || 0) + '</span></button>'
+    +     (preRail ? '<div class="l2rh">Before Level-2</div>' + preRail : '')
     +     '<div class="l2rh">Start here</div>'
     +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'start') + '" onclick="l2Pick(\'start\')">'
     +       '<span>📥</span><span class="nm">To start</span>'
     +       (_l2Cfg.waiting ? '<span class="rd">' + _l2Cfg.waiting + '</span>' : '')
     +     '</button>'
     +     '<div class="l2rh">The buckets</div>' + rail
+    +     (held ? '<button class="l2b" aria-pressed="' + (_l2Sel === 'pre:hold') + '" onclick="l2Pick(\'pre:hold\')">'
+    +       '<span>⏸️</span><span class="nm">' + esc(lab.hold || 'Paused') + '</span>'
+    +       '<span class="ct">' + held + '</span></button>' : '')
     +   '</div>'
     +   '<div class="l2main" id="l2Main"><div class="empty"><p>Loading…</p></div></div>'
     + '</div>';
 }
 
+// ── Today (was My Desk) ──────────────────────────────────────────────────────
+// Three things a person needs before choosing a claim: what I am on duty for, where the rota has
+// a hole today, and which claims are on fire. Shown only when there is something to say.
+function _l2TodayHtml(){
+  const d = _l2Today;
+  if (!d) return '';
+  const duties = d.my_duties || [], cov = d.coverage || [], fire = d.on_fire || [];
+  const bits = [];
+  bits.push(duties.length
+    ? '<span class="l2tk">On duty today</span>' + duties.map(function(x){
+        return '<button class="l2tchip" onclick="l2GoDuty(\'' + esc(x.key || '') + '\')">'
+          + (x.icon || '') + ' ' + esc(x.name) + '</button>'; }).join('')
+    : '<span class="l2tk">You are not on duty for any bucket today</span>');
+  if (cov.length){
+    const hot = cov.filter(function(g){ return g.kind === 'on_leave'; }).length;
+    bits.push('<button class="l2tchip ' + (hot ? 'red' : 'amber') + '" onclick="l2TodayToggle()">⚠️ '
+      + cov.length + ' bucket' + (cov.length > 1 ? 's' : '') + ' not covered</button>');
+  }
+  bits.push(fire.length
+    ? '<button class="l2tchip red" onclick="l2TodayToggle()">🔥 ' + fire.length + ' on fire</button>'
+    : '<span class="l2tchip ok">✓ Nothing on fire</span>');
+  let detail = '';
+  if (_l2TodayOpen && (cov.length || fire.length)){
+    const covHtml = cov.map(function(g){
+      const kind = g.kind === 'on_leave' ? 'Everyone rostered is on leave'
+                 : (g.kind === 'soon' ? 'Everyone rostered goes on leave soon' : 'Nobody rostered');
+      return '<div class="l2tr"><span class="k ' + (g.kind === 'on_leave' ? 'red' : '') + '">' + kind + '</span>'
+        + '<span>' + (g.icon || '') + ' <b>' + esc(g.name) + '</b> · ' + (g.waiting || 0) + ' waiting'
+        + ((g.who || []).length ? ' — ' + esc(g.who.join(', ')) : '')
+        + (g.until ? ' (until ' + esc(g.until) + ')' : '')
+        + (g.cover ? ' · covering: <b>' + esc(g.cover) + '</b>' : '') + '</span>'
+        + (_role === 'super_admin' && g.key
+            ? '<button class="l2mv g" onclick="deskAssign(\'' + esc(g.key) + '\')">Set duty</button>' : '')
+        + '</div>';
+    }).join('');
+    const fireHtml = fire.map(function(f){
+      return '<div class="l2tr" style="cursor:pointer" onclick="openClaimDrawer(' + f.claim_id + ')">'
+        + '<span>' + (f.icon || '🔥') + '</span><b>' + esc(f.who || ('NP-' + f.claim_id)) + '</b>'
+        + '<span style="color:var(--nd-text-muted)">' + esc(f.why || '') + '</span>'
+        + (f.mine ? '<span class="k">YOURS</span>' : '') + '</div>';
+    }).join('');
+    detail = '<div class="l2tdet">' + covHtml + fireHtml + '</div>';
+  }
+  return '<div class="l2today">' + bits.join('') + detail + '</div>';
+}
+// A duty is a bucket, a stage before Level-2, or a conversation channel - go to the right place.
+function l2GoDuty(key){
+  if (key === 'whatsapp' || key === 'support'){ showPanel(key); return; }
+  const isBucket = (_l2Cfg && (_l2Cfg.buckets || []).some(function(b){ return b.bucket_key === key; }));
+  l2Pick(isBucket ? key : 'pre:' + key);
+}
+window.l2GoDuty = l2GoDuty;
+function l2TodayToggle(){ _l2TodayOpen = !_l2TodayOpen; l2Shell(); l2Load(); }
+window.l2TodayToggle = l2TodayToggle;
+
 function l2Pick(key){
-  if (_l2Sel !== key){ _l2Sel = key; _l2Sub = ''; _l2Q = ''; }
+  if (_l2Sel !== key){
+    _l2Sel = key; _l2Sub = ''; _l2Q = '';
+    // Case Board's filters start clean for each entry; a stage entry pins that stage.
+    _cbState = {blocker:'', stage:'', flag:'', mine:false};
+    if (key.indexOf('pre:') === 0) _cbState.stage = key.slice(4);
+  }
   l2Shell();
   l2Load();
 }
@@ -12229,6 +12344,23 @@ async function l2Load(){
   const m = document.getElementById('l2Main');
   if (!m) return;
   m.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  if (_l2Sel === 'all' || _l2Sel.indexOf('pre:') === 0){
+    // The whole line, or one stage before Level-2 - Case Board's own list, filters and sheet.
+    _cbStyles();
+    const pb = document.getElementById('panel-board');
+    if (pb){ pb.innerHTML = ''; delete pb.dataset.ready; }   // one set of ids on the page
+    const k = _l2Sel === 'all' ? '' : _l2Sel.slice(4);
+    const nm = _l2Sel === 'all' ? '🗂️ All open claims'
+      : esc((((_l2Line || {}).labels || {}).stage || {})[k] || k);
+    m.innerHTML = '<div class="l2hd"><div class="l2ttl">' + nm + '</div></div>'
+      + '<div class="l2ban info">Claims that nobody else is holding up come first. '
+      + 'Use <b>Change status or owner</b> to say who we are waiting for, pause a claim, or hand it '
+      + 'to someone.</div>'
+      + '<div id="cbTiles" class="cb-tiles"></div><div id="cbFilters"></div>'
+      + '<div id="cbBody"><div class="cb-empty">Loading claims…</div></div>';
+    await cbRefresh();
+    return;
+  }
   if (_l2Sel === 'start'){
     try{
       const r = await API('/buckets/waiting-to-start');
@@ -12444,8 +12576,10 @@ function l2RenderBucket(){
 function _l2DutyLine(key){
   // The rota uses the same keys as the buckets, so a bucket is staffed by rostering that duty.
   const on = (window._deskRota && window._deskRota[key]) || null;
-  if (on && on.length) return '👤 On duty: <b>' + on.map(function(x){ return esc(x.name); }).join(', ') + '</b>';
-  return '<span class="none">👤 Nobody on duty</span>';
+  const set = (_role === 'super_admin')
+    ? ' <button class="l2mv g" style="margin-left:.3rem" onclick="deskAssign(\'' + esc(key) + '\')">Set duty</button>' : '';
+  if (on && on.length) return '👤 On duty: <b>' + on.map(function(x){ return esc(x.name); }).join(', ') + '</b>' + set;
+  return '<span class="none">👤 Nobody on duty</span>' + set;
 }
 
 function l2Table(b){
@@ -14442,7 +14576,8 @@ function cbRender(d){
     Object.keys(byF).sort(function(a,b){ return byF[b]-byF[a]; }).forEach(function(k){
       const nice = {stalled:'Stalled', fee_unpaid:'Fee unpaid', no_email:'No email',
                     no_phone:'No phone', unreviewed:'Not reviewed', docs_short:'Documents short',
-                    no_timeline:'Nothing recorded', filing_window:'Deadline near'}[k] || k;
+                    no_timeline:'Nothing recorded', filing_window:'Deadline near',
+                    awaiting_l2_start:'Paid, not started'}[k] || k;
       prob += _cbChip(esc(nice), byF[k], _cbState.flag===k, `cbSet('flag','${k}')`);
     });
     prob += '</div>';
@@ -14469,7 +14604,8 @@ function cbRender(d){
 
   const flagName = {stalled:'Stalled', fee_unpaid:'Fee unpaid', no_email:'No email',
                     no_phone:'No phone', unreviewed:'Not reviewed', docs_short:'Docs short',
-                    no_timeline:'Nothing recorded', filing_window:'Deadline near'};
+                    no_timeline:'Nothing recorded', filing_window:'Deadline near',
+                    awaiting_l2_start:'Paid, not started'};
 
   body.innerHTML =
     `<div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.35rem">`
@@ -14663,6 +14799,15 @@ function _cbBucketName(k){
 }
 function _cbPipeSection(it){
   const lab = '<div class="cbs-lab">Where is it in the Level-2 process?</div>';
+  if (it.in_pipeline && document.getElementById('panel-l2')){
+    // Inside Level-2 -> Settlement a claim in a bucket is moved from its bucket, where every move
+    // asks for the comment the ground rule requires. Offering a comment-less move here would only
+    // be refused.
+    return '<div class="cbs-sec">' + lab
+      + '<div style="font-size:.82rem;margin-bottom:.5rem">Now in <b>' + esc(_cbBucketName(it.stage)) + '</b></div>'
+      + '<button class="btn btn-primary" style="width:100%" onclick="cbCloseSheet();l2Pick(\''
+      +   esc(it.stage) + '\')">Open its bucket to move it →</button></div>';
+  }
   if (it.in_pipeline){
     const nextK = it.next_stage || '';
     const opts = CB_BUCKETS.map(function(b){
