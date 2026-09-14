@@ -9122,12 +9122,24 @@ function openModal(title, bodyHtml, buttons=[], wide=false) {
   document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape') return;
     // A dropdown or a menu inside a dialog gets first refusal.
-    // Hand-built overlays sit ABOVE the shared dialog (the document viewer opens over a case
-    // sheet), so they close first - newest, top-most first.
-    const ovs = Array.from(document.querySelectorAll('[data-ov="1"]'));
-    if (ovs.length){ ovs[ovs.length - 1].remove(); return; }
-    const open = document.querySelector('.modal-bg.open');
-    if (open){ closeModal(); return; }
+    // Close whichever layer is really on top: the highest z-index, and between equals the one
+    // later in the page. Only VISIBLE layers count - the account drawer hides itself rather than
+    // leaving, and an invisible overlay must never swallow the Escape meant for the dialog.
+    const shown = function(el){
+      if (!el.getClientRects().length) return false;
+      const cs = getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden';
+    };
+    const layers = Array.from(document.querySelectorAll('[data-ov="1"], .modal-bg.open')).filter(shown);
+    if (layers.length){
+      const z = function(el){ return parseInt(getComputedStyle(el).zIndex, 10) || 0; };
+      const top = layers.reduce(function(a, b){
+        if (z(b) !== z(a)) return z(b) > z(a) ? b : a;
+        return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? b : a;
+      });
+      if (top.classList.contains('modal-bg')) closeModal(); else top.remove();
+      return;
+    }
     const dbg = document.getElementById('drawerBg');
     if (dbg && dbg.classList.contains('open') && typeof closeDrawer === 'function') closeDrawer();
   });

@@ -409,6 +409,19 @@ async function run() {
           'Escape closes the viewer and leaves the case sheet underneath');
     }
     await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    // The Draft form draws the same pair for any claim, and saves nothing until Save is pressed.
+    await page.evaluate(id => window.csrDraft(id), l2Claim);
+    await page.waitForTimeout(1800);
+    const dp = await page.evaluate(() => {
+      const r = [...document.querySelectorAll('.csrpair .csred')].map(e => e.getBoundingClientRect());
+      return { n: r.length, side: r.length === 2 && Math.abs(r[0].top - r[1].top) < 2,
+               equal: r.length === 2 && Math.abs(r[0].height - r[1].height) < 2,
+               tall: r.length ? Math.round(r[0].height) : 0 };
+    });
+    chk(dp.n === 2 && dp.side, 'the Draft form: Draft and Lokpal Draft side by side');
+    chk(dp.equal && dp.tall > 400, `  the same big height (${dp.tall}px)`);
+    await assertEscapable(page, 'draft form');
   }
   chk(errors.length === 0, 'the case sheet throws no script error', errors[0]);
 
