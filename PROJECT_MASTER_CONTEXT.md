@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 14, 2026. Newest work is at the BOTTOM — read **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 14, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -6646,6 +6646,35 @@ the account drawer hides with display:none and must not swallow it.
 
 **Data notes:** NP-119 draft by Dr. Ashish lost its line breaks through the old one-line box
 (words intact); ANNAPURNA KASERA saved an empty Lokpal draft. Backups `/root/pre_round3_*.db`.
+
+## A99 — [NIDAAN] ONE SCREEN FOR THE LINE, THE CLAIM AS A POPUP, ONE ALERT ONE MESSAGE (Sep 14 2026)
+
+**The founder's model (confirmed):** an assembly line. Every bucket adds its part to the claim —
+gist facts, assessment, drafts — each form showing what earlier buckets filled (one value per
+fact, shared by gist/draft/report), until the claim is ready for Lokpal and moves to settlement.
+
+**Level-2 → Settlement is the whole line and the landing page.** Rail: All open claims · Before
+Level-2 (stages from `case_state.board` `stage_order` that are not buckets, minus `hold`) · To
+start · buckets · Paused. `l2Pick('all'|'pre:<stage>')` renders Case Board's own `cbRender` into
+`#l2Main` (panel-board's scaffold is cleared so ids stay unique). `_cbPipeSection` sends
+in-bucket moves to the bucket (comment rule). Today strip = `/desk` data (`my_duties`,
+`coverage`, `on_fire`); `l2GoDuty` routes channel duties to their panels. `showPanel('desk'|'board')`
+redirects to `l2`. Menu drops both; code/endpoints kept.
+
+**Claim popup.** `openClaimDrawer` sets `_drawerMode(true)` (`.drawer-bg.is-claim`); every other
+opener of the shared drawer calls `_drawerMode(false)`. After drawing, `_claimPopLayout()` moves
+the body's children (tagged `data-ord`) into `.dcols > .dcol` by heading (`_DCOL_RULES`); <768px
+puts them back in order. CSS only under `@media (min-width:768px)`.
+
+**Alerts.** `_record_notification` is THE Telegram mirror of a staff bell (honours
+`telegram=False`, task kept in `_BG_TASKS`); never mirror again after `notify_staff_inapp`/
+`dispatch`. `_telegram_mirror` drops identical text to the same person within 120s.
+`on_branch_l2_paid` once per payment (`nidaan_alert_dedup` key `l2_queued:<claim>:<payment id>`);
+`mark_l2_paid` UPDATE is conditional. WhatsApp outbound template rows store the rendered wording
+(`template_text`, Meta bodies cached 6h).
+
+**Testing:** `node uitest/flow.mjs --local-html=../static/nidaan_ops.html` proves a screen change
+against live data before deploy.
 
 ---
 

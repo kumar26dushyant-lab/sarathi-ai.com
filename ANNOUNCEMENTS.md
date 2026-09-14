@@ -839,3 +839,25 @@ Team, three changes to how a claim moves into Level-2 and is worked there:
 3. **बिना डाउनलोड दस्तावेज़ पढ़ें।** किसी भी दस्तावेज़ पर क्लिक करें, वहीं खुल जाएगा। Esc दबाएँ, वह बंद होगा और आप केस पर वापस होंगे। **Full claim** अब अलग विंडो में खुलता है।
 
 _Suggested roles: Team members + Admins + Super admins (everyone who works Level-2)._
+
+---
+
+## 2026-09-14 — My Desk and Case Board are now inside Level-2 → Settlement; the claim opens in the middle — DRAFT (founder to review)
+
+**Title (EN):**
+🗂️ One screen for every claim, and a bigger claim view
+
+**Details (EN):**
+Team, two changes you'll see today:
+1. **My Desk and Case Board have moved into ⚖️ Level-2 → Settlement**, which is now the first screen after you log in. On the left you'll find **All open claims**, the stages **before Level-2** (Review, Conversion), **To start**, and every bucket. The **Today** strip at the top shows the buckets you're on duty for, any bucket nobody is covering, and the claims on fire. **Only mine**, the filters and **Change status or owner** work exactly as they did on Case Board.
+2. **A claim now opens in the middle of the screen** on laptops and tablets, with everything side by side: claim details on the left, the work (documents, status, tasks) in the middle, and notes and history on the right. Each column scrolls on its own. On phones it opens from the side as before.
+
+**Title (HI):**
+🗂️ हर क्लेम एक ही स्क्रीन पर, और बड़ा क्लेम व्यू
+
+**Details (HI):**
+टीम, आज आपको दो बदलाव दिखेंगे:
+1. **My Desk और Case Board अब ⚖️ Level-2 → Settlement के अंदर हैं**, जो अब लॉगिन के बाद पहली स्क्रीन है। बाईं ओर मिलेंगे **All open claims**, **Level-2 से पहले** के चरण (Review, Conversion), **To start**, और हर बकेट। ऊपर की **Today** पट्टी दिखाती है कि आप किन बकेट पर ड्यूटी पर हैं, कौन-सा बकेट खाली है, और कौन-से क्लेम तुरंत ध्यान माँगते हैं। **Only mine**, फ़िल्टर और **Change status or owner** वैसे ही काम करते हैं जैसे Case Board पर करते थे।
+2. **लैपटॉप और टैबलेट पर क्लेम अब स्क्रीन के बीच में खुलता है**, सब कुछ साथ-साथ: बाईं ओर क्लेम की जानकारी, बीच में काम (दस्तावेज़, स्टेटस, टास्क), और दाईं ओर नोट्स व हिस्ट्री। हर कॉलम अलग से स्क्रॉल होता है। फ़ोन पर पहले की तरह साइड से खुलता है।
+
+_Suggested roles: Everyone (all staff)._

@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-14 (live testing with the founder, rounds 1–3: documents-first L2 handover, WhatsApp collection fixed, ClaimShield case record, documents open in place, big side-by-side drafts; browser test 125/125)
+**Last updated:** 2026-09-14 (live testing rounds 1–5: duplicate alerts fixed, template wording in the inbox, My Desk + Case Board folded into Level-2 → Settlement, the claim as a centred popup; browser test 137/137)
 
 ### ✅ SHIPPED 2026-09-10 — attachments, duty roster, Email Radar
 - ✅ **Attachment limits raised everywhere at once** — 5 files/10 MB → **20 files/25 MB**, per-claim cap 40 → 60. Applied to all **five** upload endpoints via one `_guard_upload_batch()` (branch, claim portal, review purchase, claim docs, My Business) plus every piece of user-facing copy on 6 surfaces — the endpoint-uniformity rule. **Why 25 MB and not 100:** every stored file is virus-scanned in memory before it is written, and clamd refuses a stream past `StreamMaxLength`. 100 MB would have meant refusing files in the gap or storing them unscanned. Instead **clamd was raised to 64M** (`/root/clamd.conf.bak.*` kept) and proved: a 25 MB stream scans clean in 4.4s and **EICAR is still detected**. Browser now **splits a large set into batches** under the nginx 50M body cap, so a big upload succeeds instead of hitting an opaque 413; a partial upload reports what actually landed.
@@ -108,10 +108,22 @@ routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/
   complainant got the thank-you WhatsApp twice. `on_branch_l2_paid` is now once per payment
   (dedup key on the claim's payment id) and the write is conditional. **The WhatsApp inbox now
   shows the words a template sent** (approved wording from Meta, cached 6 h, values filled in).
-- 🟡 **My Desk / Case Board — founder asked to retire them "if not in use"; they are in use.**
-  14 Sep logs: Case Board opened from ~12 devices (mostly the office network), My Desk is the
-  landing page for everyone. For the 8 team members, Case Board + Claims Dashboard are the only
-  screens showing pre-Level-2 claims. Awaiting founder's call on the fold plan.
+- ✅ **Round 5 — one screen for the whole line; the claim as a popup.** My Desk and Case Board
+  folded into **Level-2 → Settlement** (landing page): rail = All open claims · Before Level-2
+  (Intake/Review/Conversion — 94 of 97 open claims live here) · To start · the buckets · Paused;
+  Case Board's list/filters/"Change status or owner" sheet reused as-is; My Desk's Today strip
+  (on duty, not covered, on fire) on top; Set duty per bucket. Old links redirect; nothing deleted.
+  **Claim panel = centred popup on ≥768px** (3 columns ≥1200px: who & what | the work |
+  conversation & history; 2 on tablets), sections moved not redrawn; phones keep the side panel;
+  tasks/leads/QR keep the side panel. Browser test serves a local build against live data
+  (`--local-html`) so screens are proved before deploy — 137/137.
+- 🟢 **Letter drafting from the gist** — the Draft form's case facts already fill from earlier
+  buckets; the two letters are typed. Possible next step: a starting letter composed from the
+  gist facts for the drafter to edit (founder to decide).
+- ℹ️ **Sarathi side, for that terminal:** a DNS blip at the host (14 Sep 17:04) made the Sarathi
+  Razorpay plan lookup fail at startup, and it created a new `individual_annual` plan
+  (plan_TbxZG9cdrwKcBJ) instead of finding the existing one - check which plan id new Sarathi
+  subscriptions now use.
 - 🔴 **Security hygiene (Sarathi side):** the legacy Sarathi bot's startup error prints its bot
   token into the journal (token is already rejected by Telegram, so dead) - redact exception
   text from Telegram library errors before logging.
