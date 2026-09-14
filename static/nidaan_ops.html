@@ -3635,15 +3635,56 @@ function _claimTrail(c){
     + `📇 complainant: ${_contactBadge(c)}`
     + `</div>`;
 }
-function _l2CardInner(c){
+// Everything L2 Claims needs to move a claim on, in one place, for every view.
+//   in a bucket      -> where it is
+//   handed over      -> by whom, and the way to the workspace
+//   not paid for     -> says so
+//   otherwise        -> the "All documents received" tick, Documents, and Move to Level-2
+// Documents are gathered HERE, before Level-2; the tick says they are all in and records whose
+// word that is, and only then does Move open - so Live Cases starts with the papers for the gist.
+function _l2HandoverControls(c){
+  if (c.pipeline_stage){
+    return '<span style="color:var(--nd-success-text);font-weight:700">▶ In Level-2</span><br>'
+      + '<span style="color:var(--nd-text-faint)">' + esc(c.pipeline_stage.replace(/_/g,' ')) + '</span>';
+  }
+  if (c.l2_handover_at){
+    return '<span style="color:var(--nd-cyan-text);font-weight:700">✓ Handed over</span>'
+      + (c.l2_handover_by ? '<br><span style="color:var(--nd-text-faint)">👤 ' + esc(c.l2_handover_by) + '</span>' : '')
+      + '<br><button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.1rem .4rem" '
+      + 'onclick="event.stopPropagation();showPanel(\'l2\')">Open workspace</button>';
+  }
+  if (!_l2Eligible(c)){
+    return '<span style="color:var(--nd-text-faint)">Fee not paid yet</span>';
+  }
+  const done = !!c.docs_complete_at;
+  return '<label style="display:flex;gap:.3rem;align-items:center;font-size:.7rem;cursor:pointer;'
+      + 'margin-bottom:.25rem;color:' + (done ? 'var(--nd-success-text)' : 'var(--nd-text-secondary)') + '">'
+      +   '<input type="checkbox"' + (done ? ' checked' : '')
+      +   ' onclick="event.stopPropagation()" onchange="l2DocsTick(' + c.claim_id + ',this.checked)">'
+      +   'All documents received</label>'
+    + (done ? '<div style="font-size:.64rem;color:var(--nd-text-faint);margin-bottom:.25rem">✔ '
+              + esc(c.docs_complete_by || '') + '</div>' : '')
+    + '<button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.12rem .4rem;margin-bottom:.25rem" '
+    +   'onclick="event.stopPropagation();docsOpen(' + c.claim_id + ',_reloadL2)">📂 Documents</button><br>'
+    + (done
+        ? '<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" '
+          + 'onclick="event.stopPropagation();hoOpen(' + c.claim_id + ')">→ Move to Level-2</button>'
+        : '<button class="btn btn-ghost" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap;opacity:.55" '
+          + 'title="Tick \'All documents received\' first" '
+          + 'onclick="event.stopPropagation();l2DocsNeeded(' + c.claim_id + ')">→ Move to Level-2</button>');
+}
+
+function _l2CardInner(c, withL2){
   return `<div style="display:flex;justify-content:space-between;gap:.4rem"><strong style="font-size:.82rem">#${fmtClaimNum(c.claim_id)}</strong>`
     + `<span style="font-size:.72rem;${_l2Eligible(c)?'color:var(--nd-success-text)':'color:var(--nd-warning-text)'}">${_l2Eligible(c)?'Paid':'Due'}</span></div>`
     + `<div style="font-weight:600;font-size:.85rem;margin-top:.15rem">${esc(c.insured_name||'—')}</div>`
     + `<div style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.claim_type||'—')} · ₹${fmt(c.disputed_amount||0)}</div>`
     + `<div style="font-size:.72rem;margin-top:.25rem">${_l2CsBadge(c)}</div>`
-    + _claimTrail(c);
+    + _claimTrail(c)
+    // On L2 Claims the card must be able to move the claim, exactly as the table row can.
+    + (withL2 ? `<div style="margin-top:.45rem;padding-top:.4rem;border-top:1px dashed var(--nd-border);font-size:.72rem" onclick="event.stopPropagation()">${_l2HandoverControls(c)}</div>` : '');
 }
-function _renderClaimBoard(rows){
+function _renderClaimBoard(rows, withL2){
   const byStage = {};
   rows.forEach(c=>{ (byStage[c.status]=byStage[c.status]||[]).push(c); });
   // Show canonical stages that have rows, then any unknown statuses.
@@ -3652,11 +3693,11 @@ function _renderClaimBoard(rows){
   return '<div class="board">'+order.map(s=>{
     const list=byStage[s]||[];
     return `<details class="board-col" open><summary>${esc(_claimStageLabel(s))}<span class="vw-count">${list.length}</span></summary>`
-      + `<div class="board-cards">`+list.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')+`</div></details>`;
+      + `<div class="board-cards">`+list.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c, withL2)}</div>`).join('')+`</div></details>`;
   }).join('')+'</div>';
 }
-function _renderClaimCards(rows){
-  return '<div class="card-grid">'+rows.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c)}</div>`).join('')+'</div>';
+function _renderClaimCards(rows, withL2){
+  return '<div class="card-grid">'+rows.map(c=>`<div class="board-card" onclick="openClaimDrawer(${c.claim_id})">${_l2CardInner(c, withL2)}</div>`).join('')+'</div>';
 }
 
 // ══════════ UNIFIED CLAIM PIPELINE — one workspace, stage columns + origin filter ══════════
@@ -3858,8 +3899,8 @@ function _renderOutcome(key){
   if(isL2){ ['table','board','cards'].forEach(v=>{ const b=document.getElementById('vw_'+v); if(b) b.classList.toggle('active', _l2View===v); }); }
   if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims match.</p></div>'; return; }
   // Views engine (L2): Board / Cards alternatives to the table.
-  if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows); return; }
-  if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows); return; }
+  if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows, true); return; }
+  if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows, true); return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
     + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Level-2</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
@@ -3876,32 +3917,11 @@ function _renderOutcome(key){
         }
         // The move into Level-2 lives on this row, because this is the screen somebody is looking
         // at when they decide a claim is ready. A new screen for it was the wrong answer.
-        let l2Cell = '';
-        if(isL2){
-          const st = _l2HO[c.claim_id];
-          if(c.pipeline_stage){
-            l2Cell = `<td style="font-size:.72rem"><span style="color:var(--nd-success-text);font-weight:700">▶ In Level-2</span><br><span style="color:var(--nd-text-faint)">${esc(c.pipeline_stage.replace(/_/g,' '))}</span></td>`;
-          } else if(c.l2_handover_at){
-            l2Cell = `<td style="font-size:.72rem"><span style="color:var(--nd-cyan-text);font-weight:700">✓ Handed over</span>${c.l2_handover_by?`<br><span style="color:var(--nd-text-faint)">👤 ${esc(c.l2_handover_by)}</span>`:''}<br><button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.1rem .4rem" onclick="event.stopPropagation();showPanel('l2')">Open workspace</button></td>`;
-          } else if(!_l2Eligible(c)){
-            l2Cell = `<td style="font-size:.7rem;color:var(--nd-text-faint)">Fee not paid yet</td>`;
-          } else {
-            // Documents are gathered HERE, before Level-2. The tick says they are all in, and
-            // only then does the Move button open - so Live Cases starts with the papers it needs
-            // for the gist. Ticking records the person's name.
-            const done = !!c.docs_complete_at;
-            l2Cell = `<td style="white-space:nowrap" onclick="event.stopPropagation()">`
-              + `<label style="display:flex;gap:.3rem;align-items:center;font-size:.7rem;cursor:pointer;margin-bottom:.25rem;color:${done?'var(--nd-success-text)':'var(--nd-text-secondary)'}">`
-              +   `<input type="checkbox"${done?' checked':''} onchange="l2DocsTick(${c.claim_id},this.checked)">`
-              +   `All documents received</label>`
-              + (done ? `<div style="font-size:.64rem;color:var(--nd-text-faint);margin-bottom:.25rem">✔ ${esc(c.docs_complete_by||'')}</div>` : '')
-              + `<button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.12rem .4rem;margin-bottom:.25rem" onclick="docsOpen(${c.claim_id},_reloadL2)">📂 Documents</button><br>`
-              + (done
-                  ? `<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="hoOpen(${c.claim_id})">→ Move to Level-2</button>`
-                  : `<button class="btn btn-ghost" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap;opacity:.55" title="Tick 'All documents received' first" onclick="l2DocsNeeded(${c.claim_id})">→ Move to Level-2</button>`)
-              + `</td>`;
-          }
-        }
+        // The Level-2 controls come from ONE function, shared with the Board and Cards views -
+        // they used to live only here, so the other two views had no way to move a claim.
+        const l2Cell = isL2
+          ? `<td style="font-size:.72rem;white-space:nowrap" onclick="event.stopPropagation()">${_l2HandoverControls(c)}</td>`
+          : '';
         return `<tr onclick="openClaimDrawer(${c.claim_id})" style="cursor:pointer">
         <td style="white-space:nowrap">${c.unseen_notes>0?'<span class="unseen-dot" title="New activity — not seen yet"></span> ':''}<strong>#${fmtClaimNum(c.claim_id)}</strong></td>
         <td>${esc(c.insured_name)} ${_payBadge(c.payment_status)}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.insured_phone||'')}</span></td>

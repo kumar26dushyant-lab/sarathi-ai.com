@@ -255,6 +255,100 @@ async function run() {
   }
   chk(errors.length === 0, 'the document window throws no script error', errors[0]);
 
+  /* ── 3b. the Documents window (live-testing round 1, 14 Sep) ──────────────
+   * The founder could not attach a paper to NP-119 at all. Read-only here: it opens the window
+   * and checks the controls are there - it never uploads and never ticks the box. */
+  console.log('\n── documents window ──');
+  errors.length = 0;
+  if (claimId) {
+    await page.evaluate(id => window.docsOpen(id), claimId);
+    await page.waitForTimeout(2200);
+    const dc = await page.evaluate(() => ({
+      open: !!document.querySelector('.modal-bg.open'),
+      title: (document.getElementById('modalTitle') || {}).textContent || '',
+      upload: !!document.getElementById('dcFile'),
+      which: !!document.getElementById('dcKey'),
+      options: document.querySelectorAll('#dcKey option').length,
+      attach: !!document.querySelector('[onclick^="docsUpload"]'),
+      tick: !!document.getElementById('dcDone'),
+      askMore: !!document.querySelector('[onclick*="dwOpen"]'),
+    }));
+    chk(dc.open && /documents/i.test(dc.title), 'the Documents window opens', dc.title);
+    chk(dc.upload && dc.attach, 'with a file picker and an Attach button');
+    chk(dc.which && dc.options > 1,
+        `and a "which document is this?" list (${dc.options} choices)`);
+    chk(dc.askMore, 'and a way to ask the complainant for what is missing');
+    await shot(page, 'documents');
+    await assertEscapable(page, 'documents window');
+  }
+  chk(errors.length === 0, 'the documents window throws no script error', errors[0]);
+
+  /* ── 3c. L2 Claims: the "All documents received" tick gates the move ────── */
+  console.log('\n── L2 Claims tick ──');
+  errors.length = 0;
+  const l2c = await openPanel(page, 'l2claims', 15000);
+  // The header draws before the rows arrive, so wait for real rows - the first version of this
+  // check measured the header and reported "0 ticks" on a screen that had 57.
+  for (let i = 0; i < 40; i++) {
+    const n = await page.evaluate(() =>
+      document.querySelectorAll('#oc_l2claims_wrap tbody tr').length);
+    if (n) break;
+    await page.waitForTimeout(500);
+  }
+  chk(!l2c.timedOut, 'L2 Claims loads');
+  // ALL THREE VIEWS. The controls once lived only in the table, so a staffer whose browser
+  // remembered Board or Cards had no way to move a claim - and nothing said why.
+  let tick = null;
+  for (const v of ['board', 'cards', 'table']) {
+    await page.evaluate(v => window._setL2View && window._setL2View(v), v);
+    await page.waitForTimeout(900);
+    const t = await page.evaluate(() => ({
+      ticks: document.querySelectorAll('#oc_l2claims_wrap input[onchange*="l2DocsTick"]').length,
+      moves: document.querySelectorAll('#oc_l2claims_wrap [onclick*="hoOpen"]').length,
+      gated: document.querySelectorAll('#oc_l2claims_wrap [onclick*="l2DocsNeeded"]').length,
+      docs: document.querySelectorAll('#oc_l2claims_wrap [onclick*="docsOpen"]').length,
+    }));
+    chk(t.ticks > 0, `${v} view: every waiting claim has an "All documents received" tick (${t.ticks})`);
+    chk(t.docs === t.ticks, `${v} view: and a Documents button on each (${t.docs})`);
+    chk(t.gated + t.moves === t.ticks,
+        `${v} view: every Move is either open or explains why not`,
+        `ticks ${t.ticks}, open ${t.moves}, gated ${t.gated}`);
+    tick = t;
+  }
+  if (tick.gated) {
+    // Pressing a gated Move must explain itself, not do nothing.
+    await page.evaluate(() =>
+      document.querySelector('#oc_l2claims_wrap [onclick*="l2DocsNeeded"]').click());
+    await page.waitForTimeout(600);
+    const why = await page.evaluate(() =>
+      (document.getElementById('modalBody') || {}).innerText || '');
+    chk(/all documents received/i.test(why), 'a gated Move explains what to tick');
+    await assertEscapable(page, 'documents-first notice');
+  }
+  chk(errors.length === 0, 'L2 Claims throws no script error', errors[0]);
+
+  /* ── 3d. the claim panel carries Documents (founder's NP-119 screenshot) ── */
+  console.log('\n── claim panel ──');
+  errors.length = 0;
+  if (claimId) {
+    await page.evaluate(id => window.openClaimDrawer && window.openClaimDrawer(id), claimId);
+    await page.waitForTimeout(2500);
+    const dr = await page.evaluate(() => {
+      const d = document.querySelector('.drawer-bg.open, #claimDrawer, .drawer');
+      const t = d ? d.innerText : '';
+      return { open: !!d, docs: !!(d && d.querySelector('[onclick^="docsOpen"]')),
+               wa: /start whatsapp collection/i.test(t),
+               staleHint: /a cold start needs an approved template/i.test(t) };
+    });
+    chk(dr.open, 'the claim panel opens');
+    chk(dr.docs, 'and has an "Open documents & attach" button');
+    chk(!dr.staleHint, 'and no longer tells staff a cold start needs a template it now sends');
+    await shot(page, 'claim-panel');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+  chk(errors.length === 0, 'the claim panel throws no script error', errors[0]);
+
   /* ── 4. the handover dialog — opens, and never traps ─────────────────────── */
   console.log('\n── handover ──');
   errors.length = 0;
