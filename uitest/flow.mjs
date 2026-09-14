@@ -84,7 +84,13 @@ async function openOps(browser, who) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.message || e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    // Cloudflare injects its analytics beacon into the live page and our CSP blocks it - correctly.
+    // That is Cloudflare's script, not ours, so it is not a failure of the page.
+    if (/cloudflareinsights\.com/.test(m.text())) return;
+    errors.push('console: ' + m.text());
+  });
   await page.goto(`${BASE}/nidaan/ops`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#sidebarNav a, .nav-item, [onclick*="showPanel"]', { timeout: 30000 })
     .catch(() => {});
