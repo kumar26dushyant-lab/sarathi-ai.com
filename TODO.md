@@ -100,6 +100,21 @@ routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/
   - **Drafts as two big equal boxes side by side** (32rem each) — on the case sheet and the Draft form.
   - **Escape closes whatever is really on top** (visible layers only, by z-index) — an account
     drawer hidden with display:none had been swallowing it.
+- ✅ **Round 4 — the same alert twice (NP-151).** Every staff bell already mirrored to Telegram;
+  a 12 Sep change added a second mirror in `notify_staff_inapp`, and 11 callers ran a third loop.
+  Now ONE Telegram per bell (the bell's own), `telegram=False` finally honoured, and
+  `_telegram_mirror` drops identical text to the same person within 2 min. **The Level-2 fee
+  was handled twice** (branch verify + Razorpay webhook, `mark_l2_paid` True to both): the
+  complainant got the thank-you WhatsApp twice. `on_branch_l2_paid` is now once per payment
+  (dedup key on the claim's payment id) and the write is conditional. **The WhatsApp inbox now
+  shows the words a template sent** (approved wording from Meta, cached 6 h, values filled in).
+- 🟡 **My Desk / Case Board — founder asked to retire them "if not in use"; they are in use.**
+  14 Sep logs: Case Board opened from ~12 devices (mostly the office network), My Desk is the
+  landing page for everyone. For the 8 team members, Case Board + Claims Dashboard are the only
+  screens showing pre-Level-2 claims. Awaiting founder's call on the fold plan.
+- 🔴 **Security hygiene (Sarathi side):** the legacy Sarathi bot's startup error prints its bot
+  token into the journal (token is already rejected by Telegram, so dead) - redact exception
+  text from Telegram library errors before logging.
 - ℹ️ **Data notes for the founder:** Dr. Ashish's NP-119 draft (1,875 chars) was typed into the old
   one-line box and lost its line breaks — words intact, re-paste restores the layout. ANNAPURNA
   KASERA saved an empty Lokpal draft.
