@@ -9122,11 +9122,12 @@ function openModal(title, bodyHtml, buttons=[], wide=false) {
   document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape') return;
     // A dropdown or a menu inside a dialog gets first refusal.
-    const open = document.querySelector('.modal-bg.open');
-    if (open){ closeModal(); return; }
-    // Hand-built overlays, newest (top-most) first.
+    // Hand-built overlays sit ABOVE the shared dialog (the document viewer opens over a case
+    // sheet), so they close first - newest, top-most first.
     const ovs = Array.from(document.querySelectorAll('[data-ov="1"]'));
     if (ovs.length){ ovs[ovs.length - 1].remove(); return; }
+    const open = document.querySelector('.modal-bg.open');
+    if (open){ closeModal(); return; }
     const dbg = document.getElementById('drawerBg');
     if (dbg && dbg.classList.contains('open') && typeof closeDrawer === 'function') closeDrawer();
   });
@@ -9267,7 +9268,9 @@ function _handleDeepLink(){
     } else if (task && /^\d+$/.test(task)) {
       setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
     } else if (claim && /^\d+$/.test(claim)) {
+      // Open the claim itself, not just the list it is in - "Full claim" lands here.
       setTimeout(()=>{ try{ showPanel('claims'); }catch(e){} }, 350);
+      setTimeout(()=>{ try{ openClaimDrawer(parseInt(claim, 10)); }catch(e){} }, 900);
     } else if (leave && /^\d+$/.test(leave)) {
       setTimeout(()=>{ try{ showPanel('tasks'); }catch(e){} }, 350);
     }
@@ -12450,9 +12453,12 @@ function l2Table(b){
     // By Level-2 the papers were gathered before the handover, so this opens EVERY document -
     // what you need to build the gist - rather than the window that asks for missing ones. That
     // window is still one click away inside it, for the day the insurer asks for something new.
-    const docs = '<button class="l2mv ' + (i.docs_ready ? 'g' : '') + '" title="All documents on this claim" '
+    // How many FILES are attached - the useful number once Level-2 has begun. The checklist
+    // count read "0/4" on a claim with eight files, because they were attached without saying
+    // which line each one answered.
+    const docs = '<button class="l2mv g" title="All documents on this claim" '
       + 'onclick="docsOpen(' + i.claim_id + ')">📂 '
-      + (i.docs_total ? i.docs_done + '/' + i.docs_total : 'Documents') + '</button>';
+      + (i.files ? i.files + ' file' + (i.files === 1 ? '' : 's') : 'Documents') + '</button>';
     return '<tr>'
       + '<td><b>NP-' + i.claim_id + '</b>' + lok + '</td>'
       + '<td>' + esc(i.who || '(no name)')
@@ -12631,7 +12637,30 @@ function l2MoveMenu(claimId){
 // ── the case report ──────────────────────────────────────────────────────────
 let _l2Case = null;
 
+// Save one of the claim's own columns from the case sheet, through the gist endpoint - the same
+// short, audited list the gist form uses.
+async function l2Core(key, value, el){
+  const id = _l2Case && _l2Case.claim_id;
+  if (!id) return;
+  const msg = document.getElementById('l2cMsg');
+  const body = {core: {}}; body.core[key] = value;
+  try{
+    const r = await API('/cases/' + id + '/gist', {method:'POST', body: JSON.stringify(body)});
+    const d = await r.json().catch(function(){ return {}; });
+    if (r.ok){
+      if (el){ el.style.borderColor = 'var(--nd-success-text)';
+               setTimeout(function(){ el.style.borderColor = ''; }, 900); }
+      if (_l2Case.claim) _l2Case.claim[key] = value;
+      if (msg){ msg.style.color = 'var(--nd-success-text)'; msg.textContent = 'Saved';
+                setTimeout(function(){ if (msg) msg.textContent = ''; }, 1200); }
+    } else if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not save'); }
+  }catch(e){ if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not save.'; } }
+}
+window.l2Core = l2Core;
+
 async function l2Open(claimId){
+  if (typeof _csrStyles === 'function') _csrStyles();
+  if (typeof _csrRtStyles === 'function') _csrRtStyles();
   openModal('NP-' + claimId, '<div class="empty"><div class="ei">⏳</div><p>Opening…</p></div>', [], true);
   let st = null, claim = null, rem = [];
   try{
@@ -12679,7 +12708,19 @@ function l2CaseRender(rem){
       + esc(s.name_en) + '</option>';
   }).join('');
 
-  const flds = (st.fields || []).map(function(f){
+  // Rich-text fields - the two drafts - are drawn separately below as two big boxes side by
+  // side, the ClaimShield way. Everything else is the ordinary list.
+  const richF = (st.fields || []).filter(function(f){ return f.field_type === 'richtext'; });
+  // Live Cases is where the case's facts are pinned down, and Policy No. and Policy Inception are
+  // two of them - columns on the claim itself, so they save through the gist.
+  const coreHtml = (st.bucket === 'live_cases')
+    ? '<div class="l2fld"><label>Policy No.</label><input id="lf_core_policy_no" value="'
+      + esc(c.policy_no || '') + '" onchange="l2Core(\'policy_no\',this.value,this)"></div>'
+      + '<div class="l2fld"><label>Policy Inception Date</label><input type="date" '
+      + 'id="lf_core_policy_inception_date" value="' + esc(String(c.policy_inception_date || '').slice(0, 10))
+      + '" onchange="l2Core(\'policy_inception_date\',this.value,this)"></div>'
+    : '';
+  const flds = coreHtml + (st.fields || []).filter(function(f){ return f.field_type !== 'richtext'; }).map(function(f){
     const v = (st.values || {})[f.field_key] || '';
     const req = f.required_exit ? ' <span class="req">*</span>' : '';
     let input;
@@ -12758,7 +12799,11 @@ function l2CaseRender(rem){
     +   ((_l2Case.files || []).length
           ? '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
             + (_l2Case.files || []).map(function(f){
-                return '<a class="l2mv g" href="' + esc(f.url) + '" target="_blank" rel="noopener" '
+                // Opens IN the page, above this sheet - no download, and the gist below stays.
+                return '<a class="l2mv g" href="#" '
+                  + 'onclick="event.preventDefault();docView(\'' + esc(f.url).replace(/'/g, "\\'")
+                  + '\',\'' + esc(f.original_name || 'document').replace(/'/g, "\\'") + '\',\''
+                  + esc(f.mime_type || '') + '\')" '
                   + 'title="' + esc(f.original_name || '') + '">'
                   + (/pdf/i.test(f.mime_type || '') ? '\ud83d\udcc4 ' : '\ud83d\uddbc\ufe0f ')
                   + esc((f.original_name || 'document').slice(0, 34)) + '</a>';
@@ -12770,12 +12815,28 @@ function l2CaseRender(rem){
     +     '\ud83d\udcce Attach or check the list</button>'
     + '</div>'
     + (flds ? '<div><div class="l2sec">The gist \u2014 recorded here</div>' + flds + '</div>' : '')
+    // The drafts, two big boxes side by side - saved when the cursor leaves the box.
+    + (richF.length
+        ? '<div class="csrpair">' + richF.map(function(f){
+            return '<div class="csrrt"><label>' + esc(f.label_en)
+              + (f.required_exit ? ' <span class="req">*</span>' : '') + '</label>'
+              + '<div class="csrbar">'
+              +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
+              +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
+              +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+              + '</div>'
+              + '<div class="csred" contenteditable="true" id="lf_' + f.field_key + '" '
+              +   'onblur="l2Field(\'' + f.field_key + '\',this.innerHTML,this)">'
+              +   _csrRichHTML((st.values || {})[f.field_key] || '') + '</div></div>';
+          }).join('') + '</div>'
+        : '')
     + '<div><div class="l2sec">Remarks</div><div class="l2rem">' + remHtml + '</div></div>'
     + '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
     +   (fwd ? '<button class="l2mv p" onclick="l2MoveFromCase(\'' + fwd.to_key + '\')">'
             + '→ ' + esc(fwd.name_en) + '</button>' : '')
     +   '<button class="l2mv g" onclick="l2MoveMenuCase()">Move somewhere else…</button>'
-    +   '<button class="l2mv g" onclick="openClaimDrawer(' + id + ')">Full claim</button>'
+    // Its own window: the claim panel and a case sheet cannot both be read in one.
+    +   '<button class="l2mv g" onclick="window.open(\'/nidaan/ops?claim=' + id + '\',\'_blank\')">Full claim \u2197</button>'
     + '</div>'
     + '<div id="l2cMsg" style="font-size:.82rem"></div>'
     + '</div>';
@@ -13100,7 +13161,9 @@ async function docsRender(msg, ok){
           + '<span class="nm">' + esc(f.original_name || 'document')
           +   '<span class="mt">' + _dcSize(f.file_size) + ' · '
           +   esc(String(f.uploaded_at || '').slice(0, 16)) + '</span></span>'
-          + '<a class="l2mv g" href="' + esc(f.url) + '" target="_blank" rel="noopener">Open</a>'
+          + '<button class="l2mv g" onclick="docView(\'' + esc(f.url).replace(/'/g, "\\'") + '\',\''
+          +   esc(f.original_name || 'document').replace(/'/g, "\\'") + '\',\'' + esc(f.mime_type || '')
+          +   '\')">Open</button>'
           + '</div>';
       }).join('')
     : '<div class="bdsub">Nothing attached yet.</div>';
@@ -13198,6 +13261,66 @@ async function docsMarkDone(on){
 
 window.docsOpen = docsOpen; window.docsUpload = docsUpload; window.docsMarkDone = docsMarkDone;
 
+// ══ Look at a document without downloading it ═════════════════════════════════
+// Its own layer ABOVE whatever is open, so viewing a paper never closes the case sheet or the
+// gist being typed underneath it. PDFs open in the browser's own viewer; images are shown as
+// images; anything else - a Word file - cannot be shown safely inside the page, so it says so
+// and offers the download.
+function docView(url, name, mime){
+  const old = document.getElementById('docViewOv');
+  if (old) old.remove();
+  const isPdf = /pdf/i.test(mime || '') || /\.pdf(\?|$)/i.test(url || '');
+  const isImg = /^image\//i.test(mime || '') || /\.(jpe?g|png)(\?|$)/i.test(url || '');
+  const ov = document.createElement('div');
+  ov.id = 'docViewOv';
+  ov.setAttribute('data-ov', '1');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(2,8,16,.78);'
+    + 'display:flex;flex-direction:column;padding:1rem';
+  // Asking for the PDF inline is what stops the download; the server grants it for PDFs only.
+  const inlineUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'inline=1';
+  const body = isPdf
+    ? '<iframe src="' + esc(inlineUrl) + '" title="' + esc(name || 'document') + '" '
+      + 'style="flex:1;width:100%;border:0;background:#fff;border-radius:0 0 10px 10px"></iframe>'
+    : (isImg
+        ? '<div style="flex:1;overflow:auto;background:#1a1f26;border-radius:0 0 10px 10px;'
+          + 'display:flex;align-items:flex-start;justify-content:center;padding:1rem">'
+          + '<img src="' + esc(url) + '" alt="' + esc(name || 'document') + '" '
+          + 'style="max-width:100%;height:auto;background:#fff"></div>'
+        : '<div style="flex:1;background:var(--nd-bg-base-2);border-radius:0 0 10px 10px;'
+          + 'display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.7rem;'
+          + 'color:var(--nd-text-secondary);font-size:.95rem;text-align:center;padding:2rem">'
+          + '<div style="font-size:2.2rem">📄</div>'
+          + '<div>This kind of file (a Word document) cannot be shown safely inside the page.</div>'
+          + '<a class="btn btn-primary" href="' + esc(url) + '">Download it</a></div>');
+  ov.innerHTML =
+      '<div style="display:flex;align-items:center;gap:.6rem;background:var(--nd-bg-base-2);'
+    +   'border-radius:10px 10px 0 0;padding:.55rem .8rem;border-bottom:1px solid var(--nd-border)">'
+    +   '<span style="font-weight:700;color:var(--nd-text-primary);flex:1;min-width:0;'
+    +     'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(name || 'Document') + '</span>'
+    +   '<a class="btn-sm btn-ghost" href="' + esc(url) + '" title="Save a copy">⬇ Download</a>'
+    +   '<button class="modal-x" type="button" aria-label="Close" title="Close (Esc)" '
+    +     'onclick="document.getElementById(\'docViewOv\').remove()">&times;</button>'
+    + '</div>' + body;
+  document.body.appendChild(ov);
+}
+window.docView = docView;
+
+// ══ Formatted drafts, two big boxes side by side ══════════════════════════════
+// The founder's ClaimShield sample: Draft and Lokpal Draft next to each other, each tall enough
+// to read a whole letter through. Used by the Draft form and by the Level-2 case sheet.
+function _csrRtStyles(){
+  if (document.getElementById('csrRtCss')) return;
+  const st = document.createElement('style'); st.id = 'csrRtCss';
+  st.textContent = `
+  .csrpair{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.9rem}
+  .csrpair .csrrt{margin-top:0}
+  .csrpair .csred{min-height:26rem;max-height:34rem}
+  @media (max-width:900px){ .csrpair{grid-template-columns:1fr} .csrpair .csred{min-height:18rem} }`;
+  document.head.appendChild(st);
+}
+window._csrRtStyles = _csrRtStyles;
+
+
 // ══ The ClaimShield case record ═══════════════════════════════════════════════
 // Four screens, laid out the way the office already knows them from ClaimShield:
 //
@@ -13233,8 +13356,7 @@ const CSR_GIST = [
   ['Comments', 'field', 'gist_comments'],
   ['Email ID', 'field', 'case_email'],
   ['Email Password', 'field', 'case_email_password'],
-  ['Consultation charge %', 'field', 'consultation_pct', 'number'],
-  ['CF Amount', 'field', 'cf_amount', 'number'],
+  // Consultation % and CF amount moved to the payment stage (founder, 14 Sep).
 ];
 // The draft form repeats the facts of the case above the two drafts, exactly as ClaimShield does.
 const CSR_DRAFT_FACTS = [
@@ -13414,15 +13536,17 @@ function _csrEditor(id, label, value){
     + '<div class="csred" id="' + id + '" contenteditable="true">' + _csrRichHTML(value) + '</div></div>';
 }
 async function csrDraft(claimId){
-  _csrStyles();
+  _csrStyles(); _csrRtStyles();
   openModal('Draft — NP-' + claimId, '<div class="empty"><p>Loading…</p></div>', [], true);
   try{ await _csrLoad(claimId); }
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the draft.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
       _csrInsurerList()
     + '<div class="csrg c4">' + CSR_DRAFT_FACTS.map(_csrInput).join('') + '</div>'
-    + _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'))
-    + _csrEditor('csrDraftLp', 'Lokpal Draft', _csrVal('field', 'draft_hi'))
+    + '<div class="csrpair">'
+    +   _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'))
+    +   _csrEditor('csrDraftLp', 'Lokpal Draft', _csrVal('field', 'draft_hi'))
+    + '</div>'
     + '<div class="csrsub"><button class="btn btn-primary" onclick="csrDraftSave()">Submit</button></div>'
     + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
     +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
@@ -13461,7 +13585,7 @@ function _csrPrint(title, bodyHtml){
     + '.bar{background:#e8f5e9;padding:8px 10px;font-size:12px;margin:6px 0 10px}'
     + '.rm{font-size:12px;margin:4px 0 12px}.rm ul{margin:4px 0 0 18px;padding:0}'
     + '.dr{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}'
-    + '.dr>div{border:1px solid #ccc;min-height:240px;padding:10px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}'
+    + '.dr>div{border:1px solid #ccc;min-height:420px;padding:12px;font-size:12.5px;line-height:1.55;overflow-wrap:anywhere}'
     + '.dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px;font-weight:700;margin-top:10px}'
     + '.act{position:fixed;top:12px;right:14px}.act button{font:inherit;padding:6px 12px;cursor:pointer}'
     + '@media print{.act{display:none}.pg{padding:0}}'
@@ -13510,14 +13634,14 @@ async function csrReport(claimId){
     + '<div class="two">'
     +   C('Initial Case Date', _csrDate(d.created_at)) + C('Patient Name', d.insured_name)
     +   C('Patient Contact', d.insured_phone) + C('Complainant Name', d.complainant_name)
-    +   C('Complainant Contact', d.complainant_phone) + C('Handed to Level-2 by', d.handed_over_by)
+    +   C('Complainant Contact', d.complainant_phone) + C('Manager', d.manager)
     +   C('Channel Partner', d.channel_partner) + C('Insurance company', d.insurer_name)
     +   C('Claim Number', f.insurer_claim_no) + C('Claim Amount', _csrMoney(d.disputed_amount))
-    +   C('Case Rejection Reason', f.rejection_reason) + C('Documents confirmed by', d.docs_complete_by)
+    +   C('Case Rejection Reason', f.rejection_reason) + C('Handed to Level-2 by', d.handed_over_by)
     + '</div>'
     + '<div class="rm"><b>Remarks :</b>' + (remarks ? '<ul>' + remarks + '</ul>' : ' —') + '</div>'
     + '<div class="two">'
-    +   C('Consultation Charge', f.consultation_pct) + C('Processing Fees', f.pf_status || f.review_fee_status)
+    +   C('Consultation Charge', f.consultation_pct) + C('Processing Fees', d.processing_fee)
     +   C('Cheque Amount', f.cheque_amount) + C('Cheque Number', f.cheque_no)
     +   C('Bank Name', f.bank_name) + C('CF Amount', f.cf_amount)
     +   C('PF Transaction Number', f.pf_txn || f.review_pf_txn) + C('CF Transaction Number', f.cf_txn)

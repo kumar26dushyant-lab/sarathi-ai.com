@@ -165,10 +165,8 @@ _FIELDS = {
         ("case_email", "Case email", "केस ईमेल", "text", 1,
          "The complainant's own email — all correspondence runs on it"),
         ("case_email_password", "Case email password", "ईमेल पासवर्ड", "text", 0, ""),
-        ("consultation_pct", "Consultation charge %", "कंसल्टेशन %", "number", 0, ""),
-        ("cf_amount", "CF amount", "CF राशि", "money", 0, ""),
-        ("review_fee_status", "Review fee (PF)", "रिव्यू फ़ीस (PF)", "choice", 0, ""),
-        ("review_pf_txn", "PF transaction no.", "PF ट्रांज़ैक्शन नं.", "text", 0, ""),
+        # Consultation %, CF amount, review fee and PF transaction moved to the payment stage
+        # (founder, 14 Sep) - consultation % and CF amount live there under the same keys.
         # From the ClaimShield gist form. The INSURER's claim number, not ClaimShield's case id.
         ("insurer_claim_no", "Claim number", "क्लेम नंबर", "text", 0,
          "The insurance company's own claim number, e.g. CIR/2026/201112/1282847"),
@@ -262,7 +260,7 @@ _CHOICES = {
 
 # from, to, kind, needs_reason
 _MOVES = [
-    ("live_cases", "pending_docs", "forward", 0),
+    # live_cases -> pending_docs retired 14 Sep: documents are gathered before Level-2 now.
     ("live_cases", "pending_draft", "forward", 0),
     ("pending_docs", "pending_draft", "forward", 0),
     ("pending_docs", "live_cases", "back", 1),
@@ -588,6 +586,19 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") 
             (int(claim_id), field_key, val, (actor or "")[:80]))
         await c.commit()
     return {"ok": True}
+
+
+async def _clean_rich_values(vals: dict) -> dict:
+    """Rich-text answers sanitised on the way OUT. The case sheet puts these straight into an
+    editor inside the ops page, and drafts saved before they were rich text were never cleaned."""
+    async with aiosqlite.connect(DB_PATH) as c:
+        rich = {r[0] for r in await (await c.execute(
+            "SELECT field_key FROM nidaan_bucket_fields WHERE field_type='richtext'")).fetchall()}
+    out = dict(vals or {})
+    for k in rich:
+        if out.get(k):
+            out[k] = sanitize_rich(out[k])
+    return out
 
 
 async def missing_required(claim_id: int, bucket_key: str) -> list:
@@ -980,7 +991,9 @@ def _why_here(item: dict, note: str, missing: list) -> tuple:
     if item.get("hold_until"):
         return ("Paused until %s." % str(item["hold_until"])[:10], "nothing until then")
 
-    if dt and dn < dt:
+    # Documents are gathered in L2 Claims, before the handover. Past that point the checklist is
+    # not what a claim is waiting for - except in Pending Docs, where it is the whole job.
+    if dt and dn < dt and item.get("bucket") == "pending_docs":
         short = dt - dn
         # Documents come from the COMPLAINANT. They are who has them and who the document window
         # asks. The bucket's waits_on is about who owes the next move on the CASE - a different
@@ -1077,6 +1090,17 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
 
     ids = [r["claim_id"] for r in rows]
     docs = await _docs_counts(ids)
+    # How many FILES are on each claim. In Level-2 that is the useful number - NP-119 had eight
+    # attached and its checklist said 0/4, because they were attached without saying which line
+    # each one answered.
+    files: dict = {}
+    if ids:
+        async with aiosqlite.connect(DB_PATH) as c:
+            ph = ",".join("?" * len(ids))
+            for cid_, n_ in await (await c.execute(
+                    "SELECT claim_id, COUNT(*) FROM nidaan_claim_documents WHERE claim_id IN (%s) "
+                    "GROUP BY claim_id" % ph, ids)).fetchall():
+                files[cid_] = n_
 
     items = []
     for r in rows:
@@ -1108,6 +1132,7 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "amber_days": amber, "red_days": red,
             "waits_on": sdef.get("waits_on") or b.get("waits_on") or "internal",
             "docs_done": done, "docs_total": total,
+            "files": files.get(r["claim_id"], 0),
             "docs_ready": bool(total and done >= total),
             "origin": _origin_of(r),
             "assigned_to": r.get("assigned_to_staff_id"),
@@ -1232,7 +1257,7 @@ async def for_claim(claim_id: int) -> dict:
         "substates": subs,
         "days": days, "age_state": age_state(days, amber, red),
         "amber_days": amber, "red_days": red,
-        "fields": await fields(bk), "values": vals,
+        "fields": await fields(bk), "values": await _clean_rich_values(vals),
         "missing_required": await missing_required(claim_id, bk),
         "moves": await moves_from(bk),
         "hold_until": row.get("hold_until") or "",

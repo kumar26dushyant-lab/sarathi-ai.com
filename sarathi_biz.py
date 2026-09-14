@@ -418,9 +418,20 @@ async def nidaan_doc_access_guard(request: Request, call_next):
         # from the file's own bytes, forcing a download means a crafted upload can't become
         # stored XSS against a staff session — it can only be saved to disk. nosniff stops the
         # browser second-guessing the type, and an empty sandbox drops any inherited privileges.
-        response.headers["Content-Disposition"] = "attachment"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+        # The in-app viewer may ask to SEE a PDF rather than download it. Granted only for .pdf,
+        # and the extension is derived from the file's own first bytes at upload - never from
+        # its name - so this is a real PDF. nosniff pins the type: the browser can only hand it
+        # to its PDF viewer, which runs apart from our pages, never parse it as a page of ours.
+        # (Chrome's viewer will not draw under a sandbox CSP, so frame-ancestors alone here.)
+        # Everything else, and every request that does not ask, still downloads.
+        if (request.query_params.get("inline") == "1"
+                and stored_name.lower().endswith(".pdf")):
+            response.headers["Content-Disposition"] = "inline"
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+        else:
+            response.headers["Content-Disposition"] = "attachment"
+            response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
         return response
     return await call_next(request)
 
@@ -6866,6 +6877,37 @@ async def ops_case_report(claim_id: int, request: Request):
             link = "%s/nidaan/claim/magic?token=%s" % (_cl._public_base(), p["access_token"])
     except Exception:
         link = ""
+    # "Manager" on ClaimShield's report is, in Nidaan's terms, the claim's CHAIN: where it came
+    # from and who raised it (founder, 14 Sep).
+    chain = [_bk._origin_of(claim)]
+    if cp and cp[0]:
+        chain.append("via partner %s" % cp[0])
+    if claim.get("branch_code") and not str(claim["branch_code"]).startswith("SP-"):
+        try:
+            _b = await nidaan.get_branch(claim["branch_code"])
+            if _b and _b.get("name"):
+                chain.append(_b["name"])
+        except Exception:
+            pass
+    # Processing fee: what the ledger says was actually paid. A subscriber raising a claim for
+    # themselves pays no processing fee, and the report says so rather than showing a blank.
+    fee = ""
+    if (claim.get("payment_status") or "").lower() == "subscription":
+        fee = "Subscriber raised \u2014 no processing fee"
+    else:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            pr = await (await c.execute(
+                "SELECT total_paise, source FROM nidaan_payments WHERE claim_id=? "
+                "AND source IN ('per_claim_review','branch_l2') "
+                "AND (verified=1 OR status IN ('captured','paid','success')) "
+                "ORDER BY pay_id DESC LIMIT 1", (claim_id,))).fetchone()
+        if pr and pr[0]:
+            fee = "\u20b9%s paid (%s)" % (
+                ("%.2f" % (pr[0] / 100.0)).rstrip("0").rstrip("."),
+                "review fee" if pr[1] == "per_claim_review" else "branch Level-2 fee")
+        else:
+            fee = "Not paid"
+
     # "Complainant", as the founder asked for everywhere a person reads. Remarks written before the
     # rename on 12 Sep still say "claimant"; this changes what is SHOWN and printed, never what is
     # stored - the history stays exactly as it was written.
@@ -6892,6 +6934,8 @@ async def ops_case_report(claim_id: int, request: Request):
         "raised_by": claim.get("raised_by_name") or "",
         "handed_over_by": claim.get("l2_handover_by") or "",
         "docs_complete_by": claim.get("docs_complete_by") or "",
+        "manager": " \u00b7 ".join(x for x in chain if x),
+        "processing_fee": fee,
         "bucket": claim.get("pipeline_stage") or "",
         "upload_link": link,
         "fields": vals,
