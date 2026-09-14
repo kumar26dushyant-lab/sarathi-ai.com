@@ -815,3 +815,27 @@ Team, when you raise a claim for a customer, the form now asks for the customer'
 टीम, जब आप किसी ग्राहक के लिए क्लेम दर्ज करते हैं, तो अब फ़ॉर्म में ग्राहक का **ईमेल** (मोबाइल के साथ) माँगा जाता है — और यह ज़रूरी है। कारण: जब कोई क्लेम **Level-2** तक जाने लायक होता है, तो हम ग्राहक को एक **अधिकार-पत्र लिंक** ईमेल पर भेजते हैं ताकि वे शर्तें स्वीकार कर सकें। जैसे ही वे वह लिंक खोलते हैं, उनका ईमेल **अपने आप वेरिफ़ाई** हो जाता है — कोई OTP नहीं, आपके लिए कुछ अतिरिक्त नहीं। कृपया ग्राहक का सही, चालू ईमेल भरें। अगर क्लेम आपका या परिवार के किसी सदस्य का है, तो उसी व्यक्ति का ईमेल डालें।
 
 _Suggested roles: Team members + Admins + Super admins (anyone who raises claims) + Branches._
+
+---
+
+## 2026-09-14 — Level-2: documents first, the case record, documents open in the page — DRAFT (founder to review)
+
+**Title (EN):**
+📂 Level-2: documents first, and the whole case in one place
+
+**Details (EN):**
+Team, three changes to how a claim moves into Level-2 and is worked there:
+1. **Documents come first.** In L2 Claims, attach any missing documents on the claim (the new **attach** button on the claim panel), or ask the complainant on WhatsApp. When everything is in, tick **All documents received**, then **Move to Level-2**. After that nobody is asked for documents again, and Live Cases goes straight on to Pending Draft.
+2. **The case record.** Open a case and you'll find the **Gist** (now with Policy No. and Policy Inception Date), the **Assessment Sheet**, the **Draft and Lokpal Draft side by side in two big boxes**, and the **Case Report**. Please paste drafts into the big boxes so the line breaks are kept.
+3. **Read documents without downloading.** Click any document and it opens right there. Press Esc to close it and you're back on the case. **Full claim** now opens in its own window.
+
+**Title (HI):**
+📂 Level-2: पहले दस्तावेज़, और पूरा केस एक जगह
+
+**Details (HI):**
+टीम, क्लेम के Level-2 में जाने और वहाँ काम होने के तरीके में तीन बदलाव:
+1. **पहले दस्तावेज़।** L2 Claims में क्लेम पर बाकी दस्तावेज़ जोड़ें (क्लेम पैनल पर नया **attach** बटन) या WhatsApp पर शिकायतकर्ता से मँगाएँ। सब आ जाए तो **All documents received** पर टिक करें, फिर **Move to Level-2** करें। उसके बाद किसी से दोबारा दस्तावेज़ नहीं माँगे जाते, और Live Cases से केस सीधे Pending Draft में जाता है।
+2. **केस रिकॉर्ड।** केस खोलिए, आपको मिलेगा **Gist** (अब Policy No. और Policy Inception Date के साथ), **Assessment Sheet**, **Draft और Lokpal Draft दो बड़े बॉक्स में साथ-साथ**, और **Case Report**। ड्राफ़्ट बड़े बॉक्स में ही पेस्ट करें ताकि लाइनें सही रहें।
+3. **बिना डाउनलोड दस्तावेज़ पढ़ें।** किसी भी दस्तावेज़ पर क्लिक करें, वहीं खुल जाएगा। Esc दबाएँ, वह बंद होगा और आप केस पर वापस होंगे। **Full claim** अब अलग विंडो में खुलता है।
+
+_Suggested roles: Team members + Admins + Super admins (everyone who works Level-2)._

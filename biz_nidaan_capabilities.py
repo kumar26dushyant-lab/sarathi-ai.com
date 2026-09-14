@@ -399,6 +399,25 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
+        "id": "case_record",
+        "en": {"t": "The case record: gist, drafts and case report",
+               "d": "Open any Level-2 case and its record fills in as the case moves: the gist "
+                    "(policy number and inception date included), the Initial Claim Assessment "
+                    "Sheet, the Draft and the Lokpal Draft in two big boxes side by side, and "
+                    "the Case Report that puts it all on one page. Click any document to read it "
+                    "right there - PDFs and photos open in the page, nothing to download. "
+                    "Full claim opens the claim in its own window, so the two sit side by side.",
+               "u": "Level-2 → Settlement → Open on any case."},
+        "hi": {"t": "केस रिकॉर्ड: गिस्ट, ड्राफ़्ट और केस रिपोर्ट",
+               "d": "Level-2 का कोई भी केस खोलिए - केस आगे बढ़ने के साथ उसका रिकॉर्ड भरता जाता है: गिस्ट "
+                    "(पॉलिसी नंबर और पॉलिसी शुरू होने की तारीख के साथ), शुरुआती क्लेम आकलन शीट, Draft और "
+                    "Lokpal Draft दो बड़े बॉक्स में साथ-साथ, और केस रिपोर्ट जिसमें सब एक पेज पर है। किसी भी "
+                    "दस्तावेज़ पर क्लिक करें, वहीं पढ़ें - PDF और फ़ोटो पेज में ही खुलते हैं, डाउनलोड नहीं करना पड़ता। "
+                    "Full claim क्लेम को अलग विंडो में खोलता है, ताकि दोनों साथ-साथ दिखें।",
+               "u": "Level-2 → Settlement → किसी भी केस पर Open।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "propose_channel_partner",
         "en": {"t": "Propose a Channel Partner",
                "d": "Any staff member can add a partner who sends us business \u2014 they are the "

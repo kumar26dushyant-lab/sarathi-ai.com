@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 13, 2026. Newest work is at the BOTTOM — read **A93** first, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 14, 2026. Newest work is at the BOTTOM — read **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -6606,6 +6606,46 @@ Claim Pipeline.**
 * **My Desk** is the only owner of: on-duty chips, leave-coverage alerts (nobody / on leave /
   on leave within a fortnight, with the covering name), the on-fire list with prose reasons, the
   journey map, and the EN/हिंदी toggle.
+
+## A98 — [NIDAAN] LIVE TESTING WITH THE FOUNDER, ROUNDS 1–3 (Sep 14 2026)
+
+**How we work now:** the founder tests step by step on real claims and reports with screenshots;
+each fix is proved on a copy of the live DB through the real routes, then in a real browser
+(`uitest/flow.mjs`, Playwright, mints a real staff token over SSH, never writes — **125/125**),
+then deployed and the round reported. Test screenshots hold real customer documents — **delete
+`uitest/screenshots/*.png` after every run** (git-ignored, but they sit on disk).
+
+**Round 1 — documents-first handover.** `POST /claims/{id}/documents/upload` (any claim,
+team_member, `_guard_upload_batch` + ClamAV, optional `doc_key` ticks the line). `POST
+/cases/{id}/docs-complete` sets `docs_complete_at/by`; the `hand_over` move requires it
+(`needs_docs`) — the ONE gate besides comment + park date. `_l2HandoverControls(c)` is shared by
+L2 Claims' table, board and cards views. WhatsApp collection (`biz_nidaan_wa_orchestrator.
+start_for_claim`): complainant phone first; in-session → guided chat; cold → `wa_journey(...,
+"doc_reminder")` (template `np_doc_reminder`); returns `{ok, mode, to, who, first_doc, pending,
+error}` and the UI shows exactly that.
+
+**Round 2 — the ClaimShield case record.** Gist (`POST /cases/{id}/gist`, `_GIST_CORE` short
+audited list of claim columns + bucket fields), Assessment Sheet, Draft form, Case Report (`GET
+/cases/{id}/report`). `sanitize_rich()` (allowlist b,strong,i,em,u,br,p,div,span,ul,ol,li; no
+attributes) on write in `set_field` and on read; `_FIELD_MAX` richtext 60000 / textarea 20000 /
+else 2000 — **refuse, never truncate**. Client `_csrRichHTML` trusts server output (no double escape).
+
+**Round 3.** Report `manager` = `_origin_of(claim)` · CP · branch name; `processing_fee` from
+`nidaan_payments` (`per_claim_review` / `branch_l2`) or "Subscriber raised — no processing fee" when
+`payment_status='subscription'`. `_why_here` mentions documents ONLY in `pending_docs`; `board()`
+rows carry `files`. `live_cases→pending_docs` tombstoned (next = Pending Draft). Live Cases fee
+fields (consultation_pct, cf_amount, review_fee_status, review_pf_txn) set inactive, answers kept;
+Policy No. + Policy Inception on the case sheet via `l2Core` → /gist. **Document serving**
+(`nidaan_doc_access_guard`): default stays `attachment` + nosniff + `sandbox; default-src 'none'`;
+`?inline=1` granted ONLY for `.pdf` (extension derived from magic bytes at upload) → `inline` +
+`frame-ancestors 'self'` (Chrome's PDF viewer will not draw under a sandbox CSP). `docView(url,
+name, mime)` overlay: iframe for PDF, `<img>` for images, a download notice for Word. "Full claim ↗"
+= `window.open('/nidaan/ops?claim=ID')`, deep link opens the drawer. Drafts = `.csrpair` two equal
+32rem boxes. **Escape** closes the top-most VISIBLE layer by z-index (DOM order between equals) —
+the account drawer hides with display:none and must not swallow it.
+
+**Data notes:** NP-119 draft by Dr. Ashish lost its line breaks through the old one-line box
+(words intact); ANNAPURNA KASERA saved an empty Lokpal draft. Backups `/root/pre_round3_*.db`.
 
 ---
 

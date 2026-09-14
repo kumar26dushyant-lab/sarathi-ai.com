@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-13 (L2 bucket system SHIPPED - 11 buckets as data, handover with sign-off, any-bucket moves, comment on every move, arrival notifications, readiness gate; doc-collection window under discussion)
+**Last updated:** 2026-09-14 (live testing with the founder, rounds 1–3: documents-first L2 handover, WhatsApp collection fixed, ClaimShield case record, documents open in place, big side-by-side drafts; browser test 125/125)
 
 ### ✅ SHIPPED 2026-09-10 — attachments, duty roster, Email Radar
 - ✅ **Attachment limits raised everywhere at once** — 5 files/10 MB → **20 files/25 MB**, per-claim cap 40 → 60. Applied to all **five** upload endpoints via one `_guard_upload_batch()` (branch, claim portal, review purchase, claim docs, My Business) plus every piece of user-facing copy on 6 surfaces — the endpoint-uniformity rule. **Why 25 MB and not 100:** every stored file is virus-scanned in memory before it is written, and clamd refuses a stream past `StreamMaxLength`. 100 MB would have meant refusing files in the gap or storing them unscanned. Instead **clamd was raised to 64M** (`/root/clamd.conf.bak.*` kept) and proved: a 25 MB stream scans clean in 4.4s and **EICAR is still detected**. Browser now **splits a large set into batches** under the nginx 50M body cap, so a big upload succeeds instead of hitting an opaque 413; a partial upload reports what actually landed.
@@ -66,6 +66,43 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
   `team_member` can open.
 - 🟢 **NEXT:** claim panel redesign (one popup, no scrolling), claim communication redesign
   (complainant + CC every channel), Notification Control Centre, folding Claims Dashboard in.
+
+### ✅ SHIPPED 2026-09-14 — live testing with the founder, rounds 1–3
+_The founder tests step by step on real claims and reports; each fix is proved through the real
+routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/125**) before the report goes back._
+- ✅ **Round 1 — L2 Claims → Level-2.** Manual **attach documents** on the claim panel (any claim,
+  virus-scanned, 25 MB guard, can tick the checklist line it answers). **"All documents received"
+  tick** on every L2 Claims row, in all three views (table / board / cards — Board and Cards had
+  no Move controls at all). The tick is what lets a claim move to Level-2 (founder's rule); the
+  handover itself is never otherwise blocked. **WhatsApp document collection fixed**: it messaged
+  the wrong number (insured, not complainant), sent free text outside the 24-hour window (refused
+  by WhatsApp, reported as success), and now uses the approved template cold, the guided chat
+  in-session, and reports honestly who it went to and what failed.
+- ✅ **Round 2 — the ClaimShield case record.** Gist form, Initial Claim Assessment Sheet, Draft form
+  (Draft + Lokpal Draft, formatted) and the Case Report, filling in as each bucket completes, same
+  layout as ClaimShield. Drafts are formatted HTML **sanitised on write and on read** (allowlist of
+  11 tags, every attribute dropped, script/style/iframe bodies removed); a draft over 60,000
+  characters is **refused, never truncated** (the old box silently cut at 8,000).
+- ✅ **Round 3 — (founder, 14 Sep).**
+  - Report **Manager** = the claim's chain (origin · via partner · branch). Operation officer left as is.
+  - **Processing Fees** from the payment ledger: "Subscriber raised — no processing fee", "₹X paid
+    (review fee / branch Level-2 fee)", or "Not paid".
+  - **No pending-documents talk after Level-2 begins** — documents are gathered in L2 Claims now. The
+    why-line only mentions documents in Pending Docs itself; rows show **files attached** (NP-119
+    had 8 files and read "0/4"); Live Cases' next step is **Pending Draft** (route tombstoned).
+  - **Documents open in the page, not as downloads.** PDFs are served inline **only** when the viewer
+    asks (`?inline=1`) and only for files proven PDF by their own first bytes at upload; nosniff +
+    `frame-ancestors 'self'`. Everything else still downloads under the sandbox CSP. Images show
+    via `<img>`. Verified in real Edge: 0 downloads. Escape closes the viewer and keeps the case sheet.
+  - **Gist form**: Consultation %, CF amount, Review fee (PF), PF transaction no. removed (fields
+    retired, answers kept); **Policy No. + Policy Inception Date** added, saved on the claim.
+  - **Full claim ↗ opens in its own window** straight onto the claim.
+  - **Drafts as two big equal boxes side by side** (32rem each) — on the case sheet and the Draft form.
+  - **Escape closes whatever is really on top** (visible layers only, by z-index) — an account
+    drawer hidden with display:none had been swallowing it.
+- ℹ️ **Data notes for the founder:** Dr. Ashish's NP-119 draft (1,875 chars) was typed into the old
+  one-line box and lost its line breaks — words intact, re-paste restores the layout. ANNAPURNA
+  KASERA saved an empty Lokpal draft.
 
 ### 🔵 QUEUED (founder, Sep 13 2026) — 🔔 Notification Control Centre
 
