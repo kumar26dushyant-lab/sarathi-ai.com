@@ -349,6 +349,69 @@ async function run() {
   }
   chk(errors.length === 0, 'the claim panel throws no script error', errors[0]);
 
+  /* ── 3e. live-testing round 3 (14 Sep): the Level-2 case sheet ────────────
+   * Drafts as two equal big boxes side by side (they were one-line inputs, which drop line
+   * breaks on paste); documents open IN the page; Full claim opens its own window. */
+  console.log('\n── case sheet (round 3) ──');
+  errors.length = 0;
+  const l2Claim = await page.evaluate(async () => {
+    const r = await API('/buckets/pending_draft/claims');
+    const d = r.ok ? await r.json() : {};
+    const it = (d.items || [])[0] || null;
+    if (it) return it.claim_id;
+    const r2 = await API('/buckets/live_cases/claims');
+    const d2 = r2.ok ? await r2.json() : {};
+    return ((d2.items || [])[0] || {}).claim_id || 0;
+  });
+  if (l2Claim) {
+    await page.evaluate(id => window.l2Open(id), l2Claim);
+    await page.waitForTimeout(2800);
+    const cs = await page.evaluate(() => {
+      const eds = [...document.querySelectorAll('.csrpair .csred')];
+      const r = eds.map(e => e.getBoundingClientRect());
+      return {
+        oneLine: !!document.querySelector('input#lf_draft_en, input#lf_draft_hi'),
+        n: eds.length,
+        side: r.length === 2 && Math.abs(r[0].top - r[1].top) < 2,
+        equal: r.length === 2 && Math.abs(r[0].height - r[1].height) < 2,
+        tall: r.length ? Math.round(r[0].height) : 0,
+        docs: document.querySelectorAll('[onclick*="docView("]').length,
+        full: !!document.querySelector('[onclick*="?claim="]'),
+        gistBtn: !!document.querySelector('[onclick^="csrGist("]'),
+        reportBtn: !!document.querySelector('[onclick^="csrReport("]'),
+      };
+    });
+    const st = await page.evaluate(() => (window._l2Case && _l2Case.st && _l2Case.st.bucket) || '');
+    if (st === 'pending_draft') {
+      chk(!cs.oneLine, 'the drafts are no longer one-line boxes');
+      chk(cs.n === 2 && cs.side, 'Draft and Lokpal Draft sit side by side');
+      chk(cs.equal && cs.tall > 400, `and are the same big height (${cs.tall}px)`);
+    }
+    chk(cs.gistBtn && cs.reportBtn, 'the case sheet offers the Gist and the Case report');
+    chk(cs.full, 'and a Full claim button');
+    if (cs.docs) {
+      await page.evaluate(() => document.querySelector('[onclick*="docView("]').click());
+      await page.waitForTimeout(1200);
+      const v = await page.evaluate(() => {
+        const o = document.getElementById('docViewOv');
+        const f = o && o.querySelector('iframe,img');
+        return { open: !!o, tag: f ? f.tagName : '', inline: f && f.tagName === 'IFRAME'
+                 ? /[?&]inline=1/.test(f.getAttribute('src') || '') : true };
+      });
+      chk(v.open, 'a document opens in the viewer, inside the page');
+      chk(v.inline, 'and a PDF is asked for inline, not as a download');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      const after = await page.evaluate(() => ({
+        viewer: !!document.getElementById('docViewOv'),
+        sheet: !!document.querySelector('.modal-bg.open') }));
+      chk(!after.viewer && after.sheet,
+          'Escape closes the viewer and leaves the case sheet underneath');
+    }
+    await page.keyboard.press('Escape');
+  }
+  chk(errors.length === 0, 'the case sheet throws no script error', errors[0]);
+
   /* ── 4. the handover dialog — opens, and never traps ─────────────────────── */
   console.log('\n── handover ──');
   errors.length = 0;

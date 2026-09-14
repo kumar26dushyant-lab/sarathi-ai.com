@@ -13314,7 +13314,9 @@ function _csrRtStyles(){
   st.textContent = `
   .csrpair{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.9rem}
   .csrpair .csrrt{margin-top:0}
-  .csrpair .csred{min-height:26rem;max-height:34rem}
+  /* Both boxes the SAME height, scrolling inside - one growing to fit a long letter left its
+     neighbour short and the pair lopsided. */
+  .csrpair .csred{height:32rem;min-height:0;max-height:none}
   @media (max-width:900px){ .csrpair{grid-template-columns:1fr} .csrpair .csred{min-height:18rem} }`;
   document.head.appendChild(st);
 }
