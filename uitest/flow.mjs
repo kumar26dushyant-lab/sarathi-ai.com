@@ -410,9 +410,55 @@ async function run() {
     chk(dr.open, 'the claim panel opens');
     chk(dr.docs, 'and has an "Open documents & attach" button');
     chk(!dr.staleHint, 'and no longer tells staff a cold start needs a template it now sends');
+    // 14 Sep: on a laptop the claim is a popup in the middle, its sections in three columns.
+    const pop = await page.evaluate(() => {
+      const d = document.getElementById('claimDrawer').getBoundingClientRect();
+      const cols = [...document.querySelectorAll('#drawerBody .dcols > .dcol')];
+      const inCol = (re) => cols.findIndex(c => [...c.querySelectorAll('h4, summary')]
+                                               .some(h => re.test(h.textContent)));
+      return {
+        centred: Math.abs((d.left + d.width / 2) - innerWidth / 2) < 30 && d.width > 1000,
+        n: cols.length,
+        info: inCol(/claim info/i), docs: inCol(/📂 Documents/), notes: inCol(/internal notes/i),
+        hist: inCol(/status history/i), upd: inCol(/update status/i),
+        sections: document.querySelectorAll('#drawerBody [data-ord]').length,
+        colScroll: cols.every(c => getComputedStyle(c).overflowY === 'auto'),
+        bodyScroll: document.getElementById('drawerBody').scrollHeight
+                    <= document.getElementById('drawerBody').clientHeight + 2 };
+    });
+    chk(pop.centred, 'on a laptop the claim opens as a wide popup in the middle of the screen');
+    chk(pop.n === 3, `its sections sit in three columns (${pop.n})`);
+    chk(pop.info === 0 && pop.docs === 1 && pop.notes === 2 && pop.hist === 2 && pop.upd === 1,
+        'who & what | the work | conversation & history', JSON.stringify(pop));
+    chk(pop.colScroll && pop.bodyScroll, 'each column scrolls on its own; the popup itself does not');
     await shot(page, 'claim-panel');
+    // Buttons still work after the move: the documents window opens from the popup.
+    await page.evaluate(() => document.querySelector('#drawerBody [onclick^="docsOpen"]').click());
+    await page.waitForTimeout(1500);
+    chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
+        'a button inside the popup still works (Open documents)');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
+    // Narrow the window to a phone: back to the side panel, every section, in the original order.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(600);
+    const ph = await page.evaluate(() => {
+      const b = document.getElementById('drawerBody');
+      const ords = [...b.children].map(e => +e.dataset.ord);
+      return { cols: !!b.querySelector('.dcols'), n: ords.length,
+               ordered: ords.every((v, i) => i === 0 || v > ords[i - 1]),
+               full: document.getElementById('claimDrawer').getBoundingClientRect().width >= 385 };
+    });
+    chk(!ph.cols && ph.ordered && ph.n === pop.sections && ph.full,
+        `on a phone it is the side panel again, all ${ph.n} sections in their original order`);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.waitForTimeout(600);
+    chk(await page.evaluate(() => document.querySelectorAll('#drawerBody .dcols > .dcol').length === 3),
+        'and widening the window puts the columns back');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('drawerBg').classList.contains('is-claim')),
+        'closing it clears the popup mode, so tasks and leads keep the side panel');
   }
   chk(errors.length === 0, 'the claim panel throws no script error', errors[0]);
 
