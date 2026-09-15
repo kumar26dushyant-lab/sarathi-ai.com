@@ -463,7 +463,7 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
             "payment_status, "
             "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
             "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by, "
-            "l2_handover_note "
+            "l2_handover_note, back_at, back_by, back_by_role, back_from, back_reason "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
 
@@ -556,11 +556,81 @@ def sanitize_rich(html: str) -> str:
 _FIELD_MAX = {"richtext": 60000, "textarea": 20000}
 
 
-async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") -> dict:
+# ── Finished work locks (founder, 15 Sep) ──────────────────────────────────────
+# A bucket's work can be changed while the claim is in that bucket - or in any bucket BEFORE it,
+# since filling something early harms nothing. Once the claim has moved PAST it, the work is
+# locked and only a super admin may change it. The gist is the exception: it stays open until
+# the drafts are finished, because the drafter is the one who spots a wrong fact in it.
+SUPER = "super_admin"
+GIST_BUCKET = "live_cases"
+GIST_OPEN_UNTIL = "pending_draft"
+# The case's own facts that the gist corrects - columns on the claim, not bucket fields.
+CORE_GIST_KEYS = ("insured_name", "complainant_name", "insurer_name", "policy_no",
+                  "policy_inception_date", "disputed_amount")
+
+
+async def locked_fields(row: Optional[dict], role: str = "") -> dict:
+    """{field_key: name of the bucket that finished it} for everything THIS person may not change
+    on this claim. Empty for a super admin, and for a claim that has not started Level-2."""
+    if not row or (role or "") == SUPER:
+        return {}
+    cur = (row.get("pipeline_stage") or "").strip()
+    if not cur:
+        return {}
+    bmap = {b["bucket_key"]: b for b in await buckets(include_inactive=True)}
+    here = bmap.get(cur) or {}
+    if here.get("is_park"):
+        # A parked claim is where it was parked from, for this purpose.
+        here = bmap.get((row.get("pipeline_from") or "").strip()) or here
+    if here.get("sort_order") is None or here.get("is_park"):
+        return {}
+    at = here["sort_order"]
+    until = bmap.get(GIST_OPEN_UNTIL) or {}
+    async with aiosqlite.connect(DB_PATH) as c:
+        rows = await (await c.execute(
+            "SELECT bucket_key, field_key FROM nidaan_bucket_fields WHERE active=1")).fetchall()
+    last: dict = {}
+    for bk, fk in rows:
+        b = bmap.get(bk)
+        if not b or b.get("is_park") or b.get("sort_order") is None:
+            continue
+        o, nm = b["sort_order"], b.get("name_en") or bk
+        if bk == GIST_BUCKET and until.get("sort_order") is not None and until["sort_order"] > o:
+            o, nm = until["sort_order"], until.get("name_en") or GIST_OPEN_UNTIL
+        # A field kept in two buckets (settlement amount) belongs to the later one.
+        if fk not in last or o > last[fk][0]:
+            last[fk] = (o, nm)
+    out = {fk: nm for fk, (o, nm) in last.items() if at > o}
+    g = bmap.get(GIST_BUCKET) or {}
+    g_o = until.get("sort_order") if until.get("sort_order") is not None else g.get("sort_order")
+    if g_o is not None and at > g_o:
+        nm = until.get("name_en") or g.get("name_en") or "Live Cases"
+        for k in CORE_GIST_KEYS:
+            out[k] = nm
+    return out
+
+
+def lock_message(where: str) -> str:
+    return ("Locked: this was finished in %s. Only a super admin can change it now - "
+            "use Request a change." % (where or "an earlier bucket"))
+
+
+async def _note_locked_edit(claim_id: int, field_key: str, where: str, actor: str) -> None:
+    """A super admin changing locked work goes into the remarks - once an hour per field, not
+    once per autosave."""
+    key = "lockedit:%s:%s:%s" % (claim_id, field_key, datetime.utcnow().strftime("%Y%m%d%H"))
+    if await _alert_once(key):
+        await _log(claim_id, "\U0001f513 Super admin changed %s (locked since %s)"
+                   % (field_key.replace("_", " "), where), actor)
+
+
+async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
+                    role: str = "") -> dict:
     """Record one answer.
 
     Only fields the configuration knows about are accepted, so a renamed or deleted field cannot
-    quietly keep collecting data that nobody will ever look at again.
+    quietly keep collecting data that nobody will ever look at again. Finished work is locked for
+    everyone but a super admin; saving the same value again is harmless and not refused.
     """
     async with aiosqlite.connect(DB_PATH) as c:
         known = await (await c.execute(
@@ -578,6 +648,19 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") 
             return {"ok": False,
                     "error": "That is too long to save (%d characters; the limit is %d)."
                              % (len(val), limit)}
+        row = await _claim_row(claim_id)
+        locks = await locked_fields(row, "")        # what is locked for everyone but a super admin
+        if field_key in locks:
+            cur = await (await c.execute(
+                "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
+                (int(claim_id), field_key))).fetchone()
+            same = ((cur[0] if cur else "") or "").strip()
+            if ftype == "richtext":
+                same = sanitize_rich(same)
+            if same == val:
+                return {"ok": True, "unchanged": True}
+            if (role or "") != SUPER:
+                return {"ok": False, "locked": True, "error": lock_message(locks[field_key])}
         await c.execute(
             "INSERT INTO nidaan_claim_fields (claim_id, field_key, value, updated_by, updated_at) "
             "VALUES (?,?,?,?,CURRENT_TIMESTAMP) "
@@ -585,6 +668,8 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "") 
             "updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP",
             (int(claim_id), field_key, val, (actor or "")[:80]))
         await c.commit()
+    if field_key in locks:
+        await _note_locked_edit(claim_id, field_key, locks[field_key], actor)
     return {"ok": True}
 
 
@@ -683,7 +768,8 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
 
 
 async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
-               hold_until: str = "", actor: str = "", force: bool = False) -> dict:
+               hold_until: str = "", actor: str = "", force: bool = False,
+               actor_role: str = "") -> dict:
     """Move a claim to any other bucket.
 
     NO MOVE IS EVER REFUSED FOR BEING UNTIDY. A route that is not in the configuration is allowed
@@ -798,13 +884,26 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                 "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_by=?, pipeline_from=?, "
                 "hold_until=? WHERE claim_id=?",
                 (to_key, sub, (actor or "")[:80], came_from, (day or None), int(claim_id)))
+            # The flag the next person sees: set on a backward move, cleared once the claim goes
+            # forward again. A park and its return leave it as it was.
+            if kind == "back":
+                await c.execute(
+                    "UPDATE nidaan_claims SET back_at=CURRENT_TIMESTAMP, back_by=?, back_by_role=?, "
+                    "back_from=?, back_reason=? WHERE claim_id=?",
+                    ((actor or "")[:80], (actor_role or "")[:20], src.get("name_en", cur_key)[:60],
+                     (reason or "").strip()[:400], int(claim_id)))
+            elif kind == "forward":
+                await c.execute(
+                    "UPDATE nidaan_claims SET back_at=NULL, back_by='', back_by_role='', "
+                    "back_from='', back_reason='' WHERE claim_id=?", (int(claim_id),))
             await c.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("bucket move failed for %s: %s", claim_id, e)
         return {"ok": False, "error": "Could not save that. Try again."}
 
-    verb = {"back": "sent back to", "park": "parked in",
-            "resume": "resumed into"}.get(kind, "moved to")
+    verb = {"back": ("pulled back by a super admin to" if (actor_role or "") == SUPER
+                     else "sent back to"),
+            "park": "parked in", "resume": "resumed into"}.get(kind, "moved to")
     summary = "%s -> %s %s%s" % (src.get("name_en", cur_key), verb, dest["name_en"],
                                  " (off the usual path)" if off_route else "")
     if day:
@@ -896,7 +995,8 @@ _CLAIM_COLS = (
     "c.created_at, "
     "c.pipeline_stage, c.pipeline_sub, c.pipeline_stage_at, c.pipeline_entered_at, "
     "c.pipeline_by, c.pipeline_from, c.hold_until, c.raised_by_name, c.raised_via, "
-    "c.channel_partner_id, c.origin"
+    "c.channel_partner_id, c.origin, c.back_at, c.back_by, c.back_by_role, c.back_from, "
+    "c.back_reason"
 )
 
 
@@ -1141,6 +1241,7 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "from_bucket": (r.get("pipeline_from") or ""),
             "lokpal_days_left": left,
             "created_at": r.get("created_at"),
+            "back": _back_flag(r),
         })
 
     # WHY each one is sitting here, and WHAT is outstanding. Computed after the loop so the
@@ -1233,8 +1334,17 @@ async def waiting_to_start(limit: int = 200) -> list:
              "waiting_days": _days_since(r.get("l2_handover_at"))} for r in rows]
 
 
-async def for_claim(claim_id: int) -> dict:
-    """Everything the case report needs about where this claim is."""
+def _back_flag(row: dict) -> dict:
+    if not (row or {}).get("back_at"):
+        return {}
+    return {"at": str(row.get("back_at") or ""), "by": row.get("back_by") or "",
+            "super": (row.get("back_by_role") or "") == SUPER,
+            "from": row.get("back_from") or "", "reason": row.get("back_reason") or ""}
+
+
+async def for_claim(claim_id: int, role: str = "") -> dict:
+    """Everything the case report needs about where this claim is - and, for the person asking,
+    which finished work they may not change."""
     row = await _claim_row(claim_id)
     if not row:
         return {}
@@ -1264,6 +1374,11 @@ async def for_claim(claim_id: int) -> dict:
         "from_bucket": row.get("pipeline_from") or "",
         "moved_by": row.get("pipeline_by") or "",
         "lokpal_days_left": await _lokpal_days_left(row, vals),
+        "locked": await locked_fields(row, role),
+        # What is locked for everyone else - so a super admin is told their edit is an override.
+        "locked_for_others": await locked_fields(row, ""),
+        "is_super": (role or "") == SUPER,
+        "back": _back_flag(row),
     }
 
 

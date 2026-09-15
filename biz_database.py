@@ -2678,6 +2678,13 @@ async def init_db():
             # so by the time it is in Live Cases the gist can be built from what is there.
             "ALTER TABLE nidaan_claims ADD COLUMN docs_complete_at TIMESTAMP",
             "ALTER TABLE nidaan_claims ADD COLUMN docs_complete_by TEXT DEFAULT ''",
+            # The last backward move, shown on the claim until it next moves forward: who sent it
+            # back, from which bucket, why, and whether that was a super admin pulling it back.
+            "ALTER TABLE nidaan_claims ADD COLUMN back_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN back_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN back_by_role TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN back_from TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN back_reason TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_rs_sql)

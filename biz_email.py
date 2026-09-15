@@ -92,10 +92,12 @@ async def send_email(to_email: str, subject: str, html_body: str,
                      delivery_critical: bool = False) -> bool:
     """Send transactional email. Prefers Resend HTTPS API when RESEND_API_KEY is
     set (proper DKIM-aligned deliverability), otherwise falls back to Gmail SMTP.
-    Returns True on success.
+    Returns True on success. NIDAAN_NO_OUTBOUND=1 (test runs only) sends nothing.
     from_email: override sender address (defaults to FROM_NOREPLY).
     from_name: override sender display name.
     reply_to: override Reply-To header (defaults to noreply)."""
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
+        return False
     if not _initialized:
         logger.warning("Email not sent (not configured): %s → %s", subject, to_email)
         return False

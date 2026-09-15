@@ -577,6 +577,13 @@ async function run() {
       pw: /\u2022{6}/.test((document.querySelector('.l2built') || {}).innerText || '')
           || !/Email Password/.test((document.querySelector('.l2built') || {}).innerText || '') }));
     chk(b.built, `NP-${later}, past Pending Draft, shows what the earlier buckets built`);
+    // 15 Sep: finished drafts lock - but a super admin (this session) may still edit them.
+    const sa = await page.evaluate(() => {
+      const ed = document.querySelector('.l2built #lf_draft_hi');
+      return { editable: ed && ed.isContentEditable,
+               note: /Locked for others/.test((document.querySelector('.l2built') || {}).innerText || '') };
+    });
+    chk(sa.editable && sa.note, 'a super admin can edit the locked drafts, and is told it is an override');
     chk(b.drafts && b.from, 'including both drafts, marked as written in Pending Draft');
     chk(b.pw, 'and never shows the case email password');
 
@@ -696,6 +703,51 @@ async function run() {
              launch: !!document.querySelector('[onclick*="waLaunchCampaign"]') };
   });
   chk(waBits.inbox, 'a sub-super-admin sees the WhatsApp inbox');
+
+  // 15 Sep: past Pending Draft, the drafts and the gist are locked for everyone but the three
+  // super admins. Nothing here is saved or sent - the request is opened and cancelled.
+  const later2 = await page.evaluate(async () => {
+    for (const b of ['escalation', 'lokpal', 'completed']) {
+      const r = await API('/buckets/' + b + '/claims');
+      const d = r.ok ? await r.json() : {};
+      if ((d.items || []).length) return d.items[0].claim_id;
+    }
+    return 0;
+  });
+  if (later2) {
+    await page.evaluate(() => showPanel('l2'));
+    await page.waitForTimeout(1500);
+    await page.evaluate(id => l2Open(id), later2);
+    await page.waitForFunction(() => document.getElementById('l2cMsg'), null, { timeout: 20000 }).catch(() => {});
+    const lk = await page.evaluate(() => {
+      const ed = document.querySelector('.l2built #lf_draft_hi');
+      return { ro: !!ed && !ed.isContentEditable && ed.classList.contains('locked'),
+               banner: /Locked \u2014 finished in/.test((document.querySelector('.l2built') || {}).innerText || ''),
+               req: !!document.querySelector('.l2built [onclick^="l2RequestChange"]') };
+    });
+    chk(lk.ro, `for ${ss.name} the drafts on NP-${later2} are read-only`);
+    chk(lk.banner && lk.req, 'marked Locked, with a Request a change button');
+    await page.evaluate(() => document.querySelector('.l2built [onclick^="l2RequestChange"]').click());
+    await page.waitForTimeout(400);
+    const rq = await page.evaluate(() => ({
+      open: !!document.getElementById('l2rcOv'),
+      sheet: !!document.querySelector('.modal-bg.open'),
+      what: (document.getElementById('l2rcWhat') || {}).value || '' }));
+    chk(rq.open && rq.sheet && rq.what, `Request a change opens above the case sheet ("${rq.what}")`);
+    await page.evaluate(() => document.querySelector('#l2rcOv .btn-ghost').click());   // Cancel
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('l2rcOv') && !!document.querySelector('.modal-bg.open')),
+        'Cancel closes it and the case sheet stays');
+    await page.evaluate(id => csrGist(id), later2);
+    await page.waitForTimeout(2000);
+    const gf = await page.evaluate(() => ({
+      disabled: [...document.querySelectorAll('#modalBody .csrf input, #modalBody .csrf select')].every(e => e.disabled),
+      submit: !!document.querySelector('#modalBody .csrsub'),
+      banner: /locked/i.test((document.querySelector('#modalBody .l2ban') || {}).innerText || '') }));
+    chk(gf.disabled && !gf.submit && gf.banner, 'the Gist form is greyed out, says why, and offers no Submit');
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+    await page.waitForTimeout(300);
+  }
   chk(!waBits.settings, 'but not the automation defaults');
   chk(!waBits.campaign && !waBits.launch, 'and no campaign controls at all');
   await shot(page, 'wa-subadmin');

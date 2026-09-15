@@ -6619,7 +6619,8 @@ async def nidaan_ops_pipeline_move(claim_id: int, body: _PipelineMoveReq, reques
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    res = await _bk.move(claim_id, body.to, reason=body.note, actor=_actor_label(caller))
+    res = await _bk.move(claim_id, body.to, reason=body.note, actor=_actor_label(caller),
+                         actor_role=caller.get("role") or "")
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
     await _ops_audit(request, "case.pipeline_move", "claim", claim_id,
@@ -6834,9 +6835,10 @@ async def ops_case_report(claim_id: int, request: Request):
     """
     if not _is_nidaan_host(request):
         raise HTTPException(404)
-    _require_staff(request, "team_member")
+    caller = _require_staff(request, "team_member")
     import aiosqlite as _aio
     import biz_nidaan_buckets as _bk
+    _locks = await _bk.locked_fields(await _bk._claim_row(claim_id), caller.get("role") or "")
     async with _aio.connect(nidaan.DB_PATH) as c:
         c.row_factory = _aio.Row
         r = await (await c.execute(
@@ -6943,6 +6945,9 @@ async def ops_case_report(claim_id: int, request: Request):
         "fields": vals,
         "labels": labels,
         "remarks": acts,
+        "locked": _locks,
+        "locked_all": await _bk.locked_fields(await _bk._claim_row(claim_id), ""),
+        "is_super": (caller.get("role") or "") == "super_admin",
     }
 
 
@@ -6959,10 +6964,39 @@ async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
         raise HTTPException(404)
     caller = _require_staff(request, "team_member")
     who = _actor_label(caller)
+    role = caller.get("role") or ""
     import biz_nidaan_buckets as _bk
     changed = []
 
     core = {k: v for k, v in (body.core or {}).items() if k in _GIST_CORE}
+    # Finished work is locked: a core fact that is locked may be re-sent unchanged, never changed.
+    if core:
+        locks = await _bk.locked_fields(await _bk._claim_row(claim_id), role)
+        locked_core = [k for k in core if k in locks]
+        if locked_core:
+            import aiosqlite as _aio0
+            async with _aio0.connect(nidaan.DB_PATH) as c:
+                cur = await (await c.execute(
+                    "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(locked_core),
+                    (claim_id,))).fetchone()
+            curv = dict(zip(locked_core, cur or [None] * len(locked_core)))
+            def _same(k):
+                a, b = curv.get(k), core.get(k)
+                a = "" if a is None else str(a).strip()
+                b = "" if b is None else str(b).strip()
+                if k == "disputed_amount":
+                    try:
+                        return (int(float(a)) if a else None) == (int(float(b)) if b else None)
+                    except ValueError:
+                        return False
+                if k == "policy_inception_date":
+                    return a[:10] == b[:10]
+                return a.lower() == b.lower()
+            changed_locked = [k for k in locked_core if not _same(k)]
+            if changed_locked:
+                raise HTTPException(400, _bk.lock_message(locks[changed_locked[0]]))
+            for k in locked_core:
+                core.pop(k, None)
     unknown = [k for k in (body.core or {}) if k not in _GIST_CORE]
     if unknown:
         raise HTTPException(400, "These cannot be changed from the gist: %s" % ", ".join(unknown))
@@ -7001,7 +7035,8 @@ async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
 
     errors = []
     for k, v in (body.fields or {}).items():
-        res = await _bk.set_field(claim_id, str(k)[:60], "" if v is None else str(v), actor=who)
+        res = await _bk.set_field(claim_id, str(k)[:60], "" if v is None else str(v), actor=who,
+                                  role=role)
         if res.get("ok"):
             changed.append(k)
         else:
@@ -7169,9 +7204,9 @@ async def ops_case_bucket(claim_id: int, request: Request):
     """Where this claim is, what it needs, and where it may go - for the case report."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "team_member")
+    caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    return await _bk.for_claim(claim_id)
+    return await _bk.for_claim(claim_id, role=caller.get("role") or "")
 
 
 @app.post("/nidaan/ops/api/cases/{claim_id}/bucket/move")
@@ -7183,7 +7218,8 @@ async def ops_case_bucket_move(claim_id: int, body: _BucketMoveReq, request: Req
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
     res = await _bk.move(claim_id, body.to, sub=body.sub, reason=body.reason,
-                         hold_until=body.hold_until, actor=_actor_label(caller))
+                         hold_until=body.hold_until, actor=_actor_label(caller),
+                         actor_role=caller.get("role") or "")
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
     await _ops_audit(request, "bucket.move", "claim", claim_id,
@@ -7213,10 +7249,50 @@ async def ops_case_bucket_field(claim_id: int, body: _BucketFieldReq, request: R
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    res = await _bk.set_field(claim_id, body.field_key, body.value, _actor_label(caller))
+    res = await _bk.set_field(claim_id, body.field_key, body.value, _actor_label(caller),
+                              role=caller.get("role") or "")
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
     return res
+
+
+class _ChangeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    what: str = Field("", max_length=80)
+    note: str = Field(..., min_length=5, max_length=1000)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/change-request")
+@limiter.limit("10/minute")
+async def ops_case_change_request(claim_id: int, body: _ChangeReq, request: Request):
+    """Ask the super admins to change locked work. They are told on the bell, Telegram and email,
+    and the request is written into the claim's remarks where everyone can see it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    import biz_nidaan_buckets as _bk
+    import biz_nidaan_notifications as _nnot
+    row = await _bk._claim_row(claim_id)
+    if not row:
+        raise HTTPException(404, "Claim not found")
+    who = _actor_label(caller)
+    what = (body.what or "this claim's finished work").strip()[:80]
+    note = body.note.strip()
+    patient = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    await _bk._log(claim_id, "\u270b Change requested on %s - %s" % (what, note), who)
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        ids = [r[0] for r in await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+            "AND deleted_at IS NULL")).fetchall()]
+    subj = "\u270b Change requested - NP-%s %s" % (claim_id, patient)
+    msg = ("%s asks for a change to %s on NP-%s (%s).\n\n\"%s\"\n\n"
+           "It is locked for everyone but a super admin. Open the case in Level-2 -> Settlement."
+           % (who, what, claim_id, patient or "claim", note))
+    sent = await _nnot.notify_staff_inapp(ids, subj, msg, event_key="case.change_request",
+                                          email=True, claim_id=claim_id)
+    await _ops_audit(request, "case.change_request", "claim", claim_id, (what + ": " + note)[:160])
+    return {"ok": True, "told": sent}
 
 
 class _PayFollowReq(BaseModel):
@@ -9996,10 +10072,23 @@ async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request
     disputed amount). Only supplied fields change."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request, "sub_super_admin")
+    caller = _require_staff(request, "sub_super_admin")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(400, "Nothing to update")
+    # The gist's facts lock once the drafts are finished - here as on the gist form, or this
+    # would be a second way round the lock.
+    import biz_nidaan_buckets as _bk
+    locks = await _bk.locked_fields(await _bk._claim_row(claim_id), caller.get("role") or "")
+    hit = [k for k in data if k in locks]
+    if hit:
+        import aiosqlite as _aio0
+        async with _aio0.connect(nidaan.DB_PATH) as c:
+            cur = await (await c.execute(
+                "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(hit), (claim_id,))).fetchone()
+        for k, old in zip(hit, cur or [None] * len(hit)):
+            if str(old if old is not None else "").strip().lower() != str(data[k]).strip().lower():
+                raise HTTPException(400, _bk.lock_message(locks[k]))
     if not await nidaan.update_claim_info(claim_id, **data):
         raise HTTPException(404, "Claim not found or nothing changed")
     await _ops_audit(request, "claim.info_edit", "claim", str(claim_id),

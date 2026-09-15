@@ -1164,6 +1164,8 @@ async def push_to_staff(staff_ids: list[int], title: str, body: str,
 
 def _fire_push(staff_ids, title, body, url="/nidaan/ops", tag="nidaan") -> None:
     """Schedule a non-blocking push (never blocks the caller's DB write)."""
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":        # test runs never reach a real browser
+        return
     try:
         asyncio.create_task(push_to_staff(list(staff_ids), title, body, url, tag))
     except RuntimeError:

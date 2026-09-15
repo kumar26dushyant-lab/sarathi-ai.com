@@ -191,6 +191,8 @@ def verify_webhook_signature(app_secret: str, raw_body: bytes, header_sig: str) 
 async def _post(payload: dict) -> dict:
     if not is_configured():
         return {"ok": False, "error": "not_configured"}
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":        # test runs never reach a real customer
+        return {"ok": False, "error": "outbound_off"}
     url = f"{GRAPH}/{_phone_id()}/messages"
     try:
         async with httpx.AsyncClient(timeout=25) as c:

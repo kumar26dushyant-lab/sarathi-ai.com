@@ -12272,6 +12272,11 @@ function _l2Styles(){
   .csrsaved.ok{color:var(--nd-success-text)}
   .csrsaved.bad{color:var(--nd-danger-text);font-weight:800}
   .csred.l2fail{border-color:var(--nd-danger-text)!important;box-shadow:0 0 0 2px rgba(239,68,68,.25)}
+  .csred.locked{background:var(--nd-bg-surface);color:var(--nd-text-secondary);cursor:default}
+  .csrlock{font-size:.76rem;color:var(--nd-warning-text);gap:.4rem;flex-wrap:wrap}
+  .csrsu{font-size:.72rem;color:var(--nd-cyan-text);margin-left:.5rem;align-self:center}
+  .l2back{font-size:.74rem;font-weight:700;color:var(--nd-warning-text);margin-bottom:.15rem}
+  .l2back.su{color:var(--nd-danger-text)}
   .l2today{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0 0 .7rem;
     padding:.5rem .65rem;border:1px solid var(--nd-border);border-radius:10px;
     background:var(--nd-bg-surface)}
@@ -12763,14 +12768,19 @@ function l2Table(b){
       + '<td>' + esc(i.who || '(no name)')
       +   (i.insured && i.insured !== i.who ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">'
           + esc(i.insured) + '</div>' : '') + '</td>'
-      + '<td>' + esc(i.insurer || '<span class="l2warn">not recorded</span>') + '</td>'
+      + '<td>' + (i.insurer ? esc(i.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
       + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
       + '<td>' + docs + '</td>'
       + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
       + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
-      + '<td class="l2why">' + esc(i.why || '')
+      + '<td class="l2why">'
+      +   (i.back && i.back.at
+          ? '<div class="l2back' + (i.back.super ? ' su' : '') + '">\u21a9 '
+            + (i.back.super ? 'Pulled back by super admin ' : 'Sent back by ') + esc(i.back.by)
+            + ' from ' + esc(i.back.from) + '</div>' : '')
+      +   esc(i.why || '')
       +   (i.note ? '<div class="nt">“' + esc(i.note) + '”'
           + (i.note_by ? ' <span class="by">— ' + esc(i.note_by) + '</span>' : '')
           + '</div>' : '')
@@ -13068,6 +13078,15 @@ function l2CaseRender(rem){
     +   (st.lokpal_days_left != null && st.lokpal_days_left <= 90
         ? ' · <span class="l2lok">⏳ Lokpal window ' + st.lokpal_days_left + ' days</span>' : '')
     + '</div>'
+    + (st.back && st.back.at
+        ? '<div class="l2ban ' + (st.back.super ? 'red' : 'amber') + '">\u21a9 '
+          + (st.back.super ? '<b>Pulled back by super admin ' + esc(st.back.by) + '</b>'
+                           : '<b>Sent back by ' + esc(st.back.by) + '</b>')
+          + ' from ' + esc(st.back.from) + ' \u00b7 ' + esc(String(st.back.at).slice(0, 16))
+          + (st.back.reason ? '<div style="margin-top:.2rem">\u201c' + esc(st.back.reason) + '\u201d</div>' : '')
+          + '<div style="font-size:.76rem;margin-top:.2rem;opacity:.85">This bucket\'s work is open again. '
+          + 'Everything recorded is kept.</div></div>'
+        : '')
     + (miss.length
         ? '<div class="l2ban amber">Before this can move on: <b>'
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
@@ -13229,14 +13248,27 @@ async function _l2SaveRich(key, el){
 window.l2RichInput = l2RichInput; window.l2RichBlur = l2RichBlur;
 
 // The big draft box, used for this bucket's drafts and for drafts built in earlier buckets.
-function _l2RichEditor(f, value, from){
-  return '<div class="csrrt"><label>' + esc(f.label_en)
+function _l2RichEditor(f, value, from, lockedIn){
+  const head = '<label>' + esc(f.label_en)
     + (from ? ' <span style="font-weight:400;color:var(--nd-text-faint)">\u00b7 written in ' + esc(from) + '</span>' : '')
-    + (f.required_exit && !from ? ' <span class="req">*</span>' : '') + '</label>'
+    + (f.required_exit && !from ? ' <span class="req">*</span>' : '') + '</label>';
+  const st = _l2Case && _l2Case.st || {};
+  // Finished work is read-only for everyone but a super admin (founder, 15 Sep).
+  if (lockedIn && !st.is_super){
+    return '<div class="csrrt">' + head
+      + '<div class="csrbar csrlock">\ud83d\udd12 Locked \u2014 finished in ' + esc(lockedIn)
+      +   '. Only a super admin can change it.'
+      +   '<button type="button" class="l2mv g" style="margin-left:auto" '
+      +   'onclick="l2RequestChange(\'' + esc(f.label_en).replace(/'/g, "\\'") + '\')">\u270b Request a change</button></div>'
+      + '<div class="csred locked" id="lf_' + f.field_key + '" data-label="' + esc(f.label_en) + '">'
+      +   _csrRichHTML(value || '') + '</div></div>';
+  }
+  return '<div class="csrrt">' + head
     + '<div class="csrbar">'
     +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
     +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
     +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+    +   (lockedIn ? '<span class="csrsu">\ud83d\udd13 Locked for others \u2014 your changes are recorded</span>' : '')
     +   '<span class="csrsaved" id="lfs_' + f.field_key + '"></span>'
     + '</div>'
     + '<div class="csred" contenteditable="true" id="lf_' + f.field_key + '" data-key="' + f.field_key + '" '
@@ -13244,6 +13276,53 @@ function _l2RichEditor(f, value, from){
     +   'oninput="l2RichInput(\'' + f.field_key + '\',this)" onblur="l2RichBlur(\'' + f.field_key + '\',this)">'
     +   _csrRichHTML(value || '') + '</div></div>';
 }
+
+// ── Request a change: anyone looking at locked work can ask the super admins ────
+// Its own layer above the case sheet, so asking never closes the sheet. Only its ✕ or Cancel
+// closes it.
+function l2RequestChange(what, claimId){
+  const id = claimId || (_l2Case && _l2Case.claim_id) || _csrClaim;
+  if (!id) return;
+  const old = document.getElementById('l2rcOv'); if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'l2rcOv'; ov.setAttribute('data-ov', '1');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10040;background:rgba(2,8,16,.6);'
+    + 'display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML = '<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);'
+    + 'border-radius:12px;width:min(520px,100%);padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.6rem">'
+    + '<div style="display:flex;align-items:center;gap:.5rem"><b style="flex:1;color:var(--nd-text-primary)">'
+    +   '\u270b Request a change \u2014 NP-' + id + '</b>'
+    +   '<button class="modal-x" type="button" aria-label="Close" onclick="document.getElementById(\'l2rcOv\').remove()">&times;</button></div>'
+    + '<div style="font-size:.82rem;color:var(--nd-text-muted)">This is locked because the bucket that '
+    +   'owns it has finished. The super admins are told straight away, on the bell, Telegram and '
+    +   'email, and your request goes into the claim\'s remarks.</div>'
+    + '<div class="l2fld"><label>What should change?</label>'
+    +   '<input id="l2rcWhat" maxlength="80" value="' + esc(what || '') + '"></div>'
+    + '<div class="l2fld"><label>What is wrong, and what should it say? <span class="req">*</span></label>'
+    +   '<textarea id="l2rcNote" rows="4" maxlength="1000" placeholder="e.g. The policy number in the Lokpal Draft is wrong - it should be P/201129/01/2022/003379"></textarea></div>'
+    + '<div style="display:flex;gap:.4rem;justify-content:flex-end;align-items:center">'
+    +   '<span id="l2rcMsg" style="font-size:.8rem;flex:1"></span>'
+    +   '<button class="btn btn-ghost" onclick="document.getElementById(\'l2rcOv\').remove()">Cancel</button>'
+    +   '<button class="btn btn-primary" id="l2rcSend" onclick="l2RequestSend(' + id + ')">Send to super admins</button></div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ const t = document.getElementById('l2rcNote'); if (t) t.focus(); }, 30);
+}
+async function l2RequestSend(id){
+  const note = (document.getElementById('l2rcNote').value || '').trim();
+  const what = (document.getElementById('l2rcWhat').value || '').trim();
+  const msg = document.getElementById('l2rcMsg');
+  if (note.length < 5){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Say what is wrong.'; return; }
+  const b = document.getElementById('l2rcSend'); b.disabled = true;
+  try{
+    const r = await API('/cases/' + id + '/change-request', {method:'POST', body: JSON.stringify({what: what, note: note})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not send'); b.disabled = false; return; }
+    document.getElementById('l2rcOv').remove();
+    ndUI.toast('Sent to the super admins' + (d.told ? ' (' + d.told + ')' : '') + '. It is in the remarks too.', 'success');
+  }catch(e){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not send.'; b.disabled = false; }
+}
+window.l2RequestChange = l2RequestChange; window.l2RequestSend = l2RequestSend;
 
 // "Built so far": what every other bucket recorded on this claim, in the order of the line. The
 // drafts come as their two big boxes (a later bucket refines them); the rest reads as a summary,
@@ -13282,8 +13361,14 @@ function _l2BuiltSoFar(st, id){
   if (!groups.length && !rich.length) return '';
   return '<div class="l2built"><div class="l2sec">Built so far \u2014 what the other buckets recorded</div>'
     + groups.join('')
-    + (groups.length ? '<button class="l2mv g" onclick="csrGist(' + id + ')">\u270d\ufe0f Change these in the Gist</button>' : '')
-    + (rich.length ? '<div class="csrpair">' + rich.map(function(x){ return _l2RichEditor(x.f, x.v, x.from); }).join('') + '</div>' : '')
+    + (groups.length
+        ? ((st.locked || {}).policy_no && !st.is_super
+            ? '<button class="l2mv g" onclick="l2RequestChange(\'the gist\')">\ud83d\udd12 Locked \u2014 \u270b Request a change</button>'
+            : '<button class="l2mv g" onclick="csrGist(' + id + ')">\u270d\ufe0f Change these in the Gist</button>')
+        : '')
+    + (rich.length ? '<div class="csrpair">' + rich.map(function(x){
+        return _l2RichEditor(x.f, x.v, x.from,
+          (st.is_super ? (st.locked_for_others || {}) : (st.locked || {}))[x.f.field_key]); }).join('') + '</div>' : '')
     + '</div>';
 }
 
@@ -13888,24 +13973,46 @@ function _csrVal(kind, key){
   return v == null ? '' : String(v);
 }
 
+function _csrAllLocked(fields){
+  return fields.every(function(f){ return _csrLocked(f[2]); });
+}
+function _csrLocked(key){
+  return !!(_csr && !_csr.is_super && (_csr.locked || {})[key]);
+}
+// The banner a Gist or Draft form shows when some of it is finished work.
+function _csrLockBanner(fields){
+  const keys = fields.map(function(f){ return f[2]; });
+  if (_csr && _csr.is_super){
+    return keys.some(function(k){ return (_csr.locked_all || {})[k]; })
+      ? '<div class="l2ban info">\ud83d\udd13 Parts of this are locked for everyone else. You can change them as a super admin \u2014 your changes are recorded.</div>' : '';
+  }
+  const hit = keys.filter(_csrLocked);
+  if (!hit.length) return '';
+  const where = (_csr.locked || {})[hit[0]];
+  return '<div class="l2ban amber">\ud83d\udd12 <b>' + (hit.length === keys.length ? 'This is' : 'Parts of this are')
+    + ' locked</b> \u2014 finished in ' + esc(where) + '. Only a super admin can change '
+    + (hit.length === keys.length ? 'it' : 'the greyed boxes') + '. '
+    + '<button class="l2mv g" onclick="l2RequestChange(\'the gist / drafts\',' + _csrClaim + ')">\u270b Request a change</button></div>';
+}
 function _csrInput(f){
   const [label, kind, key, type] = f;
   const id = 'csr_' + kind + '_' + key;
   const v = _csrVal(kind, key);
+  const lk = _csrLocked(key) ? ' disabled title="Locked \u2014 only a super admin can change this"' : '';
   let ctl;
   if (type === 'choice'){
     const opts = CSR_CHOICES[key] || ['None'];
     const cur = v || 'None';
-    ctl = '<select id="' + id + '">' + opts.map(function(o){
+    ctl = '<select id="' + id + '"' + lk + '>' + opts.map(function(o){
       return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('')
       + (opts.indexOf(cur) < 0 ? '<option selected>' + esc(cur) + '</option>' : '') + '</select>';
   } else if (type === 'insurer'){
-    ctl = '<input id="' + id + '" list="csrIns" value="' + esc(v) + '">';
+    ctl = '<input id="' + id + '" list="csrIns" value="' + esc(v) + '"' + lk + '>';
   } else {
     ctl = '<input id="' + id + '" type="' + (type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text'))
-      + '" value="' + esc(type === 'date' ? v.slice(0, 10) : v) + '"' + (type === 'number' ? ' step="any"' : '') + '>';
+      + '" value="' + esc(type === 'date' ? v.slice(0, 10) : v) + '"' + (type === 'number' ? ' step="any"' : '') + lk + '>';
   }
-  return '<div class="csrf"><label for="' + id + '">' + esc(label) + '</label>' + ctl + '</div>';
+  return '<div class="csrf"><label for="' + id + '">' + esc(label) + (lk ? ' \ud83d\udd12' : '') + '</label>' + ctl + '</div>';
 }
 
 function _csrInsurerList(){
@@ -13918,6 +14025,7 @@ function _csrCollect(fields){
   const core = {}, flds = {};
   fields.forEach(function(f){
     const [, kind, key, type] = f;
+    if (_csrLocked(key)) return;            // locked work is not sent at all
     const el = document.getElementById('csr_' + kind + '_' + key);
     if (!el) return;
     let v = (el.value || '').trim();
@@ -13957,9 +14065,10 @@ async function csrGist(claimId){
   try{ await _csrLoad(claimId); }
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the gist.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
-      _csrInsurerList()
+      _csrLockBanner(CSR_GIST)
+    + _csrInsurerList()
     + '<div class="csrg c3">' + CSR_GIST.map(_csrInput).join('') + '</div>'
-    + '<div class="csrsub"><button class="btn btn-primary" onclick="csrGistSave()">Submit</button></div>'
+    + (_csrAllLocked(CSR_GIST) ? '' : '<div class="csrsub"><button class="btn btn-primary" onclick="csrGistSave()">Submit</button></div>')
     + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
     +   '<button class="l2mv g" onclick="csrSheet(' + claimId + ')">📄 Initial Claim Assessment Sheet</button>'
     +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
@@ -13980,7 +14089,11 @@ function _csrRichHTML(v){
   if (!/<(p|div|br|ul|ol|li)\b/i.test(v)) return v.replace(/\n/g, '<br>');
   return v;
 }
-function _csrEditor(id, label, value){
+function _csrEditor(id, label, value, locked){
+  if (locked){
+    return '<div class="csrrt"><label>' + esc(label) + ' \ud83d\udd12</label>'
+      + '<div class="csred locked" id="' + id + '">' + _csrRichHTML(value) + '</div></div>';
+  }
   return '<div class="csrrt"><label>' + esc(label) + '</label>'
     + '<div class="csrbar">'
     +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
@@ -13995,13 +14108,15 @@ async function csrDraft(claimId){
   try{ await _csrLoad(claimId); }
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the draft.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
-      _csrInsurerList()
+      _csrLockBanner(CSR_DRAFT_FACTS.concat([['', 'field', 'draft_en'], ['', 'field', 'draft_hi']]))
+    + _csrInsurerList()
     + '<div class="csrg c4">' + CSR_DRAFT_FACTS.map(_csrInput).join('') + '</div>'
     + '<div class="csrpair">'
-    +   _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'))
-    +   _csrEditor('csrDraftLp', 'Lokpal Draft', _csrVal('field', 'draft_hi'))
+    +   _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'), _csrLocked('draft_en'))
+    +   _csrEditor('csrDraftLp', 'Lokpal Draft', _csrVal('field', 'draft_hi'), _csrLocked('draft_hi'))
     + '</div>'
-    + '<div class="csrsub"><button class="btn btn-primary" onclick="csrDraftSave()">Submit</button></div>'
+    + (_csrAllLocked(CSR_DRAFT_FACTS.concat([['', 'field', 'draft_en'], ['', 'field', 'draft_hi']]))
+        ? '' : '<div class="csrsub"><button class="btn btn-primary" onclick="csrDraftSave()">Submit</button></div>')
     + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
     +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
     + '</div>'
@@ -14010,8 +14125,8 @@ async function csrDraft(claimId){
 async function csrDraftSave(){
   const p = _csrCollect(CSR_DRAFT_FACTS);
   // The server keeps bold, italic, underline, paragraphs and lists, and strips everything else.
-  p.fields.draft_en = (document.getElementById('csrDraftEn') || {}).innerHTML || '';
-  p.fields.draft_hi = (document.getElementById('csrDraftLp') || {}).innerHTML || '';
+  if (!_csrLocked('draft_en')) p.fields.draft_en = (document.getElementById('csrDraftEn') || {}).innerHTML || '';
+  if (!_csrLocked('draft_hi')) p.fields.draft_hi = (document.getElementById('csrDraftLp') || {}).innerHTML || '';
   await _csrSave(p, 'csrMsg', 'Saved. The case report shows both drafts.');
 }
 

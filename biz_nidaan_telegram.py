@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import os
 import secrets
 from typing import Optional
 
@@ -247,6 +248,9 @@ async def send_message(chat_id: str, text: str,
     """Send a plain-text message. `buttons` = [[{'text':…, 'url':…}], …]."""
     if not chat_id:
         return (False, "no_chat_id")
+    # Test runs (a copy of the live DB, the server's env loaded) must never reach a real phone.
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
+        return (False, "outbound_off")
     payload: dict = {"chat_id": str(chat_id), "text": text[:4000],
                      "parse_mode": "Markdown", "disable_web_page_preview": True}
     if buttons:
