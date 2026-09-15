@@ -1705,8 +1705,12 @@ async def create_subscription(
     actor_id: str = "",
     actor_name: str = "",
     verify_method: str = "",
+    total_paise: int = 0,
 ) -> int:
     """Record a new subscription. Returns sub_id.
+
+    `total_paise` is the exact amount charged; `amount_paid` is whole rupees for the legacy
+    column. Without it the ledger recorded Rs.588 for a Rs.588.82 payment.
 
     `razorpay_subscription_id` actually holds the Razorpay ORDER id for one-time
     payments (legacy column name). `razorpay_payment_id` is the actual payment
@@ -1743,7 +1747,7 @@ async def create_subscription(
     # covers order-pay, recurring-verify, webhook and manual mark-paid alike.
     try:
         _is_manual = (razorpay_payment_id or "").upper().startswith("MANUAL")
-        _total_paise = int(round(float(amount_paid or 0) * 100))
+        _total_paise = int(total_paise) if total_paise else int(round(float(amount_paid or 0) * 100))
         try:
             _base_paise = int((await get_plan_cfg(plan)).get("price_paise") or 0)
         except Exception:
@@ -5209,6 +5213,7 @@ async def activate_from_order_payment(
         razorpay_subscription_id=razorpay_order_id,
         period_days=period_days,
         razorpay_payment_id=razorpay_payment_id,
+        total_paise=int(amount_paise or 0),
     )
     logger.info("✅ Nidaan activated via order: account=%d plan=%s sub_id=%d amount=₹%d period_days=%d",
                 nidaan_account_id, plan, sub_id, amount_paise // 100, period_days)
@@ -5406,12 +5411,17 @@ async def verify_nidaan_subscription_and_activate(
     _base_paise = int((await get_plan_cfg(plan)).get("price_paise") or plan_info.get("amount_paise", 0))
     _amt_paise = (await charge_with_gst(_base_paise / 100))["total_paise"]
 
+    # With the PAYMENT id: it is the key the webhook uses, so when Razorpay's own events arrive
+    # for this same charge they find it already recorded instead of "renewing" the plan.
     await create_subscription(
         account_id=account_id,
         plan=plan,
         amount_paid=int(round(_amt_paise / 100)),
         razorpay_subscription_id=razorpay_subscription_id,
         period_days=period_days,
+        razorpay_payment_id=razorpay_payment_id,
+        verify_method="signature",
+        total_paise=int(_amt_paise),
     )
     logger.info("✅ Nidaan subscription verified & activated: account=%d plan=%s sub=%s payment=%s",
                 account_id, plan, razorpay_subscription_id, razorpay_payment_id)
@@ -5421,7 +5431,7 @@ async def verify_nidaan_subscription_and_activate(
 
     sub = await get_active_subscription(account_id)
     renewal_date = sub["current_period_end"][:10] if sub else ""
-    return {"status": "ok", "plan": plan, "renewal_date": renewal_date}
+    return {"status": "ok", "plan": plan, "renewal_date": renewal_date, "new": True}
 
 
 async def activate_from_razorpay_webhook(
@@ -5461,8 +5471,49 @@ async def activate_from_razorpay_webhook(
 
     # ── RENEWAL (the subscription already exists) ──────────────────────────────
     if existing:
-        _key = (razorpay_payment_id or "").strip() or \
-            f"subrenew:{razorpay_sub_id}:{existing.get('current_period_end') or ''}"
+        pid = (razorpay_payment_id or "").strip()
+        # A charge we cannot identify is not a renewal - extending a plan on a guess gives a
+        # month away. (Genuine renewals arrive as subscription.charged, with their payment.)
+        if not pid:
+            logger.info("Nidaan sub event with no payment id - not treated as a renewal (rzp_sub=%s)",
+                        razorpay_sub_id)
+            return "dup"
+        async with aiosqlite.connect(DB_PATH) as conn:
+            # This exact charge is already recorded - by the subscriber's own confirmation, or by
+            # the other of the activated/charged pair. Nothing to do.
+            if await (await conn.execute(
+                    "SELECT 1 FROM nidaan_payments WHERE dedup_key=? OR razorpay_payment_id=?",
+                    (pid, pid))).fetchone():
+                return "dup"
+            # The activation was recorded WITHOUT a payment id: this charge IS that first payment.
+            # Give the row its payment id and exact amount; do not renew.
+            first = await (await conn.execute(
+                "SELECT pay_id, base_paise FROM nidaan_payments WHERE razorpay_subscription_id=? "
+                "AND source='subscription' AND COALESCE(razorpay_payment_id,'')='' "
+                "ORDER BY pay_id LIMIT 1", (razorpay_sub_id,))).fetchone()
+            if first:
+                _tp = int(amount_paise or 0)
+                await conn.execute(
+                    "UPDATE nidaan_payments SET razorpay_payment_id=?, dedup_key=?, total_paise=?, "
+                    "gst_paise=MAX(0, ? - base_paise), verify_method='webhook' WHERE pay_id=?",
+                    (pid, pid, _tp, _tp, first[0]))
+                await conn.commit()
+                logger.info("Nidaan first charge matched to activation row %s (rzp_sub=%s)",
+                            first[0], razorpay_sub_id)
+                return "dup"
+            # And no plan renews within a week of starting: that is the first charge again.
+            st = await (await conn.execute(
+                "SELECT started_at FROM nidaan_subscriptions WHERE sub_id=?",
+                (existing["sub_id"],))).fetchone()
+        try:
+            _started = datetime.fromisoformat(str((st or [""])[0])[:19])
+            if (datetime.utcnow() - _started).days < 7:
+                logger.warning("Nidaan charge %s within 7 days of the start - not a renewal "
+                               "(rzp_sub=%s)", pid, razorpay_sub_id)
+                return "dup"
+        except Exception:
+            pass
+        _key = pid
         fresh = await record_payment(
             source="subscription_renewal", total_paise=int(amount_paise or 0), dedup_key=_key,
             razorpay_payment_id=(razorpay_payment_id or ""), razorpay_subscription_id=razorpay_sub_id,
@@ -5470,7 +5521,7 @@ async def activate_from_razorpay_webhook(
             verified=True, verify_method="webhook", note="recurring subscription charge")
         if not fresh:
             logger.info("Nidaan sub renewal already processed (rzp_sub=%s)", razorpay_sub_id)
-            return True
+            return "dup"
         # Extend from the LATER of now / current end, so an early webhook never shortens a period.
         async with aiosqlite.connect(DB_PATH) as conn:
             await conn.execute(
@@ -5489,31 +5540,27 @@ async def activate_from_razorpay_webhook(
             except Exception as _be:
                 logger.warning("bundle re-provision on renewal failed: %s", _be)
         logger.info("🔁 Nidaan sub RENEWED: account=%s plan=%s +%sd", nidaan_account_id, plan, period_days)
-        return True
+        return "renewed"
 
     # ── FIRST ACTIVATION ───────────────────────────────────────────────────────
+    # One ledger row, keyed on the payment id with the exact amount - create_subscription records
+    # it. (It used to record under the subscription id, rounded, and then again below.)
     sub_id = await create_subscription(
         account_id=nidaan_account_id,
         plan=plan,
         amount_paid=amount_paise // 100,
         razorpay_subscription_id=razorpay_sub_id,
         period_days=period_days,
+        razorpay_payment_id=(razorpay_payment_id or ""),
+        verify_method="webhook",
+        total_paise=int(amount_paise or 0),
     )
     logger.info("✅ Nidaan sub activated: account=%d plan=%s sub_id=%d", nidaan_account_id, plan, sub_id)
 
     if PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
         await _provision_sarathi_bundle(nidaan_account_id, plan, period_days)
 
-    # Unified ledger (webhook is the durable fallback if the checkout path missed it; dedup-safe).
-    try:
-        await record_payment(
-            source="subscription", total_paise=int(amount_paise or 0),
-            dedup_key=(razorpay_payment_id or f"subactivate:{razorpay_sub_id}"),
-            razorpay_payment_id=(razorpay_payment_id or ""), razorpay_subscription_id=razorpay_sub_id,
-            account_id=nidaan_account_id, plan=plan, base_paise=int(_base_rs * 100),
-            verified=True, verify_method="webhook", note="subscription activation")
-    except Exception as _pe:
-        logger.warning("record_payment (activation) failed: %s", _pe)
+    # (The ledger row was written by create_subscription above - one row per payment.)
 
     # GST ledger: record tax for this charge (base from plan config; no-op if off).
     try:
@@ -5522,7 +5569,7 @@ async def activate_from_razorpay_webhook(
     except Exception as _ge:
         logger.warning("record_gst (activation) failed: %s", _ge)
 
-    return True
+    return "new"
 
 
 async def cancel_nidaan_subscription(account_id: int) -> bool:
@@ -6180,6 +6227,19 @@ async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
                                status="ok", meta=(razorpay_payment_id or _key))
         except Exception:
             pass
+        # EVERY payment is announced to the office, the first time it is recorded - whichever
+        # route it came by. Idempotent recording means it can never be announced twice.
+        try:
+            import asyncio as _aio
+            import biz_nidaan_notifications as _nnp
+            _t = _aio.create_task(_nnp.on_ledger_payment(
+                source=source, total_paise=int(total_paise or 0), account_id=account_id,
+                claim_id=claim_id, branch_code=branch_code, plan=plan, verified=bool(verified),
+                actor_name=actor_name))
+            _nnp._BG_TASKS.add(_t)
+            _t.add_done_callback(_nnp._BG_TASKS.discard)
+        except Exception:
+            pass
         return True
     except Exception as e:
         try:
@@ -6298,14 +6358,14 @@ async def ledger_revenue_summary() -> dict:
             """SELECT source, COUNT(*) n,
                       ROUND(SUM(total_paise)/100.0, 2) rupees,
                       SUM(verified) verified_n
-               FROM nidaan_payments WHERE status!='refunded'
+               FROM nidaan_payments WHERE status NOT IN ('refunded','duplicate')
                GROUP BY source ORDER BY rupees DESC""")).fetchall()]
         led_total = (await (await conn.execute(
             "SELECT ROUND(COALESCE(SUM(total_paise),0)/100.0,2) FROM nidaan_payments "
-            "WHERE status!='refunded'")).fetchone())[0]
+            "WHERE status NOT IN ('refunded','duplicate')")).fetchone())[0]
         unverified = (await (await conn.execute(
             "SELECT ROUND(COALESCE(SUM(total_paise),0)/100.0,2) FROM nidaan_payments "
-            "WHERE status!='refunded' AND verified=0")).fetchone())[0]
+            "WHERE status NOT IN ('refunded','duplicate') AND verified=0")).fetchone())[0]
         # Legacy source-table formula (what the Revenue tab historically summed).
         legacy = (await (await conn.execute(
             """SELECT ROUND(

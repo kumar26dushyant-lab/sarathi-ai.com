@@ -3124,13 +3124,7 @@ async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
     try:
         import biz_nidaan_notifications as _nnot
         _aio.create_task(_nnot.on_funnel_paid(claim_id, account_id, sla_due.isoformat()))
-        # All-channel PAID alert to super-admins (bell + email + Telegram + push) — parity with
-        # the failed/pending alerts, so a received payment is never silent for ops.
-        _aio.create_task(_nnot.on_payment_success(
-            f"₹{_fee} claim review", _fee,
-            detail=f"Claim #{claim_id} — {claim.get('insured_name','')} · {claim.get('claim_type','')}",
-            contact=claim.get('insured_phone') or claim.get('account_phone') or "",
-            account_id=account_id, claim_id=claim_id))
+        # (The office's "payment received" alert now comes from record_payment, once per payment.)
     except Exception:
         pass
     _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
@@ -5392,19 +5386,12 @@ async def nidaan_razorpay_webhook(request: Request):
                 _row = dict(_row)
                 _sub = await nidaan.get_active_subscription(account_id)
                 _renewal = _sub["current_period_end"][:10] if _sub else ""
-                _asyncio.create_task(email_svc.send_nidaan_subscription_email(
-                    _row["email"], _row["owner_name"], plan, amount_paise // 100, _renewal
-                ))
-                # All-channel PAID alert to super-admins on a NEW activation (not on idempotent re-calls).
+                # One confirmation per payment: only when THIS call activated the plan.
                 if not already:
-                    try:
-                        import biz_nidaan_notifications as _nf_ok
-                        _asyncio.create_task(_nf_ok.on_payment_success(
-                            f"Subscription ({plan})", amount_paise // 100,
-                            detail=f"Account #{account_id} — {_row.get('owner_name','')}",
-                            contact=_row.get("phone") or _row.get("email") or "", account_id=account_id))
-                    except Exception:
-                        pass
+                    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+                        _row["email"], _row["owner_name"], plan, amount_paise // 100, _renewal
+                    ))
+                # (The office's "payment received" alert comes from record_payment, once per payment.)
         return {"status": "ok", "event": event}
 
     # ── Legacy subscription events (kept for backward compat) ─────────────────
@@ -5426,9 +5413,14 @@ async def nidaan_razorpay_webhook(request: Request):
         amount_paise = payment_entity.get("amount", 0)
         # Pass the Razorpay payment id: it is the idempotency key that lets the renewal path
         # extend the period + hit the ledger exactly once per charge.
-        await nidaan.activate_from_razorpay_webhook(
+        _res = await nidaan.activate_from_razorpay_webhook(
             rzp_sub_id, account_id, plan, amount_paise,
             razorpay_payment_id=(payment_entity.get("id") or ""))
+        # One confirmation email per payment. Razorpay sends activated AND charged for the first
+        # payment, and the subscriber's own confirmation may have activated it already - account
+        # 134 got "Plan Activated!" three times in one second.
+        if _res not in ("new", "renewed"):
+            return {"status": "ok", "event": event, "already": True}
         async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
             _c.row_factory = __import__("aiosqlite").Row
             _row = await (await _c.execute(
@@ -5870,6 +5862,11 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
     )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    if result.get("already_processed"):
+        # Razorpay's webhook activated it first and sent the confirmation - do not send another.
+        new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], body.plan)
+        return {"token": new_token, "plan": body.plan, "status": "active",
+                "renewal_date": result.get("renewal_date", "")}
     # Send confirmation email — with the ACTUAL GST-inclusive amount charged (not the old base).
     _pc = await nidaan.get_plan_cfg(body.plan)
     _pi = nidaan.NIDAAN_RAZORPAY_PLANS.get(body.plan, {})

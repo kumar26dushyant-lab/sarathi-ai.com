@@ -1977,6 +1977,54 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
         logger.warning("on_payment_success alert failed: %s", e)
 
 
+async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, claim_id=None,
+                            branch_code: str = "", plan: str = "", verified: bool = True,
+                            actor_name: str = "") -> None:
+    """One payment, just recorded in the ledger - tell the office what it was and who paid."""
+    try:
+        amt = total_paise / 100.0
+        amount = ("%.2f" % amt).rstrip("0").rstrip(".")
+        who, phone, claim_bit = "", "", ""
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            if account_id:
+                a = await (await conn.execute(
+                    "SELECT owner_name, phone, email FROM nidaan_accounts WHERE account_id=?",
+                    (account_id,))).fetchone()
+                if a:
+                    who = (a["owner_name"] or "").strip()
+                    phone = (a["phone"] or a["email"] or "").strip()
+            if claim_id:
+                c = await (await conn.execute(
+                    "SELECT insured_name, claim_type FROM nidaan_claims WHERE claim_id=?",
+                    (claim_id,))).fetchone()
+                if c:
+                    claim_bit = "NP-%s %s (%s)" % (claim_id, (c["insured_name"] or "").strip(),
+                                                   c["claim_type"] or "")
+        nice_plan = (plan or "").replace("_", " ").title()
+        kind = {
+            "subscription": "Subscription — %s" % (nice_plan or "plan"),
+            "subscription_renewal": "Subscription renewal — %s" % (nice_plan or "plan"),
+            "per_claim_review": "Claim review fee",
+            "branch_l2": "Level-2 fee",
+            "payment_link": "Payment link",
+        }.get(source, source.replace("_", " ").capitalize())
+        lines = []
+        if claim_bit:
+            lines.append("Claim: " + claim_bit)
+        if branch_code:
+            lines.append("Branch: " + branch_code)
+        if account_id:
+            lines.append("Account #%s%s" % (account_id, (" — " + who) if who else ""))
+        if not verified:
+            lines.append("Recorded by hand" + (" by " + actor_name if actor_name else "")
+                         + " - not confirmed by Razorpay")
+        await on_payment_success(kind, amount, detail="\n".join(lines), contact=phone,
+                                 account_id=account_id, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("payment announcement failed (%s): %s", source, e)
+
+
 async def on_branch_l2_paid(claim_id: int, branch_code: str):
     """A branch moved a claim to Level-2 (paid the configured fee, or advanced it free)
     — alert SA/Admin that the case is queued for the legal team.
