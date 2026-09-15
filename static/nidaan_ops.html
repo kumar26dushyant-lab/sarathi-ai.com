@@ -510,7 +510,7 @@ select.form-input option{background:#1e293b}
 </div>
 
 <!-- ══════════ CLAIM DETAIL DRAWER ══════════ -->
-<div class="drawer-bg" id="drawerBg" onclick="closeDrawer(event)">
+<div class="drawer-bg" id="drawerBg">
   <div class="drawer" id="claimDrawer">
     <div class="drawer-top">
       <h2 id="drawerTitle">Claim Detail</h2>
@@ -9186,6 +9186,9 @@ async function loadCCActivity(){
 //  MODAL HELPER
 // ═══════════════════════════════════════════════════════════════
 function openModal(title, bodyHtml, buttons=[], wide=false) {
+  // Opening a window over the case sheet replaces it: send what was typed, and never drop a
+  // draft whose save failed without asking.
+  if (!_ndCloseOk(true)) return;
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
   // A dialog with no way out is a trap. If the caller passed no buttons — or passed only
@@ -9203,14 +9206,41 @@ function openModal(title, bodyHtml, buttons=[], wide=false) {
   const modalEl = document.getElementById('modal');
   if (wide) modalEl.classList.add('modal-lg'); else modalEl.classList.remove('modal-lg');
   document.getElementById('modalBg').classList.add('open');
-  // Close on backdrop click
-  document.getElementById('modalBg').onclick = e => { if(e.target===document.getElementById('modalBg')) closeModal(); };
-  // Focus the dialog so Escape reaches it and a screen reader announces it.
+  // No close on a background click: only the window's own button closes it (founder, 15 Sep).
+  document.getElementById('modalBg').onclick = null;
+  // Focus the dialog so a screen reader announces it.
   setTimeout(()=>{ const x = modalEl.querySelector('.modal-x'); if (x) x.focus(); }, 30);
 }
 
-// Escape closes the top-most thing that is open. Registered once, for every dialog in the app —
-// including the ones built as their own overlays, which is why it looks for those too.
+// A WINDOW CLOSES ONLY FROM ITS OWN BUTTON (founder, 15 Sep) - its close button, or its
+// Cancel/Close. One stray click on the dimmed background, or a stray Escape (Grammarly and
+// autocomplete both use it), used to close the case sheet with the work in it. These two
+// listeners run first, for every window in the portal - including the ones built as their own
+// overlays and the shared ndUI dialogs - so no window can be closed any other way.
+function _ndIsBackdrop(el){
+  if (!el || el === document.body || el === document.documentElement) return false;
+  if (el.id === 'sidebarOverlay') return false;   // the phone menu's shade: closing the MENU is right
+  if (el.matches && el.matches('.modal-bg, .drawer-bg, .nd-modal-bg, .cbs-back, [data-ov="1"], #acctDrawer'))
+    return true;
+  const cs = getComputedStyle(el);
+  if (cs.position !== 'fixed') return false;
+  const r = el.getBoundingClientRect();
+  return r.width >= window.innerWidth - 2 && r.height >= window.innerHeight - 2;
+}
+document.addEventListener('click', function(e){
+  if (_ndIsBackdrop(e.target)){ e.stopImmediatePropagation(); e.stopPropagation(); }
+}, true);
+window.addEventListener('keydown', function(e){
+  if (e.key !== 'Escape') return;
+  // Only a window that is actually on screen - the account drawer hides rather than leaving.
+  const open = Array.from(document.querySelectorAll(
+      '.modal-bg.open, .drawer-bg.open, .nd-modal-bg.open, .cbs-back, [data-ov="1"]'))
+    .some(function(el){ return el.getClientRects().length && getComputedStyle(el).display !== 'none'; });
+  if (open){ e.stopImmediatePropagation(); }
+}, true);
+
+// (Escape used to close the top-most window here. Kept for the record, switched off above by
+// the founder's rule; it can never fire while a window is open.)
 (function(){
   document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape') return;
@@ -9239,9 +9269,39 @@ function openModal(title, bodyHtml, buttons=[], wide=false) {
 })();
 
 function closeModal() {
+  if (!_ndCloseOk()) return;
   document.getElementById('modal').classList.remove('modal-lg');
   document.getElementById('modalBg').classList.remove('open');
+  _csrDirty = false;
 }
+
+// Before a window with drafts in it closes: anything typed but not yet sent is sent now, and a
+// draft whose save FAILED is never thrown away without asking.
+let _csrDirty = false;
+function _ndCloseOk(replacing){
+  const body = document.getElementById('modalBody');
+  if (!body || !document.getElementById('modalBg').classList.contains('open')) return true;
+  const eds = Array.from(body.querySelectorAll('.csred[data-key]'));
+  eds.forEach(function(ed){
+    if (ed.dataset.dirty && !ed._saving && !ed.classList.contains('l2fail')) _l2SaveRich(ed.dataset.key, ed);
+  });
+  const failed = eds.filter(function(ed){ return ed.classList.contains('l2fail'); });
+  if (failed.length){
+    const names = failed.map(function(ed){ return ed.dataset.label || ed.dataset.key; }).join(', ');
+    return confirm(names + ' could NOT be saved:\n' + (failed[0].dataset.failed || '')
+      + '\n\nClose anyway and lose it? (Cancel keeps the window open so you can copy it.)');
+  }
+  // The Gist and Draft forms save on Submit; typed but not submitted is asked about.
+  if (!replacing && _csrDirty && document.getElementById('csrMsg')){
+    return confirm('You have changes here that are not submitted yet.\n\nClose and lose them?');
+  }
+  return true;
+}
+document.addEventListener('input', function(e){
+  const b = document.getElementById('modalBody');
+  if (b && b.contains(e.target) && document.getElementById('csrMsg')
+      && !(e.target.closest && e.target.closest('.csred[data-key]'))) _csrDirty = true;
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  UTILS
@@ -12205,6 +12265,13 @@ function _l2Styles(){
   .l2sum .pill.ok{border-color:var(--nd-success-text);color:var(--nd-success-text)}
   .l2sum .pill.ok b{color:var(--nd-success-text)}
   .l2lok{font-size:.72rem;font-weight:700;color:var(--nd-danger-text)}
+  .l2built{border-top:2px solid var(--nd-border);padding-top:.6rem;display:flex;flex-direction:column;gap:.55rem}
+  .l2bg{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:9px;padding:.5rem .65rem}
+  .l2bgh{font-size:.74rem;font-weight:800;color:var(--nd-text-secondary);margin-bottom:.3rem}
+  .csrsaved{margin-left:auto;font-size:.72rem;color:var(--nd-text-faint);align-self:center}
+  .csrsaved.ok{color:var(--nd-success-text)}
+  .csrsaved.bad{color:var(--nd-danger-text);font-weight:800}
+  .csred.l2fail{border-color:var(--nd-danger-text)!important;box-shadow:0 0 0 2px rgba(239,68,68,.25)}
   .l2today{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0 0 .7rem;
     padding:.5rem .65rem;border:1px solid var(--nd-border);border-radius:10px;
     background:var(--nd-bg-surface)}
@@ -12907,6 +12974,9 @@ async function l2Open(claimId){
       '<div class="empty"><div class="ei">⚠️</div><p>Could not open this case.</p></div>';
     return;
   }
+  if (!_l2Cfg){
+    try{ const rc = await API('/buckets/config'); if (rc.ok) _l2Cfg = await rc.json(); }catch(e){}
+  }
   let files = [];
   try{
     const [r, rf] = await Promise.all([
@@ -13008,6 +13078,7 @@ function l2CaseRender(rem){
     +   '<div><div class="k">Disputed</div><div class="v">'
     +     (c.disputed_amount ? '₹' + Number(c.disputed_amount).toLocaleString('en-IN') : '—') + '</div></div>'
     +   '<div><div class="k">Phone</div><div class="v">' + esc(c.complainant_phone || c.insured_phone || '—') + '</div></div>'
+    +   '<div><div class="k">Policy No.</div><div class="v">' + esc(c.policy_no || '—') + '</div></div>'
     +   '<div><div class="k">Last moved by</div><div class="v">' + esc(st.moved_by || '—') + '</div></div>'
     + '</div>'
     // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
@@ -13046,22 +13117,15 @@ function l2CaseRender(rem){
     +   '<button class="l2mv g" style="margin-top:.35rem" onclick="docsOpen(' + id + ')">'
     +     '\ud83d\udcce Attach or check the list</button>'
     + '</div>'
-    + (flds ? '<div><div class="l2sec">The gist \u2014 recorded here</div>' + flds + '</div>' : '')
-    // The drafts, two big boxes side by side - saved when the cursor leaves the box.
+    + (flds ? '<div><div class="l2sec">Recorded in this bucket</div>' + flds + '</div>' : '')
+    // The drafts, two big boxes side by side - saved as you type.
     + (richF.length
         ? '<div class="csrpair">' + richF.map(function(f){
-            return '<div class="csrrt"><label>' + esc(f.label_en)
-              + (f.required_exit ? ' <span class="req">*</span>' : '') + '</label>'
-              + '<div class="csrbar">'
-              +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
-              +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
-              +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
-              + '</div>'
-              + '<div class="csred" contenteditable="true" id="lf_' + f.field_key + '" '
-              +   'onblur="l2Field(\'' + f.field_key + '\',this.innerHTML,this)">'
-              +   _csrRichHTML((st.values || {})[f.field_key] || '') + '</div></div>';
+            return _l2RichEditor(f, (st.values || {})[f.field_key] || '', '');
           }).join('') + '</div>'
         : '')
+    // The assembly line: everything the other buckets have already built into this claim.
+    + _l2BuiltSoFar(st, id)
     + '<div><div class="l2sec">Remarks</div><div class="l2rem">' + remHtml + '</div></div>'
     + '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
     +   (fwd ? '<button class="l2mv p" onclick="l2MoveFromCase(\'' + fwd.to_key + '\')">'
@@ -13085,28 +13149,183 @@ function l2MoveMenuCase(){
   l2MoveMenu(id); _l2Sel = keep;
 }
 
+// ── Pasting into a draft keeps the letter, not Word's hidden formatting ────────
+// A ~2,400-character letter copied from Word or Google Docs arrives as ~89,000 characters of
+// styles, spans and mso markup, and NP-112's Lokpal Draft was refused for it eight times. Keep
+// what the drafts can show - bold, italic, underline, paragraphs, lists, line breaks - and drop
+// everything else. (The server sanitises again; this is about the size and the look.)
+function _csrCleanPaste(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const out = document.createElement('div');
+  const KEEP = {B:'b', STRONG:'b', I:'i', EM:'i', U:'u', P:'p', DIV:'div', UL:'ul', OL:'ol', LI:'li', BR:'br'};
+  const BLOCK = {H1:1, H2:1, H3:1, H4:1, H5:1, H6:1, TR:1, BLOCKQUOTE:1, PRE:1};
+  const DROP = {SCRIPT:1, STYLE:1, META:1, LINK:1, TITLE:1, HEAD:1, IMG:1, SVG:1, OBJECT:1, IFRAME:1, XML:1};
+  function walk(src, dst){
+    Array.prototype.forEach.call(src.childNodes, function(n){
+      if (n.nodeType === 3){ dst.appendChild(document.createTextNode(n.nodeValue.replace(/\u00a0/g, ' '))); return; }
+      if (n.nodeType !== 1) return;                       // comments (Word's mso blocks) go
+      const tag = n.tagName.toUpperCase();
+      // Word's own tags (o:p, w:...) are unwrapped to their text; its drawings (v:...) go.
+      if (DROP[tag] || tag.indexOf('V:') === 0) return;
+      const st = (n.getAttribute('style') || '').toLowerCase();
+      let el = null;
+      if (KEEP[tag]){
+        // Google Docs wraps a whole paste in <b style="font-weight:normal"> - not bold at all.
+        if ((tag === 'B' || tag === 'STRONG') && /font-weight:\s*(normal|400)/.test(st)) el = null;
+        else el = document.createElement(KEEP[tag]);
+      } else if (BLOCK[tag]) el = document.createElement('p');
+      let target = el || dst;
+      if (el) dst.appendChild(el);
+      // Word marks bold, italic and underline in the style, not the tag.
+      if (!el || tag === 'SPAN' || tag === 'FONT'){
+        if (/font-weight:\s*(bold|[6-9]00)/.test(st)){ const b = document.createElement('b'); target.appendChild(b); target = b; }
+        if (/font-style:\s*italic/.test(st)){ const i = document.createElement('i'); target.appendChild(i); target = i; }
+        if (/text-decoration[^;]*underline/.test(st)){ const u = document.createElement('u'); target.appendChild(u); target = u; }
+      }
+      if (tag === 'TD' || tag === 'TH'){ walk(n, target); target.appendChild(document.createTextNode(' ')); return; }
+      if (tag !== 'BR') walk(n, target);
+    });
+  }
+  walk(doc.body, out);
+  return out.innerHTML;
+}
+document.addEventListener('paste', function(e){
+  const ed = e.target && e.target.closest && e.target.closest('.csred');
+  if (!ed || !e.clipboardData) return;
+  const html = e.clipboardData.getData('text/html');
+  const text = e.clipboardData.getData('text/plain');
+  if (!html && !text) return;
+  e.preventDefault();
+  const clean = html ? _csrCleanPaste(html)
+                     : esc(text).replace(/\r\n|\r|\n/g, '<br>');
+  document.execCommand('insertHTML', false, clean);
+});
+
+// ── The drafts save while you type ────────────────────────────────────────────
+// 1.5 seconds after the typing (or a paste) stops, and again when the cursor leaves the box. A
+// version number stops an older save from marking newer typing as saved.
+const _l2SaveT = {};
+function l2RichInput(key, el){
+  el._ver = (el._ver || 0) + 1;
+  el.dataset.dirty = '1';
+  clearTimeout(_l2SaveT[key]);
+  _l2SaveT[key] = setTimeout(function(){
+    delete _l2SaveT[key];
+    if (document.body.contains(el) && el.dataset.dirty) _l2SaveRich(key, el);
+  }, 1500);
+}
+function l2RichBlur(key, el){
+  clearTimeout(_l2SaveT[key]); delete _l2SaveT[key];
+  if (el.dataset.dirty && !el._saving) _l2SaveRich(key, el);
+}
+async function _l2SaveRich(key, el){
+  const v = el._ver || 0;
+  el._saving = true;
+  let ok = false;
+  try{ ok = await l2Field(key, el.innerHTML, el); } finally { el._saving = false; }
+  if (ok && (el._ver || 0) === v) delete el.dataset.dirty;
+  else if (ok && el.dataset.dirty && document.body.contains(el)) _l2SaveRich(key, el);  // typed meanwhile
+}
+window.l2RichInput = l2RichInput; window.l2RichBlur = l2RichBlur;
+
+// The big draft box, used for this bucket's drafts and for drafts built in earlier buckets.
+function _l2RichEditor(f, value, from){
+  return '<div class="csrrt"><label>' + esc(f.label_en)
+    + (from ? ' <span style="font-weight:400;color:var(--nd-text-faint)">\u00b7 written in ' + esc(from) + '</span>' : '')
+    + (f.required_exit && !from ? ' <span class="req">*</span>' : '') + '</label>'
+    + '<div class="csrbar">'
+    +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
+    +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
+    +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+    +   '<span class="csrsaved" id="lfs_' + f.field_key + '"></span>'
+    + '</div>'
+    + '<div class="csred" contenteditable="true" id="lf_' + f.field_key + '" data-key="' + f.field_key + '" '
+    +   'data-label="' + esc(f.label_en) + '" '
+    +   'oninput="l2RichInput(\'' + f.field_key + '\',this)" onblur="l2RichBlur(\'' + f.field_key + '\',this)">'
+    +   _csrRichHTML(value || '') + '</div></div>';
+}
+
+// "Built so far": what every other bucket recorded on this claim, in the order of the line. The
+// drafts come as their two big boxes (a later bucket refines them); the rest reads as a summary,
+// changed from the Gist. Passwords are never shown here.
+function _l2BuiltSoFar(st, id){
+  const bs = ((_l2Cfg || {}).buckets || []);
+  if (!bs.length) return '';
+  const vals = st.values || {};
+  const seen = {};
+  (st.fields || []).forEach(function(f){ seen[f.field_key] = 1; });
+  const at = bs.findIndex(function(b){ return b.bucket_key === st.bucket; });
+  const groups = [], rich = [];
+  bs.forEach(function(b, i){
+    if (b.bucket_key === st.bucket) return;
+    const earlier = at < 0 || i < at;
+    const rows = [];
+    (b.fields || []).forEach(function(f){
+      if (seen[f.field_key]) return;
+      const v = vals[f.field_key];
+      const has = v != null && String(v).replace(/<[^>]*>/g, '').trim() !== '';
+      if (f.field_type === 'richtext'){
+        if (earlier || has){ seen[f.field_key] = 1; rich.push({f: f, from: b.name_en, v: v}); }
+        return;
+      }
+      if (!has) return;
+      seen[f.field_key] = 1;
+      let shown = String(v);
+      if (/password/i.test(f.field_key)) shown = '\u2022\u2022\u2022\u2022\u2022\u2022';
+      else if (f.field_type === 'date') shown = _csrDate(shown);
+      else if (f.field_type === 'money' && !isNaN(+shown)) shown = '\u20b9' + Number(shown).toLocaleString('en-IN');
+      rows.push('<div><div class="k">' + esc(f.label_en) + '</div><div class="v">' + esc(shown) + '</div></div>');
+    });
+    if (rows.length) groups.push('<div class="l2bg"><div class="l2bgh">' + (b.icon || '') + ' '
+      + esc(b.name_en) + '</div><div class="l2kv">' + rows.join('') + '</div></div>');
+  });
+  if (!groups.length && !rich.length) return '';
+  return '<div class="l2built"><div class="l2sec">Built so far \u2014 what the other buckets recorded</div>'
+    + groups.join('')
+    + (groups.length ? '<button class="l2mv g" onclick="csrGist(' + id + ')">\u270d\ufe0f Change these in the Gist</button>' : '')
+    + (rich.length ? '<div class="csrpair">' + rich.map(function(x){ return _l2RichEditor(x.f, x.v, x.from); }).join('') + '</div>' : '')
+    + '</div>';
+}
+
 async function l2Field(key, value, el){
   const id = _l2Case && _l2Case.claim_id;
-  if (!id) return;
+  if (!id) return false;
   const msg = document.getElementById('l2cMsg');
+  const tag = document.getElementById('lfs_' + key);
+  if (tag){ tag.textContent = 'Saving\u2026'; tag.className = 'csrsaved'; }
   try{
     const r = await API('/cases/' + id + '/bucket/field',
       {method:'POST', body: JSON.stringify({field_key: key, value: String(value == null ? '' : value)})});
     if (r.ok){
-      if (el){ el.style.borderColor = 'var(--nd-success-text)';
+      if (el){ el.classList.remove('l2fail'); delete el.dataset.failed;
+               el.style.borderColor = 'var(--nd-success-text)';
                setTimeout(function(){ el.style.borderColor = ''; }, 900); }
+      if (tag){ tag.textContent = '\u2713 Saved'; tag.className = 'csrsaved ok'; }
       // Keep the "before this can move on" banner honest as fields are filled.
       const st = await API('/cases/' + id + '/bucket').then(function(x){ return x.ok ? x.json() : null; });
       if (st){ _l2Case.st = st; }
       if (msg){ msg.style.color = 'var(--nd-success-text)'; msg.textContent = 'Saved';
                 setTimeout(function(){ if (msg) msg.textContent = ''; }, 1200); }
+      return true;
     } else {
       const d = await r.json().catch(function(){ return {}; });
-      if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not save'); }
+      _l2SaveFailed(key, el, _l2Err(d, 'Could not save'), id);
     }
   }catch(e){
-    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not save.'; }
+    _l2SaveFailed(key, el, 'Could not reach the server - check the connection.', id);
   }
+  return false;
+}
+// A failed save is never quiet: the box turns red, its label says so, and a message stays on the
+// screen long enough to read even if the window has already been closed.
+function _l2SaveFailed(key, el, why, id){
+  const msg = document.getElementById('l2cMsg');
+  if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = why; }
+  const tag = document.getElementById('lfs_' + key);
+  if (tag){ tag.textContent = '\u26a0 NOT saved'; tag.className = 'csrsaved bad'; }
+  const label = (el && el.dataset && el.dataset.label) || key.replace(/_/g, ' ');
+  if (el && el.classList && el.classList.contains('csred')){ el.classList.add('l2fail'); el.dataset.failed = why; }
+  try{ ndUI.toast('NP-' + id + ' \u2014 ' + label + ' was NOT saved: ' + why, 'error', 12000); }catch(e){}
 }
 
 async function l2SetSub(sub, el){
@@ -13722,6 +13941,7 @@ async function _csrSave(payload, msgId, okText){
       m.style.color = (d.errors && d.errors.length) ? 'var(--nd-warning-text)' : 'var(--nd-success-text)';
       m.textContent = okText + ((d.errors && d.errors.length) ? ' Not saved: ' + d.errors.join('; ') : '');
     }
+    _csrDirty = false;
     await _csrLoad(_csrClaim);
     return true;
   }catch(e){
@@ -14963,7 +15183,7 @@ async function cbMove(id, to, note){
 }
 window.cbStartL2=cbStartL2; window.cbMove=cbMove;
 
-function _cbEsc(e){ if (e.key === 'Escape') cbCloseSheet(); }
+function _cbEsc(e){ /* windows close only from their own button (founder, 15 Sep) */ }
 
 function cbCloseSheet(){
   const b = document.getElementById('cbsBack');

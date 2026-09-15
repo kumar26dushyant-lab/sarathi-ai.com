@@ -135,14 +135,22 @@ async function assertEscapable(page, label) {
   if (!info) { chk(false, `${label}: a dialog should be open and is not`); return false; }
   chk(info.hasX, `${label}: has an ✕ in the corner`);
   chk(info.exit, `${label}: has a button that leaves`, `buttons were: ${info.btns.join(' / ')}`);
-  // And Escape genuinely closes it. The "Updates for you" popup can open over everything part-way
-  // through a run, and Escape rightly closes THAT first, being on top. Press its "Later" -
-  // which only closes it on this screen and records nothing - so the Escape reaches the dialog.
+  // 15 Sep: a window closes ONLY from its own button. A stray click on the dimmed background
+  // or a stray Escape must leave it open. (The "Updates for you" popup can open over everything
+  // part-way through a run; its "Later" closes it on this screen only and records nothing.)
   await page.evaluate(() => { if (typeof _ackClose === 'function') _ackClose(); });
+  await page.mouse.click(6, 450);                     // the dimmed background, left edge
+  await page.waitForTimeout(250);
+  chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
+      `${label}: a click on the background does NOT close it`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  const stillOpen = await page.evaluate(() => !!document.querySelector('.modal-bg.open'));
-  chk(!stillOpen, `${label}: Escape closes it`);
+  chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
+      `${label}: Escape does NOT close it`);
+  await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+  await page.waitForTimeout(250);
+  chk(await page.evaluate(() => !document.querySelector('.modal-bg.open')),
+      `${label}: its ✕ closes it`);
   return true;
 }
 
@@ -209,9 +217,14 @@ async function run() {
   if (firstCard) {
     await page.waitForTimeout(500);
     chk(await page.evaluate(() => !!document.getElementById('cbsBack')), 'Change status or owner opens');
+    await page.mouse.click(6, 450);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-    chk(await page.evaluate(() => !document.getElementById('cbsBack')), 'and Escape closes it');
+    chk(await page.evaluate(() => !!document.getElementById('cbsBack')),
+        'a background click or Escape does NOT close it');
+    await page.evaluate(() => document.querySelector('#cbsBack .cbs-x').click());
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('cbsBack')), 'and its ✕ does');
   }
   await page.evaluate(() => showPanel('board'));
   await page.waitForTimeout(2500);
@@ -437,8 +450,12 @@ async function run() {
     await page.waitForTimeout(1500);
     chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
         'a button inside the popup still works (Open documents)');
-    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
     await page.waitForTimeout(300);
+    await page.mouse.click(6, 450);                   // the claim popup's own background
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => document.getElementById('drawerBg').classList.contains('open')),
+        'a click beside the claim popup does NOT close it');
     // Narrow the window to a phone: back to the side panel, every section, in the original order.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(600);
@@ -455,8 +472,10 @@ async function run() {
     await page.waitForTimeout(600);
     chk(await page.evaluate(() => document.querySelectorAll('#drawerBody .dcols > .dcol').length === 3),
         'and widening the window puts the columns back');
-    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.querySelector('#claimDrawer .drawer-top .btn-icon').click());
     await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('drawerBg').classList.contains('open')),
+        'its ✕ closes it');
     chk(await page.evaluate(() => !document.getElementById('drawerBg').classList.contains('is-claim')),
         'closing it clears the popup mode, so tasks and leads keep the side panel');
   }
@@ -515,13 +534,16 @@ async function run() {
       chk(v.inline, 'and a PDF is asked for inline, not as a download');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);
+      chk(await page.evaluate(() => !!document.getElementById('docViewOv')), 'Escape does NOT close the viewer');
+      await page.evaluate(() => document.querySelector('#docViewOv .modal-x').click());
+      await page.waitForTimeout(300);
       const after = await page.evaluate(() => ({
         viewer: !!document.getElementById('docViewOv'),
         sheet: !!document.querySelector('.modal-bg.open') }));
       chk(!after.viewer && after.sheet,
-          'Escape closes the viewer and leaves the case sheet underneath');
+          "the viewer's ✕ closes it and leaves the case sheet underneath");
     }
-    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
     await page.waitForTimeout(300);
     // The Draft form draws the same pair for any claim, and saves nothing until Save is pressed.
     await page.evaluate(id => window.csrDraft(id), l2Claim);
@@ -536,6 +558,97 @@ async function run() {
     chk(dp.equal && dp.tall > 400, `  the same big height (${dp.tall}px)`);
     await assertEscapable(page, 'draft form');
   }
+  // 15 Sep: past Pending Draft, the case sheet still shows the drafts - the assembly line.
+  const later = await page.evaluate(async () => {
+    for (const b of ['escalation', 'lokpal', 'completed']) {
+      const r = await API('/buckets/' + b + '/claims');
+      const d = r.ok ? await r.json() : {};
+      if ((d.items || []).length) return d.items[0].claim_id;
+    }
+    return 0;
+  });
+  if (later) {
+    await page.evaluate(id => window.l2Open(id), later);
+    await page.waitForFunction(() => document.getElementById('l2cMsg'), null, { timeout: 20000 }).catch(() => {});
+    const b = await page.evaluate(() => ({
+      built: !!document.querySelector('.l2built'),
+      drafts: !!document.querySelector('.l2built #lf_draft_en') && !!document.querySelector('.l2built #lf_draft_hi'),
+      from: /written in Pending Draft/.test((document.querySelector('.l2built') || {}).innerText || ''),
+      pw: /\u2022{6}/.test((document.querySelector('.l2built') || {}).innerText || '')
+          || !/Email Password/.test((document.querySelector('.l2built') || {}).innerText || '') }));
+    chk(b.built, `NP-${later}, past Pending Draft, shows what the earlier buckets built`);
+    chk(b.drafts && b.from, 'including both drafts, marked as written in Pending Draft');
+    chk(b.pw, 'and never shows the case email password');
+
+    // Paste, save-as-you-type, and a refused save - with the save request answered INSIDE the
+    // browser, so nothing is written to the live claim. The route stays in place until the
+    // window is closed, so no stray save can leak through.
+    const sent = [];
+    let answer = { status: 200, body: '{"ok":true}' };
+    await page.route('**/bucket/field', r => {
+      sent.push(JSON.parse(r.request().postData() || '{}'));
+      r.fulfill({ status: answer.status, contentType: 'application/json', body: answer.body });
+    });
+    await page.route('**/cases/*/bucket', r => r.request().method() === 'GET' ? r.continue()
+                                                                                : r.abort());
+    const dialogs = [];
+    const onDialog = d => { dialogs.push(d.message()); d.dismiss(); };
+    page.on('dialog', onDialog);
+    await page.evaluate(() => {
+      const ed = document.querySelector('.l2built #lf_draft_hi');
+      ed.focus();
+      const dt = new DataTransfer();
+      dt.setData('text/html', '<html><head><style>' + 'p{mso-x:1}'.repeat(3000) + '</style></head><body>'
+        + '<p class=MsoNormal><span style="font-weight:bold">सादर</span> धन्यवाद<o:p></o:p></p></body></html>');
+      ed.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
+    await page.waitForTimeout(2300);
+    const saved = sent.filter(x => x.field_key === 'draft_hi').pop() || {};
+    chk(!!saved.value && /<b>सादर<\/b>/.test(saved.value) && saved.value.length < 2000,
+        `a paste saves by itself within 2 seconds, cleaned (${(saved.value || '').length} characters)`);
+    chk(await page.evaluate(() => /Saved/.test(document.getElementById('lfs_draft_hi').textContent)),
+        'and the box says ✓ Saved');
+    // Now the server refuses.
+    answer = { status: 400, body: '{"detail":"That is too long to save (61000 characters; the limit is 60000)."}' };
+    await page.evaluate(() => {
+      const ed = document.querySelector('.l2built #lf_draft_hi');
+      ed.focus(); document.execCommand('insertText', false, ' और');
+    });
+    await page.waitForTimeout(2300);
+    const fail = await page.evaluate(() => ({
+      red: document.querySelector('.l2built #lf_draft_hi').classList.contains('l2fail'),
+      tag: document.getElementById('lfs_draft_hi').textContent,
+      toast: /NOT saved/.test(document.body.innerText) }));
+    chk(fail.red && /NOT saved/.test(fail.tag) && fail.toast,
+        'a refused save turns the box red, says NOT saved, and shows a message', JSON.stringify(fail));
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+    await page.waitForTimeout(400);
+    chk(dialogs.some(m => /could NOT be saved/.test(m))
+        && await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
+        'closing with an unsaved draft asks first - and Cancel keeps the window open');
+    page.off('dialog', onDialog);
+    page.once('dialog', d => d.accept());
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+    await page.waitForTimeout(400);
+    chk(await page.evaluate(() => !document.querySelector('.modal-bg.open')), 'OK then closes it');
+    await page.unroute('**/bucket/field');
+    await page.unroute('**/cases/*/bucket');
+    // The browser logs the 400 this test answered on purpose; that one is not a page error.
+    for (let i = errors.length - 1; i >= 0; i--) if (/status of 400/.test(errors[i])) errors.splice(i, 1);
+  }
+  // A Word-style paste shrinks to the letter and keeps its bold.
+  const pc = await page.evaluate(() => {
+    const junk = '<style>' + 'p.MsoNormal{margin:0;font-family:Mangal}'.repeat(900) + '</style>';
+    const w = '<html><head>' + junk + '</head><body><!--[if gte mso 9]><xml><o:x/></xml><![endif]-->'
+      + '<p class="MsoNormal" style="mso-margin-top-alt:auto;line-height:115%"><span style="font-size:12pt;font-family:Mangal;mso-bidi-font-weight:bold">'
+      + '<b>विषय:</b> शिकायत</span><o:p>&nbsp;</o:p></p>'
+      + '<p class=MsoNormal><span style="font-weight:bold">Policy No.</span> 12345</p></body></html>';
+    const out = _csrCleanPaste(w);
+    return { before: w.length, after: out.length, out };
+  });
+  chk(pc.after < pc.before / 50 && /<b>विषय:<\/b>/.test(pc.out) && /<b>Policy No\.<\/b>/.test(pc.out)
+      && !/style|class|mso|<o:p/i.test(pc.out),
+      `a Word paste is cleaned to the letter (${pc.before} → ${pc.after} characters), bold kept`, pc.out);
   chk(errors.length === 0, 'the case sheet throws no script error', errors[0]);
 
   /* ── 4. the handover dialog — opens, and never traps ─────────────────────── */

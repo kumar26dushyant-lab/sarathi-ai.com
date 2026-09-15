@@ -6667,9 +6667,11 @@ class _BucketSubReq(BaseModel):
 class _BucketFieldReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     field_key: str = Field(..., max_length=60)
-    # A formatted legal draft runs well past 8,000 characters; set_field enforces the real
-    # per-type limit and refuses rather than truncating.
-    value: str = Field("", max_length=60000)
+    # A formatted legal draft runs well past 8,000 characters, and a paste from Word carries
+    # tens of thousands of characters of hidden formatting on top (NP-112's 2,400-character
+    # letter arrived as 89,000). set_field sanitises FIRST and then enforces the real per-type
+    # limit on the cleaned text, refusing rather than truncating; this cap only bounds the request.
+    value: str = Field("", max_length=400000)
 
 
 class _BucketSaveReq(BaseModel):
