@@ -12821,12 +12821,22 @@ function l2Export(){
 // person press a button and be refused — a refusal you could have predicted is a design failure.
 function _l2Rule(fromKey, toKey){
   const b = _l2Bucket(fromKey) || {};
-  return (b.moves || []).filter(function(m){ return m.to_key === toKey; })[0] || null;
+  const r = (b.moves || []).filter(function(m){ return m.to_key === toKey; })[0];
+  if (r) return r;
+  // No configured route: still allowed - any bucket, any time - and recorded as off the usual
+  // path. Backwards or forwards is read from the order of the line, exactly as the server does.
+  const dest = _l2Bucket(toKey);
+  if (!dest) return null;
+  const order = (_l2Cfg.buckets || []).map(function(x){ return x.bucket_key; });
+  const kind = dest.is_park ? 'park' : (b.is_park ? 'resume'
+    : (order.indexOf(toKey) < order.indexOf(fromKey) ? 'back' : 'forward'));
+  return {to_key: toKey, kind: kind, off_route: true, needs_reason: 1};
 }
 
-async function l2Move(claimId, toKey, presetReason){
-  const rule = _l2Rule(_l2Sel, toKey);
-  if (!rule){ ndUI.toast('That move is not allowed from here.', 'error'); return; }
+async function l2Move(claimId, toKey, presetReason, fromKey){
+  const from = fromKey || _l2Sel;
+  const rule = _l2Rule(from, toKey);
+  if (!rule){ ndUI.toast('That bucket no longer exists.', 'error'); return; }
   const dest = _l2Bucket(toKey) || {};
   const isPark = !!dest.is_park;
   const needsReason = !!rule.needs_reason;
@@ -12844,12 +12854,19 @@ async function l2Move(claimId, toKey, presetReason){
         ? '<div class="l2ban amber" style="margin-bottom:.6rem">This is <b>not the usual '
           + 'next step</b> from here. That is allowed - it is simply recorded as off the '
           + 'usual path, so the history shows it was deliberate.</div>'
-        : (rule.kind === 'back'
+        : '')
+    + (rule.kind === 'back'
         ? '<div class="l2ban amber" style="margin-bottom:.6rem">This sends the claim backwards. '
-          + 'The reason goes into the remarks and is read later.</div>' : ''))
+          + 'The reason goes into the remarks and is read later.'
+          + (_role === 'super_admin'
+              ? ' It will show as <b>pulled back by you (super admin)</b> until it moves forward '
+                + 'again, and the work in ' + esc(dest.name_en || 'that bucket') + ' opens again. '
+                + 'Nothing already written is erased.'
+              : ' It will show who sent it back and why.')
+          + '</div>' : '')
     + (isPark
         ? '<div class="l2ban info" style="margin-bottom:.6rem">A pause needs a date it comes back. '
-          + 'On that date the claim returns to <b>' + esc((_l2Bucket(_l2Sel)||{}).name_en || '')
+          + 'On that date the claim returns to <b>' + esc((_l2Bucket(from)||{}).name_en || '')
           + '</b> by itself.</div>' : '')
     + (subs.length > 1
         ? '<div class="l2fld"><label>Which step?</label><select id="l2mSub">' + subOpts + '</select></div>'
@@ -12906,20 +12923,21 @@ async function _l2Send(claimId, toKey, body){
   }finally{ _l2Busy = false; }
 }
 
-function l2MoveMenu(claimId){
+function l2MoveMenu(claimId, fromKey){
   // Any bucket, any time. The configured routes decide what is listed FIRST; everything else is
   // still offered, because a claim moved in error has to be moveable back without asking anyone.
-  const b = _l2Bucket(_l2Sel) || {};
+  const from = fromKey || _l2Sel;
+  const b = _l2Bucket(from) || {};
   const routed = {};
   (b.moves || []).forEach(function(m){ routed[m.to_key] = m; });
-  const all = (_l2Cfg.buckets || []).filter(function(x){ return x.bucket_key !== _l2Sel; });
+  const all = (_l2Cfg.buckets || []).filter(function(x){ return x.bucket_key !== from; });
   if (!all.length){ ndUI.toast('There is nowhere to move this.', 'error'); return; }
 
   const btn = function(x, m){
     const cls = !m ? 'g' : (m.kind === 'back' ? 'd' : (m.kind === 'forward' ? 'p' : 'g'));
     return '<button class="l2mv ' + cls
       + '" style="display:block;width:100%;text-align:left;margin-bottom:.25rem"'
-      + ' onclick="closeModal();l2Move(' + claimId + ',\'' + x.bucket_key + '\')">'
+      + ' onclick="closeModal();l2Move(' + claimId + ',\'' + x.bucket_key + '\',\'\',\'' + from + '\')">'
       + (x.icon || '') + ' ' + esc(x.name_en)
       + (!m ? ' <span style="opacity:.65;font-weight:400">- off the usual path</span>' : '')
       + '</button>';
@@ -13157,15 +13175,13 @@ function l2CaseRender(rem){
     + '</div>';
 }
 
+// From a case sheet the claim's OWN bucket decides the moves - not whichever list it was opened
+// from (All open claims, a stage before Level-2, another bucket).
 function l2MoveFromCase(to){
-  const id = _l2Case.claim_id;
-  const keep = _l2Sel; _l2Sel = (_l2Case.st || {}).bucket || _l2Sel;
-  l2Move(id, to); _l2Sel = keep;
+  l2Move(_l2Case.claim_id, to, '', (_l2Case.st || {}).bucket || _l2Sel);
 }
 function l2MoveMenuCase(){
-  const id = _l2Case.claim_id;
-  const keep = _l2Sel; _l2Sel = (_l2Case.st || {}).bucket || _l2Sel;
-  l2MoveMenu(id); _l2Sel = keep;
+  l2MoveMenu(_l2Case.claim_id, (_l2Case.st || {}).bucket || _l2Sel);
 }
 
 // ── Pasting into a draft keeps the letter, not Word's hidden formatting ────────

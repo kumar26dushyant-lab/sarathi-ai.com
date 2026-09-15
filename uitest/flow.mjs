@@ -643,6 +643,34 @@ async function run() {
     // The browser logs the 400 this test answered on purpose; that one is not a page error.
     for (let i = errors.length - 1; i >= 0; i--) if (/status of 400/.test(errors[i])) errors.splice(i, 1);
   }
+  // 15 Sep (founder): a super admin could not pull NP-119 back from Escalation to Pending Draft -
+  // the page refused every "off the usual path" move. Opened from All open claims, exactly as
+  // they did. The move window is closed without moving anything.
+  if (later) {
+    await page.evaluate(() => { _l2Sel = 'all'; });
+    await page.evaluate(id => window.l2Open(id), later);
+    await page.waitForFunction(() => document.getElementById('l2cMsg'), null, { timeout: 20000 }).catch(() => {});
+    await page.evaluate(() => l2MoveMenuCase());
+    await page.waitForTimeout(400);
+    const menu = await page.evaluate(() => [...document.querySelectorAll('#modalBody .l2mv')]
+      .map(b => b.textContent.trim()));
+    const target = menu.find(t => /Pending Draft/.test(t)) || '';
+    chk(!!target, `the Move window offers Pending Draft ("${target}")`);
+    const toasts0 = await page.evaluate(() => document.body.innerText.includes('not allowed'));
+    await page.evaluate(() => [...document.querySelectorAll('#modalBody .l2mv')]
+      .find(b => /Pending Draft/.test(b.textContent)).click());
+    await page.waitForTimeout(500);
+    const mv = await page.evaluate(() => ({
+      title: (document.getElementById('modalTitle') || {}).textContent || '',
+      why: !!document.getElementById('l2mWhy'),
+      pull: /pulled back by you/.test((document.getElementById('modalBody') || {}).innerText || ''),
+      refused: document.body.innerText.includes('not allowed from here') }));
+    chk(!toasts0 && !mv.refused && mv.why && /Pending Draft/.test(mv.title),
+        `choosing it opens the move window ("${mv.title}") - no "not allowed"`);
+    chk(mv.pull, 'and tells the super admin it will show as pulled back by them');
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+    await page.waitForTimeout(300);
+  }
   // A Word-style paste shrinks to the letter and keeps its bold.
   const pc = await page.evaluate(() => {
     const junk = '<style>' + 'p.MsoNormal{margin:0;font-family:Mangal}'.repeat(900) + '</style>';
