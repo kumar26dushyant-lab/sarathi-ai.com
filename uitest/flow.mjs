@@ -822,10 +822,14 @@ async function run() {
       const ed = document.querySelector('.l2built #lf_draft_hi');
       return { ro: !!ed && !ed.isContentEditable && ed.classList.contains('locked'),
                banner: /Locked \u2014 finished in/.test((document.querySelector('.l2built') || {}).innerText || ''),
-               req: !!document.querySelector('.l2built [onclick^="l2RequestChange"]') };
+               req: !!document.querySelector('.l2built [onclick^="l2RequestChange"]'),
+               // the toolbar sizes its buttons for B / I / U - this one must fit its words
+               reqW: Math.round(((document.querySelector('.csrlock button') || {getBoundingClientRect(){return{width:0}}})
+                       .getBoundingClientRect()).width) };
     });
     chk(lk.ro, `for ${ss.name} the drafts on NP-${later2} are read-only`);
     chk(lk.banner && lk.req, 'marked Locked, with a Request a change button');
+    chk(lk.reqW > 100, `and the button fits its words (${lk.reqW}px - it was squeezed to 28px on phones)`);
     await page.evaluate(() => document.querySelector('.l2built [onclick^="l2RequestChange"]').click());
     await page.waitForTimeout(400);
     const rq = await page.evaluate(() => ({

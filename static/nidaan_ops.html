@@ -12508,7 +12508,9 @@ function _l2Styles(){
   .csrsaved.bad{color:var(--nd-danger-text);font-weight:800}
   .csred.l2fail{border-color:var(--nd-danger-text)!important;box-shadow:0 0 0 2px rgba(239,68,68,.25)}
   .csred.locked{background:var(--nd-bg-surface);color:var(--nd-text-secondary);cursor:default}
-  .csrlock{font-size:.76rem;color:var(--nd-warning-text);gap:.4rem;flex-wrap:wrap}
+  .csrlock{font-size:.76rem;color:var(--nd-warning-text);gap:.4rem;flex-wrap:wrap;align-items:center}
+  /* The toolbar's buttons are sized for B / I / U; the request button sizes to its words. */
+  .csrbar.csrlock button{width:auto;height:auto;flex-shrink:0;padding:.2rem .6rem}
   .csrsu{font-size:.72rem;color:var(--nd-cyan-text);margin-left:.5rem;align-self:center}
   .l2back{font-size:.74rem;font-weight:700;color:var(--nd-warning-text);margin-bottom:.15rem}
   .qbad{font-size:.76rem;font-weight:800;border-radius:8px;padding:.3rem .5rem;margin-bottom:.25rem;line-height:1.35}
