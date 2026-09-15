@@ -2685,6 +2685,52 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN back_by_role TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN back_from TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN back_reason TEXT DEFAULT ''",
+            # One number that goes up whenever anything a screen shows changes. The ops page asks
+            # for it every few seconds and refreshes only when it has moved. Kept by triggers, so
+            # no code path can change a claim and forget to say so.
+            # The draft query: raised in Pending Draft, answered in Live Cases. 'open' while Live
+            # works on it, 'resolved' once it is back with the doctor/advocate, '' after that.
+            "ALTER TABLE nidaan_claims ADD COLUMN query_state TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_text TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_by_id INTEGER",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_round INTEGER DEFAULT 0",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_resolved_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_resolved_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_resolved_note TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_mo_id INTEGER",
+            "ALTER TABLE nidaan_claims ADD COLUMN query_mo_name TEXT DEFAULT ''",
+            # The one query message to the complainant, and whether they have answered it.
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_by TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_by_id INTEGER",
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_text TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_channels TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claims ADD COLUMN cq_reply_at TIMESTAMP",
+            "CREATE TABLE IF NOT EXISTS nidaan_change_seq (id INTEGER PRIMARY KEY CHECK (id = 1), "
+            "seq INTEGER NOT NULL DEFAULT 0)",
+            "INSERT OR IGNORE INTO nidaan_change_seq (id, seq) VALUES (1, 0)",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_insert AFTER INSERT ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_update AFTER UPDATE ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_activity_insert AFTER INSERT ON nidaan_claim_activity BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_fields_insert AFTER INSERT ON nidaan_claim_fields BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_fields_update AFTER UPDATE ON nidaan_claim_fields BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_documents_insert AFTER INSERT ON nidaan_claim_documents BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_documents_delete AFTER DELETE ON nidaan_claim_documents BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_notes_insert AFTER INSERT ON nidaan_claim_notes BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_assignees_insert AFTER INSERT ON nidaan_claim_assignees BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_assignees_delete AFTER DELETE ON nidaan_claim_assignees BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_doc_checklist_insert AFTER INSERT ON nidaan_claim_doc_checklist BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claim_doc_checklist_update AFTER UPDATE ON nidaan_claim_doc_checklist BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_payments_insert AFTER INSERT ON nidaan_payments BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_payments_update AFTER UPDATE ON nidaan_payments BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_tasks_insert AFTER INSERT ON nidaan_tasks BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_tasks_update AFTER UPDATE ON nidaan_tasks BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_quick_tasks_insert AFTER INSERT ON nidaan_quick_tasks BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_quick_tasks_update AFTER UPDATE ON nidaan_quick_tasks BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_task_notes_insert AFTER INSERT ON nidaan_task_notes BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
+            "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_quick_task_notes_insert AFTER INSERT ON nidaan_quick_task_notes BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
         ):
             try:
                 await conn.execute(_rs_sql)

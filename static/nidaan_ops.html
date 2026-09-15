@@ -147,6 +147,8 @@ tr:hover td{background:var(--nd-bg-surface)}
 select{color-scheme:dark}
 select option{background-color:var(--nd-bg-base-2);color:var(--nd-text-primary)}
 .filter-bar input:focus,.filter-bar select:focus{border-color:#22d3ee}
+.nd-clear{font:inherit;font-size:.76rem;font-weight:700;border:1px solid var(--nd-border-warn);
+  color:var(--nd-warning-text);background:var(--nd-warning-soft);border-radius:999px;padding:.2rem .7rem;cursor:pointer}
 
 /* ── DETAIL PANEL (slide-in drawer) ── */
 .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;justify-content:flex-end}
@@ -566,10 +568,236 @@ function _scheduleAutoRefresh(){
   if (_autoRefreshTimer) clearTimeout(_autoRefreshTimer);
   _autoRefreshTimer = setTimeout(function(){
     _autoRefreshTimer = null;
-    if (_ndOverlayOpen()) { _scheduleAutoRefresh(); return; }   // retry once the overlay closes
-    try { if (typeof _currentPanel !== 'undefined' && _currentPanel && typeof showPanel === 'function') showPanel(_currentPanel, true); } catch(e){}
+    _ndSilentRefresh();                 // quietly - never a "Loading..." flash (founder, 15 Sep)
   }, 600);
 }
+
+// ══ Updates that arrive without a flicker ═══════════════════════════════════════
+// Every 10 seconds the page asks the server for one number that the DATABASE moves whenever a
+// claim, move, field, document, note, payment or task changes. When it has moved, the list on
+// screen is fetched again behind a frozen copy of itself and swapped in when ready: no
+// "Loading...", scroll and filters kept. Never while a window is open or while someone is typing -
+// it waits, and updates the moment they finish.
+let _ND_LOADERS = {};
+let _ndSeq = null, _ndSilentBusy = false, _ndSilentAgain = false, _ndSilentPending = false;
+// The screens that are lists of shared work. Forms and tools (raise a claim, settings, the
+// designer...) are never redrawn under someone.
+const _ND_LIVE = {l2:1, claims:1, overview:1, l2claims:1, archived:1, tasks:1, cp:1, accounts:1,
+                  support:1, radar:1, payfollow:1, leave:1, crm:1, branches:1};
+function _ndWindowOpen(){
+  if (_ndOverlayOpen()) return true;
+  if (document.querySelector('.modal-bg.open, .cbs-back, .nd-modal-bg.open')) return true;
+  return Array.from(document.querySelectorAll('[data-ov="1"]')).some(function(el){
+    return el.getClientRects().length && getComputedStyle(el).display !== 'none'; });
+}
+function _ndTyping(panel){
+  const a = document.activeElement;
+  if (!a || a === document.body) return false;
+  if (a.isContentEditable) return true;
+  return /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && (!panel || panel.contains(a));
+}
+async function _ndSilentRefresh(){
+  const id = _currentPanel;
+  if (!id || !_ND_LIVE[id] || !_ND_LOADERS[id]) return;
+  if (_ndSilentBusy){ _ndSilentAgain = true; return; }
+  const panel = document.getElementById('panel-' + id);
+  if (!panel || panel.style.display === 'none') return;
+  if (_ndWindowOpen() || _ndTyping(panel)){ _ndSilentPending = true; return; }
+  _ndSilentPending = false;
+  _ndSilentBusy = true;
+  const y = window.scrollY;
+  // Scroll positions inside the panel (tables, the Level-2 rail and list), by position in the tree.
+  const boxes = Array.from(panel.querySelectorAll('.table-wrap, .l2rail, .l2main, .cb-list, .board, .dcol'));
+  const scr = boxes.map(function(b){ return [b.scrollTop, b.scrollLeft]; });
+  // The frozen copy - ids removed so nothing can find it instead of the real panel.
+  const ghost = panel.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach(function(e){ e.removeAttribute('id'); });
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.style.pointerEvents = 'none';
+  ghost.classList.add('nd-ghost');
+  ghost.classList.remove('panel');      // never mistaken for a screen by showPanel
+  panel.parentNode.insertBefore(ghost, panel);
+  panel.style.display = 'none';
+  try{
+    await _ND_LOADERS[id]();
+    // Some screens draw in two steps (Level-2 draws its rail, then the list): wait for the
+    // placeholder to go, up to 8 seconds.
+    for (let i = 0; i < 80; i++){
+      // "Loading\u2026", "Loading claims\u2026", "Loading cases\u2026", "Opening\u2026"
+      if (!/Loading[a-z ]{0,20}(\u2026|\.\.\.)|Opening\u2026/i.test(panel.textContent || '')) break;
+      await new Promise(function(r){ setTimeout(r, 100); });
+    }
+  }catch(e){}
+  finally{
+    // If the person moved to another screen meanwhile, that screen is showing - leave this hidden.
+    panel.style.display = (_currentPanel === id) ? '' : 'none';
+    ghost.remove();
+    window.scrollTo(0, y);
+    const nb = Array.from(panel.querySelectorAll('.table-wrap, .l2rail, .l2main, .cb-list, .board, .dcol'));
+    nb.forEach(function(b, i){ if (scr[i]){ b.scrollTop = scr[i][0]; b.scrollLeft = scr[i][1]; } });
+    _ndSilentBusy = false;
+    if (_ndSilentAgain){ _ndSilentAgain = false; setTimeout(_ndSilentRefresh, 50); }
+  }
+}
+async function _ndPollChanges(){
+  if (document.hidden || !_token) return;
+  if (_ndSilentPending && !_ndSilentBusy){ _ndSilentRefresh(); }
+  try{
+    const r = await fetch('/nidaan/ops/api/changes', {headers: hdrs()});
+    if (!r.ok) return;
+    const s = (await r.json()).seq;
+    if (_ndSeq === null){ _ndSeq = s; return; }
+    if (s !== _ndSeq){ _ndSeq = s; _ndSilentRefresh(); }
+  }catch(e){}
+}
+let _ndPollT = null;
+function _ndStartLive(){
+  if (_ndPollT) return;
+  _ndPollT = setInterval(_ndPollChanges, 10000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) _ndPollChanges(); });
+}
+// A window just closed or typing just stopped: bring the list up to date now.
+function _ndCatchUp(){ if (_ndSilentPending) setTimeout(_ndSilentRefresh, 150); }
+document.addEventListener('focusout', function(){ setTimeout(function(){ if (!_ndTyping(null)) _ndCatchUp(); }, 300); });
+
+// ══ Filters that stay ═══════════════════════════════════════════════════════════
+// Every filter a person sets is remembered for THEM, through a refresh, an automatic update and a
+// change of screen, until they press "Clear filters". Two kinds: controls in a filter bar (kept by
+// id, put back the moment the bar is drawn), and filters held in the page (kept by name).
+function _ndKeepKey(){ return 'nd_keep_' + (_staffId || 'x'); }
+function _ndKeepGet(){ try{ return JSON.parse(localStorage.getItem(_ndKeepKey()) || '{}') || {}; }catch(e){ return {}; } }
+function _ndKeepPut(o){ try{ localStorage.setItem(_ndKeepKey(), JSON.stringify(o)); }catch(e){} }
+function _ndKeepable(el){
+  return el && el.id && (el.tagName === 'INPUT' || el.tagName === 'SELECT')
+    && !/^(password|file|hidden|date)$/i.test(el.type || '')
+    && el.closest && el.closest('.filter-bar, [data-keep]');
+}
+function _ndKeepControl(e){
+  const el = e.target;
+  if (!_ndKeepable(el)) return;
+  const k = _ndKeepGet(); k.dom = k.dom || {};
+  const v = el.type === 'checkbox' ? (el.checked ? '1' : '') : (el.value || '');
+  if (v) k.dom[el.id] = v; else delete k.dom[el.id];
+  _ndKeepPut(k);
+  _ndMarkBars();
+}
+document.addEventListener('input', _ndKeepControl, true);
+document.addEventListener('change', _ndKeepControl, true);
+// Put saved values back as soon as a filter bar appears - before the screen reads them.
+function _ndRestoreIn(root){
+  const dom = (_ndKeepGet().dom) || {};
+  if (!Object.keys(dom).length || !root || !root.querySelectorAll) return;
+  const els = root.matches && root.matches('.filter-bar [id], [data-keep] [id]') ? [root]
+    : Array.from(root.querySelectorAll('.filter-bar input[id], .filter-bar select[id], [data-keep] input[id], [data-keep] select[id]'));
+  els.forEach(function(el){
+    const v = dom[el.id];
+    if (v == null || !_ndKeepable(el)) return;
+    if (el.type === 'checkbox'){ el.checked = v === '1'; return; }
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(function(o){ return o.value === v; })) return;
+    if (el.value !== v){ el.value = v; el.dataset.ndRestored = '1'; }
+  });
+}
+// After the screen has drawn, run each restored control's own handler once, so the list is
+// filtered by it (a restored search box re-runs its search).
+function _ndReplayRestored(){
+  document.querySelectorAll('[data-nd-restored="1"]').forEach(function(el){
+    delete el.dataset.ndRestored;
+    try{ el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', {bubbles: true})); }catch(e){}
+  });
+}
+let _ndReplayT = null;
+const _ndObs = new MutationObserver(function(muts){
+  let any = false;
+  muts.forEach(function(m){
+    m.addedNodes.forEach(function(nd){
+      if (nd.nodeType !== 1) return;
+      if (nd.classList && nd.classList.contains('nd-ghost')) return;
+      if (!nd.isConnected) return;          // added and already removed again - nothing to do
+      if (nd.matches && (nd.matches('.filter-bar, [data-keep], option') || nd.querySelector && nd.querySelector('.filter-bar, [data-keep]'))){
+        if (nd.tagName === 'OPTION'){
+          // An option arriving in a filter dropdown (lists filled after a fetch).
+          const sel = nd.parentNode;
+          const bar = sel && sel.closest ? sel.closest('.filter-bar, [data-keep]') : null;
+          if (!bar) return;
+          _ndRestoreIn(bar);
+        } else {
+          _ndRestoreIn(nd);
+        }
+        any = true;
+      }
+    });
+  });
+  if (any){
+    _ndMarkBars();
+    clearTimeout(_ndReplayT);
+    _ndReplayT = setTimeout(_ndReplayRestored, 700);
+  }
+});
+_ndObs.observe(document.documentElement, {childList: true, subtree: true});
+// "Filters on - Clear filters" on any bar holding a kept value, so a filtered list is never
+// mistaken for missing work.
+function _ndMarkBars(){
+  const dom = (_ndKeepGet().dom) || {};
+  document.querySelectorAll('.filter-bar').forEach(function(bar){
+    if (bar.closest('.nd-ghost')) return;
+    const on = Array.from(bar.querySelectorAll('input[id], select[id]')).some(function(el){
+      return dom[el.id] != null && dom[el.id] !== ''; });
+    let b = bar.querySelector('.nd-clear');
+    if (on && !b){
+      b = document.createElement('button');
+      b.type = 'button'; b.className = 'nd-clear';
+      b.textContent = '\u2715 Clear filters';
+      b.title = 'Your filters are kept until you clear them';
+      b.onclick = function(){ _ndClearBar(bar); };
+      bar.appendChild(b);
+    } else if (!on && b){ b.remove(); }
+  });
+}
+function _ndClearBar(bar){
+  const k = _ndKeepGet(); k.dom = k.dom || {};
+  bar.querySelectorAll('input[id], select[id]').forEach(function(el){
+    delete k.dom[el.id];
+    if (el.type === 'checkbox') el.checked = false;
+    else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+    try{ el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', {bubbles: true})); }catch(e){}
+  });
+  _ndKeepPut(k);
+  _ndMarkBars();
+}
+window._ndClearBar = _ndClearBar;
+
+// Filters held in the page, kept by name. Read on start-up; written whenever they change.
+const _ND_STATE = {
+  l2Sel:  [function(){ return _l2Sel; }, function(v){ _l2Sel = v; }],
+  l2Sub:  [function(){ return _l2Sub; }, function(v){ _l2Sub = v; }],
+  l2Q:    [function(){ return _l2Q; }, function(v){ _l2Q = v; }],
+  cb:     [function(){ return _cbState; }, function(v){ if (v && typeof v === 'object') _cbState = Object.assign({blocker:'', stage:'', flag:'', mine:false}, v); }],
+  pay:    [function(){ return _opsPayFilter; }, function(v){ _opsPayFilter = v || ''; }],
+  sup:    [function(){ return _supportFilter; }, function(v){ if (v) _supportFilter = v; }],
+  wai:    [function(){ return _waiScope; }, function(v){ if (v) _waiScope = v; }],
+  l2f:    [function(){ return (typeof _l2f !== 'undefined') ? _l2f : null; },
+           function(v){ if (v && typeof v === 'object' && typeof _l2f !== 'undefined') Object.assign(_l2f, v); }],
+};
+function _ndStateRestore(){
+  const st = _ndKeepGet().st || {};
+  Object.keys(_ND_STATE).forEach(function(k){
+    if (st[k] === undefined) return;
+    try{ _ND_STATE[k][1](st[k]); }catch(e){}
+  });
+}
+let _ndStateLast = '';
+function _ndStateSnap(){
+  const st = {};
+  Object.keys(_ND_STATE).forEach(function(k){ try{ st[k] = _ND_STATE[k][0](); }catch(e){} });
+  const s = JSON.stringify(st);
+  if (s === _ndStateLast) return;
+  _ndStateLast = s;
+  const k = _ndKeepGet(); k.st = st; _ndKeepPut(k);
+}
+setInterval(_ndStateSnap, 1500);
+window.addEventListener('beforeunload', _ndStateSnap);
 
 // Generic headers helper used by Phase 3 & Phase 4 loaders (tasks, kanban,
 // workflow settings, official numbers). Returns plain object so it composes
@@ -684,13 +912,17 @@ async function bootApp() {
   const KNOWN_PANELS = ['tasks','desk','board','onbehalf','payfollow','leave','l2','cp','bdesign','overview','pipeline','support','docsplit','radar','claims','accounts','branches','crm','staff','leavehistory','settings','numbers','whatsapp','telegram','guide','revenue','plans','content','health'];
   const hashPanel = (location.hash || '').replace('#','');
   // The day starts on the assembly line: Level-2 -> Settlement carries what My Desk showed
-  // (on duty, cover gaps, on fire) above the whole line of claims.
-  const initial = KNOWN_PANELS.includes(hashPanel) ? hashPanel : 'l2';
+  // (on duty, cover gaps, on fire) above the whole line of claims. A refresh comes back to the
+  // screen the person was on - any screen their menu offers them, not just a fixed few.
+  _ndStateRestore();
+  const _navOk = !!document.querySelector('.nav-item[data-panel="' + hashPanel.replace(/[^a-z0-9_]/gi, '') + '"]');
+  const initial = (KNOWN_PANELS.includes(hashPanel) || (hashPanel && _navOk)) ? hashPanel : 'l2';
   showPanel(initial, true);
   try { history.replaceState({panel: initial}, '', '#' + initial); } catch(e){}
   // Notification bell — load + poll every 45s.
   loadBell();
   if (!_bellPoll) _bellPoll = setInterval(loadBell, 45000);
+  _ndStartLive();
   // Phase 4: mandatory staff onboarding — save 3 official numbers
   await checkStaffOnboarding();
 }
@@ -1119,6 +1351,7 @@ function showPanel(id, fromHistory) {
     health: loadHealth,
     leavehistory: loadLeaveHistory,
   };
+  _ND_LOADERS = loaders;
   if (loaders[id]) loaders[id]();
 }
 
@@ -4806,7 +5039,7 @@ function _radarLinksBlock(links){
   }).join('');
   return '<div style="margin-top:.7rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);'
     + 'border-radius:8px;padding:.6rem .8rem">'
-    + '<div style="font-weight:700;font-size:.8rem;margin-bottom:.25rem">\U0001f517 Links in this email ('
+    + '<div style="font-weight:700;font-size:.8rem;margin-bottom:.25rem">\u{1f517} Links in this email ('
     + links.length + ')</div>'
     + '<div style="font-size:.72rem;color:var(--nd-text-muted);margin-bottom:.35rem">'
     + 'Check the domain before you open one. Anything unexpected \u2014 do not click.</div>'
@@ -6150,6 +6383,7 @@ function closeDrawer(e) {
   if (e && e.target !== document.getElementById('drawerBg')) return;
   document.getElementById('drawerBg').classList.remove('open');
   _drawerMode(false);
+  _ndCatchUp();
 }
 
 // The shared side panel shows a claim as a centred popup; anything else keeps the side panel.
@@ -9273,6 +9507,7 @@ function closeModal() {
   document.getElementById('modal').classList.remove('modal-lg');
   document.getElementById('modalBg').classList.remove('open');
   _csrDirty = false;
+  _ndCatchUp();
 }
 
 // Before a window with drafts in it closes: anything typed but not yet sent is sent now, and a
@@ -9554,8 +9789,8 @@ function pulseAnnounce(list){
   // If the staffer is looking at a screen that lists claims, bring the new one into it — but
   // never while a drawer or modal is open, since that would yank the page out from under them.
   const claimPanels = ['l2','pipeline','overview','claims','tasks'];
-  if (claimPanels.includes(_currentPanel) && !_ndOverlayOpen()) {
-    try { showPanel(_currentPanel, true); } catch(e){}
+  if (claimPanels.includes(_currentPanel)) {
+    try { _ndSilentRefresh(); } catch(e){}
   }
 }
 
@@ -12276,6 +12511,11 @@ function _l2Styles(){
   .csrlock{font-size:.76rem;color:var(--nd-warning-text);gap:.4rem;flex-wrap:wrap}
   .csrsu{font-size:.72rem;color:var(--nd-cyan-text);margin-left:.5rem;align-self:center}
   .l2back{font-size:.74rem;font-weight:700;color:var(--nd-warning-text);margin-bottom:.15rem}
+  .qbad{font-size:.76rem;font-weight:800;border-radius:8px;padding:.3rem .5rem;margin-bottom:.25rem;line-height:1.35}
+  .qbad.open{background:rgba(239,68,68,.12);border:1px solid var(--nd-danger-text);color:var(--nd-danger-text)}
+  .qbad.done{background:rgba(16,185,129,.1);border:1px solid var(--nd-success-text);color:var(--nd-success-text)}
+  .qbad .qt{font-weight:500;color:var(--nd-text-secondary);margin-top:.12rem}
+  .qcontact{border:1px solid var(--nd-border);border-radius:9px;padding:.5rem .65rem;background:var(--nd-bg-surface)}
   .l2back.su{color:var(--nd-danger-text)}
   .l2today{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0 0 .7rem;
     padding:.5rem .65rem;border:1px solid var(--nd-border);border-radius:10px;
@@ -12486,8 +12726,10 @@ window.l2TodayToggle = l2TodayToggle;
 function l2Pick(key){
   if (_l2Sel !== key){
     _l2Sel = key; _l2Sub = ''; _l2Q = '';
-    // Case Board's filters start clean for each entry; a stage entry pins that stage.
-    _cbState = {blocker:'', stage:'', flag:'', mine:false};
+    // Each entry keeps its own chip filters until they are cleared; a stage entry pins its stage.
+    const kept = ((_ndKeepGet().cbBy) || {})[key];
+    _cbState = kept ? Object.assign({blocker:'', stage:'', flag:'', mine:false}, kept)
+                    : {blocker:'', stage:'', flag:'', mine:false};
     if (key.indexOf('pre:') === 0) _cbState.stage = key.slice(4);
   }
   l2Shell();
@@ -12510,7 +12752,10 @@ async function l2Load(){
     const k = _l2Sel === 'all' ? '' : _l2Sel.slice(4);
     const nm = _l2Sel === 'all' ? '🗂️ All open claims'
       : esc((((_l2Line || {}).labels || {}).stage || {})[k] || k);
-    m.innerHTML = '<div class="l2hd"><div class="l2ttl">' + nm + '</div></div>'
+    const cbOn = _cbState.blocker || _cbState.flag || _cbState.mine
+      || (_cbState.stage && _l2Sel === 'all');
+    m.innerHTML = '<div class="l2hd"><div class="l2ttl">' + nm + '</div>'
+      + (cbOn ? '<button class="nd-clear" onclick="cbClear()">\u2715 Clear filters</button>' : '') + '</div>'
       + '<div class="l2ban info">Claims that nobody else is holding up come first. '
       + 'Use <b>Change status or owner</b> to say who we are waiting for, pause a claim, or hand it '
       + 'to someone.</div>'
@@ -12699,6 +12944,8 @@ function l2RenderBucket(){
   const sum = (d.matching || 0)
     ? '<div class="l2sum">'
       + '<span class="pill"><b>' + d.matching + '</b> in this bucket</span>'
+      + pill((_l2Rows || []).filter(function(x){ return x.query && x.query.state === 'open'; }).length,
+             'draft quer' + ((_l2Rows || []).filter(function(x){ return x.query && x.query.state === 'open'; }).length === 1 ? 'y' : 'ies'), 'red')
       + pill(d.closing_window, 'window closing', 'red')
       + pill(d.red, 'past the limit', 'red')
       + pill(d.late - (d.red || 0), 'need looking at', 'amber')
@@ -12749,6 +12996,10 @@ function l2Table(b){
         (fwd ? '<button class="l2mv p" onclick="l2Move(' + i.claim_id + ',\'' + fwd.to_key + '\')">→ '
               + esc(fwd.name_en) + '</button>' : '')
       + (others.length ? '<button class="l2mv g" onclick="l2MoveMenu(' + i.claim_id + ')">Move…</button>' : '')
+      + (b.bucket_key === 'pending_draft'
+          ? '<button class="l2mv d" onclick="l2QueryRaise(' + i.claim_id + ')">\u2753 Query</button>' : '')
+      + (b.bucket_key === 'live_cases' && i.query && i.query.state === 'open'
+          ? '<button class="l2mv p" onclick="l2QueryResolve(' + i.claim_id + ',' + (i.query.by_id || 0) + ')">\u2705 Resolved</button>' : '')
       + '<button class="l2mv g" onclick="l2Open(' + i.claim_id + ')">Open</button>';
     const lok = (i.lokpal_days_left != null && i.lokpal_days_left <= 90)
       ? '<div class="l2lok">⏳ Lokpal window ' + i.lokpal_days_left + 'd</div>' : '';
@@ -12776,7 +13027,8 @@ function l2Table(b){
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
       + '<td class="l2why">'
-      +   (i.back && i.back.at
+      +   _qBadge(i.query)
+      +   (!(i.query && i.query.state) && i.back && i.back.at
           ? '<div class="l2back' + (i.back.super ? ' su' : '') + '">\u21a9 '
             + (i.back.super ? 'Pulled back by super admin ' : 'Sent back by ') + esc(i.back.by)
             + ' from ' + esc(i.back.from) + '</div>' : '')
@@ -13096,7 +13348,12 @@ function l2CaseRender(rem){
     +   (st.lokpal_days_left != null && st.lokpal_days_left <= 90
         ? ' · <span class="l2lok">⏳ Lokpal window ' + st.lokpal_days_left + ' days</span>' : '')
     + '</div>'
-    + (st.back && st.back.at
+    + (st.query && st.query.state ? _qBadge(st.query)
+        + (st.query.state === 'open' && st.bucket === 'live_cases'
+            ? '<button class="l2mv p" style="align-self:flex-start" onclick="l2QueryResolve(' + id + ','
+              + (st.query.by_id || 0) + ')">\u2705 Query resolved \u2014 send back to Pending Draft</button>' : '')
+        : '')
+    + (!(st.query && st.query.state) && st.back && st.back.at
         ? '<div class="l2ban ' + (st.back.super ? 'red' : 'amber') + '">\u21a9 '
           + (st.back.super ? '<b>Pulled back by super admin ' + esc(st.back.by) + '</b>'
                            : '<b>Sent back by ' + esc(st.back.by) + '</b>')
@@ -13163,11 +13420,34 @@ function l2CaseRender(rem){
         : '')
     // The assembly line: everything the other buckets have already built into this claim.
     + _l2BuiltSoFar(st, id)
+    // Reaching the complainant directly (founder's spec 5.4): call, or ONE query message.
+    + '<div class="qcontact"><div class="l2sec">Contact the complainant</div>'
+    +   '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">'
+    +     '<span style="font-size:.86rem;color:var(--nd-text-primary);font-weight:600">'
+    +       esc(((st.contact || {}).name) || '\u2014') + '</span>'
+    +     (((st.contact || {}).phone)
+          ? '<a class="l2mv g" href="tel:' + esc(String(st.contact.phone).replace(/[^0-9+]/g, '')) + '">\u{1f4de} '
+            + esc(st.contact.phone) + '</a>' : '<span class="l2warn">no phone</span>')
+    +     (((st.contact || {}).email) ? '<span style="font-size:.8rem;color:var(--nd-text-muted)">\u2709\ufe0f '
+            + esc(st.contact.email) + '</span>' : '')
+    +     '<button class="l2mv p" onclick="l2QuerySend(' + id + ',' + esc(JSON.stringify(
+            (st.query && st.query.state === 'open') ? (st.query.text || '').slice(0, 300) : ''))
+    +       ')">\u{1f4e8} Send the query to the complainant</button>'
+    +   '</div>'
+    +   ((st.query || {}).asked
+          ? '<div style="font-size:.78rem;margin-top:.3rem;color:' + (st.query.asked.replied ? 'var(--nd-success-text)' : 'var(--nd-warning-text)') + '">'
+            + 'Query sent by ' + esc(st.query.asked.by) + ' ' + esc(String(st.query.asked.at).slice(0, 16))
+            + ' via ' + esc(st.query.asked.channels) + ' \u2014 '
+            + (st.query.asked.replied ? '\u2705 replied ' + esc(String(st.query.asked.reply_at).slice(0, 16)) : '\u23f3 no reply yet')
+            + '</div>' : '')
+    + '</div>'
     + '<div><div class="l2sec">Remarks</div><div class="l2rem">' + remHtml + '</div></div>'
     + '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
     +   (fwd ? '<button class="l2mv p" onclick="l2MoveFromCase(\'' + fwd.to_key + '\')">'
             + '→ ' + esc(fwd.name_en) + '</button>' : '')
     +   '<button class="l2mv g" onclick="l2MoveMenuCase()">Move somewhere else…</button>'
+    +   (st.bucket === 'pending_draft'
+          ? '<button class="l2mv d" onclick="l2QueryRaise(' + id + ')">\u2753 Raise a query</button>' : '')
     // Its own window: the claim panel and a case sheet cannot both be read in one.
     +   '<button class="l2mv g" onclick="window.open(\'/nidaan/ops?claim=' + id + '\',\'_blank\')">Full claim \u2197</button>'
     + '</div>'
@@ -13291,6 +13571,158 @@ function _l2RichEditor(f, value, from, lockedIn){
     +   'data-label="' + esc(f.label_en) + '" '
     +   'oninput="l2RichInput(\'' + f.field_key + '\',this)" onblur="l2RichBlur(\'' + f.field_key + '\',this)">'
     +   _csrRichHTML(value || '') + '</div></div>';
+}
+
+// ══ The draft query ════════════════════════════════════════════════════════════
+// Raised in Pending Draft (back to Live Cases, marked); resolved in Live Cases (back to the
+// doctor/advocate chosen); and ONE message to the complainant from any case. Each is its own
+// small window above whatever is open, closed only by its own buttons.
+function _qOv(id, title, inner, sendLabel, onSend){
+  const old = document.getElementById(id); if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = id; ov.setAttribute('data-ov', '1');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10040;background:rgba(2,8,16,.6);'
+    + 'display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML = '<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border-strong);'
+    + 'border-radius:12px;width:min(560px,100%);max-height:92vh;overflow:auto;padding:1rem 1.1rem;'
+    + 'display:flex;flex-direction:column;gap:.6rem">'
+    + '<div style="display:flex;align-items:center;gap:.5rem"><b style="flex:1;color:var(--nd-text-primary)">'
+    +   title + '</b><button class="modal-x" type="button" aria-label="Close" '
+    +   'onclick="document.getElementById(\'' + id + '\').remove()">&times;</button></div>'
+    + inner
+    + '<div style="display:flex;gap:.4rem;justify-content:flex-end;align-items:center">'
+    +   '<span id="' + id + 'Msg" style="font-size:.8rem;flex:1"></span>'
+    +   '<button class="btn btn-ghost" onclick="document.getElementById(\'' + id + '\').remove()">Cancel</button>'
+    +   '<button class="btn btn-primary" id="' + id + 'Go">' + sendLabel + '</button></div></div>';
+  document.body.appendChild(ov);
+  document.getElementById(id + 'Go').onclick = onSend;
+  return ov;
+}
+function _qMsg(id, t, bad){
+  const m = document.getElementById(id + 'Msg');
+  if (m){ m.style.color = bad ? 'var(--nd-danger-text)' : 'var(--nd-text-muted)'; m.textContent = t; }
+}
+async function _qAfter(claimId){
+  try{ await loadL2(); }catch(e){}
+  if (_l2Case && _l2Case.claim_id === claimId && document.querySelector('.modal-bg.open')) l2Open(claimId);
+}
+
+function l2QueryRaise(claimId){
+  _qOv('qRaise', '\u2753 Raise a draft query \u2014 NP-' + claimId,
+      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim goes back to <b>Live Cases</b>, '
+    + 'marked <b>Draft query</b>, and Live Cases\' duty staff and the claim\'s handlers are told now. '
+    + 'When they have fixed it, it comes back here to the doctor/advocate they choose.</div>'
+    + '<div class="l2fld"><label>What is missing or wrong? <span class="req">*</span></label>'
+    + '<textarea id="qRaiseTxt" rows="4" maxlength="1000" placeholder="e.g. Discharge summary is not '
+    + 'signed by the treating doctor; need the signed copy and the OPD papers from March."></textarea></div>',
+    'Send back with this query', async function(){
+      const t = (document.getElementById('qRaiseTxt').value || '').trim();
+      if (t.length < 5){ _qMsg('qRaise', 'Say what is needed.', true); return; }
+      this.disabled = true; _qMsg('qRaise', 'Sending\u2026');
+      const r = await API('/cases/' + claimId + '/query/raise', {method:'POST', body: JSON.stringify({text: t})});
+      const d = await r.json().catch(function(){ return {}; });
+      if (!r.ok){ this.disabled = false; _qMsg('qRaise', _l2Err(d, 'Could not raise it'), true); return; }
+      document.getElementById('qRaise').remove();
+      ndUI.toast('NP-' + claimId + ' is back in Live Cases with your query \u2014 ' + (d.told || 0) + ' told.', 'success');
+      _qAfter(claimId);
+    });
+  setTimeout(function(){ const t = document.getElementById('qRaiseTxt'); if (t) t.focus(); }, 30);
+}
+
+async function l2QueryResolve(claimId, byId){
+  let staff = [];
+  try{ staff = await _loadAssigneesOnce(); }catch(e){}
+  const opts = (staff || []).filter(function(s){ return !s.deleted_at; }).map(function(s){
+    return '<option value="' + s.staff_id + '"' + (String(s.staff_id) === String(byId || '') ? ' selected' : '')
+      + '>' + esc(s.name) + '</option>'; }).join('');
+  _qOv('qRes', '\u2705 Draft query resolved \u2014 NP-' + claimId,
+      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim goes back to <b>Pending Draft</b>, '
+    + 'to the person you choose, marked <b>Draft query resolved</b>. They are told straight away.</div>'
+    + '<div class="l2fld"><label>Back to (doctor / advocate) <span class="req">*</span></label>'
+    + '<select id="qResWho"><option value="">\u2014 choose \u2014</option>' + opts + '</select></div>'
+    + '<div class="l2fld"><label>What was done? <span class="req">*</span></label>'
+    + '<textarea id="qResTxt" rows="3" maxlength="1000" placeholder="e.g. Signed discharge summary '
+    + 'received from the complainant and attached; OPD papers attached."></textarea></div>',
+    'Send back to Pending Draft', async function(){
+      const who = parseInt(document.getElementById('qResWho').value, 10) || 0;
+      const t = (document.getElementById('qResTxt').value || '').trim();
+      if (!who){ _qMsg('qRes', 'Choose who it goes back to.', true); return; }
+      if (t.length < 3){ _qMsg('qRes', 'Say what was done.', true); return; }
+      this.disabled = true; _qMsg('qRes', 'Sending\u2026');
+      const r = await API('/cases/' + claimId + '/query/resolve', {method:'POST', body: JSON.stringify({staff_id: who, note: t})});
+      const d = await r.json().catch(function(){ return {}; });
+      if (!r.ok){ this.disabled = false; _qMsg('qRes', _l2Err(d, 'Could not resolve it'), true); return; }
+      document.getElementById('qRes').remove();
+      ndUI.toast('NP-' + claimId + ' is back in Pending Draft with ' + (d.to || 'them') + '.', 'success');
+      _qAfter(claimId);
+    });
+}
+
+async function l2QuerySend(claimId, preset){
+  let info = {};
+  try{ const r = await API('/cases/' + claimId + '/query/contact'); if (r.ok) info = await r.json(); }catch(e){}
+  const to = info.to || {}, cc = info.cc || [], asked = info.asked || null;
+  const was = asked
+    ? '<div class="l2ban ' + (asked.replied ? 'info' : 'amber') + '">Last query: sent by <b>' + esc(asked.by)
+      + '</b> ' + esc(String(asked.at).slice(0, 16)) + ' via ' + esc(asked.channels) + ' \u2014 '
+      + (asked.replied ? '\u2705 they replied ' + esc(String(asked.reply_at).slice(0, 16))
+                       : '\u23f3 no reply yet. One message, not a stream: if it has been less than a '
+                         + 'day, call them instead.') + '</div>' : '';
+  _qOv('qSend', '\u{1f4e8} Send the query to the complainant \u2014 NP-' + claimId,
+      was
+    + '<div style="font-size:.82rem;color:var(--nd-text-muted)">To <b>' + esc(to.name || 'the complainant')
+    + '</b>' + (to.phone ? ' \u00b7 ' + esc(to.phone) : '') + (to.email ? ' \u00b7 ' + esc(to.email) : '') + '</div>'
+    + '<div class="l2fld"><label>What must they send or answer? <span class="req">*</span></label>'
+    + '<textarea id="qSendTxt" rows="3" maxlength="300">' + esc(preset || '') + '</textarea>'
+    + '<div class="hint">One clear ask. On WhatsApp it reads: \u201cTo move your claim (Ref #NP-' + claimId
+    + ') forward, we still need: <i>your words</i>. Please reply to this chat\u2026\u201d</div></div>'
+    + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
+    +   '<input type="checkbox" id="qSendWa"' + (to.phone ? ' checked' : ' disabled') + '> \u{1f4ac} WhatsApp'
+    +   (to.phone ? '' : ' <span style="color:var(--nd-text-faint)">(no phone on the claim)</span>') + '</label>'
+    + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
+    +   '<input type="checkbox" id="qSendEm"' + (to.email ? ' checked' : ' disabled') + '> \u2709\ufe0f Email'
+    +   (to.email ? '' : ' <span style="color:var(--nd-text-faint)">(no email on the claim)</span>') + '</label>'
+    + (cc.length
+        ? '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
+          + '<input type="checkbox" id="qSendCc" checked> Copy by email to: '
+          + cc.map(function(p){ return esc(p.label + (p.name ? ' (' + p.name + ')' : '')); }).join(', ') + '</label>'
+        : '<div style="font-size:.78rem;color:var(--nd-text-faint)">No branch or subscriber email to copy.</div>')
+    + '<div style="font-size:.78rem;color:var(--nd-text-muted)">When they answer on WhatsApp, the super admins '
+    + 'and you are told at once.</div>',
+    'Send once', async function(){
+      const t = (document.getElementById('qSendTxt').value || '').trim();
+      const wa = !!(document.getElementById('qSendWa') || {}).checked;
+      const em = !!(document.getElementById('qSendEm') || {}).checked;
+      const c = !!(document.getElementById('qSendCc') || {}).checked;
+      if (t.length < 5){ _qMsg('qSend', 'Write what they must send or answer.', true); return; }
+      if (!wa && !em){ _qMsg('qSend', 'Choose WhatsApp, email or both.', true); return; }
+      this.disabled = true; _qMsg('qSend', 'Sending\u2026');
+      const r = await API('/cases/' + claimId + '/query/contact', {method:'POST',
+        body: JSON.stringify({text: t, whatsapp: wa, email: em, cc: c})});
+      const d = await r.json().catch(function(){ return {}; });
+      if (!r.ok){ this.disabled = false; _qMsg('qSend', _l2Err(d, 'Nothing was sent'), true); return; }
+      const bits = [];
+      if (d.whatsapp) bits.push('WhatsApp ' + (d.whatsapp.ok ? '\u2713' : '\u2717 ' + (d.whatsapp.error || '')));
+      if (d.email) bits.push('email ' + (d.email.ok ? '\u2713' : '\u2717 ' + (d.email.error || '')));
+      (d.cc || []).forEach(function(x){ bits.push('copy to ' + x.to + ' ' + (x.ok ? '\u2713' : '\u2717')); });
+      document.getElementById('qSend').remove();
+      ndUI.toast('Sent: ' + bits.join(' \u00b7 '), 'success', 9000);
+      _qAfter(claimId);
+    });
+}
+window.l2QueryRaise = l2QueryRaise; window.l2QueryResolve = l2QueryResolve; window.l2QuerySend = l2QuerySend;
+
+// The query's badge - on a row and on the case sheet.
+function _qBadge(q){
+  if (!q || !q.state) return '';
+  if (q.state === 'open')
+    return '<div class="qbad open">\u2753 DRAFT QUERY' + (q.round > 1 ? ' \u00b7 round ' + q.round : '')
+      + ' \u00b7 ' + (q.days == null ? '' : q.days + 'd') + ' \u2014 raised by ' + esc(q.by)
+      + '<div class="qt">\u201c' + esc(q.text) + '\u201d</div></div>';
+  return '<div class="qbad done">\u2705 Draft query resolved by ' + esc(q.resolved_by)
+    + (q.mo ? ' \u2014 back with <b>' + esc(q.mo) + '</b>' : '')
+    + (q.note ? '<div class="qt">\u201c' + esc(q.note) + '\u201d</div>' : '')
+    + '<div class="qt" style="opacity:.8">The query was: \u201c' + esc(q.text) + '\u201d</div></div>';
 }
 
 // ── Request a change: anyone looking at locked work can ask the super admins ────
@@ -15093,10 +15525,12 @@ function cbRender(d){
 function cbSet(k, v){
   if (k === 'mine') _cbState.mine = !!v;
   else _cbState[k] = (_cbState[k] === v) ? '' : v;   // tapping the active chip clears it
+  try{ const kk = _ndKeepGet(); kk.cbBy = kk.cbBy || {}; kk.cbBy[_l2Sel || 'all'] = _cbState; _ndKeepPut(kk); }catch(e){}
   cbRefresh();
 }
 function cbClear(){
   _cbState = {blocker:'', stage:'', flag:'', mine:false};
+  try{ const kk = _ndKeepGet(); if (kk.cbBy) delete kk.cbBy[_l2Sel || 'all']; _ndKeepPut(kk); }catch(e){}
   cbRefresh();
 }
 window.mbcPickRej=mbcPickRej; window.mbcClearRej=mbcClearRej;

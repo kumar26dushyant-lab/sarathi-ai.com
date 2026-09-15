@@ -271,6 +271,15 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         continue  # duplicate wamid — already processed
                     await upsert_contact(msisdn, mark_inbound=True)
                     handled += 1
+                    # A reply to a query we sent this complainant: tell the super admins and the
+                    # person who asked, with what they said. Never allowed to break the inbox.
+                    try:
+                        import biz_nidaan_buckets as _bkq
+                        _t = (m.get("text") or {}).get("body", "") if mtype == "text" else (
+                            (m.get("button") or {}).get("text", "") if mtype == "button" else "")
+                        await _bkq.on_query_reply(msisdn, mtype, _t)
+                    except Exception as _qe:  # noqa: BLE001
+                        logger.info("query reply hook failed: %s", _qe)
                     if mtype == "text":
                         await _on_inbound_text(msisdn, (m.get("text") or {}).get("body", ""))
                     elif mtype in ("image", "document", "audio", "video"):

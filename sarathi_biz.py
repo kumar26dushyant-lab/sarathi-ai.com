@@ -6496,6 +6496,23 @@ async def nidaan_ops_desk(request: Request, lang: str = "en"):
                           lang=("hi" if lang == "hi" else "en"))
 
 
+@app.get("/nidaan/ops/api/changes")
+async def nidaan_ops_changes(request: Request):
+    """One number that goes up whenever a claim, move, field, document, note, payment or task
+    changes. The ops page asks for it every few seconds and refreshes what it shows only when it
+    has moved - so everyone sees everyone's work without a page reload or a flicker."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    try:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            r = await (await c.execute("SELECT seq FROM nidaan_change_seq WHERE id=1")).fetchone()
+        return {"seq": int(r[0]) if r else 0}
+    except Exception:
+        return {"seq": 0}
+
+
 @app.get("/nidaan/ops/api/cases/board")
 async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
                                 flag: str = "", mine: int = 0, limit: int = 300):
@@ -7250,6 +7267,86 @@ async def ops_case_bucket_field(claim_id: int, body: _BucketFieldReq, request: R
                               role=caller.get("role") or "")
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    return res
+
+
+class _QueryRaiseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=5, max_length=1000)
+
+
+class _QueryResolveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: int = Field(..., ge=1)
+    note: str = Field(..., min_length=3, max_length=1000)
+
+
+class _QueryContactReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=5, max_length=300)
+    whatsapp: bool = True
+    email: bool = True
+    cc: bool = True
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/raise")
+@limiter.limit("20/minute")
+async def ops_case_query_raise(claim_id: int, body: _QueryRaiseReq, request: Request):
+    """Pending Draft: raise a draft query - the claim goes back to Live Cases, marked, and Live's
+    people are told now."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.raise_query(claim_id, body.text, actor=_actor_label(caller),
+                                actor_id=caller.get("staff_id"), actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not raise the query")
+    await _ops_audit(request, "case.draft_query", "claim", claim_id, body.text[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/resolve")
+@limiter.limit("20/minute")
+async def ops_case_query_resolve(claim_id: int, body: _QueryResolveReq, request: Request):
+    """Live Cases: the query is fixed - back to Pending Draft, to the doctor/advocate chosen."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.resolve_query(claim_id, body.staff_id, body.note, actor=_actor_label(caller),
+                                  actor_id=caller.get("staff_id"), actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not resolve the query")
+    await _ops_audit(request, "case.draft_query_resolved", "claim", claim_id, body.note[:160])
+    return res
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/query/contact")
+async def ops_case_query_contact_info(claim_id: int, request: Request):
+    """Who a query message would go to, and the last one sent."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.contact_recipients(claim_id)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/contact")
+@limiter.limit("10/minute")
+async def ops_case_query_contact(claim_id: int, body: _QueryContactReq, request: Request):
+    """Ask the complainant ONE thing - WhatsApp (approved template carrying the exact words, or
+    free text inside the 24-hour window) and/or email, copied by email to the branch/subscriber."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.send_query_to_complainant(
+        claim_id, body.text, whatsapp=body.whatsapp, email=body.email, cc=body.cc,
+        actor=_actor_label(caller), actor_id=caller.get("staff_id"))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Nothing was sent")
+    await _ops_audit(request, "case.query_contact", "claim", claim_id, body.text[:160])
     return res
 
 

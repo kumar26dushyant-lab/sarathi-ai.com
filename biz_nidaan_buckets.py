@@ -463,7 +463,12 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
             "payment_status, "
             "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
             "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by, "
-            "l2_handover_note, back_at, back_by, back_by_role, back_from, back_reason "
+            "l2_handover_note, back_at, back_by, back_by_role, back_from, back_reason, "
+            "query_state, query_text, query_by, query_by_id, query_at, query_round, "
+            "query_resolved_by, query_resolved_at, query_resolved_note, query_mo_id, query_mo_name, "
+            "cq_at, cq_by, cq_by_id, cq_text, cq_channels, cq_reply_at, "
+            "complainant_phone, insured_phone, complainant_email, insured_email, "
+            "assigned_to_staff_id "
             "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
     return dict(r) if r else None
 
@@ -769,7 +774,7 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
 
 async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                hold_until: str = "", actor: str = "", force: bool = False,
-               actor_role: str = "") -> dict:
+               actor_role: str = "", quiet: bool = False) -> dict:
     """Move a claim to any other bucket.
 
     NO MOVE IS EVER REFUSED FOR BEING UNTIDY. A route that is not in the configuration is allowed
@@ -896,6 +901,17 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                 await c.execute(
                     "UPDATE nidaan_claims SET back_at=NULL, back_by='', back_by_role='', "
                     "back_from='', back_reason='' WHERE claim_id=?", (int(claim_id),))
+                # The draft query follows the claim: an open query leaving Live Cases forward is
+                # answered (by whoever moved it, with their note); a resolved one leaving Pending
+                # Draft forward is done.
+                if cur_key == "live_cases" and (row.get("query_state") or "") == "open":
+                    await c.execute(
+                        "UPDATE nidaan_claims SET query_state='resolved', query_resolved_by=?, "
+                        "query_resolved_at=CURRENT_TIMESTAMP, query_resolved_note=? WHERE claim_id=?",
+                        ((actor or "")[:80], (reason or "").strip()[:400], int(claim_id)))
+                elif cur_key == GIST_OPEN_UNTIL and (row.get("query_state") or "") == "resolved":
+                    await c.execute("UPDATE nidaan_claims SET query_state='' WHERE claim_id=?",
+                                    (int(claim_id),))
             await c.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("bucket move failed for %s: %s", claim_id, e)
@@ -917,15 +933,342 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     await _log(claim_id, summary, actor)
 
     who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
-    await _notify_move(claim_id, to_key=to_key, to_name=dest["name_en"],
-                       from_name=src.get("name_en", cur_key), kind=kind,
-                       reason=reason, actor=actor, who=who)
-    if kind == "back":
-        await _notify_sender_back(claim_id, to_name=dest["name_en"], reason=reason,
-                                  actor=actor, who=who)
+    if not quiet:          # the draft query sends its own, more specific alert
+        await _notify_move(claim_id, to_key=to_key, to_name=dest["name_en"],
+                           from_name=src.get("name_en", cur_key), kind=kind,
+                           reason=reason, actor=actor, who=who)
+        if kind == "back":
+            await _notify_sender_back(claim_id, to_name=dest["name_en"], reason=reason,
+                                      actor=actor, who=who)
 
     return {"ok": True, "bucket": to_key, "name": dest["name_en"], "sub": sub, "kind": kind,
             "off_route": off_route}
+
+
+# ══ The draft query ════════════════════════════════════════════════════════════
+QUERY_FROM = "pending_draft"
+QUERY_TO = "live_cases"
+
+
+async def _supers_only() -> list:
+    """The three super admins - not the wider admin group (founder: 'alert superadmin and the
+    respective staff')."""
+    async with aiosqlite.connect(DB_PATH) as c:
+        return [r[0] for r in await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+            "AND deleted_at IS NULL")).fetchall()]
+
+
+async def _staff_row(staff_id) -> Optional[dict]:
+    if not staff_id:
+        return None
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT staff_id, name, role FROM nidaan_staff WHERE staff_id=? AND status='active' "
+            "AND deleted_at IS NULL", (int(staff_id),))).fetchone()
+    return dict(r) if r else None
+
+
+async def _claim_handlers(claim_id: int, row: dict) -> list:
+    ids = []
+    if row.get("assigned_to_staff_id"):
+        ids.append(int(row["assigned_to_staff_id"]))
+    async with aiosqlite.connect(DB_PATH) as c:
+        for (sid,) in await (await c.execute(
+                "SELECT staff_id FROM nidaan_claim_assignees WHERE claim_id=?", (int(claim_id),))).fetchall():
+            if sid and int(sid) not in ids:
+                ids.append(int(sid))
+    return ids
+
+
+async def raise_query(claim_id: int, text: str, *, actor: str, actor_id=None,
+                      actor_role: str = "") -> dict:
+    """The doctor/advocate in Pending Draft cannot finish: the claim goes back to Live Cases,
+    marked DRAFT QUERY, and the people who can fix it are told now - not left to find it."""
+    text = (text or "").strip()
+    if len(text) < 5:
+        return {"ok": False, "error": "Say what is needed - the Live Cases team starts from your words."}
+    row = await _claim_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    if (row.get("pipeline_stage") or "") != QUERY_FROM:
+        return {"ok": False, "error": "A draft query is raised from Pending Draft."}
+    res = await move(claim_id, QUERY_TO, reason="\u2753 Draft query: " + text[:380], actor=actor,
+                     actor_role=actor_role, quiet=True)
+    if not res.get("ok"):
+        return res
+    async with aiosqlite.connect(DB_PATH) as c:
+        await c.execute(
+            "UPDATE nidaan_claims SET query_state='open', query_text=?, query_by=?, query_by_id=?, "
+            "query_at=CURRENT_TIMESTAMP, query_round=COALESCE(query_round,0)+1, "
+            "query_resolved_by='', query_resolved_at=NULL, query_resolved_note='', "
+            "query_mo_id=NULL, query_mo_name='' WHERE claim_id=?",
+            (text[:1000], (actor or "")[:80], actor_id, int(claim_id)))
+        await c.commit()
+    # Who is told: Live Cases' duty staff and the claim's own handlers - never just a queue.
+    import biz_nidaan as _n
+    import biz_nidaan_notifications as _nnot
+    try:
+        ids = list(await _n.on_duty_rep_ids(QUERY_TO))
+    except Exception:
+        ids = []
+    for sid in await _claim_handlers(claim_id, row):
+        if sid not in ids:
+            ids.append(sid)
+    if actor_id in ids:
+        ids.remove(actor_id)
+    fallback = not ids
+    if fallback:
+        ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
+    who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    rnd = int(row.get("query_round") or 0) + 1
+    subj = "\u2753 Draft query \u2014 NP-%s %s" % (claim_id, who)
+    body = ("%s raised a draft query in Pending Draft%s and sent NP-%s back to Live Cases.\n\n"
+            "\u201c%s\u201d\n\nFix it, then press \u2705 Query resolved on the claim in "
+            "Level-2 \u2192 Settlement \u2192 Live Cases." % (
+                actor or "Someone", (" (round %d)" % rnd) if rnd > 1 else "", claim_id, text[:600]))
+    if fallback:
+        body += "\n\n\u26a0 Nobody is on duty for Live Cases, so this came to the admins."
+    try:
+        await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.draft_query",
+                                       email=True, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("draft query alert failed for %s: %s", claim_id, e)
+    return {"ok": True, "told": len(ids), "round": rnd}
+
+
+async def resolve_query(claim_id: int, mo_staff_id, note: str, *, actor: str, actor_id=None,
+                        actor_role: str = "") -> dict:
+    """Live Cases has fixed the query: back to Pending Draft, to the doctor/advocate chosen - one
+    place at a time - and that person is told it is theirs again."""
+    note = (note or "").strip()
+    if len(note) < 3:
+        return {"ok": False, "error": "Say what was done - the doctor/advocate reads this first."}
+    row = await _claim_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    if (row.get("query_state") or "") != "open" or (row.get("pipeline_stage") or "") != QUERY_TO:
+        return {"ok": False, "error": "This claim has no open draft query in Live Cases."}
+    mo = await _staff_row(mo_staff_id)
+    if not mo:
+        return {"ok": False, "error": "Pick the doctor or advocate it goes back to."}
+    res = await move(claim_id, QUERY_FROM,
+                     reason="\u2705 Draft query resolved \u2014 for %s: %s" % (mo["name"], note[:300]),
+                     actor=actor, actor_role=actor_role, quiet=True)
+    if not res.get("ok"):
+        return res
+    async with aiosqlite.connect(DB_PATH) as c:
+        # (move() marked it resolved with the note; this adds who it went back to.)
+        await c.execute(
+            "UPDATE nidaan_claims SET query_state='resolved', query_resolved_by=?, "
+            "query_resolved_at=CURRENT_TIMESTAMP, query_resolved_note=?, query_mo_id=?, "
+            "query_mo_name=? WHERE claim_id=?",
+            ((actor or "")[:80], note[:1000], mo["staff_id"], mo["name"][:80], int(claim_id)))
+        if not await (await c.execute(
+                "SELECT 1 FROM nidaan_claim_assignees WHERE claim_id=? AND staff_id=?",
+                (int(claim_id), mo["staff_id"]))).fetchone():
+            await c.execute(
+                "INSERT INTO nidaan_claim_assignees (claim_id, staff_id, assigned_by, assigned_at) "
+                "VALUES (?,?,?,CURRENT_TIMESTAMP)", (int(claim_id), mo["staff_id"], actor_id))
+        await c.commit()
+    import biz_nidaan_notifications as _nnot
+    ids = [mo["staff_id"]]
+    if row.get("query_by_id") and int(row["query_by_id"]) not in ids:
+        ids.append(int(row["query_by_id"]))
+    who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    subj = "\u2705 Draft query resolved \u2014 NP-%s %s" % (claim_id, who)
+    body = ("NP-%s is back in Pending Draft for %s.\n\n%s: \u201c%s\u201d\n\n"
+            "The query was: \u201c%s\u201d" % (claim_id, mo["name"], actor or "Live Cases",
+                                                 note[:600], (row.get("query_text") or "")[:400]))
+    try:
+        await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.draft_query_resolved",
+                                       email=True, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("query resolved alert failed for %s: %s", claim_id, e)
+    return {"ok": True, "to": mo["name"]}
+
+
+async def contact_recipients(claim_id: int) -> dict:
+    """Who a query message goes to: the complainant, and by email in copy the branch/subscriber/
+    partner who brought the claim."""
+    row = await _claim_row(claim_id) or {}
+    to = {"name": (row.get("complainant_name") or row.get("insured_name") or "").strip(),
+          "phone": (row.get("complainant_phone") or row.get("insured_phone") or "").strip(),
+          "email": (row.get("complainant_email") or row.get("insured_email") or "").strip()}
+    cc = []
+    try:
+        import biz_nidaan_doc_request as _dr
+        for p in await _dr.recipients(claim_id):
+            if p.get("kind") == "cc" and p.get("email") and p["email"].lower() != to["email"].lower():
+                cc.append({"label": p.get("label") or p.get("role") or "", "name": p.get("name") or "",
+                           "email": p["email"]})
+    except Exception as e:  # noqa: BLE001
+        logger.info("query cc lookup failed for %s: %s", claim_id, e)
+    return {"to": to, "cc": cc, "asked": _query_info(row).get("asked")}
+
+
+async def send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool, email: bool,
+                                    cc: bool, actor: str, actor_id=None) -> dict:
+    """ONE query message to the complainant - the exact words, not a stream. A second is refused
+    while the first is unanswered for 24 hours; the answer is to call them."""
+    text = " ".join((text or "").split())
+    if len(text) < 5:
+        return {"ok": False, "error": "Write what the complainant must send or answer."}
+    if len(text) > 300:
+        return {"ok": False, "error": "Keep it to one clear ask (under 300 characters)."}
+    if not (whatsapp or email):
+        return {"ok": False, "error": "Choose WhatsApp, email or both."}
+    row = await _claim_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    asked = _query_info(row).get("asked")
+    if asked and not asked.get("replied"):
+        since = _days_since(row.get("cq_at"))
+        async with aiosqlite.connect(DB_PATH) as c:
+            fresh = await (await c.execute(
+                "SELECT 1 FROM nidaan_claims WHERE claim_id=? AND cq_at > datetime('now','-24 hours')",
+                (int(claim_id),))).fetchone()
+        if fresh:
+            return {"ok": False, "error": "A query already went to the complainant (%s, by %s) and they "
+                    "have not answered yet. One message, not a stream - call them, or wait for the "
+                    "reply." % (str(row.get("cq_at"))[:16], row.get("cq_by") or "staff")}
+    rec = await contact_recipients(claim_id)
+    out = {"ok": False, "whatsapp": None, "email": None, "cc": []}
+    sent = []
+    if whatsapp:
+        if not rec["to"]["phone"]:
+            out["whatsapp"] = {"ok": False, "error": "no phone number on the claim"}
+        else:
+            import biz_nidaan_wa_orchestrator as _orch
+            r = await _orch.wa_journey(claim_id, "doc_reminder", {"doc_label": text})
+            out["whatsapp"] = {"ok": bool(r.get("ok")), "error": r.get("error") or ""}
+            if r.get("ok"):
+                sent.append("WhatsApp")
+    if email:
+        if not rec["to"]["email"]:
+            out["email"] = {"ok": False, "error": "no email address on the claim"}
+        else:
+            import biz_nidaan_doc_request as _dr
+            first = (rec["to"]["name"] or "").split(" ")[0] or "ji"
+            msg = ("Namaste %s,\n\nTo move your claim (Ref NP-%s) forward, we still need:\n\n"
+                   "%s\n\nPlease reply to this email, or send it on WhatsApp to +91 91836 86384.\n\n"
+                   "Thank you,\nTeam NidaanPartner" % (first, claim_id, text))
+            ok, err = await _dr._mail(rec["to"]["email"], "NP-%s: one thing we need for your claim"
+                                      % claim_id, msg, claim_id)
+            out["email"] = {"ok": ok, "error": err}
+            if ok:
+                sent.append("email")
+            if ok and cc:
+                for p in rec["cc"]:
+                    cmsg = ("For your information: we have asked %s (NP-%s) for the following:\n\n%s\n\n"
+                            "\u2014 Team NidaanPartner" % (rec["to"]["name"] or "the complainant", claim_id, text))
+                    cok, cerr = await _dr._mail(p["email"], "Copy \u2014 NP-%s: we asked the complainant "
+                                                "for one thing" % claim_id, cmsg, claim_id)
+                    out["cc"].append({"to": p["label"], "ok": cok, "error": cerr})
+    if not sent:
+        return dict(out, error="Nothing was sent - " + "; ".join(
+            "%s: %s" % (k, v["error"]) for k, v in (("WhatsApp", out["whatsapp"]), ("Email", out["email"]))
+            if v and not v.get("ok")))
+    async with aiosqlite.connect(DB_PATH) as c:
+        await c.execute(
+            "UPDATE nidaan_claims SET cq_at=CURRENT_TIMESTAMP, cq_by=?, cq_by_id=?, cq_text=?, "
+            "cq_channels=?, cq_reply_at=NULL WHERE claim_id=?",
+            ((actor or "")[:80], actor_id, text, "+".join(sent), int(claim_id)))
+        await c.commit()
+    copies = [x["to"] for x in out["cc"] if x.get("ok")]
+    await _log(claim_id, "\U0001f4e8 Query sent to the complainant by %s via %s%s: %s" % (
+        actor or "staff", " and ".join(sent), (" (copy: %s)" % ", ".join(copies)) if copies else "",
+        text), actor)
+    out["ok"] = True
+    return out
+
+
+async def on_query_reply(msisdn: str, mtype: str, text: str = "") -> int:
+    """A complainant wrote on WhatsApp. If a query to them is waiting for an answer, the super
+    admins and the staff member who sent it are told now, with what they said."""
+    digits = "".join(ch for ch in (msisdn or "") if ch.isdigit())[-10:]
+    if len(digits) < 10:
+        return 0
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT claim_id, complainant_name, insured_name, cq_by, cq_by_id, cq_text, cq_at "
+            "FROM nidaan_claims WHERE cq_at IS NOT NULL "
+            "AND (cq_reply_at IS NULL OR cq_reply_at < cq_at) "
+            "AND (substr(replace(replace(COALESCE(complainant_phone,''),'+',''),' ',''),-10)=? "
+            "  OR substr(replace(replace(COALESCE(insured_phone,''),'+',''),' ',''),-10)=?)",
+            (digits, digits))).fetchall()]
+        for r in rows:
+            await c.execute("UPDATE nidaan_claims SET cq_reply_at=CURRENT_TIMESTAMP WHERE claim_id=?",
+                            (r["claim_id"],))
+        await c.commit()
+    if not rows:
+        return 0
+    import biz_nidaan_notifications as _nnot
+    said = (text or "").strip()[:300] if mtype in ("text", "button", "interactive") else ""
+    what = ("\u201c%s\u201d" % said) if said else ("\U0001f4ce a %s" % (mtype or "message"))
+    for r in rows:
+        ids = await _supers_only()
+        if r.get("cq_by_id") and int(r["cq_by_id"]) not in ids:
+            ids.append(int(r["cq_by_id"]))
+        who = (r.get("complainant_name") or r.get("insured_name") or "").strip()
+        subj = "\U0001f4ac Query answered \u2014 NP-%s %s" % (r["claim_id"], who)
+        body = ("%s replied on WhatsApp to the query sent by %s (%s).\n\nThe query: \u201c%s\u201d\n"
+                "Their reply: %s\n\nOpen the WhatsApp inbox or the case in Level-2 \u2192 Settlement."
+                % (who or "The complainant", r.get("cq_by") or "staff", str(r.get("cq_at") or "")[:16],
+                   (r.get("cq_text") or "")[:300], what))
+        try:
+            await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.query_reply",
+                                           email=False, claim_id=r["claim_id"])
+            await _log(r["claim_id"], "\U0001f4ac Complainant answered the query on WhatsApp: %s"
+                       % (said or (mtype or "message")), "complainant")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("query reply alert failed for %s: %s", r["claim_id"], e)
+    return len(rows)
+
+
+async def query_reminders() -> dict:
+    """Every morning an open draft query is still open, Live Cases hears about it again; after 3
+    days the super admins do too. Silence while it is open is exactly ClaimShield's failure."""
+    import biz_nidaan as _n
+    import biz_nidaan_notifications as _nnot
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT claim_id, complainant_name, insured_name, query_text, query_by, query_at "
+            "FROM nidaan_claims WHERE query_state='open' AND pipeline_stage=?", (QUERY_TO,))).fetchall()]
+    if not rows:
+        return {"open": 0, "sent": 0}
+    try:
+        duty = list(await _n.on_duty_rep_ids(QUERY_TO))
+    except Exception:
+        duty = []
+    admins = await _supers_only()
+    today = _today_ist().isoformat()
+    sent = 0
+    for r in rows:
+        days = _days_since(r.get("query_at")) or 0
+        if not await _alert_once("draft_query_open:%s:%s" % (r["claim_id"], today)):
+            continue
+        ids = list(duty) or list(admins)
+        if days >= 3:
+            ids += [a for a in admins if a not in ids]
+        who = (r.get("complainant_name") or r.get("insured_name") or "").strip()
+        subj = "\u2753 Draft query still open (%d day%s) \u2014 NP-%s %s" % (
+            days, "" if days == 1 else "s", r["claim_id"], who)
+        body = ("Raised by %s: \u201c%s\u201d\n\nResolve it in Level-2 \u2192 Settlement \u2192 "
+                "Live Cases (\u2705 Query resolved)." % (r.get("query_by") or "staff",
+                                                        (r.get("query_text") or "")[:400]))
+        if days >= 3:
+            body += "\n\nIt has been open %d days, so the super admins are told too." % days
+        try:
+            await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.draft_query_open",
+                                           email=False, claim_id=r["claim_id"])
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("draft query reminder failed for %s: %s", r["claim_id"], e)
+    return {"open": len(rows), "sent": sent}
 
 
 async def set_substate(claim_id: int, sub: str, *, actor: str = "") -> dict:
@@ -996,7 +1339,9 @@ _CLAIM_COLS = (
     "c.pipeline_stage, c.pipeline_sub, c.pipeline_stage_at, c.pipeline_entered_at, "
     "c.pipeline_by, c.pipeline_from, c.hold_until, c.raised_by_name, c.raised_via, "
     "c.channel_partner_id, c.origin, c.back_at, c.back_by, c.back_by_role, c.back_from, "
-    "c.back_reason"
+    "c.back_reason, c.query_state, c.query_text, c.query_by, c.query_by_id, c.query_at, c.query_round, "
+    "c.query_resolved_by, c.query_resolved_at, c.query_resolved_note, c.query_mo_name, "
+    "c.cq_at, c.cq_by, c.cq_reply_at"
 )
 
 
@@ -1242,6 +1587,7 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "lokpal_days_left": left,
             "created_at": r.get("created_at"),
             "back": _back_flag(r),
+            "query": _query_info(r),
         })
 
     # WHY each one is sitting here, and WHAT is outstanding. Computed after the loop so the
@@ -1258,7 +1604,9 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
         i["missing_n"] = len(miss)
 
     order = {"red": 0, "amber": 1, "ok": 2}
-    items.sort(key=lambda i: (order.get(i["age_state"], 3), -(i["days"] or 0)))
+    # An open draft query comes first, always - it is the one ClaimShield let go quiet.
+    items.sort(key=lambda i: (0 if (i.get("query") or {}).get("state") == "open" else 1,
+                              order.get(i["age_state"], 3), -(i["days"] or 0)))
 
     sub_counts: dict = {}
     for i in items:
@@ -1334,6 +1682,27 @@ async def waiting_to_start(limit: int = 200) -> list:
              "waiting_days": _days_since(r.get("l2_handover_at"))} for r in rows]
 
 
+def _query_info(row: dict) -> dict:
+    st = (row or {}).get("query_state") or ""
+    out = {}
+    if st:
+        out = {"state": st, "text": row.get("query_text") or "", "by": row.get("query_by") or "",
+               "by_id": row.get("query_by_id"),
+               "at": str(row.get("query_at") or ""), "round": int(row.get("query_round") or 0),
+               "days": _days_since(row.get("query_at")),
+               "resolved_by": row.get("query_resolved_by") or "",
+               "resolved_at": str(row.get("query_resolved_at") or ""),
+               "note": row.get("query_resolved_note") or "",
+               "mo": row.get("query_mo_name") or ""}
+    if row and row.get("cq_at"):
+        rep = row.get("cq_reply_at")
+        out["asked"] = {"at": str(row.get("cq_at") or ""), "by": row.get("cq_by") or "",
+                        "text": row.get("cq_text") or "", "channels": row.get("cq_channels") or "",
+                        "replied": bool(rep and str(rep) >= str(row.get("cq_at") or "")),
+                        "reply_at": str(rep or "")}
+    return out
+
+
 def _back_flag(row: dict) -> dict:
     if not (row or {}).get("back_at"):
         return {}
@@ -1374,6 +1743,10 @@ async def for_claim(claim_id: int, role: str = "") -> dict:
         "from_bucket": row.get("pipeline_from") or "",
         "moved_by": row.get("pipeline_by") or "",
         "lokpal_days_left": await _lokpal_days_left(row, vals),
+        "query": _query_info(row),
+        "contact": {"name": (row.get("complainant_name") or row.get("insured_name") or "").strip(),
+                    "phone": (row.get("complainant_phone") or row.get("insured_phone") or "").strip(),
+                    "email": (row.get("complainant_email") or row.get("insured_email") or "").strip()},
         "locked": await locked_fields(row, role),
         # What is locked for everyone else - so a super admin is told their edit is an override.
         "locked_for_others": await locked_fields(row, ""),
@@ -2207,6 +2580,10 @@ async def standing_alerts(force: bool = False) -> dict:
     """
     import biz_nidaan as _n
     import biz_nidaan_notifications as _nnot
+    try:
+        await query_reminders()          # open draft queries first - they are the urgent ones
+    except Exception as e:  # noqa: BLE001
+        logger.warning("draft query reminders failed: %s", e)
 
     today = _today_ist().isoformat()
     sent, skipped, unstaffed = 0, 0, []

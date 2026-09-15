@@ -235,6 +235,55 @@ async function run() {
   chk(await page.evaluate(() => _currentPanel === 'l2'), 'an old My Desk link opens Level-2');
   chk(errors.length === 0, 'the whole-line screen throws no script error', errors[0]);
 
+  /* ── 1c. filters stay; updates arrive without a flicker (founder, 15 Sep) ── */
+  console.log('\n── filters that stay, updates without a flicker ──');
+  errors.length = 0;
+  await openPanel(page, 'claims');
+  await page.fill('#claimSearch', 'zzqfilter');
+  await page.waitForTimeout(900);
+  await page.goto(`${BASE}/nidaan/ops#claims`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#claimSearch', { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  const fk = await page.evaluate(() => ({
+    panel: _currentPanel, val: (document.getElementById('claimSearch') || {}).value || '',
+    clear: !!document.querySelector('#panel-claims .nd-clear') }));
+  chk(fk.panel === 'claims', 'a refresh comes back to the same screen (All Claims)');
+  chk(fk.val === 'zzqfilter', `the search typed before the refresh is still there ("${fk.val}")`);
+  chk(fk.clear, 'with a "Clear filters" button, so a filtered list is never mistaken for missing work');
+  await page.evaluate(() => document.querySelector('#panel-claims .nd-clear').click());
+  await page.waitForTimeout(600);
+  await page.goto(`${BASE}/nidaan/ops#claims`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#claimSearch', { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(1200);
+  chk(await page.evaluate(() => ((document.getElementById('claimSearch') || {}).value || '') === ''),
+      'Clear filters clears it - and it stays cleared after a refresh');
+  // A quiet update never shows "Loading...": watch the screen while one runs.
+  await page.evaluate(() => showPanel('l2'));
+  await page.waitForFunction(() => document.querySelectorAll('#l2Main .cb-card, #l2Main table').length > 0,
+                             null, { timeout: 25000 }).catch(() => {});
+  const flick = await page.evaluate(async () => {
+    const seen = [];
+    let done = false;
+    const t0 = Date.now();
+    const p = _ndSilentRefresh().then(() => { done = true; });
+    while (!done && Date.now() - t0 < 12000){
+      const vis = [...document.querySelectorAll('#panel-l2, .nd-ghost')]
+        .filter(e => e.offsetParent !== null).map(e => e.innerText).join(' ');
+      if (/Loading/.test(vis)) seen.push('loading');
+      await new Promise(r => setTimeout(r, 50));
+    }
+    await p;
+    return { seen: seen.length, ghostLeft: !!document.querySelector('.nd-ghost'),
+             shown: document.getElementById('panel-l2').style.display !== 'none' };
+  });
+  chk(flick.seen === 0, `a quiet update never shows "Loading..." (${flick.seen} flashes)`);
+  chk(!flick.ghostLeft && flick.shown, 'and leaves the real screen showing, nothing left behind');
+  const seqOk = await page.evaluate(async () => {
+    const r = await fetch('/nidaan/ops/api/changes', { headers: hdrs() });
+    return r.ok ? typeof (await r.json()).seq === 'number' : false; });
+  chk(seqOk, 'the page can ask the server whether anything changed');
+  chk(errors.length === 0, 'filters and quiet updates throw no script error', errors[0]);
+
   /* ── 2. the Bucket Designer opens a bucket and its dialogs escape ────────── */
   console.log('\n── bucket designer ──');
   errors.length = 0;
@@ -668,6 +717,28 @@ async function run() {
     chk(!toasts0 && !mv.refused && mv.why && /Pending Draft/.test(mv.title),
         `choosing it opens the move window ("${mv.title}") - no "not allowed"`);
     chk(mv.pull, 'and tells the super admin it will show as pulled back by them');
+    await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
+    await page.waitForTimeout(300);
+  }
+  // 15 Sep: the case sheet reaches the complainant - call, or ONE query message (opened and
+  // cancelled here; nothing is sent).
+  if (later) {
+    await page.evaluate(id => window.l2Open(id), later);
+    await page.waitForFunction(() => document.getElementById('l2cMsg'), null, { timeout: 20000 }).catch(() => {});
+    const cb = await page.evaluate(() => ({
+      block: !!document.querySelector('#modalBody .qcontact'),
+      send: !!document.querySelector('#modalBody [onclick^="l2QuerySend"]') }));
+    chk(cb.block && cb.send, 'the case sheet has Contact the complainant, with Send the query');
+    await page.evaluate(() => document.querySelector('#modalBody [onclick^="l2QuerySend"]').click());
+    await page.waitForSelector('#qSend', { timeout: 10000 }).catch(() => {});
+    const qs = await page.evaluate(() => ({
+      open: !!document.getElementById('qSend'),
+      wa: !!document.getElementById('qSendWa'), em: !!document.getElementById('qSendEm'),
+      hint: /we still need/.test((document.getElementById('qSend') || {}).innerText || '') }));
+    chk(qs.open && qs.wa && qs.em && qs.hint, 'the send window offers WhatsApp and email and shows the wording');
+    await page.evaluate(() => document.querySelector('#qSend .btn-ghost').click());   // Cancel - nothing sent
+    await page.waitForTimeout(300);
+    chk(await page.evaluate(() => !document.getElementById('qSend')), 'Cancel closes it without sending');
     await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
     await page.waitForTimeout(300);
   }
