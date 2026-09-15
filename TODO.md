@@ -125,6 +125,14 @@ routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/
   toast + ask-before-close. **Case sheet shows "Built so far"** (other buckets' fields in line
   order, drafts as the editable pair, password masked). Browser 162/162; nothing written to live
   claims (save route answered in-browser).
+- ✅ **Round 7 (15 Sep) — finished work locks.** Past its owning bucket, work locks for all but
+  the 3 super admins (gist + core facts open through Pending Draft, then lock with the drafts);
+  enforced server-side at the field save, Gist/Draft forms and claim-info edit. Back moves flagged
+  (who/from/why/super) until the next forward move; restart = clock + steps + unlock, nothing
+  erased; Pending Docs keeps documents. **Request a change** → super admins (bell/Telegram/email)
+  + remarks. **`NIDAAN_NO_OUTBOUND=1`** stops Telegram/email/WhatsApp/push for test runs (some
+  suites had stubbed only WhatsApp — earlier test runs may have sent staff real Telegram/email
+  about test moves). Tests 41 + 423; browser 168/168.
 - 🟢 **Letter drafting from the gist** — the Draft form's case facts already fill from earlier
   buckets; the two letters are typed. Possible next step: a starting letter composed from the
   gist facts for the drafter to edit (founder to decide).

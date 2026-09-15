@@ -6681,6 +6681,17 @@ failures via `_l2SaveFailed`); `closeModal`/`openModal` call `_ndCloseOk`. `_Buc
 cap 400000 (set_field sanitises then limits 60000). `_l2BuiltSoFar(st,id)` renders every other
 bucket's recorded fields + drafts from `_l2Cfg.buckets`.
 
+**Round 7 (Sep 15) — finished work locks.** `biz_nidaan_buckets.locked_fields(row, role)` =
+{field: bucket that finished it}; super_admin → {}. A field locks when the claim's bucket (parked →
+`pipeline_from`) sort_order is past the field's owning bucket; `live_cases` fields and
+`CORE_GIST_KEYS` count as owned by `GIST_OPEN_UNTIL='pending_draft'`. `set_field(..., role=)`
+refuses changes (same value = ok, unchanged); `/gist` core and `PATCH /claims/{id}/info` check the
+same. `for_claim` returns `locked`, `locked_for_others`, `is_super`, `back`; `/report` returns
+`locked`, `locked_all`, `is_super`. `move(..., actor_role=)` writes `back_*` columns on kind=back,
+clears on forward. `POST /cases/{id}/change-request` → super admins + remarks. **Every test run
+sets `NIDAAN_NO_OUTBOUND=1`** (Telegram send_message, biz_email.send_email, WhatsApp `_post`,
+`_fire_push` return early) — never set it in production.
+
 **Testing:** `node uitest/flow.mjs --local-html=../static/nidaan_ops.html` proves a screen change
 against live data before deploy.
 

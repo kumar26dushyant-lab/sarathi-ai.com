@@ -885,3 +885,27 @@ Team, three fixes from today's testing:
 3. **हर बकेट अब पिछले बकेट का काम देखता है।** Escalation या Lokpal में केस खोलें — **Built so far** में गिस्ट की जानकारी और दोनों ड्राफ़्ट मिलेंगे।
 
 _Suggested roles: Everyone (all staff)._
+
+---
+
+## 2026-09-15 — Finished work is locked; Request a change — DRAFT (founder to review)
+
+**Title (EN):**
+🔒 Finished work is now locked
+
+**Details (EN):**
+Team, once a claim moves past a bucket, that bucket's work is **locked**, so nobody later changes it by mistake. The gist stays open until the drafts are finished, then locks with them. From Escalation onward, the drafts and the gist are **read-only**.
+- **Only the three super admins** can change locked work, and every change is recorded with their name.
+- Spotted a mistake? Press **✋ Request a change** on the locked box and say what's wrong. The super admins are told straight away, and your request goes into the claim's remarks.
+- A claim that is **sent back** shows who sent it, from where, and why. That bucket's work opens again and nothing already written is erased. Sending back still needs a reason.
+
+**Title (HI):**
+🔒 पूरा हुआ काम अब लॉक है
+
+**Details (HI):**
+टीम, क्लेम किसी बकेट से आगे बढ़ते ही उस बकेट का काम **लॉक** हो जाता है, ताकि बाद में कोई गलती से उसे न बदले। गिस्ट ड्राफ़्ट पूरे होने तक खुला रहता है, फिर उनके साथ लॉक होता है। Escalation से आगे ड्राफ़्ट और गिस्ट **सिर्फ़ पढ़ने के लिए** हैं।
+- लॉक काम **सिर्फ़ तीन सुपर एडमिन** बदल सकते हैं, और हर बदलाव उनके नाम से दर्ज होता है।
+- कोई गलती दिखी? लॉक बॉक्स पर **✋ Request a change** दबाएँ और बताएँ क्या गलत है। सुपर एडमिन को तुरंत खबर जाती है और आपका अनुरोध क्लेम के रिमार्क्स में दर्ज होता है।
+- **वापस भेजे गए** क्लेम पर दिखता है कि किसने, कहाँ से और क्यों भेजा। उस बकेट का काम फिर खुल जाता है और पहले लिखा कुछ भी नहीं मिटता। वापस भेजने के लिए कारण लिखना अब भी ज़रूरी है।
+
+_Suggested roles: Everyone (all staff)._

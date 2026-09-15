@@ -418,6 +418,26 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "finished_work_locks",
+        "en": {"t": "Finished work locks; ask for a change",
+               "d": "Once a claim moves past a bucket, that bucket's work is locked, so nobody later "
+                    "changes it by mistake. The gist stays open until the drafts are finished, then "
+                    "locks with them. Only the three super admins can change locked work, and every "
+                    "change is recorded. If something needs fixing, press Request a change: the super "
+                    "admins are told at once and the request goes into the claim's remarks. When a claim "
+                    "is sent back, it is flagged with who sent it and why, and that bucket's work opens "
+                    "again. Nothing already recorded is erased.",
+               "u": "Level-2 → Settlement → open a case → Request a change on locked work."},
+        "hi": {"t": "पूरा हुआ काम लॉक; बदलाव माँगें",
+               "d": "क्लेम किसी बकेट से आगे बढ़ते ही उस बकेट का काम लॉक हो जाता है, ताकि बाद में कोई गलती से उसे न बदले। "
+                    "गिस्ट ड्राफ़्ट पूरे होने तक खुला रहता है, फिर उनके साथ लॉक होता है। लॉक काम सिर्फ़ तीन सुपर एडमिन बदल "
+                    "सकते हैं और हर बदलाव दर्ज होता है। कुछ ठीक करना हो तो Request a change दबाएँ: सुपर एडमिन को तुरंत "
+                    "खबर जाती है और अनुरोध क्लेम के रिमार्क्स में दर्ज होता है। क्लेम वापस भेजा जाए तो उस पर लिखा आता है "
+                    "कि किसने और क्यों भेजा, और उस बकेट का काम फिर खुल जाता है। पहले से दर्ज कुछ भी मिटता नहीं।",
+               "u": "Level-2 → Settlement → केस खोलें → लॉक काम पर Request a change।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "propose_channel_partner",
         "en": {"t": "Propose a Channel Partner",
                "d": "Any staff member can add a partner who sends us business \u2014 they are the "
