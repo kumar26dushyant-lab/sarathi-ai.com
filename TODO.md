@@ -133,6 +133,23 @@ routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/
   + remarks. **`NIDAAN_NO_OUTBOUND=1`** stops Telegram/email/WhatsApp/push for test runs (some
   suites had stubbed only WhatsApp — earlier test runs may have sent staff real Telegram/email
   about test moves). Tests 41 + 423; browser 168/168.
+- ✅ **Round 8 (15-16 Sep) — payments, the draft query loop, filters, no flicker.**
+  **Payments:** no "payment received" alert ever fired for subscriptions (now from `record_payment`,
+  every source, once); webhook first activation recorded twice (rounded `sub_` row + exact `pay_` row);
+  first charge taken for a renewal when the subscriber's confirmation won the race (+30 days, counted
+  twice); "Plan Activated!" emailed 3×. All fixed (22 scenario tests). **Draft query:** Raise (Pending
+  Draft → Live Cases, loud alert, pinned red, daily reminder, super admins at 3 days) → Resolve (pick
+  doctor/advocate → Pending Draft) → clears on moving on. **Ask the complainant:** call or ONE message
+  (np_doc_reminder template carrying the exact words / email, CC branch+subscriber by email; 2nd refused
+  while unanswered 24 h); WhatsApp reply → 3 super admins + sender. **Filters** kept per person
+  (`nd_keep_<staff>` in localStorage) until Clear filters; refresh returns to the same screen. **No
+  flicker:** `nidaan_change_seq` (20 SQLite triggers) + `GET /changes` every 10 s → ghost-swap refresh.
+- 🔴 **FOUNDER DECISION — payment ledger correction (nothing changed yet):** (A) mark 8 rounded webhook
+  duplicates duplicate: pay_id 44, 58, 63, 72, 76, 79, 82, 84 (₹6,474); (B) mark 5 rounded first-payment
+  rows duplicate 48, 50, 60, 66, 69 and relabel 49, 51, 61, 67, 70 renewal→subscription (₹4,714);
+  (C) 5 customers got an extra month — accounts 116 BHARTI JAIN (platinum), 118 LAKSHYA PARDESHI,
+  123 LOKESH SHARMA, 126 MILIND GUNJAL, 127 AMRIT LAL BALANI: keep as goodwill or pull back 30 days;
+  (D) account 85: two ₹588 rows on two subscriptions (19/20 Aug) — check whether they paid twice.
 - 🟢 **Letter drafting from the gist** — the Draft form's case facts already fill from earlier
   buckets; the two letters are typed. Possible next step: a starting letter composed from the
   gist facts for the drafter to edit (founder to decide).

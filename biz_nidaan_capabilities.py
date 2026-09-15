@@ -438,6 +438,39 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "draft_query",
+        "en": {"t": "Draft query: send a claim back, and make sure it is answered",
+               "d": "In Pending Draft, the doctor or advocate can Raise a query: the claim goes back to "
+                    "Live Cases marked DRAFT QUERY, at the top of the list, and Live Cases is told at "
+                    "once. It is reminded every morning while open, and the super admins are told after "
+                    "3 days. Live Cases presses Query resolved, picks the doctor or advocate, and it goes "
+                    "back to them in Pending Draft.",
+               "u": "Level-2 → Settlement → Pending Draft → ❓ Query; Live Cases → ✅ Resolved."},
+        "hi": {"t": "ड्राफ़्ट क्वेरी: क्लेम वापस भेजें, और जवाब पक्का करें",
+               "d": "Pending Draft में डॉक्टर या एडवोकेट Raise a query दबा सकते हैं: क्लेम Live Cases में "
+                    "DRAFT QUERY लिखकर सबसे ऊपर लौटता है और Live Cases को तुरंत खबर जाती है। खुली रहने तक हर "
+                    "सुबह याद दिलाया जाता है, 3 दिन बाद सुपर एडमिन को भी। Live Cases Query resolved दबाकर "
+                    "डॉक्टर/एडवोकेट चुनता है और क्लेम उन्हीं के पास Pending Draft में लौटता है।",
+               "u": "Level-2 → Settlement → Pending Draft → ❓ Query; Live Cases → ✅ Resolved।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "ask_complainant",
+        "en": {"t": "Ask the complainant one thing",
+               "d": "From any Level-2 case: call them, or send ONE query message on WhatsApp (our "
+                    "approved message carrying your exact words) and email, copied by email to the "
+                    "branch or subscriber. A second message is refused while the first is unanswered, "
+                    "so nobody is bombarded. When they reply on WhatsApp, the super admins and you are "
+                    "told at once.",
+               "u": "Level-2 → Settlement → open a case → Contact the complainant."},
+        "hi": {"t": "शिकायतकर्ता से एक बात पूछें",
+               "d": "Level-2 के किसी भी केस से: कॉल करें, या WhatsApp पर एक क्वेरी संदेश भेजें (हमारा "
+                    "मंज़ूर संदेश, आपके शब्दों के साथ) और ईमेल, जिसकी कॉपी ब्रांच/सब्सक्राइबर को ईमेल से जाती है। "
+                    "पहले का जवाब आने तक दूसरा संदेश नहीं जाता। WhatsApp पर जवाब आते ही सुपर एडमिन और आपको खबर मिलती है।",
+               "u": "Level-2 → Settlement → केस खोलें → Contact the complainant।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "propose_channel_partner",
         "en": {"t": "Propose a Channel Partner",
                "d": "Any staff member can add a partner who sends us business \u2014 they are the "

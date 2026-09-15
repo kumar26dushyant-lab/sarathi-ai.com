@@ -909,3 +909,31 @@ Team, once a claim moves past a bucket, that bucket's work is **locked**, so nob
 - **वापस भेजे गए** क्लेम पर दिखता है कि किसने, कहाँ से और क्यों भेजा। उस बकेट का काम फिर खुल जाता है और पहले लिखा कुछ भी नहीं मिटता। वापस भेजने के लिए कारण लिखना अब भी ज़रूरी है।
 
 _Suggested roles: Everyone (all staff)._
+
+---
+
+## 2026-09-16 — Draft queries, asking the complainant, filters that stay — DRAFT (founder to review)
+
+**Title (EN):**
+❓ Draft queries that never go quiet, and screens that keep up by themselves
+
+**Details (EN):**
+Team, what's new in Level-2 → Settlement:
+1. **Raise a query (Pending Draft).** If the papers aren't enough, press **❓ Query** and write what's needed. The claim goes back to **Live Cases**, marked **DRAFT QUERY** in red at the top, and Live Cases is told straight away. It's reminded every morning until it's fixed.
+2. **Query resolved (Live Cases).** Once it's fixed, press **✅ Resolved**, choose the doctor or advocate, and say what was done. The claim goes back to them in Pending Draft.
+3. **Contact the complainant (any case).** Call them from the case, or press **📨 Send the query**. It goes once, on WhatsApp and email, with a copy to the branch or subscriber. When they reply, you're told.
+4. **Your filters stay** until you press **✕ Clear filters**, even if you refresh the page.
+5. **Screens update by themselves** within about 10 seconds when anyone changes something, with no flicker and no "Loading…".
+
+**Title (HI):**
+❓ ड्राफ़्ट क्वेरी जो कभी दबती नहीं, और स्क्रीन जो खुद अपडेट होती है
+
+**Details (HI):**
+टीम, Level-2 → Settlement में नया:
+1. **क्वेरी भेजें (Pending Draft)।** कागज़ पूरे न हों तो **❓ Query** दबाएँ और लिखें क्या चाहिए। क्लेम **Live Cases** में लाल **DRAFT QUERY** के साथ सबसे ऊपर लौटता है और Live Cases को तुरंत खबर जाती है। ठीक होने तक हर सुबह याद दिलाया जाता है।
+2. **क्वेरी हल (Live Cases)।** ठीक होते ही **✅ Resolved** दबाएँ, डॉक्टर या एडवोकेट चुनें और लिखें क्या किया। क्लेम उनके पास Pending Draft में लौटता है।
+3. **शिकायतकर्ता से संपर्क (कोई भी केस)।** केस से ही कॉल करें, या **📨 Send the query** दबाएँ। संदेश एक बार WhatsApp और ईमेल पर जाता है, ब्रांच या सब्सक्राइबर को कॉपी के साथ। जवाब आते ही आपको खबर मिलती है।
+4. **आपके फ़िल्टर बने रहते हैं** जब तक आप **✕ Clear filters** न दबाएँ, पेज रिफ़्रेश करने पर भी।
+5. **स्क्रीन खुद अपडेट होती है**, कोई भी बदलाव करे तो करीब 10 सेकंड में, बिना झिलमिलाहट और बिना "Loading…" के।
+
+_Suggested roles: Everyone (all staff)._

@@ -6692,6 +6692,17 @@ clears on forward. `POST /cases/{id}/change-request` → super admins + remarks.
 sets `NIDAAN_NO_OUTBOUND=1`** (Telegram send_message, biz_email.send_email, WhatsApp `_post`,
 `_fire_push` return early) — never set it in production.
 
+**Round 8 (Sep 15-16).** PAYMENTS: `record_payment` announces every fresh ledger row via
+`notifications.on_ledger_payment` (don't add direct `on_payment_success` calls). `create_subscription`
+takes `total_paise` + payment id; `activate_from_razorpay_webhook` returns "new"/"renewed"/"dup" and
+only renews a NEW payment id, never within 7 days, never without a payment id; the webhook and the
+client verify send the confirmation email only when they activated. Ledger totals exclude
+status='duplicate'. DRAFT QUERY: `bk.raise_query / resolve_query / send_query_to_complainant /
+on_query_reply (wa_flow inbound hook) / query_reminders (in standing_alerts)`; claim columns
+`query_*`, `cq_*`; `move(..., quiet=True)` skips generic alerts. LIVE: `nidaan_change_seq` + triggers,
+`GET /nidaan/ops/api/changes`; page `_ndSilentRefresh` (whitelist `_ND_LIVE`) and filter keeping
+(`_ndKeep*`, MutationObserver restore, `_ND_STATE`).
+
 **Testing:** `node uitest/flow.mjs --local-html=../static/nidaan_ops.html` proves a screen change
 against live data before deploy.
 
