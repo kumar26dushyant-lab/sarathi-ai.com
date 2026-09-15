@@ -117,6 +117,14 @@ routes on a copy of the live DB and in a real browser (`uitest/flow.mjs`, **125/
   conversation & history; 2 on tablets), sections moved not redrawn; phones keep the side panel;
   tasks/leads/QR keep the side panel. Browser test serves a local build against live data
   (`--local-html`) so screens are proved before deploy — 137/137.
+- ✅ **Round 6 (15 Sep) — windows, drafts, the line.** Only a window's own ✕/Cancel closes it
+  (capture-phase guards: background click + Escape do nothing, all windows incl. overlays and ndUI;
+  phone menu shade exempt). **NP-112's Lokpal Draft was refused 8× (422)**: Word paste of a
+  2.4k letter = 89k chars > request cap. Fix: paste cleaner (`_csrCleanPaste`), raw cap 400k with
+  the 60k limit on the sanitised text, autosave 1.5 s + on blur (version-checked), failures red +
+  toast + ask-before-close. **Case sheet shows "Built so far"** (other buckets' fields in line
+  order, drafts as the editable pair, password masked). Browser 162/162; nothing written to live
+  claims (save route answered in-browser).
 - 🟢 **Letter drafting from the gist** — the Draft form's case facts already fill from earlier
   buckets; the two letters are typed. Possible next step: a starting letter composed from the
   gist facts for the drafter to edit (founder to decide).

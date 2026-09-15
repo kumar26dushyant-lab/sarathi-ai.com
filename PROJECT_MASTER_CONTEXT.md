@@ -6673,6 +6673,14 @@ puts them back in order. CSS only under `@media (min-width:768px)`.
 `mark_l2_paid` UPDATE is conditional. WhatsApp outbound template rows store the rendered wording
 (`template_text`, Meta bodies cached 6h).
 
+**Round 6 (Sep 15).** Windows close ONLY from their own button: `_ndIsBackdrop` + capture
+click listener and a capture Escape listener (visible windows only) in nidaan_ops.html; don't add
+backdrop-close handlers. Drafts: `_csrCleanPaste` on paste into any `.csred`; case-sheet editors
+built by `_l2RichEditor` (`data-key`, autosave `l2RichInput`/`l2RichBlur`/`_l2SaveRich`,
+failures via `_l2SaveFailed`); `closeModal`/`openModal` call `_ndCloseOk`. `_BucketFieldReq.value`
+cap 400000 (set_field sanitises then limits 60000). `_l2BuiltSoFar(st,id)` renders every other
+bucket's recorded fields + drafts from `_l2Cfg.buckets`.
+
 **Testing:** `node uitest/flow.mjs --local-html=../static/nidaan_ops.html` proves a screen change
 against live data before deploy.
 

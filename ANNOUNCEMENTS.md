@@ -861,3 +861,27 @@ Team, two changes you'll see today:
 2. **लैपटॉप और टैबलेट पर क्लेम अब स्क्रीन के बीच में खुलता है**, सब कुछ साथ-साथ: बाईं ओर क्लेम की जानकारी, बीच में काम (दस्तावेज़, स्टेटस, टास्क), और दाईं ओर नोट्स व हिस्ट्री। हर कॉलम अलग से स्क्रॉल होता है। फ़ोन पर पहले की तरह साइड से खुलता है।
 
 _Suggested roles: Everyone (all staff)._
+
+---
+
+## 2026-09-15 — Windows stay open; drafts save by themselves — DRAFT (founder to review)
+
+**Title (EN):**
+✅ Your work no longer disappears
+
+**Details (EN):**
+Team, three fixes from today's testing:
+1. **A window closes only with its ✕ (or Cancel/Close).** Clicking outside it or pressing Esc no longer closes it, so a stray click can't lose your work.
+2. **Drafts save by themselves** a moment after you stop typing. The box says **✓ Saved**. If a save ever fails, the box turns **red** and says **NOT saved**, and the window asks before closing. Pasting from Word or Google Docs now keeps just the letter: bold, italic, underline and paragraphs.
+3. **Every bucket now sees what earlier buckets built.** Open a case in Escalation or Lokpal and you'll find the gist details and both drafts under **Built so far**.
+
+**Title (HI):**
+✅ अब आपका काम गायब नहीं होगा
+
+**Details (HI):**
+टीम, आज की टेस्टिंग से तीन सुधार:
+1. **विंडो अब सिर्फ़ उसके ✕ (या Cancel/Close) से बंद होती है।** बाहर क्लिक करने या Esc दबाने से अब बंद नहीं होती, ताकि गलती से क्लिक होने पर आपका काम न खोए।
+2. **ड्राफ़्ट अपने-आप सेव होते हैं** — टाइप करना रुकते ही। बॉक्स में **✓ Saved** दिखता है। अगर कभी सेव न हो, तो बॉक्स **लाल** हो जाता है, **NOT saved** लिखा आता है, और विंडो बंद करने से पहले पूछती है। Word या Google Docs से पेस्ट करने पर अब सिर्फ़ चिट्ठी आती है — बोल्ड, इटैलिक, अंडरलाइन और पैराग्राफ़ के साथ।
+3. **हर बकेट अब पिछले बकेट का काम देखता है।** Escalation या Lokpal में केस खोलें — **Built so far** में गिस्ट की जानकारी और दोनों ड्राफ़्ट मिलेंगे।
+
+_Suggested roles: Everyone (all staff)._
