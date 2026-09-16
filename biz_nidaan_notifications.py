@@ -1981,6 +1981,11 @@ async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, c
                             branch_code: str = "", plan: str = "", verified: bool = True,
                             actor_name: str = "", dedup_key: str = "") -> None:
     """One payment, just recorded in the ledger - tell the office what it was and who paid."""
+    # A branch Level-2 fee already has its own message - "Level-2 queued ... Level-2 fee: Rs.X" -
+    # to the same people. A second "Payment RECEIVED" beside it is the near-duplicate the founder
+    # objected to, so that one path announces itself (and stamps the row) instead.
+    if source == "branch_l2":
+        return
     try:
         amt = total_paise / 100.0
         amount = ("%.2f" % amt).rstrip("0").rstrip(".")
@@ -2092,6 +2097,18 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
         await notify_staff_inapp(ids, subj, body, event_key="claim.l2_queued", email=True)
     except Exception as e:
         logger.warning("on_branch_l2_paid inapp failed: %s", e)
+    # The Level-2 alert above IS this payment's announcement (it names the fee), so the ledger row
+    # is stamped here: the guardian's "was this payment announced?" stays a fact, and nobody gets
+    # two messages for one event.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE nidaan_payments SET announced_at=CURRENT_TIMESTAMP "
+                "WHERE claim_id=? AND source='branch_l2' AND announced_at IS NULL", (claim_id,))
+            await conn.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not stamp the Level-2 payment as announced: %s", e)
+
     # Complainant payment-thanks on WhatsApp (branch/ops claim — the customer is not the
     # account-holder here, so no collision with any subscriber-facing confirmation).
     try:
