@@ -161,6 +161,46 @@ async def _upload_link(claim_id: int) -> str:
         return ""
 
 
+# ── the one document that needs explaining ───────────────────────────────────
+# Asking somebody for an email password is a big ask, and a bare line on a list reads like a
+# phishing message. So whenever this document is asked for, the message says three things: it is
+# a NEW account made only for this case, what we use it for, and that they can change the password
+# or delete the account the moment the case is over. In their own language, because a person does
+# not hand over a password in a language they half-read.
+MAIL_ID_NOTE = {
+    "en": ("About the email ID: please CREATE A NEW email account for this case — do not give us "
+           "your personal one. We write to the insurance company and the authorities from it, and "
+           "their replies come back to it, which is why we need the password. It is used for "
+           "nothing else. When your case is over you can change the password or delete the "
+           "account — it stays yours."),
+    "hi": ("ईमेल आईडी के बारे में: कृपया इस केस के लिए एक नई ईमेल आईडी बनाइए — अपनी निजी आईडी मत दीजिए। "
+           "हम इसी से बीमा कंपनी और अधिकारियों को पत्र भेजते हैं और उनके जवाब इसी पर आते हैं, इसीलिए "
+           "पासवर्ड चाहिए। इसका और कोई उपयोग नहीं होता। केस पूरा होने पर आप पासवर्ड बदल सकते हैं या "
+           "आईडी डिलीट कर सकते हैं — वह आपकी ही रहती है।"),
+    "hinglish": ("Email ID ke baare mein: is case ke liye ek NAYI email ID banaiye — apni personal "
+                 "ID mat dijiye. Hum isi se insurance company aur authorities ko likhte hain aur "
+                 "unke jawab isi par aate hain, isliye password chahiye. Iska aur koi upyog nahi "
+                 "hota. Case poora hone par aap password badal sakte hain ya ID delete kar sakte "
+                 "hain — wo aapki hi rehti hai."),
+}
+
+
+async def _lang_for(claim_id: int, claim: dict) -> str:
+    """Which language this complainant reads. Their WhatsApp contact remembers it; if we have
+    never spoken, Hinglish is the house default."""
+    phone = (claim.get("complainant_phone") or claim.get("insured_phone") or "").strip()
+    if not phone:
+        return "hinglish"
+    try:
+        import biz_nidaan_whatsapp as _w
+        async with aiosqlite.connect(DB_PATH) as c:
+            r = await (await c.execute("SELECT language FROM nidaan_wa_contacts WHERE msisdn=?",
+                                       (_w.normalize_msisdn(phone),))).fetchone()
+        return (r[0] if r and r[0] else "hinglish")
+    except Exception:  # noqa: BLE001
+        return "hinglish"
+
+
 async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "request",
                         note: str = "") -> str:
     """The wording that goes out, with the documents named. Staff can edit every word of it -
@@ -171,11 +211,13 @@ async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "requ
     name = ((claim.get("complainant_name") or claim.get("insured_name") or "").strip()
             .split(" ") or [""])[0]
     docs = {d["key"]: d for d in await _ck.effective_docs(claim_id, ctype)}
+    lang = await _lang_for(claim_id, claim)
     lines = []
     for k in doc_keys:
         d = docs.get(k)
         if d:
-            lines.append("• %s" % (d.get("en") or k))
+            # Hindi readers get the Hindi name of the document; everyone else the English one.
+            lines.append("• %s" % ((d.get("hi") if lang == "hi" else None) or d.get("en") or k))
     link = await _upload_link(claim_id)
 
     head = ("Namaste %s \U0001f64f" % name) if name else "Namaste \U0001f64f"
@@ -190,6 +232,9 @@ async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "requ
                    % claim_id)
 
     body = [head, "", opening, ""] + lines
+    # The email ID is the one ask that must explain itself, in the language they read.
+    if "mail_credentials" in (doc_keys or []):
+        body += ["", MAIL_ID_NOTE.get(lang, MAIL_ID_NOTE["hinglish"])]
     if (note or "").strip():
         body += ["", (note or "").strip()]
     if link:

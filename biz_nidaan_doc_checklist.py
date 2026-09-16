@@ -87,19 +87,40 @@ def _doc(key, en, hi, why_en, required=True, conditional=False):
 
 # ── Per-claim-type required-document templates (spec §8, real-name labels) ────
 TEMPLATES: dict[str, list[dict]] = {
+    # Health: the founder's own list (16 Sep 2026), in his order. The KEYS are unchanged for the
+    # four documents that already existed — a tick is stored against the key, so relabelling
+    # costs nobody the papers they have already sent. Three are new, plus the mail ID.
     "health": [
-        _doc("rejection_letter", "Rejection / Underpaid Settlement Letter",
-             "रिजेक्शन / कम भुगतान सेटलमेंट लेटर",
-             "The insurer's letter saying no or paying less — the basis of the dispute."),
         _doc("policy_document", "Policy Document (with T&C page) / Policy Copy",
              "पॉलिसी डॉक्यूमेंट (नियम-शर्तें पेज सहित) / पॉलिसी कॉपी",
              "Shows your coverage and the exclusions the insurer is relying on."),
+        _doc("rejection_letter", "Rejection Letter / Bill Summary",
+             "रिजेक्शन लेटर / बिल समरी",
+             "The insurer's letter saying no or paying less — the basis of the dispute."),
+        _doc("itemized_bills", "Final Bill with Payment Receipts",
+             "फाइनल बिल और भुगतान रसीदें",
+             "The final bill with the receipts — proves what was actually paid."),
+        _doc("claim_form", "Claim Form",
+             "क्लेम फॉर्म",
+             "The form filed with the insurer — what was claimed, and on what basis."),
         _doc("discharge_summary", "Discharge Summary / Discharge Documents",
              "डिस्चार्ज समरी / डिस्चार्ज दस्तावेज़",
              "The most important hospital paper — establishes the treatment given."),
-        _doc("itemized_bills", "Itemised Hospital Bills",
-             "विस्तृत अस्पताल बिल",
-             "Room rent, medicines and doctor fees shown separately — proves the amount."),
+        _doc("kyc", "KYC (ID proof of the policyholder)",
+             "KYC (पॉलिसीधारक का पहचान प्रमाण)",
+             "Aadhaar or PAN — proves who the policyholder is to the insurer and the authorities."),
+        # Not an ordinary document: a NEW email account created for this case, which we use to
+        # write to the insurance company and the authorities on the complainant's behalf. It asks
+        # for a password, so what the complainant is told matters as much as the ask itself —
+        # see MAIL_ID_NOTE in biz_nidaan_doc_request.
+        _doc("mail_credentials", "Email ID created for this case (with its password)",
+             "इस केस के लिए बनाई गई ईमेल आईडी (पासवर्ड सहित)",
+             "A NEW email account made only for this case — we write to the insurance company and "
+             "the authorities from it. Never your personal email."),
+        _doc("other_docs", "Any other documents available",
+             "कोई अन्य उपलब्ध दस्तावेज़",
+             "Anything else about this claim — letters, messages, prescriptions.",
+             required=False),
         _doc("prior_medical", "Past Medical Records / Doctor's Certificate",
              "पुराने मेडिकल रिकॉर्ड / डॉक्टर का प्रमाणपत्र",
              "Only if a pre-existing disease is alleged — records from before the policy.",
@@ -272,6 +293,39 @@ async def mark_doc_received(claim_id: int, doc_key: str, *, via: str,
         return cur.rowcount > 0
 
 
+async def set_doc_received(claim_id: int, doc_key: str, received: bool, *, by: str = "") -> dict:
+    """Tick (or untick) a checklist line BY HAND.
+
+    Until now a line could only go green if somebody chose the document's name from a dropdown as
+    they uploaded it, or if the WhatsApp bot recognised it. Papers arrive by post, by hand and in
+    somebody's inbox, and they arrive named IMG_2231 — so the list said 3 of 8 while 9 documents
+    sat attached to the claim. Staff can now say so themselves. Deliberately manual: matching a
+    typed file name to a checklist line is a guess, and a wrong guess means we stop asking for a
+    paper we never received."""
+    via = ("staff:%s" % (by or "")).strip(":")[:40] if received else ""
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        cur = await conn.execute(
+            """UPDATE nidaan_claim_doc_checklist
+               SET received=?, received_via=?, updated_at=datetime('now')
+               WHERE claim_id=? AND doc_key=?""",
+            (1 if received else 0, via, int(claim_id), doc_key))
+        if not cur.rowcount:
+            # A template line nobody has touched yet has no row of its own.
+            await conn.execute(
+                """INSERT INTO nidaan_claim_doc_checklist
+                   (claim_id, doc_key, required, conditional, received, received_via)
+                   VALUES (?,?,1,0,?,?)""",
+                (int(claim_id), doc_key, 1 if received else 0, via))
+        if not received:
+            # Unticking by hand also breaks the link to whatever file had answered it, or the
+            # next person would see a green line pointing at a document we no longer count.
+            await conn.execute(
+                "UPDATE nidaan_claim_doc_checklist SET received_doc_id=NULL "
+                "WHERE claim_id=? AND doc_key=?", (int(claim_id), doc_key))
+        await conn.commit()
+    return {"ok": True, "doc_key": doc_key, "received": bool(received)}
+
+
 async def set_doc_required(claim_id: int, doc_key: str, required: bool) -> None:
     """Reviewer toggles a (conditional) item required or not."""
     async with aiosqlite.connect(db.DB_PATH) as conn:
@@ -358,12 +412,15 @@ async def add_custom_doc(claim_id: int, label: str, *, by: str, required: bool =
     return {"ok": True, "doc_key": key, "label": label}
 
 
-async def remove_doc(claim_id: int, doc_key: str, *, by: str, reason: str) -> dict:
-    """Take a document off this claim's list. A reason is required - the next person needs to
-    know we stopped asking on purpose, not by accident. The row is kept, never deleted."""
+async def remove_doc(claim_id: int, doc_key: str, *, by: str, reason: str = "") -> dict:
+    """Take a document off this claim's list.
+
+    A reason used to be compulsory. The founder's call (16 Sep): staff tidying a list should not
+    have to write a sentence every time, and nobody is told when a line comes off. Who removed it
+    and when is still recorded, the row is still kept rather than deleted, and a reason is still
+    saved when one is given — so "why did we stop asking for the FIR?" can still be answered by
+    the person who did it."""
     reason = (reason or "").strip()
-    if not reason:
-        return {"ok": False, "error": "Say why this is no longer needed."}
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         r = await (await conn.execute(

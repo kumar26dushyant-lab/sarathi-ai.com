@@ -14387,9 +14387,25 @@ async function docsRender(msg, ok){
       }).join('')
     : '<div class="bdsub">Nothing attached yet.</div>';
 
+  // Every line is tickable BY HAND. Papers arrive by post, by hand and in somebody's inbox, and
+  // a line could only go green if the document's name was chosen from the dropdown during upload
+  // - which is how a claim shows 9 files attached and "3 of 8" on the list. Ticking is deliberate
+  // and manual: guessing from a file name would mean silently not asking for a paper we never got.
+  const _tickRow = function(d){
+    return '<label class="dcl ' + (d.received ? 'got' : 'miss') + '" style="display:flex;'
+      + 'align-items:flex-start;gap:.45rem;cursor:pointer">'
+      + '<input type="checkbox" ' + (d.received ? 'checked ' : '')
+      +   'onchange="docsTick(' + esc(JSON.stringify(d.key)) + ', this.checked, this)" '
+      +   'style="margin-top:.15rem;flex:0 0 auto">'
+      + '<span>' + esc(d.label)
+      + (d.required === false ? ' <span class="bdsub">(optional)</span>' : '')
+      + (d.received && d.received_via ? '<span class="mt"> · ' + esc(String(d.received_via).replace('staff:', 'ticked by ')) + '</span>' : '')
+      + '</span></label>';
+  };
   const checkRows = list.length
-    ? got.map(function(d){ return '<div class="dcl got">✅ ' + esc(d.label) + '</div>'; }).join('')
-      + miss.map(function(d){ return '<div class="dcl miss">○ ' + esc(d.label) + '</div>'; }).join('')
+    ? got.map(_tickRow).join('') + miss.map(_tickRow).join('')
+      + '<div class="bdsub" style="margin-top:.4rem">Tick what has reached us. Only unticked '
+      + 'documents are asked for.</div>'
     : '<div class="bdsub">No checklist for this claim type yet.</div>';
 
   const opts = '<option value="">Not on the list — just attach it</option>'
@@ -14423,9 +14439,10 @@ async function docsRender(msg, ok){
     +       '<div style="font-size:.8rem;font-weight:700;color:var(--nd-text-primary)">📎 Attach a document</div>'
     +       '<label style="font-size:.76rem;color:var(--nd-text-muted);display:block;margin-top:.35rem">Which document is this?</label>'
     +       '<select id="dcKey">' + opts + '</select>'
-    +       '<input type="file" id="dcFile" multiple accept=".pdf,.jpg,.jpeg,.png,.docx">'
+    +       '<input type="file" id="dcFile" multiple>'
     +       '<button class="l2mv p" style="margin-top:.45rem" onclick="docsUpload(this)">Attach</button>'
-    +       '<div class="bdsub" style="margin-top:.3rem">PDF, JPG, PNG or DOCX. Every file is virus-scanned.</div>'
+    +       '<div class="bdsub" style="margin-top:.3rem">Anything except video — PDF, photos (iPhone '
+    +         'photos too), Word, scans. Up to 25 MB each. Every file is virus-scanned.</div>'
     +     '</div>'
     +   '</div>'
     +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
@@ -14441,6 +14458,28 @@ async function docsRender(msg, ok){
     if (m){ m.style.color = ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)'; m.textContent = msg; }
   }
 }
+
+// Tick or untick one checklist line. The screen updates first so it feels immediate, and puts
+// itself back if the save fails - a tick that looks saved but is not would mean a document nobody
+// ever asks for again.
+async function docsTick(key, received, box){
+  const was = !received;
+  try{
+    const r = await API('/claims/' + _dcClaim + '/doc-window/tick',
+      {method:'POST', body: JSON.stringify({doc_key: key, received: !!received})});
+    if (!r.ok){
+      if (box) box.checked = was;
+      const d = await r.json().catch(function(){ return {}; });
+      return docsRender(_l2Err(d, 'Could not save that tick.'), false);
+    }
+  }catch(e){
+    if (box) box.checked = was;
+    return docsRender('Could not save that tick.', false);
+  }
+  docsRender(received ? 'Ticked — we will not ask for that one again.'
+                      : 'Un-ticked — it goes back on the list to ask for.', true);
+}
+window.docsTick = docsTick;
 
 async function docsUpload(btn){
   const inp = document.getElementById('dcFile');
@@ -15300,33 +15339,26 @@ async function dwAdd(){
 }
 
 function dwRemove(key, label){
-  // A removal is a decision somebody has to be able to explain later, so it carries a reason
-  // and the reason is kept for good.
-  const prev = document.getElementById('modalBody').innerHTML;
-  openModal('Remove "' + label + '" from this claim?',
+  // The founder's call (16 Sep): tidying a list should not demand a sentence every time. A plain
+  // confirm stays - a mis-tap on a phone must not silently drop a document we need - but the
+  // reason box is gone, nothing is deleted, and nobody is notified. Who removed it is recorded,
+  // and it can be put back from "Removed from this claim".
+  openModal('Remove “' + label + '” from this claim?',
       '<div class="l2ban info">It comes off the list and we stop asking for it. Nothing is '
-    + 'deleted — your reason stays on the claim, so the next person knows we stopped on '
-    + 'purpose.</div>'
-    + '<div class="l2fld"><label>Why is it not needed? <span class="req">*</span></label>'
-    + '<textarea id="dwRmWhy" rows="2" maxlength="400" placeholder="e.g. The FIR already '
-    + 'covers this."></textarea></div>'
+    + 'deleted — you can put it back at any time, and the complainant is not told.</div>'
     + '<div id="dwRmMsg" style="font-size:.82rem"></div>',
     [{label:'Keep it', cls:'btn-ghost', fn:function(){ dwOpen(_dwClaim); }},
      {label:'Remove it', cls:'btn-primary', fn:async function(){
-       const why = ((document.getElementById('dwRmWhy') || {}).value || '').trim();
        const m = document.getElementById('dwRmMsg');
-       if (!why){ if (m){ m.style.color = 'var(--nd-danger-text)';
-         m.textContent = 'Say why — the next person needs to know we stopped on purpose.'; }
-         return; }
        try{
          const r = await API('/claims/' + _dwClaim + '/doc-window/remove',
-           {method:'POST', body: JSON.stringify({doc_key: key, reason: why})});
+           {method:'POST', body: JSON.stringify({doc_key: key, reason: ''})});
          const d = await r.json().catch(function(){ return {}; });
          if (!r.ok){ if (m){ m.style.color = 'var(--nd-danger-text)';
            m.textContent = _l2Err(d, 'Could not remove it.'); } return; }
          delete _dwPick[key];
          await dwOpen(_dwClaim);
-         _dwSay('Removed, with your reason on the claim.', true);
+         _dwSay('Removed from this claim. You can put it back any time.', true);
        }catch(e){ if (m){ m.style.color = 'var(--nd-danger-text)';
          m.textContent = 'Could not remove it.'; } }
      }}], false);

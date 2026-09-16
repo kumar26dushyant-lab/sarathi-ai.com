@@ -584,6 +584,23 @@ async function run() {
     await page.waitForTimeout(1500);
     chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
         'a button inside the popup still works (Open documents)');
+    // 16 Sep (founder): "keep it manually tick-boxes" - every checklist line is tickable by hand,
+    // and the attach box no longer pretends we only take four kinds of file.
+    const dw = await page.evaluate(() => {
+      const body = document.getElementById('modalBody') || {};
+      const lines = [...(body.querySelectorAll ? body.querySelectorAll('.dcl') : [])];
+      const file = body.querySelector ? body.querySelector('#dcFile') : null;
+      return { lines: lines.length,
+               tickable: lines.filter(l => l.querySelector('input[type=checkbox]')).length,
+               says: /Only unticked documents are asked for/i.test(body.innerText || ''),
+               accept: file ? (file.getAttribute('accept') || '') : 'no-input',
+               video: /except video/i.test(body.innerText || '') };
+    });
+    chk(dw.lines > 0 && dw.tickable === dw.lines,
+        `every checklist line can be ticked by hand (${dw.tickable} of ${dw.lines})`);
+    chk(dw.says, 'and the box says only unticked documents are asked for');
+    chk(dw.accept === '' && dw.video,
+        `the attach box takes anything but video (accept="${dw.accept}")`);
     await page.evaluate(() => document.querySelector('.modal-bg.open .modal-x').click());
     await page.waitForTimeout(300);
     await page.mouse.click(6, 450);                   // the claim popup's own background

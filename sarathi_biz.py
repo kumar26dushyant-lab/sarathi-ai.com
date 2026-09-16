@@ -8243,6 +8243,29 @@ async def ops_doc_window_type(claim_id: int, body: _DocTypeReq, request: Request
     return res
 
 
+class _DocTickReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_key: str = Field(..., min_length=1, max_length=60)
+    received: bool = True
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/tick")
+@limiter.limit("120/minute")
+async def ops_doc_window_tick(claim_id: int, body: _DocTickReq, request: Request):
+    """Tick a checklist line by hand. Papers arrive by post, by hand and in somebody's inbox,
+    and a line could only go green if the document's name was chosen from a dropdown as it was
+    uploaded — so the list said 3 of 8 while 9 documents sat on the claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.set_doc_received(claim_id, body.doc_key, body.received,
+                                     by=_actor_label(caller))
+    await _ops_audit(request, "doc.tick", "claim", str(claim_id),
+                     "%s %s" % (body.doc_key, "received" if body.received else "un-ticked"))
+    return res
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/add")
 @limiter.limit("60/minute")
 async def ops_doc_window_add(claim_id: int, body: _DocAddReq, request: Request):
