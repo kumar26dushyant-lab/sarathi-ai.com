@@ -1,5 +1,40 @@
 # Staff Announcement Drafts
 
+## 2026-09-16 (2) — How often we message a complainant
+
+**Title (EN):**
+💬 We now message a complainant twice a day at most · 🚫 STOP is visible before you write
+
+**Details (EN):**
+• **We start at most 2 WhatsApp messages a day, and 5 a week, with one complainant.** Beyond that a message waits. This protects our WhatsApp number — people who feel spammed report the number, and a reported number stops working for every claim we have.
+
+• **Your own replies are never limited.** If you type a reply to somebody, it goes. Nor is the bot limited while answering inside a chat the complainant started — so asking for documents one after another still works exactly as before.
+
+• **A held message is not lost.** It is written on the claim with the reason ("already had 2 messages from us today"). If it is urgent, **call them, or send an email** — those are not limited.
+
+• **Anyone can reply STOP**, and then we must not message them on WhatsApp at all. Before you write a query, the screen now tells you: **STOPPED — no WhatsApp**, or how many messages are left today and this week. If someone wants updates back, they reply **START**.
+
+• **Every claim now gets its "claim registered" message**, whichever way it came in — including ₹499 website claims and claims you raise on a subscriber's behalf, which used to send nothing.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+💬 एक शिकायतकर्ता को दिन में ज़्यादा से ज़्यादा 2 मैसेज · 🚫 STOP लिखने से पहले दिखेगा
+
+**Details (HI):**
+• **हम खुद से एक शिकायतकर्ता को दिन में ज़्यादा से ज़्यादा 2 और हफ़्ते में 5 WhatsApp मैसेज भेजते हैं।** उससे ज़्यादा हो तो मैसेज रुक जाता है। यह हमारे WhatsApp नंबर की सुरक्षा है — परेशान लोग नंबर रिपोर्ट कर देते हैं, और रिपोर्ट हुआ नंबर हर क्लेम के लिए बंद हो जाता है।
+
+• **आपके अपने जवाब पर कोई सीमा नहीं।** आप जो लिखकर भेजते हैं वह जाता है। और जो चैट शिकायतकर्ता ने खुद शुरू की हो, उसमें बॉट के जवाब भी पहले की तरह चलते हैं — दस्तावेज़ एक-एक करके माँगना वैसे ही चलता है।
+
+• **रुका हुआ मैसेज खोता नहीं।** वह क्लेम पर कारण के साथ दर्ज होता है। ज़रूरी हो तो **कॉल कीजिए या ईमेल भेजिए** — उन पर कोई सीमा नहीं।
+
+• **कोई भी STOP भेज सकता है**, और फिर हमें उन्हें WhatsApp पर मैसेज नहीं करना है। कोई क्वेरी लिखने से पहले स्क्रीन बताएगी: **STOPPED — WhatsApp नहीं**, या आज और इस हफ़्ते कितने मैसेज बचे हैं। दोबारा चाहिए तो वे **START** भेजते हैं।
+
+• **अब हर क्लेम पर "क्लेम रजिस्टर हुआ" मैसेज जाता है**, चाहे वह किसी भी रास्ते से आया हो — ₹499 वेबसाइट क्लेम और आपके द्वारा सब्सक्राइबर की ओर से रेज़ किए गए क्लेम भी, जिन पर पहले कुछ नहीं जाता था।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-16 — Documents open where you are standing
 
 **Title (EN):**

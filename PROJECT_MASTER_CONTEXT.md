@@ -6763,6 +6763,53 @@ and `claimId` was referenced outside its scope in `docsRender` (`node --check` c
 `test_lock` 41, all against a fresh copy of the live DB with `NIDAAN_NO_OUTBOUND=1`; **183/183** in
 the browser against the live site after deploy.
 
+## A101 — [NIDAAN] HOW OFTEN WE ARE ALLOWED TO SPEAK FIRST (Sep 16 2026)
+
+**The founder's decision:** start sending claim-registered to complainants, but *"we no need to
+bombardment of messages and also we need to provide user to stop receiving messages option to
+safeguard our whatsapp number"* — then the numbers: **2 a day, 5 a week per complainant**, *"for
+only reasonable messages not unnecessary messages"*.
+
+**One gate: `biz_nidaan_wa_guard.decide()`, called inside `biz_nidaan_whatsapp._post`** — the one
+place every Nidaan WhatsApp message passes through. A cap on any other line is a cap with a way
+around it. The class of each outbound is stored on the row (`nidaan_wa_messages.send_class`), so the
+count is the log itself and cannot drift; old rows are empty and simply not counted, which is why
+the caps begin from the day they are switched on rather than judging history.
+
+| class | what it is | treatment |
+|---|---|---|
+| `initiated` | us speaking first — journey, reminders out of session, campaigns | **2/day, 5/week** |
+| `conversation` | the bot answering inside the 24h window THEY opened | burst guard only (12/day) |
+| `human` | a staff member typing | never held |
+| `critical` | failed payment, an authorisation they just gave | counted, never held |
+| `consent` | the STOP/START confirmation itself | always sent |
+| `business` | staff, branch partners | not capped |
+
+**Why conversation is not capped:** document collection is a back-and-forth the complainant
+started ("here is the discharge summary" → "now the policy copy"). Two a day would break the
+founder's other priority — a strong document-collection process. The burst guard still stands in
+the way of a runaway loop, which is what actually endangers our number.
+
+**The way out, and the way back.** STOP says what it costs (*"no claim updates here; we would still
+call or email you"*) and how to return; sent as `consent` so it reaches someone who just opted out.
+START re-enables and confirms. `stopped_at` / `stop_source` record when and how. The STOP line rides
+on every 3rd message we start **and the first** — Meta templates carry fixed approved wording, so it
+goes on free-form text.
+
+**A held message is visible:** written on the claim's timeline with the reason, and deliberately NOT
+into the WhatsApp thread (that thread is what was actually exchanged). Campaigns count held as
+*skipped*, not *failed*.
+
+**Two silent doors closed:** `ensure_claim_for_paid_purchase` (the D2C ₹499 funnel) and
+raise-on-behalf created claims and told the complainant nothing. Both now announce, so every intake
+channel behaves the same.
+
+**Fail-open, deliberately:** a guard that cannot read the database lets the message through.
+
+**Proof:** `test_caps` 30 — run with fake Meta credentials AND a stubbed HTTP client, because either
+one alone failing would mean a test messaging live complainants. Six other suites re-run, 183/183 in
+the browser, and a read-only check against live contacts after deploy.
+
 ---
 
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),

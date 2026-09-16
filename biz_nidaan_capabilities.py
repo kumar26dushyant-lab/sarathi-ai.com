@@ -707,6 +707,16 @@ CAPABILITIES: list[dict] = [
     },
     # Documents & money-watching (Sep 2026)
     {
+        "id": "wa_message_limits",
+        "en": {"t": "How often we message a complainant (and their way out)",
+               "d": "We start at most 2 WhatsApp messages a day and 5 a week with one person. Your own typed replies are never limited, and neither is the bot answering inside a chat they started. Anyone can reply STOP to stop updates and START to get them back; a held message is written on the claim so nothing goes missing.",
+               "u": "Before you write, the query screen says STOPPED → no WhatsApp, or how many messages are left today and this week."},
+        "hi": {"t": "\u0939\u092e \u0936\u093f\u0915\u093e\u092f\u0924\u0915\u0930\u094d\u0924\u093e \u0915\u094b \u0915\u093f\u0924\u0928\u0940 \u092c\u093e\u0930 \u092e\u0948\u0938\u0947\u091c \u0915\u0930\u0924\u0947 \u0939\u0948\u0902 (\u0914\u0930 \u0909\u0928\u0915\u093e \u092c\u0902\u0926 \u0915\u0930\u0928\u0947 \u0915\u093e \u0930\u093e\u0938\u094d\u0924\u093e)",
+               "d": "\u0939\u092e \u0916\u0941\u0926 \u0938\u0947 \u090f\u0915 \u0935\u094d\u092f\u0915\u094d\u0924\u093f \u0915\u094b \u0926\u093f\u0928 \u092e\u0947\u0902 \u091c\u093c\u094d\u092f\u093e\u0926\u093e \u0938\u0947 \u091c\u093c\u094d\u092f\u093e\u0926\u093e 2 \u0914\u0930 \u0939\u092b\u093c\u094d\u0924\u0947 \u092e\u0947\u0902 5 WhatsApp \u092e\u0948\u0938\u0947\u091c \u092d\u0947\u091c\u0924\u0947 \u0939\u0948\u0902\u0964 \u0906\u092a\u0915\u0947 \u0905\u092a\u0928\u0947 \u091c\u0935\u093e\u092c \u092a\u0930 \u0915\u094b\u0908 \u0938\u0940\u092e\u093e \u0928\u0939\u0940\u0902, \u0914\u0930 \u0928 \u0939\u0940 \u0909\u0938 \u091a\u0948\u091f \u092a\u0930 \u091c\u094b \u0909\u0928\u094d\u0939\u094b\u0902\u0928\u0947 \u0936\u0941\u0930\u0942 \u0915\u0940 \u0939\u094b\u0964 \u0915\u094b\u0908 \u092d\u0940 STOP \u092d\u0947\u091c\u0915\u0930 \u0905\u092a\u0921\u0947\u091f \u092c\u0902\u0926 \u0915\u0930 \u0938\u0915\u0924\u093e \u0939\u0948 \u0914\u0930 START \u0938\u0947 \u0926\u094b\u092c\u093e\u0930\u093e \u091a\u093e\u0932\u0942\u0964",
+               "u": "\u0932\u093f\u0916\u0928\u0947 \u0938\u0947 \u092a\u0939\u0932\u0947 \u0938\u094d\u0915\u094d\u0930\u0940\u0928 \u092c\u0924\u093e\u0924\u0940 \u0939\u0948: STOPPED → WhatsApp \u0928\u0939\u0940\u0902, \u092f\u093e \u0906\u091c \u0914\u0930 \u0907\u0938 \u0939\u092b\u093c\u094d\u0924\u0947 \u0915\u093f\u0924\u0928\u0947 \u092e\u0948\u0938\u0947\u091c \u092c\u091a\u0947 \u0939\u0948\u0902\u0964"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "claim_documents",
         "en": {"t": "Open a claim's documents without downloading them",
                "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary') and it is saved on the claim. Any file except video, up to 25 MB, virus-scanned before it is stored.",
