@@ -3845,6 +3845,27 @@ const _L2_STAGES = [
   ['intimated','Intimated'],['assigned','Assigned'],['in_review','In review'],
   ['in_negotiation','In negotiation'],['resolved_won','Won'],['resolved_lost','Lost'],
   ['closed','Closed'],['withdrawn','Withdrawn']];
+// Where a claim stands in Consolidation, and the last thing that actually happened on it.
+// A status word alone never answered "is anyone doing anything with this?" (founder, 16 Sep).
+function _whereAndWhat(c){
+  const stage = (c.pipeline_stage || '').trim();
+  const where = stage
+    ? '<span style="background:rgba(34,211,238,.14);color:var(--nd-cyan-text);border-radius:8px;'
+      + 'padding:.05rem .4rem;font-weight:700">' + esc(stage.replace(/_/g, ' ')) + '</span>'
+      + ((c.pipeline_sub || '').trim() ? ' <span style="color:var(--nd-text-faint)">'
+          + esc(String(c.pipeline_sub).replace(/_/g, ' ')) + '</span>' : '')
+    : (c.l2_handover_at
+        ? '<span style="color:var(--nd-text-muted)">Handed over — to start</span>'
+        : '<span style="color:var(--nd-text-disabled)">Not in Consolidation</span>');
+  const what = (c.last_activity || '').trim();
+  if (!what) return where + '<br><span style="color:var(--nd-text-disabled)">No activity recorded</span>';
+  const when = c.last_activity_at ? ndUI.timeAgo(c.last_activity_at) : '';
+  const short = what.length > 70 ? what.slice(0, 68) + '…' : what;
+  return where + '<br><span style="color:var(--nd-text-muted)" title="' + esc(what) + '">'
+    + esc(short) + (when ? ' <span style="color:var(--nd-text-faint)">· ' + esc(when) + '</span>' : '')
+    + '</span>';
+}
+
 function _claimStageLabel(s){ const f=_L2_STAGES.find(x=>x[0]===s); return f?f[1]:((s||'—').replace(/_/g,' ')); }
 
 // "Insured" is a word most people never use. On a health claim the person IS the patient, so we
@@ -3907,7 +3928,11 @@ function _authBadge(c){
 function _portalBadge(c){
   if(!c.portal_created) return '<span style="color:var(--nd-text-faint)">🖥️ no dashboard</span>';
   const admin=(_role==='super_admin'||_role==='sub_super_admin');
-  const enter = (admin && c.portal_token) ? ` <a href="/nidaan/claim/magic?token=${encodeURIComponent(c.portal_token)}&staff=1" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--nd-cyan-text)">enter ↗</a>` : '';
+  // "Enter" used to be the complainant's own magic link with &staff=1 pinned on - a flag anybody
+  // could type. It now asks the server for a short staff PREVIEW session: it shows exactly what
+  // the complainant sees, cannot accept the fee terms, and dies in 20 minutes.
+  const enter = (admin && c.portal_token)
+    ? ` <a href="#" onclick="event.stopPropagation();event.preventDefault();portalPreview(${c.claim_id});return false" style="color:var(--nd-cyan-text)">enter ↗</a>` : '';
   return `<span>🖥️ ${c.portal_opened?'opened':'not opened'}</span>${enter}`;
 }
 function _contactBadge(c){
@@ -4151,10 +4176,21 @@ async function loadOutcomeClaims(key, outcome, title, sub){
   if(isL2) _renderL2Views();
   _renderOutcome(key);
 }
+// A claim that has already been handed over is being worked in Consolidation. It used to sit in
+// BOTH lists, so L2 Claims kept showing work nobody there had left to do (founder, 16 Sep). Sending
+// one back clears the handover, and then it appears here again - which is exactly what send-back is
+// for. Claims already inside a bucket are hidden the same way, including older ones that were
+// migrated into the line before the handover step existed.
+function _l2MovedOn(c){
+  return !!(c && (c.l2_handover_at || (c.pipeline_stage || '').trim()));
+}
+
 function _renderOutcome(key){
   const wrap = document.getElementById('oc_'+key+'_wrap'); if(!wrap) return;
   const isL2 = key==='l2claims';
-  const all = _outcomeCache[key] || [];
+  const everything = _outcomeCache[key] || [];
+  const all = isL2 ? everything.filter(function(c){ return !_l2MovedOn(c); }) : everything;
+  const movedOn = isL2 ? everything.length - all.length : 0;
   // Metrics matrix (L2 only) — from the FULL set, independent of the active filter.
   if(isL2){
     const m = document.getElementById('oc_l2claims_metrics');
@@ -4170,7 +4206,11 @@ function _renderOutcome(key){
         ${card('Disputed', '₹'+fmt(disputed))}
         ${card('Sent to ClaimShield', sent, 'var(--nd-cyan-text)')}
         ${card('Not sent', all.length-sent, 'var(--nd-text-secondary)')}
-      </div>`;
+      </div>
+      ${movedOn ? `<div style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.4rem">
+        ${movedOn} more ${movedOn===1?'claim has':'claims have'} already been handed over and
+        ${movedOn===1?'is':'are'} being worked in
+        <a href="#l2" onclick="showPanel('l2');return false" style="color:var(--nd-cyan-text)">⚖️ Consolidation</a>.</div>` : ''}`;
     }
   }
   const q = (((document.getElementById('oc_'+key+'_s')||{}).value)||'').toLowerCase();
@@ -4441,6 +4481,7 @@ function _renderClaimResults(){
       <td style="font-size:.8rem">${_sourceBadge(c)}</td>
       <td style="font-size:.72rem;line-height:1.5">${_authBadge(c)}<br>${_portalBadge(c)}</td>
       <td>${esc(c.assigned_staff_name||'—')}</td>
+      <td style="font-size:.74rem;line-height:1.45;max-width:230px">${_whereAndWhat(c)}</td>
       <td style="text-align:center">${(c.pending_tasks||0)>0?`<span style="background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;padding:.1rem .45rem;font-size:.72rem;font-weight:700">${c.pending_tasks}</span>`:'<span style="color:var(--nd-text-disabled)">0</span>'}</td>
       <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.created_at)}</td>
     </tr>`).join('');
@@ -4455,7 +4496,7 @@ function _renderClaimResults(){
   if(cv==='board'){ bodyHtml = _renderClaimBoard(claims); }
   else if(cv==='cards'){ bodyHtml = _renderClaimCards(claims); }
   else bodyHtml = `<div class="table-wrap"><table>
-        <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
+        <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Where it is &amp; last activity</th><th>Tasks</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
   // Admin cleanup bar: archive/restore test-garbage claims + toggle the Archived view.
   const archView = !!window._claimsArchivedView;
@@ -6288,6 +6329,29 @@ async function emailClaimPortalLink(claimId, btn){
   }catch(e){ ndUI.toast('Network error','error'); if(btn){ btn.disabled=false; btn.textContent='✉️ Email to complainant'; } }
 }
 
+// Look at the complainant's own page as they see it. Staff cannot receive the complainant's
+// code - and should not: the point of the code is that whoever accepts the fee terms is the
+// person whose number we hold. So ops gets its own read-only session instead.
+async function portalPreview(claimId){
+  // The tab is opened BEFORE the await, or the browser treats it as a pop-up and blocks it.
+  const tab = window.open('', '_blank');
+  try{
+    const r = await API('/claims/' + claimId + '/portal/preview');
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || !d.link){
+      if (tab) tab.close();
+      ndUI.toast(_extractErr(d, 'Could not open the preview'), 'error');
+      return;
+    }
+    if (tab) tab.location = d.link; else window.location = d.link;
+    ndUI.toast('Staff preview — read-only, ' + (d.minutes || 20) + ' minutes', 'success');
+  }catch(e){
+    if (tab) tab.close();
+    ndUI.toast('Could not open the preview.', 'error');
+  }
+}
+window.portalPreview = portalPreview;
+
 async function loadClaimWatchers(claimId){
   const el = document.getElementById('claimWatchersArea_'+claimId); if(!el) return;
   try {
@@ -6734,7 +6798,9 @@ function exportAccountsCSV(){
   opsDownloadCSV('nidaan-accounts_'+new Date().toISOString().slice(0,10)+'.csv', rows);
 }
 function exportL2CSV(){
-  const list = _outcomeCache['l2claims']||[];
+  // The same claims the screen is showing - ones already handed over are being worked in
+  // Consolidation, so exporting them here would put the same claim on two people's lists.
+  const list = (_outcomeCache['l2claims']||[]).filter(function(c){ return !_l2MovedOn(c); });
   const rows = [['Claim #','Insured / Patient','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber','Referred by','Ref code','Delivered']]
     .concat(list.map(c=>{
       const owner=(c.owner_name||'').trim();
@@ -14145,28 +14211,20 @@ async function hoOpen(claimId){
   const rd = d.readiness || {};
   const blocks = rd.blocks || [];
 
-  const q = (d.questions || []).map(function(x){
-    return '<label style="display:flex;gap:.5rem;align-items:flex-start;padding:.45rem 0;'
-      + 'border-bottom:1px solid var(--nd-border);cursor:pointer">'
-      + '<input type="checkbox" id="ho_' + x.key + '" style="margin-top:.25rem">'
-      + '<span style="flex:1;min-width:0">'
-      +   '<span style="font-weight:600;color:var(--nd-text-primary)">' + esc(x.label) + '</span>'
-      +   (x.required ? ' <span class="req">*</span>' : '')
-      +   (x.detail ? '<div style="font-size:.8rem;color:var(--nd-warning-text)">' + esc(x.detail) + '</div>' : '')
-      +   (x.why ? '<div style="font-size:.76rem;color:var(--nd-text-faint)">' + esc(x.why) + '</div>' : '')
-      + '</span></label>';
-  }).join('');
+  // The two confirm tick-boxes are gone (founder, 16 Sep): 'All documents received'
+  // is ticked a step earlier and is the real gate - being asked to confirm the same
+  // thing again taught people to tick without reading. The NOTE stays, because the
+  // Level-2 team picks this claim up cold.
 
   body.innerHTML =
       (blocks.length
         ? '<div class="l2ban red">⛔ This claim cannot be handed over yet:<br>'
           + blocks.map(function(b){ return '• <b>' + esc(b.label) + '</b> — ' + esc(b.detail); }).join('<br>')
           + '</div>'
-        : '<div class="l2ban info">Confirm what you have checked. Anything you tick is recorded '
-          + 'against your name, so the Level-2 team knows what was looked at.</div>')
+        : '<div class="l2ban info">Documents are already ticked off before this point. Just tell '
+          + 'the Level-2 team what they need to know.</div>')
     + '<div style="font-size:.8rem;color:var(--nd-text-muted);margin-bottom:.3rem">'
     +   'Came in as: <b>' + esc(rd.origin || '—') + '</b></div>'
-    + '<div class="l2sec">Please confirm</div>' + q
     + '<div class="l2fld" style="margin-top:.7rem"><label>Note for the Level-2 team <span class="req">*</span></label>'
     +   '<textarea id="hoNote" rows="3" maxlength="600" placeholder="What they need to know before '
     +     'they pick this up — anything unusual, anything still being chased…"></textarea>'
@@ -14185,22 +14243,11 @@ async function hoSend(force){
   if (!_hoQ) return;
   const id = _hoQ.claim_id;
   const msg = document.getElementById('hoMsg');
-  const checks = {};
-  (_hoQ.d.questions || []).forEach(function(x){
-    const e = document.getElementById('ho_' + x.key);
-    checks[x.key] = !!(e && e.checked);
-  });
   const note = (document.getElementById('hoNote') || {}).value || '';
-  // An unticked question does NOT stop the handover. It becomes something the note has to
-  // answer, and what was left unconfirmed travels to the Level-2 team with the claim.
-  const miss = (_hoQ.d.questions || []).filter(function(x){ return x.required && !checks[x.key]; });
   if (!note.trim()){
     if (msg){
       msg.style.color = 'var(--nd-danger-text)';
-      msg.textContent = miss.length
-        ? ('You have not confirmed: ' + miss.map(function(x){ return x.label; }).join('; ')
-           + '. You can still hand it over — say why in the note and Level-2 will see it.')
-        : 'Add a note for the Level-2 team.';
+      msg.textContent = 'Add a note for the Level-2 team.';
     }
     const n = document.getElementById('hoNote');
     if (n) n.focus();
@@ -14209,7 +14256,7 @@ async function hoSend(force){
   if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Handing over…'; }
   try{
     const r = await API('/cases/' + id + '/handover' + (force ? '?force=1' : ''),
-      {method:'POST', body: JSON.stringify({note: note, checks: checks})});
+      {method:'POST', body: JSON.stringify({note: note})});
     const d = await r.json().catch(function(){ return {}; });
     if (r.ok){
       closeModal();

@@ -1683,6 +1683,26 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_waverify_msisdn "
                            "ON nidaan_wa_verify(msisdn, vid DESC)")
 
+        # Proving it is really the complainant before their claim page opens. The portal link used
+        # to BE the credential - whoever held the URL could accept the success-fee terms. Now the
+        # link only gets you to "confirm it is you", and a code goes to the number or email ALREADY
+        # on the claim. The code is stored as a peppered HMAC, never in the clear, so reading this
+        # table cannot get anyone in. `sent_to` is the MASKED destination, for the trail only.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_verify (
+                vid         INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER NOT NULL,
+                channel     TEXT DEFAULT '',        -- whatsapp | email
+                sent_to     TEXT DEFAULT '',        -- masked, e.g. "•••• 1753"
+                code_hash   TEXT NOT NULL,
+                attempts    INTEGER DEFAULT 0,
+                consumed    INTEGER DEFAULT 0,
+                expires_at  TIMESTAMP,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_claimverify_claim "
+                           "ON nidaan_claim_verify(claim_id, vid DESC)")
+
         # Feedback on a shared design document (ops/stakeholder review pages). Nothing to do with
         # claims — a comment surface so a design can be reviewed by people who are not staff users.
         await conn.execute("""

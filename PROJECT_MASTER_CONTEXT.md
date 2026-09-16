@@ -6810,6 +6810,101 @@ channel behaves the same.
 one alone failing would mean a test messaging live complainants. Six other suites re-run, 183/183 in
 the browser, and a read-only check against live contacts after deploy.
 
+## A102 — [NIDAAN] THE CLAIM PANEL, 14 ITEMS FROM THE FOUNDER (Sep 16 2026)
+
+He listed fourteen things after a live session and asked to discuss before anything moved. What
+the discussion turned up, and what shipped:
+
+**Already there, just not everywhere.** The insurance-company list (`NidaanInsurers`, 40 companies
++ "Other") existed and was used by the branch, dashboard and intake forms — only the claim's own
+Edit form still took free text. `complainant_name` / `complainant_phone` existed as columns,
+backfilled from the insured, and no screen showed them. `review_findings` sat on 100 claims with
+nowhere to read it. Three of his fourteen items were surfacing what we already had.
+
+**Three sections were doing the same job.** The panel had a Documents button-box, a second
+Documents list, and a document-collection block inside the Complainant Portal — same papers, three
+places. Now one section.
+
+**Why the ticks were wrong.** A checklist line only went green when somebody picked the document's
+name from the upload dropdown (or the WhatsApp bot recognised it). Files arriving by post, by hand
+or named `IMG_2231` never ticked anything — "9 attached, 3 of 5". The founder chose **manual tick
+boxes over name-matching**: *"no automation, simple manual work, would be good for now"*. That is
+also the safer call — a wrong guess means we stop asking for a paper we never received.
+
+**The health list is his eight** (policy, rejection/bill summary, final bill with receipts, claim
+form, discharge summary, KYC, the case email ID, any other documents). The four that existed KEEP
+THEIR KEYS — a tick is stored against the key, so relabelling cost none of the 33 live ticks.
+Checked before shipping: **0 chases armed anywhere**, so the longer list could not wake an
+automatic nudge on any of the 134 health claims.
+
+**The case email ID.** Asking for an email password reads like phishing as one line on a list, so
+the ask now carries: create a NEW account for this case, we write to the insurance company and the
+authorities from it, and when the case ends change the password or delete it — in the language
+their WhatsApp contact already remembers (hi / hinglish / en).
+
+**Assigning narrowed to six people, without losing anybody.** `claim_handler_ids` (an ops setting,
+so it changes without a deploy) flags the six; the dropdown offers them. **17 live claims are
+assigned to 7 people outside that list** — they stay as removable chips.
+
+**The order is data, not layout surgery.** Each section states its place (`data-ord`) and
+`_claimPopLayout` sorts by it, so his 1–8 sequence is set once in the template. On a phone, where
+it is one column, that IS the reading order.
+
+**Two screens disagreeing.** A handed-over claim sat in L2 Claims AND Consolidation. L2 Claims now
+hides anything with `l2_handover_at` or a `pipeline_stage` (metrics and CSV follow the same rule) —
+and a send-back clears the handover, which is exactly how it returns.
+
+**Removed on evidence, not opinion.** Follow-ups: 3 ever created, last 1 Sep. Claim tasks: 2 claims
+ever, last 25 Jul. The Tasks module itself: 657 tasks, used the same morning — untouched.
+
+**Still to do (his item 7):** the complainant portal is a magic link today. He wants it opened only
+by the registered email/mobile. Left until last on purpose: get it wrong and a complainant cannot
+reach their own case.
+
+**Proof:** `test_panel` 19, `test_docs` 33, `test_flow` 18, plus the earlier suites re-run; browser
+checks 183 → ~215 across the four passes, each verified against the live site after deploy.
+
+## A103 — [NIDAAN] THE PORTAL LINK STOPS BEING A KEY (Sep 16 2026)
+
+**The founder's reason:** *"no random person should open the link and authorized, we want to ensure
+it's authorized by the complainant, that's why the registered email/mobile is the one thing our
+magic link can identify, and collect authorization from right person."*
+
+**What was true before.** The portal link WAS the credential. `_claimant_ctx` resolved the access
+token straight to the claim, so anyone holding the URL — forwarded in a family group, left open on
+a shared phone — could read the claim, upload documents, and **accept the success-fee terms**. That
+last one is the whole reason this mattered: the acceptance is the document we rely on.
+
+**What it is now.** Three endpoints accept the link (`_claimant_link_ctx`): where can we send a
+code, send it, check it. Everything else — `/api/me`, document upload, document delete, consent —
+requires a **session** (`nidaan_claim_session`, JWT, 12h) that only a correct code mints.
+
+- The channels offered are the ones ALREADY on the claim, shown masked (`•••• 1753`,
+  `p*****@gmail.com`). A request naming its own destination is refused by the schema — a code you
+  can redirect proves nothing.
+- Codes: 6 digits, peppered HMAC at rest (`nidaan_claim_verify`), 10 minutes, dead after 5 wrong
+  tries, 5 an hour per claim so the link cannot be used to hammer somebody's phone.
+- The WhatsApp code is sent as `critical`, so the 2-a-day caps never hold up somebody standing at
+  the door waiting for it.
+
+**Staff.** A staffer cannot receive the complainant's code and should not: the point is that
+whoever accepts is the person whose number we hold. So ops mints its own **preview session** — 20
+minutes, read-only, and the consent endpoint refuses it with a message saying why. This replaces
+`?staff=1` on the magic link, a flag anybody could type.
+
+**A side effect worth having:** first-open used to be stamped when the link was clicked — which
+proved only that somebody clicked. It is now stamped when they enter the code, and the claim
+records which channel they proved it on.
+
+**Checked before building:** all 36 live portals have a phone on file, 28 also an email, **none
+have neither** — so nobody can be locked out by this. 13 had already accepted; their acceptance
+stands untouched.
+
+**Proof:** `test_portal` 36 — including that the link alone can no longer read the claim or accept
+the terms, that the code goes to the contact on the claim and not to one named in the request, that
+five wrong tries kill it, that a session is bound to one claim, and that the staff preview can look
+but never accept.
+
 ---
 
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),

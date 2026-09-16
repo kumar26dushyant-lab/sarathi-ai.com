@@ -2648,6 +2648,38 @@ def create_branch_magic_token(branch_code: str, email: str, minutes: int = 20) -
     return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
 
 
+def create_claim_session_token(claim_id: int, minutes: int = 720, preview: bool = False) -> str:
+    """The complainant's session, minted only after they have entered the code we sent to the
+    contact already on their claim. This - not the portal link - is what opens the claim.
+
+    `preview` is the staff version: ops mints one to look at what the complainant sees, so a
+    staffer never needs the complainant's code. A preview session can look and cannot accept
+    the success-fee terms; the consent endpoint refuses it."""
+    now = int(time.time())
+    payload = {
+        "typ": "nidaan_claim_session",
+        "sub": str(int(claim_id)),
+        "pv": 1 if preview else 0,
+        "iat": now,
+        "exp": now + max(1, int(minutes)) * 60,
+    }
+    return _jwt_lib.encode(payload, _nidaan_secret(), algorithm="HS256")
+
+
+def verify_claim_session_token(token: str) -> Optional[dict]:
+    """Decode a complainant session → {claim_id, preview}, or None if it is not one / expired."""
+    try:
+        payload = _jwt_lib.decode(token, _nidaan_secret(), algorithms=["HS256"])
+        if payload.get("typ") != "nidaan_claim_session":
+            return None
+        cid = int(payload.get("sub") or 0)
+        if not cid:
+            return None
+        return {"claim_id": cid, "preview": bool(payload.get("pv"))}
+    except Exception:
+        return None
+
+
 def verify_branch_magic_token(token: str) -> Optional[dict]:
     """Decode a branch magic-login token → {branch_code, email}, or None."""
     try:
@@ -6891,7 +6923,16 @@ async def get_claims_ops(
                                       WHERE r.note_id = cn.note_id AND r.staff_id = ?)) AS unseen_notes,
                     cp.access_token AS portal_token, cp.activated_at AS portal_activated_at,
                     cp.consent_accepted_at AS consent_accepted_at, cp.consent_pushed_at AS consent_pushed_at,
-                    CASE WHEN cp.claim_id IS NOT NULL THEN 1 ELSE 0 END AS portal_exists
+                    CASE WHEN cp.claim_id IS NOT NULL THEN 1 ELSE 0 END AS portal_exists,
+                    -- The last thing that actually happened on this claim, so All Claims can show
+                    -- it beside the Consolidation bucket instead of only a status word. Indexed on
+                    -- claim_id (idx_claimact_claim), one row each.
+                    (SELECT act.summary FROM nidaan_claim_activity act
+                      WHERE act.claim_id = c.claim_id
+                      ORDER BY act.act_id DESC LIMIT 1) AS last_activity,
+                    (SELECT act.created_at FROM nidaan_claim_activity act
+                      WHERE act.claim_id = c.claim_id
+                      ORDER BY act.act_id DESC LIMIT 1) AS last_activity_at
                FROM nidaan_claims c
                JOIN nidaan_accounts a ON a.account_id = c.account_id
                LEFT JOIN nidaan_claimant_portal cp ON cp.claim_id = c.claim_id

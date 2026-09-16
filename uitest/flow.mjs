@@ -252,6 +252,20 @@ async function run() {
   chk(fk.clear, 'with a "Clear filters" button, so a filtered list is never mistaken for missing work');
   await page.evaluate(() => document.querySelector('#panel-claims .nd-clear').click());
   await page.waitForTimeout(600);
+  // 16 Sep (founder): All Claims says where a claim is in Consolidation and what last happened.
+  const col = await page.evaluate(() => {
+    const heads = [...document.querySelectorAll('#panel-claims thead th')].map(t => t.textContent.trim());
+    const i = heads.findIndex(h => /where it is/i.test(h));
+    const rows = [...document.querySelectorAll('#panel-claims tbody tr')].slice(0, 40);
+    const cells = rows.map(r => (r.cells[i] || {}).innerText || '').filter(Boolean);
+    return { i, heads: heads.length, filled: cells.length, rows: rows.length,
+             sample: (cells.find(c => /\S/.test(c)) || '').replace(/\s+/g, ' ').slice(0, 70),
+             anyStage: cells.some(c => /Not in Consolidation|Handed over|pending|live cases|escalation/i.test(c)) };
+  });
+  chk(col.i >= 0, 'All Claims has a "Where it is & last activity" column');
+  chk(col.filled === col.rows && col.rows > 0,
+      `every row fills it (${col.filled} of ${col.rows})`);
+  chk(col.anyStage, `and it names the Consolidation stage (e.g. "${col.sample}")`);
   await page.goto(`${BASE}/nidaan/ops#claims`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#claimSearch', { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1200);
@@ -437,6 +451,30 @@ async function run() {
       gated: document.querySelectorAll('#oc_l2claims_wrap [onclick*="l2DocsNeeded"]').length,
       docs: document.querySelectorAll('#oc_l2claims_wrap [onclick*="docsOpen"]').length,
     }));
+    if (v === 'table') {
+      // 16 Sep (founder): a claim that has been handed over is being worked in Consolidation and
+      // must not still sit in L2 Claims - it was appearing in both lists.
+      const moved = await page.evaluate(() => {
+        // _outcomeCache is a top-level `let`, so it is NOT a property of window - reference it
+        // by name, the way the page's own code does.
+        const all = (typeof _outcomeCache !== 'undefined' && _outcomeCache['l2claims']) || [];
+        const handed = all.filter(c => c.l2_handover_at || (c.pipeline_stage || '').trim());
+        // Read the ids the ROWS actually carry (their open-the-claim handler), not the panel's
+        // text - "44" appears inside plenty of rupee amounts.
+        const shown = [...document.querySelectorAll('#oc_l2claims_wrap [onclick*="openClaimDrawer("]')]
+          .map(el => parseInt((el.getAttribute('onclick').match(/openClaimDrawer\((\d+)\)/) || [])[1], 10))
+          .filter(n => !isNaN(n));
+        return { total: all.length, handed: handed.length,
+                 ids: handed.map(c => c.claim_id), shown };
+      });
+      // The data has to be loaded for this to mean anything - an empty list would "pass" while
+      // proving nothing.
+      chk(moved.total > 0, `L2 Claims has data to judge (${moved.total} claims)`);
+      const stillListed = moved.ids.filter(id => moved.shown.includes(id));
+      chk(moved.handed > 0 && stillListed.length === 0,
+          `the ${moved.handed} claims already handed over have left L2 Claims`
+          + (stillListed.length ? ` — still showing ${stillListed.join(', ')}` : ''));
+    }
     chk(t.ticks > 0, `${v} view: every waiting claim has an "All documents received" tick (${t.ticks})`);
     chk(t.docs === t.ticks, `${v} view: and a Documents button on each (${t.docs})`);
     chk(t.gated + t.moves === t.ticks,
@@ -581,7 +619,10 @@ async function run() {
     await page.evaluate(() => { const o = document.getElementById('editEntityOv'); if (o) o.remove(); });
     // Buttons still work after the move: the documents window opens from the popup.
     await page.evaluate(() => document.querySelector('#drawerBody [onclick^="docsOpen"]').click());
-    await page.waitForTimeout(1500);
+    // Wait for the window to finish drawing rather than guessing at a delay: it fetches the
+    // files, the checklist and the claim before it renders.
+    await page.waitForSelector('#dcFile', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(300);
     chk(await page.evaluate(() => !!document.querySelector('.modal-bg.open')),
         'a button inside the popup still works (Open documents)');
     // 16 Sep (founder): "keep it manually tick-boxes" - every checklist line is tickable by hand,
@@ -874,6 +915,12 @@ async function run() {
     chk(ho.note, 'with a note box');
     chk(!/fee has not been paid/i.test(ho.body),
         'and does not claim the fee is unpaid on a covered claim');
+    // 16 Sep (founder): "the tick boxes should be gone and note kept" - documents are ticked off
+    // a step earlier, so confirming the same thing twice taught people to tick without reading.
+    const hoBoxes = await page.evaluate(() =>
+      document.querySelectorAll('#modalBody input[type=checkbox][id^="ho_"]').length);
+    chk(hoBoxes === 0, `the confirm tick-boxes are gone (${hoBoxes})`);
+    chk(!/please confirm/i.test(ho.body), 'and it no longer asks you to confirm what you just ticked');
     await shot(page, 'handover');
     await assertEscapable(page, 'handover dialog');
   }

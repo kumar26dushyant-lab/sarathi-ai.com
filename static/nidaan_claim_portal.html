@@ -95,7 +95,18 @@ var T = {
     timelineTitle:"Progress", updateTitle:"Latest update",
     reassure:"Rest assured — our legal team is working on your claim. You will see updates here.",
     expired:"This link is invalid or has expired. Please contact NidaanPartner for a fresh link.",
-    sending:"Saving…", ok:"OK"
+    sending:"Saving…", ok:"OK",
+    vTitle:"Is this you?",
+    vWhy:"Your claim page holds your documents and your authorisation, so we check it is really you before opening it. We will send a 6-digit code to the number or email already on your claim — not to anything typed here.",
+    vWhats:"Send the code on WhatsApp",
+    vEmail:"Send the code by email",
+    vSending:"Sending…",
+    vSent:"We sent a code to",
+    vEnter:"Enter the 6-digit code",
+    vOpen:"Open my claim page",
+    vAgain:"Send it again",
+    vNever:"⚠️ We will never ask you for this code — not on a call, not on WhatsApp.",
+    vNoWay:"We do not have a phone or email on your claim. Please call us and we will help you."
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
@@ -115,7 +126,18 @@ var T = {
     timelineTitle:"प्रगति", updateTitle:"ताज़ा अपडेट",
     reassure:"निश्चिंत रहें — हमारी कानूनी टीम आपके दावे पर काम कर रही है। अपडेट आपको यहाँ दिखेंगे।",
     expired:"यह लिंक अमान्य है या समाप्त हो गया है। कृपया नए लिंक के लिए NidaanPartner से संपर्क करें।",
-    sending:"सहेजा जा रहा है…", ok:"ठीक है"
+    sending:"सहेजा जा रहा है…", ok:"ठीक है",
+    vTitle:"क्या यह आप ही हैं?",
+    vWhy:"आपके क्लेम पेज पर आपके दस्तावेज़ और आपकी अनुमति होती है, इसलिए खोलने से पहले हम यह पक्का करते हैं कि यह आप ही हैं। 6 अंकों का कोड उसी नंबर या ईमेल पर जाएगा जो पहले से आपके क्लेम पर दर्ज है।",
+    vWhats:"WhatsApp पर कोड भेजें",
+    vEmail:"ईमेल पर कोड भेजें",
+    vSending:"भेजा जा रहा है…",
+    vSent:"कोड भेज दिया गया:",
+    vEnter:"6 अंकों का कोड डालें",
+    vOpen:"मेरा क्लेम पेज खोलें",
+    vAgain:"दोबारा भेजें",
+    vNever:"⚠️ हम आपसे यह कोड कभी नहीं पूछेंगे — न कॉल पर, न WhatsApp पर।",
+    vNoWay:"आपके क्लेम पर कोई फ़ोन या ईमेल दर्ज नहीं है। कृपया हमें कॉल कीजिए, हम मदद करेंगे।"
   }
 };
 function t(k){ return (T[LANG]||T.en)[k] || T.en[k] || k; }
@@ -139,16 +161,114 @@ function toggleLang(){
   if(DATA) render();
 }
 
+// The link gets you as far as "is this you?"; a code sent to the number or email already on the
+// claim is what actually opens it. SESSION is what every call below uses - the link itself no
+// longer opens anything, which is the whole point (founder, 16 Sep).
+var SESSION = "";
+function getSession(){
+  var h = (location.hash||"").replace(/^#/,"");
+  var m = /(?:^|&)s=([^&]+)/.exec(h);            // staff preview links carry #s=
+  if(m) return decodeURIComponent(m[1]);
+  try{ return sessionStorage.getItem("claim_session_" + TOKEN) || ""; }catch(e){ return ""; }
+}
+function keepSession(tok){
+  SESSION = tok;
+  try{ sessionStorage.setItem("claim_session_" + TOKEN, tok); }catch(e){}
+}
+function auth(){ return { "Authorization":"Bearer " + (SESSION || TOKEN) }; }
+
 async function load(){
   TOKEN = getToken();
   document.getElementById("langBtn").textContent = (LANG==="en") ? "हिंदी" : "English";
-  if(!TOKEN){ return showErr(); }
+  SESSION = getSession();
+  if(!TOKEN && !SESSION){ return showErr(); }
+  if(SESSION){
+    try{
+      var rs = await fetch("/nidaan/claim/api/me", { headers:{ "Authorization":"Bearer "+SESSION } });
+      if(rs.ok){ DATA = await rs.json(); return render(); }
+    }catch(e){}
+    SESSION = "";                                  // expired - ask them to confirm again
+    try{ sessionStorage.removeItem("claim_session_" + TOKEN); }catch(e){}
+    if(!TOKEN) return showErr();
+  }
+  return askWhoYouAre();
+}
+
+async function askWhoYouAre(){
+  var where = null;
   try{
-    var r = await fetch("/nidaan/claim/api/me", { headers:{ "Authorization":"Bearer "+TOKEN } });
-    if(!r.ok){ return showErr(); }
-    DATA = await r.json();
+    var r = await fetch("/nidaan/claim/api/verify/where", { headers: auth() });
+    if(!r.ok) return showErr();
+    where = await r.json();
+  }catch(e){ return showErr(); }
+  var ch = where.channels || [];
+  document.getElementById("greetWrap").innerHTML =
+    '<h1>' + esc(t("greet")) + (where.name ? " " + esc(where.name) : "") + '</h1>';
+  document.getElementById("reassure").textContent = "";
+  if(!ch.length){
+    document.getElementById("content").innerHTML =
+      '<div class="card"><h2>' + esc(t("vTitle")) + '</h2><p>' + esc(t("vNoWay")) + '</p></div>';
+    return;
+  }
+  var btns = ch.map(function(c){
+    return '<button class="btn" style="width:100%;margin-bottom:.5rem" onclick="sendCode(\'' + c.kind + '\')">'
+      + esc(c.kind === "whatsapp" ? t("vWhats") : t("vEmail"))
+      + ' <span style="opacity:.75">' + esc(c.masked) + '</span></button>';
+  }).join("");
+  document.getElementById("content").innerHTML =
+      '<div class="card">'
+    +   '<h2>🔒 ' + esc(t("vTitle")) + '</h2>'
+    +   '<p style="font-size:.92rem;line-height:1.5">' + esc(t("vWhy")) + '</p>'
+    +   '<div id="vPick" style="margin-top:.8rem">' + btns + '</div>'
+    +   '<div id="vCode" style="display:none;margin-top:.8rem">'
+    +     '<p id="vSentTo" style="font-size:.9rem"></p>'
+    +     '<input id="vInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" '
+    +       'placeholder="• • • • • •" '
+    +       'style="width:100%;font-size:1.5rem;letter-spacing:.35em;text-align:center;padding:.6rem;'
+    +       'border-radius:10px;border:1px solid #cbd5e1;margin:.3rem 0 .6rem">'
+    +     '<button class="btn" style="width:100%" onclick="checkCode()">' + esc(t("vOpen")) + '</button>'
+    +     '<button class="btn ghost" style="width:100%;margin-top:.4rem" onclick="askWhoYouAre()">'
+    +       esc(t("vAgain")) + '</button>'
+    +   '</div>'
+    +   '<p id="vMsg" style="font-size:.88rem;color:#b91c1c;min-height:1.2em"></p>'
+    +   '<p style="font-size:.82rem;color:#64748b">' + esc(t("vNever")) + '</p>'
+    + '</div>';
+}
+
+async function sendCode(kind){
+  var msg = document.getElementById("vMsg");
+  msg.style.color = "#64748b"; msg.textContent = t("vSending");
+  try{
+    var r = await fetch("/nidaan/claim/api/verify/start", { method:"POST",
+      headers:{ "Authorization":"Bearer "+TOKEN, "Content-Type":"application/json" },
+      body: JSON.stringify({ channel: kind }) });
+    var d = await r.json().catch(function(){ return {}; });
+    if(!r.ok){ msg.style.color = "#b91c1c"; msg.textContent = d.detail || "Could not send the code."; return; }
+    msg.textContent = "";
+    document.getElementById("vPick").style.display = "none";
+    document.getElementById("vCode").style.display = "";
+    document.getElementById("vSentTo").textContent = t("vSent") + " " + (d.masked||"");
+    var i = document.getElementById("vInput"); if(i) i.focus();
+  }catch(e){ msg.style.color = "#b91c1c"; msg.textContent = "Could not send the code."; }
+}
+
+async function checkCode(){
+  var msg = document.getElementById("vMsg");
+  var code = ((document.getElementById("vInput")||{}).value || "").trim();
+  msg.style.color = "#64748b"; msg.textContent = t("sending");
+  try{
+    var r = await fetch("/nidaan/claim/api/verify/check", { method:"POST",
+      headers:{ "Authorization":"Bearer "+TOKEN, "Content-Type":"application/json" },
+      body: JSON.stringify({ code: code }) });
+    var d = await r.json().catch(function(){ return {}; });
+    if(!r.ok){ msg.style.color = "#b91c1c"; msg.textContent = d.detail || "That code is not right."; return; }
+    keepSession(d.session);
+    msg.textContent = "";
+    var me = await fetch("/nidaan/claim/api/me", { headers: auth() });
+    if(!me.ok) return showErr();
+    DATA = await me.json();
     render();
-  }catch(e){ showErr(); }
+  }catch(e){ msg.style.color = "#b91c1c"; msg.textContent = "Could not check that code."; }
 }
 function showErr(){
   document.getElementById("greetWrap").innerHTML = "";
@@ -244,9 +364,9 @@ async function removeDoc(docId, btn){
   btn.disabled = true; btn.textContent = t("removing");
   try{
     var r = await fetch("/nidaan/claim/api/documents/"+docId, {
-      method:"DELETE", headers:{ "Authorization":"Bearer "+TOKEN } });
+      method:"DELETE", headers: auth() });
     if(r.ok){
-      var me = await fetch("/nidaan/claim/api/me",{headers:{"Authorization":"Bearer "+TOKEN}});
+      var me = await fetch("/nidaan/claim/api/me",{headers: auth()});
       DATA = await me.json(); render();
       return;
     }
@@ -262,8 +382,8 @@ async function uploadDocs(input){
   var fd = new FormData();
   for(var i=0;i<input.files.length;i++){ fd.append("files", input.files[i]); }
   try{
-    var r = await fetch("/nidaan/claim/api/documents/upload", { method:"POST", headers:{ "Authorization":"Bearer "+TOKEN }, body:fd });
-    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers:{"Authorization":"Bearer "+TOKEN}}); DATA = await me.json(); render(); }
+    var r = await fetch("/nidaan/claim/api/documents/upload", { method:"POST", headers: auth(), body:fd });
+    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers: auth()}); DATA = await me.json(); render(); }
     else { btn.disabled=false; btn.textContent=t("upload"); }
   }catch(e){ btn.disabled=false; btn.textContent=t("upload"); }
 }
@@ -296,8 +416,8 @@ if("serviceWorker" in navigator){
 async function accept(btn){
   btn.disabled = true; btn.textContent = t("sending");
   try{
-    var r = await fetch("/nidaan/claim/api/consent", { method:"POST", headers:{ "Authorization":"Bearer "+TOKEN } });
-    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers:{"Authorization":"Bearer "+TOKEN}}); DATA = await me.json(); render(); }
+    var r = await fetch("/nidaan/claim/api/consent", { method:"POST", headers: auth() });
+    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers: auth()}); DATA = await me.json(); render(); }
     else { btn.disabled=false; btn.textContent=t("accept"); }
   }catch(e){ btn.disabled=false; btn.textContent=t("accept"); }
 }

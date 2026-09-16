@@ -1,5 +1,115 @@
 # Staff Announcement Drafts
 
+## 2026-09-16 (4) — The complainant's page now checks it is really them
+
+**Title (EN):**
+🔒 A claim link no longer opens a claim by itself
+
+**Details (EN):**
+• **Sending someone their claim link is no longer enough to open it.** When they tap it, the page asks them to confirm it is them: a **6-digit code** goes to the **number or email already on their claim** — their choice of WhatsApp or email — and only that opens the page.
+
+• **Why:** that page holds their documents and their authorisation of our fee. A link can be forwarded in a family group or left open on a shared phone. The code makes sure the person who accepts the terms is the person whose number we hold.
+
+• **We will NEVER ask a complainant for that code** — not on a call, not on WhatsApp. If anyone tells you a caller asked them for it, that is not us; tell a super admin the same day.
+
+• **To see what the complainant sees**, use **enter ↗** on the claim as before. You get a **20-minute read-only preview**. You cannot accept the terms on their behalf — and should not: only they can.
+
+• **If they cannot get the code:** check the number and email on the claim first (✏️ Edit on Claim Info). If both are wrong or missing, fix them and send the link again. If they are on the phone with you and stuck, tell a super admin rather than working around it.
+
+• Nothing changes for the **13 complainants who have already accepted** their terms — their acceptance stands.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🔒 अब सिर्फ़ लिंक से क्लेम पेज नहीं खुलता
+
+**Details (HI):**
+• **किसी को क्लेम लिंक भेज देना अब पेज खोलने के लिए काफ़ी नहीं है।** लिंक खोलने पर पेज पूछता है कि क्या यह वही व्यक्ति है: **6 अंकों का कोड** उसी **नंबर या ईमेल** पर जाता है जो पहले से क्लेम पर दर्ज है — WhatsApp या ईमेल, उनकी पसंद — और उसी से पेज खुलता है।
+
+• **क्यों:** उस पेज पर उनके दस्तावेज़ और हमारी फ़ीस की अनुमति होती है। लिंक परिवार के ग्रुप में फ़ॉरवर्ड हो सकता है या साझा फ़ोन पर खुला रह सकता है। कोड यह पक्का करता है कि शर्तें वही व्यक्ति स्वीकार करे जिसका नंबर हमारे पास है।
+
+• **हम शिकायतकर्ता से वह कोड कभी नहीं पूछेंगे** — न कॉल पर, न WhatsApp पर। अगर कोई कहे कि किसी ने कोड माँगा, तो वह हम नहीं हैं; उसी दिन सुपर एडमिन को बताइए।
+
+• **शिकायतकर्ता को क्या दिखता है यह देखने के लिए** क्लेम पर **enter ↗** वैसे ही इस्तेमाल कीजिए। आपको **20 मिनट का सिर्फ़-देखने वाला प्रीव्यू** मिलेगा। आप उनकी ओर से शर्तें स्वीकार नहीं कर सकते — और करनी भी नहीं चाहिए।
+
+• **अगर उन्हें कोड न मिले:** पहले क्लेम पर दर्ज नंबर और ईमेल जाँचिए (Claim Info पर ✏️ Edit)। ग़लत या ख़ाली हों तो सुधारकर लिंक दोबारा भेजिए। अगर वे फ़ोन पर हैं और अटके हैं, तो कोई रास्ता निकालने की बजाय सुपर एडमिन को बताइए।
+
+• जिन **13 शिकायतकर्ताओं ने शर्तें पहले ही स्वीकार कर ली हैं**, उनके लिए कुछ नहीं बदला — उनकी स्वीकृति वैसी ही दर्ज है।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
+## 2026-09-16 (3) — The claim screen, tidied
+
+**Title (EN):**
+🧹 One documents box · ☑️ Tick what has arrived · 👥 The complainant is on the screen
+
+**Details (EN):**
+• **Tick the checklist yourself.** A document only turned green if you picked its name from the dropdown while uploading it — so a claim could show nine files attached and "3 of 5" on the list. **Now every line has a tick box.** Tick what has reached us, however it reached us: by post, by hand, by email. **Only unticked documents are asked for**, so nobody is chased for a paper they already sent.
+
+• **One documents box, not three.** The papers, the button to attach more, and "ask the complainant for what is missing" are now in the same place on the claim.
+
+• **The health checklist is now eight documents** — policy, rejection letter / bill summary, final bill with receipts, claim form, discharge summary, KYC, the case email ID, and any other documents. Nothing already ticked was lost.
+
+• **The case email ID:** when we ask for it, the message now explains it properly — a NEW email account made for this case, used only to write to the insurance company and the authorities, and after the case they can change the password or delete it. In their own language.
+
+• **The complainant is on the claim screen** with their number — it only ever showed the insured, and on the claims where those are different people, staff were calling the wrong number.
+
+• **"Insured" now reads "Patient" on health claims**, which is what everyone actually says.
+
+• **Assigning a claim is a dropdown** of the people who work claims. Anyone already on a claim stays on it.
+
+• **Involve a colleague from a dropdown**, without having to write a note with an @mention.
+
+• **The review we sent the customer is readable on the claim** — you no longer have to open their dashboard to see what a colleague told them.
+
+• **"Level-2 → Settlement" is now called Consolidation.** Same screen, same work.
+
+• **Handing over to Level-2 no longer asks you to confirm twice** — you already tick "All documents received" before moving. Just write the note; the Level-2 team picks the claim up cold.
+
+• **A claim you have handed over now leaves L2 Claims** instead of sitting in both lists. If Level-2 sends it back, it returns.
+
+• **All Claims has a new column** — where the claim is in Consolidation, and the last thing that happened on it.
+
+• Follow-ups and the claim's Tasks & reminders boxes are gone from the claim screen; the Tasks screen is unchanged.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🧹 एक ही डॉक्युमेंट बॉक्स · ☑️ जो आ गया उस पर टिक · 👥 शिकायतकर्ता अब स्क्रीन पर
+
+**Details (HI):**
+• **चेकलिस्ट पर खुद टिक कीजिए।** पहले दस्तावेज़ तभी हरा होता था जब अपलोड करते समय आप उसका नाम ड्रॉपडाउन से चुनते थे — इसलिए नौ फाइलें लगी होने पर भी लिस्ट "3 of 5" दिखाती थी। **अब हर लाइन पर टिक बॉक्स है।** जो भी हमें मिल चुका है उस पर टिक कीजिए — डाक से, हाथ से, ईमेल से, कैसे भी आया हो। **सिर्फ़ बिना टिक वाले दस्तावेज़ ही माँगे जाते हैं**, इसलिए भेजी हुई चीज़ दोबारा नहीं माँगी जाएगी।
+
+• **तीन की जगह एक डॉक्युमेंट बॉक्स।** कागज़, नया कागज़ लगाने का बटन, और "जो बाकी है वह शिकायतकर्ता से माँगें" — अब एक ही जगह।
+
+• **हेल्थ चेकलिस्ट अब आठ दस्तावेज़ों की है** — पॉलिसी, रिजेक्शन लेटर / बिल समरी, फाइनल बिल और रसीदें, क्लेम फॉर्म, डिस्चार्ज समरी, KYC, केस की ईमेल आईडी, और कोई अन्य दस्तावेज़। पहले से टिक किया हुआ कुछ भी नहीं गया।
+
+• **केस की ईमेल आईडी:** माँगते समय संदेश अब पूरी बात समझाता है — इस केस के लिए बनाई गई **नई** ईमेल आईडी, जिससे हम बीमा कंपनी और अधिकारियों को लिखते हैं, और केस पूरा होने पर वे पासवर्ड बदल सकते हैं या आईडी डिलीट कर सकते हैं। उन्हीं की भाषा में।
+
+• **शिकायतकर्ता का नाम और नंबर अब क्लेम स्क्रीन पर है** — पहले सिर्फ़ बीमित व्यक्ति दिखता था, और जहाँ दोनों अलग हैं वहाँ स्टाफ़ ग़लत नंबर पर कॉल कर रहा था।
+
+• **हेल्थ क्लेम में "Insured" की जगह अब "Patient" लिखा आता है** — वही शब्द जो लोग बोलते हैं।
+
+• **क्लेम असाइन करना अब ड्रॉपडाउन से** — जो लोग क्लेम पर काम करते हैं उनकी सूची से। जो पहले से किसी क्लेम पर हैं, वे वहीं रहेंगे।
+
+• **साथी को ड्रॉपडाउन से जोड़िए** — नोट में @mention लिखने की ज़रूरत नहीं।
+
+• **ग्राहक को भेजी गई रिव्यू अब क्लेम पर ही पढ़ी जा सकती है** — उनके डैशबोर्ड में जाने की ज़रूरत नहीं।
+
+• **"Level-2 → Settlement" अब "Consolidation" कहलाता है।** स्क्रीन वही, काम वही।
+
+• **Level-2 को सौंपते समय अब दोबारा पुष्टि नहीं माँगी जाती** — "All documents received" आप पहले ही टिक कर चुके होते हैं। बस नोट लिखिए; Level-2 टीम क्लेम बिल्कुल नए सिरे से उठाती है।
+
+• **सौंपा हुआ क्लेम अब L2 Claims से हट जाता है**, दोनों जगह नहीं दिखता। Level-2 वापस भेजे तो वह लौट आता है।
+
+• **All Claims में नया कॉलम** — क्लेम Consolidation में कहाँ है, और उस पर आख़िरी क्या हुआ।
+
+• क्लेम स्क्रीन से Follow-ups और Tasks & reminders बॉक्स हटा दिए गए हैं; Tasks स्क्रीन पहले जैसी ही है।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-16 (2) — How often we message a complainant
 
 **Title (EN):**

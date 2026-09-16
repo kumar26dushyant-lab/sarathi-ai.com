@@ -1226,17 +1226,48 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
 # acceptance — without any mediator in between. Dormant until the L2 trigger + link
 # send are wired (deliberately held until the T&C copy is counsel-approved).
 # ═════════════════════════════════════════════════════════════════════════════
-async def _claimant_ctx(request: Request) -> Optional[dict]:
-    """Resolve the complainant's access_token (Bearer or ?token=) → portal+claim row, or None."""
-    tok = ""
+def _bearer(request: Request) -> str:
     h = request.headers.get("Authorization", "")
-    if h.startswith("Bearer "):
-        tok = h[7:]
-    if not tok:
-        tok = request.query_params.get("token", "")
+    return h[7:] if h.startswith("Bearer ") else (request.query_params.get("token", "") or "")
+
+
+async def _claimant_link_ctx(request: Request) -> Optional[dict]:
+    """The PORTAL LINK — enough to be asked "is this you?", and nothing else.
+
+    It used to be the whole credential: whoever held the URL could open the claim and accept the
+    success-fee terms. Now it only reaches the verification endpoints."""
+    tok = _bearer(request)
+    return await claimant.get_portal_by_token(tok) if tok else None
+
+
+async def _claimant_ctx(request: Request) -> Optional[dict]:
+    """A VERIFIED complainant session → portal+claim row, or None.
+
+    The session is minted only after they typed the code we sent to the number or email already
+    on their claim (biz_nidaan_claim_access). A raw portal link no longer opens anything — that
+    is the whole point of the change (founder, 16 Sep)."""
+    tok = _bearer(request)
     if not tok:
         return None
-    return await claimant.get_portal_by_token(tok)
+    sess = nidaan.verify_claim_session_token(tok)
+    if not sess:
+        return None
+    ctx = await claimant.get_portal(sess["claim_id"])
+    if not ctx:
+        return None
+    ctx = dict(ctx)
+    ctx["preview"] = sess.get("preview", False)
+    # get_portal() returns the portal row; the claim's own details come with it for the page.
+    # The old token lookup aliased two of them (c.status AS claim_status, c.stage AS claim_stage),
+    # and the dashboard reads those names - so map them here or the complainant's page would show
+    # "In progress" for every claim whatever its real status.
+    claim = await nidaan.get_claim_with_account(sess["claim_id"]) or {}
+    for k, v in claim.items():
+        ctx.setdefault(k, v)
+    ctx["claim_status"] = claim.get("status") or ""
+    ctx["claim_stage"] = claim.get("stage") or ""
+    ctx["claim_id"] = sess["claim_id"]
+    return ctx
 
 
 @app.get("/nidaan/claim", response_class=HTMLResponse)
@@ -1303,11 +1334,86 @@ async def nidaan_claim_magic(request: Request, token: str = ""):
     ctx = await claimant.get_portal_by_token(token or "")
     if not ctx:
         return RedirectResponse(url="/nidaan/claim?e=expired", status_code=303)
-    # staff=1 → an ops staffer is opening the complainant's view to inspect it; do NOT stamp first-open
-    # (that signal must mean the COMPLAINANT opened it). Real complainant links omit this.
-    if request.query_params.get("staff") != "1":
-        await claimant.mark_activated(ctx["claim_id"])
+    # First-open is NOT stamped here any more. Opening a link proves only that somebody clicked
+    # it - it could be anyone the link was forwarded to. It is stamped when they enter the code we
+    # sent to the number or email on the claim, which is the first moment we know it is them.
+    # (The old `?staff=1` flag is gone with it: staff now use the ops preview session instead.)
     return RedirectResponse(url=f"/nidaan/claim#t={token}", status_code=303)
+
+
+class _ClaimVerifyStartReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channel: str = Field(..., max_length=20)
+
+
+class _ClaimVerifyCheckReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(..., min_length=4, max_length=10)
+
+
+@app.get("/nidaan/claim/api/verify/where")
+@limiter.limit("30/minute")
+async def nidaan_claim_verify_where(request: Request):
+    """Where we can send a code — masked, from the contacts ALREADY on the claim. Reached with
+    the portal link, which from here on proves nothing more than that."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    name = (ctx.get("insured_name") or "").split(" ")[0]
+    return {"claim_id": ctx["claim_id"], "name": name,
+            "channels": await _acc.channels(ctx["claim_id"])}
+
+
+@app.post("/nidaan/claim/api/verify/start")
+@limiter.limit("10/minute")
+async def nidaan_claim_verify_start(body: _ClaimVerifyStartReq, request: Request):
+    """Send the code to the number or email already on the claim. Never to one typed in here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    res = await _acc.start(ctx["claim_id"], body.channel)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "Could not send the code")
+    try:
+        await nidaan.record_claim_activity(
+            ctx["claim_id"], "portal_code", channel="system", actor="complainant",
+            summary="Verification code sent to %s (%s)" % (res.get("masked"), res.get("kind")))
+    except Exception:
+        pass
+    return res
+
+
+@app.post("/nidaan/claim/api/verify/check")
+@limiter.limit("20/minute")
+async def nidaan_claim_verify_check(body: _ClaimVerifyCheckReq, request: Request):
+    """Right code → a session. That session, not the link, is what opens the claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    res = await _acc.check(ctx["claim_id"], body.code)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "That code is not right")
+    # First time the COMPLAINANT proves who they are, that is the real first-open.
+    try:
+        await claimant.mark_activated(ctx["claim_id"])
+        await nidaan.record_claim_activity(
+            ctx["claim_id"], "portal_open", channel="system", actor="complainant",
+            summary="Complainant confirmed their identity by %s and opened their claim page"
+                    % (res.get("channel") or "code"))
+    except Exception:
+        pass
+    return {"ok": True,
+            "session": nidaan.create_claim_session_token(ctx["claim_id"],
+                                                         minutes=_acc.SESSION_MIN)}
 
 
 @app.get("/nidaan/claim/api/me")
@@ -1470,6 +1576,13 @@ async def nidaan_claim_consent(request: Request):
     ctx = await _claimant_ctx(request)
     if not ctx:
         raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    # A staff preview session can look at this page; it can never accept on somebody's behalf.
+    # The whole point of the code is that the person who accepts is the person we hold a number
+    # for - a staffer standing in for them would put us right back where we started.
+    if ctx.get("preview"):
+        raise HTTPException(status_code=403,
+                            detail="This is a staff preview. Only the complainant can accept "
+                                   "the terms, after confirming their identity.")
     ip = (request.client.host if request.client else "") or ""
     ua = request.headers.get("user-agent", "") or ""
     res = await claimant.record_consent(ctx["claim_id"], ip=ip, user_agent=ua)
@@ -1563,6 +1676,29 @@ async def ops_claim_portal_state(claim_id: int, request: Request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     return await claimant.portal_state(claim_id)
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/portal/preview")
+@limiter.limit("30/minute")
+async def ops_claim_portal_preview(claim_id: int, request: Request):
+    """A short-lived link that shows a staffer EXACTLY what the complainant sees.
+
+    Staff cannot receive the complainant's code — and should not: the point of the code is that
+    the person who accepts the fee terms is the person whose number we hold. So ops mints its own
+    preview session instead. It can look; the consent endpoint refuses it, and it dies in 20
+    minutes. This replaces the old '?staff=1' on the magic link, which anybody could type."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    import biz_nidaan_claim_access as _acc
+    tok = nidaan.create_claim_session_token(claim_id, minutes=_acc.PREVIEW_MIN, preview=True)
+    await _ops_audit(request, "claimant_portal.preview", "claim", str(claim_id),
+                     "%s previewed the complainant's page" % _actor_label(caller))
+    return {"ok": True, "minutes": _acc.PREVIEW_MIN,
+            "link": f"{_nidaan_origin(request)}/nidaan/claim#s={tok}"}
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/ensure")

@@ -717,6 +717,16 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "portal_identity",
+        "en": {"t": "The complainant proves who they are before their page opens",
+               "d": "The portal link no longer opens a claim by itself. It asks the complainant to confirm their identity: a 6-digit code goes to the number or email already on the claim, and only that opens the page or accepts the fee terms. To look at what they see, use Enter on the claim \u2014 it gives you a 20-minute read-only preview, and it can never accept on their behalf.",
+               "u": "All Claims \u2192 a claim row \u2192 enter \u2197 for the staff preview. Complainants get the code themselves."},
+        "hi": {"t": "\u0936\u093f\u0915\u093e\u092f\u0924\u0915\u0930\u094d\u0924\u093e \u092a\u0939\u0932\u0947 \u0905\u092a\u0928\u0940 \u092a\u0939\u091a\u093e\u0928 \u0938\u093e\u092c\u093f\u0924 \u0915\u0930\u0924\u093e \u0939\u0948",
+               "d": "\u092a\u094b\u0930\u094d\u091f\u0932 \u0932\u093f\u0902\u0915 \u0905\u092c \u0905\u092a\u0928\u0947 \u0906\u092a \u0915\u094d\u0932\u0947\u092e \u0928\u0939\u0940\u0902 \u0916\u094b\u0932\u0924\u093e\u0964 6 \u0905\u0902\u0915\u094b\u0902 \u0915\u093e \u0915\u094b\u0921 \u0909\u0938\u0940 \u0928\u0902\u092c\u0930 \u092f\u093e \u0908\u092e\u0947\u0932 \u092a\u0930 \u091c\u093e\u0924\u093e \u0939\u0948 \u091c\u094b \u0915\u094d\u0932\u0947\u092e \u092a\u0930 \u0926\u0930\u094d\u091c \u0939\u0948, \u0914\u0930 \u0909\u0938\u0940 \u0938\u0947 \u092a\u0947\u091c \u0916\u0941\u0932\u0924\u093e \u0939\u0948 \u092f\u093e \u092b\u0940\u0938 \u0936\u0930\u094d\u0924\u0947\u0902 \u0938\u094d\u0935\u0940\u0915\u093e\u0930 \u0939\u094b\u0924\u0940 \u0939\u0948\u0902\u0964 \u0938\u094d\u091f\u093e\u092b\u093c → 20 \u092e\u093f\u0928\u091f \u0915\u093e \u0938\u093f\u0930\u094d\u092b\u093c-\u0926\u0947\u0916\u0928\u0947 \u0935\u093e\u0932\u093e \u092a\u094d\u0930\u0940\u0935\u094d\u092f\u0942\u0964",
+               "u": "All Claims \u2192 \u0915\u094d\u0932\u0947\u092e \u092a\u0902\u0915\u094d\u0924\u093f \u2192 enter \u2197 \u0938\u0947 \u0938\u094d\u091f\u093e\u092b\u093c \u092a\u094d\u0930\u0940\u0935\u094d\u092f\u0942\u0964"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "claim_documents",
         "en": {"t": "Open a claim's documents without downloading them",
                "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary') and it is saved on the claim. Any file except video, up to 25 MB, virus-scanned before it is stored.",

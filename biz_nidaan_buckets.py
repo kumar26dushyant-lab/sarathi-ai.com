@@ -2090,13 +2090,18 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
     for b in (rd.get("blocks") or []):
         concerns.append("%s - %s" % (b["label"], b["detail"]))
 
+    # The two acknowledgement tick-boxes are gone (founder, 16 Sep): "we are checking the box
+    # before moving, and then moving it finally, so the popup box should not be coming". The
+    # documents tick above is the real gate and it is made deliberately, a step earlier; asking
+    # the same person to confirm the same thing twice taught them to tick without reading.
+    # `checks` is still accepted, and still recorded when a caller sends it, so nothing that
+    # already sent them breaks.
     checks = checks or {}
-    unanswered = [q for q in ("ack_docs_plan", "ack_contactable") if not checks.get(q)]
-    if unanswered:
+    if checks and not all(checks.get(q) for q in ("ack_docs_plan", "ack_contactable")):
         concerns.append("Handed over without confirming: %s" % ", ".join(
             {"ack_docs_plan": "that we know which documents this case needs",
              "ack_contactable": "that someone has actually spoken to the complainant"}[q]
-            for q in unanswered))
+            for q in ("ack_docs_plan", "ack_contactable") if not checks.get(q)))
 
     # The COMMENT is the one thing that is genuinely required, and it always was: the Level-2
     # team picks this up cold. When something is outstanding the note has to say why anyway.
