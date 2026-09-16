@@ -513,6 +513,45 @@ async function run() {
     chk(!!who.complainantText, `and says who they are (${who.complainantText.slice(0, 40)})`);
     await shot(page, 'claim-panel');
 
+    /* 16 Sep (founder): one documents box, the order he asked for, and the dead sections gone. */
+    const panel = await page.evaluate(() => {
+      const secs = [...document.querySelectorAll('#drawerBody [data-ord]')];
+      const head = el => ((el.querySelector('h4, summary') || {}).textContent || '').trim();
+      const seq = secs.slice().sort((a, b) => a.dataset.ord - b.dataset.ord).map(head);
+      const txt = document.getElementById('drawerBody').innerText;
+      return {
+        seq,
+        docBoxes: secs.filter(s => /^\s*📂?\s*Documents\s*$/i.test(head(s))).length,
+        docLists: document.querySelectorAll('[id^="opsClaimDocs_"]').length,
+        followups: /(^|\n)\s*Follow-ups\s*(\n|$)/i.test(txt),
+        tasks: /Tasks & reminders/i.test(txt),
+        assignPick: !!document.querySelector('[id^="assignPick_"]'),
+        assignChips: !!document.querySelector('[id^="assignChips_"]'),
+        involvePick: !!document.querySelector('[id^="involvePick_"]'),
+        channel: /Came in as/i.test(txt),
+        askBox: /Ask the complainant for what is missing/i.test(txt),
+        sheetBtn: !!document.querySelector('#drawerBody [onclick^="csrSheet"]') };
+    });
+    chk(panel.docBoxes === 1 && panel.docLists === 1,
+        `the panel has ONE documents box, not two (${panel.docBoxes} boxes, ${panel.docLists} lists)`);
+    chk(panel.askBox, 'and asking the complainant for what is missing sits in it');
+    chk(!panel.sheetBtn, 'the Assessment sheet button is gone from here (it lives in Consolidation)');
+    chk(!panel.followups && !panel.tasks, 'Follow-ups and Tasks & reminders are off the claim panel');
+    chk(panel.assignPick && panel.assignChips, 'a claim is assigned from a dropdown, with chips for who is on it');
+    chk(panel.involvePick, 'and a colleague can be involved from a dropdown');
+    chk(panel.channel, 'the panel says which door the claim came through');
+    const want = ['Claim Info', 'Advisor & channel', 'Assign To Staff', 'Internal Notes & Discussion',
+                  'Involved', 'Review', 'Complainant Portal', 'Documents'];
+    const got = panel.seq.join(' | ');
+    const inOrder = want.every((w, i) => {
+      const pos = panel.seq.findIndex(h => h.replace(/\s+/g, ' ').includes(w));
+      if (pos < 0) return w === 'Advisor & channel' ? false : true;   // optional sections may be absent
+      const prev = want.slice(0, i).map(p => panel.seq.findIndex(h => h.replace(/\s+/g, ' ').includes(p)))
+                        .filter(x => x >= 0);
+      return prev.every(x => x < pos);
+    });
+    chk(inOrder, `the sections read in the order asked for (${got.slice(0, 120)})`);
+
     /* The insurance company is picked from the shared list, not typed. */
     await page.evaluate(id => window.editClaimInfoModal && window.editClaimInfoModal(id), claimId);
     await page.waitForTimeout(1200);

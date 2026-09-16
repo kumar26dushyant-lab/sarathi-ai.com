@@ -3855,6 +3855,23 @@ function _insuredLabel(claimType){
 }
 function _insuredLabelMixed(){ return 'Insured / Patient'; }
 window._insuredLabel = _insuredLabel;
+
+// Which door a claim came through - branch, CP, My Business, the website, or staff raising it for
+// a subscriber. It was only ever shown on branch claims, so on the other 79 the panel said nothing
+// about where the work had come from.
+function _claimChannel(c){
+  const o = (c.origin||'').toLowerCase();
+  if (o === 'branch')        return '🏢 Branch' + (c.branch_code ? ' · ' + esc(c.branch_code) : '');
+  if (o === 'ops_on_behalf') return '👤 Raised by staff for a subscriber'
+                                    + (c.raised_by_name ? ' · ' + esc(c.raised_by_name) : '');
+  if (o === 'd2c_review')    return '🌐 Website — ₹499 review';
+  if (o === 'my_business')   return '💼 My Business';
+  if (o === 'cp')            return '🤝 Channel partner';
+  if (o)                     return esc(o.replace(/_/g, ' '));
+  // No origin recorded (73 older claims): say what we DO know rather than an empty dash.
+  return c.branch_code ? ('🏢 Branch · ' + esc(c.branch_code))
+                       : (c.account_id ? '👤 Subscriber dashboard' : '—');
+}
 function _l2CsBadge(c){
   if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
   return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
@@ -5753,16 +5770,7 @@ async function openClaimDrawer(claimId) {
 
   const notesHtml = _renderClaimNotesThread(c.notes||[], c.claim_id);
 
-  const fuHtml = (c.followups||[]).map(f=>{
-    const isOver = f.status==='overdue';
-    return `<div class="fu-item">
-      <div class="fu-due ${isOver?'overdue':''}">${f.due_date}${isOver?' ⚠️':''}</div>
-      <div class="fu-note">${esc(f.note||'—')}</div>
-      <div class="fu-who">${esc(f.staff_name)}</div>
-      <span class="pill-status s-${f.status}">${f.status}</span>
-      ${f.status==='pending'?`<button class="btn-sm btn-success" onclick="markFollowupDone(${f.followup_id},${claimId})">Done</button>`:''}
-    </div>`;
-  }).join('') || '<div style="font-size:.8rem;color:var(--nd-text-faint)">No follow-ups</div>';
+  // (The follow-up list markup was built here for a section this panel no longer has.)
 
   const tlHtml = (c.status_log||[]).reverse().map(l=>`
     <div class="tl-item">
@@ -5776,7 +5784,7 @@ async function openClaimDrawer(claimId) {
 
   document.getElementById('drawerBody').innerHTML = `
     <!-- Claim Info -->
-    <div class="drawer-section">
+    <div data-ord="10" class="drawer-section">
       <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Claim Info${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editClaimInfoModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
       <div class="kv"><span class="kv-label">Claim ID</span><span class="kv-val">#${fmtClaimNum(c.claim_id)}</span></div>
       <div class="kv"><span class="kv-label">Type</span><span class="kv-val">${esc(c.claim_type)}</span></div>
@@ -5807,12 +5815,27 @@ async function openClaimDrawer(claimId) {
       ${(c.review_fee_paid||0)>0?`<div class="kv"><span class="kv-label">Review fee paid</span><span class="kv-val">₹${fmt(c.review_fee_paid)}${c.review_outcome==='can_fight'?' <span style="color:var(--nd-success-text);font-size:.72rem">— credited toward legal</span>':''}</span></div>`:''}
     </div>
     <!-- Complainant Portal (direct line to the policyholder) -->
-    <div class="drawer-section" style="border:1px solid rgba(13,122,104,.3);border-radius:10px;padding:.85rem">
+    <div data-ord="70" class="drawer-section" style="border:1px solid rgba(13,122,104,.3);border-radius:10px;padding:.85rem">
       <h4>🔗 Complainant Portal</h4>
       <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.5rem">Direct dashboard for the insured / policyholder — track status, share documents, and accept the success-fee terms. Reach them directly; the mediator stays in the loop.</div>
       <div id="claimPortalCard_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
+    </div>
+    <!-- ONE documents box: the papers, the way to attach more, and the way to ask for what is
+         missing. It used to be three separate boxes in three places on this panel, which is how
+         a document gets attached twice and asked for twice. The Assessment sheet button is gone
+         from here on purpose: the gist that produces it is prepared in Consolidation, and the
+         button still sits there, where the work is done. -->
+    <div data-ord="80" class="drawer-section">
+      <h4>📂 Documents</h4>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Everything attached to this claim, and the checklist it answers. Attach a paper here yourself when it arrives by hand, post or email.</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+        <button class="btn-sm btn-primary" onclick="docsOpen(${c.claim_id})">📂 Open documents &amp; attach</button>
+        <button class="btn-sm btn-ghost" onclick="csrReport(${c.claim_id})">📋 Case report</button>
+        ${c.docs_complete_at ? `<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ All received — ${esc(c.docs_complete_by||'staff')}</span>` : ''}
+      </div>
+      <div id="opsClaimDocs_${c.claim_id}" style="font-size:.84rem;color:var(--nd-text-faint);padding-top:.5rem;border-top:1px dashed var(--nd-border)">Loading documents…</div>
       <div style="margin-top:.7rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
-        <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Document collection — complainant: ${_contactBadge(c)}</div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:.35rem">📄 Ask the complainant for what is missing — ${_contactBadge(c)}</div>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
           ${c.insured_email
             ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
@@ -5822,22 +5845,11 @@ async function openClaimDrawer(claimId) {
             : ''}
           <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem"></span>
         </div>
-        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Asks the complainant one document at a time. If they have never written to us, the first message goes as our approved WhatsApp template; once they reply, the guided chat carries on from their answer.</div>
-      </div>
-    </div>
-    <!-- Every paper on the claim, and a way to attach more. -->
-    <div class="drawer-section">
-      <h4>📂 Documents</h4>
-      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Everything attached to this claim, and the checklist it answers. Attach a paper here yourself when it arrives by hand, post or email.</div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button class="btn-sm btn-primary" onclick="docsOpen(${c.claim_id})">📂 Open documents &amp; attach</button>
-        <button class="btn-sm btn-ghost" onclick="csrSheet(${c.claim_id})">📄 Assessment sheet</button>
-        <button class="btn-sm btn-ghost" onclick="csrReport(${c.claim_id})">📋 Case report</button>
-        ${c.docs_complete_at ? `<span style="font-size:.78rem;color:var(--nd-success-text);align-self:center">✅ All received — ${esc(c.docs_complete_by||'staff')}</span>` : ''}
+        <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Only documents still unticked are asked for. If they have never written to us, the first message goes as our approved WhatsApp template; once they reply, the guided chat carries on from their answer.</div>
       </div>
     </div>
     ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
-    <div class="drawer-section">
+    <div data-ord="25" class="drawer-section">
       <h4>Branch &amp; Level-2</h4>
       <div class="kv"><span class="kv-label">Origin</span><span class="kv-val">Branch${c.branch_code?(' · '+esc(c.branch_code)):''}</span></div>
       <div class="kv"><span class="kv-label">Review</span><span class="kv-val">${
@@ -5852,8 +5864,9 @@ async function openClaimDrawer(claimId) {
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
     </div>`:''}
     <!-- Advisor -->
-    <div class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Advisor${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
+    <div data-ord="20" class="drawer-section">
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Advisor &amp; channel${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
+      <div class="kv"><span class="kv-label">Came in as</span><span class="kv-val">${_claimChannel(c)}</span></div>
       <div class="kv"><span class="kv-label">Name</span><span class="kv-val">${esc(c.owner_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Firm</span><span class="kv-val">${esc(c.firm_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
@@ -5864,25 +5877,28 @@ async function openClaimDrawer(claimId) {
           : '<span style="color:var(--nd-text-faint)">Direct (no referrer)</span>'
       }${_role==='super_admin'?` <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;color:var(--nd-cyan-text)" onclick="openClaimReattributeModal(${c.claim_id})" title="Correct who referred this claim">🏷️ Fix</button>`:''}</span></div>
     </div>
-    ${canAssign?`<div class="drawer-section">
+    ${canAssign?`<div data-ord="30" class="drawer-section">
       <h4>Assign To Staff</h4>
-      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">Select one or more. The first selected is the primary handler; all assignees can work the claim &amp; are notified.</div>
-      <div id="assignBox_${c.claim_id}" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem;margin-bottom:.5rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem"><span style="color:var(--nd-text-faint);font-size:.8rem">Loading staff…</span></div>
+      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">Pick a handler from the list. The first one is the primary handler; everyone added can work the claim &amp; is notified.</div>
+      <select id="assignPick_${c.claim_id}" class="form-input" style="width:100%;margin-bottom:.5rem" onchange="assignAdd(${c.claim_id}, this)">
+        <option value="">Loading staff…</option>
+      </select>
+      <div id="assignChips_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem"></div>
       <button class="btn btn-warn" onclick="assignClaim(${c.claim_id})">Assign</button>
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
     <!-- Who gets notified on this claim + the contact details we're missing -->
-    <details class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
+    <details data-ord="90" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
       <summary style="cursor:pointer;font-weight:700;list-style:none">🔔 Who gets notified <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— every party on this claim + any missing WhatsApp/email to chase</span></summary>
       <div id="claimParties_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
     </details>
     <!-- Activity timeline (automation messages, responses, status, payments) -->
-    <details class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimActivity(${c.claim_id});}">
+    <details data-ord="100" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimActivity(${c.claim_id});}">
       <summary style="cursor:pointer;font-weight:700;list-style:none">📜 Activity timeline <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— status, payments, WhatsApp &amp; every automation nudge + reply</span></summary>
       <div id="claimActivity_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
     </details>
     <!-- Notes & discussion -->
-    <div class="drawer-section">
+    <div data-ord="40" class="drawer-section">
       <h4>Internal Notes &amp; Discussion</h4>
       <div id="notesArea_${c.claim_id}">${notesHtml}</div>
       <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
@@ -5898,21 +5914,21 @@ async function openClaimDrawer(claimId) {
       </div>
     </div>
     <!-- Involved (watchers) -->
-    <div class="drawer-section">
+    <div data-ord="50" class="drawer-section">
       <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
         <span>👥 Involved</span>
         <button class="btn-sm btn-ghost" id="claimMuteBtn_${c.claim_id}" onclick="toggleClaimMute(${c.claim_id})" title="Mute/unmute your notifications for this claim">🔔 Mute me</button>
       </h4>
-      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">@mention a teammate in a note to involve them. Involved staff are notified of activity on this claim (bell + Telegram) until they mute.</div>
+      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">Pick a colleague to involve, or @mention them in a note. Involved staff get this claim's updates (bell + Telegram) until they mute.</div>
+      <select id="involvePick_${c.claim_id}" class="form-input" style="width:100%;margin-bottom:.5rem" onchange="claimInvolve(${c.claim_id}, this)">
+        <option value="">＋ Involve a colleague…</option>
+      </select>
       <div id="claimWatchersArea_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
     </div>
-    <!-- Documents -->
-    <div class="drawer-section">
-      <h4>Documents</h4>
-      <div id="opsClaimDocs_${c.claim_id}" style="font-size:.84rem;color:var(--nd-text-faint)">Loading documents…</div>
-    </div>
+    <!-- (The second Documents box lived here. It is now part of the one 📂 Documents section
+         above, so the same papers are not listed twice on one panel.) -->
     <!-- Messages with subscriber -->
-    <div class="drawer-section">
+    <div data-ord="110" class="drawer-section">
       <h4>💬 Messages with subscriber</h4>
       <div id="opsMsgThread_${c.claim_id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem;font-size:.85rem">Loading…</div>
       <div style="display:flex;gap:.5rem;align-items:center">
@@ -5923,31 +5939,13 @@ async function openClaimDrawer(claimId) {
       </div>
       <div id="opsMsgFileName_${c.claim_id}" style="font-size:.74rem;color:var(--nd-cyan-text);margin-top:.25rem"></div>
     </div>
-    <!-- Follow-ups -->
-    <div class="drawer-section">
-      <h4>Follow-ups</h4>
-      <div id="fuArea_${c.claim_id}">${fuHtml}</div>
-      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <input type="date" id="fuDate_${c.claim_id}" class="form-input" style="flex:1;min-width:130px" min="${new Date().toISOString().slice(0,10)}">
-        <input id="fuNote_${c.claim_id}" class="form-input" style="flex:2;min-width:120px" placeholder="Note">
-        <button class="btn btn-success" onclick="addFollowup(${c.claim_id})">Schedule</button>
-      </div>
-    </div>
-    <!-- Tasks & reminders for this claim (consolidated: workflow tasks + quick-task reminders) -->
-    <div class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
-        <span>🗂️ Tasks &amp; reminders</span>
-        ${(_role==='super_admin'||_role==='sub_super_admin')?
-          `<span style="display:flex;gap:.4rem">
-             <button class="btn-sm btn-ghost" onclick="openCreateTaskModalForClaim(${c.claim_id})">+ Task</button>
-             <button class="btn-sm btn-ghost" onclick="openQuickTaskModal(${c.claim_id})">+ Reminder</button>
-           </span>`:''}
-      </h4>
-      <div id="claimTasksArea_${c.claim_id}" style="margin-bottom:.6rem">Loading…</div>
-      <div id="claimRemindersArea_${c.claim_id}">Loading…</div>
-    </div>
+    <!-- Follow-ups and the claim's Tasks & reminders lived here. Both are gone from this
+         panel on purpose: in the whole life of the system 3 follow-ups were ever created
+         (last one 1 Sep) and only 2 claims ever had a task attached (last one 25 July).
+         The Tasks module itself is untouched and busy - 657 tasks, used daily - and the
+         two old claim-linked tasks are still there, in the Tasks panel where they belong. -->
     <!-- Actions -->
-    ${canStatus?`<div class="drawer-section">
+    ${canStatus?`<div data-ord="120" class="drawer-section">
       <h4>Update Status</h4>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
         <select id="newStatusSel_${c.claim_id}" class="form-input" style="flex:1;min-width:140px">${statusOptions}</select>
@@ -5956,9 +5954,25 @@ async function openClaimDrawer(claimId) {
       </div>
       <div class="msg" id="statusMsg_${c.claim_id}"></div>
     </div>`:''}
-    ${canStatus?`<div class="drawer-section" style="border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:.85rem">
-      <h4>📋 Deliver Legal Assessment</h4>
-      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Sets status to <b>Review Delivered</b> and notifies the customer (dashboard + WhatsApp + email).</div>
+    ${canStatus?`<div data-ord="60" class="drawer-section" style="border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:.85rem">
+      <h4>📋 ${c.review_findings ? 'Review delivered' : 'Deliver Legal Assessment'}</h4>
+      ${c.review_findings ? `
+      <!-- What we actually told the customer. 100 claims carried this text with nowhere on this
+           panel to read it, so staff had to open the customer's own dashboard to find out what
+           their colleague had said. -->
+      <div style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:8px;padding:.7rem .8rem;margin-bottom:.6rem">
+        <div style="font-size:.74rem;color:var(--nd-text-muted);margin-bottom:.35rem">
+          ${c.review_outcome==='can_fight'
+            ? '<span style="color:var(--nd-success-text);font-weight:700">✅ Can be challenged</span>'
+            : (c.review_outcome==='no_scope'
+                ? '<span style="color:var(--nd-warning-text);font-weight:700">⚠️ Settled / no scope</span>'
+                : '<span style="font-weight:700">Delivered</span>')}
+          ${c.review_delivered_at ? ' · ' + fmtDate(c.review_delivered_at) : ''}
+        </div>
+        <div style="font-size:.85rem;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow:auto">${esc(c.review_findings)}</div>
+      </div>
+      <div style="font-size:.74rem;color:var(--nd-text-faint);margin-bottom:.5rem">Delivering again replaces what the customer sees and tells them once more.</div>`
+      : '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">Sets status to <b>Review Delivered</b> and notifies the customer (dashboard + WhatsApp + email).</div>'}
       <div style="display:flex;flex-direction:column;gap:.5rem">
         <select id="rvOutcomeSel_${c.claim_id}" class="form-input" onchange="rvLoadTemplates(${c.claim_id})">
           <option value="">Select outcome…</option>
@@ -5972,7 +5986,7 @@ async function openClaimDrawer(claimId) {
       <div class="msg" id="rvMsg_${c.claim_id}"></div>
     </div>`:''}
     <!-- Status Timeline -->
-    <div class="drawer-section">
+    <div data-ord="130" class="drawer-section">
       <h4>Status History</h4>
       <div class="tl">${tlHtml}</div>
     </div>`;
@@ -5986,18 +6000,13 @@ async function openClaimDrawer(claimId) {
   if (canAssign) {
     let staffList = [];
     try { staffList = await _loadAssigneesOnce(); } catch(e){}
-    const box = document.getElementById('assignBox_'+c.claim_id);
-    const assigned = new Set((c.assignees||[]).map(a=>a.staff_id));
-    if (!assigned.size && c.assigned_to_staff_id) assigned.add(c.assigned_to_staff_id);
-    if (box) box.innerHTML = (staffList||[]).filter(s=>!s.deleted_at).map(s=>
-      `<label style="display:flex;align-items:center;gap:.45rem;font-size:.85rem;cursor:pointer;padding:.15rem 0"><input type="checkbox" class="assignChk_${c.claim_id}" value="${s.staff_id}" ${assigned.has(s.staff_id)?'checked':''}> ${esc(s.name)} <span style="font-size:.7rem;color:var(--nd-text-faint)">(${(s.role||'').replace(/_/g,' ')})</span></label>`).join('')
-      || '<span style="color:var(--nd-text-faint);font-size:.8rem">No staff found</span>';
+    const assigned = (c.assignees||[]).map(a=>a.staff_id);
+    if (!assigned.length && c.assigned_to_staff_id) assigned.push(c.assigned_to_staff_id);
+    _assignInit(c.claim_id, staffList, assigned);
   }
 
-  // Load tasks for this claim (Phase 5 — Tasks under Claims)
-  loadClaimTasks(c.claim_id);
-  // Load Quick Task reminders linked to this claim
-  loadClaimReminders(c.claim_id);
+  // (Claim tasks and reminders are no longer drawn on this panel - see the note above - so the
+  //  two calls that fetched them have gone with the sections. The Tasks panel loads its own.)
   // Load subscriber ⇄ ops message thread
   opsLoadMessages(c.claim_id);
   // Load "involved" watchers + my mute state
@@ -6076,8 +6085,66 @@ async function deliverReview(claimId) {
   else { msgEl.className='msg err'; msgEl.textContent=_extractErr(d,'Failed to deliver'); }
 }
 
+// ── Assigning a claim: a short list of handlers, and nobody dropped by accident ──────────────
+// The dropdown offers the people who actually work claims (the server flags them, so the list is
+// a setting and not a code change). Anyone ALREADY assigned stays on the claim as a chip even if
+// they are not on that list - 17 live claims sit with people outside it, and a screen that simply
+// forgot them would look like the claim had been unassigned.
+const _assignSel = {};    // claimId -> [staff_id, ...]  (order matters: first = primary handler)
+const _assignAll = {};    // claimId -> [{staff_id, name, role, claim_handler}]
+
+function _assignInit(claimId, staffList, assigned){
+  _assignAll[claimId] = (staffList||[]).filter(s=>!s.deleted_at);
+  _assignSel[claimId] = (assigned||[]).slice();
+  _assignRender(claimId);
+}
+function _assignName(claimId, id){
+  const s = (_assignAll[claimId]||[]).find(x=>x.staff_id===id);
+  return s ? s.name : ('Staff #' + id);
+}
+function _assignRender(claimId){
+  const pick = document.getElementById('assignPick_'+claimId);
+  const chips = document.getElementById('assignChips_'+claimId);
+  const sel = _assignSel[claimId] || [];
+  const all = _assignAll[claimId] || [];
+  if (pick){
+    const offer = all.filter(s => s.claim_handler !== false && sel.indexOf(s.staff_id) < 0);
+    pick.innerHTML = '<option value="">＋ Add a handler…</option>'
+      + offer.map(s => '<option value="'+s.staff_id+'">'+esc(s.name)+'</option>').join('');
+    if (!offer.length) pick.innerHTML = '<option value="">Everyone on the list is already on this claim</option>';
+  }
+  if (chips){
+    chips.innerHTML = sel.length
+      ? sel.map(function(id, i){
+          const s = all.find(x=>x.staff_id===id);
+          const off = s && s.claim_handler === false;
+          return '<span style="display:inline-flex;align-items:center;gap:.35rem;background:var(--nd-bg-surface-2);'
+            + 'border:1px solid var(--nd-border-strong);border-radius:999px;padding:.2rem .55rem;font-size:.8rem">'
+            + (i===0 ? '<b title="Primary handler">★</b> ' : '')
+            + esc(_assignName(claimId, id))
+            + (off ? ' <span style="font-size:.66rem;color:var(--nd-text-faint)" title="Already on this claim, though not on the handler list">(existing)</span>' : '')
+            + ' <button onclick="assignRemove('+claimId+','+id+')" title="Remove from this claim" '
+            + 'style="background:none;border:0;color:var(--nd-text-faint);cursor:pointer;font-size:.9rem;line-height:1">✕</button></span>';
+        }).join('')
+      : '<span style="color:var(--nd-text-faint);font-size:.8rem">Nobody assigned yet.</span>';
+  }
+}
+function assignAdd(claimId, sel){
+  const id = parseInt(sel.value, 10);
+  if (!id) return;
+  const cur = _assignSel[claimId] || (_assignSel[claimId] = []);
+  if (cur.indexOf(id) < 0) cur.push(id);
+  sel.value = '';
+  _assignRender(claimId);
+}
+function assignRemove(claimId, id){
+  _assignSel[claimId] = (_assignSel[claimId]||[]).filter(x=>x!==id);
+  _assignRender(claimId);
+}
+window.assignAdd = assignAdd; window.assignRemove = assignRemove;
+
 async function assignClaim(claimId) {
-  const staff_ids = Array.from(document.querySelectorAll('.assignChk_'+claimId+':checked')).map(b=>parseInt(b.value));
+  const staff_ids = (_assignSel[claimId] || []).slice();
   const msgEl = document.getElementById('assignMsg_'+claimId);
   if (!staff_ids.length) { msgEl.className='msg err'; msgEl.textContent='Select at least one staff member'; return; }
   msgEl.className='msg'; msgEl.textContent='Assigning…';
@@ -6234,8 +6301,35 @@ async function loadClaimWatchers(claimId){
       </div>`).join('') : '<span style="color:var(--nd-text-faint)">No one involved yet — @mention a teammate in a note to involve them.</span>';
     const btn = document.getElementById('claimMuteBtn_'+claimId);
     if(btn){ btn.textContent = d.me_muted ? '🔕 Unmute me' : '🔔 Mute me'; btn.dataset.muted = d.me_muted ? '1' : '0'; }
+    // Offer everyone who is not already involved. Involving is about who hears about the claim,
+    // not who works it, so this is the whole team - unlike the handler list on Assign.
+    const pick = document.getElementById('involvePick_'+claimId);
+    if (pick){
+      let staff = [];
+      try { staff = await _loadAssigneesOnce(); } catch(e){}
+      const on = new Set(ws.map(w=>w.staff_id));
+      const left = (staff||[]).filter(s=>!s.deleted_at && !on.has(s.staff_id));
+      pick.innerHTML = '<option value="">＋ Involve a colleague…</option>'
+        + left.map(s=>'<option value="'+s.staff_id+'">'+esc(s.name)+'</option>').join('');
+    }
   } catch(e){ el.textContent=''; }
 }
+// Involve someone straight from the panel. They are told once, then follow the claim until they
+// mute it - exactly what an @mention in a note already did, without having to write a note.
+async function claimInvolve(claimId, sel){
+  const id = parseInt(sel.value, 10); if (!id) return;
+  const name = sel.options[sel.selectedIndex].text;
+  sel.value = ''; sel.disabled = true;
+  try{
+    const r = await API('/claims/'+claimId+'/watchers', {method:'POST', body: JSON.stringify({staff_ids:[id]})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not involve them'), 'error'); }
+    else { ndUI.toast(name + ' is now involved', 'success'); }
+  }catch(e){ ndUI.toast('Could not involve them.', 'error'); }
+  sel.disabled = false;
+  loadClaimWatchers(claimId);
+}
+window.claimInvolve = claimInvolve;
 async function toggleClaimMute(claimId){
   const btn = document.getElementById('claimMuteBtn_'+claimId);
   const willMute = !(btn && btn.dataset.muted === '1');
@@ -6430,8 +6524,9 @@ function _drawerMode(isClaim){
 // Which column a claim section belongs in, read from its own heading. First match wins, so
 // "Status History" is caught as history before "Update Status" could be taken as work.
 const _DCOL_RULES = [
-  [3, /notes|discussion|messages with|activity|status history/i],
-  [1, /claim info|branch|advisor|assign to|involved|notified|who gets/i],
+  // "Involved" sits with the notes on purpose: you involve somebody BECAUSE of what was said.
+  [3, /notes|discussion|messages with|activity|status history|involved/i],
+  [1, /claim info|branch|advisor|assign to|notified|who gets/i],
 ];
 const _DCOL_NAMES = {1: 'Who & what', 2: 'The work', 3: 'Conversation & history'};
 
@@ -6451,7 +6546,11 @@ function _claimPopLayout(force){
       .sort(function(a, b){ return a.dataset.ord - b.dataset.ord; });
   } else {
     secs = Array.from(body.children);
-    secs.forEach(function(el, i){ el.dataset.ord = i; });
+    // A section may state its own place in the reading order (data-ord in the template). Only the
+    // ones that don't are numbered by where they happen to sit in the markup, so the order the
+    // founder asked for is set once, in the template, instead of by moving big blocks of HTML.
+    secs.forEach(function(el, i){ if (!el.dataset.ord) el.dataset.ord = String(1000 + i); });
+    secs.sort(function(a, b){ return (a.dataset.ord - b.dataset.ord); });
   }
   body.dataset.cols = String(n);
   if (n === 1){ body.replaceChildren.apply(body, secs); return; }

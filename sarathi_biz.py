@@ -4661,6 +4661,41 @@ async def ops_claim_watchers(claim_id: int, request: Request):
     return {"watchers": watchers, "me_muted": me_muted, "me": staff["staff_id"]}
 
 
+class _ClaimInvolveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_ids: List[int] = Field(..., min_length=1, max_length=20)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/watchers")
+@limiter.limit("30/minute")
+async def ops_claim_involve(claim_id: int, body: _ClaimInvolveReq, request: Request):
+    """Involve a colleague in a claim directly, instead of having to @mention them in a note.
+    Same effect as a mention: they are told once, and then they follow the claim until they mute."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    newly = await nidaan.add_claim_watchers(claim_id, body.staff_ids, caller["staff_id"],
+                                            relation="involved")
+    who = _actor_label(caller)
+    if newly:
+        try:
+            import biz_nidaan_notifications as _nnot
+            from biz_nidaan_notifications import _cn as _claim_no
+            await _nnot.notify_staff_inapp(
+                newly, f"👥 You are now involved in #{_claim_no(claim_id)}",
+                f"{who} added you to the claim for {claim.get('insured_name') or ''}. "
+                f"You will get its updates until you mute it.",
+                event_key="claim.involved", claim_id=claim_id)
+        except Exception as e:  # noqa: BLE001 — being told is not worth failing the action for
+            logger.info("could not tell the newly involved on claim %s: %s", claim_id, e)
+    await _ops_audit(request, "claim.involve", "claim", str(claim_id),
+                     "involved %d staff" % len(newly))
+    return {"ok": True, "added": newly, "watchers": await nidaan.list_claim_watchers(claim_id)}
+
+
 class _ClaimMuteReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     muted: bool = True
@@ -13082,13 +13117,35 @@ async def ops_flags_set(body: _SystemFlagReq, request: Request):
 
 
 # ── Staff roster (for assignee picker) ────────────────────────────────────────
+#: The people a CLAIM can be handed to — Dr.Ashish (23), Ashwin Kaushal (2), Adv Harish Bhatia
+#: (30), Adv Ambikesh C (26), Chayan Bagga (20), Yamini (22). Deliberately short: a claim landing
+#: with somebody who does not work claims is how a claim goes quiet. It is only the DEFAULT — the
+#: live list is the ops setting `claim_handler_ids`, so it can be changed without a deploy.
+#: Everyone else keeps everything else: tasks, @mentions, notifications, and any claim they are
+#: already assigned to stays theirs.
+_DEFAULT_CLAIM_HANDLERS = "23,2,30,26,20,22"
+
+
+def _handler_ids(raw: Optional[str]) -> set:
+    ids = {int(x) for x in str(raw or "").replace(" ", "").split(",") if x.strip().isdigit()}
+    return ids or {int(x) for x in _DEFAULT_CLAIM_HANDLERS.split(",")}
+
+
 @app.get("/nidaan/ops/api/assignees")
 async def ops_assignees(request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request)
     rows = await ntasks.list_active_associates()
+    handlers = _handler_ids(await nidaan.get_ops_setting("claim_handler_ids",
+                                                         _DEFAULT_CLAIM_HANDLERS))
     for r in rows:
         r["avatar_url"] = _nidaan_doc_url(r["profile_pic"]) if r.get("profile_pic") else ""
+        # Additive flag: every existing caller of this list ignores it and behaves as before.
+        r["claim_handler"] = int(r.get("staff_id") or 0) in handlers
+    # If not one of them is active any more, offer everybody rather than an empty dropdown.
+    if not any(r.get("claim_handler") for r in rows):
+        for r in rows:
+            r["claim_handler"] = True
     return {"staff": rows}
 
 
