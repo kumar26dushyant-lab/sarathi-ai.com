@@ -518,8 +518,25 @@ async function raiseBranchClaim(){
         disputed_amount:parseInt($('bcAmount').value)||null,notes:($('bcNotes').value||'').trim()})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.detail||'Could not submit the claim');
+    // The rejection letter is the whole basis of the case. This upload used to be fire-and-forget
+    // inside an empty catch, so when it failed the branch still read "submitted ✓" and the claim
+    // reached us with nothing attached (that is how NP-167 arrived empty). Now a failure is said
+    // out loud, with what to do about it.
+    let docOk=false, docWhy='';
     try{ const fd=new FormData(); fd.append('files',rej);
-      await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',{method:'POST',headers:authHeaders(),body:fd}); }catch(_){}
+      const ur=await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',
+        {method:'POST',headers:authHeaders(),body:fd});
+      docOk=ur.ok;
+      if(!ur.ok){ const ud=await ur.json().catch(()=>({})); docWhy=ud.detail||('error '+ur.status); }
+    }catch(e){ docWhy=(e&&e.message)||'the upload did not go through'; }
+    if(!docOk){
+      setMsg('Claim #'+d.claim_id+' was created, but the rejection letter did NOT attach — '
+             +docWhy+'. Open the claim below and attach it, or the case cannot move forward.',false);
+      $('bcRejFile').value='';
+      loadBranchClaims();
+      btn.disabled=false;
+      return;
+    }
     setMsg('Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.',true);
     ['bcCompName','bcCompPhone','bcCompEmail','bcInsName','bcInsPhone','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
     $('bcType').value=''; $('bcRejFile').value='';

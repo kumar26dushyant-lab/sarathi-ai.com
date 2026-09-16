@@ -988,7 +988,7 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
+            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
         if not _doc_magic_ok(content):
             raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -1494,6 +1494,11 @@ async def nidaan_claim_delete_doc(doc_id: int, request: Request):
         raise HTTPException(status_code=404, detail="That document is no longer on this claim.")
     _nidaan_remove_doc_file(stored)
     try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(int(ctx["claim_id"]), int(doc_id))
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
+    try:
         await nidaan.record_claim_activity(
             int(ctx["claim_id"]), "doc_removed", channel="web", direction="in",
             actor="complainant", summary="Complainant removed a document they had uploaded")
@@ -1525,7 +1530,7 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(status_code=413, detail=f"{f.filename} exceeds the 10 MB limit")
+            raise HTTPException(status_code=413, detail=f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -4394,6 +4399,11 @@ async def nidaan_branch_delete_claim_doc(claim_id: int, doc_id: int, request: Re
     stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
     if stored is None: raise HTTPException(404, "Document not found")
     _nidaan_remove_doc_file(stored)
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
     return {"ok": True}
 
 
@@ -4473,6 +4483,13 @@ async def nidaan_ops_delete_claim_doc(claim_id: int, doc_id: int, request: Reque
     stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
     if stored is None: raise HTTPException(404, "Document not found")
     _nidaan_remove_doc_file(stored)
+    # If that file was what answered a checklist line, the line has to open again - otherwise a
+    # wrong document removed leaves a green tick behind and we never ask for the real one.
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
     await _ops_audit(request, "claim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
     return {"ok": True}
 
@@ -9770,7 +9787,7 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
+            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
         if not _doc_magic_ok(content):
             raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -9810,6 +9827,11 @@ async def ops_my_claim_doc_delete(claim_id: int, doc_id: int, request: Request):
     if stored is None:
         raise HTTPException(status_code=404, detail="Document not found")
     _nidaan_remove_doc_file(stored)
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
     await _ops_audit(request, "myclaim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
     return {"ok": True}
 
@@ -27977,6 +27999,11 @@ async def main():
                     n = await nnot.sweep_missed_claim_alerts()
                     if n:
                         logger.warning("Claim-alert sweep recovered %d missed alert(s)", n)
+                    # A claim with NO papers at all is work nobody can start. The forms now say so
+                    # when an upload fails; this catches the ones that slip past anyway.
+                    e = await nnot.sweep_empty_claims()
+                    if e:
+                        logger.warning("Flagged %d claim(s) that arrived with no documents", e)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:

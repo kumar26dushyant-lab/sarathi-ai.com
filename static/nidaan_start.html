@@ -1368,11 +1368,27 @@ async function submitFreeClaim() {
     const claimId = data.claim_id;
     // Upload every document to the new claim (so the dashboard opens straight on the pay-gate).
     btn.innerHTML = '<span>⏳</span> ' + _Lr('Uploading your documents…', 'आपके दस्तावेज़ अपलोड हो रहे हैं…');
+    // A failed upload used to pass silently: the customer was taken to their dashboard believing
+    // their papers were with us, and the claim reached our team empty. Now we say which ones did
+    // not go, so they can send them again from the dashboard.
+    const failed = [];
     for (const key of _revDocs) {
       const f = _revFiles[key]; if (!f) continue;
       const fd = new FormData(); fd.append('files', f); fd.append('doc_key', key);
-      await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
-        method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+      try {
+        const ur = await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+        if (!ur.ok) failed.push(f.name || key);
+      } catch(_) { failed.push(f.name || key); }
+    }
+    if (failed.length) {
+      showRevMsg('err', _Lr(
+        'Your claim was created, but these did not upload: ' + failed.join(', ')
+          + '. Please add them again from your dashboard.',
+        'आपका क्लेम बन गया, लेकिन ये अपलोड नहीं हुए: ' + failed.join(', ')
+          + '। कृपया इन्हें अपने डैशबोर्ड से दोबारा भेजें।'));
+      setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 4000);
+      return;
     }
     showRevMsg('ok', _Lr('✅ All set! Taking you to your dashboard…', '✅ सब तैयार! आपको आपके डैशबोर्ड पर ले जा रहे हैं…'));
     btn.style.display = 'none';

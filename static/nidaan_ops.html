@@ -3954,7 +3954,7 @@ function _claimTrail(c){
 //   in a bucket      -> where it is
 //   handed over      -> by whom, and the way to the workspace
 //   not paid for     -> says so
-//   otherwise        -> the "All documents received" tick, Documents, and Move to Level-2
+//   otherwise        -> the "All documents received" tick, Documents, and Move to Consolidation
 // Documents are gathered HERE, before Level-2; the tick says they are all in and records whose
 // word that is, and only then does Move open - so Live Cases starts with the papers for the gist.
 function _l2HandoverControls(c){
@@ -3983,10 +3983,10 @@ function _l2HandoverControls(c){
     +   'onclick="event.stopPropagation();docsOpen(' + c.claim_id + ',_reloadL2)">📂 Documents</button><br>'
     + (done
         ? '<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" '
-          + 'onclick="event.stopPropagation();hoOpen(' + c.claim_id + ')">→ Move to Level-2</button>'
+          + 'onclick="event.stopPropagation();hoOpen(' + c.claim_id + ')">→ Move to Consolidation</button>'
         : '<button class="btn btn-ghost" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap;opacity:.55" '
           + 'title="Tick \'All documents received\' first" '
-          + 'onclick="event.stopPropagation();l2DocsNeeded(' + c.claim_id + ')">→ Move to Level-2</button>');
+          + 'onclick="event.stopPropagation();l2DocsNeeded(' + c.claim_id + ')">→ Move to Consolidation</button>');
 }
 
 function _l2CardInner(c, withL2){
@@ -4232,7 +4232,7 @@ function _renderOutcome(key){
   if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows, true); return; }
   if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows, true); return; }
   wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Disputed</th>'
-    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Level-2</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
+    + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Consolidation</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
         if(isL2){
@@ -5938,33 +5938,33 @@ async function openClaimDrawer(claimId) {
       <summary style="cursor:pointer;font-weight:700;list-style:none">📜 Activity timeline <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— status, payments, WhatsApp &amp; every automation nudge + reply</span></summary>
       <div id="claimActivity_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
     </details>
-    <!-- Notes & discussion -->
+    <!-- Notes, and who is involved - ONE box (founder, 17 Sep). They were two sections doing
+         one job: you involve somebody BECAUSE of what was said. The long list of name chips is
+         gone; pick a colleague from the dropdown, or type @ in the note as before. -->
     <div data-ord="40" class="drawer-section">
-      <h4>Internal Notes &amp; Discussion</h4>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <span>💬 Notes &amp; who is involved</span>
+        <button class="btn-sm btn-ghost" id="claimMuteBtn_${c.claim_id}" onclick="toggleClaimMute(${c.claim_id})" title="Mute/unmute your notifications for this claim">🔔 Mute me</button>
+      </h4>
       <div id="notesArea_${c.claim_id}">${notesHtml}</div>
       <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
-        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… tag teammates below to notify them"></textarea>
+        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… type @ to tag a teammate"></textarea>
         <div id="claimMentionBox_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.3rem;font-size:.78rem;color:var(--nd-text-muted)"></div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-          <input type="file" id="claimNoteFiles_${c.claim_id}" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.txt,.csv,.heic,.heif" style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
+          <input type="file" id="claimNoteFiles_${c.claim_id}" multiple style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
           <button class="btn-sm btn-ghost" type="button" onclick="document.getElementById('claimNoteFiles_${c.claim_id}').click()">📎 Attach</button>
           <span id="claimNoteFileList_${c.claim_id}" style="font-size:.76rem;color:var(--nd-text-muted)"></span>
           <button class="btn btn-primary" style="margin-left:auto" onclick="addNote(${c.claim_id})">Add note</button>
         </div>
-        <div style="font-size:.7rem;color:var(--nd-text-faint)">Up to 10 files · 10&nbsp;MB each. You can delete your own note/attachment within 1&nbsp;hour; admins anytime.</div>
+        <div style="font-size:.7rem;color:var(--nd-text-faint)">Up to 10 files · 10&nbsp;MB each. You can remove your own note or attachment within 1&nbsp;hour; admins any time.</div>
       </div>
-    </div>
-    <!-- Involved (watchers) -->
-    <div data-ord="50" class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
-        <span>👥 Involved</span>
-        <button class="btn-sm btn-ghost" id="claimMuteBtn_${c.claim_id}" onclick="toggleClaimMute(${c.claim_id})" title="Mute/unmute your notifications for this claim">🔔 Mute me</button>
-      </h4>
-      <div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.4rem">Pick a colleague to involve, or @mention them in a note. Involved staff get this claim's updates (bell + Telegram) until they mute.</div>
-      <select id="involvePick_${c.claim_id}" class="form-input" style="width:100%;margin-bottom:.5rem" onchange="claimInvolve(${c.claim_id}, this)">
-        <option value="">＋ Involve a colleague…</option>
-      </select>
-      <div id="claimWatchersArea_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
+      <div style="margin-top:.8rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
+        <select id="involvePick_${c.claim_id}" class="form-input" style="width:100%;margin-bottom:.4rem" onchange="claimInvolve(${c.claim_id}, this)">
+          <option value="">＋ Involve a colleague…</option>
+        </select>
+        <div id="claimWatchersArea_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
+        <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.3rem">Involved staff get this claim's updates until they mute.</div>
+      </div>
     </div>
     <!-- (The second Documents box lived here. It is now part of the one 📂 Documents section
          above, so the same papers are not listed twice on one panel.) -->
@@ -6482,18 +6482,41 @@ async function loadClaimMentions(claimId){
     if (!r.ok){ box.innerHTML=''; return; }
     const cands = (await r.json()).candidates || [];
     if (!cands.length){ box.innerHTML='<span style="opacity:.5">No teammates to tag</span>'; return; }
-    box.innerHTML = '<span style="opacity:.55;align-self:center">Tag:</span>' + cands.slice(0,40).map(c=>{
-      const on = _claimMentionSel[claimId].has(c.staff_id);
-      return `<button type="button" id="claimMent_${claimId}_${c.staff_id}" onclick="claimToggleMention(${claimId},${c.staff_id})" style="background:${on?'var(--nd-warning-soft)':'var(--nd-bg-surface-2)'};border:1px solid ${on?'#fbbf24':'var(--nd-border-strong)'};color:${on?'var(--nd-warning-text)':'var(--nd-text-secondary)'};border-radius:14px;padding:.15rem .5rem;font-size:.75rem;font-weight:600;cursor:pointer">${c.is_assignee?'★ ':''}${esc(c.name)}</button>`;
-    }).join('');
+    _claimMentionCands[claimId] = cands;
+    _renderMentionPick(claimId);
   } catch(e){ box.innerHTML=''; }
 }
+// A dropdown, not a wall of twenty names (founder, 17 Sep). Only the people you have actually
+// tagged show as chips; everyone else lives in the list until you pick them.
+const _claimMentionCands = {};
+function _renderMentionPick(claimId){
+  const box = document.getElementById('claimMentionBox_'+claimId);
+  if (!box) return;
+  const cands = _claimMentionCands[claimId] || [];
+  const sel = _claimMentionSel[claimId] || new Set();
+  const left = cands.filter(c => !sel.has(c.staff_id));
+  box.innerHTML =
+      '<select class="form-input" style="flex:1 1 180px;min-width:150px;font-size:.8rem;padding:.3rem .4rem" '
+    +   'onchange="claimToggleMention(' + claimId + ', parseInt(this.value,10)); this.value=\'\'">'
+    +   '<option value="">＋ Tag a teammate…</option>'
+    +   left.map(function(c){ return '<option value="' + c.staff_id + '">'
+        + (c.is_assignee ? '★ ' : '') + esc(c.name) + '</option>'; }).join('')
+    + '</select>'
+    + [...sel].map(function(id){
+        const c = cands.find(function(x){ return x.staff_id === id; }) || {name: '#' + id};
+        return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--nd-warning-soft);'
+          + 'border:1px solid #fbbf24;color:var(--nd-warning-text);border-radius:14px;padding:.15rem .5rem;'
+          + 'font-size:.75rem;font-weight:600">' + esc(c.name)
+          + '<button type="button" onclick="claimToggleMention(' + claimId + ',' + id + ')" '
+          + 'style="background:none;border:0;color:inherit;cursor:pointer;line-height:1">×</button></span>';
+      }).join('');
+}
 function claimToggleMention(claimId, staffId){
+  if (!staffId) return;
   _claimMentionSel[claimId] = _claimMentionSel[claimId] || new Set();
-  const on = !_claimMentionSel[claimId].has(staffId);
-  if (on) _claimMentionSel[claimId].add(staffId); else _claimMentionSel[claimId].delete(staffId);
-  const el = document.getElementById('claimMent_'+claimId+'_'+staffId);
-  if (el){ el.style.background = on?'rgba(251,191,36,.2)':'rgba(255,255,255,.05)'; el.style.borderColor = on?'#fbbf24':'rgba(255,255,255,.14)'; el.style.color = on?'#fde68a':'var(--nd-text-muted)'; }
+  if (_claimMentionSel[claimId].has(staffId)) _claimMentionSel[claimId].delete(staffId);
+  else _claimMentionSel[claimId].add(staffId);
+  _renderMentionPick(claimId);
 }
 function claimNoteFilesPicked(claimId){
   const fi = document.getElementById('claimNoteFiles_'+claimId), fl = document.getElementById('claimNoteFileList_'+claimId);
@@ -14430,6 +14453,8 @@ async function docsRender(msg, ok){
           +   '\',' + _dcClaim + ',' + (f.doc_id || 0) + ')">Open</button>'
           + '<button class="l2mv g" title="Rename this document" onclick="docRename(' + _dcClaim + ','
           +   (f.doc_id || 0) + ',' + esc(JSON.stringify(f.original_name || '')) + ')">✏️</button>'
+          + '<button class="l2mv d" title="Remove this document" onclick="docsDelete('
+          +   (f.doc_id || 0) + ',' + esc(JSON.stringify(f.original_name || '')) + ')">Remove</button>'
           + '</div>';
       }).join('')
     : '<div class="bdsub">Nothing attached yet.</div>';
@@ -14488,8 +14513,8 @@ async function docsRender(msg, ok){
     +       '<select id="dcKey">' + opts + '</select>'
     +       '<input type="file" id="dcFile" multiple>'
     +       '<button class="l2mv p" style="margin-top:.45rem" onclick="docsUpload(this)">Attach</button>'
-    +       '<div class="bdsub" style="margin-top:.3rem">Anything except video — PDF, photos (iPhone '
-    +         'photos too), Word, scans. Up to 25 MB each. Every file is virus-scanned.</div>'
+    +       '<div class="bdsub" style="margin-top:.3rem">PDF, photos, Word, scans — not video. '
+    +         'Max 25 MB each.</div>'
     +     '</div>'
     +   '</div>'
     +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
@@ -14505,6 +14530,24 @@ async function docsRender(msg, ok){
     if (m){ m.style.color = ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)'; m.textContent = msg; }
   }
 }
+
+// Remove a document that should not be on the claim. Wherever a file can be attached in this
+// application it can be taken off again - a wrong document attached and stuck there is worse than
+// no document. Confirmed first, because on a phone this sits next to Open.
+async function docsDelete(docId, name){
+  if (!docId) return;
+  if (!confirm('Remove "' + (name || 'this document') + '" from this claim?\n\nIt comes off the '
+      + 'claim and off the checklist line it answered. This cannot be undone.')) return;
+  try{
+    const r = await API('/claims/' + _dcClaim + '/documents/' + docId, {method:'DELETE'});
+    if (!r.ok){
+      const d = await r.json().catch(function(){ return {}; });
+      return docsRender(_l2Err(d, 'Could not remove that document.'), false);
+    }
+  }catch(e){ return docsRender('Could not remove that document.', false); }
+  docsRender('Removed. If it answered a checklist line, that line is open again.', true);
+}
+window.docsDelete = docsDelete;
 
 // Tick or untick one checklist line. The screen updates first so it feels immediate, and puts
 // itself back if the save fails - a tick that looks saved but is not would mean a document nobody

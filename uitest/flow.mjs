@@ -519,7 +519,9 @@ async function run() {
       return {
         centred: Math.abs((d.left + d.width / 2) - innerWidth / 2) < 30 && d.width > 1000,
         n: cols.length,
-        info: inCol(/claim info/i), docs: inCol(/📂 Documents/), notes: inCol(/internal notes/i),
+        // 17 Sep: "Internal notes & discussion" and "Involved" became one box, "Notes & who is
+        // involved" - you involve somebody because of what was said.
+        info: inCol(/claim info/i), docs: inCol(/📂 Documents/), notes: inCol(/notes/i),
         hist: inCol(/status history/i), upd: inCol(/update status/i),
         sections: document.querySelectorAll('#drawerBody [data-ord]').length,
         colScroll: cols.every(c => getComputedStyle(c).overflowY === 'auto'),
@@ -635,7 +637,8 @@ async function run() {
                tickable: lines.filter(l => l.querySelector('input[type=checkbox]')).length,
                says: /Only unticked documents are asked for/i.test(body.innerText || ''),
                accept: file ? (file.getAttribute('accept') || '') : 'no-input',
-               video: /except video/i.test(body.innerText || '') };
+               // 17 Sep: the wording was trimmed to the two facts that matter (founder).
+               video: /not video/i.test(body.innerText || '') };
     });
     chk(dw.lines > 0 && dw.tickable === dw.lines,
         `every checklist line can be ticked by hand (${dw.tickable} of ${dw.lines})`);

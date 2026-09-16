@@ -1722,6 +1722,60 @@ async def on_claim_filed(claim_id: int, account_id: int):
         logger.warning("on_claim_filed wa_journey failed claim %s: %s", claim_id, e)
 
 
+async def sweep_empty_claims(hours: int = 48) -> int:
+    """A claim that reached us with NOTHING attached.
+
+    The branch form asks for the rejection letter and will not submit without one - but it created
+    the claim first and uploaded the letter second, inside an empty catch, so a failed upload left
+    a claim with no papers and nobody any the wiser (NP-167, 16 Sep). The form now says so out
+    loud; this is the backstop, because the same thing can happen any time a form is closed
+    mid-upload or a phone loses signal.
+
+    Fires once per claim, 20 minutes after it arrives (so an upload still in flight is not
+    mistaken for a missing one), and only for claims that came in through a form.
+    """
+    told = 0
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (await conn.execute(
+            """SELECT c.claim_id, c.insured_name, c.complainant_name, c.branch_code, c.origin,
+                      c.claim_type, c.created_at
+                 FROM nidaan_claims c
+                WHERE c.created_at >= datetime('now', ?)
+                  AND c.created_at <= datetime('now', '-20 minutes')
+                  AND COALESCE(c.archived,0)=0
+                  AND COALESCE(c.status,'') NOT IN ('closed','withdrawn')
+                  AND NOT EXISTS (SELECT 1 FROM nidaan_claim_documents d
+                                   WHERE d.claim_id = c.claim_id)
+                  AND NOT EXISTS (SELECT 1 FROM nidaan_claim_activity a
+                                   WHERE a.claim_id = c.claim_id AND a.kind = 'no_documents')
+                ORDER BY c.claim_id DESC LIMIT 25""",
+            ("-%d hours" % int(hours),))).fetchall()
+    for r in rows:
+        row = dict(r)
+        cid = row["claim_id"]
+        who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+        where = ("branch %s" % row["branch_code"]) if row.get("branch_code") else (
+            row.get("origin") or "a form")
+        try:
+            ids = [a["staff_id"] for a in await _super_admin_staff()]
+            await notify_staff_inapp(
+                ids, "\U0001f4ed #%s arrived with no documents" % _cn(cid),
+                "%s (%s) came in from %s and has nothing attached — not even the rejection "
+                "letter, which the case is built on.\n\nSomebody has to ask for it: open the "
+                "claim, then Documents → Ask the complainant for what is missing."
+                % (who or "A claim", row.get("claim_type") or "claim", where),
+                event_key="claim.no_documents", claim_id=cid, email=False)
+            import biz_nidaan as _nid
+            await _nid.record_claim_activity(
+                cid, "no_documents", channel="system", actor="system",
+                summary="Arrived with no documents — flagged to super admins")
+            told += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not flag empty claim %s: %s", cid, e)
+    return told
+
+
 async def sweep_missed_claim_alerts(hours: int = 48) -> int:
     """Self-heal: find recent claims the team was never told about, and tell them.
 
