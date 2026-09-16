@@ -407,14 +407,14 @@ CAPABILITIES: list[dict] = [
                     "the Case Report that puts it all on one page. Click any document to read it "
                     "right there - PDFs and photos open in the page, nothing to download. "
                     "Full claim opens the claim in its own window, so the two sit side by side.",
-               "u": "Level-2 → Settlement → Open on any case."},
+               "u": "Consolidation → Open on any case."},
         "hi": {"t": "केस रिकॉर्ड: गिस्ट, ड्राफ़्ट और केस रिपोर्ट",
                "d": "Level-2 का कोई भी केस खोलिए - केस आगे बढ़ने के साथ उसका रिकॉर्ड भरता जाता है: गिस्ट "
                     "(पॉलिसी नंबर और पॉलिसी शुरू होने की तारीख के साथ), शुरुआती क्लेम आकलन शीट, Draft और "
                     "Lokpal Draft दो बड़े बॉक्स में साथ-साथ, और केस रिपोर्ट जिसमें सब एक पेज पर है। किसी भी "
                     "दस्तावेज़ पर क्लिक करें, वहीं पढ़ें - PDF और फ़ोटो पेज में ही खुलते हैं, डाउनलोड नहीं करना पड़ता। "
                     "Full claim क्लेम को अलग विंडो में खोलता है, ताकि दोनों साथ-साथ दिखें।",
-               "u": "Level-2 → Settlement → किसी भी केस पर Open।"},
+               "u": "Consolidation → किसी भी केस पर Open।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
@@ -427,14 +427,14 @@ CAPABILITIES: list[dict] = [
                     "admins are told at once and the request goes into the claim's remarks. When a claim "
                     "is sent back, it is flagged with who sent it and why, and that bucket's work opens "
                     "again. Nothing already recorded is erased.",
-               "u": "Level-2 → Settlement → open a case → Request a change on locked work."},
+               "u": "Consolidation → open a case → Request a change on locked work."},
         "hi": {"t": "पूरा हुआ काम लॉक; बदलाव माँगें",
                "d": "क्लेम किसी बकेट से आगे बढ़ते ही उस बकेट का काम लॉक हो जाता है, ताकि बाद में कोई गलती से उसे न बदले। "
                     "गिस्ट ड्राफ़्ट पूरे होने तक खुला रहता है, फिर उनके साथ लॉक होता है। लॉक काम सिर्फ़ तीन सुपर एडमिन बदल "
                     "सकते हैं और हर बदलाव दर्ज होता है। कुछ ठीक करना हो तो Request a change दबाएँ: सुपर एडमिन को तुरंत "
                     "खबर जाती है और अनुरोध क्लेम के रिमार्क्स में दर्ज होता है। क्लेम वापस भेजा जाए तो उस पर लिखा आता है "
                     "कि किसने और क्यों भेजा, और उस बकेट का काम फिर खुल जाता है। पहले से दर्ज कुछ भी मिटता नहीं।",
-               "u": "Level-2 → Settlement → केस खोलें → लॉक काम पर Request a change।"},
+               "u": "Consolidation → केस खोलें → लॉक काम पर Request a change।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
@@ -445,13 +445,13 @@ CAPABILITIES: list[dict] = [
                     "once. It is reminded every morning while open, and the super admins are told after "
                     "3 days. Live Cases presses Query resolved, picks the doctor or advocate, and it goes "
                     "back to them in Pending Draft.",
-               "u": "Level-2 → Settlement → Pending Draft → ❓ Query; Live Cases → ✅ Resolved."},
+               "u": "Consolidation → Pending Draft → ❓ Query; Live Cases → ✅ Resolved."},
         "hi": {"t": "ड्राफ़्ट क्वेरी: क्लेम वापस भेजें, और जवाब पक्का करें",
                "d": "Pending Draft में डॉक्टर या एडवोकेट Raise a query दबा सकते हैं: क्लेम Live Cases में "
                     "DRAFT QUERY लिखकर सबसे ऊपर लौटता है और Live Cases को तुरंत खबर जाती है। खुली रहने तक हर "
                     "सुबह याद दिलाया जाता है, 3 दिन बाद सुपर एडमिन को भी। Live Cases Query resolved दबाकर "
                     "डॉक्टर/एडवोकेट चुनता है और क्लेम उन्हीं के पास Pending Draft में लौटता है।",
-               "u": "Level-2 → Settlement → Pending Draft → ❓ Query; Live Cases → ✅ Resolved।"},
+               "u": "Consolidation → Pending Draft → ❓ Query; Live Cases → ✅ Resolved।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
@@ -462,12 +462,12 @@ CAPABILITIES: list[dict] = [
                     "branch or subscriber. A second message is refused while the first is unanswered, "
                     "so nobody is bombarded. When they reply on WhatsApp, the super admins and you are "
                     "told at once.",
-               "u": "Level-2 → Settlement → open a case → Contact the complainant."},
+               "u": "Consolidation → open a case → Contact the complainant."},
         "hi": {"t": "शिकायतकर्ता से एक बात पूछें",
                "d": "Level-2 के किसी भी केस से: कॉल करें, या WhatsApp पर एक क्वेरी संदेश भेजें (हमारा "
                     "मंज़ूर संदेश, आपके शब्दों के साथ) और ईमेल, जिसकी कॉपी ब्रांच/सब्सक्राइबर को ईमेल से जाती है। "
                     "पहले का जवाब आने तक दूसरा संदेश नहीं जाता। WhatsApp पर जवाब आते ही सुपर एडमिन और आपको खबर मिलती है।",
-               "u": "Level-2 → Settlement → केस खोलें → Contact the complainant।"},
+               "u": "Consolidation → केस खोलें → Contact the complainant।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {

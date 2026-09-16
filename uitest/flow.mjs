@@ -493,7 +493,53 @@ async function run() {
     chk(pop.info === 0 && pop.docs === 1 && pop.notes === 2 && pop.hist === 2 && pop.upd === 1,
         'who & what | the work | conversation & history', JSON.stringify(pop));
     chk(pop.colScroll && pop.bodyScroll, 'each column scrolls on its own; the popup itself does not');
+
+    /* 16 Sep (founder): the words on the panel, and the person we actually deal with. */
+    const who = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#drawerBody .kv')];
+      const nameRow = rows.find(r => /^(insured|patient)$/i.test(((r.querySelector('.kv-label') || {}).textContent || '').trim()));
+      const compRow = rows.find(r => /^complainant$/i.test(((r.querySelector('.kv-label') || {}).textContent || '').trim()));
+      return {
+        nameLabel: nameRow ? (nameRow.querySelector('.kv-label').textContent || '').trim() : '',
+        complainant: !!compRow,
+        complainantText: compRow ? (compRow.querySelector('.kv-val').textContent || '').trim() : '',
+        patientWord: typeof window._insuredLabel === 'function' ? window._insuredLabel('health') : '',
+        insuredWord: typeof window._insuredLabel === 'function' ? window._insuredLabel('motor') : '' };
+    });
+    chk(who.patientWord === 'Patient' && who.insuredWord === 'Insured',
+        'a health claim says Patient, a motor claim says Insured');
+    chk(/^(insured|patient)$/i.test(who.nameLabel), `the panel uses that word (${who.nameLabel})`);
+    chk(who.complainant, 'the complainant is on the panel at last');
+    chk(!!who.complainantText, `and says who they are (${who.complainantText.slice(0, 40)})`);
     await shot(page, 'claim-panel');
+
+    /* The insurance company is picked from the shared list, not typed. */
+    await page.evaluate(id => window.editClaimInfoModal && window.editClaimInfoModal(id), claimId);
+    await page.waitForTimeout(1200);
+    const ed = await page.evaluate(() => {
+      const pick = document.getElementById('ecInsurerBox_pick');
+      return { picker: !!pick,
+               many: pick ? pick.options.length : 0,
+               other: pick ? [...pick.options].some(o => /other/i.test(o.textContent)) : false,
+               kept: !!document.getElementById('ecInsurerWas'),
+               freeText: !!document.getElementById('ecInsurer') };
+    });
+    chk(ed.picker && ed.many > 30, `the claim's insurance company is a list of ${ed.many}, not a free-text box`);
+    chk(ed.other, 'and it always offers "Other", so a company we have not listed can still be recorded');
+    chk(ed.kept && !ed.freeText, 'the company already on the claim is remembered, so saving cannot blank it');
+    await page.evaluate(() => { const o = document.getElementById('editEntityOv'); if (o) o.remove(); });
+
+    /* The advisor's name decides who gets credit: contact details only. */
+    await page.evaluate(id => window.editAdvisorModal && window.editAdvisorModal(id), claimId);
+    await page.waitForTimeout(1200);
+    const adv = await page.evaluate(() => ({
+      name: !!document.getElementById('eaName'), firm: !!document.getElementById('eaFirm'),
+      email: !!document.getElementById('eaEmail'), phone: !!document.getElementById('eaPhone'),
+      says: /cannot be changed here/i.test((document.getElementById('editEntityOv') || {}).innerText || '') }));
+    chk(!adv.name && !adv.firm, 'the advisor name and firm can no longer be typed over');
+    chk(adv.email && adv.phone, 'but their email and phone are still editable');
+    chk(adv.says, 'and the form says why');
+    await page.evaluate(() => { const o = document.getElementById('editEntityOv'); if (o) o.remove(); });
     // Buttons still work after the move: the documents window opens from the popup.
     await page.evaluate(() => document.querySelector('#drawerBody [onclick^="docsOpen"]').click());
     await page.waitForTimeout(1500);

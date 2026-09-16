@@ -1240,7 +1240,7 @@ function buildSidebar() {
   // Grouped into clear zones. A zone header shows only if it has ≥1 visible item.
   const zones = [
     {h:'Work', items:[
-      {id:'l2',       label:'⚖️ Level-2 → Settlement', minRank:0},
+      {id:'l2',       label:'⚖️ Consolidation', minRank:0},
       // My Desk and Case Board folded into Level-2 -> Settlement (founder, 14 Sep). Old links to
       // them still work - showPanel() sends them here.
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
@@ -3711,7 +3711,7 @@ async function renderActiveClaimsWidget(statusFilter, search) {
     <div class="table-wrap" style="max-height:480px;overflow-y:auto">
       <table>
         <thead>
-          <tr><th>#</th><th>Insured</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Pay</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr>
+          <tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Pay</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -3756,7 +3756,7 @@ async function drillIntoTaskStatus(statusSlug, label) {
       <div style="font-size:.85rem">🗂️ Showing ${claims.length} claim${claims.length===1?'':'s'} with tasks in <b>${esc(label)}</b></div>
       <button class="btn-sm btn-ghost" onclick="loadClaims()">Clear filter ✕</button>
     </div>
-    <table class="claims-tbl"><thead><tr><th>ID</th><th>Insured</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">No matching claims</td></tr>'}</tbody></table>`;
+    <table class="claims-tbl"><thead><tr><th>ID</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Owner</th><th>Assigned</th><th>Created</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">No matching claims</td></tr>'}</tbody></table>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3846,6 +3846,15 @@ const _L2_STAGES = [
   ['in_negotiation','In negotiation'],['resolved_won','Won'],['resolved_lost','Lost'],
   ['closed','Closed'],['withdrawn','Withdrawn']];
 function _claimStageLabel(s){ const f=_L2_STAGES.find(x=>x[0]===s); return f?f[1]:((s||'—').replace(/_/g,' ')); }
+
+// "Insured" is a word most people never use. On a health claim the person IS the patient, so we
+// say Patient; on motor, life, fire or anything else "Patient" would be wrong (on a life claim,
+// plainly so). Lists mix claim types and cannot choose, so they carry both words.
+function _insuredLabel(claimType){
+  return /health|medic|hospital/i.test(String(claimType||'')) ? 'Patient' : 'Insured';
+}
+function _insuredLabelMixed(){ return 'Insured / Patient'; }
+window._insuredLabel = _insuredLabel;
 function _l2CsBadge(c){
   if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
   return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
@@ -4021,14 +4030,14 @@ async function loadPipeline(){
     + '</div></div>'
     + '<div class="l2ban info" style="max-width:44rem">'
     +   '<b>Looking for where a claim has reached?</b> That is '
-    +   '<a href="#l2" onclick="showPanel(\'l2\');return false">⚖️ Level-2 → Settlement</a> '
+    +   '<a href="#l2" onclick="showPanel(\'l2\');return false">⚖️ Consolidation</a> '
     +   '— it reads the real bucket, and says why each claim is waiting.</div>'
     + '<div class="l2ban info" style="max-width:44rem">'
     +   '<b>Looking for who brought a claim in, or which are unpaid leads?</b> Those two filters '
     +   'are now on <a href="#claims" onclick="showPanel(\'claims\');return false">'
     +   '📋 All Claims</a> — <i>Brought by</i> and <i>Customer</i>.</div>'
     + '<button class="btn btn-primary" onclick="showPanel(\'claims\')">Take me to All Claims</button>'
-    + ' <button class="btn btn-ghost" onclick="showPanel(\'l2\')">⚖️ Level-2 → Settlement</button>';
+    + ' <button class="btn btn-ghost" onclick="showPanel(\'l2\')">⚖️ Consolidation</button>';
   return;
 }
 
@@ -4165,7 +4174,7 @@ function _renderOutcome(key){
   // Views engine (L2): Board / Cards alternatives to the table.
   if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows, true); return; }
   if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows, true); return; }
-  wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Disputed</th>'
+  wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Disputed</th>'
     + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Level-2</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
@@ -4429,7 +4438,7 @@ function _renderClaimResults(){
   if(cv==='board'){ bodyHtml = _renderClaimBoard(claims); }
   else if(cv==='cards'){ bodyHtml = _renderClaimCards(claims); }
   else bodyHtml = `<div class="table-wrap"><table>
-        <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
+        <thead><tr>${_claimAdmin?'<th></th>':''}<th>#</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Payment</th><th>Source / Who</th><th>Auth / Dashboard</th><th>Assigned To</th><th>Tasks</th><th>Date</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
   // Admin cleanup bar: archive/restore test-garbage claims + toggle the Archived view.
   const archView = !!window._claimsArchivedView;
@@ -5772,8 +5781,24 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Claim ID</span><span class="kv-val">#${fmtClaimNum(c.claim_id)}</span></div>
       <div class="kv"><span class="kv-label">Type</span><span class="kv-val">${esc(c.claim_type)}</span></div>
       <div class="kv"><span class="kv-label">Status</span><span class="kv-val"><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></span></div>
-      <div class="kv"><span class="kv-label">Insured</span><span class="kv-val">${esc(c.insured_name)}</span></div>
+      <div class="kv"><span class="kv-label">${_insuredLabel(c.claim_type)}</span><span class="kv-val">${esc(c.insured_name)}</span></div>
       <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.insured_phone)}</span></div>
+      ${(function(){
+        // The complainant is who we actually deal with - the person who writes, sends papers and
+        // signs the authorisation. On most claims they are the same person as the insured, which
+        // is exactly why this row was never shown; but when they differ, nothing on this panel
+        // said so, and staff were calling the wrong number.
+        const cn = (c.complainant_name || '').trim(), cp = (c.complainant_phone || '').trim();
+        const sameName = !cn || cn.toLowerCase() === (c.insured_name || '').toLowerCase();
+        const samePhone = !cp || cp === (c.insured_phone || '');
+        const same = sameName && samePhone;
+        return '<div class="kv"><span class="kv-label">Complainant</span><span class="kv-val">'
+          + (same
+              ? '<span style="color:var(--nd-text-muted)">Same as the ' + _insuredLabel(c.claim_type).toLowerCase() + '</span>'
+              : esc(cn || c.insured_name || '—')
+                + (cp ? ' · <a href="tel:' + esc(cp) + '">' + esc(cp) + '</a>' : ''))
+          + '</span></div>';
+      })()}
       ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)} ${c.insured_email_verified?'<span title="Verified when the complainant opened the authorization link" style="background:rgba(16,185,129,.15);color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>':'<span title="Not yet verified — verifies when the complainant opens the Level-2 authorization link" style="background:rgba(234,179,8,.15);color:#a16207;padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'}</span></div>`:''}
       <div class="kv"><span class="kv-label">Insurance Company</span><span class="kv-val">${esc(c.insurer_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
@@ -6611,7 +6636,7 @@ function exportAccountsCSV(){
 }
 function exportL2CSV(){
   const list = _outcomeCache['l2claims']||[];
-  const rows = [['Claim #','Insured','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber','Referred by','Ref code','Delivered']]
+  const rows = [['Claim #','Insured / Patient','Phone','Type','Disputed','L2 fee','Status','ClaimShield case','Subscriber','Referred by','Ref code','Delivered']]
     .concat(list.map(c=>{
       const owner=(c.owner_name||'').trim();
       const subscriber = (/house account/i.test(owner) || c.origin==='branch') ? '' : owner;
@@ -7267,7 +7292,7 @@ function _acctTabClaims(d) {
       <td style="font-size:.75rem;color:var(--nd-text-muted)">${esc((c.created_at||'').split('T')[0])}</td>
     </tr>`).join('');
   return `<div class="table-wrap"><table>
-    <thead><tr><th>#</th><th>Insured</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Assigned</th><th>Open Tasks</th><th>Created</th></tr></thead>
+    <thead><tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Insurance Co.</th><th>Disputed</th><th>Status</th><th>Assigned</th><th>Open Tasks</th><th>Created</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -7370,21 +7395,49 @@ async function editClaimInfoModal(claimId){
   if(c.claim_type && std.indexOf(c.claim_type)<0) opts.unshift(c.claim_type);
   const typeOpts=opts.map(t=>'<option value="'+esc(t)+'"'+((c.claim_type||'')===t?' selected':'')+'>'+esc(t)+'</option>').join('');
   _editOverlay('Edit Claim #'+fmtClaimNum(claimId),
-    _efInput('Insured name','ecName',c.insured_name)
+    _efInput(_insuredLabel(c.claim_type)+' name','ecName',c.insured_name)
     +_efInput('Phone','ecPhone',c.insured_phone)
     +_efInput('Email','ecEmail',c.insured_email)
     +'<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:var(--nd-text-secondary)">Claim type<select id="ecType" style="width:100%;box-sizing:border-box;margin-top:.2rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem;border-radius:8px">'+typeOpts+'</select></label>'
-    +_efInput('Insurance Company','ecInsurer',c.insurer_name)
+    // The insurance company is picked from the one shared list (NidaanInsurers), not typed - the
+    // same list the branch, dashboard and intake forms use. Typing it free-hand is how one company
+    // arrives spelled four ways and stops being countable. A company already on the claim that is
+    // not in the list stays selectable, so opening this form never blanks somebody's data.
+    +'<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:var(--nd-text-secondary)">'
+    +  'Insurance Company<div id="ecInsurerBox" style="margin-top:.2rem"></div></label>'
+    +'<input type="hidden" id="ecInsurerWas" value="'+esc(c.insurer_name||'')+'">'
     +_efInput('Policy no.','ecPolicy',c.policy_no)
     +_efInput('Disputed amount ₹','ecAmount',c.disputed_amount,'number')
     +'<div id="ecMsg" style="font-size:.82rem;margin:.3rem 0"></div>'
     +'<button class="btn btn-primary" style="width:100%" onclick="saveClaimInfo('+claimId+')">💾 Save changes</button>');
+  try{
+    NidaanInsurers.mount('ecInsurerBox', {value: c.insurer_name || '',
+      style:'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+          + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);'
+          + 'padding:.5rem;border-radius:8px'});
+  }catch(e){
+    // If the shared list cannot load for any reason, fall back to a plain box rather than
+    // leaving the staffer with no way to record the company at all.
+    const box = document.getElementById('ecInsurerBox');
+    if (box) box.innerHTML = '<input type="text" id="ecInsurer" value="' + esc(c.insurer_name||'')
+      + '" style="width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+      + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem;border-radius:8px">';
+  }
 }
 async function saveClaimInfo(claimId){
   const g=id=>document.getElementById(id); const msg=g('ecMsg');
   const body={ insured_name:(g('ecName').value||'').trim(), insured_phone:(g('ecPhone').value||'').trim(),
     insured_email:(g('ecEmail').value||'').trim(), claim_type:g('ecType').value,
-    insurer_name:(g('ecInsurer').value||'').trim(), policy_no:(g('ecPolicy').value||'').trim() };
+    policy_no:(g('ecPolicy').value||'').trim() };
+  // The company: from the picker, or the fallback box if the shared list could not load. If the
+  // picker comes back empty while the claim already HAS a company, we send nothing rather than an
+  // empty string - opening this form to fix a policy number must never quietly erase the insurer.
+  const insNow = (function(){
+    try{ const v = NidaanInsurers.value('ecInsurerBox'); if (v !== null && v !== undefined) return String(v).trim(); }catch(e){}
+    const el = g('ecInsurer'); return el ? (el.value||'').trim() : '';
+  })();
+  const insWas = ((g('ecInsurerWas')||{}).value || '').trim();
+  if (insNow || !insWas) body.insurer_name = insNow;
   const amt=(g('ecAmount').value||'').trim(); if(amt!=='') body.disputed_amount=parseInt(amt,10);
   if(msg){msg.style.color='#94a3b8';msg.textContent='Saving…';}
   const r=await API('/claims/'+claimId+'/info',{method:'PATCH',body:JSON.stringify(body)});
@@ -7394,9 +7447,18 @@ async function saveClaimInfo(claimId){
 async function editAdvisorModal(claimId){
   const r=await API('/claims/'+claimId); if(!r.ok){ alert('Could not load claim'); return; }
   const c=await r.json();
+  // The name and the firm identify WHO brought this claim - referral credit, commissions and the
+  // claim's own history all hang off them. Only the way we reach them is editable here; if the
+  // name itself is wrong, that is an account correction, not a typo fix on one claim.
+  const _ro = 'width:100%;box-sizing:border-box;margin-top:.2rem;background:var(--nd-bg-surface);'
+            + 'border:1px solid var(--nd-border);color:var(--nd-text-muted);padding:.5rem;border-radius:8px';
   _editOverlay('Edit Advisor',
-    _efInput('Name','eaName',c.owner_name)
-    +_efInput('Firm','eaFirm',c.firm_name)
+    '<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:var(--nd-text-secondary)">'
+    + 'Name<div style="' + _ro + '">' + esc(c.owner_name || '—') + '</div></label>'
+    + '<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:var(--nd-text-secondary)">'
+    + 'Firm<div style="' + _ro + '">' + esc(c.firm_name || '—') + '</div></label>'
+    + '<div style="font-size:.72rem;color:var(--nd-text-faint);margin:-.3rem 0 .6rem">The name and firm '
+    + 'cannot be changed here — they decide who gets credit for this claim.</div>'
     +_efInput('Email','eaEmail',c.advisor_email||c.email)
     +_efInput('Phone','eaPhone',c.advisor_phone||c.phone)
     +'<div id="eaMsg" style="font-size:.82rem;margin:.3rem 0"></div>'
@@ -7404,8 +7466,8 @@ async function editAdvisorModal(claimId){
 }
 async function saveAdvisorInfo(claimId){
   const g=id=>document.getElementById(id); const msg=g('eaMsg');
-  const body={ owner_name:(g('eaName').value||'').trim(), firm_name:(g('eaFirm').value||'').trim(),
-    email:(g('eaEmail').value||'').trim(), phone:(g('eaPhone').value||'').trim() };
+  // Name and firm are deliberately not sent: they are shown read-only above.
+  const body={ email:(g('eaEmail').value||'').trim(), phone:(g('eaPhone').value||'').trim() };
   if(msg){msg.style.color='#94a3b8';msg.textContent='Saving…';}
   const r=await API('/claims/'+claimId+'/advisor',{method:'PATCH',body:JSON.stringify(body)});
   if(r.ok){ const ov=g('editEntityOv'); if(ov)ov.remove(); openClaimDrawer(claimId); try{ndUI.toast('Advisor updated','success');}catch(e){} }
@@ -12696,7 +12758,7 @@ function l2Shell(){
 
   el.innerHTML =
       '<div class="section-hdr"><div>'
-    +   '<div class="section-title">⚖️ Level-2 → Settlement</div>'
+    +   '<div class="section-title">⚖️ Consolidation</div>'
     +   '<div class="section-sub">The whole line: every open claim, the stage it has reached, and '
     +     'who we are waiting for. Each bucket does its part and passes the claim on.</div>'
     + '</div><button class="btn-sm btn-ghost" onclick="loadL2()">🔄 Refresh</button></div>'
@@ -13106,7 +13168,7 @@ function l2Sub(s){ _l2Sub = s; l2Load(); }
 function l2Export(){
   if (!_l2Rows.length) return;
   const b = _l2Bucket(_l2Sel) || {};
-  const head = ['Ref','Complainant','Insured','Phone','Insurance Company','Policy','Disputed',
+  const head = ['Ref','Complainant','Insured / Patient','Phone','Insurance Company','Policy','Disputed',
                 'Docs','Step','Days in bucket','Origin','Last moved by'];
   const rows = _l2Rows.map(function(i){
     return ['NP-' + i.claim_id, i.who, i.insured, i.phone, i.insurer, i.policy_no, i.amount,
@@ -13420,7 +13482,8 @@ function l2CaseRender(rem){
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
     + '<div class="l2kv">'
     +   '<div><div class="k">Complainant</div><div class="v">' + esc(who) + '</div></div>'
-    +   '<div><div class="k">Insured</div><div class="v">' + esc(c.insured_name || '—') + '</div></div>'
+    +   '<div><div class="k">' + _insuredLabel(c.claim_type) + '</div><div class="v">'
+    +     esc(c.insured_name || '—') + '</div></div>'
     +   '<div><div class="k">Insurance Co.</div><div class="v">' + esc(c.insurer_name || '—') + '</div></div>'
     +   '<div><div class="k">Disputed</div><div class="v">'
     +     (c.disputed_amount ? '₹' + Number(c.disputed_amount).toLocaleString('en-IN') : '—') + '</div></div>'
