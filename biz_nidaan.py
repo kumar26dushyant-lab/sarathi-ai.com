@@ -7979,6 +7979,31 @@ async def save_claim_document(
         return cur.lastrowid
 
 
+async def rename_claim_document(doc_id: int, claim_id: int, new_name: str) -> Optional[dict]:
+    """Give a document a name a person can read. The stored file is untouched - only the name
+    staff see - so its extension (and everything that depends on it) cannot be changed from here."""
+    name = " ".join((new_name or "").split())[:160]
+    if len(name) < 2:
+        return None
+    await ensure_claim_documents_table()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            "SELECT * FROM nidaan_claim_documents WHERE doc_id=? AND claim_id=?",
+            (int(doc_id), int(claim_id)))).fetchone()
+        if not row:
+            return None
+        old = dict(row).get("original_name") or ""
+        # Keep the extension the file actually has, so a renamed PDF still reads as a PDF.
+        ext = os.path.splitext(dict(row).get("stored_name") or "")[1]
+        if ext and not name.lower().endswith(ext.lower()):
+            name = "%s%s" % (os.path.splitext(name)[0], ext)
+        await conn.execute("UPDATE nidaan_claim_documents SET original_name=? WHERE doc_id=?",
+                           (name, int(doc_id)))
+        await conn.commit()
+    return {"doc_id": int(doc_id), "old": old, "name": name}
+
+
 async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None,
                                 claim_id: Optional[int] = None, purchase_id: Optional[int] = None,
                                 allow_any: bool = False) -> Optional[str]:

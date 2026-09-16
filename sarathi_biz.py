@@ -13,6 +13,7 @@
 # =============================================================================
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -988,11 +989,10 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+            raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -1420,11 +1420,10 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(status_code=413, detail=f"{f.filename} exceeds the 10 MB limit")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(status_code=415, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(status_code=415, detail=f"{f.filename} does not look like a valid document.")
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -3787,11 +3786,8 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
 
 # ── Document upload (customer) ────────────────────────────────────────────────
 
-_ALLOWED_MIME = {
-    "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
+# (There is no MIME allow-list any more: _sniff_file() decides from the file's own bytes, which
+# is the only thing an attacker cannot choose. See _sniff_file / _upload_refusal above.)
 _NIDAAN_DOCS_DIR = Path(__file__).parent / "uploads" / "nidaan-docs"
 _NIDAAN_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -3859,29 +3855,126 @@ def _guard_upload_batch(files) -> None:
                    f"{_MAX_UPLOAD_BATCH_BYTES // (1024*1024)} MB at a time.")
 
 
-def _doc_ext_for(content: bytes) -> str:
-    """The canonical extension implied by the file's OWN bytes, or "" if it isn't an allowed type.
+def _sniff_file(content: bytes) -> tuple:
+    """(extension, family) from the file's OWN bytes. family: image | pdf | office | text |
+    audio | video | "" (unknown).
 
-    SECURITY — this is what the stored filename's extension must come from. Deriving it from the
+    SECURITY — this is where a stored file's extension comes from. Deriving it from the
     client-supplied filename instead is exploitable: a file can be a valid PDF/JPEG by magic bytes
     AND contain HTML (a polyglot). Uploaded as "x.html" it would be stored as "<uuid>.html" and
     served as text/html from our own origin, so a staffer opening the "document" would execute the
-    attacker's script inside their authenticated ops session. Trust the bytes, never the name."""
-    if len(content) < 8:
-        return ""
-    if content[:4] == b"%PDF":
-        return ".pdf"
-    if content[:3] == b"\xff\xd8\xff":                       # JPEG
-        return ".jpg"
-    if content[:8] == b"\x89PNG\r\n\x1a\n":                  # PNG
-        return ".png"
-    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":  # WEBP
-        return ".webp"
-    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # legacy .doc (OLE)
-        return ".doc"
-    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):  # docx (zip)
-        return ".docx"
-    return ""
+    attacker's script inside their authenticated ops session. Trust the bytes, never the name.
+    Anything unrecognised is refused, and a bare .zip is refused too - only Office/OpenDocument
+    packages pass, checked by looking INSIDE the zip."""
+    if not content or len(content) < 12:
+        return "", ""
+    head = content[:2048]
+    # A real PDF can carry a few bytes before its header; readers tolerate up to 1 KB, and a
+    # genuine insurer letter was being refused for it.
+    if b"%PDF" in head[:1024]:
+        return ".pdf", "pdf"
+    if content[:3] == b"\xff\xd8\xff":
+        return ".jpg", "image"
+    if content[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png", "image"
+    if content[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif", "image"
+    if content[:2] == b"BM":
+        return ".bmp", "image"
+    if content[:4] in (b"II*\x00", b"MM\x00*"):
+        return ".tiff", "image"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp", "image"
+    if content[:4] == b"RIFF" and content[8:12] == b"AVI ":
+        return ".avi", "video"
+    if content[:4] == b"\x1aE\xdf\xa3":                       # Matroska / WebM
+        return ".mkv", "video"
+    if content[4:8] == b"ftyp":                               # the iPhone/Android container
+        brand = content[8:12].lower()
+        if brand in (b"heic", b"heix", b"hevc", b"heim", b"heis", b"hevm", b"mif1", b"msf1"):
+            return ".heic", "image"
+        if brand in (b"m4a ", b"m4b "):
+            return ".m4a", "audio"
+        return ".mp4", "video"
+    if content[:4] == b"OggS":
+        return ".ogg", "audio"
+    if content[:3] == b"ID3" or content[:2] in (b"\xff\xfb", b"\xff\xf3"):
+        return ".mp3", "audio"
+    if content[:5] == b"{\\rtf":
+        return ".rtf", "text"
+    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # Word/Excel/PowerPoint, old style
+        return ".doc", "office"
+    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        # A zip is a container: accept ONLY a document package, by what is inside it.
+        try:
+            import zipfile as _zf
+            z = _zf.ZipFile(io.BytesIO(content))
+            names = z.namelist()[:200]
+            if any(n.startswith("word/") for n in names):
+                return ".docx", "office"
+            if any(n.startswith("xl/") for n in names):
+                return ".xlsx", "office"
+            if any(n.startswith("ppt/") for n in names):
+                return ".pptx", "office"
+            if "mimetype" in names:
+                m = z.read("mimetype")[:80]
+                if b"opendocument.text" in m:
+                    return ".odt", "office"
+                if b"opendocument.spreadsheet" in m:
+                    return ".ods", "office"
+                if b"opendocument.presentation" in m:
+                    return ".odp", "office"
+        except Exception:
+            return "", ""
+        return "", ""
+    # Plain text last, so it never swallows a real format. HTML lands here and is stored as .txt -
+    # which is the point: it can then never be served back as a page.
+    if b"\x00" not in content[:4096]:
+        try:
+            content[:4096].decode("utf-8")
+            return ".txt", "text"
+        except UnicodeDecodeError:
+            pass
+    return "", ""
+
+
+def _doc_ext_for(content: bytes) -> str:
+    """The extension for a file we are willing to STORE (video excluded on purpose)."""
+    ext, fam = _sniff_file(content)
+    return "" if (not ext or fam == "video") else ext
+
+
+def _upload_refusal(filename: str, content: bytes) -> str:
+    """Why we cannot take this file, in words that say what to do next."""
+    name = filename or "That file"
+    _, fam = _sniff_file(content)
+    if fam == "video":
+        return ("%s is a video. Videos are not accepted - please attach a photo, a PDF or a "
+                "document instead." % name)
+    return ("%s is not a file type we can accept. Please attach a photo (JPG, PNG, HEIC), a PDF, "
+            "or a Word/Excel document. If it is a PDF that will not attach, open it and re-save "
+            "it as PDF, then try again." % name)
+
+
+def _as_viewable(content: bytes, ext: str) -> tuple:
+    """iPhone photos (HEIC) become JPG on the way in, so they open in the page like any other
+    photo. If the converter is not installed the original is stored untouched - never a failed
+    upload over a preview."""
+    if ext not in (".heic", ".heif"):
+        return content, ext
+    try:
+        from pillow_heif import register_heif_opener
+        from PIL import Image
+        register_heif_opener()
+        im = Image.open(io.BytesIO(content))
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=88, optimize=True)
+        return buf.getvalue(), ".jpg"
+    except Exception as e:  # noqa: BLE001
+        logger.info("HEIC conversion unavailable (%s) - storing the original", e)
+        return content, ext
 
 
 def _doc_magic_ok(content: bytes) -> bool:
@@ -3890,7 +3983,7 @@ def _doc_magic_ok(content: bytes) -> bool:
     return bool(_doc_ext_for(content))
 
 
-_IMAGE_EXTS = (".jpg", ".png", ".webp")
+_IMAGE_EXTS = (".jpg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff")
 
 
 def validate_upload(content: bytes, declared_mime: str = "", *, images_only: bool = False,
@@ -3919,10 +4012,10 @@ def validate_upload(content: bytes, declared_mime: str = "", *, images_only: boo
     if not ext or (images_only and ext not in _IMAGE_EXTS):
         raise HTTPException(
             status_code=415,
-            detail=("Please upload a real image (JPG, PNG or WebP)." if images_only
-                    else "That file is not a valid PDF, image or Word document."))
-    if declared_mime and declared_mime not in _ALLOWED_MIME:
-        raise HTTPException(status_code=415, detail="File type not allowed")
+            detail=("Please upload a real image (JPG, PNG, HEIC or WebP)." if images_only
+                    else _upload_refusal(what.capitalize(), content)))
+    if (declared_mime or "").lower().startswith("video/"):
+        raise HTTPException(status_code=415, detail=_upload_refusal(what.capitalize(), content))
     return ext
 
 
@@ -3982,11 +4075,10 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(status_code=413,
                                 detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -4046,11 +4138,10 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(status_code=413,
                                 detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(status_code=415, detail=f"File type {f.content_type} not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(status_code=415, detail=f"File {f.filename} does not look like a valid PDF/image/Word document.")
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored_name = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -4166,6 +4257,74 @@ async def nidaan_branch_delete_claim_doc(claim_id: int, doc_id: int, request: Re
     return {"ok": True}
 
 
+class _DocRenameReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=2, max_length=160)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}")
+@limiter.limit("60/minute")
+async def nidaan_ops_rename_claim_doc(claim_id: int, doc_id: int, body: _DocRenameReq,
+                                      request: Request):
+    """Rename a document so the list reads like a set of papers, not a camera roll."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    res = await nidaan.rename_claim_document(doc_id, claim_id, body.name)
+    if not res:
+        raise HTTPException(404, "Document not found")
+    await _ops_audit(request, "claim.doc_rename", "claim", str(claim_id),
+                     "%s -> %s" % (res["old"], res["name"]))
+    try:
+        import biz_nidaan_buckets as _bk
+        await _bk._log(claim_id, "\U0001f4dd Renamed a document: %s \u2192 %s"
+                       % (res["old"], res["name"]), _actor_label(caller))
+    except Exception:
+        pass
+    return res
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}/preview")
+async def nidaan_ops_doc_preview(claim_id: int, doc_id: int, request: Request):
+    """The TEXT of a Word document, so a letter can be read in the page instead of downloaded.
+    The file itself is never rendered: we extract the words on the server and the screen escapes
+    them."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        r = await (await c.execute(
+            "SELECT stored_name, original_name FROM nidaan_claim_documents "
+            "WHERE doc_id=? AND claim_id=?", (doc_id, claim_id))).fetchone()
+    if not r:
+        raise HTTPException(404, "Document not found")
+    stored = dict(r)["stored_name"] or ""
+    path = _NIDAAN_DOCS_DIR / stored
+    if not path.exists():
+        raise HTTPException(404, "That file is no longer on the server")
+    ext = os.path.splitext(stored)[1].lower()
+    if ext == ".txt":
+        try:
+            return {"kind": "text", "text": path.read_text(encoding="utf-8", errors="replace")[:100000]}
+        except Exception:
+            raise HTTPException(415, "Could not read that file")
+    if ext != ".docx":
+        raise HTTPException(415, "No preview for this kind of file")
+    try:
+        import docx as _docx
+        d = _docx.Document(str(path))
+        parts = [p.text for p in d.paragraphs]
+        for t in d.tables:
+            for row in t.rows:
+                parts.append(" | ".join(c.text.strip() for c in row.cells))
+        return {"kind": "text", "text": "\n".join(parts)[:100000]}
+    except Exception as e:  # noqa: BLE001
+        logger.info("docx preview failed for %s: %s", stored, e)
+        raise HTTPException(415, "Could not read this Word file - please download it")
+
+
 @app.delete("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}")
 async def nidaan_ops_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
     """Ops staff delete a document on any claim (staff-raised, subscriber, one-time, branch)."""
@@ -4217,11 +4376,10 @@ async def ops_upload_any_claim_doc(claim_id: int, request: Request,
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(413, f"{f.filename} is larger than {mb} MB.")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+            raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(
@@ -9407,11 +9565,10 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(413, f"{f.filename} exceeds the 10 MB limit")
-        if f.content_type not in _ALLOWED_MIME:
-            raise HTTPException(415, "File type not allowed. Use PDF, JPG, PNG, or DOCX.")
         if not _doc_magic_ok(content):
-            raise HTTPException(415, f"{f.filename} does not look like a valid document.")
+            raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
         doc_id = await nidaan.save_claim_document(

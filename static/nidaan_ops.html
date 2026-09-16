@@ -13453,7 +13453,7 @@ function l2CaseRender(rem){
                 return '<a class="l2mv g" href="#" '
                   + 'onclick="event.preventDefault();docView(\'' + esc(f.url).replace(/'/g, "\\'")
                   + '\',\'' + esc(f.original_name || 'document').replace(/'/g, "\\'") + '\',\''
-                  + esc(f.mime_type || '') + '\')" '
+                  + esc(f.mime_type || '') + '\',' + id + ',' + (f.doc_id || 0) + ')" '
                   + 'title="' + esc(f.original_name || '') + '">'
                   + (/pdf/i.test(f.mime_type || '') ? '\ud83d\udcc4 ' : '\ud83d\uddbc\ufe0f ')
                   + esc((f.original_name || 'document').slice(0, 34)) + '</a>';
@@ -14200,7 +14200,9 @@ async function docsRender(msg, ok){
           +   esc(String(f.uploaded_at || '').slice(0, 16)) + '</span></span>'
           + '<button class="l2mv g" onclick="docView(\'' + esc(f.url).replace(/'/g, "\\'") + '\',\''
           +   esc(f.original_name || 'document').replace(/'/g, "\\'") + '\',\'' + esc(f.mime_type || '')
-          +   '\')">Open</button>'
+          +   '\',' + _dcClaim + ',' + (f.doc_id || 0) + ')">Open</button>'
+          + '<button class="l2mv g" title="Rename this document" onclick="docRename(' + _dcClaim + ','
+          +   (f.doc_id || 0) + ',' + esc(JSON.stringify(f.original_name || '')) + ')">✏️</button>'
           + '</div>';
       }).join('')
     : '<div class="bdsub">Nothing attached yet.</div>';
@@ -14303,11 +14305,30 @@ window.docsOpen = docsOpen; window.docsUpload = docsUpload; window.docsMarkDone 
 // gist being typed underneath it. PDFs open in the browser's own viewer; images are shown as
 // images; anything else - a Word file - cannot be shown safely inside the page, so it says so
 // and offers the download.
-function docView(url, name, mime){
+// Rename a document where you are looking at it - a camera-roll name becomes "Discharge summary".
+async function docRename(claimId, docId, current, after){
+  const now = (current || '').replace(/\.[a-z0-9]+$/i, '');
+  const name = prompt('Name this document so the list reads clearly:', now);
+  if (name === null) return;
+  if ((name || '').trim().length < 2){ ndUI.toast('Give it a name of at least 2 letters.', 'error'); return; }
+  try{
+    const r = await API('/claims/' + claimId + '/documents/' + docId, {method:'PATCH',
+      body: JSON.stringify({name: name.trim()})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not rename it'), 'error'); return; }
+    ndUI.toast('Renamed to ' + (d.name || name), 'success');
+    if (typeof after === 'function') after();
+    else if (typeof docsOpen === 'function') docsOpen(claimId);
+  }catch(e){ ndUI.toast('Could not rename it.', 'error'); }
+}
+window.docRename = docRename;
+
+function docView(url, name, mime, claimId, docId){
   const old = document.getElementById('docViewOv');
   if (old) old.remove();
   const isPdf = /pdf/i.test(mime || '') || /\.pdf(\?|$)/i.test(url || '');
-  const isImg = /^image\//i.test(mime || '') || /\.(jpe?g|png)(\?|$)/i.test(url || '');
+  const isImg = /^image\//i.test(mime || '') || /\.(jpe?g|png|webp|gif|bmp|tiff?)(\?|$)/i.test(url || '');
+  const isWord = /\.(docx|txt)(\?|$)/i.test(url || '');
   const ov = document.createElement('div');
   ov.id = 'docViewOv';
   ov.setAttribute('data-ov', '1');
@@ -14323,22 +14344,45 @@ function docView(url, name, mime){
           + 'display:flex;align-items:flex-start;justify-content:center;padding:1rem">'
           + '<img src="' + esc(url) + '" alt="' + esc(name || 'document') + '" '
           + 'style="max-width:100%;height:auto;background:#fff"></div>'
-        : '<div style="flex:1;background:var(--nd-bg-base-2);border-radius:0 0 10px 10px;'
-          + 'display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.7rem;'
-          + 'color:var(--nd-text-secondary);font-size:.95rem;text-align:center;padding:2rem">'
-          + '<div style="font-size:2.2rem">📄</div>'
-          + '<div>This kind of file (a Word document) cannot be shown safely inside the page.</div>'
-          + '<a class="btn btn-primary" href="' + esc(url) + '">Download it</a></div>');
+        : (isWord
+            ? '<div id="docViewText" style="flex:1;overflow:auto;background:var(--nd-bg-base-2);'
+              + 'border-radius:0 0 10px 10px;padding:1.1rem 1.3rem;color:var(--nd-text-primary);'
+              + 'font-size:.9rem;line-height:1.6;white-space:pre-wrap">Reading the document\u2026</div>'
+            : '<div style="flex:1;background:var(--nd-bg-base-2);border-radius:0 0 10px 10px;'
+              + 'display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.7rem;'
+              + 'color:var(--nd-text-secondary);font-size:.95rem;text-align:center;padding:2rem">'
+              + '<div style="font-size:2.2rem">📄</div>'
+              + '<div>This kind of file cannot be shown inside the page. Download it to open it.</div>'
+              + '<a class="btn btn-primary" href="' + esc(url) + '">Download it</a></div>'));
   ov.innerHTML =
       '<div style="display:flex;align-items:center;gap:.6rem;background:var(--nd-bg-base-2);'
     +   'border-radius:10px 10px 0 0;padding:.55rem .8rem;border-bottom:1px solid var(--nd-border)">'
     +   '<span style="font-weight:700;color:var(--nd-text-primary);flex:1;min-width:0;'
     +     'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(name || 'Document') + '</span>'
+    +   (claimId && docId
+        ? '<button class="btn-sm btn-ghost" title="Rename this document" onclick="docRename('
+          + claimId + ',' + docId + ',' + esc(JSON.stringify(name || '')) + ')">✏️ Rename</button>'
+        : '')
     +   '<a class="btn-sm btn-ghost" href="' + esc(url) + '" title="Save a copy">⬇ Download</a>'
     +   '<button class="modal-x" type="button" aria-label="Close" title="Close (Esc)" '
     +     'onclick="document.getElementById(\'docViewOv\').remove()">&times;</button>'
     + '</div>' + body;
   document.body.appendChild(ov);
+  // A Word file or a text file: its words are read out on the server and shown here, so nobody
+  // has to download a letter just to read it. (The file itself is never rendered.)
+  if (isWord && claimId && docId){
+    API('/claims/' + claimId + '/documents/' + docId + '/preview').then(async function(r){
+      const box = document.getElementById('docViewText');
+      if (!box) return;
+      if (!r.ok){
+        box.innerHTML = 'This one cannot be read in the page. '
+          + '<a class="btn-sm btn-ghost" href="' + esc(url) + '">⬇ Download it</a>';
+        return;
+      }
+      const d = await r.json().catch(function(){ return {}; });
+      box.textContent = (d.text || '').trim() || '(this document has no text in it)';
+    }).catch(function(){});
+  }
 }
 window.docView = docView;
 
