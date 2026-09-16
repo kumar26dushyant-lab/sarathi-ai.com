@@ -705,6 +705,27 @@ CAPABILITIES: list[dict] = [
                "u": "All Claims (टेबल) → क्लेम चुनें → 'Archive selected'; '🗄️ Archived claims' में देखें/रिस्टोर करें।"},
         "telegram": False, "web": True, "min_role": "sub_super_admin",
     },
+    # Documents & money-watching (Sep 2026)
+    {
+        "id": "claim_documents",
+        "en": {"t": "Open a claim's documents without downloading them",
+               "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary') and it is saved on the claim. Any file except video, up to 25 MB, virus-scanned before it is stored.",
+               "u": "Open a claim → Documents → click a file to read it, or ✏️ to rename it. Download is still one click away."},
+        "hi": {"t": "क्लेम के दस्तावेज़ बिना डाउनलोड किए खोलें",
+               "d": "दस्तावेज़ पर क्लिक करें और पेज में ही पढ़ें — PDF, फोटो और Word पत्र। ग़लत नाम वाली फाइल का नाम बदलें (IMG_2231 → 'डिस्चार्ज समरी'), वह क्लेम पर दर्ज हो जाता है। वीडियो छोड़कर हर तरह की फाइल, 25 MB तक, स्टोर करने से पहले वायरस जाँच।",
+               "u": "क्लेम खोलें → Documents → पढ़ने के लिए फाइल पर क्लिक करें, या नाम बदलने के लिए ✏️। डाउनलोड अब भी एक क्लिक दूर है।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "payment_guardian",
+        "en": {"t": "Payment Guardian (watches every rupee, day and night)",
+               "d": "Checks the payment machinery every few minutes — money taken but no claim unlocked, a payment nobody was told about, a double charge, a subscription that did not start, the bank going quiet. Anything wrong reaches super-admins on Telegram and repeats every 10 minutes until one of them presses Seen; if it is still wrong 2 hours later it comes back.",
+               "u": "Revenue → 🛡️ Payment Guardian shows what is open and who has seen it."},
+        "hi": {"t": "पेमेंट गार्जियन (हर रुपये पर 24 घंटे नज़र)",
+               "d": "हर कुछ मिनट में पेमेंट सिस्टम की जाँच — पैसा आया पर क्लेम नहीं खुला, पेमेंट जिसकी किसी को ख़बर नहीं हुई, दोहरा चार्ज, सब्सक्रिप्शन शुरू नहीं हुआ, बैंक से जवाब बंद। गड़बड़ी सुपर-एडमिन को Telegram पर जाती है और हर 10 मिनट दोहराती है जब तक कोई 'देख लिया' न दबाए; 2 घंटे बाद भी ठीक न हो तो फिर आती है।",
+               "u": "Revenue → 🛡️ Payment Guardian में खुली समस्याएँ और किसने देखा, दोनों दिखते हैं।"},
+        "telegram": True, "web": True, "min_role": "super_admin",
+    },
     {
         "id": "claim_activity",
         "en": {"t": "Claim activity timeline",

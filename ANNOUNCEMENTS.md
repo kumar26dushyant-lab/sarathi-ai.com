@@ -1,5 +1,42 @@
 # Staff Announcement Drafts
 
+## 2026-09-16 — Documents open where you are standing
+
+**Title (EN):**
+📎 Click a document and read it · ✏️ Rename anything badly named
+
+**Details (EN):**
+• **A document now opens inside the claim.** Click it and read it there — a PDF, a photo, or a Word letter. No downloading, opening, closing and coming back. **Download is still one click away** whenever you actually need the file itself.
+
+• **You can rename a document where you are looking at it.** A phone sends us IMG_2231.HEIC and a typist sends "New Doc 04-27-2026 12.27.docx"; neither tells the next person what the paper is. Rename it to *Discharge summary* or *Rejection letter from Star Health* and it is saved on the claim with your name on the record. **The file itself never changes** — only the name we read.
+
+• **Almost anything a complainant can send, we now take.** iPhone photos (HEIC — these were being refused outright), Android files, PDFs, Word, scans, spreadsheets. **Video is the one thing we do not take** — if someone sends a clip, ask for a photo or a PDF of the page instead. Up to **25 MB a file**.
+
+• **A PDF that was being refused this morning now attaches.** Some insurer letters carry a few stray bytes before the file properly begins, and our check used to turn those away as "not a PDF". It now reads the file itself instead of trusting its label — which is also **safer**, because a dangerous file renamed to .pdf can no longer walk in. Every file is still virus-scanned before it is stored, and the links we hand out still expire.
+
+• **If a file is ever refused, the screen tells you what to do instead** — in plain words, not an error code. If the words do not help, send it to the IT SPOC; that is a bug worth fixing, not something to work around.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📎 दस्तावेज़ पर क्लिक कीजिए और वहीं पढ़िए · ✏️ ग़लत नाम वाली फाइल का नाम बदलिए
+
+**Details (HI):**
+• **अब दस्तावेज़ क्लेम के अंदर ही खुलता है।** उस पर क्लिक कीजिए और वहीं पढ़िए — PDF हो, फोटो हो या Word पत्र। डाउनलोड करना, खोलना, बंद करना और वापस आना — अब ज़रूरी नहीं। **जब सचमुच फाइल चाहिए, डाउनलोड एक क्लिक पर है।**
+
+• **जहाँ देख रहे हैं वहीं नाम बदल सकते हैं।** फ़ोन से IMG_2231.HEIC आता है और टाइपिस्ट से "New Doc 04-27-2026 12.27.docx" — दोनों से अगले व्यक्ति को कुछ पता नहीं चलता। उसे *डिस्चार्ज समरी* या *Star Health का रिजेक्शन लेटर* कर दीजिए — आपके नाम के साथ क्लेम पर दर्ज हो जाएगा। **फाइल खुद नहीं बदलती** — सिर्फ़ वह नाम जो हम पढ़ते हैं।
+
+• **शिकायतकर्ता जो भी भेजे, लगभग सभी चीज़ें अब लग जाती हैं।** iPhone की फोटो (HEIC — ये पहले मना हो रही थीं), Android फाइलें, PDF, Word, स्कैन, शीट। **सिर्फ़ वीडियो नहीं लेते** — कोई क्लिप भेजे तो उससे फोटो या पेज की PDF माँगिए। एक फाइल **25 MB** तक।
+
+• **जो PDF आज सुबह तक मना हो रही थी, अब लग जाती है।** कुछ बीमा कंपनियों के पत्रों में फाइल शुरू होने से पहले कुछ बेकार बाइट होते हैं, और हमारी जाँच उन्हें "PDF नहीं है" कहकर लौटा देती थी। अब हम नाम पर भरोसा न करके फाइल को खुद पढ़ते हैं — यह **ज़्यादा सुरक्षित** भी है, क्योंकि ख़तरनाक फाइल का नाम .pdf रख देने भर से अब वह अंदर नहीं आ सकती। हर फाइल स्टोर होने से पहले वायरस के लिए जाँची जाती है।
+
+• **कोई फाइल मना हो तो स्क्रीन साफ़ शब्दों में बताएगी कि अब क्या करना है** — कोई एरर कोड नहीं। फिर भी समझ न आए तो IT SPOC को भेजिए।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+_(Super-admins only, nothing to announce to the floor: the 🛡️ Payment Guardian now watches every payment end to end and repeats on Telegram until someone presses Seen; and a Level-2 fee no longer produces two near-identical alerts.)_
+
+
 ## 2026-09-13 (3) — Nothing stops a claim moving any more
 
 **Title (EN):**

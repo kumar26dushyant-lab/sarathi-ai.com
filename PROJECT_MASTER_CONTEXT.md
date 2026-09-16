@@ -6706,6 +6706,63 @@ on_query_reply (wa_flow inbound hook) / query_reminders (in standing_alerts)`; c
 **Testing:** `node uitest/flow.mjs --local-html=../static/nidaan_ops.html` proves a screen change
 against live data before deploy.
 
+## A100 — [NIDAAN] THE PAYMENT GUARDIAN, AND ATTACHMENTS THAT TAKE WHAT PEOPLE HAVE (Sep 15–16 2026)
+
+**The founder's ask:** *"everything related to payment, revenue … must be working 24/7, no bug, no
+glitch, if any bug or glitch we should be notified"* — a bot watching the money end to end, flagging
+**our** mechanics breaking, not a customer's card being declined.
+
+### The Payment Guardian (`biz_nidaan_pay_guard.py`, LIVE)
+Twelve checks over a 48-hour window, every 5 minutes on the worker; a heartbeat every 10 on web.
+It judges **only what happened since it started watching** (`pay_guard_since`), so it never wakes up
+shouting about history. `_is_ours()` keeps it to our own mechanics: a Sarathi product is skipped, and
+a payment must carry a `claim_id` / `account_id` / `purchase_id` to be ours to fix.
+
+What it looks for: money taken but the claim not unlocked · a payment nobody was told about · the same
+payment charged twice · a subscription paid but not started · exact-paise mismatches · Razorpay
+captured but missing from our ledger · the webhook going quiet · reconciliation drifting.
+
+**The alert loop is the founder's design, exactly:** Telegram to super-admins with a **Seen** button
+(`pgk:` callback, super-admin only), repeating **every 10 minutes** until one of them presses it —
+who pressed and when is recorded — and if the problem is **still** there **2 hours** later it comes
+back. Incidents live in `nidaan_pay_incidents`; Revenue → 🛡️ Payment Guardian shows what is open.
+
+### Four real payment bugs it was built on top of (all fixed)
+Subscription payments were never announced · 8 duplicate ledger pairs (₹6,474) · a **first** charge
+treated as a renewal for 5 customers (₹4,714 + a free month) · NP-151's Level-2 fee handled twice
+(branch verify + webhook). Fixes: exact-paise ledger, a once-per-payment `dedup_key` with a
+conditional UPDATE, first-charge/7-day guards, and `announced_at` stamped on the row so "was anyone
+told?" is a fact on the payment instead of a guess from nearby alerts.
+**Still open — founder's call:** correcting the historical rows (options A–D in TODO.md).
+
+### One event, one message
+A branch Level-2 fee has its own message naming the claim and the branch; the ledger used to send a
+second "Payment RECEIVED" beside it. The ledger now stays quiet for `source == "branch_l2"` and that
+message stamps `announced_at` itself — so the Guardian still sees it as announced.
+
+### Attachments (Sep 16, LIVE)
+The founder's own repudiation letter was refused: a real PDF with a few stray bytes before its
+header. The old check trusted the browser's label plus a short allow-list — which refused honest
+files and would have waved through a renamed `.exe`.
+
+- **`_sniff_file()` decides from the file's own bytes**, the one thing an attacker cannot choose.
+  `_ALLOWED_MIME` is gone. Everything is accepted **except video**; a refusal says what to do instead.
+- **HEIC → JPG on the way in** (`_as_viewable`), keeping the name the phone gave it; HTML is stored
+  as `.txt` so nothing can ever execute from our domain. 25 MB a file.
+- **Unchanged:** ClamAV in-memory scan, signed expiring URLs, `nosniff`, attachment disposition,
+  sandbox CSP. Inline rendering stays limited to real PDFs.
+- **Rename** (`rename_claim_document` + `PATCH .../documents/{doc_id}`): the stored file and its real
+  extension are untouched — only the name staff read — and the rename is written to claim activity.
+- **Read without downloading:** PDFs and photos as before; a Word letter's text is extracted on the
+  server (`GET .../documents/{doc_id}/preview`) and escaped by the page. The file is never rendered.
+
+**Caught in testing:** `io` was never imported in `sarathi_biz.py`, so DOCX and HEIC failed silently;
+and `claimId` was referenced outside its scope in `docsRender` (`node --check` cannot see that one).
+
+**Proof:** `test_attach` 26 · `test_guard` 29 · `test_payments` 23 · `test_dups` 16 · `test_query` 29 ·
+`test_lock` 41, all against a fresh copy of the live DB with `NIDAAN_NO_OUTBOUND=1`; **183/183** in
+the browser against the live site after deploy.
+
 ---
 
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
