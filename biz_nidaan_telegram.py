@@ -1454,6 +1454,28 @@ async def _handle_callback(cq: dict) -> None:
         return
     lang = _lang(staff)
     try:
+        if data.startswith("pgk:"):
+            # "Seen" on a payment guardian alert: stops the repeats for every super admin.
+            if (staff.get("role") or "") != "super_admin":
+                await ack("Only a super admin can take this"); return
+            try:
+                _inc = int(data.split(":")[1])
+            except Exception:
+                await ack(); return
+            try:
+                import biz_nidaan_pay_guard as _pg
+                res = await _pg.acknowledge(_inc, staff["staff_id"], staff.get("name") or "")
+                if res.get("already") == "acked":
+                    await ack("Already seen by %s" % (res.get("by") or "another super admin"))
+                elif res.get("already") == "resolved":
+                    await ack("That one is already resolved")
+                else:
+                    await ack("Recorded — it will stop repeating. It returns in 2h if not fixed.")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("guardian ack failed: %s", e)
+                await ack("Could not record — please open the portal")
+            return
+
         if data.startswith("annr:"):
             # Announcement reaction (👍 = read & understood) — recorded for adoption.
             parts = data.split(":")

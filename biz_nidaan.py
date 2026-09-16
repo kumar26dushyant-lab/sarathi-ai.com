@@ -6235,7 +6235,7 @@ async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
             _t = _aio.create_task(_nnp.on_ledger_payment(
                 source=source, total_paise=int(total_paise or 0), account_id=account_id,
                 claim_id=claim_id, branch_code=branch_code, plan=plan, verified=bool(verified),
-                actor_name=actor_name))
+                actor_name=actor_name, dedup_key=_key))
             _nnp._BG_TASKS.add(_t)
             _t.add_done_callback(_nnp._BG_TASKS.discard)
         except Exception:

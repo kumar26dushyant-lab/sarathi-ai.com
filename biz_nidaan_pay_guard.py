@@ -1,0 +1,546 @@
+"""
+NidaanPartner PAYMENT GUARDIAN — watches OUR payment mechanics, end to end, around the clock.
+
+Founder, 15 Sep: "anything not working correctly (in our mechanics), flag and notify superadmins on
+telegram ... it should trigger every 10 min until any superadmin sees it ... payment is serious."
+
+WHAT IT IS, AND WHAT IT DELIBERATELY IS NOT
+  * It READS and it ALERTS. It never records, retries, refunds or activates anything. A bug here
+    cannot break a payment, and if this module dies the payment paths carry on untouched (a
+    heartbeat, checked from the web processes, notices the silence).
+  * Every finding is a FACT from Razorpay's own records or our database - never a guess.
+  * One problem is ONE incident, keyed, so repeated runs can never produce a flood.
+  * Customer-side trouble (a declined card, an abandoned checkout) is NOT for this: that lives in
+    Payment Follow-up. This is only for OUR mechanics breaking.
+
+THE CHECKS (each one caught, or would have caught, a real bug)
+  1  paid_not_recorded   Razorpay captured it; our ledger has no row.
+  2  amount_mismatch     Our row's amount differs from what Razorpay actually charged.
+  3  ledger_not_at_rzp   We hold a verified row Razorpay does not know, or has not captured.
+  4  no_effect           Money in, nothing happened: no active plan / claim not unlocked / L2 not queued.
+  5  duplicate_row       The same charge recorded twice (the 20 Aug - 15 Sep subscription bug).
+  6  period_wrong        A subscription's period does not match its plan (the "free extra month" bug).
+  7  not_announced       A payment nobody was told about (subscriptions, silent since August).
+  8  renewal_overdue     An active plan past its end date with no renewal charge.
+  9  webhook_silent      Razorpay captured payments but no webhook reached us.
+  10 gateway_unreachable Razorpay keys missing/rejected, or the API unreachable twice in a row.
+  11 plan_config         An active plan with no price, or a price that cannot make a valid charge.
+  12 guardian_silent     (checked from the web processes) this guardian has not run for 15 minutes.
+
+ALERTS
+  Telegram to every super admin with a "👀 Seen" button, plus the dashboard bell. Unseen, it
+  repeats every 10 minutes for as long as it takes. The first tap records who saw it, stops the
+  repeats for everyone, and tells the others. If it is still not fixed 2 hours later, it speaks up
+  again (founder's rule). When the fact stops being true, it says so once and closes itself.
+"""
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timedelta, timezone
+
+import aiosqlite
+import httpx
+
+import biz_database as db
+import biz_nidaan as _n
+
+logger = logging.getLogger("nidaan.pay_guard")
+DB_PATH = db.DB_PATH
+IST = timezone(timedelta(hours=5, minutes=30))
+
+ALERT_EVERY_MIN = 10        # unseen: say it again this often, for as long as it takes
+REMIND_AFTER_ACK_H = 2      # seen but still broken: speak up again after this long
+LOOK_BACK_H = 48            # how far back the reconciliation looks
+HEARTBEAT_KEY = "pay_guard_heartbeat"
+SINCE_KEY = "pay_guard_since"    # it judges what happens from the moment it starts watching
+HEARTBEAT_STALE_MIN = 15
+_RZP_FAIL_KEY = "pay_guard_rzp_fails"
+
+
+# ── the incident store ───────────────────────────────────────────────────────
+async def _now() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def open_incidents(include_resolved: bool = False, limit: int = 100) -> list[dict]:
+    q = ("SELECT * FROM nidaan_pay_incidents"
+         + ("" if include_resolved else " WHERE status <> 'resolved'")
+         + " ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END, last_seen DESC LIMIT ?")
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        return [dict(r) for r in await (await c.execute(q, (int(limit),))).fetchall()]
+
+
+async def _sync(findings: list[dict], checks_ran: set) -> dict:
+    """Write what is true now. A check that could not run never closes its incidents - silence is
+    not evidence that a problem went away."""
+    now = await _now()
+    seen_keys = {f["key"] for f in findings}
+    opened, closed = [], []
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        for f in findings:
+            row = await (await c.execute(
+                "SELECT inc_id, status FROM nidaan_pay_incidents WHERE key=?", (f["key"],))).fetchone()
+            if row and dict(row)["status"] != "resolved":
+                await c.execute(
+                    "UPDATE nidaan_pay_incidents SET last_seen=?, detail=?, amount_paise=? WHERE inc_id=?",
+                    (now, f.get("detail", "")[:2000], f.get("amount_paise") or 0, dict(row)["inc_id"]))
+                continue
+            cur = await c.execute(
+                "INSERT INTO nidaan_pay_incidents (key, check_name, severity, title, detail, claim_id, "
+                "account_id, amount_paise, first_seen, last_seen, status, next_alert_at, alert_count) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?, 'open', ?, 0) "
+                "ON CONFLICT(key) DO UPDATE SET status='open', last_seen=excluded.last_seen, "
+                "detail=excluded.detail, next_alert_at=excluded.next_alert_at, resolved_at=NULL",
+                (f["key"], f["check"], f.get("severity", "critical"), f["title"][:200],
+                 f.get("detail", "")[:2000], f.get("claim_id"), f.get("account_id"),
+                 f.get("amount_paise") or 0, now, now, now))
+            opened.append(f["key"])
+        # Close what is no longer true, but only for checks that actually ran.
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT inc_id, key, check_name, title FROM nidaan_pay_incidents "
+            "WHERE status <> 'resolved'")).fetchall()]
+        for r in rows:
+            if r["key"] in seen_keys or r["check_name"] not in checks_ran:
+                continue
+            await c.execute("UPDATE nidaan_pay_incidents SET status='resolved', resolved_at=? "
+                            "WHERE inc_id=?", (now, r["inc_id"]))
+            closed.append(r)
+        await c.commit()
+    return {"opened": opened, "closed": closed}
+
+
+async def _since() -> str:
+    """The guardian judges payments from the moment it first ran - never the backlog behind it.
+
+    Without this it would open an incident for every historical duplicate and every payment made
+    before the announcements were fixed, and then repeat them every 10 minutes: noise about things
+    already known, which is how people learn to ignore alerts. Those are handled once, by hand."""
+    val = await _n.get_ops_setting(SINCE_KEY, "") or ""
+    if not val:
+        val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        await _n.set_ops_setting(SINCE_KEY, val)
+    window = (datetime.utcnow() - timedelta(hours=LOOK_BACK_H)).strftime("%Y-%m-%d %H:%M:%S")
+    return max(val, window)
+
+
+def _is_ours(p: dict, in_ledger: bool) -> bool:
+    """One Razorpay account serves NidaanPartner and Sarathi. Judge only what is ours; an
+    unrecognised payment is left alone rather than reported as a problem."""
+    if in_ledger:
+        return True
+    notes = p.get("notes") or {}
+    prod = str(notes.get("product") or "").lower()
+    if prod.startswith("nidaan"):
+        return True
+    if "sarathi" in prod:
+        return False
+    # Sarathi's payments carry tenant_id/plan_key and product=sarathi-ai-crm (excluded above);
+    # ours carry the claim or the account they are for.
+    if notes.get("claim_id") or notes.get("account_id") or notes.get("purchase_id"):
+        return True
+    return False
+
+
+# ── the checks ───────────────────────────────────────────────────────────────
+def _rzp_auth() -> tuple:
+    key = os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+    sec = os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
+    return key, sec
+
+
+async def _rzp_payments(hours: int) -> tuple:
+    """Razorpay's own list of payments in the window. (payments, ok) - ok=False means we could not
+    ask, which is itself something to watch rather than a reason to accuse anyone."""
+    key, sec = _rzp_auth()
+    if not (key and sec):
+        return [], False
+    now = int(datetime.utcnow().timestamp())
+    params = {"from": now - hours * 3600, "to": now + 300, "count": 100}
+    out = []
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.get("https://api.razorpay.com/v1/payments", params=params, auth=(key, sec))
+        if r.status_code != 200:
+            logger.warning("razorpay payments list %s: %s", r.status_code, r.text[:200])
+            return [], False
+        out = (r.json() or {}).get("items") or []
+    except Exception as e:  # noqa: BLE001
+        logger.warning("razorpay payments list failed: %s", e)
+        return [], False
+    return out, True
+
+
+async def _check_reconcile(findings: list, ran: set) -> None:
+    """Razorpay's record against ours, both ways."""
+    pays, ok = await _rzp_payments(LOOK_BACK_H)
+    if not ok:
+        fails = int(await _n.get_ops_setting(_RZP_FAIL_KEY, "0") or 0) + 1
+        await _n.set_ops_setting(_RZP_FAIL_KEY, str(fails))
+        if fails >= 2:      # one blip is the internet; two in a row is ours to look at
+            findings.append({
+                "key": "gateway_unreachable", "check": "gateway", "severity": "critical",
+                "title": "Razorpay cannot be reached (or the keys are refused)",
+                "detail": "Two checks in a row could not read Razorpay's payment list. Payments may "
+                          "still be going through, but we cannot verify them. Check the keys in "
+                          "biz.env and Razorpay's status."})
+        return
+    await _n.set_ops_setting(_RZP_FAIL_KEY, "0")
+    ran.update({"gateway", "reconcile", "webhook"})
+    since = await _since()
+    captured = [p for p in pays if (p.get("status") or "") == "captured"]
+
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        ledger = {r["razorpay_payment_id"]: dict(r) for r in await (await c.execute(
+            "SELECT * FROM nidaan_payments WHERE COALESCE(razorpay_payment_id,'') <> '' "
+            "AND created_at > datetime('now', ?)", ("-%d hours" % (LOOK_BACK_H + 6),))).fetchall()}
+        recent_rows = [dict(r) for r in await (await c.execute(
+            "SELECT * FROM nidaan_payments WHERE created_at > datetime('now', ?) "
+            "AND status <> 'duplicate'", ("-%d hours" % LOOK_BACK_H,))).fetchall()]
+
+    for p in captured:
+        pid = p.get("id") or ""
+        row = ledger.get(pid)
+        amt = int(p.get("amount") or 0)
+        who = (p.get("email") or p.get("contact") or "")[:60]
+        when = datetime.utcfromtimestamp(int(p.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M:%S")             if p.get("created_at") else ""
+        if when and when < since:
+            continue                      # before we started watching - handled by hand, not here
+        if not _is_ours(p, bool(row)):
+            continue                      # Sarathi's, or unrecognisable: not ours to judge
+        if not row:
+            findings.append({
+                "key": "paid_not_recorded:%s" % pid, "check": "reconcile", "severity": "critical",
+                "title": "Money taken, not in our ledger — ₹%s" % (amt / 100),
+                "amount_paise": amt,
+                "detail": "Razorpay captured %s (₹%s, %s) but we have no ledger row for it. The "
+                          "customer has paid and may be waiting for what they bought."
+                          % (pid, amt / 100, who)})
+        elif int(row.get("total_paise") or 0) != amt:
+            findings.append({
+                "key": "amount_mismatch:%s" % pid, "check": "reconcile", "severity": "critical",
+                "title": "Amount does not match Razorpay — ₹%s vs ₹%s"
+                         % (int(row["total_paise"]) / 100, amt / 100),
+                "amount_paise": amt, "account_id": row.get("account_id"), "claim_id": row.get("claim_id"),
+                "detail": "Ledger row #%s says ₹%s; Razorpay charged ₹%s for %s."
+                          % (row["pay_id"], int(row["total_paise"]) / 100, amt / 100, pid)})
+
+    rzp_ids = {p.get("id") for p in pays}
+    rzp_captured_ids = {p.get("id") for p in captured}
+    for row in recent_rows:
+        if str(row.get("created_at") or "") < since:   # (>= since is watched; before it, by hand)
+            continue
+        pid = (row.get("razorpay_payment_id") or "").strip()
+        if not pid or pid.upper().startswith("MANUAL") or (row.get("gateway") or "") != "razorpay":
+            continue
+        if pid not in rzp_ids:
+            continue          # older than the window Razorpay returned - not evidence of anything
+        if pid not in rzp_captured_ids:
+            findings.append({
+                "key": "ledger_not_at_rzp:%s" % pid, "check": "reconcile", "severity": "critical",
+                "title": "We recorded a payment Razorpay has not captured",
+                "amount_paise": int(row.get("total_paise") or 0),
+                "account_id": row.get("account_id"), "claim_id": row.get("claim_id"),
+                "detail": "Ledger row #%s (%s, ₹%s) but Razorpay's status for %s is not 'captured'."
+                          % (row["pay_id"], row["source"], int(row.get("total_paise") or 0) / 100, pid)})
+
+    # The webhook is how late captures and renewals reach us at all.
+    if captured:
+        async with aiosqlite.connect(DB_PATH) as c:
+            hook = await (await c.execute(
+                "SELECT COUNT(*) FROM nidaan_payments WHERE verify_method='webhook' "
+                "AND created_at > datetime('now','-24 hours')")).fetchone()
+        if not (hook and hook[0]):
+            findings.append({
+                "key": "webhook_silent", "check": "webhook", "severity": "critical",
+                "title": "No Razorpay webhook has reached us in 24 hours",
+                "detail": "Razorpay captured %d payment(s) in the last %dh, but nothing arrived by "
+                          "webhook in 24h. Renewals and late captures depend on it. Check the "
+                          "webhook URL and secret in the Razorpay dashboard."
+                          % (len(captured), LOOK_BACK_H)})
+
+
+async def _check_effects_and_duplicates(findings: list, ran: set) -> None:
+    """Money in, the right thing happened - once."""
+    ran.update({"effect", "duplicate", "period", "announced", "renewal", "plan_config"})
+    since = await _since()
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT * FROM nidaan_payments WHERE created_at >= ? "
+            "AND status NOT IN ('refunded','duplicate') ORDER BY pay_id", (since,))).fetchall()]
+
+        for r in rows:
+            src, pid = r["source"], r["pay_id"]
+            # 4 - the effect the money was for
+            if src in ("subscription", "subscription_renewal") and r.get("account_id"):
+                sub = await (await c.execute(
+                    "SELECT plan, current_period_end, started_at FROM nidaan_subscriptions "
+                    "WHERE account_id=? AND status='active' ORDER BY sub_id DESC LIMIT 1",
+                    (r["account_id"],))).fetchone()
+                if not sub:
+                    findings.append({
+                        "key": "no_effect:%s" % pid, "check": "effect", "severity": "critical",
+                        "title": "Subscription paid, no active plan — account #%s" % r["account_id"],
+                        "account_id": r["account_id"], "amount_paise": r["total_paise"],
+                        "detail": "Ledger row #%s (₹%s, %s) but this account has no active "
+                                  "subscription." % (pid, int(r["total_paise"]) / 100, r["plan"] or "")})
+                else:
+                    sub = dict(sub)
+                    # 6 - a month is a month (this is the +30 days bug)
+                    try:
+                        cfg = await _n.get_plan_cfg(sub["plan"]) or {}
+                        days = int(cfg.get("period_days") or 0) or 30
+                        st = datetime.fromisoformat(str(sub["started_at"])[:19])
+                        en = datetime.fromisoformat(str(sub["current_period_end"])[:19])
+                        got = (en - st).days
+                        if got > days + 2:
+                            findings.append({
+                                "key": "period_wrong:%s:%s" % (r["account_id"], str(sub["current_period_end"])[:10]),
+                                "check": "period", "severity": "critical",
+                                "title": "Plan period is %d days, should be %d — account #%s"
+                                         % (got, days, r["account_id"]),
+                                "account_id": r["account_id"],
+                                "detail": "%s runs %s → %s (%d days) on a %d-day plan. A charge may "
+                                          "have been counted twice." % (sub["plan"], str(st)[:10],
+                                                                        str(en)[:10], got, days)})
+                    except Exception:
+                        pass
+            elif src == "per_claim_review" and r.get("claim_id"):
+                cl = await (await c.execute(
+                    "SELECT payment_status FROM nidaan_claims WHERE claim_id=?", (r["claim_id"],))).fetchone()
+                if not cl or (dict(cl)["payment_status"] or "") not in ("paid", "subscription"):
+                    findings.append({
+                        "key": "no_effect:%s" % pid, "check": "effect", "severity": "critical",
+                        "title": "Review fee paid, claim not unlocked — NP-%s" % r["claim_id"],
+                        "claim_id": r["claim_id"], "amount_paise": r["total_paise"],
+                        "detail": "Ledger row #%s (₹%s) but NP-%s is not marked paid."
+                                  % (pid, int(r["total_paise"]) / 100, r["claim_id"])})
+            elif src == "branch_l2" and r.get("claim_id"):
+                cl = await (await c.execute(
+                    "SELECT l2_payment_status FROM nidaan_claims WHERE claim_id=?", (r["claim_id"],))).fetchone()
+                if not cl or (dict(cl)["l2_payment_status"] or "") != "paid":
+                    findings.append({
+                        "key": "no_effect:%s" % pid, "check": "effect", "severity": "critical",
+                        "title": "Level-2 fee paid, claim not queued — NP-%s" % r["claim_id"],
+                        "claim_id": r["claim_id"], "amount_paise": r["total_paise"],
+                        "detail": "Ledger row #%s (₹%s) but NP-%s is not marked Level-2 paid."
+                                  % (pid, int(r["total_paise"]) / 100, r["claim_id"])})
+
+            # 7 - THIS payment was announced (the ledger row stamps itself when the office is
+            # told). Five minutes of grace: the announcement goes just after the row is written.
+            grace = (datetime.utcnow() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+            if not r.get("announced_at") and str(r["created_at"]) < grace:
+                findings.append({
+                    "key": "not_announced:%s" % pid, "check": "announced", "severity": "warn",
+                    "title": "A payment nobody was told about — ₹%s" % (int(r["total_paise"]) / 100),
+                    "amount_paise": r["total_paise"], "account_id": r.get("account_id"),
+                    "claim_id": r.get("claim_id"),
+                    "detail": "Ledger row #%s (%s, %s) has no 'Payment RECEIVED' alert beside it."
+                              % (pid, r["source"], r["created_at"])})
+
+        # 5 - the same charge twice
+        dups = [dict(r) for r in await (await c.execute(
+            "SELECT a.pay_id a_id, b.pay_id b_id, a.account_id, a.source a_src, b.source b_src, "
+            "       a.total_paise a_amt, b.total_paise b_amt, a.created_at "
+            "FROM nidaan_payments a JOIN nidaan_payments b "
+            "  ON a.pay_id < b.pay_id AND a.status<>'duplicate' AND b.status<>'duplicate' "
+            " AND ((a.razorpay_subscription_id <> '' AND a.razorpay_subscription_id = b.razorpay_subscription_id) "
+            "      OR (a.account_id IS NOT NULL AND a.account_id = b.account_id AND a.source = b.source)) "
+            " AND abs(strftime('%s', a.created_at) - strftime('%s', b.created_at)) < 600 "
+            "WHERE a.created_at >= ?", (since,))).fetchall()]
+        for d in dups:
+            findings.append({
+                "key": "duplicate_row:%s:%s" % (d["a_id"], d["b_id"]), "check": "duplicate",
+                "severity": "critical", "account_id": d.get("account_id"),
+                "title": "One payment recorded twice — rows #%s and #%s" % (d["a_id"], d["b_id"]),
+                "amount_paise": d["a_amt"],
+                "detail": "%s ₹%s and %s ₹%s for account #%s within 10 minutes (%s). Revenue is "
+                          "overstated until one is marked duplicate."
+                          % (d["a_src"], d["a_amt"] / 100, d["b_src"], d["b_amt"] / 100,
+                             d.get("account_id"), d["created_at"])})
+
+        # 8 - an active plan past its end with no renewal
+        late = [dict(r) for r in await (await c.execute(
+            "SELECT s.account_id, s.plan, s.current_period_end, a.owner_name FROM nidaan_subscriptions s "
+            "LEFT JOIN nidaan_accounts a ON a.account_id=s.account_id "
+            "WHERE s.status='active' AND datetime(s.current_period_end) < datetime('now','-1 day')")).fetchall()]
+        for s in late:
+            findings.append({
+                "key": "renewal_overdue:%s:%s" % (s["account_id"], str(s["current_period_end"])[:10]),
+                "check": "renewal", "severity": "warn", "account_id": s["account_id"],
+                "title": "Plan still active but its period ended — account #%s" % s["account_id"],
+                "detail": "%s (%s) ended %s and is still marked active with no renewal charge. Either "
+                          "the renewal failed or the plan should have lapsed."
+                          % (s.get("owner_name") or "", s["plan"], str(s["current_period_end"])[:10])})
+
+    # 11 - a plan you cannot actually sell
+    try:
+        plans = await _n.get_plans_config() or {}
+        for key, cfg in plans.items():
+            if not (cfg or {}).get("active", True):
+                continue
+            price = int((cfg or {}).get("price_paise") or 0)
+            if price <= 0:
+                findings.append({
+                    "key": "plan_config:%s" % key, "check": "plan_config", "severity": "critical",
+                    "title": "Plan '%s' is on sale with no price" % key,
+                    "detail": "Plans & Billing shows %s as active but its price is %s. A checkout "
+                              "would charge nothing." % (key, price)})
+    except Exception as e:  # noqa: BLE001
+        logger.warning("plan config check failed: %s", e)
+        ran.discard("plan_config")
+
+
+# ── the run ──────────────────────────────────────────────────────────────────
+async def run_guardian(*, alert: bool = True) -> dict:
+    """One pass. Never raises: a guardian that crashes is worse than one that says nothing."""
+    findings: list = []
+    ran: set = set()
+    try:
+        await _check_reconcile(findings, ran)
+    except Exception as e:  # noqa: BLE001
+        logger.error("reconcile check failed: %s", e)
+    try:
+        await _check_effects_and_duplicates(findings, ran)
+    except Exception as e:  # noqa: BLE001
+        logger.error("effects check failed: %s", e)
+    res = await _sync(findings, ran)
+    try:
+        await _n.set_ops_setting(HEARTBEAT_KEY, await _now())
+    except Exception:
+        pass
+    sent = await _alert_due() if alert else 0
+    # "Resolved" is an alert too: a check-only run (the Run now button, a test) says nothing.
+    if res["closed"] and alert:
+        await _say_resolved(res["closed"])
+    return {"findings": len(findings), "checks_ran": sorted(ran), "opened": len(res["opened"]),
+            "closed": len(res["closed"]), "alerts_sent": sent}
+
+
+async def _supers() -> list:
+    async with aiosqlite.connect(DB_PATH) as c:
+        return [r[0] for r in await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+            "AND deleted_at IS NULL")).fetchall()]
+
+
+async def _alert_due() -> int:
+    """Say it again, every 10 minutes, until a super admin taps Seen. After Seen, once more in two
+    hours if it is still true."""
+    import biz_nidaan_notifications as _nnot
+    now = await _now()
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        due = [dict(r) for r in await (await c.execute(
+            "SELECT * FROM nidaan_pay_incidents WHERE status IN ('open','acked') "
+            "AND COALESCE(next_alert_at,'') <= ? ORDER BY inc_id", (now,))).fetchall()]
+    if not due:
+        return 0
+    ids = await _supers()
+    sent = 0
+    for inc in due:
+        again = int(inc["alert_count"] or 0)
+        head = "🛑 PAYMENT" if inc["severity"] == "critical" else "⚠️ PAYMENT"
+        subj = "%s — %s" % (head, inc["title"])
+        body = ("%s\n\n%s\n\nFirst seen: %s%s\n\nOpen ops → Revenue → Payment Health."
+                % (inc["title"], inc["detail"], inc["first_seen"],
+                   ("\nSaid %d times — nobody has tapped Seen yet." % again) if again >= 1 else ""))
+        if inc["status"] == "acked":
+            body += "\n\n(%s tapped Seen %s and it is still not fixed.)" % (
+                inc.get("acked_by_name") or "Someone", str(inc.get("acked_at") or "")[:16])
+        btn = [[{"text": "👀 Seen — I'm on it", "callback_data": "pgk:%d" % inc["inc_id"]}]]
+        for sid in ids:
+            try:
+                await _nnot._telegram_mirror(sid, subj + "\n\n" + body, url="/nidaan/ops", buttons=btn)
+            except Exception as e:  # noqa: BLE001
+                logger.info("guardian telegram failed for %s: %s", sid, e)
+        try:
+            await _nnot.notify_staff_inapp(ids, subj, body, event_key="payment.guardian",
+                                           email=(inc["severity"] == "critical"), telegram=False)
+        except Exception as e:  # noqa: BLE001
+            logger.info("guardian bell failed: %s", e)
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "UPDATE nidaan_pay_incidents SET alert_count=alert_count+1, status='open', "
+                "next_alert_at=datetime('now', ?) WHERE inc_id=?",
+                ("+%d minutes" % ALERT_EVERY_MIN, inc["inc_id"]))
+            await c.commit()
+        sent += 1
+    return sent
+
+
+async def acknowledge(inc_id: int, staff_id: int, staff_name: str) -> dict:
+    """A super admin has seen it: the repeats stop for everyone, and it comes back in two hours if
+    it is still broken."""
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        row = await (await c.execute(
+            "SELECT * FROM nidaan_pay_incidents WHERE inc_id=?", (int(inc_id),))).fetchone()
+        if not row:
+            return {"ok": False, "error": "That alert no longer exists."}
+        inc = dict(row)
+        if inc["status"] == "resolved":
+            return {"ok": True, "already": "resolved", "title": inc["title"]}
+        if inc["status"] == "acked":
+            return {"ok": True, "already": "acked", "by": inc.get("acked_by_name") or "",
+                    "title": inc["title"]}
+        await c.execute(
+            "UPDATE nidaan_pay_incidents SET status='acked', acked_by=?, acked_by_name=?, "
+            "acked_at=CURRENT_TIMESTAMP, next_alert_at=datetime('now', ?) WHERE inc_id=?",
+            (int(staff_id), (staff_name or "")[:80], "+%d hours" % REMIND_AFTER_ACK_H, int(inc_id)))
+        await c.commit()
+    # Tell the other super admins, so nobody duplicates the work.
+    import biz_nidaan_notifications as _nnot
+    for sid in await _supers():
+        if sid == staff_id:
+            continue
+        try:
+            await _nnot._telegram_mirror(
+                sid, "👀 Seen by %s — %s\n\nThey are on it. If it is still not fixed in %d hours, "
+                     "this will come back." % (staff_name, inc["title"], REMIND_AFTER_ACK_H),
+                url="/nidaan/ops")
+        except Exception:
+            pass
+    return {"ok": True, "title": inc["title"]}
+
+
+async def _say_resolved(closed: list) -> None:
+    import biz_nidaan_notifications as _nnot
+    ids = await _supers()
+    for r in closed:
+        try:
+            await _nnot.notify_staff_inapp(
+                ids, "✅ Payment issue resolved — %s" % r["title"],
+                "The check that raised this now passes. Nothing further to do.",
+                event_key="payment.guardian_ok", email=False)
+        except Exception:
+            pass
+
+
+# ── is the guardian itself alive? (called from the web processes) ────────────
+async def heartbeat_check() -> dict:
+    """The guardian runs in the worker. If the worker dies, nobody would ever hear from it again -
+    so the web processes check its heartbeat. The incident key is fixed, so both web processes
+    checking cannot produce two alerts."""
+    last = await _n.get_ops_setting(HEARTBEAT_KEY, "") or ""
+    stale = True
+    if last:
+        try:
+            stale = (datetime.utcnow() - datetime.fromisoformat(last[:19])) > timedelta(minutes=HEARTBEAT_STALE_MIN)
+        except Exception:
+            stale = True
+    if not stale:
+        await _sync([], {"heartbeat"})
+        return {"ok": True, "last": last}
+    await _sync([{
+        "key": "guardian_silent", "check": "heartbeat", "severity": "critical",
+        "title": "The payment guardian has stopped running",
+        "detail": "It last ran %s. While it is silent, nothing is watching the payment mechanics. "
+                  "Check the sarathi-worker service." % (last or "never"),
+    }], {"heartbeat"})
+    await _alert_due()
+    return {"ok": False, "last": last}

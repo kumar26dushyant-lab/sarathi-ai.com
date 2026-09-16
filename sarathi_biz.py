@@ -174,6 +174,23 @@ async def _install_bg_exception_handler():
     try:
         asyncio.get_running_loop().set_exception_handler(_log_background_task_exception)
         logger.info("🛡️  Background-task exception handler installed")
+
+        # The guardian runs in the WORKER. If the worker dies, nothing would ever be heard from it
+        # again - so every web process checks its heartbeat. The incident key is fixed, so two web
+        # processes checking cannot raise two alerts.
+        async def payment_guardian_heartbeat_loop():
+            import biz_nidaan_pay_guard as _pg
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    await _pg.heartbeat_check()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.info("payment guardian heartbeat check failed: %s", e)
+                await asyncio.sleep(600)
+        if os.getenv("APP_ROLE", "web") == "web":
+            asyncio.create_task(payment_guardian_heartbeat_loop())
     except Exception as _e:
         logger.warning("Could not install bg exception handler: %s", _e)
     # Seed the DB-backed Nidaan plan config (idempotent) so plans become editable in ops.
@@ -6494,6 +6511,42 @@ async def nidaan_ops_desk(request: Request, lang: str = "en"):
     return await _cs.desk(caller.get("staff_id") or caller.get("sub"),
                           role=(caller or {}).get("role") or "",
                           lang=("hi" if lang == "hi" else "en"))
+
+
+@app.get("/nidaan/ops/api/payments/incidents")
+async def ops_payment_incidents(request: Request, all: int = 0):
+    """What the payment guardian is holding open (and, with all=1, what it has closed)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    return {"incidents": await _pg.open_incidents(include_resolved=bool(all))}
+
+
+@app.post("/nidaan/ops/api/payments/incidents/{inc_id}/ack")
+@limiter.limit("30/minute")
+async def ops_payment_incident_ack(inc_id: int, request: Request):
+    """"Seen" from the dashboard - the same act as tapping Seen on Telegram."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    res = await _pg.acknowledge(inc_id, caller.get("staff_id"), _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not record that")
+    await _ops_audit(request, "payment.incident_ack", "incident", str(inc_id), res.get("title", ""))
+    return res
+
+
+@app.post("/nidaan/ops/api/payments/guardian/run")
+@limiter.limit("6/minute")
+async def ops_payment_guardian_run(request: Request):
+    """Run the checks now (they also run by themselves every 5 minutes)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    return await _pg.run_guardian()
 
 
 @app.get("/nidaan/ops/api/changes")
@@ -27479,6 +27532,23 @@ async def main():
         # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
         # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;
         # alerts super-admins ONLY on anomalies. Worker-only singleton.
+        # Step 6i-b: PAYMENT GUARDIAN — reads Razorpay against our ledger every 5 minutes and
+        # alerts super-admins until one taps "Seen". Read-only: it can never break a payment.
+        async def payment_guardian_loop():
+            import biz_nidaan_pay_guard as _pg
+            await asyncio.sleep(120)
+            while True:
+                try:
+                    res = await _pg.run_guardian()
+                    if res.get("findings") or res.get("closed"):
+                        logger.info("🛡️ payment guardian: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("payment guardian error: %s", e)
+                await asyncio.sleep(300)
+        asyncio.create_task(payment_guardian_loop())
+
         async def payment_watch_loop():
             import biz_nidaan_payment_watch as _pw
             await asyncio.sleep(200)  # let startup settle

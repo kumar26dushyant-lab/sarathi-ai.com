@@ -2708,8 +2708,27 @@ async def init_db():
             "ALTER TABLE nidaan_claims ADD COLUMN cq_text TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN cq_channels TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claims ADD COLUMN cq_reply_at TIMESTAMP",
+            # When the office was told about this payment. Empty after a few minutes means nobody
+            # was told - the bug that kept every subscription payment silent since August.
+            "ALTER TABLE nidaan_payments ADD COLUMN announced_at TIMESTAMP",
             "CREATE TABLE IF NOT EXISTS nidaan_change_seq (id INTEGER PRIMARY KEY CHECK (id = 1), "
             "seq INTEGER NOT NULL DEFAULT 0)",
+            # The payment guardian's findings. One problem is ONE row (key is unique), so however
+            # often it runs it can never produce a flood; 'acked' records who has it in hand.
+            "CREATE TABLE IF NOT EXISTS nidaan_pay_incidents ("
+            " inc_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " key TEXT UNIQUE NOT NULL,"
+            " check_name TEXT NOT NULL,"
+            " severity TEXT DEFAULT 'critical',"
+            " title TEXT NOT NULL,"
+            " detail TEXT DEFAULT '',"
+            " claim_id INTEGER, account_id INTEGER, amount_paise INTEGER DEFAULT 0,"
+            " first_seen TIMESTAMP, last_seen TIMESTAMP,"
+            " status TEXT DEFAULT 'open',"
+            " alert_count INTEGER DEFAULT 0, next_alert_at TIMESTAMP,"
+            " acked_by INTEGER, acked_by_name TEXT DEFAULT '', acked_at TIMESTAMP,"
+            " resolved_at TIMESTAMP)",
+            "CREATE INDEX IF NOT EXISTS idx_pay_inc_status ON nidaan_pay_incidents (status, next_alert_at)",
             "INSERT OR IGNORE INTO nidaan_change_seq (id, seq) VALUES (1, 0)",
             "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_insert AFTER INSERT ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
             "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_update AFTER UPDATE ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",

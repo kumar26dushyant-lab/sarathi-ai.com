@@ -1979,7 +1979,7 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
 
 async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, claim_id=None,
                             branch_code: str = "", plan: str = "", verified: bool = True,
-                            actor_name: str = "") -> None:
+                            actor_name: str = "", dedup_key: str = "") -> None:
     """One payment, just recorded in the ledger - tell the office what it was and who paid."""
     try:
         amt = total_paise / 100.0
@@ -2021,6 +2021,13 @@ async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, c
                          + " - not confirmed by Razorpay")
         await on_payment_success(kind, amount, detail="\n".join(lines), contact=phone,
                                  account_id=account_id, claim_id=claim_id)
+        # Stamp the row itself, so "was THIS payment announced?" is a fact about this payment and
+        # not "was there some payment alert around that time".
+        if dedup_key:
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute("UPDATE nidaan_payments SET announced_at=CURRENT_TIMESTAMP "
+                                   "WHERE dedup_key=?", (dedup_key,))
+                await conn.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("payment announcement failed (%s): %s", source, e)
 
