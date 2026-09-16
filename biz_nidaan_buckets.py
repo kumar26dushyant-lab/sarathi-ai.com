@@ -1105,7 +1105,17 @@ async def contact_recipients(claim_id: int) -> dict:
                            "email": p["email"]})
     except Exception as e:  # noqa: BLE001
         logger.info("query cc lookup failed for %s: %s", claim_id, e)
-    return {"to": to, "cc": cc, "asked": _query_info(row).get("asked")}
+    # Can we actually reach this person on WhatsApp today? Somebody who replied STOP must be
+    # visible as STOPPED before a staffer types a message to them, not after it silently fails;
+    # and the daily/weekly allowance is worth showing for the same reason.
+    wa = {}
+    if to["phone"]:
+        try:
+            import biz_nidaan_whatsapp as _w, biz_nidaan_wa_guard as _g
+            wa = await _g.summary(_w.normalize_msisdn(to["phone"])) or {}
+        except Exception as e:  # noqa: BLE001
+            logger.info("whatsapp reachability lookup failed for %s: %s", claim_id, e)
+    return {"to": to, "cc": cc, "asked": _query_info(row).get("asked"), "wa": wa}
 
 
 async def send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool, email: bool,

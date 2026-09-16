@@ -30,7 +30,8 @@ _LANG_WORDS = {"english": "en", "eng": "en", "hindi": "hi", "हिंदी": "
 async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = None,
                       wa_message_id: str = "", msg_type: str = "", template_name: str = "",
                       body: str = "", media_id: str = "", status: str = "", error: str = "",
-                      sender: str = "", sender_name: str = "", staff_id: str = "") -> bool:
+                      sender: str = "", sender_name: str = "", staff_id: str = "",
+                      send_class: str = "") -> bool:
     """Write one row to the WA message log. Idempotent on wa_message_id (inbound dedup).
 
     `sender` records WHO produced an outbound message — bot | human | campaign | journey |
@@ -50,11 +51,12 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
             await conn.execute(
                 """INSERT INTO nidaan_wa_messages
                    (direction, msisdn, claim_id, wa_message_id, msg_type, template_name,
-                    body, media_id, status, error, sender, sender_name, staff_id)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    body, media_id, status, error, sender, sender_name, staff_id, send_class)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (direction, msisdn, claim_id, wa_message_id or "", msg_type or "", template_name or "",
                  (body or "")[:4000], media_id or "", status or "", (error or "")[:300],
-                 sender[:20], (sender_name or "")[:80], str(staff_id or "")[:20]))
+                 sender[:20], (sender_name or "")[:80], str(staff_id or "")[:20],
+                 (send_class or "")[:16]))
             await conn.commit()
         return True
     except Exception as e:  # noqa: BLE001
@@ -96,6 +98,20 @@ async def upsert_contact(msisdn: str, *, claim_id: Optional[int] = None, account
         await conn.commit()
 
 
+async def _mark_stop(msisdn: str, *, stopped: bool, source: str) -> None:
+    """Record WHEN someone stopped (or started again) and how, so a screen can say it in words
+    instead of showing a bare status. Best-effort: never let this break the reply itself."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE nidaan_wa_contacts SET stopped_at=?, stop_source=? WHERE msisdn=?",
+                (datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if stopped else None,
+                 source if stopped else "", msisdn))
+            await conn.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not stamp the STOP on %s: %s", msisdn, e)
+
+
 async def in_session_window(msisdn: str) -> bool:
     """True if the complainant messaged us within the last 24h (free-form/text is allowed)."""
     c = await get_contact(msisdn)
@@ -119,14 +135,28 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
     t = (text or "").strip().lower()
     if t in _STOP_WORDS:
         await upsert_contact(msisdn, opted_in=False, status="stopped")
+        await _mark_stop(msisdn, stopped=True, source="reply_stop")
         try:
-            await wa.send_text(msisdn, "Theek hai — aapko ab WhatsApp par updates nahi bhejenge. "
-                                       "Dobara chalu karne ke liye START bhejein.")
+            # Sent as 'consent' so the guard lets it reach someone who has just opted out: the
+            # one message a stopped person must still get is the one confirming they stopped.
+            # It also says what they will NOT lose — their claim carries on either way.
+            with wa.sending_as("consent"):
+                await wa.send_text(msisdn, "Theek hai — aapko ab WhatsApp par claim updates nahi "
+                                           "bhejenge. Aapka claim chalu rahega aur hum aapse call "
+                                           "ya email par sampark karenge. Dobara WhatsApp par "
+                                           "updates chahiye to kabhi bhi START bhejein.")
         except Exception:
             pass
         return
     if t in _START_WORDS:
         await upsert_contact(msisdn, opted_in=True, status="active", opt_source="reply_yes")
+        await _mark_stop(msisdn, stopped=False, source="reply_start")
+        try:
+            with wa.sending_as("consent"):
+                await wa.send_text(msisdn, "Ho gaya — aapko WhatsApp par claim updates dobara "
+                                           "milenge. Band karne ke liye kabhi bhi STOP bhejein.")
+        except Exception:
+            pass
         return
     if t in _LANG_WORDS:
         await upsert_contact(msisdn, language=_LANG_WORDS[t])

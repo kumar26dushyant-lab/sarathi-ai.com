@@ -2326,6 +2326,14 @@ async def ensure_claim_for_paid_purchase(purchase_id: int) -> Optional[int]:
         await conn.commit()
     logger.info("ensure_claim_for_paid_purchase: purchase=%s → claim=%s (account=%s)",
                 purchase_id, claim_id, account_id)
+    # Someone who paid ₹499 on the website is a complainant like any other, and used to be the
+    # one door that produced no "your claim is registered" message. Best-effort and last: the
+    # claim already exists and is linked, so nothing here can undo that.
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        await _orch.wa_journey(claim_id, "claim_registered")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("d2c claim_registered WhatsApp failed for claim %s: %s", claim_id, e)
     return claim_id
 
 

@@ -409,14 +409,17 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
             ctx.update(extra)
         text = _msg.compose(event, lang, ctx)
         import biz_nidaan_wa_flow as _flow
+        # A failed payment is about their money and blocks their claim: it is never held back by
+        # the "how often may we speak first" cap. Everything else in the journey is.
+        _as = "critical" if event == "payment_failed" else "journey"
         if await _flow.in_session_window(msisdn):
-            with _wa.sending_as("journey"):
+            with _wa.sending_as(_as):
                 res = await _wa.send_text(msisdn, text)
         else:
             tmpl = JOURNEY_TEMPLATES.get(event, "")
             if tmpl:
                 comps = _wa.body_params(*_template_params(event, ctx))
-                with _wa.sending_as("journey"):
+                with _wa.sending_as(_as):
                     res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
             else:
                 res = {"ok": False, "error": "needs_template"}

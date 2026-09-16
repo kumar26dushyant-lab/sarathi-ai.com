@@ -1645,6 +1645,18 @@ async def init_db():
             # identifies the BROWSER, never anything the visitor types — matching on a typed
             # phone or email would let anyone read a stranger's chat by guessing it.
             "ALTER TABLE nidaan_support_threads ADD COLUMN visitor_token TEXT DEFAULT ''",
+            # ── HOW OFTEN WE SPEAK FIRST (Sep 2026) ─────────────────────────────────────
+            # The founder's cap is per complainant: 2 a day, 5 a week, and only for messages
+            # WE start. That needs the log to record which class each outbound belonged to —
+            # us speaking first, the bot answering inside a conversation they opened, or a
+            # colleague typing. Old rows stay empty and are simply not counted, so the caps
+            # begin from the day they are switched on rather than judging history.
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN send_class TEXT DEFAULT ''",  # initiated|conversation|human|consent|critical|business
+            "CREATE INDEX IF NOT EXISTS idx_wamsg_cap ON nidaan_wa_messages(msisdn, send_class, created_at)",
+            # When and how someone stopped hearing from us — so a screen can say it plainly
+            # instead of a bare status word.
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN stopped_at TIMESTAMP",
+            "ALTER TABLE nidaan_wa_contacts ADD COLUMN stop_source TEXT DEFAULT ''",  # reply_stop|staff
         ]
         for m in nidaan_migrations:
             try:

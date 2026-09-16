@@ -111,7 +111,7 @@ async def template_text(template: dict) -> str:
     return (" · ".join(p for p in params if p)) if params else ""
 
 
-async def _log_outbound(payload: dict, res: dict) -> None:
+async def _log_outbound(payload: dict, res: dict, send_class: str = "") -> None:
     """Record one outbound message. Best-effort: a logging failure must never break a send."""
     try:
         import biz_nidaan_wa_flow as _flow
@@ -143,7 +143,7 @@ async def _log_outbound(payload: dict, res: dict) -> None:
             wa_message_id=str(res.get("message_id") or ""), msg_type=mtype or "text",
             template_name=tmpl, body=body, media_id=media_id,
             status="sent" if ok else "failed", error=str(res.get("error") or "")[:300],
-            sender=sender, sender_name=sname, staff_id=sid)
+            sender=sender, sender_name=sname, staff_id=sid, send_class=send_class)
     except Exception as e:  # noqa: BLE001
         logger.info("outbound WhatsApp log failed (send itself was fine): %s", e)
 
@@ -193,6 +193,25 @@ async def _post(payload: dict) -> dict:
         return {"ok": False, "error": "not_configured"}
     if os.getenv("NIDAAN_NO_OUTBOUND") == "1":        # test runs never reach a real customer
         return {"ok": False, "error": "outbound_off"}
+    # How often are we allowed to speak first? Asked HERE because this is the one place every
+    # Nidaan WhatsApp message passes through — a cap on any other line would be a cap with a
+    # way around it. See biz_nidaan_wa_guard for what is capped and what deliberately is not.
+    _cls = "initiated"
+    try:
+        import biz_nidaan_wa_guard as _guard
+        _to = str(payload.get("to") or "")
+        _g = await _guard.decide(_to, str(payload.get("type") or ""), _SENDER.get()[0])
+        _cls = _g.get("cls") or _cls
+        if not _g.get("send"):
+            _body = ((payload.get("text") or {}).get("body") or "") if payload.get("type") == "text" \
+                else ((payload.get("template") or {}).get("name") or "")
+            await _guard.note_held(_to, _g.get("claim_id"), _g.get("reason") or "held", _body)
+            return {"ok": False, "error": _g.get("reason") or "held", "held": True}
+        if _g.get("footer") and payload.get("type") == "text":
+            _b = (payload.get("text") or {}).get("body") or ""
+            payload["text"]["body"] = (_b + _g["footer"])[:4000]
+    except Exception as _e:  # noqa: BLE001 — a guard failure must never stop a real message
+        logger.warning("wa guard skipped (sending anyway): %s", _e)
     url = f"{GRAPH}/{_phone_id()}/messages"
     try:
         async with httpx.AsyncClient(timeout=25) as c:
@@ -202,17 +221,17 @@ async def _post(payload: dict) -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("nidaan-wa send failed: %s", e)
         res = {"ok": False, "error": str(e)[:150]}
-        await _log_outbound(payload, res)
+        await _log_outbound(payload, res, _cls)
         return res
     if r.status_code == 200 and d.get("messages"):
         res = {"ok": True, "message_id": d["messages"][0].get("id", ""),
                "wa_id": (d.get("contacts") or [{}])[0].get("wa_id", "")}
-        await _log_outbound(payload, res)
+        await _log_outbound(payload, res, _cls)
         return res
     err = ((d.get("error") or {}).get("message")) or str(d)[:200]
     logger.warning("nidaan-wa send rejected [%s]: %s", r.status_code, err)
     res = {"ok": False, "error": err, "status": r.status_code}
-    await _log_outbound(payload, res)
+    await _log_outbound(payload, res, _cls)
     return res
 
 

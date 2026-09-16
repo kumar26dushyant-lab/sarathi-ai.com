@@ -163,7 +163,9 @@ async def _run_campaign(campaign_id: int, template_name: str, kind: str, lang: s
                               template_name, kind, lang)
         if res.get("ok"):
             sent += 1
-        elif res.get("error") == "needs_template":
+        elif res.get("error") == "needs_template" or res.get("held"):
+            # Held is not failed: the person had already had their messages for the day or week,
+            # or they replied STOP. Counting it as a failure would send someone hunting a bug.
             skipped += 1
         else:
             failed += 1

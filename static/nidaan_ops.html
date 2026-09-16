@@ -13715,6 +13715,22 @@ async function l2QuerySend(claimId, preset){
   let info = {};
   try{ const r = await API('/cases/' + claimId + '/query/contact'); if (r.ok) info = await r.json(); }catch(e){}
   const to = info.to || {}, cc = info.cc || [], asked = info.asked || null;
+  const wa0 = info.wa || {};
+  // Say it BEFORE they type: a person who replied STOP will not get this, and there is a limit
+  // on how often we start a WhatsApp conversation with anyone.
+  const waNote = !to.phone ? ''
+    : (wa0.stopped
+        ? '<div class="l2ban amber">\u{1f6ab} <b>STOPPED — no WhatsApp.</b> This person replied STOP, '
+          + 'so WhatsApp will not reach them. Use email, or call them.</div>'
+        : (wa0.left_today === 0
+            ? '<div class="l2ban amber">⏳ <b>WhatsApp limit reached today.</b> They have already had '
+              + esc(String(wa0.cap_day || 2)) + ' messages from us today, so this one would wait. '
+              + 'Email or a call gets through now.</div>'
+            : (typeof wa0.left_today === 'number'
+                ? '<div style="font-size:.78rem;color:var(--nd-text-muted)">WhatsApp: '
+                  + esc(String(wa0.left_today)) + ' of ' + esc(String(wa0.cap_day)) + ' left today, '
+                  + esc(String(wa0.left_week)) + ' of ' + esc(String(wa0.cap_week)) + ' this week.</div>'
+                : '')));
   const was = asked
     ? '<div class="l2ban ' + (asked.replied ? 'info' : 'amber') + '">Last query: sent by <b>' + esc(asked.by)
       + '</b> ' + esc(String(asked.at).slice(0, 16)) + ' via ' + esc(asked.channels) + ' \u2014 '
@@ -13722,7 +13738,7 @@ async function l2QuerySend(claimId, preset){
                        : '\u23f3 no reply yet. One message, not a stream: if it has been less than a '
                          + 'day, call them instead.') + '</div>' : '';
   _qOv('qSend', '\u{1f4e8} Send the query to the complainant \u2014 NP-' + claimId,
-      was
+      was + waNote
     + '<div style="font-size:.82rem;color:var(--nd-text-muted)">To <b>' + esc(to.name || 'the complainant')
     + '</b>' + (to.phone ? ' \u00b7 ' + esc(to.phone) : '') + (to.email ? ' \u00b7 ' + esc(to.email) : '') + '</div>'
     + '<div class="l2fld"><label>What must they send or answer? <span class="req">*</span></label>'
@@ -13730,8 +13746,10 @@ async function l2QuerySend(claimId, preset){
     + '<div class="hint">One clear ask. On WhatsApp it reads: \u201cTo move your claim (Ref #NP-' + claimId
     + ') forward, we still need: <i>your words</i>. Please reply to this chat\u2026\u201d</div></div>'
     + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
-    +   '<input type="checkbox" id="qSendWa"' + (to.phone ? ' checked' : ' disabled') + '> \u{1f4ac} WhatsApp'
-    +   (to.phone ? '' : ' <span style="color:var(--nd-text-faint)">(no phone on the claim)</span>') + '</label>'
+    +   '<input type="checkbox" id="qSendWa"' + ((to.phone && !wa0.stopped) ? ' checked' : ' disabled')
+    +   '> \u{1f4ac} WhatsApp'
+    +   (to.phone ? (wa0.stopped ? ' <span style="color:var(--nd-text-faint)">(they replied STOP)</span>' : '')
+                  : ' <span style="color:var(--nd-text-faint)">(no phone on the claim)</span>') + '</label>'
     + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
     +   '<input type="checkbox" id="qSendEm"' + (to.email ? ' checked' : ' disabled') + '> \u2709\ufe0f Email'
     +   (to.email ? '' : ' <span style="color:var(--nd-text-faint)">(no email on the claim)</span>') + '</label>'

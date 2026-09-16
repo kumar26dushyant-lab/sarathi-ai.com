@@ -1534,9 +1534,13 @@ async def _claimant_accept_thankyou(claim_id: int) -> None:
         try:
             import biz_nidaan_whatsapp as _nwa
             if _nwa.is_configured():
-                await _nwa.send_text(phone, f"Namaste {name} 🙏 Aapke claim {reg} ki authorization "
-                                            f"mil gayi — dhanyavaad! Ab hum aapka claim aage badha rahe hain "
-                                            f"aur har update aapko yahin denge. — Team NidaanPartner")
+                # 'critical': this confirms something the complainant just DID. Holding it behind
+                # the daily cap would leave them wondering whether their authorisation landed.
+                with _nwa.sending_as("critical"):
+                    await _nwa.send_text(
+                        phone, f"Namaste {name} 🙏 Aapke claim {reg} ki authorization mil gayi — "
+                               f"dhanyavaad! Ab hum aapka claim aage badha rahe hain aur har update "
+                               f"aapko yahin denge. — Team NidaanPartner")
         except Exception:
             pass
     try:
@@ -7701,6 +7705,14 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
         raise HTTPException(status_code=400, detail=msg or "Could not raise that claim.")
     await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
                      f"for account {body.account_id} ({acct.get('owner_name') or ''})"[:160])
+    # The complainant hears from us whichever door their claim came through — this one used to
+    # be silent. Fire-and-forget: a WhatsApp hiccup must not fail the staff member's request.
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_ops_claim_raised(
+            claim_id, raised_by=f"{_actor_label(caller)} (on behalf)"))
+    except Exception:
+        pass
     return {"ok": True, "claim_id": claim_id, "message": msg,
             "on_behalf_of": acct.get("owner_name") or acct.get("firm_name") or "",
             "raised_by": _actor_label(caller)}
