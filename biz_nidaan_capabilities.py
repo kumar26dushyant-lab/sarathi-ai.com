@@ -779,10 +779,10 @@ CAPABILITIES: list[dict] = [
     {
         "id": "br_login_whatsapp", "audience": ["branch"],
         "en": {"t": "Log in with a WhatsApp code if email is not reaching you",
-               "d": "The login page has two buttons. If the email code is not arriving, ask for it on WhatsApp instead — the same code, a different road. We can only send it if your branch mobile is on file and you have written to our WhatsApp number in the last 24 hours; if that window is shut, the page gives you one tap to open it.",
+               "d": "The login page has two buttons. If the email code is not arriving, ask for it on WhatsApp instead — the same code, a different road. It reaches you straight away, with a button to copy the code; you do not have to message us first. The one thing we need is your branch mobile on file, so please give it to the office if we do not have it.",
                "u": "Branch portal login → type your branch email → 'Send it on WhatsApp instead'."},
         "hi": {"t": "ईमेल न पहुँचे तो WhatsApp कोड से लॉगिन करें",
-               "d": "लॉगिन पेज पर दो बटन हैं। अगर ईमेल कोड नहीं आ रहा, तो वही कोड WhatsApp पर मँगाइए — रास्ता अलग, कोड वही। यह तभी भेज सकते हैं जब आपकी ब्रांच का मोबाइल हमारे पास दर्ज हो और आपने पिछले 24 घंटे में हमारे WhatsApp नंबर पर कुछ लिखा हो; अगर नहीं, तो पेज एक टैप में वह खिड़की खोल देता है।",
+               "d": "लॉगिन पेज पर दो बटन हैं। अगर ईमेल कोड नहीं आ रहा, तो वही कोड WhatsApp पर मँगाइए — रास्ता अलग, कोड वही। कोड सीधे आ जाता है और उसे कॉपी करने का बटन भी मिलता है; पहले हमें कोई मैसेज भेजने की ज़रूरत नहीं। बस आपकी ब्रांच का मोबाइल नंबर हमारे पास दर्ज होना चाहिए — न हो तो ऑफ़िस को बता दीजिए।",
                "u": "ब्रांच पोर्टल लॉगिन → अपना ब्रांच ईमेल लिखें → 'Send it on WhatsApp instead'।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },

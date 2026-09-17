@@ -8,7 +8,7 @@
 **Details (EN):**
 • **Branch login codes are arriving again.** Google was silently throwing away every code we sent to a `@nidaanpartner.com` address because it came through an outside service. The codes now go out on a route Google accepts, and a test message landed in the **inbox**, not spam.
 
-• **A second way in: WhatsApp.** On the branch login page there are now two buttons — email, or "Send it on WhatsApp instead". Same code, different road. WhatsApp works only if we have the branch mobile on file and the branch has written to our WhatsApp number in the last 24 hours; the page says so and gives one tap to open that window.
+• **A second way in: WhatsApp.** On the branch login page there are now two buttons — email, or "Send it on WhatsApp instead". Same code, different road. The code arrives straight away with a button to copy it, and the branch does **not** need to message us first. The only thing we need is their mobile number on file.
 
 • **Please give us the branch mobile numbers.** Five branches have neither an email nor a mobile with us and cannot log in at all. Once every branch has a mobile, WhatsApp becomes the main way in and email the backup.
 
@@ -22,7 +22,7 @@ React 👍 once read; ask the office IT SPOC if anything is unclear.
 **Details (HI):**
 • **ब्रांच लॉगिन कोड फिर से पहुँच रहे हैं।** `@nidaanpartner.com` पते पर भेजा हर कोड Google चुपचाप हटा रहा था, क्योंकि वह बाहर की सेवा से आ रहा था। अब कोड उस रास्ते से जाते हैं जिसे Google स्वीकार करता है — जाँच का संदेश **इनबॉक्स** में पहुँचा, स्पैम में नहीं।
 
-• **दूसरा रास्ता: WhatsApp।** ब्रांच लॉगिन पेज पर अब दो बटन हैं — ईमेल, या "Send it on WhatsApp instead"। कोड वही, रास्ता अलग। WhatsApp तभी काम करेगा जब ब्रांच का मोबाइल हमारे पास दर्ज हो और ब्रांच ने पिछले 24 घंटे में हमारे WhatsApp नंबर पर कुछ लिखा हो; पेज यह बताता है और एक टैप में वह खिड़की खोल देता है।
+• **दूसरा रास्ता: WhatsApp।** ब्रांच लॉगिन पेज पर अब दो बटन हैं — ईमेल, या "Send it on WhatsApp instead"। कोड वही, रास्ता अलग। कोड तुरंत आ जाता है और उसे कॉपी करने का बटन भी मिलता है; ब्रांच को पहले हमें कोई मैसेज भेजने की ज़रूरत **नहीं**। बस उनका मोबाइल नंबर हमारे पास दर्ज होना चाहिए।
 
 • **कृपया ब्रांच के मोबाइल नंबर दीजिए।** पाँच ब्रांच के पास न ईमेल है न मोबाइल — वे बिल्कुल लॉगिन नहीं कर सकतीं। जब हर ब्रांच का मोबाइल आ जाएगा, WhatsApp मुख्य रास्ता बनेगा और ईमेल बैकअप।
 
