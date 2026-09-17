@@ -766,6 +766,26 @@ CAPABILITIES: list[dict] = [
                "u": "किसी क्लेम को खोलें और उसकी पूरी क्रमवार एक्टिविटी देखें।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
+    {
+        "id": "health_ways_in",
+        "en": {"t": "See whether people can actually log in",
+               "d": "App Health now reports each way into the system — branch, subscriber, staff and the complainant portal — and says what is broken and why. It judges delivery on the codes we actually sent in the last 24 hours, not on whether the settings look right, because on 17 Sep every setting was right and no branch received a single code. A branch with no email and no mobile is named, so it can be fixed. 'Test login delivery' sends a real login email down the same path to your own address and tells you which route carried it.",
+               "u": "App Health → 🔑 Ways in — logins. A failing row links to the screen that holds the missing detail."},
+        "hi": {"t": "देखें कि लोग सचमुच लॉगिन कर पा रहे हैं या नहीं",
+               "d": "App Health अब हर लॉगिन रास्ते की हालत बताता है — ब्रांच, सब्सक्राइबर, स्टाफ़ और शिकायतकर्ता पोर्टल — और यह भी कि क्या टूटा है और क्यों। पिछले 24 घंटे में भेजे गए असली कोड के आधार पर फ़ैसला होता है, सेटिंग देखकर नहीं, क्योंकि 17 सितंबर को सेटिंग सही थी और किसी ब्रांच को एक भी कोड नहीं मिला। जिस ब्रांच के पास न ईमेल है न मोबाइल, उसका नाम दिखता है। 'Test login delivery' उसी रास्ते से आपके अपने पते पर असली ईमेल भेजकर बताता है कि वह किस रूट से गया।",
+               "u": "App Health → 🔑 Ways in — logins। जो पंक्ति लाल है, वह उसी स्क्रीन पर ले जाती है जहाँ कमी भरनी है।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
+        "id": "br_login_whatsapp", "audience": ["branch"],
+        "en": {"t": "Log in with a WhatsApp code if email is not reaching you",
+               "d": "The login page has two buttons. If the email code is not arriving, ask for it on WhatsApp instead — the same code, a different road. We can only send it if your branch mobile is on file and you have written to our WhatsApp number in the last 24 hours; if that window is shut, the page gives you one tap to open it.",
+               "u": "Branch portal login → type your branch email → 'Send it on WhatsApp instead'."},
+        "hi": {"t": "ईमेल न पहुँचे तो WhatsApp कोड से लॉगिन करें",
+               "d": "लॉगिन पेज पर दो बटन हैं। अगर ईमेल कोड नहीं आ रहा, तो वही कोड WhatsApp पर मँगाइए — रास्ता अलग, कोड वही। यह तभी भेज सकते हैं जब आपकी ब्रांच का मोबाइल हमारे पास दर्ज हो और आपने पिछले 24 घंटे में हमारे WhatsApp नंबर पर कुछ लिखा हो; अगर नहीं, तो पेज एक टैप में वह खिड़की खोल देता है।",
+               "u": "ब्रांच पोर्टल लॉगिन → अपना ब्रांच ईमेल लिखें → 'Send it on WhatsApp instead'।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
 ]
 
 

@@ -7032,6 +7032,63 @@ commit → deploy.
 
 ---
 
+## A106 — [NIDAAN] THE DAY NOBODY COULD LOG IN, AND WHAT IT TAUGHT US (Sep 17 2026)
+
+Founder: *"all branches are not receiving OTP, fix this on priority and make visibility in app
+health whether this function working or not."*
+
+### The bug was ordinary. The silence was the problem.
+Google Workspace **silently discards** mail that arrives from outside claiming to be from a domain
+it hosts — standard anti-spoofing, no bounce, no spam folder, nothing. Every branch login address
+is `@nidaanpartner.com` and we were sending through Brevo, so every branch code went nowhere while
+the API returned 201 and the log said "sent".
+
+Proved rather than guessed — three mails to a mailbox we can read over IMAP, same minute:
+
+| Route | Where it landed |
+|---|---|
+| Brevo, From: `info@nidaanpartner.com` | **NOWHERE** |
+| Brevo, From: a gmail address | **Spam** |
+| Gmail SMTP direct | **Inbox** |
+
+**Fix:** anything addressed to our own domain goes out over Gmail SMTP, whose From is a real Gmail
+account and therefore not a spoof of us. Customer mail is untouched and keeps the branded sender.
+Three header details decided inbox vs spam and are now right: the **Message-ID domain matches the
+sender**, and a one-to-one login mail carries **no cross-domain Reply-To, no List-Unsubscribe and
+no marketing X-Mailer**. Verified end-to-end after the fix: **INBOX**.
+
+### The lesson, and the thing actually built
+Every screen we had said the system was healthy, because every check asked *"is it configured?"*
+and everything **was** configured. So App Health now asks a different question: **what happened to
+the codes we actually sent?**
+
+`biz_nidaan_login_health.py` records the outcome of every login code — which transport carried it,
+or why it failed — in a rolling window (no new table, the code itself never stored, addresses
+masked). `_login_checks()` turns that into six checks that each say what is broken **and why**:
+branch (a way in / delivery), subscriber (a way in / delivery), staff, complainant portal.
+
+Two distinct failures, deliberately separated:
+- **No way in** — the person has no address and no mobile, so no code can even be addressed. A
+  data problem, invisible until someone tries and fails. It found **5 of 15 active branches**.
+- **Delivery** — addressed but never arrived. Judged on real attempts, never on configuration.
+
+They live in `_subsystem_checks()`, which the **watchdog** also runs, so a login outage now wakes a
+super-admin instead of waiting to be noticed — the exact failure we had just lived through.
+`✉️ Test login delivery` sends a real message down the exact branch-code path to the super-admin's
+own address and names the transport, because **inbox vs spam is a difference no config check can
+see**.
+
+### WhatsApp as the second way in
+Founder: *"one of them will be working."* Two buttons on the branch login page; the code still
+lives against the branch email, so verification is unchanged and only delivery differs. Two limits
+are stated rather than hidden — no mobile on file, and WhatsApp's 24-hour window (no authentication
+template is approved at Meta yet). When the window is shut the page offers one tap to open it.
+
+**Still blocking the founder's plan** to make WhatsApp primary: only **3 of 15** branches have a
+mobile on file at all, and five have neither a mobile nor an email.
+
+---
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
