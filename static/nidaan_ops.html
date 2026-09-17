@@ -4176,6 +4176,30 @@ async function loadOutcomeClaims(key, outcome, title, sub){
   if(isL2) _renderL2Views();
   _renderOutcome(key);
 }
+// How the queue is performing, on the screen where the queue lives. Same numbers as the
+// Consolidation strip, read from the same one call.
+async function _l2QueueStats(){
+  const box = document.getElementById('l2QueueStats');
+  if (!box) return;
+  try{
+    const r = await API('/stats/line');
+    if (!r.ok) return;
+    const d = await r.json(), l = d.l2 || {};
+    const bits = [];
+    if (l.oldest_days) bits.push('<b style="color:' + ((l.oldest_days > 30)
+      ? 'var(--nd-danger-text)' : 'var(--nd-warning-text)') + '">oldest waiting ' + l.oldest_days + ' days</b>');
+    if (l.waiting) bits.push('<b>' + (l.docs_complete || 0) + ' of ' + l.waiting
+      + '</b> have all their documents');
+    if (l.avg_days_to_hand_over != null) bits.push('average <b>' + l.avg_days_to_hand_over
+      + ' days</b> to hand over');
+    bits.push((l.handed_this_week || 0) + ' handed over this week'
+      + (l.sent_back_this_week ? ', ' + l.sent_back_this_week + ' sent back' : ''));
+    box.innerHTML = '<div style="font-size:.78rem;color:var(--nd-text-muted)">'
+      + bits.join(' &nbsp;·&nbsp; ') + '</div>';
+  }catch(e){ /* never let a number break the list */ }
+}
+window._l2QueueStats = _l2QueueStats;
+
 // A claim that has already been handed over is being worked in Consolidation. It used to sit in
 // BOTH lists, so L2 Claims kept showing work nobody there had left to do (founder, 16 Sep). Sending
 // one back clears the handover, and then it appears here again - which is exactly what send-back is
@@ -4210,7 +4234,9 @@ function _renderOutcome(key){
       ${movedOn ? `<div style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.4rem">
         ${movedOn} more ${movedOn===1?'claim has':'claims have'} already been handed over and
         ${movedOn===1?'is':'are'} being worked in
-        <a href="#l2" onclick="showPanel('l2');return false" style="color:var(--nd-cyan-text)">⚖️ Consolidation</a>.</div>` : ''}`;
+        <a href="#l2" onclick="showPanel('l2');return false" style="color:var(--nd-cyan-text)">⚖️ Consolidation</a>.</div>` : ''}
+      <div id="l2QueueStats" style="margin-top:.45rem"></div>`;
+      _l2QueueStats();
     }
   }
   const q = (((document.getElementById('oc_'+key+'_s')||{}).value)||'').toLowerCase();
@@ -12562,11 +12588,37 @@ function obPick(id){
     + '<label style="font-size:.78rem;font-weight:600;display:block;margin-top:.6rem">'
     +   'What happened / reason for rejection'
     +   '<textarea id="obNotes" rows="3" maxlength="2000" style="' + _rmInp() + '"></textarea></label>'
+    // The rejection letter is what the whole case is built on. We ASK for it here and let the
+    // claim through without it if you say why (founder, 17 Sep) - the same rule as every bucket
+    // move. What we do not do any more is take a claim and never mention the letter at all.
+    + '<div style="margin-top:.7rem;padding:.6rem .7rem;border:1px solid var(--nd-border);'
+    +   'border-radius:8px;background:var(--nd-bg-surface-2)">'
+    +   '<label style="font-size:.78rem;font-weight:600;display:block">Rejection letter'
+    +     '<input type="file" id="obRej" style="display:block;margin-top:.3rem" '
+    +       'onchange="obRejPicked()"></label>'
+    +   '<div id="obRejWhyBox" style="margin-top:.45rem">'
+    +     '<label style="font-size:.76rem;color:var(--nd-text-muted);display:block">'
+    +       'No letter yet? Say why, and you can still raise it'
+    +       '<input id="obRejWhy" maxlength="200" placeholder="e.g. insurer rejected by phone; '
+    +         'letter being collected" style="' + _rmInp() + '"></label>'
+    +   '</div>'
+    + '</div>'
     + '<button class="btn btn-primary" style="margin-top:.7rem" onclick="obSubmit(this)">'
     +   'Raise this claim →</button>'
     + '<span id="obMsg" style="font-size:.82rem;margin-left:.6rem"></span>';
   try{ NidaanInsurers.mount('obInsurerBox', {style: _rmInp()}); }catch(e){}
 }
+// Picked a letter? Then there is nothing to explain - hide the "why not" box so the form asks
+// for one thing, not two.
+function obRejPicked(){
+  const el = document.getElementById('obRej');
+  const box = document.getElementById('obRejWhyBox');
+  const has = !!(el && el.files && el.files.length);
+  if (box) box.style.display = has ? 'none' : '';
+  if (has){ const w = document.getElementById('obRejWhy'); if (w) w.value = ''; }
+}
+window.obRejPicked = obRejPicked;
+
 async function obSubmit(btn){
   if (!_obPicked) return;
   const g = function(id){ const e = document.getElementById(id); return e ? (e.value || '').trim() : ''; };
@@ -12577,13 +12629,26 @@ async function obSubmit(btn){
               msg.textContent = 'The insured name and the claim type are both needed.'; }
     return;
   }
+  // Ask for the letter; let it through without one if they say why (founder, 17 Sep).
+  const rejEl = document.getElementById('obRej');
+  const rejFile = rejEl && rejEl.files && rejEl.files[0];
+  const rejWhy = g('obRejWhy');
+  if (!rejFile && !rejWhy){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)';
+              msg.textContent = 'Attach the rejection letter, or say why it is not here yet.'; }
+    const w = document.getElementById('obRejWhy'); if (w) w.focus();
+    return;
+  }
   const amt = parseInt(g('obAmount'), 10);
   const payload = {account_id: _obPicked.account_id, claim_type: type, insured_name: name,
                    insured_phone: g('obPhone'), insured_email: g('obEmail'),
                    insurer_name: (function(){ try{ return NidaanInsurers.value('obInsurerBox'); }
                                                 catch(e){ return ''; } })(),
                    policy_no: g('obPolicy'),
-                   disputed_amount: (isNaN(amt) ? null : amt), notes_from_agent: g('obNotes')};
+                   disputed_amount: (isNaN(amt) ? null : amt),
+                   notes_from_agent: (g('obNotes')
+                     + (!rejFile && rejWhy
+                         ? ' — No rejection letter at raise: ' + rejWhy : '')).trim()};
   if (btn) btn.disabled = true;
   if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Raising…'; }
   try{
@@ -12592,10 +12657,29 @@ async function obSubmit(btn){
     if (r.ok){
       if (msg){ msg.style.color = 'var(--nd-success-text)';
                 msg.textContent = '✓ Raised NP-' + d.claim_id + ' for ' + (d.on_behalf_of || ''); }
+      // Attach the letter to the claim we just made, and SAY SO if it does not go on - a claim
+      // that reports success while its letter never arrived is how NP-167 happened.
+      if (rejFile){
+        try{
+          const fd = new FormData(); fd.append('files', rejFile); fd.append('doc_key', 'rejection_letter');
+          const ur = await API('/claims/' + d.claim_id + '/documents/upload', {method:'POST', body: fd});
+          if (!ur.ok){
+            const ud = await ur.json().catch(function(){ return {}; });
+            if (msg){ msg.style.color = 'var(--nd-warning-text)';
+              msg.textContent = 'NP-' + d.claim_id + ' raised, but the rejection letter did NOT attach — '
+                + _extractErr(ud, 'upload refused') + '. Open the claim and attach it.'; }
+          }
+        }catch(e){
+          if (msg){ msg.style.color = 'var(--nd-warning-text)';
+            msg.textContent = 'NP-' + d.claim_id + ' raised, but the rejection letter did NOT attach. '
+              + 'Open the claim and attach it.'; }
+        }
+      }
       ndUI.toast('NP-' + d.claim_id + ' raised for ' + (d.on_behalf_of || ''), 'success');
-      ['obName','obPhone','obEmail','obPolicy','obAmount','obNotes'].forEach(function(id){
+      ['obName','obPhone','obEmail','obPolicy','obAmount','obNotes','obRejWhy'].forEach(function(id){
         const e = document.getElementById(id); if (e) e.value = '';
       });
+      if (rejEl) rejEl.value = '';
     } else {
       if (msg){ msg.style.color = 'var(--nd-danger-text)';
                 msg.textContent = _extractErr(d, 'Could not raise that claim'); }
@@ -13062,7 +13146,7 @@ async function l2Load(){
       + '<div class="l2ban info">Claims that nobody else is holding up come first. '
       + 'Use <b>Change status or owner</b> to say who we are waiting for, pause a claim, or hand it '
       + 'to someone.</div>'
-      + '<div id="cbTiles" class="cb-tiles"></div><div id="cbFilters"></div>'
+      + '<div id="cbTiles" class="cb-tiles"></div><div id="lineStats"></div><div id="cbFilters"></div>'
       + '<div id="cbBody"><div class="cb-empty">Loading claims…</div></div>';
     await cbRefresh();
     return;
@@ -15776,7 +15860,7 @@ async function loadCaseBoard(){
       + '<div class="section-sub">Every open case, where it has reached, and who we are waiting for. '
       + 'Cases where <b>nobody else is holding us up</b> come first — those are the ones to move today.</div>'
       + '</div></div>'
-      + '<div id="cbTiles" class="cb-tiles"></div>'
+      + '<div id="cbTiles" class="cb-tiles"></div><div id="lineStats"></div>'
       + '<div id="cbFilters"></div>'
       + '<div id="cbBody"><div class="cb-empty">Loading cases…</div></div>';
     panel.dataset.ready = '1';
@@ -15804,6 +15888,62 @@ async function cbRefresh(){
   }finally{ _cbBusy = false; }
 }
 
+// ── How the line is performing ───────────────────────────────────────────────
+// Two numbers carry this strip: the OLDEST thing waiting and the count STUCK. They name the
+// claims that have gone quiet; the rest is context. Anything we cannot work out honestly is left
+// out rather than filled with a placeholder.
+let _lineStatsAt = 0, _lineStatsData = null;
+async function _lineStats(force){
+  const box = document.getElementById('lineStats');
+  if (!box) return;
+  const now = Date.now();
+  if (!force && _lineStatsData && (now - _lineStatsAt) < 60000) return _lineStatsPaint(_lineStatsData);
+  try{
+    const r = await API('/stats/line');
+    if (!r.ok) return;
+    _lineStatsData = await r.json(); _lineStatsAt = now;
+    _lineStatsPaint(_lineStatsData);
+  }catch(e){ /* a number that will not load must never break the screen */ }
+}
+function _lineStatsPaint(d){
+  const box = document.getElementById('lineStats');
+  if (!box || !d) return;
+  const c = d.consolidation || {}, l = d.l2 || {};
+  const tile = function(v, k, tone){
+    return '<div class="cb-tile"><div class="v' + (tone ? ' ' + tone : '') + '">' + v
+      + '</div><div class="k">' + k + '</div></div>';
+  };
+  const busy = (c.buckets || []).filter(function(b){ return b.n > 0; });
+  box.innerHTML =
+      '<div class="cb-tiles" style="margin-top:.4rem">'
+    +   tile(c.in_line || 0, 'in the line')
+    +   tile(c.to_start || 0, 'handed over, not started', (c.to_start ? 'warn' : ''))
+    +   tile(c.moved_this_week || 0, 'moved this week')
+    +   tile(c.stuck || 0, 'stuck over ' + (c.stuck_days || 14) + ' days', (c.stuck ? 'hot' : ''))
+    +   tile(l.waiting || 0, 'waiting to be handed over')
+    +   tile((l.oldest_days || 0) + 'd', 'oldest one waiting', ((l.oldest_days || 0) > 30 ? 'hot' : 'warn'))
+    + '</div>'
+    + (busy.length
+        ? '<div style="font-size:.76rem;color:var(--nd-text-muted);margin:.35rem 0 .1rem">'
+          + busy.map(function(b){
+              return '<b>' + esc(b.name) + '</b> ' + b.n
+                + (b.avg_days != null ? ' <span style="color:var(--nd-text-faint)">· avg '
+                    + b.avg_days + 'd' + (b.oldest_days ? ', oldest ' + b.oldest_days + 'd' : '')
+                    + '</span>' : '');
+            }).join(' &nbsp;·&nbsp; ')
+          + '</div>'
+        : '')
+    + '<div style="font-size:.72rem;color:var(--nd-text-faint);margin-bottom:.5rem">'
+    +   (l.avg_days_to_hand_over != null
+          ? 'A claim takes on average <b>' + l.avg_days_to_hand_over + ' days</b> to reach the line. ' : '')
+    +   (l.docs_complete != null && l.waiting
+          ? '<b>' + l.docs_complete + ' of ' + l.waiting + '</b> waiting claims have all their documents. ' : '')
+    +   (l.handed_this_week != null ? l.handed_this_week + ' handed over this week' : '')
+    +   (l.sent_back_this_week ? ', ' + l.sent_back_this_week + ' sent back' : '')
+    + '</div>';
+}
+window._lineStats = _lineStats;
+
 function cbRender(d){
   _cbLast = d;
   _cbSetBuckets(d.buckets);
@@ -15817,6 +15957,10 @@ function cbRender(d){
     + `<div class="cb-tile"><div class="v warn">${d.ours||0}</div><div class="k">waiting on us</div></div>`
     + `<div class="cb-tile"><div class="v ${(byF.stalled||0)?'hot':''}">${byF.stalled||0}</div><div class="k">stalled too long</div></div>`
     + `<div class="cb-tile"><div class="v ${(byF.fee_unpaid||0)?'hot':''}">${byF.fee_unpaid||0}</div><div class="k">waiting on a fee</div></div>`;
+
+  // How the LINE is performing, under the counts of what is in it (founder, 17 Sep). Loaded
+  // separately so a slow number can never hold up the list of claims.
+  _lineStats();
 
   // ── filters. Only offer a chip that would actually match something ──
   const f = document.getElementById('cbFilters');
@@ -15875,11 +16019,24 @@ function cbRender(d){
                     no_timeline:'Nothing recorded', filing_window:'Deadline near',
                     awaiting_l2_start:'Paid, not started'};
 
-  body.innerHTML =
-    `<div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.35rem">`
-    + `Showing ${items.length} of ${d.matching||items.length}`
-    + (items.length < (d.matching||0) ? ' — narrow the filters to see the rest' : '')
-    + `</div><div class="cb-list">`
+  const VIEW = _cbView();
+  const head =
+      '<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.35rem">'
+    +   '<div style="font-size:.78rem;color:var(--nd-text-muted)">Showing ' + items.length
+    +     ' of ' + (d.matching || items.length)
+    +     (items.length < (d.matching || 0) ? ' \u2014 narrow the filters to see the rest' : '')
+    +   '</div>'
+    +   '<span class="vw-switch" style="margin-left:auto">'
+    +     '<button class="' + (VIEW === 'cards' ? 'active' : '') + '" onclick="cbSetView(\'cards\')">\u25a4 Cards</button>'
+    +     '<button class="' + (VIEW === 'table' ? 'active' : '') + '" onclick="cbSetView(\'table\')">\u2630 Table</button>'
+    +     '<button class="' + (VIEW === 'kanban' ? 'active' : '') + '" onclick="cbSetView(\'kanban\')">\u25a6 Kanban</button>'
+    +   '</span>'
+    + '</div>';
+
+  if (VIEW === 'table'){ body.innerHTML = head + _cbTable(items, L, flagName); return; }
+  if (VIEW === 'kanban'){ body.innerHTML = head + _cbKanban(items, L, flagName); return; }
+
+  body.innerHTML = head + `<div class="cb-list">`
     + items.map(function(it){
         const ours = it.blocker === 'none' || it.blocker === 'internal';
         const who = (it.who || '').trim() || '(name not recorded)';
@@ -15917,6 +16074,93 @@ function cbRender(d){
               <button type="button" class="cb-act" onclick="cbOpenSheet(${it.claim_id})">Change status or owner</button>
             </div>
           </div>`;
+      }).join('')
+    + '</div>';
+}
+
+// ── Cards / Table / Kanban ───────────────────────────────────────────────────
+// One list, three ways to look at it. The switch re-renders what the browser already has - no
+// second request, no second filter path - so a chip means the same thing in every view.
+function _cbView(){
+  try{ return localStorage.getItem('cb_view') || 'cards'; }catch(e){ return 'cards'; }
+}
+function cbSetView(v){
+  try{ localStorage.setItem('cb_view', v); }catch(e){}
+  if (_cbLast) cbRender(_cbLast);
+}
+window.cbSetView = cbSetView;
+
+function _cbWaitLabel(it, L){
+  const ours = it.blocker === 'none' || it.blocker === 'internal';
+  if (ours) return it.blocker === 'internal' ? 'With a reviewer' : 'Ours to move';
+  return 'Waiting: ' + ((L.blocker[it.blocker] || it.blocker) || '').replace(/^The /, '');
+}
+
+function _cbTable(items, L, flagName){
+  const row = function(it){
+    const ours = it.blocker === 'none' || it.blocker === 'internal';
+    const age = it.age_days == null ? ''
+      : (it.over_by > 0
+          ? '<b>' + it.age_days + 'd</b> <span style="color:var(--nd-danger-text)">' + it.over_by + 'd over</span>'
+          : it.age_days + 'd');
+    const flags = (it.flags || []).map(function(fl){
+      return '<span class="cb-b cb-b-flag" style="font-size:.68rem">' + esc(flagName[fl] || fl) + '</span>';
+    }).join(' ');
+    return '<tr style="cursor:pointer" onclick="openClaimDrawer(' + it.claim_id + ')">'
+      + '<td style="white-space:nowrap">NP-' + it.claim_id + '</td>'
+      + '<td><b>' + esc((it.who || '').trim() || '(name not recorded)') + '</b>'
+      +   (it.insurer ? '<br><span style="font-size:.72rem;color:var(--nd-text-faint)">' + esc(it.insurer) + '</span>' : '')
+      + '</td>'
+      + '<td>' + esc(L.stage[it.stage] || it.stage || '') + '</td>'
+      + '<td style="' + (ours ? '' : 'color:var(--nd-warning-text)') + '">' + esc(_cbWaitLabel(it, L)) + '</td>'
+      + '<td style="white-space:nowrap">' + age + '</td>'
+      + '<td>' + (it.docs && it.docs.total ? it.docs.done + '/' + it.docs.total : '\u2014') + '</td>'
+      + '<td>' + (it.amount ? '\u20b9' + Number(it.amount).toLocaleString('en-IN') : '\u2014') + '</td>'
+      + '<td>' + flags + '</td>'
+      + '<td onclick="event.stopPropagation()"><button class="cb-act" '
+      +   'onclick="cbOpenSheet(' + it.claim_id + ')">Change</button></td>'
+      + '</tr>';
+  };
+  return '<div class="table-wrap" style="margin-top:.6rem"><table class="claims-tbl">'
+    + '<thead><tr><th>#</th><th>Who</th><th>Stage</th><th>Waiting on</th><th>Age</th>'
+    +   '<th>Docs</th><th>Disputed</th><th>Flags</th><th></th></tr></thead>'
+    + '<tbody>' + items.map(row).join('') + '</tbody></table></div>';
+}
+
+function _cbKanban(items, L, flagName){
+  // Columns in the line's own order, not alphabetical - the board should read like the process.
+  const order = [], seen = {};
+  (_cbBucketOrder() || []).forEach(function(k){ if (!seen[k]){ order.push(k); seen[k] = 1; } });
+  items.forEach(function(it){ if (!seen[it.stage]){ order.push(it.stage); seen[it.stage] = 1; } });
+  const byStage = {};
+  items.forEach(function(it){ (byStage[it.stage] = byStage[it.stage] || []).push(it); });
+  const cols = order.filter(function(k){ return (byStage[k] || []).length; });
+  if (!cols.length) return '<div class="cb-empty"><span class="ei">\ud83d\udd0d</span>Nothing to show.</div>';
+  return '<div class="board" style="margin-top:.6rem;display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.4rem">'
+    + cols.map(function(k){
+        const list = byStage[k] || [];
+        return '<div style="flex:0 0 260px;min-width:260px;background:var(--nd-bg-surface);'
+          + 'border:1px solid var(--nd-border);border-radius:10px;padding:.5rem">'
+          + '<div style="font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;'
+          +   'color:var(--nd-text-muted);margin-bottom:.4rem">'
+          +   esc(L.stage[k] || k) + ' <span style="color:var(--nd-text-faint)">' + list.length + '</span></div>'
+          + list.map(function(it){
+              const ours = it.blocker === 'none' || it.blocker === 'internal';
+              return '<div class="cb-card' + (ours ? ' ours' : '') + '" style="margin-bottom:.4rem;padding:.5rem .6rem">'
+                + '<div class="cb-top"><span class="cb-who" onclick="openClaimDrawer(' + it.claim_id + ')">'
+                +   esc((it.who || '').trim() || '(name not recorded)') + '</span>'
+                + '<span class="cb-id">NP-' + it.claim_id + '</span></div>'
+                + '<div style="font-size:.72rem;color:var(--nd-text-muted)">' + esc(_cbWaitLabel(it, L))
+                +   (it.age_days != null ? ' \u00b7 ' + it.age_days + 'd'
+                        + (it.over_by > 0 ? ' <span style="color:var(--nd-danger-text)">'
+                            + it.over_by + 'd over</span>' : '') : '')
+                + '</div>'
+                + (it.docs && it.docs.total
+                    ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">Documents '
+                      + it.docs.done + '/' + it.docs.total + '</div>' : '')
+                + '</div>';
+            }).join('')
+          + '</div>';
       }).join('')
     + '</div>';
 }
@@ -16066,6 +16310,11 @@ function _cbSetBuckets(list){
 function _cbBucketName(k){
   for (let i=0;i<CB_BUCKETS.length;i++) if (CB_BUCKETS[i][0]===k) return CB_BUCKETS[i][1];
   return (k || '').replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+}
+// The line's own order, for the Kanban columns. Anything the server did not name (a stage from
+// before Level-2, say) is appended by the caller rather than dropped.
+function _cbBucketOrder(){
+  return (CB_BUCKETS || []).map(function(b){ return b[0]; });
 }
 function _cbPipeSection(it){
   const lab = '<div class="cbs-lab">Where is it in the Level-2 process?</div>';

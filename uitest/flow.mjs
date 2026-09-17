@@ -197,15 +197,58 @@ async function run() {
   chk(await page.evaluate(() => !!document.querySelector('.l2today')), 'the Today strip (was My Desk) is on top');
   await page.evaluate(() => l2Pick('all'));
   // Wait for the list itself, not a fixed time: the workspace can redraw once more after loading.
+  // #cbTiles holds the four counts of what is IN the list; the performance strip (17 Sep) adds
+  // its own tiles under it, so this counts the four by their own container.
   await page.waitForFunction(() => document.querySelectorAll('#l2Main .cb-card').length > 0
-                                   && document.querySelectorAll('#l2Main .cb-tile').length === 4,
+                                   && document.querySelectorAll('#cbTiles .cb-tile').length === 4,
                              null, { timeout: 25000 }).catch(() => {});
   const all = await page.evaluate(() => ({
     cards: document.querySelectorAll('#l2Main .cb-card').length,
-    tiles: document.querySelectorAll('#l2Main .cb-tile').length,
+    tiles: document.querySelectorAll('#cbTiles .cb-tile').length,
     mine: [...document.querySelectorAll('#l2Main .cb-chip')].some(b => /Only mine/.test(b.textContent)) }));
   chk(all.cards > 0 && all.tiles === 4, `All open claims lists the claims (${all.cards}) with the four numbers`);
   chk(all.mine, 'with the Only mine filter');
+
+  /* 17 Sep (founder): how the line is performing, and three ways to look at the list. */
+  await page.waitForFunction(() => document.querySelectorAll('#lineStats .cb-tile').length > 0,
+                             null, { timeout: 20000 }).catch(() => {});
+  const perf = await page.evaluate(() => {
+    const box = document.getElementById('lineStats');
+    const txt = box ? box.innerText : '';
+    return { tiles: box ? box.querySelectorAll('.cb-tile').length : 0, txt,
+             oldest: /oldest one waiting/i.test(txt), stuck: /stuck over \d+ days/i.test(txt),
+             buckets: /avg [\d.]+d/i.test(txt) };
+  });
+  chk(perf.tiles >= 4, `the line's performance strip is there (${perf.tiles} numbers)`);
+  chk(perf.oldest && perf.stuck, 'including the oldest one waiting and how many are stuck');
+  chk(perf.buckets, 'and how long claims are sitting in each bucket');
+
+  const views = await page.evaluate(() => {
+    const sw = document.querySelector('#l2Main .vw-switch');
+    return { switcher: !!sw, labels: sw ? sw.innerText.replace(/\s+/g, ' ').trim() : '' };
+  });
+  chk(views.switcher, `the list offers Cards / Table / Kanban (${views.labels})`);
+  const before = await page.evaluate(() => document.querySelectorAll('#l2Main .cb-card').length);
+  await page.evaluate(() => window.cbSetView && window.cbSetView('table'));
+  await page.waitForTimeout(900);
+  const tbl = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#l2Main table tbody tr').length,
+    heads: [...document.querySelectorAll('#l2Main table thead th')].map(t => t.textContent.trim()) }));
+  chk(tbl.rows === before, `Table shows the same claims (${tbl.rows} of ${before})`);
+  chk(tbl.heads.some(h => /waiting on/i.test(h)) && tbl.heads.some(h => /docs/i.test(h)),
+      `with the columns that matter (${tbl.heads.join(', ')})`);
+  await page.evaluate(() => window.cbSetView && window.cbSetView('kanban'));
+  await page.waitForTimeout(900);
+  const kan = await page.evaluate(() => {
+    const cols = [...document.querySelectorAll('#l2Main .board > div')];
+    return { cols: cols.length, cards: document.querySelectorAll('#l2Main .board .cb-card').length };
+  });
+  chk(kan.cols > 0 && kan.cards === before,
+      `Kanban groups the same claims into ${kan.cols} columns (${kan.cards} cards)`);
+  await page.evaluate(() => window.cbSetView && window.cbSetView('cards'));
+  await page.waitForTimeout(700);
+  chk(await page.evaluate(() => document.querySelectorAll('#l2Main .cb-card').length) === before,
+      'and switching back to Cards shows them again');
   await page.evaluate(() => l2Pick('pre:review'));
   await page.waitForTimeout(2500);
   const rv = await page.evaluate(() => [...document.querySelectorAll('#l2Main .cb-card .cb-b-stage')]
