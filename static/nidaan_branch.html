@@ -80,7 +80,10 @@
     <div id="emailStep">
       <label>Branch email</label>
       <input id="brEmail" type="email" placeholder="yourbranch@nidaanpartner.com" autocomplete="email" inputmode="email">
-      <button class="btn btn-cyan" id="sendBtn" onclick="requestOtp()">Send login code →</button>
+      <button class="btn btn-cyan" id="sendBtn" onclick="requestOtp('email')">Email me the code →</button>
+      <button class="btn btn-ghost" id="sendWaBtn" style="margin-top:.55rem" onclick="requestOtp('whatsapp')">
+        Send it on WhatsApp instead</button>
+      <div id="waHelp" style="font-size:.82rem;color:var(--nd-text-muted);margin-top:.6rem;display:none"></div>
     </div>
 
     <div id="otpStep" class="hidden">
@@ -233,27 +236,49 @@ function esc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','
 function inr(n){ return '₹'+(Number(n)||0).toLocaleString('en-IN'); }
 function fmtDate(s){ if(!s) return '—'; const d=new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?String(s).slice(0,10):d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}); }
 
-async function requestOtp(){
+async function requestOtp(channel){
+  channel = channel || 'email';
   const email = ($('brEmail').value||'').trim().toLowerCase();
-  if(!email || !email.includes('@')){ msg('Please enter a valid email.','err'); return; }
+  if(!email || !email.includes('@')){ msg('Please enter your branch email.','err'); return; }
   _email = email;
-  $('sendBtn').disabled = true; msg('Sending code…','info');
+  const help = $('waHelp'); if (help){ help.style.display='none'; help.innerHTML=''; }
+  $('sendBtn').disabled = true; $('sendWaBtn').disabled = true;
+  msg(channel === 'whatsapp' ? 'Sending on WhatsApp\u2026' : 'Sending code\u2026','info');
   try{
-    const r = await fetch('/nidaan/branch/api/request-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-    if(r.status===429){ const d=await r.json().catch(()=>({})); msg(d.detail||'Please wait before requesting another code.','err'); $('sendBtn').disabled=false; return; }
-    // Always generic — show OTP step regardless (no email enumeration)
-    $('emailEcho').textContent = email;
+    const r = await fetch('/nidaan/branch/api/request-otp',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email: email, channel: channel})});
+    if(r.status===429){ const d=await r.json().catch(()=>({}));
+      msg(d.detail||'Please wait before requesting another code.','err');
+      $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; return; }
+    if(!r.ok){
+      // WhatsApp says WHY it cannot, and gives the one tap that fixes it.
+      const d = await r.json().catch(()=>({}));
+      msg(d.detail || 'Could not send the code that way.', 'err');
+      if (d.wa_link && help){
+        help.style.display='';
+        help.innerHTML = '<a href="' + d.wa_link + '" target="_blank" rel="noopener" '
+          + 'style="font-weight:700">Open WhatsApp and send us one message</a>, then tap '
+          + '"Send it on WhatsApp instead" again.';
+      }
+      $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; return;
+    }
+    // Email stays deliberately generic (a wrong address must not reveal whether it is a branch).
+    $('emailEcho').textContent = channel === 'whatsapp' ? 'your WhatsApp' : email;
     $('emailStep').classList.add('hidden');
     $('otpStep').classList.remove('hidden');
-    msg('If this is a registered branch email, a code has been sent. Check your inbox.','ok');
+    msg(channel === 'whatsapp'
+        ? 'Code sent on WhatsApp.'
+        : 'If this is a registered branch email, a code has been sent. Check your inbox \u2014 and your spam folder.','ok');
     $('brOtp').focus();
-  }catch(e){ msg('Network error. Try again.','err'); $('sendBtn').disabled=false; }
+  }catch(e){ msg('Network error. Try again.','err');
+    $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; }
 }
 
 function backToEmail(){
   $('otpStep').classList.add('hidden');
   $('emailStep').classList.remove('hidden');
-  $('sendBtn').disabled=false; msg('');
+  $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; msg('');
 }
 
 async function verifyOtp(){
