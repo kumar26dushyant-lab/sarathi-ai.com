@@ -32,6 +32,20 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - ✅ **Quota confirmed (founder ruling):** an on-behalf claim spends the subscriber's **own** quota — never a bypass. Re-verified live (`quota_exceeded_silver` on the second attempt).
 - ✅ **PROJECT_MASTER_CONTEXT.md was stale** — its header said Aug 19 and its footer said May 25 while A92 (Sep 4) was already in the file. Added **A93** covering Sep 10–12 and corrected both dates.
 
+### ✅ SHIPPED 2026-09-17 — attachments everywhere, the empty claim, the homepage ribbon
+- ✅ **Remove on all EIGHT upload surfaces** (documents window, claim panel, note attachments, task attachments, raise-claim staging, complainant portal, ₹499 intake, subscriber dashboard). It was missing from the Documents window — the one the founder hit on NP-167.
+- ✅ **Deleting a document now reopens the checklist line it ticked.** Four delete paths fixed; a wrong file removed used to leave a green tick, so the right document was never asked for again.
+- ✅ **NP-167 root cause:** the branch form creates the claim, THEN uploads the rejection letter inside `catch(_){}` — the upload failed and the branch still read "Claim submitted ✓". Now the failure is said out loud; the ₹499 intake (same swallow) names anything that did not upload; and `sweep_empty_claims()` flags a claim still empty after 20 minutes, once, to super admins.
+- 🔴 **Backlog to work deliberately:** **16 open claims older than 48h have NO documents at all** (the sweep deliberately leaves them alone — flagging them would be an alert storm, not information). List available on request.
+- ✅ **Consolidation** column + **Move to Consolidation** button; **Notes + Involved merged** into one box under Assign to staff; the 20-name tag chip wall is a **dropdown**; attachment copy trimmed to two facts; three stale "10 MB" messages corrected to 25 MB.
+- ✅ **Verified, not changed:** "Raise for a Subscriber" is already available to every staff member (tested with a live team-member token).
+- ✅ **Homepage ribbon aligned at every width** — labels no longer break mid-phrase, spacing and logo tighten at ≤1280, burger menu covers everything up to 1240px. New `uitest/home.mjs` measures 8 device widths.
+- 🟢 **Phase 3 (next, needs his answer):** scheduled WhatsApp document collection — staff choose when the complainant is actually free (his Sunday-morning example), one-off or repeating.
+- 🟢 **Phase 4:** case email + password captured from WhatsApp → recorded in document collection → auto-fills the draft (ClaimShield already works this way; our gist form already has both fields).
+- 🟢 **Phase 5:** analytics strip on L2 Claims + Consolidation — **sample shown, nothing built until he approves**.
+- 🟢 **Phase 6:** the notification control centre (A97) — he confirmed it is still wanted.
+- 🔴 **His open question to answer:** should the rejection letter BLOCK a staff-raised/on-behalf claim (as it blocks the branch form), or ask-and-allow-with-a-reason?
+
 ### ✅ SHIPPED 2026-09-16 (3) — the founder's 14-item claim-panel round (items 1–6, 8–14)
 - ✅ **Wording that means something.** "Insured" follows the claim type — a health claim says **Patient**, motor/life/fire say **Insured**, mixed lists say "Insured / Patient". The public ₹499 intake form says it in both words, both languages.
 - ✅ **The complainant is on the panel.** `complainant_name`/`complainant_phone` existed and were never shown; the row says "same as the patient" when they match and gives a tap-to-call number when they differ.

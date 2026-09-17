@@ -6905,6 +6905,74 @@ the terms, that the code goes to the contact on the claim and not to one named i
 five wrong tries kill it, that a session is bound to one claim, and that the staff preview can look
 but never accept.
 
+## A104 — [NIDAAN] ATTACHMENTS EVERYWHERE, AND WHY A CLAIM ARRIVED EMPTY (Sep 17 2026)
+
+### The founder's sharpest note yet, and it was justified
+*"I instructed you multiple time anywhere in the application wherever we are uploading anything,
+it must have remove attachment option."* It had been applied in some places and never audited
+across all of them. The audit found **eight** surfaces that take a file; **Remove was missing from
+the Documents window** — the one he was using — and, worse, **deleting a document anywhere left
+the green checklist tick it had earned**, so a wrong file removed meant the right one was never
+asked for again. Fixed on all four claim-document delete paths (ops, complainant portal, branch,
+my-claims); the pre-claim review upload has no checklist and is correctly untouched.
+
+### Why NP-167 (Neeti Gupta) arrived with nothing
+The branch form **does** demand the rejection letter and will not submit without one. But it
+created the claim first and uploaded the letter second, inside `catch(_){}`:
+
+```js
+try{ ... await fetch('.../documents/upload', ...) }catch(_){}   // failure swallowed
+```
+
+The upload failed, the branch read *"Claim submitted ✓"*, and the claim reached us empty. The logs
+for that minute had already rotated, so the cause of that particular failure is unknown — the
+class of bug is not. Three fixes: the branch is told exactly what failed and that the case cannot
+move; the ₹499 intake names any document that did not upload (same swallow); and
+`sweep_empty_claims()` flags any claim still empty **20 minutes** after arrival — once, to super
+admins, on the claim's own timeline. Twenty minutes because an upload may still be in flight.
+
+**Measured before switching it on:** 17 open claims have no documents at all, but only **1** is
+inside the 48-hour window the sweep judges, so it flags one claim, not seventeen. The other 16 are
+an older backlog to work deliberately, not an alert storm.
+
+### What ELSE that number told us
+17 open claims with nothing attached is a process fact, not a bug: documents are the thing that
+decides how fast a claim settles, which is exactly why the founder's next ask is scheduled WhatsApp
+collection (below).
+
+### Smaller things from the same message
+- The board column is **Consolidation**, the button says **Move to Consolidation**.
+- **Internal Notes and Involved are one box** under Assign to staff — you involve somebody BECAUSE
+  of what was said — and the wall of twenty name chips is a dropdown.
+- The attachment blurb is two facts ("PDF, photos, Word, scans — not video. Max 25 MB each"),
+  not a paragraph. **His feedback, taken:** *"there are multiple places where you over explained a
+  feature or over build … people still understand most things in legacy way."*
+- Three error messages still claimed a **10 MB** limit a day after it became 25 MB.
+- **"Raise for a Subscriber" was already open to every staff member** — verified with a real
+  team-member token (200 on the picker, auth passes on the raise endpoint). No change needed.
+
+### The homepage ribbon
+Labels were breaking mid-phrase ("How It / Works") because nothing stopped them wrapping, and the
+tablet width still tried to fit eleven items on one row. Now: `white-space:nowrap` on every label,
+tightened spacing and logo at ≤1280, and the burger menu covers everything up to **1240px** — the
+width below which the full row genuinely does not fit (measured, not guessed). New `uitest/home.mjs`
+checks eight widths for: nothing spilling off the side, no label broken in two, one-row bar on
+desktop, and the menu actually opening on tablet/phone.
+
+### Phases agreed for what remains (17 Sep)
+| Phase | What | State |
+|---|---|---|
+| 1 | Attachment removes · empty-claim alert · copy · Consolidation labels · notes+Involved merge | **shipped** |
+| 2 | Homepage ribbon across desktop/tablet/phone | **shipped** |
+| 3 | **Scheduled WhatsApp document collection** — staff pick when a complainant is actually free (his example: Sunday 8–11am), because that is what decides settlement speed. Later: capture profession + free time at intake and target automatically. | awaiting his answer: one-off or repeating |
+| 4 | **Case email + password** — ClaimShield has both fields and so does our gist form; capture them when the complainant sends them on WhatsApp, record on document collection, auto-fill the draft. Storage question open: encrypted on the claim, super-admin + drafter only, every reveal logged. | awaiting his confirmation |
+| 5 | **Analytics strip** on L2 Claims and Consolidation — sample shown to him, nothing built until approved. Proposed: waiting to hand over / oldest / documents complete / handed over this week / sent back / avg days; and for the line: in the line, moved this week, stuck >14 days, per-bucket counts and average days in bucket. | awaiting his approval |
+| 6 | **Notification control centre** (A97) — he confirmed it is still wanted: every channel, every permutation, on/off. | queued |
+
+### Open question he raised and I could not answer for him
+Whether the rejection letter should **block** a staff-raised or on-behalf claim the way it blocks
+the branch form, or ask-and-allow-with-a-reason (the pattern every bucket move uses).
+
 ---
 
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),

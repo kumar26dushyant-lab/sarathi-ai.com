@@ -30,8 +30,8 @@ const SIZES = [
   { name: 'desktop 1920', w: 1920, h: 1080, desktop: true },
   { name: 'laptop 1440',  w: 1440, h: 900,  desktop: true },
   { name: 'laptop 1280',  w: 1280, h: 800,  desktop: true },
-  { name: 'laptop 1150',  w: 1150, h: 740,  desktop: true },   // just above the burger threshold
-  { name: 'laptop 1100',  w: 1100, h: 740,  desktop: false },  // just below it
+  { name: 'laptop 1300',  w: 1300, h: 800,  desktop: true },   // just above the burger threshold
+  { name: 'laptop 1240',  w: 1240, h: 800,  desktop: false },  // just below it
   { name: 'tablet 1024',  w: 1024, h: 768,  desktop: false },
   { name: 'tablet 820',   w: 820,  h: 1180, desktop: false },
   { name: 'iPhone 390',   w: 390,  h: 844,  desktop: false },
@@ -47,10 +47,14 @@ async function run() {
     const page = await ctx.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(700);
-    // First-time visitors get the one-time language popup. Answer it the way a person would,
-    // so what we measure afterwards is the page they actually use.
-    await page.evaluate(() => { try { window.chooseLang && window.chooseLang('en'); } catch (e) {} });
-    await page.waitForTimeout(250);
+    // A first-time visitor meets two things before the page itself: the language popup and the
+    // advisor/policyholder gate. Answer both the way a person would, so what we measure after is
+    // the page they actually use.
+    await page.evaluate(() => {
+      try { window.chooseLang && window.chooseLang('en'); } catch (e) {}
+      try { window.egChoose && window.egChoose('advisor'); } catch (e) {}
+    });
+    await page.waitForTimeout(300);
 
     const m = await page.evaluate(() => {
       const nav = document.querySelector('.nav-inner');
@@ -91,7 +95,14 @@ async function run() {
       chk(!m.burgerShown, `${s.name}: the full menu is shown, no burger`);
     } else {
       chk(m.burgerShown, `${s.name}: the bar is brand + ☰`);
-      // and the menu actually opens
+      // and the menu actually opens. The language popup can appear on a delay, after the first
+      // dismissal - clear whatever is covering the bar before tapping, as a person would.
+      await page.evaluate(() => {
+        try { window.chooseLang && window.chooseLang('en'); } catch (e) {}
+        try { window.egChoose && window.egChoose('advisor'); } catch (e) {}
+        const ov = document.getElementById('langChooser'); if (ov) ov.remove();
+      });
+      await page.waitForTimeout(150);
       await page.click('.nav-burger');
       await page.waitForTimeout(350);
       const open = await page.evaluate(() => {
