@@ -13711,6 +13711,19 @@ function l2CaseRender(rem){
              : (f.field_type === 'number' || f.field_type === 'money' ? 'number' : 'text'))
         + '" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
         + 'onchange="l2Field(\'' + f.field_key + '\',this.value,this)">';
+    // The case email password is the one field that is a credential rather than a fact. The
+    // server sends dots to anyone whose role does not include it - so there is nothing to reveal
+    // in the page - and a Show button asks for the real one, which is recorded against your name.
+    if (f.field_key === 'case_email_password'){
+      const canSee = st.may_see_secrets;
+      const show = canSee
+        ? '<button type="button" class="l2mv g" style="margin-top:.3rem" '
+          + 'onclick="l2ShowSecret(' + (_l2Case && _l2Case.claim_id) + ',\'' + f.field_key + '\')">'
+          + 'Show it</button>'
+        : '<div class="hint">Hidden. Super admins and sub-super admins can see it.</div>';
+      return '<div class="l2fld"><label>' + esc(f.label_en) + req + '</label>' + input + show
+        + (f.hint ? '<div class="hint">' + esc(f.hint) + '</div>' : '') + '</div>';
+    }
     return '<div class="l2fld"><label>' + esc(f.label_en) + req + '</label>' + input
       + (f.hint ? '<div class="hint">' + esc(f.hint) + '</div>' : '') + '</div>';
   }).join('');
@@ -14225,6 +14238,21 @@ function _l2BuiltSoFar(st, id){
           (st.is_super ? (st.locked_for_others || {}) : (st.locked || {}))[x.f.field_key]); }).join('') + '</div>' : '')
     + '</div>';
 }
+
+// Ask the server for a credential it deliberately did not send. Every ask is written into the
+// audit log and onto the claim, so a password nobody can account for looking at does not exist.
+async function l2ShowSecret(claimId, key){
+  if (!claimId) return;
+  try{
+    const r = await API('/cases/' + claimId + '/secret/' + encodeURIComponent(key));
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not show that'), 'error'); return; }
+    const el = document.getElementById('lf_' + key);
+    if (el){ el.value = d.value || ''; el.focus(); el.select && el.select(); }
+    ndUI.toast('Shown \u2014 this is recorded against your name', 'success');
+  }catch(e){ ndUI.toast('Could not show that.', 'error'); }
+}
+window.l2ShowSecret = l2ShowSecret;
 
 async function l2Field(key, value, el){
   const id = _l2Case && _l2Case.claim_id;
