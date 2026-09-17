@@ -14605,9 +14605,14 @@ async function docsRender(msg, ok){
     +     checkRows
     +     '<button class="l2mv g" style="margin-top:.5rem" onclick="closeModal();dwOpen(' + _dcClaim + ')">'
     +       '📨 Ask the complainant for what is missing</button>'
+    +     '<button class="l2mv g" style="margin-top:.35rem" onclick="schOpen(' + _dcClaim + ')">'
+    +       '⏰ Remind them at a better time…</button>'
+    +     '<div id="dcSched" style="margin-top:.4rem;font-size:.76rem;color:var(--nd-text-muted)"></div>'
     +   '</div>'
     + '</div>'
     + '<div id="dcMsg" style="font-size:.83rem;margin-top:.5rem"></div>';
+
+  schList(_dcClaim);
 
   if (msg){
     const m = document.getElementById('dcMsg');
@@ -14618,6 +14623,127 @@ async function docsRender(msg, ok){
 // Remove a document that should not be on the claim. Wherever a file can be attached in this
 // application it can be taken off again - a wrong document attached and stuck there is worse than
 // no document. Confirmed first, because on a phone this sits next to Open.
+// ── Reminding a complainant when they can actually answer ────────────────────
+// The founder's reasoning: most people are at work from morning to evening and their papers are
+// at home, so the moment matters more than the message. We do not guess it - whoever has spoken
+// to this person picks it. It stops on its own when the documents are in, it stops after a set
+// number of tries, and it goes out through the same door as every other message, so the daily
+// cap and the STOP list still apply.
+async function schList(claimId){
+  const box = document.getElementById('dcSched');
+  if (!box) return;
+  try{
+    const r = await API('/claims/' + claimId + '/reminders');
+    if (!r.ok){ box.innerHTML = ''; return; }
+    const rows = ((await r.json()).reminders || []).filter(function(x){
+      return x.status === 'active' || x.status === 'paused';
+    });
+    if (!rows.length){ box.innerHTML = ''; return; }
+    box.innerHTML = rows.map(function(x){
+      const paused = x.status === 'paused';
+      return '<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0">'
+        + '<span>' + (paused ? '\u23f8' : '\u23f0') + '</span>'
+        + '<span style="flex:1;min-width:0">' + esc(x.next_ist || '')
+        +   (x.describes && x.describes !== 'once'
+              ? ' <span style="color:var(--nd-text-faint)">then ' + esc(x.describes) + '</span>' : '')
+        +   (x.sent_count ? ' <span style="color:var(--nd-text-faint)">\u00b7 asked ' + x.sent_count
+              + '\u00d7</span>' : '')
+        + '</span>'
+        + '<button class="l2mv g" onclick="schSet(' + x.sch_id + ',\'' + (paused ? 'active' : 'paused')
+        +   '\')">' + (paused ? 'Resume' : 'Pause') + '</button>'
+        + '<button class="l2mv d" onclick="schSet(' + x.sch_id + ',\'cancelled\')">Cancel</button>'
+        + '</div>';
+    }).join('');
+  }catch(e){ box.innerHTML = ''; }
+}
+
+function schOpen(claimId){
+  // Default to the next Sunday at 9am - the founder's own example of when people are at home
+  // with their papers - but it is only a starting point, every field is theirs to change.
+  const d = new Date();
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7));
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-'
+            + String(d.getDate()).padStart(2, '0');
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  openModal('\u23f0 Remind NP-' + claimId + ' at a better time',
+      '<div class="l2ban info">Pick the moment this person can actually answer. Most complainants '
+    + 'are at work through the day and their papers are at home \u2014 if you know their Sunday is '
+    + 'free, or their evening is, use it. It stops by itself once the documents are in.</div>'
+    + '<div class="l2fld"><label>Date</label><input type="date" id="schDate" value="' + iso + '"></div>'
+    + '<div class="l2fld"><label>Time</label><input type="time" id="schTime" value="09:00">'
+    +   '<div class="hint">Indian time.</div></div>'
+    + '<div class="l2fld"><label>Repeat</label>'
+    +   '<select id="schRepeat" onchange="schRepeatChanged()">'
+    +     '<option value="once">Just once</option>'
+    +     '<option value="weekly">Every week on the same day</option>'
+    +     '<option value="days">Every few days</option>'
+    +   '</select></div>'
+    + '<div class="l2fld" id="schEveryBox" style="display:none"><label>How many days apart</label>'
+    +   '<input type="number" id="schEvery" value="7" min="1" max="60"></div>'
+    + '<div class="l2fld"><label>Stop after</label>'
+    +   '<input type="number" id="schMax" value="6" min="1" max="20">'
+    +   '<div class="hint">Nobody should be asked for ever. After this many, it stops and the '
+    +     'claim is yours to chase by phone.</div></div>'
+    + '<div class="l2fld"><label>Anything to add to the message?</label>'
+    +   '<input id="schNote" maxlength="300" placeholder="e.g. Sirf discharge summary baaki hai"></div>'
+    + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
+    +   '<input type="checkbox" id="schStop" checked> Stop as soon as every document is in</label>'
+    + '<div id="schMsg" style="font-size:.82rem;margin-top:.4rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn:function(){ closeModal(); docsOpen(claimId); }},
+     {label:'Set the reminder', cls:'btn-primary', fn:function(){ schSave(claimId); }}], false);
+}
+function schRepeatChanged(){
+  const r = (document.getElementById('schRepeat') || {}).value;
+  const box = document.getElementById('schEveryBox');
+  if (box) box.style.display = (r === 'days') ? '' : 'none';
+}
+window.schRepeatChanged = schRepeatChanged;
+
+async function schSave(claimId){
+  const g = function(id){ const e = document.getElementById(id); return e ? e.value : ''; };
+  const msg = document.getElementById('schMsg');
+  const body = {date: g('schDate'), time: g('schTime'), repeat: g('schRepeat'),
+                every: parseInt(g('schEvery'), 10) || 7,
+                max_sends: parseInt(g('schMax'), 10) || 6,
+                note: (g('schNote') || '').trim(),
+                stop_when_complete: !!(document.getElementById('schStop') || {}).checked};
+  if (!body.date || !body.time){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Pick a date and a time.'; }
+    return;
+  }
+  if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Setting\u2026'; }
+  try{
+    const r = await API('/claims/' + claimId + '/reminders', {method:'POST', body: JSON.stringify(body)});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = _l2Err(d, 'Could not set it'); }
+      return;
+    }
+    closeModal();
+    ndUI.toast('Reminder set for ' + (d.next_ist || ''), 'success');
+    docsOpen(claimId);
+  }catch(e){
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not set that reminder.'; }
+  }
+}
+
+async function schSet(schId, status){
+  if (status === 'cancelled' && !confirm('Cancel this reminder? Nothing more will be sent from it.'))
+    return;
+  try{
+    const r = await API('/reminders/' + schId, {method:'PATCH', body: JSON.stringify({status: status})});
+    if (!r.ok){
+      const d = await r.json().catch(function(){ return {}; });
+      ndUI.toast(_extractErr(d, 'Could not change that reminder'), 'error');
+      return;
+    }
+    ndUI.toast({active:'Reminder resumed', paused:'Reminder paused',
+                cancelled:'Reminder cancelled'}[status] || 'Done', 'success');
+    schList(_dcClaim);
+  }catch(e){ ndUI.toast('Could not change that reminder.', 'error'); }
+}
+window.schOpen = schOpen; window.schSave = schSave; window.schSet = schSet; window.schList = schList;
+
 async function docsDelete(docId, name){
   if (!docId) return;
   if (!confirm('Remove "' + (name || 'this document') + '" from this claim?\n\nIt comes off the '

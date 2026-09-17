@@ -32,6 +32,16 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 - ✅ **Quota confirmed (founder ruling):** an on-behalf claim spends the subscriber's **own** quota — never a bypass. Re-verified live (`quota_exceeded_silver` on the second attempt).
 - ✅ **PROJECT_MASTER_CONTEXT.md was stale** — its header said Aug 19 and its footer said May 25 while A92 (Sep 4) was already in the file. Added **A93** covering Sep 10–12 and corrected both dates.
 
+### ✅ SHIPPED 2026-09-17 (2) — his four answers: analytics, views, and the schedule module
+- ✅ **Rejection letter, his call — ask-and-allow-with-a-reason.** The on-behalf form asks for it and lets the claim through if you say why (the reason lands on the claim). A failed attach is reported, not swallowed.
+- ✅ **The line's numbers** (`biz_nidaan_stats.py`, `GET /ops/api/stats/line`) on both work screens. Every number answers "is this moving?"; anything not honestly derivable is left out. Live on the day: **82 waiting, oldest 70 days, 5 of 82 with all documents**, avg 7.5 days to hand over; 4 in the line, 4 moved this week, 0 stuck.
+- ✅ **Cards / Table / Kanban** on Consolidation — same filtered list, same filters, nothing refetched on switch; Kanban columns in the line's order. Choice remembered.
+- ✅ **Scheduled document reminders** (`biz_nidaan_wa_schedule.py`) — staff pick the moment (once / weekly / every N days, IST), it stops when the documents are in, after N asks, or when the claim closes; re-reads the checklist at send time; obeys the 2-a-day cap and the STOP list like any other message. Worker every 5 minutes. **26 tests.**
+- 🟢 **Phase 4 next:** case email + password — captured from WhatsApp, recorded on document collection, auto-filled into the draft. His answer on access: **super admins and sub-super-admins**. Encrypted at rest, every reveal logged (my recommendation, unless he says otherwise).
+- 🟢 **Later, his words:** capture profession + free time at intake so reminder timing can be suggested rather than guessed. Manual version first, deliberately.
+- 🟢 **Phase 6:** the notification control centre (A97).
+- 🔴 **Still open for him:** the **16 open claims with no documents at all** (several at "review delivered") — chase or close, a decision not a code change.
+
 ### ✅ SHIPPED 2026-09-17 — attachments everywhere, the empty claim, the homepage ribbon
 - ✅ **Remove on all EIGHT upload surfaces** (documents window, claim panel, note attachments, task attachments, raise-claim staging, complainant portal, ₹499 intake, subscriber dashboard). It was missing from the Documents window — the one the founder hit on NP-167.
 - ✅ **Deleting a document now reopens the checklist line it ticked.** Four delete paths fixed; a wrong file removed used to leave a green tick, so the right document was never asked for again.

@@ -487,7 +487,11 @@ async function run() {
   let tick = null;
   for (const v of ['board', 'cards', 'table']) {
     await page.evaluate(v => window._setL2View && window._setL2View(v), v);
-    await page.waitForTimeout(900);
+    // Wait for the view to actually draw rather than guessing at a delay - the screen now also
+    // loads its performance numbers, so a fixed pause is a race.
+    await page.waitForFunction(
+      () => document.querySelectorAll('#oc_l2claims_wrap input[onchange*="l2DocsTick"]').length > 0,
+      null, { timeout: 20000 }).catch(() => {});
     const t = await page.evaluate(() => ({
       ticks: document.querySelectorAll('#oc_l2claims_wrap input[onchange*="l2DocsTick"]').length,
       moves: document.querySelectorAll('#oc_l2claims_wrap [onclick*="hoOpen"]').length,

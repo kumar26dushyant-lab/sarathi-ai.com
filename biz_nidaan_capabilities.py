@@ -727,6 +727,16 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "wa_scheduled_reminder",
+        "en": {"t": "Remind a complainant when they can actually answer",
+               "d": "Pick the moment \u2014 a Sunday morning, an evening, whatever you know about this person \u2014 and we ask for the missing documents then. Once, every week, or every few days. It stops by itself when the documents are in, and after the number of tries you set.",
+               "u": "Open a claim \u2192 Documents \u2192 \u23f0 Remind them at a better time. Pause or cancel it there too."},
+        "hi": {"t": "\u0936\u093f\u0915\u093e\u092f\u0924\u0915\u0930\u094d\u0924\u093e \u0915\u094b \u0938\u0939\u0940 \u0938\u092e\u092f \u092a\u0930 \u092f\u093e\u0926 \u0926\u093f\u0932\u093e\u0907\u090f",
+               "d": "\u0938\u092e\u092f \u0906\u092a \u091a\u0941\u0928\u093f\u090f \u2014 \u0930\u0935\u093f\u0935\u093e\u0930 \u0938\u0941\u092c\u0939, \u0936\u093e\u092e, \u091c\u094b \u0906\u092a \u0909\u0938 \u0935\u094d\u092f\u0915\u094d\u0924\u093f \u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u091c\u093e\u0928\u0924\u0947 \u0939\u0948\u0902 \u2014 \u0914\u0930 \u0939\u092e \u0909\u0938\u0940 \u0938\u092e\u092f \u092c\u093e\u0915\u0940 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u092e\u093e\u0901\u0917\u0924\u0947 \u0939\u0948\u0902\u0964 \u090f\u0915 \u092c\u093e\u0930, \u0939\u0930 \u0939\u092b\u093c\u094d\u0924\u0947, \u092f\u093e \u0915\u0941\u091b \u0926\u093f\u0928\u094b\u0902 \u092e\u0947\u0902\u0964 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u0906\u0924\u0947 \u0939\u0940 \u092f\u0939 \u0916\u0941\u0926 \u092c\u0902\u0926 \u0939\u094b \u091c\u093e\u0924\u093e \u0939\u0948\u0964",
+               "u": "\u0915\u094d\u0932\u0947\u092e \u0916\u094b\u0932\u0947\u0902 \u2192 Documents \u2192 \u23f0 Remind them at a better time\u0964"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "claim_documents",
         "en": {"t": "Open a claim's documents without downloading them",
                "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary'), or remove a wrong one — which reopens the checklist line it answered, so we ask for the right one. Any file except video, up to 25 MB, virus-scanned before it is stored.",

@@ -6973,6 +6973,63 @@ desktop, and the menu actually opening on tablet/phone.
 Whether the rejection letter should **block** a staff-raised or on-behalf claim the way it blocks
 the branch form, or ask-and-allow-with-a-reason (the pattern every bucket move uses).
 
+## A105 — [NIDAAN] HIS FOUR ANSWERS, AND WHAT THEY BUILT (Sep 17 2026)
+
+He answered the four questions that were blocking everything, and added one more ask.
+
+| Question | His answer | What shipped |
+|---|---|---|
+| Rejection letter on staff-raised claims | **ask-and-allow-with-a-reason** | The on-behalf form asks for it; without one you must say why, and the reason goes on the claim. A failed attach is reported, never swallowed. |
+| Case email password | **visible to super admins and sub-super-admins** | Phase 4, next |
+| Scheduled WhatsApp | *"complete schedule module as flexible as it can be"* | Built — see below |
+| Analytics | *"good to start, make it"* | Built — live on both screens |
+| (new) Views | table / kanban in Consolidation | Cards / Table / Kanban, same filters |
+
+### The numbers (`biz_nidaan_stats.py`)
+Two rules: every number answers **"is this moving?"**, and a number we cannot derive honestly is
+**not shown at all**. The two that carry the strip are the **oldest thing waiting** and the
+**count stuck**, because those name the claims that have gone quiet.
+
+On the day it shipped, live: **82 waiting to be handed over, oldest 70 days, 5 of 82 with all
+their documents**, average 7.5 days to reach the line; 4 in the line, 4 moved this week, none
+stuck. Those two numbers — 70 days, and 5 of 82 — are the argument for the schedule module.
+
+### Three ways to read the same list
+Cards, Table and Kanban on Consolidation, rendering from the SAME filtered list, so a filter chip
+means the same thing in each and switching fetches nothing. Kanban columns follow the **line's own
+order**, not alphabetical, so the board reads like the process. The choice is remembered per
+browser. 113 claims render instantly; no server change was needed.
+
+### The schedule module (`biz_nidaan_wa_schedule.py`)
+His reasoning IS the design: *"most people have doc at home and they spend less time at home …
+intelligently our team can setup reminder for document collection for Sunday morning … but again
+it's very subjective … let's leave it to the staff's wisdom."*
+
+So it schedules nothing by itself. Whoever has spoken to the complainant picks the moment — once,
+weekly on the same day, or every N days — and it defaults to next Sunday 9am (his example) as a
+starting point only.
+
+**It stops on its own, three ways:** every document is in; a set number of asks is reached
+(default 6, then it is a phone call); or the claim closes.
+
+**It is not a privileged message.** The send goes through `biz_nidaan_doc_request.send()` like
+every other — the 2-a-day cap, the STOP list, the template rules all still apply. At send time it
+re-reads the checklist, so anything ticked since is never asked for again.
+
+**Time handling is the part that would have bitten us.** Stored UTC, shown IST. The next occurrence
+is computed from the time that was CHOSEN, not from when the worker happened to run — so a delayed
+worker still keeps "Sunday 9am" on Sunday at 9am. The first test run caught exactly this.
+
+**Still to come (his own words):** capture the complainant's profession and their free time at
+intake, so the suggestion can be made for the staffer instead of guessed at. He explicitly wanted
+the manual version working first.
+
+### Deploy note worth remembering
+Twice today the browser suite failed on 404s for endpoints that existed only in the working tree.
+The local-page test runs against the LIVE API, so when a change adds an endpoint the backend must
+deploy first, then the page. That is now the order: backend commit → deploy → browser run → page
+commit → deploy.
+
 ---
 
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
