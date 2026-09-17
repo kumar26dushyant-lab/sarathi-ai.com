@@ -7089,6 +7089,64 @@ mobile on file at all, and five have neither a mobile nor an email.
 
 ---
 
+## A107 — [NIDAAN] THE PRODUCT IN TWO HALVES, AND THE SILENT-SUCCESS BUG CLASS (Sep 18 2026)
+
+### The founder's model of the product (his framing, to build against)
+He described NidaanPartner as **two processes connected end to end**, and everything we build
+should be placed in one of them:
+
+**Part 1 — INTAKE.** Anyone touching the application: subscriber, branch, My Business staff,
+direct complainant. Its job is to capture **every detail, CORRECT details, documents and
+authorization**, step by step, until the case reaches the **Consolidation** window. It is
+external-facing and full of other people's behaviour.
+
+**Part 2 — CONSOLIDATION → SETTLEMENT.** Mostly internal, an **assembly line**, ending at the
+Nidaan final payment. It runs cleanly *because* Part 1 captured everything: "almost all cases are
+completing documentation by this stage and external dependencies cut down."
+
+That is the load-bearing idea: **Part 2's smoothness is bought entirely in Part 1.** Every
+incomplete intake becomes an external dependency later, when the complainant is harder to reach
+and the case is older. It explains every intake instruction he has given — complainant name,
+rejection letter mandatory, a second slot for other documents, remove-attachment everywhere.
+
+**How he wants both built:** simple enough that everyone understands it, user-friendly, and
+**LESS automation** — "ask and manual trigger approach would be best currently." Automation that
+guesses is what creates the fix-one-break-another loop; a person pressing a button is predictable.
+
+**Evidence this is right, found the same day:** Brevo's suppression list holds `gamil.com` (typo),
+`9669711797@gmail.com` (a phone number in an email field) and `hdfhdgbhfdgb@gmail.com` (keyboard
+mash) — all hard-bounced. Those are Part 1 failures that surface much later as a complainant who
+cannot be authorised. Intake validation is not pedantry; it is the cheapest fix available.
+
+### The bug class that has been costing us: SILENT SUCCESS
+Twice in two days the same shape of failure:
+1. **Workspace anti-spoofing** — branch OTPs discarded while Brevo returned 201 (A106).
+2. **Brevo out of credits** — free-plan sends exhausted. It does **not** refuse; it returns
+   `201 {"messageId": ...}` and delivers nothing. 49 complainant authorization codes produced
+   **7 logins**, every log line reading "Brevo ✓". Proven by sending the same message to a gmail
+   account we own: Brevo → NOWHERE, Workspace → INBOX.
+
+The lesson is sharper than "add monitoring": **a check that asks "is it configured?" cannot see
+this, because everything WAS configured.** Checks have to be judged on outcomes — what happened to
+the things we actually sent — and, where an outcome is unknowable after the fact (a provider that
+lies), on a **leading indicator** like the remaining balance.
+
+Now in place: `brevo_credits()` gates the Brevo path (skipped at zero), App Health reports the
+allowance and warns **below 50 rather than at zero**, and the watchdog treats it as critical. The
+complainant portal joined the login-health recorder — its absence is exactly why 49-into-7 went
+unnoticed. Authorization WhatsApp codes now use the approved template (no 24h window), and the
+authorization email finally carries `delivery_critical` like every other code.
+
+### Open discussion: an immune system instead of a bug-fix loop
+Founder: *"we need to make a system that alert us before breaking anything and proactively fix
+itself if see something is breaking (whatever in its scope), whatever cannot be fix by our
+mechanics and dependency is on a human must be surface to superadmins on telegram."*
+Proposal and phases live in TODO.md; the principle agreed here is that **we only auto-fix what is
+provably safe and reversible, and everything else is surfaced with what broke and why** — never a
+guess, because a wrong automatic repair is worse than a clear alarm.
+
+---
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
