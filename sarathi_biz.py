@@ -69,6 +69,7 @@ import biz_nidaan_claimant as claimant
 import biz_nidaan_telegram as tg
 import biz_sarathi_tgcrm as tgcrm
 import biz_wa_agent as wa_agent
+import biz_nidaan_login_health as _login_health
 
 # Public base URL for Nidaan (deep links + Telegram webhook registration).
 NIDAAN_BASE_URL = os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com")
@@ -715,6 +716,10 @@ def _nidaan_origin(request: Request) -> str:
 class BranchOtpReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str
+    # Which way to send it. Email is the default because most branches have no mobile on file
+    # yet; WhatsApp is the fallback the founder asked for, and becomes the primary once every
+    # branch has a number.
+    channel: str = "email"
 
 
 class BranchVerifyReq(BaseModel):
@@ -740,11 +745,52 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
     result = auth.generate_email_otp(email)
     if "error" in result:
         return JSONResponse({"detail": result["error"]}, status_code=429)  # OTP cooldown
+
+    # ── WhatsApp, when they ask for it ──────────────────────────────────────
+    # The code lives against the branch's EMAIL either way, so verification is unchanged - only
+    # the delivery differs. Two honest limits are reported rather than hidden: a branch with no
+    # mobile on file cannot use this, and WhatsApp carries a free-form message only inside the 24
+    # hours after they last wrote to us (no authentication template is approved yet). When the
+    # window is shut we say so and hand them a link that opens the chat, which opens it.
+    if (body.channel or "").strip().lower() == "whatsapp":
+        phone = (branch.get("contact_phone") or "").strip()
+        if not phone:
+            return JSONResponse(
+                {"detail": "We do not have a mobile number for this branch. Use email, or ask the "
+                           "office to add your number."}, status_code=400)
+        import biz_nidaan_whatsapp as _wa, biz_nidaan_wa_flow as _flow
+        msisdn = _wa.normalize_msisdn(phone)
+        if not await _flow.in_session_window(msisdn):
+            wa_num = (os.getenv("WA_NIDAAN_DISPLAY_NUMBER") or "").strip()
+            return JSONResponse(
+                {"detail": "WhatsApp can send your code only after you have written to us. Send "
+                           "any message to our WhatsApp number and tap this again.",
+                 "wa_link": ("https://wa.me/%s?text=Login" % wa_num.lstrip("+")) if wa_num else "",
+                 "reason": "window_closed"}, status_code=400)
+        text = ("Your NidaanPartner branch login code is %s. It expires in 10 minutes. "
+                "We will never ask you for this code." % result["otp"])
+        with _wa.sending_as("critical"):
+            sent = await _wa.send_text(msisdn, text)
+        await _login_health.record("branch", "whatsapp", msisdn, bool(sent.get("ok")),
+                                   detail=str(sent.get("error") or "")[:150],
+                                   via="WhatsApp Cloud API")
+        if not sent.get("ok"):
+            return JSONResponse({"detail": "WhatsApp could not deliver the code just now. "
+                                           "Please use email."}, status_code=400)
+        logger.info("📱 Branch login code sent on WhatsApp → %s", branch.get("branch_code"))
+        return {"status": "otp_sent", "channel": "whatsapp"}
+
     # One-click login link (magic token, 20 min) alongside the code — mobile-friendly.
     magic = nidaan.create_branch_magic_token(branch["branch_code"], email, minutes=20)
     magic_url = f"{_nidaan_origin(request)}/nidaan/branch/magic?token={magic}"
-    await email_svc.send_nidaan_branch_login_email(
-        email, magic_url, otp=result["otp"], name=branch.get("name") or "", welcome=False)
+    # The outcome is recorded, not assumed. Every branch code was being silently discarded on
+    # 17 Sep while this call returned and the page said "sent" — App Health now reads this.
+    _t: dict = {}
+    _ok = await email_svc.send_nidaan_branch_login_email(
+        email, magic_url, otp=result["otp"], name=branch.get("name") or "", welcome=False,
+        transport_out=_t)
+    await _login_health.record("branch", "email", email, bool(_ok),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
     return generic
 
 
@@ -2777,7 +2823,10 @@ async def nidaan_api_send_verify_otp(req: NidaanSendOTPReq, request: Request):
     # Fetch name if account exists, else use generic greeting
     account = await nidaan.get_account_by_email(email)
     name = account.get("owner_name", "") if account else ""
-    sent = await email_svc.send_nidaan_otp_email(email, otp_code, name)
+    _t: dict = {}
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, name, transport_out=_t)
+    await _login_health.record("subscriber", "email", email, bool(sent),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
     if not sent:
         return JSONResponse({"detail": "Could not send verification email right now. Please try again in a few minutes.", "code": "email_failed"}, status_code=503)
     resp = {
@@ -2813,7 +2862,11 @@ async def nidaan_api_send_email_otp(req: NidaanSendOTPReq, request: Request):
         return JSONResponse({"detail": result["error"]}, status_code=429)
     otp_code = result["otp"]
     logger.info("📧 Nidaan Email OTP for %s***", email[:3])
-    sent = await email_svc.send_nidaan_otp_email(email, otp_code, account.get("owner_name", ""))
+    _t: dict = {}
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, account.get("owner_name", ""),
+                                                 transport_out=_t)
+    await _login_health.record("subscriber", "email", email, bool(sent),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
     if not sent:
         return JSONResponse({"detail": "Could not send OTP email right now. Please use Password login or try again in a few minutes.", "code": "email_failed"}, status_code=503)
     resp = {
@@ -11925,7 +11978,133 @@ async def _subsystem_checks() -> list:
     except Exception as _e:
         _chk("Backups", False, f"check failed: {str(_e)[:70]}")
 
+    checks.extend(await _login_checks())
     return checks
+
+
+async def _login_checks() -> list:
+    """CAN EACH KIND OF PERSON ACTUALLY GET IN — and if not, why.
+
+    Founder, 17 Sep: "mention visibility in app health about branch login system, subscriber login
+    system, or whosoever is having dashboard mechanics and login methods all should be present in
+    app health to see what's not working and why."
+
+    Two different things break a way in, so each is checked separately:
+      • NO WAY IN — the person has no address and no mobile, so no code can be addressed to them.
+        A data problem, and invisible until someone tries to log in and fails.
+      • DELIVERY — the code was addressed but did not arrive. This is what happened on 17 Sep, and
+        no amount of configuration-checking would have caught it: every key was set, every API
+        returned success, and Google was discarding the mail. So delivery is judged on what
+        actually happened to the last codes we sent, not on what is configured.
+
+    Lives in _subsystem_checks so the watchdog runs it too — a login outage that waits for someone
+    to open a dashboard is the outage we just had. Returns [{name, ok, note}]; never raises.
+    """
+    out: list = []
+
+    def _chk(name, ok, note=""):
+        out.append({"name": name, "ok": bool(ok), "note": note})
+
+    try:
+        sent = await _login_health.summary()
+    except Exception:
+        sent = {}
+
+    def _delivery(system: str, label: str, idle_note: str) -> None:
+        """Judge a way in by its last 24 hours of real attempts."""
+        s = sent.get(system) or {}
+        n, failed = int(s.get("sent") or 0), int(s.get("failed") or 0)
+        if not n:
+            # Nothing to judge. Say so plainly rather than showing a green tick nobody earned.
+            _chk(label, True, "no login codes sent in the last 24h · " + idle_note)
+            return
+        if failed >= n:
+            _chk(label, False, "ALL %d code%s in the last 24h failed — %s"
+                 % (n, "" if n == 1 else "s", s.get("last_error") or "no reason recorded"))
+            return
+        if failed:
+            _chk(label, False, "%d of %d codes failed in the last 24h — %s"
+                 % (failed, n, s.get("last_error") or "no reason recorded"))
+            return
+        _chk(label, True, "%d code%s delivered in the last 24h via %s"
+             % (n, "" if n == 1 else "s", s.get("last_via") or "email"))
+
+    # ── Branch login ────────────────────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _c.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await _c.execute(
+                "SELECT branch_code, COALESCE(contact_email,'') AS email, "
+                "COALESCE(contact_phone,'') AS phone FROM nidaan_branches "
+                "WHERE status='active'")).fetchall()]
+        total = len(rows)
+        stranded = [r["branch_code"] for r in rows if not r["email"] and not r["phone"]]
+        with_phone = [r for r in rows if r["phone"]]
+        _chk("Branch login — a way in", not stranded,
+             "all %d active branches have an email or a mobile" % total if not stranded
+             else "%d of %d branches have NEITHER an email nor a mobile and cannot log in at "
+                  "all: %s" % (len(stranded), total, ", ".join(stranded[:8])))
+        # Email is the only channel most branches have today; the founder's plan is to make
+        # WhatsApp primary once every branch has a mobile on file, so track the gap.
+        _chk("Branch login — WhatsApp fallback", bool(with_phone),
+             "%d of %d branches have a mobile, so the rest have email as their only way in"
+             % (len(with_phone), total) if total else "no active branches")
+    except Exception as _e:  # noqa: BLE001
+        _chk("Branch login — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("branch", "Branch login — code delivery",
+              "codes to our own domain go via Gmail SMTP (Workspace discards our domain "
+              "arriving from a third party)")
+
+    # ── Subscriber (advisor) login ──────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_accounts WHERE status='active' "
+                "AND COALESCE(email,'')='' AND COALESCE(phone,'')=''")).fetchone()
+        _stuck = int((_r or [0])[0] or 0)
+        _chk("Subscriber login — a way in", _stuck == 0,
+             "every active account has an email or a mobile"
+             if not _stuck else "%d active accounts have neither an email nor a mobile" % _stuck)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Subscriber login — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("subscriber", "Subscriber login — code delivery",
+              "subscriber addresses are mostly outside our domain, so these go via Brevo")
+
+    # ── Staff (ops) login ───────────────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_staff WHERE status='active' "
+                "AND deleted_at IS NULL AND COALESCE(email,'')=''")).fetchone()
+        _no_mail = int((_r or [0])[0] or 0)
+        _chk("Staff login", _no_mail == 0,
+             "every active staff member has a login email"
+             if not _no_mail else "%d active staff have no email" % _no_mail)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Staff login", False, "check failed: %s" % str(_e)[:70])
+
+    # ── Complainant portal ──────────────────────────────────────────────────
+    # The portal is opened by a code sent to the registered mobile or email, so a claim with
+    # neither cannot be opened by anyone — including the complainant it belongs to.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_claimant_portal p "
+                "JOIN nidaan_claims c ON c.claim_id = p.claim_id "
+                "WHERE COALESCE(NULLIF(c.complainant_phone,''), c.insured_phone, '') = '' "
+                "AND COALESCE(NULLIF(c.complainant_email,''), c.insured_email, '') = ''"
+            )).fetchone()
+        _unreachable = int((_r or [0])[0] or 0)
+        _chk("Complainant portal", _unreachable == 0,
+             "every portal has a mobile or an email to send its code to"
+             if not _unreachable
+             else "%d portals have no mobile and no email — nobody can open them" % _unreachable)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Complainant portal", False, "check failed: %s" % str(_e)[:70])
+
+    return out
 
 
 @app.get("/nidaan/ops/api/health")
@@ -12121,6 +12300,41 @@ async def ops_health_action(body: OpsHealthAction, request: Request):
         import biz_nidaan_payment_watch as _pw
         res = await _pw.run_payment_health_check(alert=False)
         result = {"message": "Payment watchdog re-scan complete.", "detail": res}
+    elif action == "login_selftest":
+        # PROVE the way in works, instead of inferring it from configuration. On 17 Sep every
+        # key was set, every API returned success, and every branch login code was being
+        # discarded in silence. This sends a real message down the EXACT path a branch login
+        # code takes — same sender, same delivery-critical flag, same own-domain routing — to
+        # the super-admin's OWN address, and reports which transport carried it.
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT email, name FROM nidaan_staff WHERE staff_id=?",
+                (staff["staff_id"],))).fetchone()
+        _to = ((_r[0] if _r else "") or "").strip()
+        if not _to:
+            result = {"message": "Your staff account has no email address, so there is nowhere "
+                                 "to send the test."}
+        else:
+            _t: dict = {}
+            _sent = await email_svc.send_email(
+                _to,
+                "Nidaan Partner login path test",
+                "<h2>Login delivery test</h2><p>This message travelled the same path a branch "
+                "login code takes. If you are reading it in your inbox, that path works. If you "
+                "found it in spam, the codes are arriving but people will not see them.</p>",
+                from_name="Nidaan Partner",
+                from_email=(email_svc.NIDAAN_FROM or None),
+                delivery_critical=True,
+                transport_out=_t)
+            _via = _t.get("via") or "unknown transport"
+            result = {
+                "message": ("Test sent to %s via %s — check your inbox AND your spam folder. "
+                            "Spam means the codes arrive but nobody sees them."
+                            % (_login_health.mask(_to), _via)) if _sent
+                           else ("Test could NOT be sent: %s"
+                                 % (_t.get("error") or "every transport failed")),
+                "ok_send": bool(_sent), "via": _via,
+            }
     elif action == "toggle_wa_journey":
         cur = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
         newv = "0" if cur else "1"

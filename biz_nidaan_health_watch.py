@@ -31,6 +31,13 @@ _RENOTIFY_HOURS = 12          # remind once if a subsystem is still broken after
 _CRITICAL = {
     "Database", "WhatsApp Cloud API", "Email Radar", "AI (Gemini)", "SMTP (email out)",
     "Subscription renewals", "Backups", "Disk", "Payments (Razorpay)", "Doc Splitter",
+    # The ways in. A login outage locks partners out of their own portal and, on 17 Sep, ran for
+    # a day before anyone could say what was wrong — exactly the silence this watchdog exists to
+    # break. "WhatsApp fallback" is deliberately NOT here: a branch without a mobile on file is a
+    # gap to close, not a middle-of-the-night alarm.
+    "Branch login — a way in", "Branch login — code delivery",
+    "Subscriber login — a way in", "Subscriber login — code delivery",
+    "Staff login", "Complainant portal",
 }
 
 

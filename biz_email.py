@@ -89,17 +89,29 @@ def is_enabled() -> bool:
 async def send_email(to_email: str, subject: str, html_body: str,
                      text_body: str = "", from_email: str = "",
                      from_name: str = "", reply_to: str = "",
-                     delivery_critical: bool = False) -> bool:
+                     delivery_critical: bool = False,
+                     transport_out: dict | None = None) -> bool:
     """Send transactional email. Prefers Resend HTTPS API when RESEND_API_KEY is
     set (proper DKIM-aligned deliverability), otherwise falls back to Gmail SMTP.
     Returns True on success. NIDAAN_NO_OUTBOUND=1 (test runs only) sends nothing.
     from_email: override sender address (defaults to FROM_NOREPLY).
     from_name: override sender display name.
-    reply_to: override Reply-To header (defaults to noreply)."""
+    reply_to: override Reply-To header (defaults to noreply).
+    transport_out: optional dict, filled with {"via", "error"} — WHICH transport carried this
+    message, and why it failed if it did. There are six transports here and they behave very
+    differently per recipient domain, so a caller that reports on delivery (App Health's login
+    checks) has to know which one ran rather than guess from configuration."""
+    def _via(name: str, err: str = "") -> None:
+        if transport_out is not None:
+            transport_out["via"] = name
+            transport_out["error"] = err
+
     if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
+        _via("", "outbound suppressed (test run)")
         return False
     if not _initialized:
         logger.warning("Email not sent (not configured): %s → %s", subject, to_email)
+        _via("", "email not configured — SMTP_USER/SMTP_PASSWORD missing in biz.env")
         return False
 
     sender_name = from_name or FROM_NAME
@@ -224,6 +236,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
         sender_email, reply_to = SMTP_USER, _reply_keep
         if await _smtp_send(_internal=True):
             logger.info("📧 SMTP ✓ (own-domain recipient) '%s' → %s", subject, to_email)
+            _via("Gmail SMTP (own-domain recipient)")
             return True
         logger.error("📧 SMTP failed for an own-domain recipient (%s) — falling through. Brevo "
                      "cannot reach @nidaanpartner.com with our own domain in the From, so this "
@@ -236,6 +249,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
     _nidaan_smtp_on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
     if _is_nidaan_sender and _nidaan_smtp_on and NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
         if await _smtp_send(NIDAAN_SMTP_USER, NIDAAN_SMTP_PASSWORD, NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT):
+            _via("Nidaan Workspace SMTP")
             return True
 
     # When the sender IS the authenticated Gmail SMTP account (Nidaan's
@@ -253,6 +267,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # a guaranteed last-resort retry at the bottom of this function if every transport fails
     # (most likely Brevo's 300/day free allowance running out mid-day).
     if _smtp_aligned and await _smtp_send():
+        _via("Gmail SMTP (aligned sender)")
         return True
 
     # ─── Path 1: Brevo (free 300/day, proper DKIM) — fallback for aligned senders ─
@@ -283,6 +298,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
                 )
             if r.status_code in (200, 201, 202):
                 logger.info("📧 Brevo ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+                _via("Brevo")
                 return True
             logger.error("📧 Brevo rejected (%d): %s", r.status_code, r.text[:200])
             # Fall through to SMTP on any transient failure
@@ -317,6 +333,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
                 )
             if r.status_code in (200, 202):
                 logger.info("📧 Resend ✓ '%s' → %s (from %s)", subject, to_email, sender_email)
+                _via("Resend")
                 return True
             logger.error("📧 Resend rejected (%d): %s", r.status_code, r.text[:200])
         except Exception as e:
@@ -325,6 +342,7 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # ─── Gmail SMTP: fallback for non-aligned senders, or if the APIs had no key ──
     if _smtp_ready and not _smtp_aligned:
         if await _smtp_send():
+            _via("Gmail SMTP (fallback)")
             return True
 
     # ─── LAST RESORT for delivery-critical mail (login codes, verification, payment) ──────
@@ -344,10 +362,12 @@ async def send_email(to_email: str, subject: str, html_body: str,
         logger.warning("📧 delivery-critical FALLBACK: re-sending '%s' → %s as %s "
                        "(branded %s moved to Reply-To)", subject, to_email, SMTP_USER, _branded)
         if await _smtp_send():
+            _via("Gmail SMTP (last-resort re-send)")
             return True
 
     logger.error("📧 Email failed on all transports: '%s' → %s%s", subject, to_email,
                  "  [DELIVERY-CRITICAL]" if delivery_critical else "")
+    _via("", "every transport failed (see the error log for the last one tried)")
     return False
 
 
@@ -520,7 +540,8 @@ async def send_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
     return await send_email(to_email, f"Sarathi-AI Login Code: {otp}", _wrap_template("Login Code", content))
 
 
-async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -> bool:
+async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "",
+                                transport_out: dict | None = None) -> bool:
     """Send OTP login code branded as Nidaan Partner."""
     greeting = f"Hi {owner_name}," if owner_name else "Hi,"
     content = f"""
@@ -543,11 +564,13 @@ async def send_nidaan_otp_email(to_email: str, otp: str, owner_name: str = "") -
         # A code that lands in spam is the same as no code at all — send this one on the
         # transport the domain actually authorises.
         delivery_critical=True,
+        transport_out=transport_out,
     )
 
 
 async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str = "",
-                                         name: str = "", welcome: bool = False) -> bool:
+                                         name: str = "", welcome: bool = False,
+                                         transport_out: dict | None = None) -> bool:
     """Branch-portal login email: a big one-click login button (magic link) PLUS the OTP code
     as a fallback. `welcome=True` for the email sent when a branch login is first created.
     Sent as Nidaan Partner (info@nidaanpartner.com). Mobile-first single-column layout."""
@@ -594,6 +617,7 @@ async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str
         from_email=NIDAAN_FROM or None,
         # A login link/code in the spam folder locks a partner out of their own portal.
         delivery_critical=True,
+        transport_out=transport_out,
     )
 
 
