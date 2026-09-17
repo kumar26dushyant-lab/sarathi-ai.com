@@ -12084,14 +12084,37 @@ async def _login_checks() -> list:
             # Switched on is not the same as working. If the last code still went out on the
             # Gmail fallback, Workspace refused the password and the branch still saw the wrong
             # name — saying "healthy" here would be the same lie that hid the outage all morning.
+            #
+            # But evidence from BEFORE this configuration was loaded proves nothing about it.
+            # Blaming the password for a code sent under the old settings would send someone off
+            # to regenerate a password that is perfectly good.
             _fell_back = bool(_last_via) and not _last_via.startswith("Workspace")
-            _chk("Branch login — sender name", not _fell_back,
-                 ("switched on, but the last code still went out via %s — Workspace is refusing "
-                  "the %s password. Press Test the sender for the exact reason."
-                  % (_last_via, _ws_user)) if _fell_back else
-                 ("mail to our own domain is sent through Workspace as %s%s"
-                  % (_ws_user, (" · last code confirmed via %s" % _last_via) if _last_via else
-                     " · no code sent yet to confirm it")))
+            _stale = False
+            if _fell_back:
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    _last_at = (sent.get("branch") or {}).get("last_at") or ""
+                    # The ring stores a NAIVE utcnow string. Read back without saying so it is
+                    # taken as LOCAL time, and on this box (Europe/Berlin) every record then looks
+                    # two hours old — stale enough to excuse a real failure.
+                    _stale = (_dt.fromisoformat(_last_at).replace(tzinfo=_tz.utc).timestamp() < SERVER_START_TIME)
+                except (TypeError, ValueError):
+                    _stale = False
+            if _fell_back and not _stale:
+                _chk("Branch login — sender name", False,
+                     "switched on, but the last code still went out via %s — Workspace is "
+                     "refusing the %s password. Press Test the sender for the exact reason."
+                     % (_last_via, _ws_user))
+            elif _fell_back:
+                _chk("Branch login — sender name", True,
+                     "now sent through Workspace as %s. The last code (before this was switched "
+                     "on) went via %s — the next one will confirm the new setting."
+                     % (_ws_user, _last_via))
+            else:
+                _chk("Branch login — sender name", True,
+                     "mail to our own domain is sent through Workspace as %s%s"
+                     % (_ws_user, (" · last code confirmed via %s" % _last_via) if _last_via
+                        else " · no code sent yet to confirm it"))
         else:
             _chk("Branch login — sender name", False,
                  "branch codes go out as %s and show as \"External\" — the %s app password is "
