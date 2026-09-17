@@ -8415,6 +8415,75 @@ class _DocTickReq(BaseModel):
     received: bool = True
 
 
+class _SchedReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    date: str = Field(..., min_length=8, max_length=10)      # YYYY-MM-DD, as the staffer sees it
+    time: str = Field(..., min_length=4, max_length=5)       # HH:MM in IST
+    repeat: str = Field("once", max_length=10)               # once | weekly | days
+    every: int = Field(7, ge=1, le=60)
+    weekday: Optional[int] = Field(None, ge=0, le=6)
+    note: str = Field("", max_length=300)
+    max_sends: int = Field(6, ge=1, le=20)
+    stop_when_complete: bool = True
+
+
+class _SchedStatusReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(..., max_length=12)                  # active | paused | cancelled
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/reminders")
+async def ops_claim_reminders(claim_id: int, request: Request):
+    """The document reminders somebody has set on this claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_wa_schedule as _sch
+    return {"reminders": await _sch.listing(claim_id)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/reminders")
+@limiter.limit("30/minute")
+async def ops_claim_reminder_create(claim_id: int, body: _SchedReq, request: Request):
+    """Schedule a document reminder for when this complainant can actually answer.
+
+    We do not guess the moment - the staffer who has spoken to them picks it. It stops on its own
+    once the documents are in, and goes out through the same door as every other message, so the
+    daily cap and the STOP list still apply."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    import biz_nidaan_wa_schedule as _sch
+    res = await _sch.create(claim_id, when_date=body.date, when_time=body.time,
+                            repeat=body.repeat, every=body.every, weekday=body.weekday,
+                            note=body.note, max_sends=body.max_sends,
+                            stop_when_complete=body.stop_when_complete,
+                            by=_actor_label(caller), by_id=caller.get("staff_id"))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not set that reminder")
+    await _ops_audit(request, "wa.reminder_set", "claim", str(claim_id),
+                     "%s %s" % (body.date, body.time))
+    return res
+
+
+@app.patch("/nidaan/ops/api/reminders/{sch_id}")
+@limiter.limit("30/minute")
+async def ops_claim_reminder_status(sch_id: int, body: _SchedStatusReq, request: Request):
+    """Pause, restart or cancel a reminder."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_wa_schedule as _sch
+    res = await _sch.set_status(sch_id, body.status, by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not change that reminder")
+    await _ops_audit(request, "wa.reminder_" + body.status, "reminder", str(sch_id), "")
+    return res
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/tick")
 @limiter.limit("120/minute")
 async def ops_doc_window_tick(claim_id: int, body: _DocTickReq, request: Request):
@@ -28114,6 +28183,24 @@ async def main():
                     logger.error("doc chase error: %s", e)
                 await asyncio.sleep(3600)
         asyncio.create_task(doc_chase_loop())
+
+        # Scheduled document reminders. A staffer picks the moment the complainant can actually
+        # answer - Sunday morning, an evening, whatever they know about that person - and this
+        # sends it then. Every 5 minutes, because a reminder set for 9:00 should not land at 9:55.
+        async def wa_schedule_loop():
+            await asyncio.sleep(120)
+            while True:
+                try:
+                    import biz_nidaan_wa_schedule as _sch
+                    r = await _sch.run_due()
+                    if any(r.values()):
+                        logger.info("scheduled reminders: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("scheduled reminder error: %s", e)
+                await asyncio.sleep(300)
+        asyncio.create_task(wa_schedule_loop())
 
         # Step 6g1c1d: what has gone QUIET. A claim nobody moves raises no move notification -
         # by definition - and that is exactly the case the office loses claims in. Once a day,

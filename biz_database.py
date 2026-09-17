@@ -1703,6 +1703,36 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_claimverify_claim "
                            "ON nidaan_claim_verify(claim_id, vid DESC)")
 
+        # Asking for documents WHEN THE PERSON CAN ANSWER. The founder's point: most complainants
+        # are at work 9-to-8 and their papers are at home, so a staffer who has spoken to them
+        # picks the moment - his example, Sunday morning - instead of us guessing. Times are kept
+        # in UTC and shown in IST; `stop_when_complete` is what stops somebody being chased for
+        # papers they have already sent.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_wa_schedule (
+                sch_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id          INTEGER NOT NULL,
+                next_at           TIMESTAMP,              -- UTC; NULL once it is finished
+                repeat_rule       TEXT DEFAULT 'once',    -- once | weekly | days
+                repeat_every      INTEGER DEFAULT 7,      -- for 'days'
+                repeat_weekday    INTEGER,                -- 0=Mon .. 6=Sun, for 'weekly'
+                note              TEXT DEFAULT '',        -- a line the complainant will read
+                max_sends         INTEGER DEFAULT 6,      -- nothing runs for ever
+                stop_when_complete INTEGER DEFAULT 1,
+                sent_count        INTEGER DEFAULT 0,
+                last_sent_at      TIMESTAMP,
+                status            TEXT DEFAULT 'active',  -- active | paused | done | cancelled
+                done_reason       TEXT DEFAULT '',
+                created_by        TEXT DEFAULT '',
+                created_by_name   TEXT DEFAULT '',
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_waschedule_due "
+                           "ON nidaan_wa_schedule(status, next_at)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_waschedule_claim "
+                           "ON nidaan_wa_schedule(claim_id, sch_id DESC)")
+
         # Feedback on a shared design document (ops/stakeholder review pages). Nothing to do with
         # claims — a comment surface so a design can be reviewed by people who are not staff users.
         await conn.execute("""
