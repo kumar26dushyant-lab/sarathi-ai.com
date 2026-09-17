@@ -228,6 +228,29 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # addresses) is untouched and keeps the branded Nidaan sender.
     _own_domain = "@nidaanpartner.com"
     _to_own_domain = any((e or "").lower().endswith(_own_domain) for e in (_recips or [to_email]))
+
+    # FIRST CHOICE: send it as ourselves, through Workspace.
+    # Authenticated as info@nidaanpartner.com, the mail is Workspace-internal — the From stays
+    # info@nidaanpartner.com, there is no anti-spoofing to trip, and the branch does not see an
+    # "External" warning on a login code from their own office (founder, 17 Sep: "ideally it
+    # should trigger from info@nidaanpartner.com"). This needs a WORKING app password; while it
+    # is rejected the fallback below still delivers, just under the Gmail account's name.
+    _ws_on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+    if _to_own_domain and _ws_on and NIDAAN_SMTP_USER and NIDAAN_SMTP_PASSWORD:
+        _keep_from = sender_email
+        sender_email = NIDAAN_SMTP_USER
+        if await _smtp_send(NIDAAN_SMTP_USER, NIDAAN_SMTP_PASSWORD,
+                            NIDAAN_SMTP_HOST, NIDAAN_SMTP_PORT, _internal=True):
+            logger.info("📧 Workspace ✓ (own-domain recipient, as %s) '%s' → %s",
+                        NIDAAN_SMTP_USER, subject, to_email)
+            _via("Workspace as %s" % NIDAAN_SMTP_USER)
+            return True
+        sender_email = _keep_from
+        logger.error("📧 Workspace SMTP refused %s — falling back to the Gmail account, so this "
+                     "mail will arrive under that name rather than ours.", NIDAAN_SMTP_USER)
+
+    # FALLBACK: the Gmail account in the From. Not our branded address, but it ARRIVES — and a
+    # login code that arrives under the wrong name beats one that is silently discarded.
     if _to_own_domain and SMTP_HOST and SMTP_USER and SMTP_PASSWORD:
         # The From has to be the real Gmail account too: a branded From on our own domain is the
         # very thing Workspace refuses from outside. Reply-To keeps the branded address, so a

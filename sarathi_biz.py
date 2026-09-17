@@ -12069,6 +12069,40 @@ async def _login_checks() -> list:
               "codes to our own domain go via Gmail SMTP (Workspace discards our domain "
               "arriving from a third party)")
 
+    # WHOSE NAME IS ON IT. A login code that arrives from a gmail address, tagged "External",
+    # asks a branch to trust a code from a stranger — the opposite of what a login mail should
+    # do (founder, 17 Sep: "ideally it should trigger from info@nidaanpartner.com"). The only
+    # way to put our own address on mail to our own domain is to send THROUGH Workspace, which
+    # needs a working app password for that mailbox.
+    try:
+        import biz_email as _es
+        _ws_on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+        _ws_user = _es.NIDAAN_SMTP_USER or os.getenv("NIDAAN_SMTP_USER", "")
+        _ws_pass = bool(_es.NIDAAN_SMTP_PASSWORD or os.getenv("NIDAAN_SMTP_PASSWORD", ""))
+        _last_via = ((sent.get("branch") or {}).get("last_via") or "")
+        if _ws_on and _ws_user and _ws_pass:
+            # Switched on is not the same as working. If the last code still went out on the
+            # Gmail fallback, Workspace refused the password and the branch still saw the wrong
+            # name — saying "healthy" here would be the same lie that hid the outage all morning.
+            _fell_back = bool(_last_via) and not _last_via.startswith("Workspace")
+            _chk("Branch login — sender name", not _fell_back,
+                 ("switched on, but the last code still went out via %s — Workspace is refusing "
+                  "the %s password. Press Test the sender for the exact reason."
+                  % (_last_via, _ws_user)) if _fell_back else
+                 ("mail to our own domain is sent through Workspace as %s%s"
+                  % (_ws_user, (" · last code confirmed via %s" % _last_via) if _last_via else
+                     " · no code sent yet to confirm it")))
+        else:
+            _chk("Branch login — sender name", False,
+                 "branch codes go out as %s and show as \"External\" — the %s app password is "
+                 "%s. Regenerate it in Google Workspace, put it in biz.env, then set "
+                 "NIDAAN_SMTP_ENABLED=1 and press Test the sender."
+                 % (os.getenv("SMTP_USER") or "the Gmail account",
+                    _ws_user or "info@nidaanpartner.com",
+                    "not switched on" if (_ws_user and _ws_pass) else "not configured"))
+    except Exception as _e:  # noqa: BLE001
+        _chk("Branch login — sender name", False, "check failed: %s" % str(_e)[:70])
+
     # ── Subscriber (advisor) login ──────────────────────────────────────────
     try:
         async with aiosqlite.connect(db.DB_PATH) as _c:
@@ -12348,6 +12382,36 @@ async def ops_health_action(body: OpsHealthAction, request: Request):
                                  % (_t.get("error") or "every transport failed")),
                 "ok_send": bool(_sent), "via": _via,
             }
+    elif action == "sender_test":
+        # Does the info@nidaanpartner.com app password work RIGHT NOW? Logs in and logs out —
+        # sends nothing. This is the one question standing between branch codes arriving under
+        # our own name and arriving as "External" from a gmail address, so it gets a button:
+        # regenerate the password, press this, and know in two seconds.
+        _u = os.getenv("NIDAAN_SMTP_USER", "")
+        _p = os.getenv("NIDAAN_SMTP_PASSWORD", "")
+        _h = os.getenv("NIDAAN_SMTP_HOST", "smtp.gmail.com")
+        _pt = int(os.getenv("NIDAAN_SMTP_PORT", "465") or 465)
+        if not (_u and _p):
+            result = {"message": "No NIDAAN_SMTP_USER / NIDAAN_SMTP_PASSWORD is configured, so "
+                                 "there is no sender identity to test."}
+        else:
+            try:
+                import aiosmtplib
+                _sm = aiosmtplib.SMTP(hostname=_h, port=_pt, use_tls=(_pt == 465),
+                                      start_tls=(_pt != 465), timeout=20)
+                await _sm.connect()
+                await _sm.login(_u, _p)
+                await _sm.quit()
+                _on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+                result = {"message": ("%s accepted the password. %s" % (_u,
+                          "Mail to our own domain already goes out under this name." if _on
+                          else "Now set NIDAAN_SMTP_ENABLED=1 in biz.env and restart, and branch "
+                               "codes will go out as this address instead of the Gmail one.")),
+                          "ok_auth": True}
+            except Exception as _se:  # noqa: BLE001
+                result = {"message": "%s was REFUSED: %s — regenerate the app password in Google "
+                                     "Workspace for this mailbox." % (_u, str(_se)[:130]),
+                          "ok_auth": False}
     elif action == "toggle_wa_journey":
         cur = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
         newv = "0" if cur else "1"
