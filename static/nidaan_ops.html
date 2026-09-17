@@ -12716,9 +12716,10 @@ async function obSubmit(btn){
                    complainant_name: g('obCompName'), complainant_phone: g('obCompPhone'),
                    complainant_email: g('obCompEmail'),
                    disputed_amount: (isNaN(amt) ? null : amt),
-                   notes_from_agent: (g('obNotes')
-                     + (!rejFile && rejWhy
-                         ? ' — No rejection letter at raise: ' + rejWhy : '')).trim()};
+                   notes_from_agent: g('obNotes').trim(),
+                   // Its own field, not appended to the notes: it goes on the timeline against
+                   // the raiser's name, because that person carries it from here (founder, 17 Sep).
+                   no_letter_reason: (!rejFile && rejWhy) ? rejWhy : ''};
   if (btn) btn.disabled = true;
   if (msg){ msg.style.color = 'var(--nd-text-muted)'; msg.textContent = 'Raising…'; }
   try{
