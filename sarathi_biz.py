@@ -7303,6 +7303,9 @@ async def ops_case_report(claim_id: int, request: Request):
     for k in rich:
         if vals.get(k):
             vals[k] = _bk.sanitize_rich(vals[k])
+    # The case report prints the gist, and the gist carries the case email password. Mask it for
+    # anyone whose role does not include credentials - the same rule as the case sheet.
+    vals = _bk.mask_secrets(vals, caller.get("role") or "")
     link = ""
     try:
         import biz_nidaan_claimant as _cl
@@ -8430,6 +8433,35 @@ class _SchedReq(BaseModel):
 class _SchedStatusReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: str = Field(..., max_length=12)                  # active | paused | cancelled
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/secret/{field_key}")
+@limiter.limit("20/minute")
+async def ops_case_secret(claim_id: int, field_key: str, request: Request):
+    """Show a credential kept on a claim — today, the case email password.
+
+    It is masked everywhere else, for everyone else. Asking for it is deliberate, allowed only for
+    super admins and sub-super admins (the founder's call, 17 Sep), and written into the audit log
+    with the asker's name: a password nobody can account for looking at is a password nobody
+    should hold."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_buckets as _bk
+    if field_key not in _bk.SECRET_FIELDS:
+        raise HTTPException(404, "That is not a credential field")
+    vals = await _bk.claim_fields(claim_id)
+    value = (vals.get(field_key) or "").strip()
+    if not value:
+        raise HTTPException(404, "Nothing recorded there yet")
+    await _ops_audit(request, "case.secret_view", "claim", str(claim_id), field_key)
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "secret_view", channel="system", actor=_actor_label(caller),
+            summary="Looked at the case email password")
+    except Exception:
+        pass
+    return {"ok": True, "field_key": field_key, "value": value}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/reminders")

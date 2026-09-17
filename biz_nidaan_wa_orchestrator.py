@@ -568,6 +568,109 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     return {"ok": True, "received": doc["key"], "remaining": len(pending2)}
 
 
+# ── the case email account, when it arrives on WhatsApp ──────────────────────
+# The complainant is asked to create an email account for the case and send it with its password.
+# ClaimShield keeps both on the case and our gist form has the same two fields, so when it comes in
+# on WhatsApp it belongs in those fields - not in a chat log somebody has to go hunting through.
+# We take it only when the claim is actually WAITING for it, so an ordinary message that happens to
+# mention an address is never mistaken for credentials.
+import re as _re
+
+_EMAIL_RE = _re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_PWD_HINT = _re.compile(r"(?:password|pass|pwd|पासवर्ड|paswrd)\s*[:\-=]?\s*(\S+)", _re.I)
+
+_GOT_IT = {
+    "en": "Got it — the email and password are saved on your claim, and used only to write to "
+          "the insurance company and the authorities. When your case is over you can change the "
+          "password or delete the account.",
+    "hi": "मिल गया — ईमेल और "
+          "पासवर्ड आपके क्लेम "
+          "पर सुरक्षित हैं, और "
+          "इनका उपयोग केवल बीमा "
+          "कंपनी और अधिकारियों "
+          "को लिखने में होगा। "
+          "केस पूरा होने पर आप "
+          "पासवर्ड बदल या आईडी "
+          "डिलीट कर सकते हैं।",
+    "hinglish": "Mil gaya — email aur password aapke claim par safe hain, aur inka upyog sirf "
+                "insurance company aur authorities ko likhne mein hoga. Case poora hone par aap "
+                "password badal sakte hain ya ID delete kar sakte hain.",
+}
+
+
+async def _capture_case_email(claim_id, text: str, lang: str, msisdn: str) -> dict:
+    """Take the case email + password off a WhatsApp message and put them on the claim."""
+    if not claim_id:
+        return {}
+    t = (text or "").strip()
+    m = _EMAIL_RE.search(t)
+    if not m:
+        return {}
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        pending = {d["key"] for d in await _ck.pending_required_docs(claim_id, "")}
+        row = None
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            row = await (await c.execute(
+                "SELECT claim_type FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
+        ctype = dict(row or {}).get("claim_type") or ""
+        pending = {d["key"] for d in await _ck.pending_required_docs(claim_id, ctype)}
+    except Exception:  # noqa: BLE001
+        return {}
+    # Only when the claim is actually waiting for it.
+    if "mail_credentials" not in pending:
+        return {}
+
+    email = m.group(0)
+    pwd = ""
+    hint = _PWD_HINT.search(t)
+    if hint:
+        pwd = hint.group(1)
+    else:
+        # No "password:" label - take the other word on the line, which is how people send it.
+        rest = [w for w in _re.split(r"[\s,;\n]+", t.replace(email, " ")) if len(w) >= 4]
+        pwd = rest[0] if rest else ""
+    if not pwd:
+        return {}
+
+    saved = True
+    try:
+        import biz_nidaan_buckets as _bk
+        who = "complainant (WhatsApp)"
+        r1 = await _bk.set_field(claim_id, "case_email", email, actor=who)
+        r2 = await _bk.set_field(claim_id, "case_email_password", pwd, actor=who)
+        # The gist locks once the drafts are finished. We do NOT force past that lock - a
+        # complainant's message must not rewrite work somebody has signed off. Instead the claim
+        # says it arrived, and a person decides what to do with it.
+        saved = bool(r1.get("ok")) and bool(r2.get("ok"))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not save the case email on claim %s: %s", claim_id, e)
+        saved = False
+
+    if saved:
+        try:
+            import biz_nidaan_doc_checklist as _ck2
+            await _ck2.set_doc_received(claim_id, "mail_credentials", True,
+                                        by="complainant (WhatsApp)")
+        except Exception:
+            pass
+    # The password never goes into the summary line - a claim's own timeline is read by everybody.
+    await _activity(claim_id, "case_email",
+                    ("Complainant sent the case email (%s) and its password on WhatsApp — saved "
+                     "on the claim, password hidden" % email) if saved
+                    else ("Complainant sent the case email (%s) and a password on WhatsApp, but the "
+                          "gist is locked — a super admin has to put them on the claim" % email),
+                    direction="in")
+    try:
+        with _wa.sending_as("critical"):
+            await _wa.send_text(msisdn, _GOT_IT.get(lang, _GOT_IT["hinglish"]))
+        await _touch_outbound(msisdn)
+    except Exception:
+        pass
+    return {"ok": True, "captured": True, "action": "case_email_saved"}
+
+
 async def handle_inbound_text(msisdn: str, text: str) -> dict:
     """A complainant sent text. READ IT FIRST, then respond like a person would.
 
@@ -637,6 +740,12 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
 
     if claim:
         await _link_contact(msisdn, claim)
+        # The case email account, if that is what they just sent. Checked BEFORE the brain reads
+        # the message: this is the one reply that is not a question, and it has to land on the
+        # claim rather than be answered.
+        got = await _capture_case_email(claim_id, text, lang, msisdn)
+        if got.get("captured"):
+            return got
 
     d = await _brain.decide(text, lang, context=sc.get("text", ""),
                             handoff_only=bool(sc.get("handoff_only")),

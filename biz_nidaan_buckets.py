@@ -501,6 +501,33 @@ async def claim_fields(claim_id: int) -> dict:
     return {r[0]: r[1] for r in rows}
 
 
+# The case email account is opened for ONE purpose - writing to the insurance company and the
+# authorities - and its password is the only thing on a claim that is a credential rather than a
+# fact. The founder's call (17 Sep): super admins and sub-super admins. Everyone else sees that it
+# exists, not what it is; they can still do their work, because nothing on the draft needs the
+# password itself. Asking for it is a separate, audited step.
+SECRET_FIELDS = {"case_email_password"}
+SECRET_ROLES = ("super_admin", "sub_super_admin")
+MASK = "••••••••"
+
+
+def may_see_secrets(role: str) -> bool:
+    return (role or "").strip().lower() in SECRET_ROLES
+
+
+def mask_secrets(values: dict, role: str) -> dict:
+    """Hide credential values from anyone whose role does not include them. Done on the SERVER,
+    so a password never reaches a browser that should not have it - hiding it in the page would
+    only mean it was one Inspect away."""
+    if may_see_secrets(role):
+        return values
+    out = dict(values or {})
+    for k in SECRET_FIELDS:
+        if (out.get(k) or "").strip():
+            out[k] = MASK
+    return out
+
+
 # The formatting a draft may carry, and nothing else. Rich text is shown back to staff on the
 # case report, so anything outside this list - a script, an event handler, an iframe, a style that
 # hides text - would be stored and handed to the next person who opens the case.
@@ -1746,7 +1773,10 @@ async def for_claim(claim_id: int, role: str = "") -> dict:
         "substates": subs,
         "days": days, "age_state": age_state(days, amber, red),
         "amber_days": amber, "red_days": red,
-        "fields": await fields(bk), "values": await _clean_rich_values(vals),
+        # Credentials are masked for anyone whose role does not include them, on the way OUT.
+        "fields": await fields(bk),
+        "values": mask_secrets(await _clean_rich_values(vals), role),
+        "may_see_secrets": may_see_secrets(role),
         "missing_required": await missing_required(claim_id, bk),
         "moves": await moves_from(bk),
         "hold_until": row.get("hold_until") or "",
