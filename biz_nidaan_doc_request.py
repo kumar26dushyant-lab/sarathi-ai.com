@@ -546,11 +546,33 @@ async def due_nudges(limit: int = 50) -> list[int]:
     return [int(dict(r)["claim_id"]) for r in rows]
 
 
+async def auto_collection_on() -> bool:
+    """Is AUTOMATIC document collection switched on globally?
+
+    The founder's rule (17 Sep): the global switch governs what the system does BY ITSELF. It has
+    no say over what a person deliberately set up on one claim - a staffer who has spoken to a
+    complainant and scheduled a Sunday-morning reminder has made a decision, and a global default
+    must not quietly override it. So this gates the automatic chase only; `start_for_claim` (a
+    staffer pressing Start) and the scheduled reminders run regardless.
+
+    Worth knowing: until today this setting was stored and read by the settings screen but never
+    actually checked anywhere, so "OFF" held nothing back.
+    """
+    try:
+        return str(await _n.get_ops_setting("wa_doc_collection_enabled", "0")) in ("1", "true", "True")
+    except Exception:  # noqa: BLE001
+        return False
+
+
 async def run_chase() -> dict:
     """The worker pass. Nudges what is due; when a claim has had its nudges, stops sending and
     raises it as a phone call for the bucket's duty staff - which is where an automatic process
     should hand back to a person."""
     done = {"nudged": 0, "to_call": 0, "cleared": 0}
+    if not await auto_collection_on():
+        # Automatic chasing is off. Anything a person scheduled on a claim still goes - that is
+        # the point of the claim-level setting winning.
+        return done
     for claim_id in await due_nudges():
         try:
             claim = await _claim(claim_id)

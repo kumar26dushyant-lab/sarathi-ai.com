@@ -101,13 +101,15 @@ def _contacts(claim: dict) -> dict:
 
 
 async def channels(claim_id: int) -> list[dict]:
-    """What we can send a code to, masked. Their choice, as the founder asked."""
+    """What we can send a code to, masked. Their choice, as the founder asked - but an option
+    that cannot deliver is worse than no option, so each one says whether it will work now."""
     c = _contacts(await _claim(claim_id))
     out = []
     if c["phone"]:
-        out.append({"kind": "whatsapp", "masked": mask_phone(c["phone"])})
+        out.append({"kind": "whatsapp", "masked": mask_phone(c["phone"]),
+                    "ready": await _wa_reachable(c["phone"])})
     if c["email"]:
-        out.append({"kind": "email", "masked": mask_email(c["email"])})
+        out.append({"kind": "email", "masked": mask_email(c["email"]), "ready": True})
     return out
 
 
@@ -135,9 +137,14 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
                 "message": "We do not have that on file for this claim. Try the other one, "
                            "or call us and we will help."}
     if await _codes_this_hour(claim_id) >= MAX_CODES_PER_HOUR:
-        return {"ok": False, "reason": "rate_limited",
-                "message": "That is a lot of codes in one hour. Please wait a little, "
-                           "or call us."}
+        return {"ok": False, "reason": "rate_limited", "message": _T("rate_limited", lang)}
+
+    # WhatsApp only carries a free-form message inside the 24 hours after the person last wrote
+    # to US. Outside that window Meta refuses it, and until the authentication template is
+    # approved there is no other way to put a code on WhatsApp. So we say that HERE, plainly,
+    # instead of letting them press a button that cannot work and burn one of their codes on it.
+    if kind == "whatsapp" and not await _wa_reachable(dest):
+        return {"ok": False, "reason": "wa_window_closed", "message": _T("wa_closed", lang)}
 
     code = "".join(secrets.choice("0123456789") for _ in range(CODE_DIGITS))
     masked = mask_phone(dest) if kind == "whatsapp" else mask_email(dest)
@@ -146,17 +153,78 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
         # One live challenge per claim: asking for a new code kills the old one.
         await conn.execute("UPDATE nidaan_claim_verify SET consumed=1 "
                            "WHERE claim_id=? AND consumed=0", (int(claim_id),))
-        await conn.execute(
+        cur = await conn.execute(
             "INSERT INTO nidaan_claim_verify (claim_id, channel, sent_to, code_hash, expires_at) "
             "VALUES (?,?,?,?,?)", (int(claim_id), kind, masked, _hash(code), exp))
+        vid = cur.lastrowid
         await conn.commit()
 
     sent = await _send(kind, dest, code, claim, lang)
     if not sent.get("ok"):
         logger.warning("claim %s: could not send the %s code: %s", claim_id, kind, sent.get("error"))
-        return {"ok": False, "reason": "send_failed",
-                "message": "We could not send the code just now. Try the other way, or call us."}
+        # A code that never left does not count against them. Deleting the row keeps the
+        # five-an-hour limit meaning "five codes you actually received".
+        try:
+            async with aiosqlite.connect(DB_PATH) as conn:
+                await conn.execute("DELETE FROM nidaan_claim_verify WHERE vid=?", (vid,))
+                await conn.commit()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": False, "reason": "send_failed", "message": _T("send_failed", lang)}
     return {"ok": True, "kind": kind, "masked": masked, "ttl_min": CODE_TTL_MIN}
+
+
+async def _wa_reachable(phone: str) -> bool:
+    """True only if a plain WhatsApp message would actually be delivered to this number today."""
+    try:
+        import biz_nidaan_whatsapp as _w, biz_nidaan_wa_flow as _flow
+        if not _w.is_configured():
+            return False
+        msisdn = _w.normalize_msisdn(phone)
+        # Someone who replied STOP is not reachable, whatever the window says.
+        c = await _flow.get_contact(msisdn) or {}
+        if str(c.get("status") or "").lower() == "stopped":
+            return False
+        return bool(await _flow.in_session_window(msisdn))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# The page is bilingual; these were not. A complainant reading Hindi met an English error.
+_MSG = {
+    "rate_limited": {
+        "en": "That is a lot of codes in one hour. Please wait a little, or call us.",
+        "hi": "एक घंटे में काफ़ी "
+              "कोड माँगे जा चुके "
+              "हैं। थोड़ी देर रुकिए, "
+              "या हमें कॉल कीजिए।",
+    },
+    "wa_closed": {
+        "en": "WhatsApp cannot carry the code right now — we can only message you there once "
+              "you have written to us. Use email instead, or send us any WhatsApp message first "
+              "and try again.",
+        "hi": "अभी WhatsApp पर कोड नहीं "
+              "भेजा जा सकता — हम "
+              "आपको वहाँ तभी संदेश "
+              "भेज सकते हैं जब आप "
+              "हमें लिख चुके हों। "
+              "कृपया ईमेल चुनिए, "
+              "या पहले हमें WhatsApp पर "
+              "कोई संदेश भेजिए।",
+    },
+    "send_failed": {
+        "en": "We could not send the code just now. Try the other way, or call us.",
+        "hi": "अभी कोड भेजा नहीं "
+              "जा सका। दूसरा तरीका "
+              "आज़माइए, या हमें "
+              "कॉल कीजिए।",
+    },
+}
+
+
+def _T(key: str, lang: str) -> str:
+    row = _MSG.get(key) or {}
+    return row.get("hi" if (lang or "").lower().startswith("hi") else "en", row.get("en", ""))
 
 
 _SMS = {

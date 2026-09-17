@@ -1344,6 +1344,7 @@ async def nidaan_claim_magic(request: Request, token: str = ""):
 class _ClaimVerifyStartReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     channel: str = Field(..., max_length=20)
+    lang: str = Field("en", max_length=8)      # so a Hindi reader gets a Hindi refusal
 
 
 class _ClaimVerifyCheckReq(BaseModel):
@@ -1377,7 +1378,7 @@ async def nidaan_claim_verify_start(body: _ClaimVerifyStartReq, request: Request
     if not ctx:
         raise HTTPException(401, "This link is invalid or has expired")
     import biz_nidaan_claim_access as _acc
-    res = await _acc.start(ctx["claim_id"], body.channel)
+    res = await _acc.start(ctx["claim_id"], body.channel, lang=body.lang)
     if not res.get("ok"):
         raise HTTPException(400, res.get("message") or "Could not send the code")
     try:
@@ -2390,6 +2391,11 @@ class NidaanClaimReq(BaseModel):
     comm_lang: str = ""          # en|hi|mr — preferred WhatsApp/email language
     wa_consent: bool = True      # ₹499 funnel: opt-in to WhatsApp updates for this claim
     branch_code: str = ""        # optional affiliate branch (captured here too; covers Google-signup)
+    # Who will actually deal with us — often not the patient (a son for his mother, a wife for her
+    # husband). Blank means they are the same person; every message and document ask goes here.
+    complainant_name: str = ""
+    complainant_phone: str = ""
+    complainant_email: str = ""
 
 
 class NidaanSendOTPReq(BaseModel):
@@ -3556,6 +3562,10 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         branch_code=_bc,
         payment_status=_pay_status,
         skip_eligibility=_skip_elig,
+        # Blank falls back to the insured, which is right when they are the same person.
+        complainant_name=(body.complainant_name or "").strip(),
+        complainant_phone=(body.complainant_phone or "").strip(),
+        complainant_email=(body.complainant_email or "").strip(),
     )
     if claim_id is None:
         raise HTTPException(status_code=402, detail=reason)
@@ -7866,6 +7876,13 @@ class _RaiseForSubReq(BaseModel):
     insured_name: str = Field(..., max_length=120)
     insured_phone: str = Field("", max_length=20)
     insured_email: str = Field("", max_length=160)
+    # WHO WE WILL ACTUALLY DEAL WITH. On many claims this is not the patient - a son raising it
+    # for his mother, a wife for her husband - and every message, document request and
+    # authorisation goes to this person. A claim that records only the patient leaves the team
+    # ringing the wrong number (founder, 17 Sep).
+    complainant_name: str = Field("", max_length=120)
+    complainant_phone: str = Field("", max_length=20)
+    complainant_email: str = Field("", max_length=160)
     insurer_name: str = Field("", max_length=120)
     policy_no: str = Field("", max_length=80)
     disputed_amount: Optional[int] = None
@@ -7901,6 +7918,11 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
         notes_from_agent=body.notes_from_agent,
         payment_status="subscription",
         origin="ops_on_behalf",
+        # Who we deal with. Left blank it falls back to the patient, which is right when they are
+        # the same person and wrong - silently - when they are not.
+        complainant_name=(body.complainant_name or "").strip(),
+        complainant_phone=(body.complainant_phone or "").strip(),
+        complainant_email=(body.complainant_email or "").strip(),
         raised_by_staff_id=caller.get("staff_id"),
         raised_by_name=_actor_label(caller),
         raised_via="on_behalf",
