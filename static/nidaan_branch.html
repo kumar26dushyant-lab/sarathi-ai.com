@@ -83,7 +83,6 @@
       <button class="btn btn-cyan" id="sendBtn" onclick="requestOtp('email')">Email me the code →</button>
       <button class="btn btn-ghost" id="sendWaBtn" style="margin-top:.55rem" onclick="requestOtp('whatsapp')">
         Send it on WhatsApp instead</button>
-      <div id="waHelp" style="font-size:.82rem;color:var(--nd-text-muted);margin-top:.6rem;display:none"></div>
     </div>
 
     <div id="otpStep" class="hidden">
@@ -241,7 +240,6 @@ async function requestOtp(channel){
   const email = ($('brEmail').value||'').trim().toLowerCase();
   if(!email || !email.includes('@')){ msg('Please enter your branch email.','err'); return; }
   _email = email;
-  const help = $('waHelp'); if (help){ help.style.display='none'; help.innerHTML=''; }
   $('sendBtn').disabled = true; $('sendWaBtn').disabled = true;
   msg(channel === 'whatsapp' ? 'Sending on WhatsApp\u2026' : 'Sending code\u2026','info');
   try{
@@ -252,15 +250,10 @@ async function requestOtp(channel){
       msg(d.detail||'Please wait before requesting another code.','err');
       $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; return; }
     if(!r.ok){
-      // WhatsApp says WHY it cannot, and gives the one tap that fixes it.
+      // The server says WHY (the only remaining reason is no mobile on file). The old
+      // "go and message us first" instruction is gone: the code now reaches a branch cold.
       const d = await r.json().catch(()=>({}));
       msg(d.detail || 'Could not send the code that way.', 'err');
-      if (d.wa_link && help){
-        help.style.display='';
-        help.innerHTML = '<a href="' + d.wa_link + '" target="_blank" rel="noopener" '
-          + 'style="font-weight:700">Open WhatsApp and send us one message</a>, then tap '
-          + '"Send it on WhatsApp instead" again.';
-      }
       $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; return;
     }
     // Email stays deliberately generic (a wrong address must not reveal whether it is a branch).
