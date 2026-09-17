@@ -7,6 +7,7 @@
 <link rel="icon" href="/static/nidaan_logo.png">
 <link rel="stylesheet" href="/static/nidaan_design.css?v=5">
 <script src="/static/nidaan_theme.js?v=2"></script>
+<script src="/static/nidaan_files.js?v=1"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -189,9 +190,19 @@
       <input id="bcPolicy" placeholder="Policy no. (optional)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
     </div>
     <textarea id="bcNotes" placeholder="Brief background / reason for rejection…" style="width:100%;margin-top:.55rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;min-height:60px;resize:vertical"></textarea>
+    <!-- Two slots, on purpose. The rejection letter is the only paper a claim cannot start
+         without; everything else can follow later from the dashboard or WhatsApp - but if they
+         have it in hand now, taking it now is what saves weeks. Both can be undone. -->
     <div style="margin-top:.6rem">
       <label style="font-size:.82rem;color:var(--nd-danger-text);font-weight:600">📄 Rejection letter (required) *</label>
-      <input type="file" id="bcRejFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem">
+      <input type="file" id="bcRejFile" style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem" onchange="ndFiles('bcRejFile','bcRejList')">
+      <div id="bcRejList" style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"></div>
+    </div>
+    <div style="margin-top:.6rem">
+      <label style="font-size:.82rem;font-weight:600">📎 Other documents <span style="font-weight:400;color:var(--nd-text-faint)">(optional — attach whatever they already have)</span></label>
+      <input type="file" id="bcDocs" multiple style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem" onchange="ndFiles('bcDocs','bcDocsList')">
+      <div id="bcDocsList" style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"></div>
+      <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.2rem">PDF, photos, Word, scans — not video. Max 25 MB each.</div>
     </div>
     <div class="msg" id="bcMsg" style="margin-top:.5rem"></div>
     <button class="btn btn-cyan" id="bcSubmitBtn" style="margin-top:.7rem" onclick="raiseBranchClaim()">Submit claim →</button>
@@ -503,7 +514,8 @@ async function raiseBranchClaim(){
   const insName=($('bcInsName').value||'').trim();
   const insPhone=($('bcInsPhone').value||'').replace(/[^0-9]/g,'');
   const type=$('bcType').value;
-  const rej=$('bcRejFile').files[0];
+  const rej=($('bcRejFile').files||[])[0];
+  const extras=Array.from($('bcDocs').files||[]);
   if(!cname){ setMsg('Enter the complainant name.',false); return; }
   if(cphone.length!==10){ setMsg('Enter a valid 10-digit complainant mobile.',false); return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cemail)){ setMsg('Enter a valid complainant email — we send document requests & updates there.',false); return; }
@@ -529,17 +541,33 @@ async function raiseBranchClaim(){
       docOk=ur.ok;
       if(!ur.ok){ const ud=await ur.json().catch(()=>({})); docWhy=ud.detail||('error '+ur.status); }
     }catch(e){ docWhy=(e&&e.message)||'the upload did not go through'; }
+    // Anything else they had in hand. Optional, and sent separately so a refusal here can never
+    // take the mandatory letter down with it.
+    let extraFailed=[];
+    if(docOk && extras.length){
+      try{ const fd2=new FormData(); for(const f of extras) fd2.append('files',f);
+        const ur2=await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',
+          {method:'POST',headers:authHeaders(),body:fd2});
+        if(!ur2.ok){ const u2=await ur2.json().catch(()=>({}));
+          extraFailed.push(u2.detail||('error '+ur2.status)); }
+      }catch(e){ extraFailed.push('the upload did not go through'); }
+    }
     if(!docOk){
       setMsg('Claim #'+d.claim_id+' was created, but the rejection letter did NOT attach — '
              +docWhy+'. Open the claim below and attach it, or the case cannot move forward.',false);
-      $('bcRejFile').value='';
+      $('bcRejFile').value=''; $('bcDocs').value='';
+      ['bcRejList','bcDocsList'].forEach(function(i){ const e=$(i); if(e) e.innerHTML=''; });
       loadBranchClaims();
       btn.disabled=false;
       return;
     }
-    setMsg('Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.',true);
+    setMsg(extraFailed.length
+      ? ('Claim #'+d.claim_id+' submitted ✓ — but the other documents did not attach ('
+         +extraFailed.join('; ')+'). Open the claim below and add them.')
+      : 'Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.', !extraFailed.length);
     ['bcCompName','bcCompPhone','bcCompEmail','bcInsName','bcInsPhone','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
-    $('bcType').value=''; $('bcRejFile').value='';
+    $('bcType').value=''; $('bcRejFile').value=''; $('bcDocs').value='';
+    ['bcRejList','bcDocsList'].forEach(function(i){ const e=$(i); if(e) e.innerHTML=''; });
     try{ $('bcInsDiff').checked=false; $('bcInsRow').style.display='none'; }catch(_){}
     loadBranchClaims();
   }catch(e){ setMsg(e.message,false); }

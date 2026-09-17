@@ -5908,10 +5908,12 @@ async function openClaimDrawer(claimId) {
             ? `<button class="btn-sm btn-primary" onclick="sendDocReminderEmail(${c.claim_id})">📧 Email pending-docs reminder</button>`
             : `<span style="font-size:.78rem;color:var(--nd-warning-text)">⚠ No complainant email — use ✏️ Edit above to add one.</span>`}
           ${(c.complainant_phone || c.insured_phone)
-            ? `<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(${c.claim_id})">💬 Start WhatsApp collection</button>`
+            ? `<button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(${c.claim_id})">💬 Start WhatsApp collection</button>
+               <button class="btn-sm btn-ghost" onclick="schOpen(${c.claim_id})">⏰ Schedule a reminder</button>`
             : ''}
           <span id="docReminderMsg_${c.claim_id}" style="font-size:.78rem"></span>
         </div>
+        <div id="claimSched_${c.claim_id}" style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.35rem"></div>
         <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Only documents still unticked are asked for. If they have never written to us, the first message goes as our approved WhatsApp template; once they reply, the guided chat carries on from their answer.</div>
       </div>
     </div>
@@ -6074,6 +6076,8 @@ async function openClaimDrawer(claimId) {
 
   // (Claim tasks and reminders are no longer drawn on this panel - see the note above - so the
   //  two calls that fetched them have gone with the sections. The Tasks panel loads its own.)
+  // Reminders somebody has already set on this claim, under the collection buttons.
+  try { schList(c.claim_id); } catch(e){}
   // Load subscriber ⇄ ops message thread
   opsLoadMessages(c.claim_id);
   // Load "involved" watchers + my mute state
@@ -12574,10 +12578,20 @@ function obPick(id){
     +       '<option value="">Choose…</option><option value="health">Health</option>'
     +       '<option value="life">Life</option><option value="motor">Motor</option>'
     +       '<option value="general">General / Other</option></select></label>'
-    +   '<label style="font-size:.78rem;font-weight:600">Their mobile'
+    +   '<label style="font-size:.78rem;font-weight:600">Patient mobile'
     +     '<input id="obPhone" maxlength="20" style="' + _rmInp() + '"></label>'
-    +   '<label style="font-size:.78rem;font-weight:600">Their email'
+    +   '<label style="font-size:.78rem;font-weight:600">Patient email'
     +     '<input id="obEmail" maxlength="160" style="' + _rmInp() + '"></label>'
+    // WHO WE WILL DEAL WITH. Often not the patient - a son raising it for his mother - and every
+    // message, document ask and authorisation goes to this person.
+    +   '<label style="font-size:.78rem;font-weight:600">Complainant name '
+    +     '<span style="font-weight:400;color:var(--nd-text-faint)">(who deals with us)</span>'
+    +     '<input id="obCompName" maxlength="120" placeholder="Leave blank if same as the patient" '
+    +       'style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Complainant mobile'
+    +     '<input id="obCompPhone" maxlength="20" style="' + _rmInp() + '"></label>'
+    +   '<label style="font-size:.78rem;font-weight:600">Complainant email'
+    +     '<input id="obCompEmail" maxlength="160" style="' + _rmInp() + '"></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Insurance company'
     +     '<span id="obInsurerBox" style="display:block"></span></label>'
     +   '<label style="font-size:.78rem;font-weight:600">Policy no.'
@@ -12593,23 +12607,34 @@ function obPick(id){
     // move. What we do not do any more is take a claim and never mention the letter at all.
     + '<div style="margin-top:.7rem;padding:.6rem .7rem;border:1px solid var(--nd-border);'
     +   'border-radius:8px;background:var(--nd-bg-surface-2)">'
-    +   '<label style="font-size:.78rem;font-weight:600;display:block">Rejection letter'
+    +   '<label style="font-size:.78rem;font-weight:600;display:block">Rejection letter '
+    +     '<span class="req">*</span>'
     +     '<input type="file" id="obRej" style="display:block;margin-top:.3rem" '
-    +       'onchange="obRejPicked()"></label>'
+    +       'onchange="ndFiles(\'obRej\',\'obRejList\',obRejPicked)"></label>'
+    +   '<div id="obRejList" style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.25rem"></div>'
     +   '<div id="obRejWhyBox" style="margin-top:.45rem">'
     +     '<label style="font-size:.76rem;color:var(--nd-text-muted);display:block">'
     +       'No letter yet? Say why, and you can still raise it'
     +       '<input id="obRejWhy" maxlength="200" placeholder="e.g. insurer rejected by phone; '
     +         'letter being collected" style="' + _rmInp() + '"></label>'
     +   '</div>'
+    // Everything else they already have. Optional at intake on purpose - the rest can come later
+    // from the dashboard, WhatsApp, or a staffer - but if it is in their hand now, take it now.
+    +   '<label style="font-size:.78rem;font-weight:600;display:block;margin-top:.6rem">'
+    +     'Other documents '
+    +     '<span style="font-weight:400;color:var(--nd-text-faint)">(optional, as many as they have)</span>'
+    +     '<input type="file" id="obDocs" multiple style="display:block;margin-top:.3rem" '
+    +       'onchange="ndFiles(\'obDocs\',\'obDocsList\')"></label>'
+    +   '<div id="obDocsList" style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.25rem"></div>'
     + '</div>'
     + '<button class="btn btn-primary" style="margin-top:.7rem" onclick="obSubmit(this)">'
     +   'Raise this claim →</button>'
     + '<span id="obMsg" style="font-size:.82rem;margin-left:.6rem"></span>';
   try{ NidaanInsurers.mount('obInsurerBox', {style: _rmInp()}); }catch(e){}
 }
-// Picked a letter? Then there is nothing to explain - hide the "why not" box so the form asks
-// for one thing, not two.
+// The shared picker (nidaan_files.js) draws the chosen files with a Remove on each and writes
+// back into the input, so the submit below just reads input.files. All this has to do is hide the
+// "why is there no letter" box the moment a letter IS attached, so the form asks one thing.
 function obRejPicked(){
   const el = document.getElementById('obRej');
   const box = document.getElementById('obRejWhyBox');
@@ -12631,7 +12656,9 @@ async function obSubmit(btn){
   }
   // Ask for the letter; let it through without one if they say why (founder, 17 Sep).
   const rejEl = document.getElementById('obRej');
-  const rejFile = rejEl && rejEl.files && rejEl.files[0];
+  const rejFile = (rejEl && rejEl.files && rejEl.files[0]) || null;
+  const docsEl = document.getElementById('obDocs');
+  const otherDocs = docsEl && docsEl.files ? Array.from(docsEl.files) : [];
   const rejWhy = g('obRejWhy');
   if (!rejFile && !rejWhy){
     if (msg){ msg.style.color = 'var(--nd-danger-text)';
@@ -12645,6 +12672,8 @@ async function obSubmit(btn){
                    insurer_name: (function(){ try{ return NidaanInsurers.value('obInsurerBox'); }
                                                 catch(e){ return ''; } })(),
                    policy_no: g('obPolicy'),
+                   complainant_name: g('obCompName'), complainant_phone: g('obCompPhone'),
+                   complainant_email: g('obCompEmail'),
                    disputed_amount: (isNaN(amt) ? null : amt),
                    notes_from_agent: (g('obNotes')
                      + (!rejFile && rejWhy
@@ -12659,27 +12688,41 @@ async function obSubmit(btn){
                 msg.textContent = '✓ Raised NP-' + d.claim_id + ' for ' + (d.on_behalf_of || ''); }
       // Attach the letter to the claim we just made, and SAY SO if it does not go on - a claim
       // that reports success while its letter never arrived is how NP-167 happened.
-      if (rejFile){
+      // The letter goes on its own so the mandatory one always lands even if the extras are
+      // refused; anything that does not attach is NAMED, never swallowed.
+      const failed = [];
+      const put = async function(files, key){
+        if (!files || !files.length) return;
         try{
-          const fd = new FormData(); fd.append('files', rejFile); fd.append('doc_key', 'rejection_letter');
+          const fd = new FormData();
+          for (const f of files) fd.append('files', f);
+          if (key) fd.append('doc_key', key);
           const ur = await API('/claims/' + d.claim_id + '/documents/upload', {method:'POST', body: fd});
           if (!ur.ok){
             const ud = await ur.json().catch(function(){ return {}; });
-            if (msg){ msg.style.color = 'var(--nd-warning-text)';
-              msg.textContent = 'NP-' + d.claim_id + ' raised, but the rejection letter did NOT attach — '
-                + _extractErr(ud, 'upload refused') + '. Open the claim and attach it.'; }
+            failed.push(files.map(function(f){ return f.name; }).join(', ')
+                        + ' (' + _extractErr(ud, 'refused') + ')');
           }
-        }catch(e){
-          if (msg){ msg.style.color = 'var(--nd-warning-text)';
-            msg.textContent = 'NP-' + d.claim_id + ' raised, but the rejection letter did NOT attach. '
-              + 'Open the claim and attach it.'; }
-        }
+        }catch(e){ failed.push(files.map(function(f){ return f.name; }).join(', ')); }
+      };
+      if (rejFile) await put([rejFile], 'rejection_letter');
+      if (otherDocs.length) await put(otherDocs, '');
+      if (failed.length && msg){
+        msg.style.color = 'var(--nd-warning-text)';
+        msg.textContent = 'NP-' + d.claim_id + ' raised, but these did NOT attach: '
+          + failed.join('; ') + '. Open the claim and attach them.';
       }
       ndUI.toast('NP-' + d.claim_id + ' raised for ' + (d.on_behalf_of || ''), 'success');
-      ['obName','obPhone','obEmail','obPolicy','obAmount','obNotes','obRejWhy'].forEach(function(id){
+      ['obName','obPhone','obEmail','obCompName','obCompPhone','obCompEmail',
+       'obPolicy','obAmount','obNotes','obRejWhy'].forEach(function(id){
         const e = document.getElementById(id); if (e) e.value = '';
       });
       if (rejEl) rejEl.value = '';
+      if (docsEl) docsEl.value = '';
+      ['obRejList','obDocsList'].forEach(function(id){
+        const e = document.getElementById(id); if (e) e.innerHTML = '';
+      });
+      obRejPicked();
     } else {
       if (msg){ msg.style.color = 'var(--nd-danger-text)';
                 msg.textContent = _extractErr(d, 'Could not raise that claim'); }
@@ -14658,7 +14701,9 @@ async function docsRender(msg, ok){
 // number of tries, and it goes out through the same door as every other message, so the daily
 // cap and the STOP list still apply.
 async function schList(claimId){
-  const box = document.getElementById('dcSched');
+  // The same list, wherever it is asked for: the documents window, or the claim panel.
+  const box = document.getElementById('dcSched')
+           || document.getElementById('claimSched_' + claimId);
   if (!box) return;
   try{
     const r = await API('/claims/' + claimId + '/reminders');
@@ -14685,7 +14730,11 @@ async function schList(claimId){
   }catch(e){ box.innerHTML = ''; }
 }
 
-function schOpen(claimId){
+// Remember which screen asked for this, so closing returns there instead of throwing the person
+// into the documents window they never opened.
+let _schFrom = 'docs';
+function schOpen(claimId, from){
+  _schFrom = from || (document.getElementById('dcSched') ? 'docs' : 'panel');
   // Default to the next Sunday at 9am - the founder's own example of when people are at home
   // with their papers - but it is only a starting point, every field is theirs to change.
   const d = new Date();
@@ -14717,7 +14766,8 @@ function schOpen(claimId){
     + '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
     +   '<input type="checkbox" id="schStop" checked> Stop as soon as every document is in</label>'
     + '<div id="schMsg" style="font-size:.82rem;margin-top:.4rem"></div>',
-    [{label:'Cancel', cls:'btn-ghost', fn:function(){ closeModal(); docsOpen(claimId); }},
+    [{label:'Cancel', cls:'btn-ghost', fn:function(){ closeModal();
+        if (_schFrom === 'docs') docsOpen(claimId); else schList(claimId); }},
      {label:'Set the reminder', cls:'btn-primary', fn:function(){ schSave(claimId); }}], false);
 }
 function schRepeatChanged(){
@@ -14749,7 +14799,7 @@ async function schSave(claimId){
     }
     closeModal();
     ndUI.toast('Reminder set for ' + (d.next_ist || ''), 'success');
-    docsOpen(claimId);
+    if (_schFrom === 'docs') docsOpen(claimId); else schList(claimId);
   }catch(e){
     if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not set that reminder.'; }
   }

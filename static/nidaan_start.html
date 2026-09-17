@@ -1131,6 +1131,12 @@ async function _prefillClaimForm() {
         <div class="field"><label><span class="en">Contact Email *</span><span class="hi">संपर्क ईमेल *</span></label><input type="email" id="rv_insured_email" placeholder="name@email.com" autocomplete="email"></div>
       </div>
       <p style="font-size:.74rem;color:var(--nd-text-faint);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
+      <!-- Who WE will deal with. On a claim raised for a parent or a spouse this is a different
+           person from the patient, and every message and document request goes to them. -->
+      <div class="rev-row2" style="margin-top:.6rem">
+        <div class="field"><label><span class="en">Who will deal with us?</span><span class="hi">हमसे कौन बात करेगा?</span></label><input type="text" id="rv_comp_name" placeholder="Leave blank if it is the patient" autocomplete="name"></div>
+        <div class="field"><label><span class="en">Their mobile</span><span class="hi">उनका मोबाइल</span></label><input type="tel" id="rv_comp_phone" placeholder="10-digit mobile" inputmode="tel"></div>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -1346,6 +1352,9 @@ async function submitFreeClaim() {
     branch_code: (document.getElementById('rv_branch_code')?.value || '').trim().toUpperCase(),
     policy_inception_date: (document.getElementById('rv_policy_inception')?.value || '') || null,
     tpa_name: (document.getElementById('rv_tpa_name')?.value || '').trim(),
+    // Who we will actually deal with, when that is not the patient.
+    complainant_name: (document.getElementById('rv_comp_name')?.value || '').trim(),
+    complainant_phone: (document.getElementById('rv_comp_phone')?.value || '').trim(),
   };
 
   btn.disabled = true;

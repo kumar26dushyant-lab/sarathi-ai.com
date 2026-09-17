@@ -106,7 +106,8 @@ var T = {
     vOpen:"Open my claim page",
     vAgain:"Send it again",
     vNever:"⚠️ We will never ask you for this code — not on a call, not on WhatsApp.",
-    vNoWay:"We do not have a phone or email on your claim. Please call us and we will help you."
+    vNoWay:"We do not have a phone or email on your claim. Please call us and we will help you.",
+    vWaShut:"WhatsApp can carry the code only after you have written to us. Use email, or send us any WhatsApp message and come back."
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
@@ -137,7 +138,8 @@ var T = {
     vOpen:"मेरा क्लेम पेज खोलें",
     vAgain:"दोबारा भेजें",
     vNever:"⚠️ हम आपसे यह कोड कभी नहीं पूछेंगे — न कॉल पर, न WhatsApp पर।",
-    vNoWay:"आपके क्लेम पर कोई फ़ोन या ईमेल दर्ज नहीं है। कृपया हमें कॉल कीजिए, हम मदद करेंगे।"
+    vNoWay:"आपके क्लेम पर कोई फ़ोन या ईमेल दर्ज नहीं है। कृपया हमें कॉल कीजिए, हम मदद करेंगे।",
+    vWaShut:"WhatsApp पर कोड तभी जा सकता है जब आप हमें लिख चुके हों। ईमेल चुनिए, या हमें WhatsApp पर कोई संदेश भेजकर वापस आइए।"
   }
 };
 function t(k){ return (T[LANG]||T.en)[k] || T.en[k] || k; }
@@ -210,10 +212,18 @@ async function askWhoYouAre(){
       '<div class="card"><h2>' + esc(t("vTitle")) + '</h2><p>' + esc(t("vNoWay")) + '</p></div>';
     return;
   }
+  // An option that cannot deliver is worse than no option: WhatsApp only carries a code once the
+  // person has written to us, so when it cannot, say so instead of letting them press it and
+  // spend one of their codes on a message that never arrives.
   var btns = ch.map(function(c){
-    return '<button class="btn" style="width:100%;margin-bottom:.5rem" onclick="sendCode(\'' + c.kind + '\')">'
-      + esc(c.kind === "whatsapp" ? t("vWhats") : t("vEmail"))
-      + ' <span style="opacity:.75">' + esc(c.masked) + '</span></button>';
+    var ready = (c.ready !== false);
+    return '<button class="btn" style="width:100%;margin-bottom:.5rem'
+      + (ready ? '' : ';opacity:.55') + '"'
+      + (ready ? ' onclick="sendCode(\'' + c.kind + '\')"' : ' disabled')
+      + '>' + esc(c.kind === "whatsapp" ? t("vWhats") : t("vEmail"))
+      + ' <span style="opacity:.75">' + esc(c.masked) + '</span></button>'
+      + (ready ? '' : '<div style="font-size:.8rem;color:#64748b;margin:-.3rem 0 .6rem">'
+          + esc(t("vWaShut")) + '</div>');
   }).join("");
   document.getElementById("content").innerHTML =
       '<div class="card">'
@@ -241,7 +251,7 @@ async function sendCode(kind){
   try{
     var r = await fetch("/nidaan/claim/api/verify/start", { method:"POST",
       headers:{ "Authorization":"Bearer "+TOKEN, "Content-Type":"application/json" },
-      body: JSON.stringify({ channel: kind }) });
+      body: JSON.stringify({ channel: kind, lang: LANG }) });
     var d = await r.json().catch(function(){ return {}; });
     if(!r.ok){ msg.style.color = "#b91c1c"; msg.textContent = d.detail || "Could not send the code."; return; }
     msg.textContent = "";
