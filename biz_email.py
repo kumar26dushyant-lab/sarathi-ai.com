@@ -128,7 +128,8 @@ async def send_email(to_email: str, subject: str, html_body: str,
     unsubscribe_header = f"<mailto:{sender_email}?subject=Unsubscribe>"
 
     async def _smtp_send(acct_user: str = "", acct_pass: str = "",
-                         acct_host: str = "", acct_port: int = 0) -> bool:
+                         acct_host: str = "", acct_port: int = 0,
+                         _internal: bool = False) -> bool:
         """Send via SMTP using the given account (defaults to the shared SMTP_* account).
         Returns True on success; never raises."""
         _user = acct_user or SMTP_USER
@@ -142,14 +143,25 @@ async def send_email(to_email: str, subject: str, html_body: str,
             msg["From"] = f"{sender_name} <{sender_email}>"
             msg["To"] = ", ".join(_recips) if _recips else to_email
             msg["Subject"] = subject
-            msg["Reply-To"] = reply_to or sender_email
-            # Sender header: who actually sent (on behalf of From), for RFC-compliant clients.
-            if _user and _user != sender_email:
-                msg["Sender"] = f"{sender_name} <{_user}>"
+            # A From on one domain with a Reply-To on another is a phishing signature, and Gmail
+            # scores it that way - it was enough on its own to put a login code in Spam. Internal
+            # mail keeps everything on the sending account; the address to write back to is in the
+            # body of these messages anyway.
+            if not _internal:
+                msg["Reply-To"] = reply_to or sender_email
+                # Sender header: who actually sent (on behalf of From), for RFC-compliant clients.
+                if _user and _user != sender_email:
+                    msg["Sender"] = f"{sender_name} <{_user}>"
             msg["MIME-Version"] = "1.0"
-            msg["Message-ID"] = f"<{uuid.uuid4()}@sarathi-ai.com>"
-            msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
-            msg["X-Mailer"] = "Sarathi-AI CRM"
+            # The Message-ID domain must match the sender's, or Gmail treats the message as
+            # suspect - that alone put a login code in Spam when everything else was right.
+            _mid_domain = (_user or sender_email).split("@")[-1] or "sarathi-ai.com"
+            msg["Message-ID"] = f"<{uuid.uuid4()}@{_mid_domain}>"
+            # A login code is not a mailing list. List-Unsubscribe and a marketing X-Mailer on a
+            # one-to-one transactional message are spam signals, so internal mail goes without.
+            if not _internal:
+                msg["List-Unsubscribe"] = f"<mailto:{FROM_SUPPORT or sender_email}?subject=Unsubscribe>"
+                msg["X-Mailer"] = "Sarathi-AI CRM"
             msg.attach(MIMEText(plain, "plain", "utf-8"))
             msg.attach(MIMEText(html_body, "html", "utf-8"))
             # Port 465 = implicit TLS; 587/others = STARTTLS. Many cloud hosts block 587
@@ -187,6 +199,35 @@ async def send_email(to_email: str, subject: str, html_body: str,
     # are set — Sarathi mail never touches this branch, so its path is unchanged. On failure it falls
     # through to the existing transports as backup.
     _is_nidaan_sender = (sender_email or "").lower().endswith("@nidaanpartner.com")
+
+    # ── MAIL TO OUR OWN DOMAIN MUST NOT GO THROUGH A THIRD PARTY ────────────────
+    # Google Workspace discards mail that arrives from OUTSIDE claiming to be from our own domain
+    # — standard anti-spoofing, and it does it silently: no bounce, no spam folder, nothing.
+    # Every branch login address is @nidaanpartner.com, so every branch login code disappeared
+    # while the API told us it had sent (founder, 17 Sep: "all branches are not receiving OTP").
+    #
+    # Measured, same mailbox, same minute:
+    #   Brevo, From: info@nidaanpartner.com   → NOWHERE
+    #   Brevo, From: nidaanpartner@gmail.com  → Spam
+    #   Gmail SMTP direct                     → Inbox
+    #
+    # So anything addressed to our own domain goes out through Gmail SMTP, whose From is a real
+    # Gmail account and therefore not a spoof of our domain. Customer mail (gmail, yahoo, company
+    # addresses) is untouched and keeps the branded Nidaan sender.
+    _own_domain = "@nidaanpartner.com"
+    _to_own_domain = any((e or "").lower().endswith(_own_domain) for e in (_recips or [to_email]))
+    if _to_own_domain and SMTP_HOST and SMTP_USER and SMTP_PASSWORD:
+        # The From has to be the real Gmail account too: a branded From on our own domain is the
+        # very thing Workspace refuses from outside. Reply-To keeps the branded address, so a
+        # reply still reaches the office.
+        _reply_keep = reply_to or sender_email
+        sender_email, reply_to = SMTP_USER, _reply_keep
+        if await _smtp_send(_internal=True):
+            logger.info("📧 SMTP ✓ (own-domain recipient) '%s' → %s", subject, to_email)
+            return True
+        logger.error("📧 SMTP failed for an own-domain recipient (%s) — falling through. Brevo "
+                     "cannot reach @nidaanpartner.com with our own domain in the From, so this "
+                     "mail may not arrive.", to_email)
     # The Nidaan Workspace SMTP creds (info@nidaanpartner.com) are currently rejected by
     # Gmail (535 BadCredentials), which spammed the error log while Brevo silently delivered.
     # Brevo is DKIM-authenticated for nidaanpartner.com → inbox, so we default to Brevo-first
