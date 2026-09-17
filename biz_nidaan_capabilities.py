@@ -729,7 +729,7 @@ CAPABILITIES: list[dict] = [
     {
         "id": "claim_documents",
         "en": {"t": "Open a claim's documents without downloading them",
-               "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary') and it is saved on the claim. Any file except video, up to 25 MB, virus-scanned before it is stored.",
+               "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary'), or remove a wrong one — which reopens the checklist line it answered, so we ask for the right one. Any file except video, up to 25 MB, virus-scanned before it is stored.",
                "u": "Open a claim → Documents → click a file to read it, or ✏️ to rename it. Download is still one click away."},
         "hi": {"t": "क्लेम के दस्तावेज़ बिना डाउनलोड किए खोलें",
                "d": "दस्तावेज़ पर क्लिक करें और पेज में ही पढ़ें — PDF, फोटो और Word पत्र। ग़लत नाम वाली फाइल का नाम बदलें (IMG_2231 → 'डिस्चार्ज समरी'), वह क्लेम पर दर्ज हो जाता है। वीडियो छोड़कर हर तरह की फाइल, 25 MB तक, स्टोर करने से पहले वायरस जाँच।",

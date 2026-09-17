@@ -1,5 +1,40 @@
 # Staff Announcement Drafts
 
+## 2026-09-17 — Remove a wrong document, and the claim asks for it again
+
+**Title (EN):**
+🗑 Wrong document? Remove it · 📭 We now spot a claim that arrives with nothing
+
+**Details (EN):**
+• **Every place you can attach a file, you can now remove it** — including the Documents window, which had no way to delete. It asks you to confirm first.
+
+• **Removing a document reopens its checklist line.** Before, a wrong file removed left the line ticked, so we never asked for the right one.
+
+• **A claim that arrives with no documents is now flagged** to the super admins 20 minutes after it comes in. If you raise a claim, attach the rejection letter — the case is built on it.
+
+• **If an upload fails, you will be told.** Branch claims used to say "submitted ✓" even when the rejection letter never attached. That is how NP-167 reached us empty.
+
+• **Claim screen:** "Level-2" is now **Consolidation**, and the button says **Move to Consolidation**. Notes and Involved are one box under Assign to staff — pick a colleague from the dropdown, or type @ in the note.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+🗑 ग़लत दस्तावेज़? हटा दीजिए · 📭 खाली आए क्लेम की अब जानकारी मिलती है
+
+**Details (HI):**
+• **जहाँ भी फाइल लगाई जा सकती है, वहाँ अब हटाई भी जा सकती है** — Documents विंडो सहित, जहाँ पहले हटाने का कोई रास्ता नहीं था। हटाने से पहले पुष्टि पूछी जाती है।
+
+• **दस्तावेज़ हटाने पर उसकी चेकलिस्ट लाइन दोबारा खुल जाती है।** पहले ग़लत फाइल हटाने पर भी टिक लगा रह जाता था, इसलिए सही दस्तावेज़ कभी माँगा ही नहीं जाता था।
+
+• **बिना दस्तावेज़ के आया क्लेम अब 20 मिनट में सुपर एडमिन को दिखता है।** क्लेम रेज़ करते समय रिजेक्शन लेटर ज़रूर लगाइए — पूरा केस उसी पर खड़ा होता है।
+
+• **अपलोड फेल हो तो अब आपको पता चलेगा।** ब्रांच क्लेम में पहले "submitted ✓" दिख जाता था, जबकि रिजेक्शन लेटर लगा ही नहीं होता था। NP-167 इसी तरह खाली आया।
+
+• **क्लेम स्क्रीन:** "Level-2" अब **Consolidation** है, और बटन कहता है **Move to Consolidation**। Notes और Involved अब एक ही बॉक्स में हैं — ड्रॉपडाउन से साथी चुनिए, या नोट में @ लिखिए।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-16 (4) — The complainant's page now checks it is really them
 
 **Title (EN):**
