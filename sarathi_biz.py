@@ -6899,6 +6899,19 @@ async def ops_payment_guardian_run(request: Request):
     return await _pg.run_guardian()
 
 
+@app.get("/nidaan/ops/api/stats/line")
+@limiter.limit("60/minute")
+async def nidaan_ops_line_stats(request: Request):
+    """How the two work screens are performing — the queue waiting to be handed over, and the
+    line itself. Every number answers "is this moving?"; the ones that matter most are the oldest
+    thing waiting and the count stuck, because those name the claims going quiet."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_stats as _stats
+    return await _stats.both()
+
+
 @app.get("/nidaan/ops/api/changes")
 async def nidaan_ops_changes(request: Request):
     """One number that goes up whenever a claim, move, field, document, note, payment or task
