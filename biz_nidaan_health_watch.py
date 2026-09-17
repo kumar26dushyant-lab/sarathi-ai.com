@@ -39,9 +39,15 @@ _CRITICAL = {
     "Subscriber login — a way in", "Subscriber login — code delivery",
     "Staff login",
     "Complainant portal — a way in", "Complainant portal — code delivery",
-    # Runs out silently and keeps reporting success. Nobody would ever notice by looking.
-    "Email sending allowance",
 }
+
+# Deliberately NOT critical: "Email sending allowance".
+# It is a SUPPLY notice, not an outage. When Brevo runs dry we skip it and the mail still goes
+# out over Workspace/Gmail, so nothing is broken and nobody needs waking — and if mail ever
+# genuinely stops, the outcome-based checks above ("… — code delivery") page instead, because
+# they judge what actually happened to the codes we sent. It stays red in App Health so it gets
+# topped up, but it does not ring 14 phones. An alarm that fires when nothing is broken teaches
+# people to ignore the ones that matter.
 
 
 async def _load_state() -> dict:
