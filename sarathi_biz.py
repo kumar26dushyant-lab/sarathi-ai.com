@@ -11992,6 +11992,30 @@ async def _subsystem_checks() -> list:
     except Exception as _e:
         _chk("Backups", False, f"check failed: {str(_e)[:70]}")
 
+    # ── Email sending allowance ─────────────────────────────────────────────
+    # The worst kind of failure: Brevo's free plan does not refuse when it runs out, it returns
+    # 201 with a messageId and delivers nothing. On 17 Sep that turned 49 complainant login codes
+    # into 7 logins while every log line read "Brevo ✓". Nothing can detect that after the fact —
+    # only the balance can, in advance, which is the whole point of watching it here.
+    try:
+        import biz_email as _es
+        _left = await _es.brevo_credits()
+        if not os.getenv("BREVO_API_KEY", "").strip():
+            pass                       # not configured; the panel already says so
+        elif _left is None:
+            _chk("Email sending allowance", True, "Brevo balance could not be read just now")
+        elif _left <= 0:
+            _chk("Email sending allowance", False,
+                 "Brevo has NO sends left — it accepts mail and delivers nothing, so it is being "
+                 "skipped. Mail is going out over Workspace/Gmail SMTP instead.")
+        elif _left < 50:
+            _chk("Email sending allowance", False,
+                 "Brevo is nearly out: %d sends left. It fails SILENTLY at zero." % _left)
+        else:
+            _chk("Email sending allowance", True, "Brevo has %d sends left" % _left)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Email sending allowance", False, "check failed: %s" % str(_e)[:70])
+
     checks.extend(await _login_checks())
     return checks
 
@@ -12168,12 +12192,15 @@ async def _login_checks() -> list:
                 "AND COALESCE(NULLIF(c.complainant_email,''), c.insured_email, '') = ''"
             )).fetchone()
         _unreachable = int((_r or [0])[0] or 0)
-        _chk("Complainant portal", _unreachable == 0,
+        _chk("Complainant portal — a way in", _unreachable == 0,
              "every portal has a mobile or an email to send its code to"
              if not _unreachable
              else "%d portals have no mobile and no email — nobody can open them" % _unreachable)
     except Exception as _e:  # noqa: BLE001
-        _chk("Complainant portal", False, "check failed: %s" % str(_e)[:70])
+        _chk("Complainant portal — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("portal", "Complainant portal — code delivery",
+              "codes go to the mobile or email already on the claim")
 
     return out
 
@@ -12189,6 +12216,8 @@ async def ops_health(request: Request):
     def _chk(name, ok, note=""):
         checks.append({"name": name, "ok": bool(ok), "note": note})
     _chk("Database", health is not None, "SQLite reachable")
+    # Brevo's balance is checked in _subsystem_checks (so the watchdog sees it too) — here we
+    # only say whether it is wired up at all.
     _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
     _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
     # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe

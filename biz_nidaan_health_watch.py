@@ -37,7 +37,10 @@ _CRITICAL = {
     # gap to close, not a middle-of-the-night alarm.
     "Branch login — a way in", "Branch login — code delivery",
     "Subscriber login — a way in", "Subscriber login — code delivery",
-    "Staff login", "Complainant portal",
+    "Staff login",
+    "Complainant portal — a way in", "Complainant portal — code delivery",
+    # Runs out silently and keeps reporting success. Nobody would ever notice by looking.
+    "Email sending allowance",
 }
 
 

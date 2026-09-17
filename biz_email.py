@@ -84,6 +84,44 @@ def is_enabled() -> bool:
     return _initialized
 
 
+# ── Brevo's silent cliff ─────────────────────────────────────────────────────
+# Brevo's free plan allows a fixed number of sends. When they run out it does NOT start
+# refusing: it keeps returning 201 with a real-looking messageId and never delivers the mail.
+# Measured on 17 Sep with credits at zero — a live send returned
+#   201 {"messageId":"<...@smtp-relay.mailin.fr>"}
+# and nothing arrived. That is how 49 complainant login codes produced 7 logins while every log
+# line said "Brevo ✓". So the credit balance is checked before we trust Brevo with anything, and
+# when it is exhausted we skip straight to a transport that actually sends.
+_BREVO_TTL_S = 900          # a balance this coarse does not need checking more often
+_brevo_state: dict = {"at": -1e9, "credits": None}
+
+
+async def brevo_credits(force: bool = False) -> Optional[int]:
+    """Sends Brevo will actually perform. None = unknown (never block sending on a bad read)."""
+    import time as _t
+    now = _t.monotonic()
+    if not force and (now - _brevo_state["at"]) < _BREVO_TTL_S:
+        return _brevo_state["credits"]
+    key = os.getenv("BREVO_API_KEY", "").strip()
+    if not key:
+        return None
+    _brevo_state["at"] = now
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get("https://api.brevo.com/v3/account",
+                            headers={"api-key": key, "accept": "application/json"})
+        if r.status_code != 200:
+            return _brevo_state["credits"]
+        for p in (r.json() or {}).get("plan") or []:
+            if (p.get("creditsType") or "") == "sendLimit" or p.get("credits") is not None:
+                _brevo_state["credits"] = int(p.get("credits") or 0)
+                return _brevo_state["credits"]
+    except Exception as e:  # noqa: BLE001
+        logger.debug("brevo credit check failed: %s", e)
+    return _brevo_state["credits"]
+
+
 # ── Send Email ───────────────────────────────────────────────────────────────
 
 async def send_email(to_email: str, subject: str, html_body: str,
@@ -295,6 +333,11 @@ async def send_email(to_email: str, subject: str, html_body: str,
 
     # ─── Path 1: Brevo (free 300/day, proper DKIM) — fallback for aligned senders ─
     brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+    if brevo_key and (await brevo_credits()) == 0:
+        # Exhausted. Sending anyway would return a confident 201 and deliver nothing, so the
+        # message would be lost AND reported as sent. Skip to a transport that really sends.
+        logger.warning("📧 Brevo has 0 sends left — skipping it for '%s' → %s", subject, to_email)
+        brevo_key = ""
     if brevo_key:
         try:
             import httpx

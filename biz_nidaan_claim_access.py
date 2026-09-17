@@ -139,12 +139,12 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
     if await _codes_this_hour(claim_id) >= MAX_CODES_PER_HOUR:
         return {"ok": False, "reason": "rate_limited", "message": _T("rate_limited", lang)}
 
-    # WhatsApp only carries a free-form message inside the 24 hours after the person last wrote
-    # to US. Outside that window Meta refuses it, and until the authentication template is
-    # approved there is no other way to put a code on WhatsApp. So we say that HERE, plainly,
-    # instead of letting them press a button that cannot work and burn one of their codes on it.
-    if kind == "whatsapp" and not await _wa_reachable(dest):
-        return {"ok": False, "reason": "wa_window_closed", "message": _T("wa_closed", lang)}
+    # The 24-hour gate that used to sit here is gone: np_login_code is approved at Meta, so a
+    # code now reaches a complainant COLD. Asking someone locked out of their own claim page to
+    # "send us a WhatsApp message first" was never a real instruction. The one thing that still
+    # stops us is a number that has replied STOP, which we must honour.
+    if kind == "whatsapp" and await _wa_opted_out(dest):
+        return {"ok": False, "reason": "wa_stopped", "message": _T("wa_stopped", lang)}
 
     code = "".join(secrets.choice("0123456789") for _ in range(CODE_DIGITS))
     masked = mask_phone(dest) if kind == "whatsapp" else mask_email(dest)
@@ -160,6 +160,14 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
         await conn.commit()
 
     sent = await _send(kind, dest, code, claim, lang)
+    # Recorded like every other way in, so App Health can see this one too. Its absence is why
+    # 49 codes produced 7 logins on 17 Sep with nothing anywhere reporting a problem.
+    try:
+        import biz_nidaan_login_health as _lh
+        await _lh.record("portal", kind, dest, bool(sent.get("ok")),
+                         detail=str(sent.get("error") or "")[:150], via=sent.get("via") or "")
+    except Exception:  # noqa: BLE001
+        pass
     if not sent.get("ok"):
         logger.warning("claim %s: could not send the %s code: %s", claim_id, kind, sent.get("error"))
         # A code that never left does not count against them. Deleting the row keeps the
@@ -174,18 +182,18 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
     return {"ok": True, "kind": kind, "masked": masked, "ttl_min": CODE_TTL_MIN}
 
 
-async def _wa_reachable(phone: str) -> bool:
-    """True only if a plain WhatsApp message would actually be delivered to this number today."""
+async def _wa_opted_out(phone: str) -> bool:
+    """True if this number told us to stop. A login code is wanted, but STOP means STOP.
+
+    Deliberately fails OPEN: if we cannot read the contact we let the send proceed rather than
+    lock somebody out of their claim on the strength of a database hiccup.
+    """
     try:
         import biz_nidaan_whatsapp as _w, biz_nidaan_wa_flow as _flow
         if not _w.is_configured():
             return False
-        msisdn = _w.normalize_msisdn(phone)
-        # Someone who replied STOP is not reachable, whatever the window says.
-        c = await _flow.get_contact(msisdn) or {}
-        if str(c.get("status") or "").lower() == "stopped":
-            return False
-        return bool(await _flow.in_session_window(msisdn))
+        c = await _flow.get_contact(_w.normalize_msisdn(phone)) or {}
+        return str(c.get("status") or "").lower() == "stopped"
     except Exception:  # noqa: BLE001
         return False
 
@@ -199,18 +207,16 @@ _MSG = {
               "हैं। थोड़ी देर रुकिए, "
               "या हमें कॉल कीजिए।",
     },
-    "wa_closed": {
-        "en": "WhatsApp cannot carry the code right now — we can only message you there once "
-              "you have written to us. Use email instead, or send us any WhatsApp message first "
-              "and try again.",
-        "hi": "अभी WhatsApp पर कोड नहीं "
-              "भेजा जा सकता — हम "
-              "आपको वहाँ तभी संदेश "
-              "भेज सकते हैं जब आप "
-              "हमें लिख चुके हों। "
-              "कृपया ईमेल चुनिए, "
-              "या पहले हमें WhatsApp पर "
-              "कोई संदेश भेजिए।",
+    "wa_stopped": {
+        "en": "You asked us to stop messaging you on WhatsApp, so we cannot send the code there. "
+              "Use email instead, or reply START on WhatsApp to turn messages back on.",
+        "hi": "आपने हमें WhatsApp पर "
+              "संदेश भेजने से मना "
+              "किया था, इसलिए कोड "
+              "वहाँ नहीं भेज सकते। "
+              "ईमेल चुनिए, या WhatsApp पर "
+              "START लिखकर संदेश "
+              "दोबारा चालू कीजिए।",
     },
     "send_failed": {
         "en": "We could not send the code just now. Try the other way, or call us.",
@@ -246,12 +252,21 @@ async def _send(kind: str, dest: str, code: str, claim: dict, lang: str) -> dict
     if kind == "whatsapp":
         try:
             import biz_nidaan_whatsapp as _wa
-            text = _SMS.get(lang, _SMS["hinglish"]).format(code=code, mins=CODE_TTL_MIN)
+            # The approved authentication template reaches them cold. Free-form is kept only as
+            # a second try, for the case where the template itself is unavailable.
             # 'critical': somebody is standing at the door waiting for this. It is never held
             # back by the "how often may we speak first" caps.
             with _wa.sending_as("critical"):
-                r = await _wa.send_text(dest, text)
-            return {"ok": bool(r.get("ok")), "error": r.get("error")}
+                r = await _wa.send_auth_code(dest, code,
+                                             lang="hi" if (lang or "").lower().startswith("hi")
+                                             else "en")
+                via = "WhatsApp authentication template"
+                if not r.get("ok"):
+                    text = _SMS.get(lang, _SMS["hinglish"]).format(code=code, mins=CODE_TTL_MIN)
+                    _fb = await _wa.send_text(dest, text)
+                    if _fb.get("ok"):
+                        r, via = _fb, "WhatsApp free-form (template refused)"
+            return {"ok": bool(r.get("ok")), "error": r.get("error"), "via": via}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)[:120]}
     try:
@@ -267,10 +282,14 @@ async def _send(kind: str, dest: str, code: str, claim: dict, lang: str) -> dict
             'can ignore this email.</p>'
             '<p>— Team NidaanPartner</p></div>'
         ) % (name or "ji", code, CODE_TTL_MIN)
+        # delivery_critical, like every other code we send: somebody is on a screen waiting for
+        # it. This was the one code path without it — the last-resort retry never ran here.
+        _t: dict = {}
         r = await _mail.send_email(to_email=dest, subject="Your NidaanPartner code: %s" % code,
-                                   html_body=html, from_name="Nidaan Partner")
+                                   html_body=html, from_name="Nidaan Partner",
+                                   delivery_critical=True, transport_out=_t)
         ok = bool(r.get("ok")) if isinstance(r, dict) else bool(r)
-        return {"ok": ok, "error": (r.get("error") if isinstance(r, dict) else "")}
+        return {"ok": ok, "error": _t.get("error") or "", "via": _t.get("via") or ""}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:120]}
 
