@@ -9628,7 +9628,10 @@ async function loadHealth() {
       <div class="section-hdr" style="margin-bottom:.35rem">
         <div><div class="section-title" style="font-size:1rem">🔑 Ways in — logins</div>
         <div class="section-sub">Can each kind of person actually get in, and if not, why</div></div>
-        <button class="btn-sm btn-ghost" onclick="healthAction('login_selftest','send a real login-path email to your own address and report which transport carried it','loginTestMsg')">✉️ Test login delivery</button>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <button class="btn-sm btn-ghost" onclick="healthAction('login_selftest','send a real login-path email to your own address and report which transport carried it','loginTestMsg')">✉️ Test login delivery</button>
+          <button class="btn-sm btn-ghost" onclick="healthAction('sender_test','check whether the info@nidaanpartner.com password works (logs in only, sends nothing)','loginTestMsg')">🪪 Test the sender</button>
+        </div>
       </div>
       <div style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:10px;padding:.2rem .8rem">
         ${loginRows||'<div style="padding:.7rem 0;font-size:.82rem;color:var(--nd-text-muted)">No login checks reported.</div>'}
