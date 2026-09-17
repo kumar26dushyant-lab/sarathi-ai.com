@@ -7940,6 +7940,11 @@ class _RaiseForSubReq(BaseModel):
     policy_no: str = Field("", max_length=80)
     disputed_amount: Optional[int] = None
     notes_from_agent: str = Field("", max_length=2000)
+    # Why the rejection letter is not attached. The founder allowed the claim through without one
+    # "but it should be recorded who is the staff and it's their responsibility later" (17 Sep),
+    # so the reason is a field of its own and lands on the timeline with the raiser's name —
+    # buried in a notes blob it is neither findable nor attributable.
+    no_letter_reason: str = Field("", max_length=300)
 
 
 @app.post("/nidaan/ops/api/subscribers/raise-claim")
@@ -7982,8 +7987,16 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
     )
     if not claim_id:
         raise HTTPException(status_code=400, detail=msg or "Could not raise that claim.")
+    _why = (body.no_letter_reason or "").strip()
     await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
-                     f"for account {body.account_id} ({acct.get('owner_name') or ''})"[:160])
+                     (f"for account {body.account_id} ({acct.get('owner_name') or ''})"
+                      + (f" — NO rejection letter: {_why}" if _why else ""))[:160])
+    if _why:
+        # On the timeline, with a name against it. The whole case is built on the rejection
+        # letter, so a claim that starts without one must say who decided that and why.
+        await nidaan.record_claim_activity(
+            claim_id, "raised_without_letter", actor=_actor_label(caller),
+            summary=f"Raised without the rejection letter by {_actor_label(caller)} — {_why}")
     # The complainant hears from us whichever door their claim came through — this one used to
     # be silent. Fire-and-forget: a WhatsApp hiccup must not fail the staff member's request.
     try:
