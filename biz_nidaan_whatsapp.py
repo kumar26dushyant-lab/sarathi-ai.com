@@ -249,6 +249,27 @@ async def send_template(to: str, name: str, lang: str = "en", components: Option
                         "type": "template", "template": tmpl})
 
 
+AUTH_TEMPLATE = "np_login_code"
+
+
+async def send_auth_code(to: str, code: str, lang: str = "en") -> dict:
+    """Send a login code on WhatsApp, COLD — no 24-hour window required.
+
+    This is the only way a code reaches someone who has not just written to us, which is what a
+    login fallback has to do to be worth having. Meta owns the wording of authentication
+    templates, so the code is all we supply — twice: once for the body, and once for the
+    copy-code button, which is a separate component with its own parameter (leave it out and the
+    send is rejected).
+    """
+    code = str(code)
+    components = [
+        {"type": "body", "parameters": [{"type": "text", "text": code}]},
+        {"type": "button", "sub_type": "url", "index": "0",
+         "parameters": [{"type": "text", "text": code}]},
+    ]
+    return await send_template(to, AUTH_TEMPLATE, lang=lang, components=components)
+
+
 async def send_text(to: str, body: str) -> dict:
     """Free-form text — delivers only inside the 24h session (complainant replied recently)."""
     return await _post({"messaging_product": "whatsapp", "to": normalize_msisdn(to),

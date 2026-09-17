@@ -748,36 +748,37 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
 
     # ── WhatsApp, when they ask for it ──────────────────────────────────────
     # The code lives against the branch's EMAIL either way, so verification is unchanged - only
-    # the delivery differs. Two honest limits are reported rather than hidden: a branch with no
-    # mobile on file cannot use this, and WhatsApp carries a free-form message only inside the 24
-    # hours after they last wrote to us (no authentication template is approved yet). When the
-    # window is shut we say so and hand them a link that opens the chat, which opens it.
+    # the delivery differs. It now goes as an APPROVED AUTHENTICATION TEMPLATE, which reaches a
+    # branch cold: no "write to us first", no 24-hour window. That instruction was the whole
+    # reason this fallback was not really a fallback - the person locked out is the least able to
+    # go and open a chat window. One honest limit remains: a branch with no mobile on file.
     if (body.channel or "").strip().lower() == "whatsapp":
         phone = (branch.get("contact_phone") or "").strip()
         if not phone:
             return JSONResponse(
                 {"detail": "We do not have a mobile number for this branch. Use email, or ask the "
                            "office to add your number."}, status_code=400)
-        import biz_nidaan_whatsapp as _wa, biz_nidaan_wa_flow as _flow
+        import biz_nidaan_whatsapp as _wa
         msisdn = _wa.normalize_msisdn(phone)
-        if not await _flow.in_session_window(msisdn):
-            wa_num = (os.getenv("WA_NIDAAN_DISPLAY_NUMBER") or "").strip()
-            return JSONResponse(
-                {"detail": "WhatsApp can send your code only after you have written to us. Send "
-                           "any message to our WhatsApp number and tap this again.",
-                 "wa_link": ("https://wa.me/%s?text=Login" % wa_num.lstrip("+")) if wa_num else "",
-                 "reason": "window_closed"}, status_code=400)
-        text = ("Your NidaanPartner branch login code is %s. It expires in 10 minutes. "
-                "We will never ask you for this code." % result["otp"])
         with _wa.sending_as("critical"):
-            sent = await _wa.send_text(msisdn, text)
+            sent = await _wa.send_auth_code(msisdn, result["otp"])
+            _via = "WhatsApp authentication template"
+            if not sent.get("ok"):
+                # Last resort: if the template is somehow unavailable, a free-form message still
+                # works for a branch that HAS written to us recently. Outside that window this
+                # fails too, which is no worse than not trying.
+                text = ("Your NidaanPartner branch login code is %s. It expires in 10 minutes. "
+                        "We will never ask you for this code." % result["otp"])
+                _fallback = await _wa.send_text(msisdn, text)
+                if _fallback.get("ok"):
+                    sent, _via = _fallback, "WhatsApp free-form (template refused)"
         await _login_health.record("branch", "whatsapp", msisdn, bool(sent.get("ok")),
-                                   detail=str(sent.get("error") or "")[:150],
-                                   via="WhatsApp Cloud API")
+                                   detail=str(sent.get("error") or "")[:150], via=_via)
         if not sent.get("ok"):
             return JSONResponse({"detail": "WhatsApp could not deliver the code just now. "
                                            "Please use email."}, status_code=400)
-        logger.info("📱 Branch login code sent on WhatsApp → %s", branch.get("branch_code"))
+        logger.info("📱 Branch login code sent on WhatsApp (%s) → %s",
+                    _via, branch.get("branch_code"))
         return {"status": "otp_sent", "channel": "whatsapp"}
 
     # One-click login link (magic token, 20 min) alongside the code — mobile-friendly.
