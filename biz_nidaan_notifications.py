@@ -2167,8 +2167,8 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
     # account-holder here, so no collision with any subscriber-facing confirmation).
     try:
         import biz_nidaan_wa_orchestrator as _orch
-        await _orch.wa_journey(claim_id, "thank_you_payment",
-                               extra={"amount": str(fee) if fee else ""})
+        # No amount: this is a welcome that the work has started, nothing about money.
+        await _orch.wa_journey(claim_id, "thank_you_payment")
     except Exception as e:
         logger.warning("on_branch_l2_paid wa_journey failed claim %s: %s", claim_id, e)
 
@@ -3178,18 +3178,21 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
     lang = _funnel_lang(prefs.get("comm_lang") or "en")
     name = (claim.get("owner_name") or "").split(" ")[0]
 
+    # No figure here either. This can reach a person who did not pay, and even when it reaches
+    # the payer, their bank has already told them the amount. What they need from US is that the
+    # work has started. (founder, 18 Sep)
     if lang == "hi":
-        body = (f"धन्यवाद {name}! ✅ आपका ₹499 भुगतान मिल गया।\n\n"
+        body = (f"धन्यवाद {name}! ✅ आपका क्लेम दर्ज हो गया है।\n\n"
                 f"आपके *{claim.get('insured_name','')}* के क्लेम की विशेषज्ञ समीक्षा अभी शुरू हो गई है। "
                 f"आपकी विस्तृत रिपोर्ट *24-48 कार्य-घंटों* में मिलेगी — यहीं WhatsApp पर और डैशबोर्ड पर।\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
     elif lang == "mr":
-        body = (f"धन्यवाद {name}! ✅ तुमचे ₹499 पेमेंट मिळाले.\n\n"
+        body = (f"धन्यवाद {name}! ✅ तुमचा क्लेम नोंदवला गेला आहे.\n\n"
                 f"तुमच्या *{claim.get('insured_name','')}* च्या क्लेमची तज्ज्ञ समीक्षा आता सुरू झाली आहे. "
                 f"तुमचा सविस्तर अहवाल *24-48 कामकाजाच्या तासांत* मिळेल — इथे WhatsApp वर आणि डॅशबोर्डवर.\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
     else:
-        body = (f"Thank you {name}! ✅ Your ₹499 payment is confirmed.\n\n"
+        body = (f"Thank you {name}! ✅ Your claim is registered.\n\n"
                 f"The expert review of your *{claim.get('insured_name','')}* claim has started now. "
                 f"Your detailed report arrives within *24-48 business hours* — here on WhatsApp and on your dashboard.\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
@@ -3199,13 +3202,13 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
         event_key="funnel.paid", priority=PRIORITY_P1,
         recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
         recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
-        subject="Payment confirmed — your review has started",
+        subject="Your claim is registered — your review has started",
         body=body, claim_id=claim_id)
     # Complainant payment-thanks — skips the subscriber's own number (the dispatch above owns
     # it and honours wa_opt_in); fires only if the complainant is a DIFFERENT person.
     try:
         import biz_nidaan_wa_orchestrator as _orch
-        await _orch.wa_journey(claim_id, "thank_you_payment", extra={"amount": "499"},
+        await _orch.wa_journey(claim_id, "thank_you_payment",
                                skip_phones=[claim.get("account_phone"), claim.get("insured_phone")])
     except Exception as e:
         logger.warning("on_funnel_paid wa_journey failed claim %s: %s", claim_id, e)

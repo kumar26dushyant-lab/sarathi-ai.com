@@ -56,16 +56,25 @@ def claim_registered(ctx: dict, lang: str = "hinglish") -> str:
 
 
 def thank_you_payment(ctx: dict, lang: str = "hinglish") -> str:
-    l = _lang(lang); reg = _reg(ctx); amt = ctx.get("amount")
-    amt_s = f" ₹{amt}" if amt else ""
+    """WORK-HAS-STARTED. Deliberately says NOTHING about money.
+
+    A branch or channel partner pays us one amount and may charge the complainant another. When
+    this message named the figure WE received, it told the complainant what their branch had paid
+    — on 18 Sep a complainant charged ₹1,200 was shown ₹588. That is the branch's commercial
+    relationship, not ours to disclose.
+
+    Whoever actually paid gets a confirmation from their own bank. We only need to say that the
+    work has begun, which is the part that reassures them.
+    """
+    l = _lang(lang); reg = _reg(ctx)
     hi_ = {
-        "hinglish": (f"Dhanyavaad 🙏 Aapka payment{amt_s} mil gaya hai (claim *{reg}*). "
+        "hinglish": (f"Namaste 🙏 Aapka claim *{reg}* register ho gaya hai. "
                      f"Ab hamari legal team aapke claim par kaam shuru kar rahi hai. Aap nishchint rahein — "
                      f"hum poori tarah aapke saath hain."),
-        "hi": (f"धन्यवाद 🙏 आपका भुगतान{amt_s} प्राप्त हो गया है (क्लेम *{reg}*)। अब हमारी लीगल टीम आपके क्लेम पर "
+        "hi": (f"नमस्ते 🙏 आपका क्लेम *{reg}* दर्ज हो गया है। अब हमारी लीगल टीम आपके क्लेम पर "
                f"काम शुरू कर रही है। आप निश्चिंत रहें — हम पूरी तरह आपके साथ हैं।"),
-        "en": (f"Thank you 🙏 We've received your payment{amt_s} (claim *{reg}*). Our legal team is now "
-               f"starting work on your claim. Please be assured — we're fully with you."),
+        "en": (f"Namaste 🙏 Your claim *{reg}* is registered. Our legal team is now "
+               f"starting work on it. Please be assured — we're fully with you."),
     }[l]
     return hi_ + _SIGN[l]
 

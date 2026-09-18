@@ -336,7 +336,11 @@ JOURNEY_TEMPLATES = {
     "welcome": "np_welcome",
     "intro_value": "np_intro_value",
     "claim_registered": "np_claim_registered",
-    "thank_you_payment": "np_payment_thanks",
+    # NOT np_payment_thanks. That template reads "Your payment of ₹{{2}} is confirmed", which
+    # tells a complainant what their BRANCH paid us - on 18 Sep someone charged ₹1,200 by their
+    # channel partner was shown ₹588 by us. np_claim_registered carries no money at all and says
+    # the right thing: your claim is registered and we have started. (founder, 18 Sep)
+    "thank_you_payment": "np_claim_registered",
     "payment_failed": "np_payment_failed",
     "doc_reminder": "np_doc_reminder",
 }
@@ -355,13 +359,23 @@ def _reg_no(ctx: dict) -> str:
 def _template_params(event: str, ctx: dict) -> list:
     """Ordered {{1}},{{2}}… values for each approved template. Order MUST match the template body."""
     name = ctx.get("name") or "ji"
-    if event == "claim_registered":       # {{1}}=name {{2}}=ref {{3}}=insured
+    # Both of these now ride np_claim_registered: {{1}}=name {{2}}=ref {{3}}=insured. No money.
+    if event in ("claim_registered", "thank_you_payment"):
         return [name, _reg_no(ctx), ctx.get("insured_name") or name]
-    if event == "thank_you_payment":      # {{1}}=name {{2}}=amount {{3}}=ref
-        return [name, str(ctx.get("amount") or ""), _reg_no(ctx)]
     if event == "doc_reminder":           # {{1}}=name {{2}}=ref {{3}}=doc
         return [name, _reg_no(ctx), ctx.get("doc_label") or "document"]
     return [name]                          # welcome / intro_value / payment_failed → {{1}}=name
+
+
+# Nothing about money reaches a party. A branch pays us one figure and charges the complainant
+# another; disclosing ours exposes their margin and is not ours to disclose. Stripping it HERE,
+# at the one door every lifecycle message goes through, means a caller cannot reintroduce the
+# leak by passing an amount - which is exactly how it happened the first time.
+_MONEY_KEYS = ("amount", "amount_rupees", "fee", "price", "plan", "plan_name", "paid")
+
+
+def _strip_money(ctx: dict) -> dict:
+    return {k: v for k, v in (ctx or {}).items() if k not in _MONEY_KEYS}
 
 
 async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
@@ -407,6 +421,7 @@ async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
                "claim_id": claim_id, "insured_name": claim.get("insured_name") or ""}
         if extra:
             ctx.update(extra)
+        ctx = _strip_money(ctx)            # a party never hears a figure from us
         text = _msg.compose(event, lang, ctx)
         import biz_nidaan_wa_flow as _flow
         # A failed payment is about their money and blocks their claim: it is never held back by
