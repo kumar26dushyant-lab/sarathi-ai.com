@@ -279,9 +279,7 @@ async def seed_checklist_for_claim(claim_id: int, claim_type: str) -> int:
     return len(tmpl)
 
 
-async def mark_doc_received(claim_id: int, doc_key: str, *, via: str,
-                            doc_id: Optional[int] = None) -> bool:
-    """Flip a checklist item to received. Returns True if a row was updated."""
+async def _mark_once(claim_id: int, doc_key: str, via: str, doc_id) -> int:
     async with aiosqlite.connect(db.DB_PATH) as conn:
         cur = await conn.execute(
             """UPDATE nidaan_claim_doc_checklist
@@ -290,7 +288,34 @@ async def mark_doc_received(claim_id: int, doc_key: str, *, via: str,
             (via, doc_id, claim_id, doc_key),
         )
         await conn.commit()
-        return cur.rowcount > 0
+        return cur.rowcount
+
+
+async def mark_doc_received(claim_id: int, doc_key: str, *, via: str,
+                            doc_id: Optional[int] = None) -> bool:
+    """Flip a checklist item to received. Returns True if a row was updated.
+
+    SEEDS THE CHECKLIST IF IT IS MISSING. A claim only gets checklist rows when something calls
+    seed_checklist_for_claim, and 74 of 158 live claims never had that happen — so this UPDATE
+    matched nothing, returned False, and the tick vanished. Every caller ignored the return value,
+    so a document genuinely received went on showing as outstanding for ever: the WhatsApp bot,
+    the complainant portal and staff ticks all lost work the same silent way.
+
+    Seeding is idempotent (INSERT OR IGNORE) and only adds the rows this claim's type says it
+    needs, so healing it here is safe and repairs every caller at once instead of one at a time.
+    """
+    if await _mark_once(claim_id, doc_key, via, doc_id):
+        return True
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT COALESCE(claim_type,'') FROM nidaan_claims WHERE claim_id=?",
+                (int(claim_id),))).fetchone()
+        await seed_checklist_for_claim(int(claim_id), (row[0] if row else "") or "")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not seed the checklist for claim %s: %s", claim_id, e)
+        return False
+    return bool(await _mark_once(claim_id, doc_key, via, doc_id))
 
 
 async def set_doc_received(claim_id: int, doc_key: str, received: bool, *, by: str = "") -> dict:

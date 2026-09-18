@@ -126,6 +126,8 @@ async def main() -> int:
     import biz_nidaan_doc_request as docreq
     docreq.DB_PATH = copy
     import biz_auth as auth
+    import biz_nidaan_doc_intake as intake
+    import biz_nidaan_wa_messages as wa_msg
 
     _assert_no_live_db(args.db, copy)
 
@@ -136,10 +138,14 @@ async def main() -> int:
     if not ctx["claim_id"]:
         _die("this database has no claims to exercise")
     ctx.update({"db": copy, "nidaan": nidaan, "claimant": claimant, "access": access,
-                "buckets": buckets, "docreq": docreq, "auth": auth})
+                "buckets": buckets, "docreq": docreq, "auth": auth,
+                "intake": intake, "msg": wa_msg})
 
     print("journeys — %d to run against a copy of %s" % (len(paths.ALL), os.path.basename(args.db)))
-    print("code under test: %s\n" % args.app)
+    # Name the OVERLAY when there is one. Printing only --app once let a run look as though it
+    # was testing a change when it was testing the deployed code.
+    print("code under test: %s\n"
+          % (("%s (over %s)" % (args.overlay, args.app)) if args.overlay else args.app))
 
     results = [await j.run(ctx) for j in paths.ALL]
     tally = render(results, verbose=not args.quiet)

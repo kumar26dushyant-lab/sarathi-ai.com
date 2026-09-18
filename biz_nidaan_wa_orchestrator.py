@@ -520,67 +520,66 @@ async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
 
 
 async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict:
-    """A complainant sent a file. Right-doc + quality gate → convert → save → mark → ask next."""
+    """A complainant sent a file. Take it, split it, match what we can, say one thing.
+
+    This used to judge every inbound file as ONE document against ONE expected line: a 40-page PDF
+    holding the whole case was classified as "not the discharge summary" and the sender was told
+    they had sent the wrong thing. Worse, if nothing was outstanding the file was thanked for and
+    never stored at all. biz_nidaan_doc_intake now does the real work - see its docstring for the
+    rules - and this function only decides what to SAY.
+    """
     claim = await _claim_for_msisdn(msisdn)
     if not claim:
         return {"ok": False, "error": "no_claim"}
     claim_id = claim["claim_id"]
     lang = await _lang(msisdn)
     ctype = claim.get("claim_type") or ""
-    awaiting = await _awaiting(claim_id)
-    if awaiting == "__human__" or await _contact_paused(msisdn):
+    if await _awaiting(claim_id) == "__human__" or await _contact_paused(msisdn):
         return {"ok": False, "error": "human_takeover"}
-    # Which doc did we ask for? (If none tracked, use the next pending.)
-    pending = await _ck.pending_required_docs(claim_id, ctype)
-    if not pending:
-        await _wa.send_text(msisdn, _msg.compose("docs_complete", lang, _send_ctx(claim, 1, 1)))
-        return {"ok": True, "complete": True}
-    doc = next((d for d in pending if d["key"] == awaiting), pending[0])
-    total = len(_ck.doc_template_for(ctype)) or 0
-    # Download + normalise to PDF.
+
     dl = await _wa.download_media(media_id)
     if not dl.get("ok"):
-        await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason="could not open the file")))
+        # Our end could not fetch it. That is ours to own, not theirs to fix.
+        await _wa.send_text(msisdn, _msg.compose("doc_quality", lang, _send_ctx(
+            claim, 0, 0, doc={"en": "that file"}, lang=lang,
+            reason="it did not come through to us")))
         return {"ok": False, "error": "download_failed"}
-    ext = ".pdf" if "pdf" in (mime or "") else (".jpg" if "jpe" in (mime or "") or "jpg" in (mime or "") else ".png" if "png" in (mime or "") else ".bin")
-    try:
-        pdf_bytes, pages, _skipped = _split.normalize_to_pdf([(f"in{ext}", dl["content"])])
-    except Exception as e:  # noqa: BLE001
-        logger.info("normalize_to_pdf failed: %s", e)
-        pdf_bytes = None
-    if not pdf_bytes:
-        await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason="unsupported format")))
-        return {"ok": False, "error": "convert_failed"}
-    # Gemini right-doc + quality gate.
-    v = await classify_document(pdf_bytes, doc.get("en") or doc.get("hi") or "document")
-    if not v["is_expected"]:
-        await _wa.send_text(msisdn, _msg.compose("doc_wrong", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, looks_like=v.get("looks_like") or "")))
-        await _activity(claim_id, "doc_rejected", f"Wrong doc for {doc.get('en')} (looked like {v.get('looks_like')})", channel="whatsapp", direction="in")
-        return {"ok": False, "error": "wrong_doc"}
-    if not v["legible"]:
-        await _wa.send_text(msisdn, _msg.compose("doc_quality", lang,
-                            _send_ctx(claim, total - len(pending), total, doc=doc, lang=lang, reason=v.get("reason") or "not clear")))
-        await _activity(claim_id, "doc_rejected", f"Poor quality for {doc.get('en')}: {v.get('reason')}", channel="whatsapp", direction="in")
-        return {"ok": False, "error": "poor_quality"}
-    # Good → save + mark + ask next.
-    doc_id = await _save_wa_doc(claim.get("account_id"), claim_id, doc["key"], pdf_bytes)
-    await _ck.mark_doc_received(claim_id, doc["key"], via="whatsapp", doc_id=doc_id)
-    await _activity(claim_id, "doc_received", f"Received {doc.get('en')} via WhatsApp", channel="whatsapp", direction="in")
-    # Received-ok + next ask.
-    pending2 = await _ck.pending_required_docs(claim_id, ctype)
-    nxt = pending2[0] if pending2 else None
-    done = max(0, total - len(pending2))
-    await _wa.send_text(msisdn, _msg.compose("doc_received_ok", lang, _send_ctx(claim, done, total, doc=doc, next_doc=nxt, lang=lang)))
-    if nxt:
-        await _set_awaiting(claim_id, nxt["key"])
-    else:
-        await _set_awaiting(claim_id, "")
-        await _wa.send_text(msisdn, _msg.compose("docs_complete", lang, _send_ctx(claim, done, total)))
+
+    name = "upload.pdf"
+    m = (mime or "").lower()
+    if "zip" in m:
+        name = "upload.zip"
+    elif "pdf" not in m:
+        name = "upload.jpg" if ("jpe" in m or "jpg" in m) else (
+            "upload.png" if "png" in m else "upload.bin")
+
+    import biz_nidaan_doc_intake as _intake
+    res = await _intake.accept(claim_id, claim.get("account_id"), [(name, dl["content"])],
+                              claim_type=ctype, source="whatsapp")
+    if not res.get("ok"):
+        await _wa.send_text(msisdn, _msg.compose("doc_quality", lang, _send_ctx(
+            claim, 0, 0, doc={"en": "that file"}, lang=lang,
+            reason="we could not open it — please send it as a photo or PDF")))
+        return {"ok": False, "error": res.get("error") or "unreadable"}
+
+    pending = res.get("pending") or []
+    ctx = dict(_send_ctx(claim, 0, res.get("total") or 0))
+    ctx.update({
+        "stored": res.get("stored") or 0,
+        "ticked": [t["label"] or t["key"] for t in res.get("ticked") or []],
+        "unclear": [u["label"] or u["key"] for u in res.get("unclear") or []],
+        "pending": [d.get("en") or d["key"] for d in pending],
+    })
+    # ONE message for the whole batch, whatever arrived inside it.
+    await _wa.send_text(msisdn, _msg.compose("doc_batch", lang, ctx))
+
+    # Keep the "what are we waiting for" pointer honest for the rest of the conversation.
+    await _set_awaiting(claim_id, pending[0]["key"] if pending else "")
+    if not pending:
         await _activity(claim_id, "docs_complete", "All required documents received (WhatsApp).")
-    return {"ok": True, "received": doc["key"], "remaining": len(pending2)}
+    return {"ok": True, "stored": res.get("stored") or 0,
+            "received": [t["key"] for t in res.get("ticked") or []],
+            "unsorted": len(res.get("unsorted") or []), "remaining": len(pending)}
 
 
 # ── the case email account, when it arrives on WhatsApp ──────────────────────

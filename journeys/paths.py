@@ -296,3 +296,107 @@ async def _dt5(ctx):
     res = await ctx["buckets"].set_field(ctx["dt_claim"], "admission_date", "2026-12-01",
                                          actor="journey-test", role="super_admin")
     assert not res.get("ok"), "an admission date after the discharge was accepted"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Document intake. The rules here are the founder's (19 Sep): accept anything, never discard,
+# never blame the person for our confusion, one reply per batch. These steps use no AI - they
+# pin the plumbing that must hold whether or not Gemini answers.
+intake = _j("doc_intake", "A complainant sends us documents", "complainant")
+
+
+@intake.step("a zip is opened rather than refused")
+async def _i1(ctx):
+    import io as _io
+    import zipfile as _zip
+    buf = _io.BytesIO()
+    with _zip.ZipFile(buf, "w") as z:
+        z.writestr("bill.jpg", b"not really a jpeg, but the name is what routing reads")
+        z.writestr("__MACOSX/._junk", b"junk")
+        z.writestr("notes.txt", b"should be ignored")
+    files, notes = ctx["intake"].unpack([("hospital.zip", buf.getvalue())])
+    names = [n for n, _ in files]
+    assert "bill.jpg" in names, "the zip was not opened: %s" % names
+    assert not any(n.endswith(".txt") for n in names), "a non-document was let through"
+    assert any("zip" in s for s in notes), "opening the zip was not reported"
+
+
+@intake.step("an ordinary file passes straight through")
+async def _i2(ctx):
+    files, _ = ctx["intake"].unpack([("rejection.pdf", b"%PDF-1.4 fake")])
+    assert len(files) == 1 and files[0][0] == "rejection.pdf"
+
+
+@intake.step("a corrupt zip is kept whole instead of being thrown away")
+async def _i3(ctx):
+    files, notes = ctx["intake"].unpack([("broken.zip", b"this is not a zip at all")])
+    assert len(files) == 1, "a corrupt zip lost the file"
+    assert any("whole" in s for s in notes), "we did not say what happened to it"
+
+
+@intake.step("an unreadable batch never claims success")
+async def _i4(ctx):
+    res = await ctx["intake"].accept(ctx["claim_id"], None, [("x.bin", b"\x00\x01\x02")],
+                                     claim_type="health", source="journey")
+    assert not res.get("ok"), "a batch of nonsense reported success"
+    assert res.get("error"), "it failed without saying why"
+
+
+@intake.step("and an empty batch does not crash")
+async def _i5(ctx):
+    res = await ctx["intake"].accept(ctx["claim_id"], None, [], claim_type="health",
+                                     source="journey")
+    assert not res.get("ok") and res.get("error") == "nothing_readable"
+
+
+@intake.step("the reply names what arrived, not what confused us")
+async def _i6(ctx):
+    msg = ctx["msg"].compose("doc_batch", "en", {
+        "claim_id": ctx["claim_id"], "stored": 3,
+        "ticked": ["Rejection letter", "Final bill"],
+        "unclear": ["KYC"], "pending": ["Claim form"]})
+    assert "Rejection letter" in msg and "Final bill" in msg, "it does not say what we got"
+    assert "KYC" in msg, "it does not ask for the one thing only they can fix"
+    assert "Claim form" in msg, "it does not say what is still needed"
+    assert "confiden" not in msg.lower() and "could not identify" not in msg.lower(), \
+        "our uncertainty leaked into the complainant's message"
+
+
+@intake.step("a batch we fully understood closes the loop")
+async def _i7(ctx):
+    msg = ctx["msg"].compose("doc_batch", "en", {
+        "claim_id": ctx["claim_id"], "stored": 9,
+        "ticked": ["Rejection letter"], "unclear": [], "pending": []})
+    assert "everything" in msg.lower(), "a complete set was not acknowledged as complete"
+
+
+@intake.step("ticking heals a claim that never had a checklist")
+async def _i8(ctx):
+    # 74 of 158 live claims had no checklist rows, so every tick silently did nothing. Ticking
+    # now seeds the list first. Uses a claim chosen for having no rows, so the repair is real.
+    import biz_nidaan_doc_checklist as _ck
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT c.claim_id, COALESCE(c.claim_type,'health') AS ct FROM nidaan_claims c "
+            "WHERE COALESCE(c.claim_type,'')!='' AND NOT EXISTS "
+            "(SELECT 1 FROM nidaan_claim_doc_checklist k WHERE k.claim_id=c.claim_id) "
+            "LIMIT 1")).fetchone()
+    if not r:
+        raise Skip("every claim already has a checklist")
+    row = dict(r)
+    tmpl = _ck.doc_template_for(row["ct"])
+    if not tmpl:
+        raise Skip("no template for this claim type")
+    key = tmpl[0]["key"]
+    ok = await _ck.mark_doc_received(row["claim_id"], key, via="journey", doc_id=None)
+    assert ok, "ticking a claim with no checklist still silently does nothing"
+
+
+@intake.step("and the tick is really there afterwards")
+async def _i9(ctx):
+    async with aiosqlite.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_doc_checklist WHERE received=1 "
+            "AND received_via='journey'")).fetchone()
+    assert int(n[0]) >= 1, "the tick did not persist"

@@ -218,3 +218,60 @@ _COMPOSERS = {
 def compose(kind: str, lang: str, ctx: dict) -> str:
     fn = _COMPOSERS.get(kind)
     return fn(ctx or {}, lang) if fn else ""
+
+
+def doc_batch(ctx: dict, lang: str = "hinglish") -> str:
+    """ONE reply for a whole batch, however many files arrived.
+
+    Somebody who sends eight photos should get one thank-you, not eight. And they should be told
+    what we now have, not what we failed to understand: pieces we could not identify are stored
+    and put in front of a staff member, and are never mentioned here. Our uncertainty is not the
+    complainant's problem to solve (founder, 19 Sep).
+    """
+    l = _lang(lang)
+    got = ctx.get("ticked") or []          # [label, ...] we recognised and ticked
+    unclear = ctx.get("unclear") or []     # [label, ...] we know but cannot read
+    still = ctx.get("pending") or []       # [label, ...] still outstanding
+    n = int(ctx.get("stored") or 0)
+
+    if got:
+        head = {
+            "hinglish": "✅ Mil gaya: *%s*. Dhanyavaad!" % ", ".join(got),
+            "hi": "✅ मिल गए: *%s*। धन्यवाद!" % ", ".join(got),
+            "en": "✅ Received: *%s*. Thank you!" % ", ".join(got),
+        }[l]
+    else:
+        head = {
+            "hinglish": "🙏 Aapke %d document mil gaye, dhanyavaad. Hum inhe dekh rahe hain." % n,
+            "hi": "🙏 आपके %d दस्तावेज़ मिल गए, धन्यवाद। हम इन्हें देख रहे हैं।" % n,
+            "en": "🙏 Got your %d document(s), thank you. We are going through them." % n,
+        }[l]
+
+    parts = [head]
+    if unclear:
+        parts.append({
+            "hinglish": "\n\n📷 Ek baar *%s* dobara bhej dijiye — jo aayi hai woh saaf nahi padh "
+                        "pa rahe. Achhi roshni mein, poora page." % ", ".join(unclear),
+            "hi": "\n\n📷 कृपया *%s* दोबारा भेजिए — जो मिली है वह साफ़ नहीं पढ़ी जा रही। अच्छी रोशनी "
+                  "में, पूरा पेज।" % ", ".join(unclear),
+            "en": "\n\n📷 Could you resend *%s*? The copy we have is not clear enough to read. "
+                  "Good light, and the whole page." % ", ".join(unclear),
+        }[l])
+    if still:
+        shown = ", ".join(still[:4])
+        more = (" (+%d)" % (len(still) - 4)) if len(still) > 4 else ""
+        parts.append({
+            "hinglish": "\n\n📄 Ab bhi chahiye: *%s*%s" % (shown, more),
+            "hi": "\n\n📄 अभी भी चाहिए: *%s*%s" % (shown, more),
+            "en": "\n\n📄 Still needed: *%s*%s" % (shown, more),
+        }[l])
+    elif not unclear:
+        parts.append({
+            "hinglish": "\n\nSab kuch mil gaya hai — ab hum aage badh rahe hain. 🙏",
+            "hi": "\n\nसब कुछ मिल गया है — अब हम आगे बढ़ रहे हैं। 🙏",
+            "en": "\n\nThat is everything — we are taking it forward now. 🙏",
+        }[l])
+    return "".join(parts) + _SIGN[l]
+
+
+_COMPOSERS["doc_batch"] = doc_batch
