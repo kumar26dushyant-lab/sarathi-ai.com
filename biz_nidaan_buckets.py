@@ -680,6 +680,27 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
             return {"ok": False,
                     "error": "That is too long to save (%d characters; the limit is %d)."
                              % (len(val), limit)}
+        # A discharge before the admission is not a typo we can live with: those two dates decide
+        # the treatment period the whole case argues about, and a reversed pair reads as a
+        # fabricated claim to an insurer. Checked HERE as well as in the browser, so it cannot be
+        # stored by any route (founder, 19 Sep).
+        if val and field_key in ("admission_date", "discharge_date"):
+            other_key = "discharge_date" if field_key == "admission_date" else "admission_date"
+            other = await (await c.execute(
+                "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
+                (int(claim_id), other_key))).fetchone()
+            other_val = ((other[0] if other else "") or "").strip()
+            if other_val:
+                adm = val if field_key == "admission_date" else other_val
+                dis = val if field_key == "discharge_date" else other_val
+                # ISO dates (yyyy-mm-dd) compare correctly as strings; anything else is left alone
+                # rather than guessed at.
+                if len(adm) == 10 and len(dis) == 10 and adm > dis:
+                    return {"ok": False, "error":
+                            "The discharge date (%s) is before the admission date (%s). "
+                            "Check the discharge summary and correct whichever is wrong."
+                            % (dis, adm)}
+
         row = await _claim_row(claim_id)
         locks = await locked_fields(row, "")        # what is locked for everyone but a super admin
         if field_key in locks:
@@ -849,6 +870,19 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     else:
         kind = rule.get("kind", "forward")
 
+    # THE ONE FENCE. Everything above says a claim may go anywhere, and that stays true except
+    # for this single route: once drafting has started, the claim does not drift back to Live
+    # Cases (founder, 19 Sep). A draft query is the legitimate way to ask Live Cases for
+    # something, and since 19 Sep that does it WITHOUT moving the claim - so a backward move here
+    # is now always either a mistake or a genuine reversal, and a genuine reversal is a
+    # super-admin's call. Theirs still works, and is recorded as a pull-back.
+    if kind == "back" and cur_key == QUERY_FROM and to_key == QUERY_TO \
+            and (actor_role or "") != SUPER:
+        return {"ok": False, "error":
+                "Drafting has started on this claim, so it does not go back to Live Cases. "
+                "If something is missing, raise a draft query - the claim stays here and Live "
+                "Cases is told. A super admin can pull it back if it truly has to move."}
+
     # What is still blank, worked out BEFORE we ask for the comment - so the one prompt can say
     # both things at once. Leaving a bucket forwards means finishing it; going back or parking is
     # explicitly not finishing, so blank fields only matter on the way forward.
@@ -928,15 +962,18 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                 await c.execute(
                     "UPDATE nidaan_claims SET back_at=NULL, back_by='', back_by_role='', "
                     "back_from='', back_reason='' WHERE claim_id=?", (int(claim_id),))
-                # The draft query follows the claim: an open query leaving Live Cases forward is
-                # answered (by whoever moved it, with their note); a resolved one leaving Pending
-                # Draft forward is done.
-                if cur_key == "live_cases" and (row.get("query_state") or "") == "open":
+                # A draft query lives and dies inside Pending Draft — it no longer travels with
+                # the claim (founder, 19 Sep). So when the claim finally leaves Pending Draft
+                # forwards, the query goes with it: still open means somebody moved on without
+                # formally answering, and their move note becomes the answer; already resolved
+                # means it is simply finished.
+                _qs = (row.get("query_state") or "")
+                if cur_key == QUERY_FROM and _qs == "open":
                     await c.execute(
                         "UPDATE nidaan_claims SET query_state='resolved', query_resolved_by=?, "
                         "query_resolved_at=CURRENT_TIMESTAMP, query_resolved_note=? WHERE claim_id=?",
                         ((actor or "")[:80], (reason or "").strip()[:400], int(claim_id)))
-                elif cur_key == GIST_OPEN_UNTIL and (row.get("query_state") or "") == "resolved":
+                elif cur_key == QUERY_FROM and _qs == "resolved":
                     await c.execute("UPDATE nidaan_claims SET query_state='' WHERE claim_id=?",
                                     (int(claim_id),))
             await c.commit()
@@ -1011,8 +1048,15 @@ async def _claim_handlers(claim_id: int, row: dict) -> list:
 
 async def raise_query(claim_id: int, text: str, *, actor: str, actor_id=None,
                       actor_role: str = "") -> dict:
-    """The doctor/advocate in Pending Draft cannot finish: the claim goes back to Live Cases,
-    marked DRAFT QUERY, and the people who can fix it are told now - not left to find it."""
+    """The doctor/advocate in Pending Draft cannot finish: the claim is marked DRAFT QUERY and the
+    people who can fix it are told now - not left to find it.
+
+    THE CLAIM DOES NOT MOVE. It used to be sent back to Live Cases, which made a question look
+    like a reversal: the case left the bucket it was being written in, the drafter lost sight of
+    it, and the history read as though the work had been undone. The founder's rule (19 Sep):
+    "Only status changing draft query, should not be moving anywhere." So the status changes, the
+    right people are told, and the claim stays exactly where the work is.
+    """
     text = (text or "").strip()
     if len(text) < 5:
         return {"ok": False, "error": "Say what is needed - the Live Cases team starts from your words."}
@@ -1021,10 +1065,9 @@ async def raise_query(claim_id: int, text: str, *, actor: str, actor_id=None,
         return {"ok": False, "error": "That case does not exist."}
     if (row.get("pipeline_stage") or "") != QUERY_FROM:
         return {"ok": False, "error": "A draft query is raised from Pending Draft."}
-    res = await move(claim_id, QUERY_TO, reason="\u2753 Draft query: " + text[:380], actor=actor,
-                     actor_role=actor_role, quiet=True)
-    if not res.get("ok"):
-        return res
+    if (row.get("query_state") or "") == "open":
+        return {"ok": False, "error": "There is already an open query on this claim."}
+    await _log(claim_id, "\u2753 Draft query raised: " + text[:380], actor)
     async with aiosqlite.connect(DB_PATH) as c:
         await c.execute(
             "UPDATE nidaan_claims SET query_state='open', query_text=?, query_by=?, query_by_id=?, "
@@ -1051,10 +1094,11 @@ async def raise_query(claim_id: int, text: str, *, actor: str, actor_id=None,
     who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
     rnd = int(row.get("query_round") or 0) + 1
     subj = "\u2753 Draft query \u2014 NP-%s %s" % (claim_id, who)
-    body = ("%s raised a draft query in Pending Draft%s and sent NP-%s back to Live Cases.\n\n"
-            "\u201c%s\u201d\n\nFix it, then press \u2705 Query resolved on the claim in "
-            "Level-2 \u2192 Settlement \u2192 Live Cases." % (
-                actor or "Someone", (" (round %d)" % rnd) if rnd > 1 else "", claim_id, text[:600]))
+    body = ("%s raised a draft query on NP-%s%s.\n\n\u201c%s\u201d\n\n"
+            "The claim stays in Pending Draft. Fix this, then press \u2705 Query resolved on the "
+            "claim in Level-2 \u2192 Settlement \u2192 Pending Draft." % (
+                actor or "Someone", claim_id, (" (round %d)" % rnd) if rnd > 1 else "",
+                text[:600]))
     if fallback:
         body += "\n\n\u26a0 Nobody is on duty for Live Cases, so this came to the admins."
     try:
@@ -1067,26 +1111,26 @@ async def raise_query(claim_id: int, text: str, *, actor: str, actor_id=None,
 
 async def resolve_query(claim_id: int, mo_staff_id, note: str, *, actor: str, actor_id=None,
                         actor_role: str = "") -> dict:
-    """Live Cases has fixed the query: back to Pending Draft, to the doctor/advocate chosen - one
-    place at a time - and that person is told it is theirs again."""
+    """Live Cases has fixed the query: the claim is handed to the doctor/advocate chosen - one
+    place at a time - and that person is told it is theirs again.
+
+    As with raise_query, THE CLAIM DOES NOT MOVE: it never left Pending Draft, so there is nothing
+    to send back. What changes is who owns it and that the question is answered.
+    """
     note = (note or "").strip()
     if len(note) < 3:
         return {"ok": False, "error": "Say what was done - the doctor/advocate reads this first."}
     row = await _claim_row(claim_id)
     if not row:
         return {"ok": False, "error": "That case does not exist."}
-    if (row.get("query_state") or "") != "open" or (row.get("pipeline_stage") or "") != QUERY_TO:
-        return {"ok": False, "error": "This claim has no open draft query in Live Cases."}
+    if (row.get("query_state") or "") != "open" or (row.get("pipeline_stage") or "") != QUERY_FROM:
+        return {"ok": False, "error": "This claim has no open draft query in Pending Draft."}
     mo = await _staff_row(mo_staff_id)
     if not mo:
         return {"ok": False, "error": "Pick the doctor or advocate it goes back to."}
-    res = await move(claim_id, QUERY_FROM,
-                     reason="\u2705 Draft query resolved \u2014 for %s: %s" % (mo["name"], note[:300]),
-                     actor=actor, actor_role=actor_role, quiet=True)
-    if not res.get("ok"):
-        return res
+    await _log(claim_id, "\u2705 Draft query resolved \u2014 for %s: %s"
+               % (mo["name"], note[:300]), actor)
     async with aiosqlite.connect(DB_PATH) as c:
-        # (move() marked it resolved with the note; this adds who it went back to.)
         await c.execute(
             "UPDATE nidaan_claims SET query_state='resolved', query_resolved_by=?, "
             "query_resolved_at=CURRENT_TIMESTAMP, query_resolved_note=?, query_mo_id=?, "
@@ -1105,7 +1149,7 @@ async def resolve_query(claim_id: int, mo_staff_id, note: str, *, actor: str, ac
         ids.append(int(row["query_by_id"]))
     who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
     subj = "\u2705 Draft query resolved \u2014 NP-%s %s" % (claim_id, who)
-    body = ("NP-%s is back in Pending Draft for %s.\n\n%s: \u201c%s\u201d\n\n"
+    body = ("NP-%s is yours again in Pending Draft, %s.\n\n%s: \u201c%s\u201d\n\n"
             "The query was: \u201c%s\u201d" % (claim_id, mo["name"], actor or "Live Cases",
                                                  note[:600], (row.get("query_text") or "")[:400]))
     try:
@@ -1274,7 +1318,7 @@ async def query_reminders() -> dict:
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
             "SELECT claim_id, complainant_name, insured_name, query_text, query_by, query_at "
-            "FROM nidaan_claims WHERE query_state='open' AND pipeline_stage=?", (QUERY_TO,))).fetchall()]
+            "FROM nidaan_claims WHERE query_state='open' AND pipeline_stage=?", (QUERY_FROM,))).fetchall()]
     if not rows:
         return {"open": 0, "sent": 0}
     try:
