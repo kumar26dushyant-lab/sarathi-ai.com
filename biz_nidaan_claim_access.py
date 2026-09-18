@@ -102,12 +102,20 @@ def _contacts(claim: dict) -> dict:
 
 async def channels(claim_id: int) -> list[dict]:
     """What we can send a code to, masked. Their choice, as the founder asked - but an option
-    that cannot deliver is worse than no option, so each one says whether it will work now."""
+    that cannot deliver is worse than no option, so each one says whether it will work now.
+
+    WhatsApp is ready for everyone now that the authentication template is approved; the only
+    thing that closes it is a person who told us to STOP. Never raises: if we cannot work out
+    whether they opted out, the option stays open rather than taking their way in away.
+    """
     c = _contacts(await _claim(claim_id))
     out = []
     if c["phone"]:
-        out.append({"kind": "whatsapp", "masked": mask_phone(c["phone"]),
-                    "ready": await _wa_reachable(c["phone"])})
+        try:
+            _ready = not await _wa_opted_out(c["phone"])
+        except Exception:  # noqa: BLE001
+            _ready = True
+        out.append({"kind": "whatsapp", "masked": mask_phone(c["phone"]), "ready": _ready})
     if c["email"]:
         out.append({"kind": "email", "masked": mask_email(c["email"]), "ready": True})
     return out
