@@ -3983,7 +3983,7 @@ function _l2HandoverControls(c){
     +   'onclick="event.stopPropagation();docsOpen(' + c.claim_id + ',_reloadL2)">📂 Documents</button><br>'
     + (done
         ? '<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" '
-          + 'onclick="event.stopPropagation();hoOpen(' + c.claim_id + ')">→ Move to Consolidation</button>'
+          + 'onclick="event.stopPropagation();hoConfirm(' + c.claim_id + ')">→ Move to Consolidation</button>'
         : '<button class="btn btn-ghost" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap;opacity:.55" '
           + 'title="Tick \'All documents received\' first" '
           + 'onclick="event.stopPropagation();l2DocsNeeded(' + c.claim_id + ')">→ Move to Consolidation</button>');
@@ -14098,13 +14098,13 @@ async function _qAfter(claimId){
 
 function l2QueryRaise(claimId){
   _qOv('qRaise', '\u2753 Raise a draft query \u2014 NP-' + claimId,
-      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim goes back to <b>Live Cases</b>, '
-    + 'marked <b>Draft query</b>, and Live Cases\' duty staff and the claim\'s handlers are told now. '
-    + 'When they have fixed it, it comes back here to the doctor/advocate they choose.</div>'
+      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim <b>stays here</b> in Pending '
+    + 'Draft, marked <b>Draft query</b>. Live Cases\' duty staff and the claim\'s handlers are told '
+    + 'now, and when they have fixed it they hand it back to the doctor/advocate they choose.</div>'
     + '<div class="l2fld"><label>What is missing or wrong? <span class="req">*</span></label>'
     + '<textarea id="qRaiseTxt" rows="4" maxlength="1000" placeholder="e.g. Discharge summary is not '
     + 'signed by the treating doctor; need the signed copy and the OPD papers from March."></textarea></div>',
-    'Send back with this query', async function(){
+    'Raise this query', async function(){
       const t = (document.getElementById('qRaiseTxt').value || '').trim();
       if (t.length < 5){ _qMsg('qRaise', 'Say what is needed.', true); return; }
       this.disabled = true; _qMsg('qRaise', 'Sending\u2026');
@@ -14125,8 +14125,9 @@ async function l2QueryResolve(claimId, byId){
     return '<option value="' + s.staff_id + '"' + (String(s.staff_id) === String(byId || '') ? ' selected' : '')
       + '>' + esc(s.name) + '</option>'; }).join('');
   _qOv('qRes', '\u2705 Draft query resolved \u2014 NP-' + claimId,
-      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim goes back to <b>Pending Draft</b>, '
-    + 'to the person you choose, marked <b>Draft query resolved</b>. They are told straight away.</div>'
+      '<div style="font-size:.82rem;color:var(--nd-text-muted)">The claim is <b>handed to the person '
+    + 'you choose</b> and marked <b>Draft query resolved</b>. It has stayed in Pending Draft '
+    + 'throughout; they are told straight away.</div>'
     + '<div class="l2fld"><label>Back to (doctor / advocate) <span class="req">*</span></label>'
     + '<select id="qResWho"><option value="">\u2014 choose \u2014</option>' + opts + '</select></div>'
     + '<div class="l2fld"><label>What was done? <span class="req">*</span></label>'
@@ -14558,7 +14559,27 @@ function l2DocsNeeded(claimId){
     [{label:'Open the documents', cls:'btn-primary', fn:function(){ docsOpen(claimId, _reloadL2); }},
      {label:'Close', cls:'btn-ghost', fn: closeModal}], false);
 }
-window.l2DocsTick = l2DocsTick; window.l2DocsNeeded = l2DocsNeeded;
+// A plain yes/no BEFORE the handover form opens (founder, 19 Sep).
+//
+// Ticking "All documents received" redraws the row and turns this button from greyed-out into a
+// live primary button in the same place — directly under the cursor that just ticked the box. One
+// more click and the claim had moved. The tick and the move being one gesture apart is what made
+// it feel like the tick moved the claim; 25 claims were ticked and un-ticked 75 times.
+//
+// So the move now asks first, and says which claim it is about, because on a list of rows the
+// question "are you sure?" is worthless unless it names the case.
+function hoConfirm(claimId){
+  const c = (_l2Rows || []).find(function(r){ return r.claim_id === claimId; }) || {};
+  const who = c.insured_name || c.complainant_name || '';
+  openModal('Move NP-' + fmtClaimNum(claimId) + ' to Consolidation?',
+      '<p style="font-size:.9rem">This hands <b>' + esc(who || ('NP-' + claimId)) + '</b> to the '
+    + 'Level-2 team. Your name is recorded against the move.</p>'
+    + '<p style="font-size:.84rem;color:var(--nd-text-muted)">You will still be asked for a note '
+    + 'for the people picking it up.</p>',
+    [{label:'Yes, move it', cls:'btn-primary', fn:function(){ closeModal(); hoOpen(claimId); }},
+     {label:'No, stay here', cls:'btn-ghost', fn: closeModal}], false);
+}
+window.l2DocsTick = l2DocsTick; window.l2DocsNeeded = l2DocsNeeded; window.hoConfirm = hoConfirm;
 
 // ══ Documents on a claim ══════════════════════════════════════════════════════
 // Every paper attached to the claim, in one place, with a way to attach more. Used from the
@@ -15196,11 +15217,35 @@ function _csrInput(f){
   } else if (type === 'insurer'){
     ctl = '<input id="' + id + '" list="csrIns" value="' + esc(v) + '"' + lk + '>';
   } else {
+    // The treatment dates bound each other: a discharge before the admission reads as a
+    // fabricated claim to an insurer, so the browser refuses the pair before the server has to
+    // (founder, 19 Sep). The server checks it too — this is only the faster, kinder half.
+    let bound = '';
+    if (type === 'date' && (key === 'admission_date' || key === 'discharge_date')){
+      bound = ' onchange="_csrDateBound(this,\'' + kind + '\',\'' + key + '\')"';
+    }
     ctl = '<input id="' + id + '" type="' + (type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text'))
-      + '" value="' + esc(type === 'date' ? v.slice(0, 10) : v) + '"' + (type === 'number' ? ' step="any"' : '') + lk + '>';
+      + '" value="' + esc(type === 'date' ? v.slice(0, 10) : v) + '"' + (type === 'number' ? ' step="any"' : '') + bound + lk + '>';
   }
   return '<div class="csrf"><label for="' + id + '">' + esc(label) + (lk ? ' \ud83d\udd12' : '') + '</label>' + ctl + '</div>';
 }
+
+// Admission and discharge police each other, whichever is typed first. Says which two dates
+// disagree rather than "invalid date", and puts the cursor back on what was just typed.
+function _csrDateBound(el, kind, key){
+  const other = document.getElementById('csr_' + kind + '_'
+    + (key === 'admission_date' ? 'discharge_date' : 'admission_date'));
+  if (!el.value || !other || !other.value) return;
+  const adm = (key === 'admission_date') ? el.value : other.value;
+  const dis = (key === 'discharge_date') ? el.value : other.value;
+  if (adm > dis){
+    ndUI.toast('Discharge (' + dis + ') is before admission (' + adm + ') — check the discharge '
+             + 'summary.', 'error');
+    el.value = '';
+    el.focus();
+  }
+}
+window._csrDateBound = _csrDateBound;
 
 function _csrInsurerList(){
   const list = (window.NidaanInsurers && NidaanInsurers.list) || [];
