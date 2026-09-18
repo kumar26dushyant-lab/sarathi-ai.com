@@ -3092,6 +3092,20 @@ async def on_lead_filed(claim_id: int, account_id: int):
             status="sent", sent_at=_now, claim_id=claim_id, account_id=account_id)
 
 
+def _paid_for_by_an_intermediary(claim: dict) -> bool:
+    """True when a branch or channel partner - not the complainant - owes us the fee.
+
+    On those claims the intermediary collects their own amount from the complainant, and any
+    price we quote exposes their margin. A branch charged ₹1,200 and paid us ₹588; a "pay ₹499"
+    nudge tells that complainant what we actually charge. The intermediary is responsible for the
+    payment, so the money conversation is with them and never with the complainant.
+    (founder, 18 Sep: "suppress them because for payment branch/cp are responsible not
+    complainant".)
+    """
+    return bool((claim.get("origin") or "").strip() in ("branch", "ops_on_behalf")
+                or (claim.get("branch_code") or "").strip())
+
+
 async def on_funnel_pay_ready(claim_id: int, account_id: int):
     """All required documents are in (pay-gate). WhatsApp + email: hope/hook
     (disputed amount vs ₹499) + a ONE-TAP pay link so the user never has to
@@ -3108,6 +3122,12 @@ async def on_funnel_pay_ready(claim_id: int, account_id: int):
     claim = dict(row)
     if claim.get("payment_status") != "unpaid_lead":
         return  # already paid/subscription — no pay nudge
+    if _paid_for_by_an_intermediary(claim):
+        # The branch/CP owes us this, not the complainant — and the number below is the
+        # COMPLAINANT's, so quoting our price here hands them the intermediary's margin.
+        logger.info("claim %s: no price nudge — a branch/partner is responsible for the fee",
+                    claim_id)
+        return
     # Idempotent: only the FIRST time the pay-gate opens for this claim.
     async with aiosqlite.connect(db.DB_PATH) as conn:
         seen = await (await conn.execute(
@@ -3292,26 +3312,43 @@ async def on_lead_deletion_notice(claim_id: int, account_id: int, purge_on: str)
     tok = _nd.create_pay_link_token(claim_id, account_id, hours=24 * 14)
     pay_link = f"{NIDAAN_BASE_URL}/nidaan/pay/{claim_id}?t={tok}"
 
+    # The deletion warning itself is a DPDP obligation and goes to everyone. The PRICE does not:
+    # where a branch or partner owes the fee, quoting ours to the complainant exposes their
+    # margin. They are told to speak to the office instead, which is the truth for those claims.
+    _via_partner = _paid_for_by_an_intermediary(claim)
+    _keep = {
+        "hi": (f"अपना केस जारी रखना है? एक टैप में ₹499 दें और समीक्षा शुरू करें:\n{pay_link}"
+               if not _via_partner else
+               "अपना केस जारी रखना है? जिनके माध्यम से आपने क्लेम दिया था, उनसे या हमसे संपर्क कीजिए।"),
+        "mr": (f"केस सुरू ठेवायचा? एका टॅपमध्ये ₹499 भरा आणि समीक्षा सुरू करा:\n{pay_link}"
+               if not _via_partner else
+               "केस सुरू ठेवायचा? ज्यांच्यामार्फत तुम्ही क्लेम दिला होता त्यांच्याशी किंवा आमच्याशी संपर्क साधा."),
+        "en": (f"Want to keep your case going? Start your review for ₹499 in one tap:\n{pay_link}"
+               if not _via_partner else
+               "Want to keep your case going? Please speak to whoever registered your claim, "
+               "or contact our office."),
+    }
+
     if lang == "hi":
         body = (f"नमस्ते {name},\n\n"
                 f"आपने *{claim.get('insured_name','')}* का क्लेम जमा किया था पर समीक्षा अभी शुरू नहीं हुई। "
                 f"DPDP Act 2023 के तहत हम आपके दस्तावेज़ ज़रूरत से ज़्यादा नहीं रखते — इसलिए *{purge_on}* को "
                 f"वे सुरक्षित रूप से हटा दिए जाएँगे।\n\n"
-                f"अपना केस जारी रखना है? एक टैप में ₹499 दें और समीक्षा शुरू करें:\n{pay_link}\n\n"
+                f"{_keep['hi']}\n\n"
                 f"कोई कार्रवाई न करें तो भी ठीक है — आपका डेटा कभी साझा नहीं होता।\n— Nidaan – The Legal Consultants LLP")
     elif lang == "mr":
         body = (f"नमस्कार {name},\n\n"
                 f"तुम्ही *{claim.get('insured_name','')}* चा क्लेम सबमिट केला होता पण समीक्षा अजून सुरू झाली नाही. "
                 f"DPDP Act 2023 नुसार आम्ही तुमची कागदपत्रे गरजेपेक्षा जास्त ठेवत नाही — म्हणून *{purge_on}* रोजी "
                 f"ती सुरक्षितपणे हटवली जातील.\n\n"
-                f"केस सुरू ठेवायचा? एका टॅपमध्ये ₹499 भरा आणि समीक्षा सुरू करा:\n{pay_link}\n\n"
+                f"{_keep['mr']}\n\n"
                 f"काहीही न केल्यासही हरकत नाही — तुमचा डेटा कधीही शेअर होत नाही.\n— Nidaan – The Legal Consultants LLP")
     else:
         body = (f"Hello {name},\n\n"
                 f"You submitted a claim for *{claim.get('insured_name','')}* but the review hasn't started yet. "
                 f"Under the DPDP Act 2023 we don't keep your documents longer than needed — so on *{purge_on}* "
                 f"they'll be securely deleted.\n\n"
-                f"Want to keep your case going? Start your review for ₹499 in one tap:\n{pay_link}\n\n"
+                f"{_keep['en']}\n\n"
                 f"No action is fine too — your data is never shared.\n— Nidaan – The Legal Consultants LLP")
 
     wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""

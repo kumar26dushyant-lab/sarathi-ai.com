@@ -716,17 +716,19 @@ async def send_nidaan_subscription_email(
     info = {**info, "quota": quota}
     cycle_word = "year" if str(plan).endswith("_annual") else "month"
     greeting = f"Hi {owner_name}," if owner_name else "Hi,"
-    amount_str = f"₹{amount_paid:,}" if amount_paid else "—"
+    # The plan name stays; the figure goes. Whoever paid already has the amount from their bank,
+    # and a subscription confirmation is not the place we restate what anyone paid.
+    # (founder, 18 Sep: "subscription confirmation email just show plan name not amount".)
+    # amount_paid is still accepted so every caller keeps working, and is deliberately unused.
     content = f"""
 <h2>🎉 Your {info['label']} Plan is Active!</h2>
 <p>{greeting}</p>
-<p>Thank you for subscribing to <strong>Nidaan Partner</strong>. Your payment was successful and your plan is now active.</p>
+<p>Thank you for subscribing to <strong>Nidaan Partner</strong>. Your plan is now active.</p>
 
 <div style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.35);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0">
   <p style="color:#22d3ee;font-size:1.1rem;font-weight:800;margin-bottom:.75rem">{info['label']} Plan</p>
   <table style="width:100%;font-size:.88rem;border-collapse:collapse">
-    <tr><td style="color:#64748b;padding:.3rem 0;width:130px">Amount paid</td><td style="color:#e2e8f0;font-weight:700">{amount_str}</td></tr>
-    <tr><td style="color:#64748b;padding:.3rem 0">Claims quota</td><td style="color:#e2e8f0">{info['quota']}</td></tr>
+    <tr><td style="color:#64748b;padding:.3rem 0;width:130px">Claims quota</td><td style="color:#e2e8f0">{info['quota']}</td></tr>
     <tr><td style="color:#64748b;padding:.3rem 0">Support</td><td style="color:#e2e8f0">{info['support']}</td></tr>
     <tr><td style="color:#64748b;padding:.3rem 0">Next renewal</td><td style="color:#e2e8f0;font-weight:700">{renewal_date}</td></tr>
   </table>
