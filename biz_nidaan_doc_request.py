@@ -51,6 +51,24 @@ DB_PATH = db.DB_PATH
 NUDGE_GAP_DAYS = 3
 MAX_NUDGES = 2
 
+# How long a claim has been left alone before it starts climbing the desk, and how recently
+# somebody must have asked before a second ask has to justify itself.
+COOLOFF_DAYS = 3
+
+
+def _days_since(ts) -> Optional[int]:
+    """Whole days since a stored timestamp. None when there is nothing to measure from."""
+    if not ts:
+        return None
+    from datetime import datetime as _dt
+    s = str(ts).replace("T", " ").split(".")[0].strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return max(0, (_dt.utcnow() - _dt.strptime(s, fmt)).days)
+        except ValueError:
+            continue
+    return None
+
 # The line that has to be in every automatic chase. Somebody who has already sent everything and
 # gets nudged anyway concludes we are not reading what they send.
 IGNORE_LINE_EN = ("If you have already shared all the required documents, please ignore this "
@@ -401,9 +419,18 @@ async def _mail(email: str, subject: str, text: str, claim_id: int) -> tuple[boo
 
 async def send(claim_id: int, *, doc_keys: list[str], message: str, confirm: str,
                extras=None, exclude=None, channels=None, actor: str = "",
-               actor_staff_id: Optional[int] = None, kind: str = "request") -> dict:
+               actor_staff_id: Optional[int] = None, kind: str = "request",
+               again_reason: str = "") -> dict:
     """Push the ask. Refuses unless `confirm` matches what preview() showed, so nothing reaches a
-    customer that a member of staff has not actually read back."""
+    customer that a member of staff has not actually read back.
+
+    A SECOND ASK INSIDE THE COOLING-OFF WINDOW HAS TO SAY WHY. Several people work this queue and
+    every ask was already recorded - but nothing stopped, or even mentioned, a colleague having
+    asked an hour ago. Two staff each open a claim, each send, and the complainant gets the same
+    request twice from two names, which reads as disorganised at exactly the moment we are asking
+    them to trust us. This does not forbid it: sometimes you genuinely do chase again. It asks for
+    one sentence, and records it next to the send.
+    """
     pv = await preview(claim_id, doc_keys=doc_keys, message=message, extras=extras,
                        exclude=exclude, channels=channels)
     if not pv.get("ok"):
@@ -412,6 +439,16 @@ async def send(claim_id: int, *, doc_keys: list[str], message: str, confirm: str
     if not confirm or confirm != pv.get("confirm"):
         return {"ok": False, "error": "This changed since you checked it. Look at it once more, "
                                       "then send.", "stale": True}
+
+    last = await recent_ask(claim_id)
+    if last.get("recent") and kind != "nudge" and not (again_reason or "").strip():
+        when = "today" if (last.get("days") or 0) == 0 else (
+            "yesterday" if last["days"] == 1 else "%d days ago" % last["days"])
+        return {"ok": False, "asked_recently": True, "needs_reason": True,
+                "last": last,
+                "error": "%s already asked %s. If you need to ask again, say why - it goes on "
+                         "the claim so the next person knows."
+                         % (last.get("by") or "Somebody", when)}
 
     subject = "[NidaanPartner] Documents needed for your claim NP-%s" % claim_id
     results = []
@@ -452,10 +489,14 @@ async def send(claim_id: int, *, doc_keys: list[str], message: str, confirm: str
         await _n.record_claim_activity(
             claim_id, "doc_request", channel=",".join(pv["channels"]), direction="out",
             actor=actor or "staff",
-            summary="Asked for %d document(s) — %d recipient(s) reached%s"
+            summary="Asked for %d document(s) — %d recipient(s) reached%s%s"
                     % (len(doc_keys), delivered,
-                       "" if reached_complainant else ", COMPLAINANT NOT REACHED"),
-            meta=json.dumps({"req_id": req_id, "docs": doc_keys}, ensure_ascii=False))
+                       "" if reached_complainant else ", COMPLAINANT NOT REACHED",
+                       (" · asked again: %s" % again_reason.strip()[:160])
+                       if (again_reason or "").strip() else ""),
+            meta=json.dumps({"req_id": req_id, "docs": doc_keys,
+                             "again_reason": (again_reason or "").strip()[:300]},
+                            ensure_ascii=False))
     except Exception:
         pass
 
@@ -719,3 +760,130 @@ async def set_claim_type(claim_id: int, claim_type: str, *, actor: str) -> dict:
     except Exception:
         pass
     return {"ok": True, "claim_type": _ck.canonical_type(ct)}
+
+# ── The document desk ────────────────────────────────────────────────────────
+# Everything waiting on paper, in one list, ordered by the thing that actually matters: how long
+# it has been since ANYBODY asked. Two document asks had ever been sent when this was written and
+# no per-claim schedule had ever been created, which is not a sign the team does not chase - it is
+# a sign the chasing lives in people's heads and in WhatsApp, where a colleague cannot see it.
+#
+# The founder's shape for this (19 Sep): prefer manual, and "surface only days not been looked at
+# or asked for documents". So nothing here sends anything. It only makes the silence visible.
+
+DESK_QUIET_DAYS = 3          # after this, a claim starts rising up the list
+
+
+async def desk(limit: int = 200) -> dict:
+    """Every claim still waiting for documents, worst-neglected first.
+
+    One row per claim carries what the next person needs BEFORE they act: what is outstanding,
+    when it was last asked for and by whom, whether a reminder is already scheduled, and whether
+    anything is sitting in the staff queue unidentified.
+    """
+    import biz_nidaan_doc_checklist as _ck
+    import biz_nidaan_wa_schedule as _sch
+
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        claims = [dict(r) for r in await (await c.execute(
+            "SELECT cl.claim_id, COALESCE(cl.complainant_name,'') AS complainant_name, "
+            "       COALESCE(cl.insured_name,'') AS insured_name, "
+            "       COALESCE(cl.claim_type,'') AS claim_type, "
+            "       COALESCE(cl.pipeline_stage,'') AS pipeline_stage, "
+            "       COALESCE(cl.status,'') AS status, cl.created_at, cl.docs_complete_at "
+            "FROM nidaan_claims cl "
+            "WHERE COALESCE(cl.archived,0)=0 AND COALESCE(cl.status,'') NOT IN "
+            "      ('closed','withdrawn') AND cl.docs_complete_at IS NULL "
+            "ORDER BY cl.claim_id DESC LIMIT ?", (int(limit),))).fetchall()]
+
+        asks = {int(r["claim_id"]): dict(r) for r in await (await c.execute(
+            "SELECT claim_id, MAX(created_at) AS last_at, "
+            "       COUNT(*) AS asks FROM nidaan_doc_requests GROUP BY claim_id")).fetchall()}
+        last_by = {int(r["claim_id"]): (r["sent_by"] or "") for r in await (await c.execute(
+            "SELECT d.claim_id, d.sent_by FROM nidaan_doc_requests d "
+            "JOIN (SELECT claim_id, MAX(req_id) AS m FROM nidaan_doc_requests GROUP BY claim_id) x "
+            "ON x.claim_id = d.claim_id AND x.m = d.req_id")).fetchall()}
+        scheduled = {int(r["claim_id"]): dict(r) for r in await (await c.execute(
+            "SELECT claim_id, MIN(next_at) AS next_at, COUNT(*) AS n, "
+            "       MAX(created_by_name) AS by_name FROM nidaan_wa_schedule "
+            "WHERE status='active' GROUP BY claim_id")).fetchall()}
+        chases = {int(r["claim_id"]): dict(r) for r in await (await c.execute(
+            "SELECT claim_id, nudges, last_nudge_at, paused, call_due "
+            "FROM nidaan_doc_chase")).fetchall()}
+
+    unsorted_by_claim = {}
+    try:
+        import biz_nidaan_doc_intake as _intake
+        for row in await _intake.needs_a_look(200):
+            cid = int(row["claim_id"])
+            unsorted_by_claim[cid] = unsorted_by_claim.get(cid, 0) + int(row.get("unsorted") or 0)
+    except Exception:  # noqa: BLE001
+        pass
+
+    rows = []
+    for cl in claims:
+        cid = int(cl["claim_id"])
+        try:
+            pending = await _ck.pending_required_docs(cid, cl["claim_type"])
+        except Exception:  # noqa: BLE001
+            continue
+        if not pending:
+            continue                        # nothing outstanding: not this desk's business
+        a = asks.get(cid) or {}
+        ch = chases.get(cid) or {}
+        # "Asked" means anybody reaching out by any route - a staff push or an automatic nudge.
+        last_ask = a.get("last_at") or ch.get("last_nudge_at") or ""
+        quiet = _days_since(last_ask) if last_ask else _days_since(cl.get("created_at"))
+        sc = scheduled.get(cid) or {}
+        rows.append({
+            "claim_id": cid,
+            "who": cl["complainant_name"] or cl["insured_name"],
+            "claim_type": cl["claim_type"],
+            "bucket": cl["pipeline_stage"],
+            "missing": len(pending),
+            "missing_names": [d.get("en") or d["key"] for d in pending[:3]],
+            "asks": int(a.get("asks") or 0),
+            "last_ask_at": str(last_ask or ""),
+            "last_ask_by": last_by.get(cid, ""),
+            "quiet_days": quiet if quiet is not None else 0,
+            "never_asked": not last_ask,
+            "scheduled": bool(sc),
+            "scheduled_next": _sch.utc_to_ist(sc["next_at"]) if sc.get("next_at") else "",
+            "scheduled_by": sc.get("by_name") or "",
+            "paused": bool(ch.get("paused")),
+            "call_due": bool(ch.get("call_due")),
+            "needs_a_look": unsorted_by_claim.get(cid, 0),
+        })
+
+    # Longest silence first; a claim nobody has ever asked sorts as its full age.
+    rows.sort(key=lambda r: (-(r["quiet_days"] or 0), -r["missing"]))
+    return {
+        "ok": True,
+        "quiet_days": DESK_QUIET_DAYS,
+        "waiting": len(rows),
+        "never_asked": sum(1 for r in rows if r["never_asked"]),
+        "gone_quiet": sum(1 for r in rows if (r["quiet_days"] or 0) >= DESK_QUIET_DAYS),
+        "needs_a_look": sum(r["needs_a_look"] for r in rows),
+        "rows": rows,
+    }
+
+
+async def recent_ask(claim_id: int) -> dict:
+    """When this claim was last asked, and by whom - for showing BEFORE somebody asks again.
+
+    Every ask was already recorded; what was missing is anyone seeing it at the moment it
+    matters. Two staff can each open a claim and send within minutes, and the complainant gets
+    the same request twice from two names.
+    """
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        r = await (await c.execute(
+            "SELECT sent_by, kind, created_at FROM nidaan_doc_requests "
+            "WHERE claim_id=? ORDER BY req_id DESC LIMIT 1", (int(claim_id),))).fetchone()
+    if not r:
+        return {"asked": False}
+    d = dict(r)
+    days = _days_since(d.get("created_at"))
+    return {"asked": True, "by": d.get("sent_by") or "", "at": str(d.get("created_at") or ""),
+            "days": days if days is not None else 0,
+            "recent": (days is not None and days < COOLOFF_DAYS)}

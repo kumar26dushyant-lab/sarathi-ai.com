@@ -8452,6 +8452,9 @@ class _DocPreviewReq(BaseModel):
 class _DocSendReq(_DocPreviewReq):
     confirm: str = Field(..., min_length=8, max_length=64)
     kind: str = Field("request", max_length=16)
+    # Why this claim is being asked AGAIN so soon. Only required when a colleague asked inside
+    # the cooling-off window; it goes on the claim so the next person knows it was deliberate.
+    again_reason: str = Field("", max_length=300)
 
 
 class _DocDraftReq(BaseModel):
@@ -8709,13 +8712,46 @@ async def ops_doc_window_send(claim_id: int, body: _DocSendReq, request: Request
                          extras=[e.model_dump() for e in body.extras],
                          exclude=body.exclude, channels=body.channels,
                          actor=_actor_label(caller),
-                         actor_staff_id=(caller or {}).get("staff_id"), kind=body.kind)
+                         actor_staff_id=(caller or {}).get("staff_id"), kind=body.kind,
+                         again_reason=body.again_reason)
     if not res.get("ok"):
+        if res.get("needs_reason"):
+            # 428: the send is fine, it just needs one sentence first. A distinct code so the
+            # screen can ask for it instead of showing a dead-end error.
+            return JSONResponse({"detail": res.get("error"), "needs_reason": True,
+                                 "last": res.get("last") or {}}, status_code=428)
         raise HTTPException(status_code=409 if res.get("stale") else 400,
                             detail=res.get("error") or "Could not send it")
     await _ops_audit(request, "doc.request", "claim", str(claim_id),
                      f"{len(body.doc_keys)} doc(s) to {res.get('delivered')} recipient(s)")
     return res
+
+
+@app.get("/nidaan/ops/api/doc-desk")
+@limiter.limit("30/minute")
+async def ops_doc_desk(request: Request):
+    """Every claim still waiting on paper, longest silence first.
+
+    The founder's instruction (19 Sep) was to prefer manual work and "surface only days not been
+    looked at or asked for documents". So this sends nothing and decides nothing - it makes the
+    silence visible, and shows who last asked so two people do not chase the same person.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.desk()
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/last-ask")
+@limiter.limit("60/minute")
+async def ops_claim_last_ask(claim_id: int, request: Request):
+    """When this claim was last asked and by whom - shown BEFORE somebody asks again."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.recent_ask(claim_id)
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/pause")

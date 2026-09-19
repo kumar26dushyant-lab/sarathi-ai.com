@@ -400,3 +400,62 @@ async def _i9(ctx):
             "SELECT COUNT(*) FROM nidaan_claim_doc_checklist WHERE received=1 "
             "AND received_via='journey'")).fetchone()
     assert int(n[0]) >= 1, "the tick did not persist"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Several people work the document queue. These pin the coordination: the desk that shows the
+# silence, and the guard that stops two staff chasing the same person an hour apart.
+desk = _j("doc_desk", "The team sees what is waiting on paper", "staff")
+
+
+@desk.step("the desk builds")
+async def _dk1(ctx):
+    d = await ctx["docreq"].desk()
+    assert d.get("ok"), "the document desk would not build"
+    ctx["desk"] = d
+
+
+@desk.step("it counts what is waiting")
+async def _dk2(ctx):
+    d = ctx["desk"]
+    for k in ("waiting", "never_asked", "gone_quiet", "needs_a_look"):
+        assert isinstance(d.get(k), int), "the desk does not report '%s'" % k
+
+
+@desk.step("every row says what is missing and how long it has been quiet")
+async def _dk3(ctx):
+    rows = ctx["desk"]["rows"]
+    if not rows:
+        raise Skip("nothing is waiting on documents right now")
+    r = rows[0]
+    for k in ("claim_id", "who", "missing", "quiet_days", "last_ask_by", "scheduled"):
+        assert k in r, "a desk row is missing '%s'" % k
+    assert r["missing"] > 0, "a claim with nothing outstanding reached the desk"
+
+
+@desk.step("the longest silence is at the top")
+async def _dk4(ctx):
+    days = [r["quiet_days"] or 0 for r in ctx["desk"]["rows"]]
+    assert days == sorted(days, reverse=True), \
+        "the desk is not ordered by how long nobody has asked"
+
+
+@desk.step("a claim nobody has ever asked is marked as such")
+async def _dk5(ctx):
+    rows = ctx["desk"]["rows"]
+    assert all(isinstance(r["never_asked"], bool) for r in rows)
+
+
+@desk.step("asking twice in a row needs a reason")
+async def _dk6(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        r = await (await c.execute(
+            "SELECT claim_id FROM nidaan_doc_requests ORDER BY req_id DESC LIMIT 1")).fetchone()
+    if not r:
+        raise Skip("no document ask has ever been sent, so nothing to re-ask")
+    cid = int(dict(r)["claim_id"])
+    last = await ctx["docreq"].recent_ask(cid)
+    assert last.get("asked"), "the last ask on this claim cannot be read back"
+    assert "by" in last and "days" in last, "it does not say who asked or when"
