@@ -13028,7 +13028,11 @@ function _l2Styles(){
   .l2srch{flex:1;min-width:11rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);
     color:var(--nd-text-primary);border-radius:8px;padding:.38rem .6rem;font-size:.84rem;
     font-family:inherit}
-  .l2age{font-variant-numeric:tabular-nums;font-weight:800;border-radius:5px;padding:.05rem .38rem;
+  .l2cell{font-size:.74rem;padding:.1rem .2rem;max-width:8.5rem;background:transparent;
+  border:1px solid transparent;color:var(--nd-text-secondary);border-radius:4px}
+.l2cell:hover,.l2cell:focus{border-color:var(--nd-border-strong);background:var(--nd-bg-surface)}
+.l2cell:disabled{opacity:.5}
+.l2age{font-variant-numeric:tabular-nums;font-weight:800;border-radius:5px;padding:.05rem .38rem;
     font-size:.78rem;white-space:nowrap}
   .l2age.ok{background:var(--nd-success-soft,rgba(52,211,153,.14));color:var(--nd-success-text)}
   .l2age.amber{background:var(--nd-warning-soft);color:var(--nd-warning-text)}
@@ -13305,6 +13309,8 @@ async function l2Load(){
   const m = document.getElementById('l2Main');
   if (!m) return;
   m.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  // Who a claim can be handed to, fetched once and reused by every row.
+  await _l2LoadHandlers();
   if (_l2Sel === 'all' || _l2Sel.indexOf('pre:') === 0){
     // The whole line, or one stage before Level-2 - Case Board's own list, filters and sheet.
     _cbStyles();
@@ -13580,10 +13586,17 @@ function l2Table(b){
       + '<td>' + esc(i.who || '(no name)')
       +   (i.insured && i.insured !== i.who ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">'
           + esc(i.insured) + '</div>' : '') + '</td>'
+      // The claim type decides the whole document list, so it is read here and corrected here
+      // rather than discovered three weeks later. The screen already warns: "wrong type means
+      // weeks of wrong papers."
+      + '<td style="font-size:.78rem">' + _l2TypeCell(i) + '</td>'
       + '<td>' + (i.insurer ? esc(i.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
       + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
       + '<td>' + docs + '</td>'
       + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
+      // WHO HAS IT. A bucket tells you what stage a claim is at; it does not tell you whose desk
+      // it is on, and "somebody in Drafting will pick it up" is how a claim goes quiet.
+      + '<td>' + _l2AssignCell(i) + '</td>'
       + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
@@ -13601,11 +13614,82 @@ function l2Table(b){
       + '<td style="white-space:nowrap">' + btns + '</td></tr>';
   }).join('');
   return '<div class="table-wrap"><table><thead><tr>'
-    + '<th>Ref</th><th>Complainant</th><th>Insurance Co.</th><th style="text-align:right">Disputed</th>'
+    + '<th>Ref</th><th>Complainant</th><th>Type</th><th>Insurance Co.</th>'
+    + '<th style="text-align:right">Disputed</th>'
     + '<th>Docs</th>' + (b.substates && b.substates.length ? '<th>Step</th>' : '')
-    + '<th>In bucket</th><th>Why it is waiting</th><th></th>'
+    + '<th>With</th><th>In bucket</th><th>Why it is waiting</th><th></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
+
+// Claim type and who holds the claim, as editable cells rather than facts you have to open the
+// claim to change. Both are one save; both are recorded with your name.
+// Exactly the types biz_nidaan_doc_checklist has a document list for. Offering one it does not
+// know would be rejected on save, which is a refusal we could have predicted.
+const L2_TYPES = ['health', 'motor', 'life', 'travel', 'property', 'marine', 'other'];
+
+function _l2TypeCell(i){
+  const cur = (i.claim_type || '').trim();
+  const opts = L2_TYPES.map(function(t){
+    return '<option value="' + t + '"' + (t === cur ? ' selected' : '') + '>'
+         + t.replace(/_/g, ' ') + '</option>'; }).join('');
+  return '<select class="l2cell" onclick="event.stopPropagation()" '
+    + 'onchange="l2SetType(' + i.claim_id + ',this.value,this)">'
+    + (cur ? '' : '<option value="" selected>— not set —</option>') + opts + '</select>';
+}
+
+function _l2AssignCell(i){
+  const cur = i.assigned_to == null ? '' : String(i.assigned_to);
+  const people = (_l2Handlers || []).map(function(s){
+    return '<option value="' + s.staff_id + '"' + (String(s.staff_id) === cur ? ' selected' : '')
+         + '>' + esc(s.name) + '</option>'; }).join('');
+  return '<select class="l2cell" onclick="event.stopPropagation()" '
+    + 'onchange="l2SetOwner(' + i.claim_id + ',this.value,this)">'
+    + '<option value=""' + (cur ? '' : ' selected') + '>— nobody —</option>' + people + '</select>';
+}
+
+// Loaded once, reused by every row. Only the people who actually work claims are offered: a claim
+// landing with somebody who does not is how a claim goes quiet.
+let _l2Handlers = [];
+async function _l2LoadHandlers(){
+  if (_l2Handlers.length) return;
+  try{
+    const r = await API('/assignees');
+    if (!r.ok) return;
+    const d = await r.json();
+    _l2Handlers = (d.staff || []).filter(function(s){ return s.claim_handler; });
+  }catch(e){}
+}
+
+async function l2SetType(claimId, value, el){
+  if (!value) return;
+  const was = el.getAttribute('data-was') || '';
+  el.disabled = true;
+  try{
+    // The endpoint that already owns this: it re-seeds the document list from the new type.
+    const r = await API('/claims/' + claimId + '/doc-window/type',
+      {method:'POST', body: JSON.stringify({claim_type: value})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not change the type.'), 'error');
+      if (was) el.value = was; }
+    else { ndUI.toast('NP-' + claimId + ' is now a ' + value.replace(/_/g,' ') + ' claim — the '
+                    + 'document list follows the type', 'success'); }
+  }catch(e){ ndUI.toast('Could not change the type.', 'error'); }
+  el.disabled = false;
+}
+
+async function l2SetOwner(claimId, staffId, el){
+  el.disabled = true;
+  try{
+    const r = await API('/cases/' + claimId + '/assign',
+      {method:'POST', body: JSON.stringify({staff_id: staffId ? Number(staffId) : null})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not assign that.'), 'error'); }
+    else { ndUI.toast(d.assigned_name ? ('NP-' + claimId + ' is with ' + d.assigned_name)
+                                      : ('NP-' + claimId + ' is with nobody'), 'success'); }
+  }catch(e){ ndUI.toast('Could not assign that.', 'error'); }
+  el.disabled = false;
+}
+window.l2SetType = l2SetType; window.l2SetOwner = l2SetOwner;
 
 let _l2QT = null;
 function l2Search(v){ _l2Q = v; clearTimeout(_l2QT); _l2QT = setTimeout(l2Load, 300); }
