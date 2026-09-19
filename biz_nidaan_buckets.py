@@ -1879,6 +1879,11 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "email": (r.get("complainant_email") or r.get("insured_email") or "").strip(),
             "insurer": (r.get("insurer_name") or "").strip(),
             "policy_no": (r.get("policy_no") or "").strip(),
+            # The INSURER's own claim number, off the rejection letter. Every letter, email and
+            # Ombudsman form quotes it, so staff were opening each claim to read a number they
+            # need before they can write a sentence (founder, 19 Sep). Already loaded with the
+            # claim's other fields — nothing extra is fetched to show it.
+            "insurer_claim_no": (vals.get("insurer_claim_no") or "").strip(),
             "claim_type": (r.get("claim_type") or "").strip(),
             "amount": r.get("disputed_amount") or 0,
             "bucket": bk, "bucket_name": b.get("name_en", bk), "bucket_icon": b.get("icon", ""),

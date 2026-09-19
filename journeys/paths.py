@@ -973,3 +973,31 @@ async def _af5(ctx):
     # fought would be worse than not chasing at all.
     total = sum(int(r["amount"] or 0) for r in rows if r["fightable"])
     assert ctx["fee"]["disputed_total"] == total, "the total includes claims we said have no case"
+
+
+@own.step("the board carries the insurer's own claim number")
+async def _o7(ctx):
+    # Every letter, email and Ombudsman form quotes it, so it belongs on the row rather than
+    # three clicks inside the claim.
+    b = await ctx["buckets"].board()
+    rows = b.get("items") or b.get("rows") or []
+    if not rows:
+        raise Skip("no claims in the pipeline")
+    assert "insurer_claim_no" in rows[0], "the board does not carry insurer_claim_no"
+
+
+@own.step("and it is the value recorded on the claim, not a guess")
+async def _o8(ctx):
+    import aiosqlite as _sq
+    b = await ctx["buckets"].board()
+    rows = b.get("items") or b.get("rows") or []
+    withnum = [r for r in rows if (r.get("insurer_claim_no") or "").strip()]
+    if not withnum:
+        raise Skip("no claim has an insurer claim number recorded yet")
+    r = withnum[0]
+    async with _sq.connect(ctx["db"]) as c:
+        got = await (await c.execute(
+            "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
+            (r["claim_id"], "insurer_claim_no"))).fetchone()
+    assert got and (got[0] or "").strip() == r["insurer_claim_no"], \
+        "the board shows a different claim number from the one on the claim"
