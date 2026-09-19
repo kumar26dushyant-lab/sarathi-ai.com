@@ -13681,7 +13681,10 @@ async function l2Move(claimId, toKey, presetReason, fromKey){
         ? '<div class="l2ban info" style="margin-bottom:.6rem">A pause needs a date it comes back. '
           + 'On that date the claim returns to <b>' + esc((_l2Bucket(from)||{}).name_en || '')
           + '</b> by itself.</div>' : '')
-    + (subs.length > 1
+    // Entering Escalation always lands on Escalation Pending: the claim has not been escalated
+    // yet, so offering "Escalated" as an arrival step invites somebody to mark it done before it
+    // is. From here the DATE moves it on (founder, 19 Sep).
+    + ((subs.length > 1 && to !== 'escalation')
         ? '<div class="l2fld"><label>Which step?</label><select id="l2mSub">' + subOpts + '</select></div>'
         : '')
     + (isPark
@@ -13962,9 +13965,15 @@ function l2CaseRender(rem){
     +   '<div style="font-size:.84rem;color:var(--nd-text-secondary)">'
     +   '<b>' + esc((st.guide || {}).what || '') + '</b><br>' + esc((st.guide || {}).do || '')
     +   '<br><span style="color:var(--nd-warning-text)">⚠ ' + esc((st.guide || {}).watch || '') + '</span></div></div>'
-    + ((st.substates || []).length
+    // The step picker is gone where the work itself decides the step (founder, 19 Sep).
+    //   Escalation   — the escalation DATE makes it Escalated; the insurer's reply does the rest.
+    //   Pending Draft — a draft query changes the status without moving or re-labelling anything.
+    // Buckets like Lokpal keep it: their steps are genuine choices a person makes (which annexure
+    // has come back), not facts already recorded elsewhere.
+    + (((st.substates || []).length && st.bucket !== 'escalation' && st.bucket !== 'pending_draft')
         ? '<div class="l2fld"><label>Step inside this bucket</label>'
           + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select></div>' : '')
+    + ((st.bucket === 'escalation') ? _escPanel(st, id) : '')
     // Every paper on the claim, right above the fields they are read into. Each opens in its own
     // tab, so the gist being typed below is never lost to go and look at one.
     + '<div><div class="l2sec">Documents \u00b7 ' + (_l2Case.files || []).length + '</div>'
@@ -15332,6 +15341,121 @@ function _csrDateBound(el, kind, key){
   }
 }
 window._csrDateBound = _csrDateBound;
+
+// ── Escalation, on the claim ─────────────────────────────────────────────────
+// What this bucket needs is not a dropdown but two facts: when we escalated, and what the insurer
+// said. The date moves the claim to Escalated on its own; the reply decides where it goes next —
+// Complete, Lokpal, or a query that keeps it here because from then on they are waiting on us.
+function _escPanel(st, id){
+  const sub = st.sub || '';
+  const escalated = (sub === 'escalated' || sub === 'query');
+  const cred = _escCreds(st);
+  return '<div class="l2fld" style="margin-top:.2rem">'
+    + '<div class="l2sec">Where this stands</div>'
+    + (sub === 'pending'
+        ? '<div class="l2ban info">Not escalated yet. <b>Record the escalation date below</b> — '
+          + 'that is what marks it Escalated and starts the reminder clock (day 10, 20, 30).</div>'
+        : sub === 'query'
+          ? '<div class="l2ban amber">The insurer has asked us something. <b>They are waiting on '
+            + 'us</b>, so no reminders are going out. Answer them, then record what they say.</div>'
+          : '<div class="l2ban ok">Escalated. Reminders fall due on day 10, 20 and 30 — you send '
+            + 'them, and record the date you did.</div>')
+    // The case email and password, at the moment the team needs them to write to the insurer.
+    + (escalated ? cred : '')
+    + (escalated
+        ? '<div style="margin-top:.5rem"><div class="l2sec">What did the insurer say?</div>'
+          + '<div style="display:flex;gap:.35rem;flex-wrap:wrap">'
+          + '<button class="l2mv p" onclick="escReply(' + id + ',&#39;accepted&#39;)">'
+          + '\u2705 They agreed</button>'
+          + '<button class="l2mv g" onclick="escReply(' + id + ',&#39;refused&#39;)">'
+          + '\u26d4 They refused</button>'
+          + '<button class="l2mv g" onclick="escReply(' + id + ',&#39;query&#39;)">'
+          + '\u2753 They asked a question</button>'
+          + '</div>'
+          + '<div class="hint">Agreed closes the case as settled at escalation. Refused sends it '
+          + 'to Lokpal. A question keeps it here.</div></div>'
+        : '')
+    + '</div>';
+}
+
+// The email account opened for this case. It is already on the claim — captured from the
+// document-collection conversation — and this is the moment the team needs it to write to the
+// insurer, so it is surfaced here instead of hunted for.
+//
+// The password is NOT read from the page. The server sends dots to anyone whose role does not
+// include it, and the existing l2ShowSecret() asks for the real one and records who looked. That
+// control already exists and is audited; reimplementing it here would have quietly created a
+// second, weaker path to a credential.
+function _escCreds(st){
+  const vals = (st && st.values) || {};
+  const mail = vals['case_email'] || '';
+  const pwd = vals['case_email_password'] || '';
+  const cid = (_l2Case && _l2Case.claim_id) || 0;
+  if (!mail && !pwd){
+    return '<div class="l2ban amber" style="margin-top:.5rem">No case email recorded yet — the '
+         + 'insurer and the authorities are written to from it. It is normally captured during '
+         + 'document collection; add it in the fields below if you have it.</div>';
+  }
+  const reveal = !pwd ? ''
+    : (st.may_see_secrets
+        ? ' <button class="l2mv g" onclick="l2ShowSecret(' + cid + ',&#39;case_email_password&#39;)">'
+          + 'Show it</button>'
+        : ' <span class="hint">Hidden — super admins and sub-super admins can see it.</span>');
+  return '<div style="margin-top:.5rem;padding:.5rem .6rem;border:1px solid var(--nd-border);'
+    + 'border-radius:6px;background:var(--nd-bg-surface-2)">'
+    + '<div class="l2sec" style="margin:0 0 .25rem">Case email</div>'
+    + '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.86rem">'
+    +   '<span>' + esc(mail || '\u2014') + '</span>'
+    +   '<span style="color:var(--nd-text-faint)">|</span>'
+    +   '<span>' + esc(pwd || '\u2014') + '</span>' + reveal
+    +   ' <button class="l2mv g" onclick="csrFocus(&#39;case_email&#39;)">\u270f\ufe0f Correct</button>'
+    + '</div></div>';
+}
+
+// Jump to the field rather than duplicating it: one box owns each value, so a correction made
+// here cannot disagree with the one made below.
+function csrFocus(key){
+  const el = document.getElementById('csr_claim_' + key) || document.getElementById('csr_l2_' + key);
+  if (el){ el.scrollIntoView({block:'center'}); el.focus(); }
+}
+
+async function escReply(claimId, outcome){
+  const title = {accepted: '\u2705 The insurer agreed', refused: '\u26d4 The insurer refused',
+                 query: '\u2753 The insurer asked a question'}[outcome];
+  const after = {accepted: 'This closes the case as <b>settled at escalation</b>.',
+                 refused: 'This sends the case to <b>Lokpal</b>.',
+                 query: 'The case <b>stays here</b>, marked Escalation Query, and reminders stop '
+                        + 'while they are waiting on us.'}[outcome];
+  openModal(title + ' \u2014 NP-' + fmtClaimNum(claimId),
+      '<div class="l2ban info">' + after + '</div>'
+    + '<div class="l2fld"><label>What did they write? <span class="req">*</span></label>'
+    + '<textarea id="escNote" rows="3" maxlength="1000" placeholder="e.g. Letter dated 14 Sep — '
+    + 'they want the original discharge summary before reconsidering."></textarea>'
+    + '<div class="hint">The next person starts from this.</div></div>'
+    + '<div id="escMsg" style="font-size:.82rem"></div>',
+    [{label:'Record it', cls:'btn-primary', fn: async function(){
+        const note = (document.getElementById('escNote').value || '').trim();
+        const msg = document.getElementById('escMsg');
+        if (note.length < 3){ msg.style.color='var(--nd-danger-text)';
+          msg.textContent='Say what they wrote.'; return; }
+        this.disabled = true; msg.style.color='var(--nd-text-muted)'; msg.textContent='Saving\u2026';
+        try{
+          const r = await API('/claims/' + claimId + '/escalation/reply',
+            {method:'POST', body: JSON.stringify({outcome: outcome, note: note})});
+          const d = await r.json().catch(function(){ return {}; });
+          if (!r.ok){ msg.style.color='var(--nd-danger-text)';
+            msg.textContent = _extractErr(d, 'Could not record that.'); this.disabled=false; return; }
+          closeModal();
+          ndUI.toast(d.moved_to ? ('NP-' + claimId + ' moved to ' + d.moved_to.replace(/_/g,' '))
+                                : ('NP-' + claimId + ' marked Escalation Query'), 'success');
+          if (typeof _reloadL2 === 'function') _reloadL2();
+          if (typeof l2Open === 'function') l2Open(claimId);
+        }catch(e){ msg.style.color='var(--nd-danger-text)';
+          msg.textContent='Could not record that.'; this.disabled=false; }
+      }},
+     {label:'Cancel', cls:'btn-ghost', fn: closeModal}], false);
+}
+window.escReply = escReply; window.csrFocus = csrFocus;
 
 function _csrInsurerList(){
   const list = (window.NidaanInsurers && NidaanInsurers.list) || [];
