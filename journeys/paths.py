@@ -1001,3 +1001,55 @@ async def _o8(ctx):
             (r["claim_id"], "insurer_claim_no"))).fetchone()
     assert got and (got[0] or "").strip() == r["insurer_claim_no"], \
         "the board shows a different claim number from the one on the claim"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+rem = _j("removals", "Fields nobody needed are gone", "staff")
+
+
+@rem.step("the corrections apply, and only once")
+async def _rm1(ctx):
+    first = await ctx["buckets"]._apply_config_fixes()
+    second = await ctx["buckets"]._apply_config_fixes()
+    assert second == 0, "not idempotent — a second pass changed %d row(s)" % second
+
+
+@rem.step("Approved by / Approved on are gone from Pending Draft")
+async def _rm2(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_bucket_fields WHERE bucket_key='pending_draft' "
+            "AND field_key IN ('approved_by','approved_on') AND active=1")).fetchone()
+    assert int(n[0]) == 0, "%s approval field(s) are still shown" % n[0]
+
+
+@rem.step("and they no longer block a claim leaving the bucket")
+async def _rm3(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_bucket_fields WHERE field_key IN "
+            "('approved_by','approved_on') AND required_exit=1")).fetchone()
+    assert int(n[0]) == 0, "a removed field is still required before a claim can move on"
+
+
+@rem.step("but what was already recorded is still readable")
+async def _rm4(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_fields WHERE field_key IN "
+            "('approved_by','approved_on')")).fetchone()
+    # Deactivating a field must never delete what people wrote into it.
+    assert int(n[0]) >= 1, "the values recorded against the approval fields were destroyed"
+
+
+@rem.step("the health list no longer asks for past medical records")
+async def _rm5(ctx):
+    import biz_nidaan_doc_checklist as _ck
+    keys = {d["key"] for d in _ck.doc_template_for("health")}
+    assert "prior_medical" not in keys, "Past Medical Records is still on the health list"
+    # And the list did not lose anything else on the way out.
+    for must in ("rejection_letter", "policy_doc", "claim_form", "mail_credentials"):
+        assert any(k.startswith(must[:8]) for k in keys), "the health list lost '%s'" % must

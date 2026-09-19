@@ -75,9 +75,10 @@ _GUIDE = {
                      "Every required document is in, and originals have arrived by post.",
                      "Hospitals refusing indoor case papers is common — send the standard letter, do not wait."),
     "pending_draft": ("Writing the case up and getting it approved inside the office.",
-                      "Prepare the gist, then the letter. Send for approval before anything leaves.",
-                      "The Medical Officer or Advocate has approved the draft.",
-                      "Nothing leaves unapproved. A weak letter is harder to undo than a slow one."),
+                      "Prepare the gist, then the letter. Have it approved before anything leaves.",
+                      "The draft is written and approved, and the letter is ready to go.",
+                      "A weak letter is harder to undo than a slow one. Approval is yours to "
+                      "confirm — the system no longer asks for a name before it moves."),
     "reimbursement": ("The file is with the insurance company and the 30-day clock is running.",
                       "Record their acknowledgement. Send reminders on day 10, 20 and 30.",
                       "They settle, or 30 days pass with no acceptable answer.",
@@ -188,9 +189,6 @@ _FIELDS = {
         # Formatted text (bold / italic / underline), sanitised on the server.
         ("draft_en", "Draft", "ड्राफ़्ट", "richtext", 1, ""),
         ("draft_hi", "Lokpal Draft", "लोकपाल ड्राफ़्ट", "richtext", 0, ""),
-        ("approved_by", "Approved by", "किसने अप्रूव किया", "text", 1,
-         "The Medical Officer, or the Advocate on a non-medical claim"),
-        ("approved_on", "Approved on", "कब अप्रूव हुआ", "date", 0, ""),
     ],
     "reimbursement": [
         ("submitted_on", "Submitted on", "कब जमा किया", "date", 1, ""),
@@ -334,6 +332,18 @@ _CONFIG_FIXES = (
     # this change removes, so the claims that caused it are corrected too. Deliberately narrow:
     # only an empty or 'pending' step is touched, so a claim already at 'query' or 'escalated'
     # keeps the step a person chose.
+    # The two approval fields, removed at the founder's request (19 Sep: "Need to remove both
+    # option"). Deactivated rather than deleted, so the three values already recorded stay
+    # readable on the claims that hold them. NOTE the consequence, which is deliberate: approved_by
+    # was required_exit, so Pending Draft no longer asks for an approver's name before a claim can
+    # move on. The bucket's own guidance was reworded to stop promising a rule that is now a
+    # judgement.
+    ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='pending_draft' "
+     "AND field_key IN ('approved_by','approved_on') AND active=1", ()),
+    # "Past Medical Records / Doctor's Certificate" off the health list — optional, never once
+    # received on any claim, and one more line on a list people already find long.
+    ("UPDATE nidaan_claim_doc_checklist SET required=0 WHERE doc_key='prior_medical' "
+     "AND required=1", ()),
     ("UPDATE nidaan_claims SET pipeline_sub='escalated' WHERE pipeline_stage='escalation' "
      "AND COALESCE(pipeline_sub,'') IN ('','pending') AND claim_id IN "
      "(SELECT claim_id FROM nidaan_claim_fields WHERE field_key='escalation_date' "

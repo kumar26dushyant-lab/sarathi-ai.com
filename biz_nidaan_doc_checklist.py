@@ -121,10 +121,6 @@ TEMPLATES: dict[str, list[dict]] = {
              "कोई अन्य उपलब्ध दस्तावेज़",
              "Anything else about this claim — letters, messages, prescriptions.",
              required=False),
-        _doc("prior_medical", "Past Medical Records / Doctor's Certificate",
-             "पुराने मेडिकल रिकॉर्ड / डॉक्टर का प्रमाणपत्र",
-             "Only if a pre-existing disease is alleged — records from before the policy.",
-             required=False, conditional=True),
     ],
     "life": [
         _doc("decision_letter", "Rejection / Claim Decision Letter",
