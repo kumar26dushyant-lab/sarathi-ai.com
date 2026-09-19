@@ -203,10 +203,12 @@ _FIELDS = {
     ],
     "escalation": [
         ("escalation_date", "Escalation date", "एस्केलेशन की तारीख़", "date", 1, ""),
-        ("grievance_ref", "Grievance reference", "शिकायत संदर्भ", "text", 0, ""),
-        ("esc_reminder_1", "1st reminder sent", "पहला रिमाइंडर", "yesno", 0, ""),
-        ("esc_reminder_2", "2nd reminder sent", "दूसरा रिमाइंडर", "yesno", 0, ""),
-        ("esc_reminder_3", "3rd reminder sent", "तीसरा रिमाइंडर", "yesno", 0, ""),
+        # Dates, not yes/no. "Was a reminder sent" cannot tell you when the next one is due, and
+        # the whole escalation clock is counted in days from the escalation date (founder,
+        # 19 Sep: 1st after 10 days, 2nd at 20, 3rd at 30, then Lokpal).
+        ("esc_reminder_1", "1st reminder sent on", "पहला रिमाइंडर भेजा", "date", 0, ""),
+        ("esc_reminder_2", "2nd reminder sent on", "दूसरा रिमाइंडर भेजा", "date", 0, ""),
+        ("esc_reminder_3", "3rd reminder sent on", "तीसरा रिमाइंडर भेजा", "date", 0, ""),
     ],
     "lokpal": [
         ("bhp_number", "BHP number", "BHP नंबर", "text", 1, ""),
@@ -296,6 +298,56 @@ _SEED_CORRECTIONS = [
 ]
 
 
+# ── The escalation clock ─────────────────────────────────────────────────────
+# Counted in days from the escalation date. Nothing here SENDS anything: it works out what is due
+# so a person can be told, which is the founder's rule for this whole stage (19 Sep) — "make
+# everything manual and increase visibility... if we automate then it will over complicated and
+# break things".
+ESC_REMINDER_DAYS = (10, 20, 30)
+ESC_REMINDER_FIELDS = ("esc_reminder_1", "esc_reminder_2", "esc_reminder_3")
+
+
+# Config the seed cannot fix, because ensure_seeded() is INSERT OR IGNORE and deliberately never
+# overwrites a row a super-admin may have edited. These are corrections to rows that already
+# exist, so they are written as idempotent UPDATEs guarded by the value they are changing FROM -
+# a super-admin who later renames or re-types one of these keeps their version.
+_CONFIG_FIXES = (
+    # Grievance reference: never used by any screen or report, and no claim ever had a value.
+    ("UPDATE nidaan_bucket_fields SET active=0 "
+     "WHERE bucket_key='escalation' AND field_key='grievance_ref' AND active=1", ()),
+    # The three reminders become dates.
+    ("UPDATE nidaan_bucket_fields SET field_type='date', label_en='1st reminder sent on', "
+     "label_hi='पहला रिमाइंडर भेजा' WHERE bucket_key='escalation' "
+     "AND field_key='esc_reminder_1' AND field_type='yesno'", ()),
+    ("UPDATE nidaan_bucket_fields SET field_type='date', label_en='2nd reminder sent on', "
+     "label_hi='दूसरा रिमाइंडर भेजा' WHERE bucket_key='escalation' "
+     "AND field_key='esc_reminder_2' AND field_type='yesno'", ()),
+    ("UPDATE nidaan_bucket_fields SET field_type='date', label_en='3rd reminder sent on', "
+     "label_hi='तीसरा रिमाइंडर भेजा' WHERE bucket_key='escalation' "
+     "AND field_key='esc_reminder_3' AND field_type='yesno'", ()),
+    # A yes/no answer left in what is now a date box would render as an empty, broken field.
+    ("DELETE FROM nidaan_claim_fields WHERE field_key IN "
+     "('esc_reminder_1','esc_reminder_2','esc_reminder_3') "
+     "AND value IN ('yes','no','Yes','No','')", ()),
+)
+
+
+async def _apply_config_fixes() -> int:
+    """Corrections to seeded rows. Idempotent: each is a no-op once it has run."""
+    n = 0
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            for sql, args in _CONFIG_FIXES:
+                cur = await c.execute(sql, args)
+                n += cur.rowcount or 0
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("config fixes failed: %s", e)
+    if n:
+        logger.info("bucket config corrected (%d row(s))", n)
+    return n
+
+
 async def ensure_seeded() -> dict:
     """Write the default office process into empty tables.
 
@@ -363,6 +415,7 @@ async def ensure_seeded() -> dict:
     except Exception as e:  # noqa: BLE001
         logger.error("bucket seed failed: %s", e)
         return made
+    made["fixed"] = await _apply_config_fixes()
     if any(made.values()):
         logger.info("bucket seed wrote %s", made)
     return made
@@ -433,13 +486,23 @@ async def config() -> dict:
 
 # ── ageing ───────────────────────────────────────────────────────────────────
 def _days_since(ts) -> Optional[int]:
+    """Whole days since a timestamp OR a bare date.
+
+    It used to take timestamps only, so every DATE FIELD a person fills in — an escalation date,
+    a reminder date — silently measured as None. The escalation clock read every claim as "no
+    date" and told nobody anything was due. Strictly additive: the only inputs whose answer
+    changes are the ones that used to fail.
+    """
     if not ts:
         return None
-    try:
-        t = datetime.strptime(str(ts)[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return None
-    return max(0, (datetime.utcnow() - t).days)
+    raw = str(ts)[:19].replace("T", " ").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            t = datetime.strptime(raw if fmt != "%Y-%m-%d" else raw[:10], fmt)
+        except Exception:  # noqa: BLE001
+            continue
+        return max(0, (datetime.utcnow() - t).days)
+    return None
 
 
 def age_state(days: Optional[int], amber: Optional[int], red: Optional[int]) -> str:
@@ -714,16 +777,35 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
                 return {"ok": True, "unchanged": True}
             if (role or "") != SUPER:
                 return {"ok": False, "locked": True, "error": lock_message(locks[field_key])}
+        _became_escalated = (
+            field_key == "escalation_date" and val
+            and (row or {}).get("pipeline_stage") == "escalation"
+            and ((row or {}).get("pipeline_sub") or "") in ("", "pending"))
         await c.execute(
             "INSERT INTO nidaan_claim_fields (claim_id, field_key, value, updated_by, updated_at) "
             "VALUES (?,?,?,?,CURRENT_TIMESTAMP) "
             "ON CONFLICT(claim_id, field_key) DO UPDATE SET value=excluded.value, "
             "updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP",
             (int(claim_id), field_key, val, (actor or "")[:80]))
+        if _became_escalated:
+            # THE DATE IS THE STATUS. Recording when we escalated is the act of escalating, so
+            # nobody should also have to remember to change a dropdown to say so — that is how a
+            # claim ends up filed under "Escalation Pending" a week after it was escalated, which
+            # is exactly what claim 119 looked like. (founder, 19 Sep: "when we record first date
+            # there, then the status will change escalated as soon as escalation date is
+            # recorded".)
+            # Same columns set_substate() writes, so the age shown on the board restarts for the
+            # new step exactly as it does for a manual change.
+            await c.execute(
+                "UPDATE nidaan_claims SET pipeline_sub='escalated', "
+                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_by=? WHERE claim_id=?",
+                ((actor or "")[:80], int(claim_id)))
         await c.commit()
+    if _became_escalated:
+        await _log(claim_id, "Escalated — escalation date recorded as %s" % val, actor)
     if field_key in locks:
         await _note_locked_edit(claim_id, field_key, locks[field_key], actor)
-    return {"ok": True}
+    return {"ok": True, "became_escalated": bool(_became_escalated)}
 
 
 async def _clean_rich_values(vals: dict) -> dict:
@@ -1350,6 +1432,73 @@ async def query_reminders() -> dict:
         except Exception as e:  # noqa: BLE001
             logger.warning("draft query reminder failed for %s: %s", r["claim_id"], e)
     return {"open": len(rows), "sent": sent}
+
+
+async def escalation_due() -> dict:
+    """What the escalation bucket needs a person to do today.
+
+    The clock is fixed and public: a reminder at day 10, another at 20, a third at 30, and if the
+    insurer has still said nothing after the third, the case goes to Lokpal. None of that happens
+    by itself. This works out what is due and says so; a person sends the reminder and a person
+    moves the case, which is the founder's rule for this whole stage (19 Sep): "Staff will take
+    action manually, if we automate then it will over complicated and break things."
+
+    Returns {ok, reminders: [...], lokpal: [...]} - reminders that should have gone by now, and
+    cases that have run out of reminders.
+    """
+    out = {"ok": True, "reminders": [], "lokpal": []}
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT claim_id, COALESCE(complainant_name,'') AS complainant_name, "
+            "       COALESCE(insured_name,'') AS insured_name, COALESCE(pipeline_sub,'') AS sub "
+            "FROM nidaan_claims WHERE pipeline_stage='escalation' "
+            "AND COALESCE(archived,0)=0 AND COALESCE(status,'') NOT IN ('closed','withdrawn')"
+        )).fetchall()]
+        if not rows:
+            return out
+        ids = [int(r["claim_id"]) for r in rows]
+        marks = ",".join("?" * len(ids))
+        vals = {}
+        for f in await (await c.execute(
+                "SELECT claim_id, field_key, value FROM nidaan_claim_fields "
+                "WHERE claim_id IN (%s) AND field_key IN "
+                "('escalation_date','esc_reminder_1','esc_reminder_2','esc_reminder_3')" % marks,
+                ids)).fetchall():
+            d = dict(f)
+            vals.setdefault(int(d["claim_id"]), {})[d["field_key"]] = (d["value"] or "").strip()
+
+    for r in rows:
+        cid = int(r["claim_id"])
+        v = vals.get(cid, {})
+        started = v.get("escalation_date") or ""
+        if not started:
+            continue                       # not escalated yet; nothing is counting
+        days = _days_since(started)
+        if days is None:
+            continue
+        who = r["complainant_name"] or r["insured_name"]
+        sent = [bool(v.get(k)) for k in ESC_REMINDER_FIELDS]
+        # The first reminder that is due and has not been sent. Only one at a time: telling
+        # somebody three reminders are overdue on one case helps nobody.
+        nxt = None
+        for i, due_day in enumerate(ESC_REMINDER_DAYS):
+            if not sent[i]:
+                nxt = (i + 1, due_day, days - due_day)
+                break
+        if nxt and nxt[2] >= 0:
+            out["reminders"].append({
+                "claim_id": cid, "who": who, "number": nxt[0], "due_day": nxt[1],
+                "days_since_escalation": days, "overdue_by": nxt[2],
+                "field": ESC_REMINDER_FIELDS[nxt[0] - 1]})
+        elif all(sent) and days >= ESC_REMINDER_DAYS[-1]:
+            # Three reminders sent and still here: the insurer has not answered.
+            out["lokpal"].append({
+                "claim_id": cid, "who": who, "days_since_escalation": days,
+                "last_reminder": v.get(ESC_REMINDER_FIELDS[-1]) or ""})
+    out["reminders"].sort(key=lambda x: -x["overdue_by"])
+    out["lokpal"].sort(key=lambda x: -x["days_since_escalation"])
+    return out
 
 
 async def set_substate(claim_id: int, sub: str, *, actor: str = "") -> dict:

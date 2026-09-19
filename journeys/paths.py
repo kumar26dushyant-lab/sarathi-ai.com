@@ -523,3 +523,135 @@ async def _al5(ctx):
     hw = ctx["hw"]
     for name in ("Database", "Branch login — code delivery", "Payments (Razorpay)"):
         assert name in hw._CRITICAL, "'%s' would no longer alarm anybody" % name
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Escalation. The founder's rule for this whole stage is that people act and the system only
+# makes the timing visible, so these check that the clock is RIGHT and that nothing sends itself.
+esc = _j("escalation", "The escalation clock tells a person what is due", "staff")
+
+
+@esc.step("the config correction applies, and applies only once")
+async def _e0(ctx):
+    # It runs at startup via ensure_seeded(). Running it HERE proves the migration itself works
+    # rather than assuming a deploy did it, and running it twice proves it is idempotent - these
+    # are UPDATEs against live config, so a second pass must change nothing.
+    first = await ctx["buckets"]._apply_config_fixes()
+    second = await ctx["buckets"]._apply_config_fixes()
+    assert second == 0, "the correction is not idempotent — it changed %d more row(s)" % second
+    ctx["cfg_fixed"] = first
+
+
+@esc.step("the reminders are dates, not yes/no")
+async def _e1(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        rows = {r["field_key"]: dict(r) for r in await (await c.execute(
+            "SELECT field_key, field_type, active FROM nidaan_bucket_fields "
+            "WHERE bucket_key='escalation'")).fetchall()}
+    for k in ("esc_reminder_1", "esc_reminder_2", "esc_reminder_3"):
+        assert rows.get(k, {}).get("field_type") == "date", \
+            "%s is still a %s" % (k, rows.get(k, {}).get("field_type"))
+
+
+@esc.step("the grievance reference is gone")
+async def _e2(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        r = await (await c.execute(
+            "SELECT active FROM nidaan_bucket_fields WHERE bucket_key='escalation' "
+            "AND field_key='grievance_ref'")).fetchone()
+    assert (not r) or int(r[0]) == 0, "the grievance reference field is still shown"
+
+
+@esc.step("no yes/no answer is left stranded in a date box")
+async def _e3(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_fields WHERE field_key LIKE 'esc_reminder_%' "
+            "AND value IN ('yes','no','Yes','No')")).fetchone()
+    assert int(n[0]) == 0, "%s reminder field(s) still hold a yes/no answer" % n[0]
+
+
+@esc.step("recording the escalation date IS escalating")
+async def _e4(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        r = await (await c.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE pipeline_stage='escalation' "
+            "LIMIT 1")).fetchone()
+    if not r:
+        raise Skip("no claim is in Escalation right now")
+    cid = int(dict(r)["claim_id"])
+    ctx["esc_claim"] = cid
+    async with _sq.connect(ctx["db"]) as c:
+        await c.execute("UPDATE nidaan_claims SET pipeline_sub='pending' WHERE claim_id=?", (cid,))
+        await c.commit()
+    from datetime import datetime as _dt, timedelta as _td
+    ctx["esc_started"] = (_dt.utcnow() - _td(days=35)).strftime("%Y-%m-%d")
+    res = await ctx["buckets"].set_field(cid, "escalation_date", ctx["esc_started"],
+                                         actor="journey-test", role="super_admin")
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        sub = (await (await c.execute(
+            "SELECT pipeline_sub FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone())[0]
+    assert sub == "escalated", \
+        "the claim is still '%s' after its escalation date was recorded" % sub
+
+
+@esc.step("the clock says which reminder is due, one at a time")
+async def _e5(ctx):
+    if not ctx.get("esc_claim"):
+        raise Skip("no escalated claim to measure")
+    d = await ctx["buckets"].escalation_due()
+    assert d.get("ok")
+    mine = [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]]
+    assert mine, "a claim escalated well past day 10 is not showing a reminder as due"
+    assert mine[0]["number"] == 1, "it skipped to reminder %d" % mine[0]["number"]
+    assert mine[0]["overdue_by"] >= 0
+
+
+@esc.step("sending reminder one moves the clock to reminder two")
+async def _e6(ctx):
+    if not ctx.get("esc_claim"):
+        raise Skip("no escalated claim to measure")
+    from datetime import datetime as _dt, timedelta as _td
+    sent_on = (_dt.utcnow() - _td(days=24)).strftime("%Y-%m-%d")
+    await ctx["buckets"].set_field(ctx["esc_claim"], "esc_reminder_1", sent_on,
+                                   actor="journey-test", role="super_admin")
+    d = await ctx["buckets"].escalation_due()
+    mine = [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]]
+    assert mine and mine[0]["number"] == 2, \
+        "after the first reminder the clock should ask for the second"
+
+
+@esc.step("after all three, it asks for Lokpal instead of a fourth reminder")
+async def _e7(ctx):
+    if not ctx.get("esc_claim"):
+        raise Skip("no escalated claim to measure")
+    from datetime import datetime as _dt, timedelta as _td
+    for f, back in (("esc_reminder_2", 14), ("esc_reminder_3", 4)):
+        on = (_dt.utcnow() - _td(days=back)).strftime("%Y-%m-%d")
+        await ctx["buckets"].set_field(ctx["esc_claim"], f, on,
+                                       actor="journey-test", role="super_admin")
+    d = await ctx["buckets"].escalation_due()
+    assert not [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]], \
+        "it is still asking for a fourth reminder"
+    assert [r for r in d["lokpal"] if r["claim_id"] == ctx["esc_claim"]], \
+        "three reminders sent and no reply, but Lokpal was not raised"
+
+
+@esc.step("and it still moves nothing by itself")
+async def _e8(ctx):
+    if not ctx.get("esc_claim"):
+        raise Skip("no escalated claim to measure")
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        stage = (await (await c.execute(
+            "SELECT pipeline_stage FROM nidaan_claims WHERE claim_id=?",
+            (ctx["esc_claim"],))).fetchone())[0]
+    assert stage == "escalation", \
+        "the claim moved itself to '%s' — a Lokpal filing is a person's decision" % stage
