@@ -29,6 +29,13 @@ logger = logging.getLogger("nidaan.health.watch")
 _STATE_KEY = "health_watch_state"
 _RENOTIFY_HOURS = 12          # remind once if a subsystem is still broken after this long
 
+# The headings that mark an OUTAGE claim rather than a recovery notice. They are constants
+# because biz_nidaan_alarm_policy reads them back out of the message body to decide whether an
+# alarm is worth re-verifying before delivery — renaming one silently would turn that off.
+MARK_BROKE = "🔴 STOPPED WORKING"
+MARK_STILL = "🟠 STILL DOWN"
+MARK_FIXED = "✅ BACK TO NORMAL"
+
 # TWO KINDS OF WRONG, AND ONLY ONE OF THEM IS AN ALARM.
 #
 # An INCIDENT is something that has broken and can be fixed by acting now: the database is down,
@@ -107,21 +114,34 @@ def _should_notify(prev: dict, name: str, ok: bool, now: datetime) -> tuple[bool
     return False, ""
 
 
+async def current_checks() -> list:
+    """The exact set of subsystems this watchdog judges.
+
+    It is a FUNCTION, and the only one, because two callers need the identical list: the cycle
+    below, and the alarm re-check in biz_nidaan_alarm_policy that asks "is this still true?"
+    immediately before an alarm is delivered. When the two lists differed, an alarm about a
+    subsystem missing from the re-check's list looked like a subsystem that had recovered, and
+    the alarm was dropped — a disk-full warning would have been swallowed exactly that way.
+    """
+    import sarathi_biz as _app
+    checks = await _app._subsystem_checks()
+    # The core services the panel checks first (DB/payments/disk) aren't in the extracted
+    # helper, so add the cheapest, highest-signal one here.
+    try:
+        import shutil as _sh
+        du = _sh.disk_usage(".")
+        pct = round(du.used / du.total * 100, 1)
+        checks.append({"name": "Disk", "ok": pct < 90, "note": f"{pct}% used"})
+    except Exception:
+        pass
+    return checks
+
+
 async def run_health_watch(*, alert: bool = True) -> dict:
     """One watchdog cycle. Returns {checked, failing, alerted}. Never raises."""
     out = {"checked": 0, "failing": [], "alerted": []}
     try:
-        import sarathi_biz as _app
-        checks = await _app._subsystem_checks()
-        # The core services the panel checks first (DB/payments/disk) aren't in the extracted
-        # helper, so add the two cheapest, highest-signal ones here.
-        try:
-            import shutil as _sh
-            du = _sh.disk_usage(".")
-            pct = round(du.used / du.total * 100, 1)
-            checks.append({"name": "Disk", "ok": pct < 90, "note": f"{pct}% used"})
-        except Exception:
-            pass
+        checks = await current_checks()
     except Exception as e:  # noqa: BLE001
         logger.warning("health watch could not run checks: %s", e)
         return out
@@ -160,13 +180,13 @@ async def _send_alert(items: list) -> None:
 
     lines = []
     if broke:
-        lines.append("🔴 STOPPED WORKING")
+        lines.append(MARK_BROKE)
         lines += [f"  • {n} — {note}" if note else f"  • {n}" for n, note in broke]
     if still:
-        lines.append("\n🟠 STILL DOWN")
+        lines.append("\n" + MARK_STILL)
         lines += [f"  • {n} — {note}" if note else f"  • {n}" for n, note in still]
     if fixed:
-        lines.append("\n✅ BACK TO NORMAL")
+        lines.append("\n" + MARK_FIXED)
         lines += [f"  • {n}" for n in fixed]
     lines.append("\nOpen App Health in ops for detail — several of these have a self-serve fix button.")
     body = "\n".join(lines)

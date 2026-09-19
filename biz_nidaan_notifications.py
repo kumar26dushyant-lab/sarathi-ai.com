@@ -395,6 +395,22 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
     times from 12 Sep to 14 Sep. Pass telegram=False only for something not worth a phone buzz."""
     if not staff_ids:
         return 0
+
+    # ALARMS ARE GATED HERE, and only here, because every alarm we send passes through this
+    # function. Two questions, in this order: is the thing still true, and who is allowed to hear
+    # it. Ordinary work notifications are returned untouched — see biz_nidaan_alarm_policy for
+    # exactly which keys count as alarms and why the rest deliberately do not.
+    try:
+        import biz_nidaan_alarm_policy as _alarm
+        staff_ids, _why = await _alarm.gate(event_key, staff_ids, subject, body)
+        if not staff_ids:
+            logger.info("alarm suppressed (%s): %s", event_key, _why)
+            return 0
+    except Exception as e:  # noqa: BLE001
+        # The gate failing must never cost us a notification. Fall through with the original
+        # recipients: noisy is recoverable, silent is not.
+        logger.warning("alarm gate failed for %s (%s) — sending unfiltered", event_key, e)
+
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
