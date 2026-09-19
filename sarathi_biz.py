@@ -11983,22 +11983,45 @@ async def _subsystem_checks() -> list:
     except Exception as _e:
         _chk("WA journey", False, f"check failed: {str(_e)[:70]}")
     # Email Radar — the two collection inboxes must be connected AND polling.
+    #
+    # ONE MAILBOX, ONE OPINION ON WHETHER IT IS DOWN. Radar polls every 15 minutes over IMAP, and
+    # a single poll failing is ordinary weather: a dropped connection, a slow Gmail. Radar itself
+    # has always known that — it waits for FAIL_ALERT_THRESHOLD consecutive failures before it
+    # alerts anybody, and the count resets the moment a poll succeeds.
+    #
+    # This check used to disagree with it. It went red on the FIRST failed poll, so on 19 Sep a
+    # blip on np@ that healed itself fifteen minutes later went out as "🔴 STOPPED WORKING" to ten
+    # super-admins, while radar's own alerting — correctly — stayed quiet. Two alarms on the same
+    # fact with different triggers is how people learn to ignore the alarm.
+    #
+    # So the threshold is radar's, read from radar. Below it the wobble is named in the note (the
+    # panel is where you look on purpose); at or above it, this goes red at the same moment radar
+    # pages, and the two agree.
     try:
         _mbs = await radar.list_mailboxes()
         _act = [m for m in _mbs if m.get("is_active")]
+        _thr = getattr(radar, "FAIL_ALERT_THRESHOLD", 3)
         _bad = [m for m in _act if (m.get("last_sync_status") or "") != "ok"]
+        _down = [m for m in _bad if int(m.get("fail_count") or 0) >= _thr]
+        _wobble = [m for m in _bad if m not in _down]
         if not _act:
             _chk("Email Radar", False, "no collection inbox connected (cs@ / np@)")
         else:
-            _stale = 0
-            for m in _act:
-                _ls = str(m.get("last_synced_at") or "")
-                if not _ls:
-                    _stale += 1
+            # A mailbox that has never completed a single poll is not wobbling — it has never
+            # worked, and no number of retries will reveal that on its own.
+            _stale = sum(1 for m in _act if not str(m.get("last_synced_at") or ""))
             _note = f"{len(_act)} inbox(es) · {len(_act)-len(_bad)} healthy"
-            if _bad:
-                _note += " · ⚠️ " + ", ".join(f"{(b.get('label') or b.get('email_masked'))}: {b.get('last_sync_status')}" for b in _bad[:2])
-            _chk("Email Radar", not _bad and not _stale, _note)
+            if _down:
+                _note += " · ⚠️ " + ", ".join(
+                    f"{(b.get('label') or b.get('email_masked'))}: {b.get('last_sync_status')}"
+                    f" ({b.get('fail_count')} polls in a row)" for b in _down[:2])
+            if _wobble:
+                _note += " · one poll failed for " + ", ".join(
+                    str(b.get("label") or b.get("email_masked")) for b in _wobble[:2]
+                ) + " — retrying, nothing to do yet"
+            if _stale:
+                _note += f" · {_stale} never polled"
+            _chk("Email Radar", not _down and not _stale, _note)
     except Exception as _e:
         _chk("Email Radar", False, f"check failed: {str(_e)[:70]}")
     # Gemini — powers radar triage, the WhatsApp brain, doc-splitter segmentation + AI tasks.

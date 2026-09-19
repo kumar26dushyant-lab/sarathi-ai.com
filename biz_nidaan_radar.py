@@ -102,7 +102,8 @@ async def list_mailboxes() -> list[dict]:
         rows = [dict(r) for r in await (await conn.execute(
             """SELECT mailbox_id, label, account_id, email_address, imap_host, imap_port,
                       is_active, last_sync_status, last_sync_error, last_synced_at, pod,
-                      pod_staff_ids, created_at
+                      pod_staff_ids, created_at,
+                      COALESCE(fail_count, 0) AS fail_count, fail_alert_at
                FROM nidaan_radar_mailboxes ORDER BY label, email_address""")).fetchall()]
     for r in rows:
         r["email_masked"] = _mask_email(r.get("email_address"))
@@ -199,6 +200,12 @@ async def _record_poll_failure(mailbox_id: int, status: str) -> None:
         row = await (await conn.execute(
             "SELECT label, email_address, fail_count, fail_alert_at FROM nidaan_radar_mailboxes "
             "WHERE mailbox_id=?", (mailbox_id,))).fetchone()
+    # A blip below the threshold rightly wakes nobody — but it must still leave a trace. A poll of
+    # np@ failed once on 19 Sep and recovered fifteen minutes later, and the only evidence anywhere
+    # was a red panel; the log said "2 mailbox(es), 0 new item(s)" as though nothing had happened.
+    logger.warning("Radar poll failed: mailbox=%s label=%s fail_count=%s status=%s",
+                   mailbox_id, (row["label"] if row else "?"),
+                   (row["fail_count"] if row else "?"), (status or "")[:120])
     if not row or (row["fail_count"] or 0) < FAIL_ALERT_THRESHOLD:
         return
     # Re-alert at most once per 24h until recovery (fail_alert_at is cleared on the next OK poll).
