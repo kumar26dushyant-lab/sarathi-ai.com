@@ -7147,6 +7147,106 @@ guess, because a wrong automatic repair is worse than a clear alarm.
 
 ---
 
+## A108 — [NIDAAN] THE DAY WE STOPPED TELLING PEOPLE THINGS THEY DID NOT NEED TO KNOW (Sep 19 2026)
+
+### The ₹588 leak — money left every message to an outside party
+A branch paid NidaanPartner **₹588** and charged the complainant **₹1,200**. Our payment
+confirmation then told the complainant the amount: **₹588**. The founder's ruling was absolute and
+wider than the bug: *"as soon as any case/claim registered or paid, only welcome message should go
+to all parties, not containing the amount or plan or whatever… whosoever is doing payment they
+will get payment message from their bank. so we no need to trigger payment thing to them. this is
+the reason, we are overbuilding things those are actually not needed."*
+
+Fixed at **one choke point** rather than message by message: `_strip_money()` in the WhatsApp
+orchestrator, `thank_you_payment` rewritten money-free, money removed from the funnel messages in
+`biz_nidaan_notifications.py`. Two consequences he ruled on directly: **price nudges are suppressed
+when a branch or CP is the payer** (`_paid_for_by_an_intermediary()` — 71 branch claims protected
+from being asked for a fee somebody else owes), and the **subscription email names the plan, not
+the amount**.
+
+The general lesson is his, not ours: we had built a message nobody asked for, and the bug was in
+the fact that it existed at all.
+
+### Notification noise — two kinds of wrong, and only one is an alarm
+Founder: *"these notifications are irritating… we need to understand critical notifications,
+normal notifications, and no impact notification… till then stop these."*
+
+The distinction now lives in `biz_nidaan_health_watch.py`:
+- An **INCIDENT** is something that broke and that acting now would fix. It pages, and it repeats.
+- A **GAP** is a standing fact about our data a person fills in when they get to it — five branches
+  with no contact details. Nothing broke; nothing changes by saying it again; it cannot be fixed at
+  3am. Gaps stay **RED in App Health**, where the work is actually done, and **never page**.
+
+`_GAPS` holds eight of these. Verified live the same day: the branch-login gap had paged three
+times on 18–19 Sep; its next 12-hour re-notify came due at 14:57 and correctly did not fire.
+
+Separately, the **unanswered-conversation** alarm was excluding stickers, reactions and empty
+messages from the rows it listed but **not** from the correlated subquery deciding `last_dir` — so
+the alert survived its own fix. Rewritten as a CTE; live reading is now "unanswered: 0".
+
+### Two alarms watching one mailbox, disagreeing (the Email Radar false alarm)
+A single IMAP poll of `np@` failed at 17:07. Radar's own alerting **correctly stayed silent** — it
+waits for `FAIL_ALERT_THRESHOLD = 3` consecutive failures, because a dropped IMAP connection is
+ordinary weather. Three minutes later the App Health watchdog ran, saw `status != 'ok'`, and sent
+**"🔴 STOPPED WORKING"** to all **14** super/sub-super admins. At 17:22 the next poll succeeded.
+Total outage: one missed poll.
+
+So two alarms were watching the same mailbox with different sensitivities. **App Health now reads
+the threshold from radar** — one mailbox, one opinion on whether it is down. Below the threshold
+the wobble is named in the panel note ("one poll failed for np@ — retrying, nothing to do yet") and
+pages nobody; at the threshold both fire together, and they agree.
+
+The quieter half of the same bug: the blip left **no trace anywhere**. The log read
+`Radar poll: 2 mailbox(es), 0 new item(s)` as though it had succeeded, because
+`_record_poll_failure` bumped a database counter and logged nothing. Failed polls now log a warning
+with the mailbox and the consecutive count **whether or not they alert** — the same lesson as the
+silent-success class in A107: a failure that alerts nobody must still leave evidence.
+
+**Open for the founder:** `health.subsystem` alerts go to all 14 super/sub-super admins. Re-checking
+a mailbox app password is realistically only actionable by a super_admin. Narrowing it the way
+`payment.*` was narrowed (memory `project_nidaan_notify_policy`) is his call, not ours — narrowing an infra alarm can
+hide a real outage from the person who would have caught it.
+
+### The safety net that made all of the above shippable — `journeys/`
+A new package (`harness.py`, `paths.py`, `run.py`): **15 journeys, 96 steps**, each one a thing a
+real person does, run against a **copy** of the live database. Two refusals are un-disableable:
+it exits unless `NIDAAN_NO_OUTBOUND=1`, and `_assert_no_live_db()` refuses to run if any
+`biz_nidaan_*` module has bound `db.DB_PATH` to the live file at import time.
+
+```
+cd /tmp/jr && NIDAAN_NO_OUTBOUND=1 /opt/sarathi/venv/bin/python -m journeys.run --overlay /tmp/jr --quiet
+```
+
+**It has already caught more than it cost.** It is the reason each of this day's changes shipped
+without a rollback, and twice it was the *test* that was wrong rather than the code — which is its
+own kind of evidence that it is testing something real.
+
+### Things that were silently broken and are now not
+- **74 of 158 claims had no document checklist rows at all**, so every tick a staffer made
+  vanished without a word. `mark_doc_received` now seeds a missing checklist and retries.
+- **`_days_since()` accepted timestamps but not bare dates** — so every date field measured as
+  `None` and the escalation clock would have reported nothing ever due, forever.
+- **Server timezone is Europe/Berlin**; naive-UTC-vs-epoch comparisons were off by two hours and
+  made all evidence look stale.
+- **`nidaan_documents` is an EMPTY legacy table** (the real one is `nidaan_claim_documents`, 535
+  rows). A "25 claims with zero documents" finding built on it was **wrong** and was withdrawn.
+- **Bucket seeding is `INSERT OR IGNORE`**, so editing the seed never changes live config.
+  Corrections need idempotent UPDATEs — `_CONFIG_FIXES` + `_apply_config_fixes()`.
+
+### Standing rules restated by the founder this day
+*"we cannot afford bugs, anomalies, unnecessary notifications especially people outside staff…
+This time you need to prove your capabilities to manage these kind of big applications well. we
+need to break the myth that vibe coded applications are buggy and not sustainable."*
+
+*"whenever a feature you touch, check it's disturbing any flow or what… use your wisdom at each
+level. you know the entire end to end process well, if question, ask."*
+
+And on the parked conversation-per-claim work: *"if phone numbers are not correct on a claim we can
+start from that point also, just so we ensure correct message go to correct person, if not clear,
+quit silently and surface facts of why, if questions surface questions."*
+
+---
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
