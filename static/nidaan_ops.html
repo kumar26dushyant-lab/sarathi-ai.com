@@ -3805,7 +3805,7 @@ function _filterClaimsByOriginAndCustomer(rows){
 // #7: L2 (can_fight) + Archived (no_scope) claim lists — review-delivered outcomes.
 // L2 is a full dashboard: metrics on top + filters + ClaimShield (L2 legal) management.
 let _outcomeCache = {};
-let _l2f = {pay:'', cs:'', type:''};   // L2 dashboard filters
+let _l2f = {pay:'', cs:'', type:'', auth:'', dash:'', mail:''};   // L2 dashboard filters
 function _setL2f(k,v){ _l2f[k]=v; _renderOutcome('l2claims'); }
 let _l2View = localStorage.getItem('l2_view') || 'table';   // table | board | cards
 function _setL2View(v){ _l2View=v; localStorage.setItem('l2_view',v); _renderOutcome('l2claims'); }
@@ -3816,14 +3816,16 @@ function _l2SaveView(){
   if(!name) return;
   const q=((document.getElementById('oc_l2claims_s')||{}).value)||'';
   const views=_l2Views();
-  views.push({id:'v'+Date.now(), name:name.slice(0,40), view:_l2View, pay:_l2f.pay, cs:_l2f.cs, type:_l2f.type, q});
+  views.push({id:'v'+Date.now(), name:name.slice(0,40), view:_l2View, pay:_l2f.pay, cs:_l2f.cs, type:_l2f.type,
+              auth:_l2f.auth, dash:_l2f.dash, mail:_l2f.mail, q});
   localStorage.setItem('l2_saved_views', JSON.stringify(views));
   _renderL2Views();
   ndUI.toast('View saved','success');
 }
 function _l2ApplyView(id){
   const v=_l2Views().find(x=>x.id===id); if(!v) return;
-  _l2f={pay:v.pay||'', cs:v.cs||'', type:v.type||''};
+  _l2f={pay:v.pay||'', cs:v.cs||'', type:v.type||'',
+        auth:v.auth||'', dash:v.dash||'', mail:v.mail||''};
   _l2View=v.view||'table'; localStorage.setItem('l2_view',_l2View);
   const s=document.getElementById('oc_l2claims_s'); if(s) s.value=v.q||'';
   ['pay','cs','type'].forEach(k=>{ const el=document.getElementById('oc_l2claims_'+k); if(el) el.value=v[k]||''; });
@@ -4160,6 +4162,9 @@ async function loadOutcomeClaims(key, outcome, title, sub){
       <select id="oc_l2claims_pay" onchange="_setL2f('pay',this.value)" style="min-width:118px"><option value="">L2 fee: All</option><option value="paid">Paid</option><option value="due">Due</option></select>
       <select id="oc_l2claims_cs" onchange="_setL2f('cs',this.value)" style="min-width:150px"><option value="">ClaimShield: All</option><option value="sent">Sent</option><option value="notsent">Not sent</option></select>
       <select id="oc_l2claims_type" onchange="_setL2f('type',this.value)" style="min-width:110px"><option value="">Type: All</option></select>
+      <select id="oc_l2claims_auth" onchange="_setL2f('auth',this.value)" style="min-width:150px"><option value="">Authorisation: All</option><option value="yes">Received</option><option value="no">Not received</option></select>
+      <select id="oc_l2claims_dash" onchange="_setL2f('dash',this.value)" style="min-width:150px"><option value="">Dashboard: All</option><option value="yes">Opened</option><option value="no">Never opened</option></select>
+      <select id="oc_l2claims_mail" onchange="_setL2f('mail',this.value)" style="min-width:150px"><option value="">Email: All</option><option value="yes">Verified</option><option value="no">Unverified</option></select>
       <span class="vw-switch" style="margin-left:auto">
         <button id="vw_table" onclick="_setL2View('table')">☰ Table</button>
         <button id="vw_board" onclick="_setL2View('board')">▦ Board</button>
@@ -4252,6 +4257,15 @@ function _renderOutcome(key){
     else if(_l2f.pay==='due') rows=rows.filter(c=>!_l2Eligible(c));
     if(_l2f.cs==='sent') rows=rows.filter(c=>c.claimshield_case_id);
     else if(_l2f.cs==='notsent') rows=rows.filter(c=>!c.claimshield_case_id);
+    // The three facts that decide whether a claim can actually proceed, and which were only
+    // discoverable by opening each claim one at a time (founder, 19 Sep). All three already came
+    // back with every claim; nothing new is fetched to answer them.
+    if(_l2f.auth==='yes') rows=rows.filter(c=>!!c.consent_accepted_at);
+    else if(_l2f.auth==='no') rows=rows.filter(c=>!c.consent_accepted_at);
+    if(_l2f.dash==='yes') rows=rows.filter(c=>!!c.portal_activated_at);
+    else if(_l2f.dash==='no') rows=rows.filter(c=>!c.portal_activated_at);
+    if(_l2f.mail==='yes') rows=rows.filter(c=>!!c.insured_email_verified);
+    else if(_l2f.mail==='no') rows=rows.filter(c=>!c.insured_email_verified);
     if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
   }
   // Reflect the active view on the switcher (L2 only).
@@ -13655,7 +13669,13 @@ function l2Table(b){
       + 'onclick="docsOpen(' + i.claim_id + ')">📂 '
       + (i.files ? i.files + ' file' + (i.files === 1 ? '' : 's') : 'Documents') + '</button>';
     return '<tr>'
-      + '<td><b>NP-' + i.claim_id + '</b>' + lok + '</td>'
+      + '<td><b>NP-' + i.claim_id + '</b>'
+      +   (i.insurer_claim_no
+            ? '<div style="font-size:.66rem;color:var(--nd-text-faint)" '
+              + 'title="The insurance company’s own claim number, from the rejection letter">'
+              + esc(i.insurer_claim_no) + '</div>'
+            : '')
+      +   lok + '</td>'
       + '<td>' + esc(i.who || '(no name)')
       +   (i.insured && i.insured !== i.who ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">'
           + esc(i.insured) + '</div>' : '') + '</td>'
@@ -13771,10 +13791,10 @@ function l2Sub(s){ _l2Sub = s; l2Load(); }
 function l2Export(){
   if (!_l2Rows.length) return;
   const b = _l2Bucket(_l2Sel) || {};
-  const head = ['Ref','Complainant','Insured / Patient','Phone','Insurance Company','Policy','Disputed',
+  const head = ['Ref','Insurer claim no.','Complainant','Insured / Patient','Phone','Insurance Company','Policy','Disputed',
                 'Docs','Step','Days in bucket','Origin','Last moved by'];
   const rows = _l2Rows.map(function(i){
-    return ['NP-' + i.claim_id, i.who, i.insured, i.phone, i.insurer, i.policy_no, i.amount,
+    return ['NP-' + i.claim_id, i.insurer_claim_no || '', i.who, i.insured, i.phone, i.insurer, i.policy_no, i.amount,
             (i.docs_total ? i.docs_done + '/' + i.docs_total : ''), i.sub_name,
             (i.days == null ? '' : i.days), i.origin, i.moved_by];
   });
