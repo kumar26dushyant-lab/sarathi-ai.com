@@ -7202,10 +7202,52 @@ The quieter half of the same bug: the blip left **no trace anywhere**. The log r
 with the mailbox and the consecutive count **whether or not they alert** — the same lesson as the
 silent-success class in A107: a failure that alerts nobody must still leave evidence.
 
-**Open for the founder:** `health.subsystem` alerts go to all 14 super/sub-super admins. Re-checking
-a mailbox app password is realistically only actionable by a super_admin. Narrowing it the way
-`payment.*` was narrowed (memory `project_nidaan_notify_policy`) is his call, not ours — narrowing an infra alarm can
-hide a real outage from the person who would have caught it.
+### What the founder ruled the same evening: alarms reach ONE person, and only if still true
+*"first stop these alarms otherwise people will ignore and wont be taking seriously, second,
+filter all alarm first if really something happened or it's a false alarm, restricted it to me
+only till we create a new alert bot on telegram. stop all alarm to everyone and only send me if
+any, especially these conversation unanswered."*
+
+`biz_nidaan_alarm_policy.py`, gated at the single point every alarm passes through
+(`notify_staff_inapp`). Three mechanisms:
+
+**AUDIENCE.** 15 alarm keys go to the founder and nobody else. This is *not* a channel downgrade —
+that is `biz_nidaan_notify_policy`, which only ever touches the email leg. Here the **recipient
+list itself** is replaced, so bell, Telegram, push and email all land in one place. Repointable
+without a deploy via the ops setting `alarm_audience_staff_ids`; that is also how it lifts when the
+Telegram alert bot exists.
+
+**RE-VERIFICATION.** The radar alarm was never really a threshold bug — it described **a world that
+had already stopped existing**. Sweeps detect, queue and send; between detect and send, things fix
+themselves. So every alarm with a registered re-check is asked one question immediately before
+delivery: *is this still the case?* The unanswered-conversation re-check tests **the people the
+message names**, not merely whether anyone at all is waiting — otherwise a queue that is never
+quite empty makes the check meaningless.
+
+**FAN-OUT GUARD.** Some sweeps notify one person at a time with identical text (`bucket.stale` did
+this for twelve rostered staff). Narrowing all of those to one recipient would turn twelve messages
+to twelve people into twelve **identical** messages to the founder — a worse version of the noise
+being removed. Same key and text inside a ten-minute block is delivered once.
+
+**Three rules keep this from ever causing silence**, and they are the whole reason it is safe to
+ship: an alarm with **no** registered re-check is always sent; a re-check that **errors** sends; a
+gate that **fails** sends unfiltered. Silence is only ever the result of positive evidence that the
+condition has cleared. *Noisy is recoverable; silent is not.*
+
+**Deliberately untouched:** work sent to the one person who owns it (a task assigned, an SLA breach
+on *your* task, an @mention, a draft query) and business activity (a claim filed, a payment taken, a
+signup). Redirecting those to the founder would mean the assignee never learns — breaking the
+process instead of quieting it.
+
+**A real bug the tests caught before it shipped:** the health re-check rebuilt the subsystem list
+from `_subsystem_checks()`, which **omits Disk** (the watchdog appends it separately). A genuine
+disk-full alarm would therefore have named a subsystem the re-check could not see, looked like a
+recovery, and been **swallowed**. Fixed by extracting `health_watch.current_checks()` as the single
+source of that list — the same class of fix as the radar threshold: two things judging one fact had
+to become one thing.
+
+Verified with **39 assertions** across two suites on a copy of the live database, plus the 15
+journeys. Live audience resolves to `[1] Dushyant Sharma`.
 
 ### The safety net that made all of the above shippable — `journeys/`
 A new package (`harness.py`, `paths.py`, `run.py`): **15 journeys, 96 steps**, each one a thing a
