@@ -3459,8 +3459,20 @@ _ESCALATE_AFTER_MIN = 45        # a human has been waiting this long
 _ESCALATE_AGAIN_MIN = 180       # still waiting — now it is a management problem
 
 
+# Message types that are not a question and never needed an answer. A sticker is how people say
+# "thank you" on WhatsApp; a reaction is a thumbs-up on something we already sent. Treating those
+# as an unanswered customer meant a 🙏 sticker escalated to the super-admins every three hours for
+# a day, telling them a conversation had been ignored when nothing had (founder, 19 Sep: "when we
+# are checking nothing is unanswered").
+_NOT_A_QUESTION = ("sticker", "reaction", "system", "unsupported", "ephemeral", "order")
+
+
 async def _unanswered_whatsapp(minutes: int) -> list:
-    """Numbers whose LAST message is theirs, older than `minutes`, still unanswered."""
+    """Numbers whose LAST REAL message is theirs, older than `minutes`, still unanswered.
+
+    "Real" excludes stickers and reactions, and excludes an inbound with no body and no media at
+    all — if there is nothing to read and nothing to open, there is nothing to reply to.
+    """
     cutoff = f"-{int(minutes)} minutes"
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
@@ -3473,6 +3485,9 @@ async def _unanswered_whatsapp(minutes: int) -> list:
                    (SELECT direction FROM nidaan_wa_messages x
                      WHERE x.msisdn = m.msisdn ORDER BY x.created_at DESC LIMIT 1) AS last_dir
             FROM nidaan_wa_messages m
+            WHERE COALESCE(m.msg_type,'') NOT IN
+                  ('sticker','reaction','system','unsupported','ephemeral','order')
+              AND (TRIM(COALESCE(m.body,'')) != '' OR COALESCE(m.media_id,'') != '')
             GROUP BY m.msisdn
             HAVING last_dir = 'in'
                AND last_at <= datetime('now', ?)

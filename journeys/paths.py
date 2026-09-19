@@ -459,3 +459,67 @@ async def _dk6(ctx):
     last = await ctx["docreq"].recent_ask(cid)
     assert last.get("asked"), "the last ask on this claim cannot be read back"
     assert "by" in last and "days" in last, "it does not say who asked or when"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alerts people will actually read. Both of these fired for real and told nobody anything: a
+# sticker escalated as an ignored customer every three hours, and a standing data gap repeated
+# itself every twelve. An alarm that cries wolf is worse than no alarm.
+alerts = _j("alerts", "Alerts only fire when something is wrong", "staff")
+
+
+@alerts.step("a sticker is not an unanswered conversation")
+async def _al1(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        await c.execute(
+            "INSERT INTO nidaan_wa_messages (direction, msisdn, msg_type, body, status, "
+            "created_at, sender) VALUES ('in','919999000001','sticker','','received',"
+            "datetime('now','-300 minutes'),'customer')")
+        await c.commit()
+    rows = await ctx["nnot"]._unanswered_whatsapp(180)
+    assert not any(r["msisdn"] == "919999000001" for r in rows), \
+        "a sticker is still being escalated as an ignored customer"
+
+
+@alerts.step("an empty message with nothing to read is not either")
+async def _al2(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        await c.execute(
+            "INSERT INTO nidaan_wa_messages (direction, msisdn, msg_type, body, media_id, "
+            "status, created_at, sender) VALUES ('in','919999000002','text','','','received',"
+            "datetime('now','-300 minutes'),'customer')")
+        await c.commit()
+    rows = await ctx["nnot"]._unanswered_whatsapp(180)
+    assert not any(r["msisdn"] == "919999000002" for r in rows), \
+        "an empty inbound is still counted as a question"
+
+
+@alerts.step("but a real question still is")
+async def _al3(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        await c.execute(
+            "INSERT INTO nidaan_wa_messages (direction, msisdn, msg_type, body, status, "
+            "created_at, sender) VALUES ('in','919999000003','text','Sir mera claim ka kya "
+            "hua?','received',datetime('now','-300 minutes'),'customer')")
+        await c.commit()
+    rows = await ctx["nnot"]._unanswered_whatsapp(180)
+    assert any(r["msisdn"] == "919999000003" for r in rows), \
+        "a real unanswered question is no longer being raised — the fix went too far"
+
+
+@alerts.step("a standing data gap never pages anyone")
+async def _al4(ctx):
+    hw = ctx["hw"]
+    for name in ("Branch login — a way in", "Email sending allowance", "Contact reachability"):
+        assert name not in hw._CRITICAL, "'%s' still wakes people up" % name
+        assert name in hw._GAPS, "'%s' is not classified as a gap" % name
+
+
+@alerts.step("something genuinely broken still does")
+async def _al5(ctx):
+    hw = ctx["hw"]
+    for name in ("Database", "Branch login — code delivery", "Payments (Razorpay)"):
+        assert name in hw._CRITICAL, "'%s' would no longer alarm anybody" % name

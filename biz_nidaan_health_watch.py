@@ -12,6 +12,8 @@ Design rules that keep it useful rather than noisy:
   • QUIET WHEN HEALTHY — nothing is sent while everything is green.
   • RE-ARM AFTER A LONG OUTAGE — if something stays broken past `_RENOTIFY_HOURS` we remind once,
     so a failure can't be forgotten after the first message scrolls away.
+  • INCIDENTS ALARM, GAPS DO NOT — see _GAPS. Something broken that acting now would fix is worth
+    interrupting a person for; a standing hole in our data is not, however red it looks.
   • NEVER RAISES into the worker loop.
 
 State lives in nidaan_ops_settings (a JSON blob), so it survives restarts and needs no schema.
@@ -27,27 +29,41 @@ logger = logging.getLogger("nidaan.health.watch")
 _STATE_KEY = "health_watch_state"
 _RENOTIFY_HOURS = 12          # remind once if a subsystem is still broken after this long
 
+# TWO KINDS OF WRONG, AND ONLY ONE OF THEM IS AN ALARM.
+#
+# An INCIDENT is something that has broken and can be fixed by acting now: the database is down,
+# codes are not being delivered, the disk is full. Worth interrupting someone for, and worth
+# repeating while it lasts.
+#
+# A GAP is a standing fact about our data that a person has to fill in when they get to it: five
+# branches have no contact details on file. Nothing has broken, nothing will change by telling
+# anyone again, and it cannot be "fixed" at 3am. Repeating it every twelve hours taught people to
+# swipe the alert away - and the next one they swipe away might be the database.
+#
+# (founder, 19 Sep: "these notifications are irritating... we need to understand critical
+# notifications, normal notifications, and no impact notification".) Gaps stay RED in App Health,
+# where the work actually gets done, and never page.
+_GAPS = {
+    "Branch login — a way in",
+    "Branch login — WhatsApp fallback",
+    "Subscriber login — a way in",
+    "Complainant portal — a way in",
+    "Staff login",
+    "Contact reachability",
+    "Email sending allowance",
+    "Telegram Staff Linked",
+}
+
 # Subsystems worth waking a human for. Anything else is informational only.
 _CRITICAL = {
     "Database", "WhatsApp Cloud API", "Email Radar", "AI (Gemini)", "SMTP (email out)",
     "Subscription renewals", "Backups", "Disk", "Payments (Razorpay)", "Doc Splitter",
-    # The ways in. A login outage locks partners out of their own portal and, on 17 Sep, ran for
-    # a day before anyone could say what was wrong — exactly the silence this watchdog exists to
-    # break. "WhatsApp fallback" is deliberately NOT here: a branch without a mobile on file is a
-    # gap to close, not a middle-of-the-night alarm.
-    "Branch login — a way in", "Branch login — code delivery",
-    "Subscriber login — a way in", "Subscriber login — code delivery",
-    "Staff login",
-    "Complainant portal — a way in", "Complainant portal — code delivery",
-}
-
-# Deliberately NOT critical: "Email sending allowance".
-# It is a SUPPLY notice, not an outage. When Brevo runs dry we skip it and the mail still goes
-# out over Workspace/Gmail, so nothing is broken and nobody needs waking — and if mail ever
-# genuinely stops, the outcome-based checks above ("… — code delivery") page instead, because
-# they judge what actually happened to the codes we sent. It stays red in App Health so it gets
-# topped up, but it does not ring 14 phones. An alarm that fires when nothing is broken teaches
-# people to ignore the ones that matter.
+    # Delivery checks only: these judge what actually happened to the codes we sent, so a failure
+    # here means people are being turned away right now.
+    "Branch login — code delivery",
+    "Subscriber login — code delivery",
+    "Complainant portal — code delivery",
+} - _GAPS
 
 
 async def _load_state() -> dict:

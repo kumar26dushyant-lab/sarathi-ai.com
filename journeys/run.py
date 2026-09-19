@@ -128,6 +128,9 @@ async def main() -> int:
     import biz_auth as auth
     import biz_nidaan_doc_intake as intake
     import biz_nidaan_wa_messages as wa_msg
+    import biz_nidaan_notifications as nnot
+    nnot.db.DB_PATH = copy
+    import biz_nidaan_health_watch as hw
 
     _assert_no_live_db(args.db, copy)
 
@@ -139,7 +142,7 @@ async def main() -> int:
         _die("this database has no claims to exercise")
     ctx.update({"db": copy, "nidaan": nidaan, "claimant": claimant, "access": access,
                 "buckets": buckets, "docreq": docreq, "auth": auth,
-                "intake": intake, "msg": wa_msg})
+                "intake": intake, "msg": wa_msg, "nnot": nnot, "hw": hw})
 
     print("journeys — %d to run against a copy of %s" % (len(paths.ALL), os.path.basename(args.db)))
     # Name the OVERLAY when there is one. Printing only --app once let a run look as though it
