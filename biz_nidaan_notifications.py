@@ -3478,16 +3478,24 @@ async def _unanswered_whatsapp(minutes: int) -> list:
         conn.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await conn.execute(
             """
+            WITH real AS (
+                -- One place decides what counts as a message worth answering, so the filter
+                -- cannot be applied to the rows and then forgotten in the subquery that picks
+                -- the LAST one. That mismatch is why a sticker went on being escalated after it
+                -- had supposedly been excluded: the group was filtered, "who spoke last" was not.
+                SELECT msisdn, direction, body, created_at
+                FROM nidaan_wa_messages
+                WHERE COALESCE(msg_type,'') NOT IN
+                      ('sticker','reaction','system','unsupported','ephemeral','order')
+                  AND (TRIM(COALESCE(body,'')) != '' OR COALESCE(media_id,'') != '')
+            )
             SELECT m.msisdn,
                    MAX(m.created_at) AS last_at,
-                   (SELECT body FROM nidaan_wa_messages x
+                   (SELECT body FROM real x
                      WHERE x.msisdn = m.msisdn ORDER BY x.created_at DESC LIMIT 1) AS last_body,
-                   (SELECT direction FROM nidaan_wa_messages x
+                   (SELECT direction FROM real x
                      WHERE x.msisdn = m.msisdn ORDER BY x.created_at DESC LIMIT 1) AS last_dir
-            FROM nidaan_wa_messages m
-            WHERE COALESCE(m.msg_type,'') NOT IN
-                  ('sticker','reaction','system','unsupported','ephemeral','order')
-              AND (TRIM(COALESCE(m.body,'')) != '' OR COALESCE(m.media_id,'') != '')
+            FROM real m
             GROUP BY m.msisdn
             HAVING last_dir = 'in'
                AND last_at <= datetime('now', ?)
