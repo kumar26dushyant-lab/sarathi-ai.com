@@ -499,6 +499,7 @@ select.form-input option{background:#1e293b}
       <div id="panel-docsplit" class="panel" style="display:none"></div>
       <div id="panel-claims" class="panel" style="display:none"></div>
       <div id="panel-l2claims" class="panel" style="display:none"></div>
+      <div id="panel-docdesk" class="panel" style="display:none"></div>
       <div id="panel-archived" class="panel" style="display:none"></div>
       <div id="panel-accounts" class="panel" style="display:none"></div>
       <div id="panel-branches" class="panel" style="display:none"></div>
@@ -1248,6 +1249,7 @@ function buildSidebar() {
       {id:'overview', label:'📊 Claims Dashboard', minRank:0},
       {id:'claims',   label:'📋 All Claims',       minRank:1},
       {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
+      {id:'docdesk',  label:'📄 Waiting on documents', minRank:0},
       {id:'archived', label:'🗄️ Archived',         minRank:1},
       {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
@@ -1335,6 +1337,7 @@ function showPanel(id, fromHistory) {
     l2claims: () => { loadOutcomeClaims('l2claims', 'can_fight', '⚖️ Level-2 (L2) Claims', 'Reviewed GO — ready for legal action'); _l2LoadReadiness(); },
     archived: () => loadOutcomeClaims('archived', 'no_scope', '🗄️ Archived Claims', 'Reviewed — no scope to challenge'),
     desk: loadDesk,
+    docdesk: loadDocDesk,
     onbehalf: loadOnBehalf,
     payfollow: loadPayFollow,
     leave: loadLeavePanel,
@@ -9554,6 +9557,89 @@ async function loadHealthFlags(){
     if (j) j.textContent = d.wa_journey_on ? '⏸️ Pause WA journey' : '▶️ Resume WA journey';
   } catch(e){}
 }
+// ── Waiting on documents ─────────────────────────────────────────────────────
+// Ordered by the only thing that matters here: how long it has been since ANYBODY asked. Several
+// people work this queue, so each row says who asked last and whether a reminder is already
+// scheduled - the coordination that was missing when the same complainant could be chased twice
+// in an hour by two colleagues. Nothing on this screen sends anything by itself.
+let _ddRows = [], _ddFilter = 'all';
+
+async function loadDocDesk(){
+  const el = document.getElementById('panel-docdesk');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">Waiting on documents</div>'
+    + '<div class="section-sub">Loading…</div></div>';
+  const r = await API('/doc-desk');
+  if (!r.ok){ el.innerHTML += '<div class="empty"><p>Could not load the desk.</p></div>'; return; }
+  const d = await r.json();
+  _ddRows = d.rows || [];
+  _ddRender(d);
+}
+
+function _ddRender(d){
+  const el = document.getElementById('panel-docdesk');
+  const rows = _ddRows.filter(function(r){
+    if (_ddFilter === 'never') return r.never_asked;
+    if (_ddFilter === 'quiet') return (r.quiet_days || 0) >= d.quiet_days;
+    if (_ddFilter === 'look')  return (r.needs_a_look || 0) > 0;
+    return true;
+  });
+  const tile = function(n, label, tone, f){
+    return '<div class="stat-card' + (tone ? ' ' + tone : '') + '" style="cursor:pointer" '
+      + 'onclick="_ddSet(&#39;' + f + '&#39;)"><div class="sv">' + n + '</div><div class="sl">'
+      + label + '</div></div>';
+  };
+  el.innerHTML =
+      '<div class="section-hdr"><div><div class="section-title">Waiting on documents</div>'
+    + '<div class="section-sub">Longest silence first — nothing here sends anything on its own</div></div>'
+    + '<button class="btn btn-ghost" onclick="loadDocDesk()">↻ Refresh</button></div>'
+    + '<div class="stats-row" style="margin-bottom:1rem">'
+    +   tile(d.waiting, 'Waiting on paper', '', 'all')
+    +   tile(d.never_asked, 'Never asked', d.never_asked ? 'danger' : '', 'never')
+    +   tile(d.gone_quiet, 'Quiet ' + d.quiet_days + '+ days', d.gone_quiet ? 'warn' : '', 'quiet')
+    +   tile(d.needs_a_look, 'Needs a look', d.needs_a_look ? 'warn' : '', 'look')
+    + '</div>'
+    + (rows.length
+        ? '<div class="table-wrap"><table><thead><tr>'
+          + '<th>Ref</th><th>Complainant</th><th>Missing</th><th>Quiet</th>'
+          + '<th>Last asked</th><th>Reminder</th><th></th></tr></thead><tbody>'
+          + rows.map(_ddRow).join('') + '</tbody></table></div>'
+        : '<div class="empty"><div class="ei">✅</div><p>Nothing in this view.</p></div>');
+}
+
+function _ddRow(r){
+  const quiet = r.quiet_days || 0;
+  const col = quiet >= 14 ? 'var(--nd-danger-text)'
+            : quiet >= 3  ? 'var(--nd-warning-text)' : 'var(--nd-text-secondary)';
+  const asked = r.never_asked
+    ? '<span style="color:var(--nd-danger-text)">never asked</span>'
+    : esc(r.last_ask_by || 'someone') + ' <span style="color:var(--nd-text-faint)">· '
+      + quiet + 'd ago</span>';
+  const rem = r.scheduled
+    ? '<span style="color:var(--nd-success-text)">⏰ ' + esc(r.scheduled_next || 'set') + '</span>'
+      + (r.scheduled_by ? '<div style="font-size:.66rem;color:var(--nd-text-faint)">'
+                          + esc(r.scheduled_by) + '</div>' : '')
+    : (r.paused ? '<span style="color:var(--nd-text-faint)">paused</span>' : '—');
+  return '<tr>'
+    + '<td><strong>NP-' + fmtClaimNum(r.claim_id) + '</strong></td>'
+    + '<td>' + esc(r.who || '—') + '</td>'
+    + '<td><b>' + r.missing + '</b>'
+    +   '<div style="font-size:.66rem;color:var(--nd-text-faint)">'
+    +   esc((r.missing_names || []).join(', ')) + '</div></td>'
+    + '<td style="color:' + col + ';font-weight:700;font-variant-numeric:tabular-nums">'
+    +   quiet + 'd</td>'
+    + '<td style="font-size:.78rem">' + asked + '</td>'
+    + '<td style="font-size:.78rem">' + rem + '</td>'
+    + '<td style="white-space:nowrap">'
+    +   (r.needs_a_look ? '<span class="pill-status" style="background:var(--nd-warning-soft);'
+        + 'color:var(--nd-warning-text)">' + r.needs_a_look + ' to check</span> ' : '')
+    +   '<button class="btn-sm btn-ghost" onclick="docsOpen(' + r.claim_id + ',loadDocDesk)">'
+    +   '📂 Documents</button></td>'
+    + '</tr>';
+}
+
+function _ddSet(f){ _ddFilter = f; loadDocDesk(); }
+window.loadDocDesk = loadDocDesk; window._ddSet = _ddSet;
+
 async function loadHealth() {
   const el = document.getElementById('panel-health');
   el.innerHTML = '<div class="section-hdr"><div class="section-title">App Health</div><div class="section-sub">Live system diagnostics</div></div><div class="empty"><p>Loading…</p></div>';
