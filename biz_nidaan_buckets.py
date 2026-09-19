@@ -329,6 +329,15 @@ _CONFIG_FIXES = (
     ("DELETE FROM nidaan_claim_fields WHERE field_key IN "
      "('esc_reminder_1','esc_reminder_2','esc_reminder_3') "
      "AND value IN ('yes','no','Yes','No','')", ()),
+    # Claims escalated BEFORE the date started driving the status. Claim 119 was carrying an
+    # escalation date of 18 Sep while still filed as "Escalation Pending" — the very confusion
+    # this change removes, so the claims that caused it are corrected too. Deliberately narrow:
+    # only an empty or 'pending' step is touched, so a claim already at 'query' or 'escalated'
+    # keeps the step a person chose.
+    ("UPDATE nidaan_claims SET pipeline_sub='escalated' WHERE pipeline_stage='escalation' "
+     "AND COALESCE(pipeline_sub,'') IN ('','pending') AND claim_id IN "
+     "(SELECT claim_id FROM nidaan_claim_fields WHERE field_key='escalation_date' "
+     " AND TRIM(COALESCE(value,'')) != '')", ()),
 )
 
 

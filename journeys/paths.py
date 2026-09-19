@@ -655,3 +655,17 @@ async def _e8(ctx):
             (ctx["esc_claim"],))).fetchone())[0]
     assert stage == "escalation", \
         "the claim moved itself to '%s' — a Lokpal filing is a person's decision" % stage
+
+
+@esc.step("claims escalated before the rule existed are corrected too")
+async def _e9(ctx):
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claims c WHERE c.pipeline_stage='escalation' "
+            "AND COALESCE(c.pipeline_sub,'') IN ('','pending') AND EXISTS "
+            "(SELECT 1 FROM nidaan_claim_fields f WHERE f.claim_id=c.claim_id "
+            " AND f.field_key='escalation_date' AND TRIM(COALESCE(f.value,'')) != '')"
+        )).fetchone()
+    assert int(n[0]) == 0, \
+        "%d claim(s) still show 'Escalation Pending' while holding an escalation date" % n[0]
