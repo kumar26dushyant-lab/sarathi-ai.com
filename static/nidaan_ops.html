@@ -535,6 +535,8 @@ select.form-input option{background:#1e293b}
 <div class="modal-bg" id="modalBg">
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
+      <button class="modal-x" type="button" id="modalBack" hidden onclick="modalBack()"
+              aria-label="Back" title="Back" style="margin-right:.4rem">&larr;</button>
       <h3 id="modalTitle">Modal</h3>
       <button class="modal-x" type="button" onclick="closeModal()" aria-label="Close"
               title="Close (Esc)">&times;</button>
@@ -9967,10 +9969,43 @@ async function loadCCActivity(){
 // ═══════════════════════════════════════════════════════════════
 //  MODAL HELPER
 // ═══════════════════════════════════════════════════════════════
+// ── Going back, when one window opens another ────────────────────────────────
+// There is ONE modal, so opening Documents from inside a claim REPLACED the claim sheet and
+// closing it returned you to nothing — you reopened the claim and found your place again
+// (founder, 19 Sep: "wherever we have multiple windows opening one another we need back option").
+//
+// What is remembered is a FUNCTION that reopens the previous window, not its markup. Restoring
+// old HTML would put a dead sheet on screen: the buttons would be there and nothing behind them.
+// A window that can be returned to says so by calling modalReturn() as it opens.
+let _mStack = [];
+let _mReopen = null;
+
+function modalReturn(fn){ _mReopen = fn || null; }
+
+function modalBack(){
+  const fn = _mStack.pop();
+  _mReopen = null;
+  if (typeof fn === 'function') { fn(); } else { closeModal(); }
+}
+
+function _mSyncBack(){
+  const b = document.getElementById('modalBack');
+  if (b) b.hidden = !_mStack.length;
+}
+window.modalReturn = modalReturn; window.modalBack = modalBack;
+
 function openModal(title, bodyHtml, buttons=[], wide=false) {
   // Opening a window over the case sheet replaces it: send what was typed, and never drop a
   // draft whose save failed without asking.
   if (!_ndCloseOk(true)) return;
+  // Replacing a window that knew how to reopen itself? Remember the way back.
+  const bg = document.getElementById('modalBg');
+  if (bg && bg.classList.contains('open') && typeof _mReopen === 'function'){
+    _mStack.push(_mReopen);
+    if (_mStack.length > 8) _mStack.shift();   // a stack nobody can unwind is a leak
+  }
+  _mReopen = null;
+  _mSyncBack();
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
   // A dialog with no way out is a trap. If the caller passed no buttons — or passed only
@@ -10052,6 +10087,10 @@ window.addEventListener('keydown', function(e){
 
 function closeModal() {
   if (!_ndCloseOk()) return;
+  // Closing is finishing, not stepping back: the trail would otherwise reappear on the next
+  // unrelated window and offer to "go back" somewhere the person had already left.
+  _mStack = []; _mReopen = null;
+  _mSyncBack();
   document.getElementById('modal').classList.remove('modal-lg');
   document.getElementById('modalBg').classList.remove('open');
   _csrDirty = false;
@@ -13982,6 +14021,8 @@ async function l2Open(claimId){
   if (typeof _csrStyles === 'function') _csrStyles();
   if (typeof _csrRtStyles === 'function') _csrRtStyles();
   openModal('NP-' + claimId, '<div class="empty"><div class="ei">⏳</div><p>Opening…</p></div>', [], true);
+  // Anything opened from inside this sheet can come back to it.
+  modalReturn(function(){ l2Open(claimId); });
   let st = null, claim = null, rem = [];
   try{
     const [a, b] = await Promise.all([
@@ -14912,6 +14953,7 @@ async function docsOpen(claimId, after){
   _dcClaim = claimId; _dcAfter = after || null;
   openModal('📂 Documents — NP-' + claimId,
     '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>', [], true);
+  modalReturn(function(){ docsOpen(claimId, after); });
   await docsRender();
 }
 
