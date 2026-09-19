@@ -4362,6 +4362,75 @@ async function _doSendToCS(claimId){
   else { if(msg){ msg.style.color='var(--nd-danger-text)'; msg.textContent='✕ '+_extractErr(d,'Could not send'); } if(btn){ btn.disabled=false; btn.textContent='⚖️ Send to ClaimShield'; } }
 }
 
+// ── Reviewed, and waiting to be paid for ─────────────────────────────────────
+// The step between All Claims and L2 Claims. A claim sits here because of something a PERSON has
+// to do — ring them, explain the fee, chase the branch — and inside All Claims it looked like
+// every other claim. The three dates are the point: they turn "pending" into "nine days since we
+// told them they have a case".
+function claimTab(which){
+  const el = document.getElementById('panel-claims');
+  if (which === 'all'){ loadClaims(); return; }
+  loadAwaitingFee();
+}
+
+async function loadAwaitingFee(){
+  const el = document.getElementById('panel-claims');
+  el.innerHTML = '<div class="section-hdr"><div class="section-title">Reviewed · fee due</div>'
+    + '<div class="section-sub">Loading…</div></div>';
+  const r = await API('/claims/awaiting-fee');
+  if (!r.ok){ el.innerHTML += '<div class="empty"><p>Could not load that.</p></div>'; return; }
+  const d = await r.json();
+  const rows = (d.rows || []).map(function(i){
+    const stale = (i.days_since_review || 0);
+    const col = stale >= 14 ? 'var(--nd-danger-text)'
+              : stale >= 7  ? 'var(--nd-warning-text)' : 'var(--nd-text-secondary)';
+    return '<tr>'
+      + '<td><b>NP-' + fmtClaimNum(i.claim_id) + '</b>'
+      +   (i.fightable ? '' : '<div style="font-size:.66rem;color:var(--nd-text-faint)">'
+          + 'we said no case</div>') + '</td>'
+      + '<td>' + esc(i.who || '—') + '</td>'
+      + '<td>' + esc(i.insurer || '—') + '</td>'
+      + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
+      // The timeline, in one row: started, told, paid.
+      + '<td style="font-size:.74rem;white-space:nowrap">' + _d(i.started_at) + '</td>'
+      + '<td style="font-size:.74rem;white-space:nowrap">' + _d(i.review_delivered_at) + '</td>'
+      + '<td style="font-size:.74rem;color:var(--nd-text-faint);white-space:nowrap">'
+      +   (i.paid_at ? _d(i.paid_at) : 'not yet') + '</td>'
+      + '<td style="color:' + col + ';font-weight:700;font-variant-numeric:tabular-nums">'
+      +   stale + 'd</td>'
+      + '<td><button class="l2mv g" onclick="viewClaim(' + i.claim_id + ')">Open</button></td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML =
+      '<div class="section-hdr"><div><div class="section-title">Reviewed · fee due</div>'
+    + '<div class="section-sub">We told them they have a case. They have not paid for it yet.</div></div>'
+    + '<div style="display:flex;gap:.4rem"><button class="l2mv g" onclick="claimTab(&#39;all&#39;)">'
+    + '← All claims</button>'
+    + '<button class="l2mv g" onclick="loadAwaitingFee()">↻ Refresh</button></div></div>'
+    + '<div class="stats-row" style="margin-bottom:1rem">'
+    +   '<div class="stat-card"><div class="sv">' + (d.winnable || 0) + '</div>'
+    +   '<div class="sl">Winnable, waiting</div></div>'
+    +   '<div class="stat-card"><div class="sv">₹' + Number(d.disputed_total || 0).toLocaleString('en-IN')
+    +   '</div><div class="sl">Disputed, in those claims</div></div>'
+    +   '<div class="stat-card"><div class="sv">' + (d.waiting || 0) + '</div>'
+    +   '<div class="sl">Reviewed, fee not covered</div></div>'
+    + '</div>'
+    + (rows
+        ? '<div class="table-wrap"><table><thead><tr>'
+          + '<th>Ref</th><th>Complainant</th><th>Insurance Co.</th>'
+          + '<th style="text-align:right">Disputed</th>'
+          + '<th>Started</th><th>Review sent</th><th>Paid</th><th>Waiting</th><th></th>'
+          + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty"><div class="ei">✅</div><p>Nothing reviewed is waiting on a fee.</p></div>');
+}
+
+function _d(ts){
+  if (!ts) return '—';
+  const s = String(ts).slice(0, 10).split('-');
+  return s.length === 3 ? (s[2] + '/' + s[1] + '/' + s[0].slice(2)) : String(ts).slice(0, 10);
+}
+window.claimTab = claimTab; window.loadAwaitingFee = loadAwaitingFee;
+
 async function loadClaims(statusFilter='', search='', branch='', plan='', assigned='') {
   const el = document.getElementById('panel-claims');
   const branchOpts = await _getClaimBranchOpts();
@@ -4371,6 +4440,10 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <div><div class="section-title">Claims</div><div class="section-sub">All claims across the platform</div></div>
       ${_role==='super_admin'?`<button id="claimAutoBtn" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="When ON, new paid/subscription claims auto-assign to the least-loaded handler" onclick="toggleClaimAutoAssign()">⏳ Auto-assign…</button>
       <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" title="Re-check recent Razorpay payments and unlock any claim/L2 that was captured but not reflected" onclick="reconcilePayments()">🔄 Reconcile payments</button>`:''}
+    </div>
+    <div id="claimTabs" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+      <button class="l2mv p" onclick="claimTab('all')">All claims</button>
+      <button class="l2mv g" onclick="claimTab('fee')">������ Reviewed · fee due</button>
     </div>
     <div class="filter-bar">
       <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="_claimSearchDebounced()" style="flex:1;min-width:160px">
