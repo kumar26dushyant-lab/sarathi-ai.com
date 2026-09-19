@@ -647,7 +647,7 @@ async def set_blocker(claim_id: int, blocker: str, *, note: str = "", hold_until
     return {"ok": True, "blocker": blocker, "hold_until": hold_until}
 
 
-async def assign(claim_id: int, staff_id, *, actor: str = "") -> dict:
+async def assign(claim_id: int, staff_id, *, actor: str = "", actor_id=None) -> dict:
     """Hand a case to someone, or to nobody. Only an active staff member can hold a case."""
     if not await _open_claim(claim_id):
         return {"ok": False, "error": "That case is closed or does not exist."}
@@ -679,7 +679,47 @@ async def assign(claim_id: int, staff_id, *, actor: str = "") -> dict:
 
     await _log(claim_id, "case_assign",
                (f"Assigned to {name}" if sid else "Assignment removed"), actor)
+
+    # TELL THE PERSON. Until now a claim could be handed to somebody and they would only find out
+    # by happening to look at the right board — which is the same silence a bucket system exists
+    # to end. One message, on assignment only: the founder's rule (19 Sep) is that a message on
+    # every movement gets muted within a week, and then the important one is missed too.
+    if sid and sid != actor_id:
+        try:
+            import biz_nidaan_notifications as _nnot
+            claim = await _claim_brief(claim_id)
+            await _nnot.notify_staff_inapp(
+                [sid],
+                "\U0001f4cc NP-%s is yours — %s" % (claim_id, claim.get("who") or ""),
+                "%s has handed you NP-%s.\n\n%s\n\nIt is in %s.\n\nOpen it in Level-2 → "
+                "Settlement." % (actor or "Somebody", claim_id,
+                                 claim.get("line") or "", claim.get("where") or "the pipeline"),
+                event_key="case.assigned", email=False, claim_id=claim_id)
+        except Exception as e:  # noqa: BLE001
+            # A notification that fails must never undo an assignment that succeeded.
+            logger.warning("could not tell staff %s about claim %s: %s", sid, claim_id, e)
     return {"ok": True, "assigned_to": sid, "assigned_name": name}
+
+
+async def _claim_brief(claim_id: int) -> dict:
+    """The one line a person needs to recognise a claim they have just been given."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            r = await (await c.execute(
+                "SELECT COALESCE(complainant_name,'') AS cn, COALESCE(insured_name,'') AS ins, "
+                "COALESCE(insurer_name,'') AS insurer, COALESCE(disputed_amount,0) AS amt, "
+                "COALESCE(pipeline_stage,'') AS stage FROM nidaan_claims WHERE claim_id=?",
+                (int(claim_id),))).fetchone()
+        d = dict(r or {})
+        who = d.get("cn") or d.get("ins") or ""
+        bits = [b for b in (d.get("insurer"),
+                            ("₹%s" % f"{int(d.get('amt') or 0):,}") if d.get("amt") else "")
+                if b]
+        return {"who": who, "line": " · ".join([who] + bits) if who else " · ".join(bits),
+                "where": (d.get("stage") or "").replace("_", " ") or "the pipeline"}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 async def _pipeline_row(claim_id: int) -> dict | None:

@@ -858,3 +858,57 @@ async def _o4(ctx):
     assert got == sid, "assignment did not stick"
     res = await _cs.assign(cid, None, actor="journey-test")
     assert res.get("ok"), "a claim could not be handed back to nobody"
+
+
+@own.step("being handed a claim tells the person, once")
+async def _o5(ctx):
+    import biz_nidaan_case_state as _cs
+    import aiosqlite as _sq
+    _cs.DB_PATH = ctx["db"]
+    if not ctx.get("board_rows"):
+        raise Skip("no claims")
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        st = [dict(r) for r in await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+            "LIMIT 2")).fetchall()]
+    if len(st) < 2:
+        raise Skip("need two staff to tell one about the other")
+    cid = int(ctx["board_rows"][0]["claim_id"])
+    giver, taker = int(st[0]["staff_id"]), int(st[1]["staff_id"])
+    async with _sq.connect(ctx["db"]) as c:
+        before = (await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_notifications WHERE event_key='case.assigned' "
+            "AND claim_id=?", (cid,))).fetchone())[0]
+    res = await _cs.assign(cid, taker, actor="journey-test", actor_id=giver)
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        after = (await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_notifications WHERE event_key='case.assigned' "
+            "AND claim_id=?", (cid,))).fetchone())[0]
+    assert after > before, "the person handed the claim was never told"
+
+
+@own.step("but handing it to yourself tells you nothing")
+async def _o6(ctx):
+    import biz_nidaan_case_state as _cs
+    import aiosqlite as _sq
+    _cs.DB_PATH = ctx["db"]
+    if not ctx.get("board_rows"):
+        raise Skip("no claims")
+    cid = int(ctx["board_rows"][0]["claim_id"])
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        st = await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+            "LIMIT 1")).fetchone()
+        before = (await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_notifications WHERE event_key='case.assigned' "
+            "AND claim_id=?", (cid,))).fetchone())[0]
+    me = int(dict(st)["staff_id"])
+    await _cs.assign(cid, me, actor="journey-test", actor_id=me)
+    async with _sq.connect(ctx["db"]) as c:
+        after = (await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_notifications WHERE event_key='case.assigned' "
+            "AND claim_id=?", (cid,))).fetchone())[0]
+    assert after == before, "somebody was told about something they did themselves"

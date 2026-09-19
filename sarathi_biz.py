@@ -7069,7 +7069,8 @@ async def nidaan_ops_case_assign(claim_id: int, body: _CaseAssignReq, request: R
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
     import biz_nidaan_case_state as _cs
-    res = await _cs.assign(claim_id, body.staff_id, actor=_actor_label(caller))
+    res = await _cs.assign(claim_id, body.staff_id, actor=_actor_label(caller),
+                           actor_id=(caller or {}).get("staff_id"))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
     await _ops_audit(request, "case.assign", "claim", claim_id,
