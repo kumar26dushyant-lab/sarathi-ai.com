@@ -1443,6 +1443,69 @@ async def query_reminders() -> dict:
     return {"open": len(rows), "sent": sent}
 
 
+# What the insurer came back with, and where that sends the case. Straight off the founder's
+# flow map (19 Sep):
+#
+#     Escalated ──no reply──> reminder 1 → 2 → 3 ──> Lokpal
+#               └─reply──┬── yes ──────────────────> Complete
+#                        ├── no ───────────────────> Lokpal
+#                        └── query ──> we answer ──┬─ yes ─> Complete
+#                                                  └─ no ──> Lokpal
+#
+# Complete and Lokpal are BUCKETS, not statuses - they are where the case goes next. Query is the
+# one reply that keeps the case here, because it turns the waiting around: until now we were
+# waiting on them, and from here they are waiting on us.
+ESC_REPLIES = {
+    "accepted": ("completed", "escalation_settlement",
+                 "\u2705 Insurer accepted at escalation"),
+    "refused": ("lokpal", "", "\u26d4 Insurer refused at escalation \u2014 going to Lokpal"),
+    "query": ("", "query", "\u2753 Insurer raised a query"),
+}
+
+
+async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor: str = "",
+                           actor_role: str = "") -> dict:
+    """Record what the insurer said, and let that decide where the case goes.
+
+    A person records the fact; the routing is not a judgement the system makes on its own. Nothing
+    here is automatic - it runs because somebody read a letter and pressed a button.
+    """
+    outcome = (outcome or "").strip().lower()
+    if outcome not in ESC_REPLIES:
+        return {"ok": False, "error": "Say whether they accepted, refused, or asked a question."}
+    note = (note or "").strip()
+    if len(note) < 3:
+        return {"ok": False, "error": "Say what they wrote \u2014 the next person starts from it."}
+
+    row = await _claim_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    if (row.get("pipeline_stage") or "") != "escalation":
+        return {"ok": False, "error": "This case is not in Escalation."}
+    sub = (row.get("pipeline_sub") or "")
+    if sub not in ("escalated", "query"):
+        return {"ok": False,
+                "error": "Record the escalation date first \u2014 there is nothing for them to "
+                         "have replied to yet."}
+
+    to_key, to_sub, label = ESC_REPLIES[outcome]
+    if not to_key:
+        # A query keeps the case here. A second query is allowed and recorded: insurers do come
+        # back more than once, and pretending otherwise would push people to lie to the system.
+        res = await set_substate(claim_id, to_sub, actor=actor)
+        if not res.get("ok"):
+            return res
+        await _log(claim_id, "%s: %s" % (label, note[:300]), actor)
+        return {"ok": True, "outcome": outcome, "stayed": True}
+
+    res = await move(claim_id, to_key, sub=to_sub,
+                     reason="%s \u2014 %s" % (label, note[:300]),
+                     actor=actor, actor_role=actor_role)
+    if not res.get("ok"):
+        return res
+    return {"ok": True, "outcome": outcome, "moved_to": to_key}
+
+
 async def escalation_due() -> dict:
     """What the escalation bucket needs a person to do today.
 
@@ -1455,12 +1518,13 @@ async def escalation_due() -> dict:
     Returns {ok, reminders: [...], lokpal: [...]} - reminders that should have gone by now, and
     cases that have run out of reminders.
     """
-    out = {"ok": True, "reminders": [], "lokpal": []}
+    out = {"ok": True, "reminders": [], "lokpal": [], "owed": []}
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
             "SELECT claim_id, COALESCE(complainant_name,'') AS complainant_name, "
-            "       COALESCE(insured_name,'') AS insured_name, COALESCE(pipeline_sub,'') AS sub "
+            "       COALESCE(insured_name,'') AS insured_name, COALESCE(pipeline_sub,'') AS sub, "
+            "       pipeline_stage_at AS sub_at "
             "FROM nidaan_claims WHERE pipeline_stage='escalation' "
             "AND COALESCE(archived,0)=0 AND COALESCE(status,'') NOT IN ('closed','withdrawn')"
         )).fetchall()]
@@ -1487,6 +1551,12 @@ async def escalation_due() -> dict:
         if days is None:
             continue
         who = r["complainant_name"] or r["insured_name"]
+        if r["sub"] == "query":
+            # They answered, with a question. The reminder clock is for silence, and this is not
+            # silence - chasing them now would be chasing somebody who is waiting on us.
+            out["owed"].append({"claim_id": cid, "who": who, "days_since_escalation": days,
+                                "waiting_days": _days_since(r.get("sub_at")) or 0})
+            continue
         sent = [bool(v.get(k)) for k in ESC_REMINDER_FIELDS]
         # The first reminder that is due and has not been sent. Only one at a time: telling
         # somebody three reminders are overdue on one case helps nobody.
@@ -1507,6 +1577,7 @@ async def escalation_due() -> dict:
                 "last_reminder": v.get(ESC_REMINDER_FIELDS[-1]) or ""})
     out["reminders"].sort(key=lambda x: -x["overdue_by"])
     out["lokpal"].sort(key=lambda x: -x["days_since_escalation"])
+    out["owed"].sort(key=lambda x: -x["waiting_days"])
     return out
 
 

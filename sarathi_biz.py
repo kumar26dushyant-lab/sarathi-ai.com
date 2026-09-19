@@ -8727,6 +8727,44 @@ async def ops_doc_window_send(claim_id: int, body: _DocSendReq, request: Request
     return res
 
 
+class _EscReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str = Field(..., max_length=16)      # accepted | refused | query
+    note: str = Field(..., min_length=3, max_length=1000)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/escalation/reply")
+@limiter.limit("30/minute")
+async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Request):
+    """Record what the insurer said. Their answer decides where the case goes next.
+
+    accepted -> Completed (settled at escalation) · refused -> Lokpal · query -> stays here,
+    marked Escalation Query, because from that point they are waiting on us.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    res = await buckets.escalation_reply(claim_id, body.outcome, note=body.note,
+                                         actor=_actor_label(caller),
+                                         actor_role=(caller or {}).get("role", ""))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not record that.")
+    await _ops_audit(request, "escalation.reply", "claim", str(claim_id),
+                     "%s%s" % (body.outcome, (" -> " + res["moved_to"]) if res.get("moved_to") else ""))
+    return res
+
+
+@app.get("/nidaan/ops/api/escalation/due")
+@limiter.limit("30/minute")
+async def ops_escalation_due(request: Request):
+    """What Escalation needs a person to do today: reminders owed, cases out of reminders, and
+    queries we have not answered. It sends nothing and moves nothing."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await buckets.escalation_due()
+
+
 @app.get("/nidaan/ops/api/doc-desk")
 @limiter.limit("30/minute")
 async def ops_doc_desk(request: Request):

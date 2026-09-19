@@ -669,3 +669,133 @@ async def _e9(ctx):
         )).fetchone()
     assert int(n[0]) == 0, \
         "%d claim(s) still show 'Escalation Pending' while holding an escalation date" % n[0]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The founder's flow map, walked branch by branch:
+#
+#   Escalated ──no reply──> reminder 1 → 2 → 3 ──> Lokpal
+#             └─reply──┬── yes ──────────────────> Complete
+#                      ├── no ───────────────────> Lokpal
+#                      └── query ──> we answer ──┬─ yes ─> Complete
+#                                                └─ no ──> Lokpal
+reply = _j("escalation_reply", "What the insurer said decides where the case goes", "staff")
+
+
+async def _esc_ready(ctx, sub="escalated"):
+    """A claim sitting in Escalation at the step we want to test from."""
+    import aiosqlite as _sq
+    from datetime import datetime as _dt, timedelta as _td
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        r = await (await c.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE COALESCE(pipeline_stage,'')!='' "
+            "AND COALESCE(archived,0)=0 LIMIT 1")).fetchone()
+    if not r:
+        raise Skip("no claim is in the pipeline")
+    cid = int(dict(r)["claim_id"])
+    async with _sq.connect(ctx["db"]) as c:
+        await c.execute("UPDATE nidaan_claims SET pipeline_stage='escalation', pipeline_sub=? "
+                        "WHERE claim_id=?", (sub, cid))
+        await c.execute("DELETE FROM nidaan_claim_fields WHERE claim_id=? AND field_key LIKE "
+                        "'esc%'", (cid,))
+        await c.execute(
+            "INSERT INTO nidaan_claim_fields (claim_id, field_key, value, updated_at) "
+            "VALUES (?,'escalation_date',?,CURRENT_TIMESTAMP)",
+            (cid, (_dt.utcnow() - _td(days=35)).strftime("%Y-%m-%d")))
+        await c.commit()
+    return cid
+
+
+@reply.step("a reply cannot be recorded before we have escalated")
+async def _r1(ctx):
+    import aiosqlite as _sq
+    cid = await _esc_ready(ctx, "pending")
+    res = await ctx["buckets"].escalation_reply(cid, "accepted", note="Too early.",
+                                                actor="journey-test", actor_role="super_admin")
+    assert not res.get("ok"), "a reply was accepted before the case had been escalated"
+
+
+@reply.step("every reply has to say what they wrote")
+async def _r2(ctx):
+    cid = await _esc_ready(ctx)
+    res = await ctx["buckets"].escalation_reply(cid, "accepted", note="",
+                                                actor="journey-test", actor_role="super_admin")
+    assert not res.get("ok") and "what they wrote" in (res.get("error") or "")
+
+
+@reply.step("they agreed → the case is Complete, settled at escalation")
+async def _r3(ctx):
+    import aiosqlite as _sq
+    cid = await _esc_ready(ctx)
+    res = await ctx["buckets"].escalation_reply(
+        cid, "accepted", note="Insurer agreed to settle in full.",
+        actor="journey-test", actor_role="super_admin")
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row          # without this, dict() gets a bare tuple
+        r = dict(await (await c.execute(
+            "SELECT pipeline_stage, pipeline_sub FROM nidaan_claims WHERE claim_id=?",
+            (cid,))).fetchone())
+    assert r["pipeline_stage"] == "completed", "went to '%s'" % r["pipeline_stage"]
+    assert r["pipeline_sub"] == "escalation_settlement", \
+        "landed on '%s' instead of the escalation-settlement step" % r["pipeline_sub"]
+
+
+@reply.step("they refused → Lokpal")
+async def _r4(ctx):
+    import aiosqlite as _sq
+    cid = await _esc_ready(ctx)
+    res = await ctx["buckets"].escalation_reply(
+        cid, "refused", note="Insurer upheld the repudiation.",
+        actor="journey-test", actor_role="super_admin")
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        stage = (await (await c.execute(
+            "SELECT pipeline_stage FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone())[0]
+    assert stage == "lokpal", "a refusal went to '%s'" % stage
+
+
+@reply.step("they asked a question → the case stays, marked Escalation Query")
+async def _r5(ctx):
+    import aiosqlite as _sq
+    cid = await _esc_ready(ctx)
+    res = await ctx["buckets"].escalation_reply(
+        cid, "query", note="Insurer wants the original discharge summary.",
+        actor="journey-test", actor_role="super_admin")
+    assert res.get("ok") and res.get("stayed"), "a query should not move the case"
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row          # without this, dict() gets a bare tuple
+        r = dict(await (await c.execute(
+            "SELECT pipeline_stage, pipeline_sub FROM nidaan_claims WHERE claim_id=?",
+            (cid,))).fetchone())
+    assert r["pipeline_stage"] == "escalation" and r["pipeline_sub"] == "query", \
+        "ended at %s/%s" % (r["pipeline_stage"], r["pipeline_sub"])
+    ctx["q_cid"] = cid
+
+
+@reply.step("while they wait on us, we stop chasing them")
+async def _r6(ctx):
+    if not ctx.get("q_cid"):
+        raise Skip("no queried claim")
+    d = await ctx["buckets"].escalation_due()
+    assert not [r for r in d["reminders"] if r["claim_id"] == ctx["q_cid"]], \
+        "still sending reminders to an insurer who is waiting on our answer"
+    assert [r for r in d["owed"] if r["claim_id"] == ctx["q_cid"]], \
+        "a query we owe an answer to is not surfaced anywhere"
+
+
+@reply.step("and after we answer, their yes still completes it")
+async def _r7(ctx):
+    import aiosqlite as _sq
+    if not ctx.get("q_cid"):
+        raise Skip("no queried claim")
+    res = await ctx["buckets"].escalation_reply(
+        ctx["q_cid"], "accepted", note="Sent the summary; insurer agreed to pay.",
+        actor="journey-test", actor_role="super_admin")
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        stage = (await (await c.execute(
+            "SELECT pipeline_stage FROM nidaan_claims WHERE claim_id=?",
+            (ctx["q_cid"],))).fetchone())[0]
+    assert stage == "completed", "after a query was answered it went to '%s'" % stage
