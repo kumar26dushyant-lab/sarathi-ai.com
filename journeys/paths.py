@@ -799,3 +799,62 @@ async def _r7(ctx):
             "SELECT pipeline_stage FROM nidaan_claims WHERE claim_id=?",
             (ctx["q_cid"],))).fetchone())[0]
     assert stage == "completed", "after a query was answered it went to '%s'" % stage
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The work screen has to say WHOSE desk a claim is on and WHAT KIND of claim it is. A bucket says
+# what stage it is at, which is not the same thing: "somebody in Drafting will pick it up" is how
+# a claim goes quiet. These pin the contract the columns read.
+own = _j("ownership", "The board says who holds each claim", "staff")
+
+
+@own.step("the board returns the claim type")
+async def _o1(ctx):
+    b = await ctx["buckets"].board()
+    assert b.get("items") is not None or b.get("rows") is not None, "the board returned nothing"
+    rows = b.get("items") or b.get("rows") or []
+    if not rows:
+        raise Skip("no claims in the pipeline")
+    assert "claim_type" in rows[0], "the board no longer carries claim_type"
+    ctx["board_rows"] = rows
+
+
+@own.step("and who it is assigned to")
+async def _o2(ctx):
+    if not ctx.get("board_rows"):
+        raise Skip("no rows")
+    assert "assigned_to" in ctx["board_rows"][0], "the board no longer carries assigned_to"
+
+
+@own.step("only real claim handlers can be offered")
+async def _o3(ctx):
+    import biz_nidaan_doc_checklist as _ck
+    # The dropdown offers exactly the types the checklist can build a document list for; any
+    # other would be refused on save, which is a refusal we could have predicted.
+    offered = {"health", "motor", "life", "travel", "property", "marine", "other"}
+    known = set(_ck.TEMPLATES.keys())
+    assert offered <= known, "the screen offers types with no document list: %s" % (offered - known)
+
+
+@own.step("assigning a claim sticks, and unassigning it does too")
+async def _o4(ctx):
+    import biz_nidaan_case_state as _cs
+    import aiosqlite as _sq
+    _cs.DB_PATH = ctx["db"]
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        st = await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+            "LIMIT 1")).fetchone()
+    if not st or not ctx.get("board_rows"):
+        raise Skip("no staff or no claims to assign")
+    cid = int(ctx["board_rows"][0]["claim_id"])
+    sid = int(dict(st)["staff_id"])
+    res = await _cs.assign(cid, sid, actor="journey-test")
+    assert res.get("ok"), res.get("error")
+    async with _sq.connect(ctx["db"]) as c:
+        got = (await (await c.execute(
+            "SELECT assigned_to_staff_id FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone())[0]
+    assert got == sid, "assignment did not stick"
+    res = await _cs.assign(cid, None, actor="journey-test")
+    assert res.get("ok"), "a claim could not be handed back to nobody"
