@@ -12003,7 +12003,9 @@ async def _subsystem_checks() -> list:
         _thr = getattr(radar, "FAIL_ALERT_THRESHOLD", 3)
         _bad = [m for m in _act if (m.get("last_sync_status") or "") != "ok"]
         _down = [m for m in _bad if int(m.get("fail_count") or 0) >= _thr]
-        _wobble = [m for m in _bad if m not in _down]
+        # Split by id, not by dict equality: `m not in _down` would compare whole rows.
+        _dids = {m.get("mailbox_id") for m in _down}
+        _wobble = [m for m in _bad if m.get("mailbox_id") not in _dids]
         if not _act:
             _chk("Email Radar", False, "no collection inbox connected (cs@ / np@)")
         else:
