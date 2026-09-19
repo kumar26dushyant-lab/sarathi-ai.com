@@ -136,3 +136,82 @@ async def consolidation() -> dict:
 
 async def both() -> dict:
     return {"l2": await l2_claims(), "consolidation": await consolidation()}
+
+
+# ── Reviewed, and waiting to be paid for ─────────────────────────────────────
+# The gap between "we told them they have a case" and "they paid us to fight it". A claim sits
+# here because of something a PERSON has to do — ring them, explain the fee, chase the branch —
+# and until now it sat inside All Claims looking like every other claim, which is how 17 winnable
+# cases came to be waiting an average of nine days with nobody counting.
+#
+# The founder asked for the dates as well as the list (19 Sep): "their dates and timeline captures
+# there for everything when a claim started, when it's review delivered, when payment is done."
+# Those three dates turn "it is pending" into "it has been nine days since we told them".
+
+async def awaiting_fee(limit: int = 300) -> dict:
+    """Claims whose review has been delivered but whose Level-2 fee is not covered.
+
+    Coverage means the same three things it means everywhere else — an L2 fee paid, a paid claim,
+    or a live subscription — so this screen and the handover gate can never disagree about whether
+    a claim has been paid for. That disagreement was NP-112.
+    """
+    async with aiosqlite.connect(db.DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            """
+            SELECT claim_id, COALESCE(complainant_name,'') AS complainant_name,
+                   COALESCE(insured_name,'')  AS insured_name,
+                   COALESCE(insurer_name,'')  AS insurer_name,
+                   COALESCE(disputed_amount,0) AS disputed_amount,
+                   COALESCE(review_outcome,'') AS review_outcome,
+                   COALESCE(branch_code,'')    AS branch_code,
+                   created_at, review_delivered_at, paid_at, l2_paid_at,
+                   COALESCE(payment_status,'')    AS payment_status,
+                   COALESCE(l2_payment_status,'') AS l2_payment_status
+            FROM nidaan_claims
+            WHERE review_delivered_at IS NOT NULL
+              AND COALESCE(archived,0)=0
+              AND COALESCE(status,'') NOT IN ('closed','withdrawn')
+              AND LOWER(COALESCE(l2_payment_status,'')) <> 'paid'
+              AND LOWER(COALESCE(payment_status,'')) NOT IN ('paid','subscription')
+            ORDER BY review_delivered_at ASC LIMIT ?
+            """, (int(limit),))).fetchall()]
+
+    out, winnable = [], 0
+    for r in rows:
+        # A claim we said had NO case is not a claim to chase a fee for. It is listed, clearly
+        # marked, so nobody rings that person by mistake.
+        fightable = (r["review_outcome"] == "can_fight")
+        if fightable:
+            winnable += 1
+        out.append({
+            "claim_id": r["claim_id"],
+            "who": r["complainant_name"] or r["insured_name"],
+            "insurer": r["insurer_name"],
+            "amount": r["disputed_amount"],
+            "outcome": r["review_outcome"],
+            "fightable": fightable,
+            "branch_code": r["branch_code"],
+            "started_at": str(r["created_at"] or ""),
+            "review_delivered_at": str(r["review_delivered_at"] or ""),
+            "paid_at": str(r["l2_paid_at"] or r["paid_at"] or ""),
+            "days_since_review": _days(r["review_delivered_at"]),
+            "days_since_start": _days(r["created_at"]),
+        })
+    return {"ok": True, "waiting": len(out), "winnable": winnable,
+            "disputed_total": sum(int(r["amount"] or 0) for r in out if r["fightable"]),
+            "rows": out}
+
+
+def _days(ts):
+    if not ts:
+        return None
+    from datetime import datetime as _dt
+    raw = str(ts)[:19].replace("T", " ").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return max(0, (_dt.utcnow() - _dt.strptime(raw if fmt != "%Y-%m-%d" else raw[:10],
+                                                       fmt)).days)
+        except ValueError:
+            continue
+    return None

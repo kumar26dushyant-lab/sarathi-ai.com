@@ -912,3 +912,64 @@ async def _o6(ctx):
             "SELECT COUNT(*) FROM nidaan_notifications WHERE event_key='case.assigned' "
             "AND claim_id=?", (cid,))).fetchone())[0]
     assert after == before, "somebody was told about something they did themselves"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The gap between "we told them they have a case" and "they paid us to fight it". 17 winnable
+# claims were sitting in it, averaging nine days, with nobody counting.
+fee = _j("awaiting_fee", "Reviewed claims waiting to be paid for are visible", "staff")
+
+
+@fee.step("the list builds")
+async def _af1(ctx):
+    d = await ctx["stats"].awaiting_fee()
+    assert d.get("ok"), "the awaiting-fee list would not build"
+    ctx["fee"] = d
+
+
+@fee.step("it counts what is waiting, and what is winnable")
+async def _af2(ctx):
+    d = ctx["fee"]
+    for k in ("waiting", "winnable", "disputed_total"):
+        assert isinstance(d.get(k), int), "it does not report '%s'" % k
+    assert d["winnable"] <= d["waiting"], "more winnable claims than claims"
+
+
+@fee.step("every row carries the three dates the founder asked for")
+async def _af3(ctx):
+    rows = ctx["fee"]["rows"]
+    if not rows:
+        raise Skip("nothing is awaiting a fee right now")
+    r = rows[0]
+    for k in ("started_at", "review_delivered_at", "paid_at", "days_since_review"):
+        assert k in r, "a row is missing '%s'" % k
+    assert r["review_delivered_at"], "a claim reached this list without a review date"
+
+
+@fee.step("a claim already paid for never appears here")
+async def _af4(ctx):
+    import aiosqlite as _sq
+    ids = [r["claim_id"] for r in ctx["fee"]["rows"]]
+    if not ids:
+        raise Skip("empty list")
+    marks = ",".join("?" * len(ids))
+    async with _sq.connect(ctx["db"]) as c:
+        n = await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claims WHERE claim_id IN (%s) AND "
+            "(LOWER(COALESCE(l2_payment_status,''))='paid' OR "
+            " LOWER(COALESCE(payment_status,'')) IN ('paid','subscription'))" % marks,
+            ids)).fetchone()
+    assert int(n[0]) == 0, "%s claim(s) that are already paid for are being chased" % n[0]
+
+
+@fee.step("and a claim we said has no case is marked, not chased")
+async def _af5(ctx):
+    rows = ctx["fee"]["rows"]
+    if not rows:
+        raise Skip("empty list")
+    for r in rows:
+        assert isinstance(r.get("fightable"), bool), "a row does not say whether it is winnable"
+    # The money total counts only the winnable ones — chasing a fee for a case we said cannot be
+    # fought would be worse than not chasing at all.
+    total = sum(int(r["amount"] or 0) for r in rows if r["fightable"])
+    assert ctx["fee"]["disputed_total"] == total, "the total includes claims we said have no case"

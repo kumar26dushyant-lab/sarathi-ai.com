@@ -8755,6 +8755,22 @@ async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Reque
     return res
 
 
+@app.get("/nidaan/ops/api/claims/awaiting-fee")
+@limiter.limit("30/minute")
+async def ops_claims_awaiting_fee(request: Request):
+    """Reviewed, told they have a case, and not yet paid for — oldest first.
+
+    The step between All Claims and L2 Claims the founder asked for (19 Sep). It carries the three
+    dates that turn "pending" into "nine days since we told them": when the claim started, when the
+    review was delivered, and when it was paid for.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_stats as _st
+    return await _st.awaiting_fee()
+
+
 @app.get("/nidaan/ops/api/escalation/due")
 @limiter.limit("30/minute")
 async def ops_escalation_due(request: Request):
