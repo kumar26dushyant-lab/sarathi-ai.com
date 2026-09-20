@@ -1154,8 +1154,25 @@ async def file_attachments_to_claim(item_id: int, claim_id: int, by: str = "") -
     import uuid as _uuid
     docs_dir = Path(__file__).parent / "uploads" / "nidaan-docs"
     filed, skipped = 0, []
+    import biz_av_scan as _av
     for f in files:
         try:
+            # VIRUS SCAN before anything else. These attachments arrive from customer mailboxes -
+            # forwarded insurer mail, hospital paperwork, whatever a stranger sent them - and get
+            # filed onto a claim that staff then open. Same distribution-point risk as the upload
+            # form, which has been scanning for months.
+            #
+            # Scanned as RECEIVED, before normalize_to_pdf, so the verdict is on the real artefact
+            # rather than on our re-rendering of it. Fail-closed to match every other path: a file
+            # we could not scan is a file we do not file. It lands in `skipped`, which is already
+            # reported back to the staffer who pressed the button, so a refusal is visible rather
+            # than silent.
+            allowed, why = await _av.scan_bytes(f["data"])
+            if not allowed:
+                logger.warning("radar REFUSED an attachment for claim %s: %s (%s)",
+                               claim_id, str(f.get("name"))[:60], why)
+                skipped.append(f["name"])
+                continue
             pdf, pages, _sk = _split.normalize_to_pdf([(f["name"], f["data"])])
             if not pdf or not pages:
                 skipped.append(f["name"])

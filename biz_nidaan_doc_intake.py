@@ -170,6 +170,48 @@ async def accept(claim_id: int, account_id, files: list, *, claim_type: str = ""
         out["error"] = "nothing_readable"
         return out
 
+    # VIRUS SCAN, on what actually arrived.
+    #
+    # Every HTTP upload has gone through validate_upload_scanned() for months, but files arriving
+    # by WhatsApp reached the disk without ever being scanned - and they are files from strangers,
+    # stored and then opened by staff on an authenticated machine. We are a distribution point
+    # here exactly as we are on the upload form.
+    #
+    # Scanned BEFORE normalize_to_pdf, deliberately: the thing to judge is the artefact the
+    # complainant actually sent, not our re-rendering of it. A zip is expanded by unpack() first,
+    # so members are scanned individually rather than as an opaque blob.
+    #
+    # Fail-closed, like the upload paths: if the scanner cannot give a verdict we do not store the
+    # file. But NOTHING here is said back to the complainant - a refusal is our problem to explain,
+    # and it goes to staff through `rejected` and the notes. (Founder: never blame the person for
+    # our confusion.)
+    out["rejected"] = []
+    try:
+        import biz_av_scan as _av
+        kept = []
+        for name, data in files:
+            allowed, why = await _av.scan_bytes(data)
+            if allowed:
+                kept.append((name, data))
+                continue
+            out["rejected"].append({"name": (name or "file")[:80], "reason": why or "refused"})
+            logger.warning("doc intake REFUSED a file on claim %s: %s (%s)",
+                           claim_id, (name or "?")[:60], why)
+        if out["rejected"]:
+            out["notes"].append(
+                "%d file(s) could not be accepted and need a person to look"
+                % len(out["rejected"]))
+        files = kept
+    except Exception as e:  # noqa: BLE001
+        # The scanner module itself failing is not a reason to drop a complainant's documents on
+        # the floor silently; it IS a reason to make sure a person sees it.
+        logger.error("doc intake could not run the virus scan on claim %s: %s", claim_id, e)
+        out["notes"].append("the virus scanner could not be reached - a person should check these")
+
+    if not files:
+        out["error"] = "nothing_accepted"
+        return out
+
     # Everything becomes one PDF so the splitter can look across the whole batch at once - that is
     # what lets eight photos of one bill be recognised as a single document.
     try:
