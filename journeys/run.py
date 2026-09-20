@@ -75,6 +75,16 @@ async def _subjects(db_path: str) -> dict:
             "COALESCE(contact_phone,'') AS contact_phone FROM nidaan_branches "
             "WHERE status='active' AND COALESCE(contact_email,'')!='' LIMIT 1")).fetchone()
         out["branch_row"] = dict(b) if b else None
+        # Somebody who has actually crossed into Sarathi: an active subscription whose account
+        # already holds a live Sarathi link. Chosen this way round on purpose - the journey then
+        # asks whether their PLAN still entitles them to what they already have, which is how
+        # entitlement drift shows up. Picking by plan name instead would only re-test a constant.
+        bs = await (await c.execute(
+            "SELECT s.account_id, s.plan FROM nidaan_subscriptions s "
+            "WHERE s.status='active' AND s.account_id IN "
+            "(SELECT nidaan_account_id FROM product_link WHERE active=1) "
+            "ORDER BY s.started_at DESC LIMIT 1")).fetchone()
+        out["bundle_sub"] = dict(bs) if bs else None
     return out
 
 
@@ -133,6 +143,10 @@ async def main() -> int:
     import biz_nidaan_health_watch as hw
     import biz_nidaan_stats as stats
     stats.db.DB_PATH = copy
+    # The Sarathi<->Nidaan seam. It reads DB_PATH from the environment at import time like the
+    # rest, but it is rebound explicitly because the bundle journeys WRITE through it.
+    import biz_platform_bridge as bridge
+    bridge.DB_PATH = copy
 
     _assert_no_live_db(args.db, copy)
 
@@ -145,7 +159,7 @@ async def main() -> int:
     ctx.update({"db": copy, "nidaan": nidaan, "claimant": claimant, "access": access,
                 "buckets": buckets, "docreq": docreq, "auth": auth,
                 "intake": intake, "msg": wa_msg, "nnot": nnot, "hw": hw,
-                "stats": stats})
+                "stats": stats, "bridge": bridge})
 
     print("journeys — %d to run against a copy of %s" % (len(paths.ALL), os.path.basename(args.db)))
     # Name the OVERLAY when there is one. Printing only --app once let a run look as though it

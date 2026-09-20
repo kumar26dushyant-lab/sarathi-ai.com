@@ -1053,3 +1053,278 @@ async def _rm5(ctx):
     # And the list did not lose anything else on the way out.
     for must in ("rejection_letter", "policy_doc", "claim_form", "mail_credentials"):
         assert any(k.startswith(must[:8]) for k in keys), "the health list lost '%s'" % must
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SARATHI-AI
+#
+# Until 20 Sep every journey here was a NidaanPartner journey. That was fine while the two
+# products were one deployment with one fate — but we are about to cut a 29,000-line file in half,
+# and a safety net over one half of it is not a safety net.
+#
+# These exercise the Sarathi side and, above all, the SEAM: the bundle. 37 of 59 tenants were
+# created by somebody buying NidaanPartner, so the handover is not an edge case — it is how most
+# Sarathi tenants come into existence. It is also the one thing the founder asked about by name.
+#
+# Scoped to ACTIVE tenants and ACTIVE links on purpose. There is a wiped test tenant (#14,
+# product_link.active=0, bundled_until long past) with no agent; asserting over every row would
+# have failed on day one and taught everyone to ignore the suite.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+bundle_sso = _j("bundle_sso", "A bundle subscriber opens Sarathi CRM", "subscriber")
+
+
+@bundle_sso.step("their Nidaan plan actually includes the Sarathi bundle")
+async def _b1(ctx):
+    sub = ctx.get("bundle_sub")
+    if not sub:
+        raise Skip("no active Nidaan subscription on a bundle plan to exercise")
+    plan = sub["plan"]
+    limits = ctx["nidaan"].PLAN_LIMITS.get(plan) or {}
+    assert limits.get("sarathi_bundle"), \
+        "plan %r is sold with Sarathi CRM but PLAN_LIMITS does not grant it" % plan
+    ctx["bundle_account_id"] = sub["account_id"]
+
+
+@bundle_sso.step("the link from their Nidaan account resolves to a Sarathi tenant")
+async def _b2(ctx):
+    tid = await ctx["nidaan"].get_sarathi_tenant_for_nidaan(ctx["bundle_account_id"])
+    assert tid, ("account #%s pays for a bundle plan but no Sarathi tenant is linked — "
+                 "the CRM button would 403" % ctx["bundle_account_id"])
+    ctx["tenant_id"] = int(tid)
+
+
+@bundle_sso.step("that tenant exists and is not a dead account")
+async def _b3(ctx):
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        t = await (await c.execute(
+            "SELECT tenant_id, subscription_status, bundled_until, plan_source "
+            "FROM tenants WHERE tenant_id=?", (ctx["tenant_id"],))).fetchone()
+    assert t, "product_link points at tenant #%s, which does not exist" % ctx["tenant_id"]
+    t = dict(t)
+    assert t["subscription_status"] == "active", \
+        "their Sarathi tenant is %r, so the CRM opens to a dead account" % t["subscription_status"]
+    ctx["tenant_row"] = t
+
+
+@bundle_sso.step("somebody is actually in that tenant — the first screen is not empty")
+async def _b4(ctx):
+    # The bridge creates an owner agent at provisioning time precisely so the tenant is usable on
+    # first login. A tenant with no agent means a paying subscriber lands in an empty product.
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        n = (await (await c.execute(
+            "SELECT COUNT(*) FROM agents WHERE tenant_id=?", (ctx["tenant_id"],))).fetchone())[0]
+        owners = (await (await c.execute(
+            "SELECT COUNT(*) FROM agents WHERE tenant_id=? AND role='owner'",
+            (ctx["tenant_id"],))).fetchone())[0]
+    assert n, "tenant #%s has no agents — the subscriber logs in to nothing" % ctx["tenant_id"]
+    assert owners, "tenant #%s has agents but no owner — nobody can administer it" % ctx["tenant_id"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+provisioning = _j("bundle_provisioning", "Buying NidaanPartner creates a usable Sarathi account",
+                  "subscriber")
+
+
+@provisioning.step("the bridge provisions a brand-new tenant")
+async def _p1b(ctx):
+    # Runs against the COPY, with an address nobody owns, so this can never touch a real tenant.
+    email = "journey-probe@example.invalid"
+    tid = await ctx["bridge"].upsert_bundle_tenant(
+        email=email, owner_name="Journey Probe", firm_name="Probe Firm",
+        phone="", sarathi_plan="individual", bundled_until="2099-01-01")
+    assert tid, "the bundle bridge returned no tenant id"
+    ctx["probe_email"], ctx["probe_tid"] = email, int(tid)
+
+
+@provisioning.step("and gives it an owner, so it works on first login")
+async def _p2b(ctx):
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        rows = await (await c.execute(
+            "SELECT role FROM agents WHERE tenant_id=?", (ctx["probe_tid"],))).fetchall()
+    roles = [dict(r)["role"] for r in rows]
+    assert "owner" in roles, \
+        "a freshly provisioned bundle tenant has no owner agent — it would open empty"
+
+
+@provisioning.step("buying again refreshes the same tenant, it does not make a second one")
+async def _p3b(ctx):
+    # Renewal runs this same call. If it created a duplicate every time, one subscriber would
+    # accumulate tenants and their data would scatter across them.
+    again = await ctx["bridge"].upsert_bundle_tenant(
+        email=ctx["probe_email"], owner_name="Journey Probe", firm_name="Probe Firm",
+        phone="", sarathi_plan="gold", bundled_until="2099-06-01")
+    assert int(again) == ctx["probe_tid"], \
+        "a second purchase created tenant #%s instead of refreshing #%s" % (again, ctx["probe_tid"])
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        t = dict(await (await c.execute(
+            "SELECT plan, bundled_until, subscription_status FROM tenants WHERE tenant_id=?",
+            (ctx["probe_tid"],))).fetchone())
+    assert t["plan"] == "gold", "the renewed plan was not applied (still %r)" % t["plan"]
+    assert t["bundled_until"] == "2099-06-01", "the new expiry was not applied"
+    assert t["subscription_status"] == "active", "renewal left the tenant inactive"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+bundle_end = _j("bundle_end", "Bundle access ends when the subscription does", "subscriber")
+
+
+@bundle_end.step("we can find the tenants whose bundle ends on a given day")
+async def _e1b(ctx):
+    if not ctx.get("probe_tid"):
+        raise Skip("the provisioning journey did not run, so there is nothing to find")
+    rows = await ctx["bridge"].find_bundle_tenants_ending_on("2099-06-01")
+    assert isinstance(rows, list), "the expiry sweep did not return a list"
+    assert any(int(r.get("tenant_id", 0)) == ctx["probe_tid"] for r in rows), \
+        "the sweep missed a tenant whose bundle ends that day — renewals would run on nobody"
+
+
+@bundle_end.step("shortening one writes a grace date rather than cutting it dead")
+async def _e2b(ctx):
+    if not ctx.get("probe_tid"):
+        raise Skip("nothing provisioned to shorten")
+    # EARLIER than the current 2099-06-01. The first version of this step asked for a LATER date
+    # and read the refusal as a bug — the bridge was right and the test was wrong.
+    ok = await ctx["bridge"].shorten_bundle_tenant(tenant_id=ctx["probe_tid"],
+                                                   grace_until="2099-02-01")
+    assert ok is True, "shortening a lapsed bundle did not happen (returned %r)" % ok
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        t = dict(await (await c.execute(
+            "SELECT bundled_until, lifetime_trial_used FROM tenants WHERE tenant_id=?",
+            (ctx["probe_tid"],))).fetchone())
+    assert t["bundled_until"] == "2099-02-01", \
+        "the grace date was not written (still %r)" % t["bundled_until"]
+    assert t["lifetime_trial_used"], \
+        "an ex-bundle tenant could restart a free Sarathi trial"
+
+
+@bundle_end.step("and it can only ever shorten — a lapsing bundle is never extended by accident")
+async def _e3b(ctx):
+    if not ctx.get("probe_tid"):
+        raise Skip("nothing provisioned")
+    # The guarantee that actually matters: this sweep runs unattended, and a bug that moved the
+    # date FORWARD would hand people months of access nobody sold them, silently.
+    out = await ctx["bridge"].shorten_bundle_tenant(tenant_id=ctx["probe_tid"],
+                                                    grace_until="2099-12-31")
+    assert out is False, "a later date was accepted — the bundle would be silently extended"
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        t = dict(await (await c.execute(
+            "SELECT bundled_until FROM tenants WHERE tenant_id=?",
+            (ctx["probe_tid"],))).fetchone())
+    assert t["bundled_until"] == "2099-02-01", \
+        "the date moved to %r despite the call being refused" % t["bundled_until"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+tenancy = _j("tenancy", "Every Sarathi account holds together", "subscriber")
+
+
+@tenancy.step("no active link points at a tenant that does not exist")
+async def _t1b(ctx):
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        n = (await (await c.execute(
+            "SELECT COUNT(*) FROM product_link p WHERE p.active=1 AND NOT EXISTS "
+            "(SELECT 1 FROM tenants t WHERE t.tenant_id=p.sarathi_tenant_id)")).fetchone())[0]
+    assert n == 0, "%d active Nidaan-to-Sarathi link(s) point at a missing tenant" % n
+
+
+@tenancy.step("no agent belongs to a tenant that does not exist")
+async def _t2b(ctx):
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        n = (await (await c.execute(
+            "SELECT COUNT(*) FROM agents a WHERE NOT EXISTS "
+            "(SELECT 1 FROM tenants t WHERE t.tenant_id=a.tenant_id)")).fetchone())[0]
+    assert n == 0, "%d agent(s) belong to no tenant — their data is unreachable" % n
+
+
+@tenancy.step("every LIVE bundle tenant has somebody who can use it")
+async def _t3b(ctx):
+    import aiosqlite
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT t.tenant_id FROM tenants t WHERE t.plan_source='nidaan_bundle' "
+            "AND t.subscription_status='active' AND NOT EXISTS "
+            "(SELECT 1 FROM agents a WHERE a.tenant_id=t.tenant_id)")).fetchall()]
+    assert not rows, ("%d active bundle tenant(s) have no agent: %s — those subscribers would "
+                      "open the CRM and find nothing"
+                      % (len(rows), ", ".join("#%s" % r["tenant_id"] for r in rows)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+boundary = _j("boundary", "The wall between the two products still stands", "staff")
+
+
+@boundary.step("no NidaanPartner module reaches into Sarathi's tables")
+async def _w1(ctx):
+    # The rule that makes a clean split possible at all (founder, 17 Aug: keep them separate).
+    # Cheap to check and expensive to rediscover: every violation is a line that would have to be
+    # rewritten under time pressure on the day the two apps are actually pulled apart.
+    import ast as _ast
+    import glob
+    import os as _os
+    import re as _re
+    bad = []
+    pat = _re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+(tenants|agents|leads|customers|policies)\b",
+                      _re.I)
+
+    def _sql_literals(tree):
+        """Every string literal EXCEPT docstrings — SQL lives in the first, English in the second.
+
+        The first version of this scanned raw file text and flagged biz_nidaan_crm.py, because its
+        module docstring says "create/list/update leads". A boundary check that fires on prose is
+        one people switch off within a week.
+        """
+        docs = set()
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.Module, _ast.ClassDef, _ast.FunctionDef,
+                                 _ast.AsyncFunctionDef)):
+                body = getattr(node, "body", None) or []
+                first = body[0] if body else None
+                if isinstance(first, _ast.Expr) and isinstance(first.value, _ast.Constant) \
+                        and isinstance(first.value.value, str):
+                    docs.add(id(first.value))
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Constant) and isinstance(node.value, str) \
+                    and id(node) not in docs:
+                yield node.value
+
+    # Scan the tree the RUN ACTUALLY LOADED, not the working directory. A bare
+    # glob("biz_nidaan*.py") reads whatever cwd happens to be — which under --overlay is the
+    # deployed app, not the code under test. Proven by injecting a real `FROM tenants` into the
+    # overlay and watching this step stay green; same family as the overlay bug of 19 Sep.
+    # biz_nidaan is always imported and rebound by the runner, so its own location is the truth.
+    root = _os.path.dirname(_os.path.abspath(ctx["nidaan"].__file__))
+    scanned = sorted(glob.glob(_os.path.join(root, "biz_nidaan*.py")))
+    assert scanned, "found no Nidaan modules to check in %s — this check would pass blindly" % root
+    ctx["boundary_scanned"] = len(scanned)
+    for f in scanned:
+        try:
+            tree = _ast.parse(open(f, encoding="utf-8", errors="replace").read())
+        except (OSError, SyntaxError):
+            continue
+        for lit in _sql_literals(tree):
+            for m in pat.finditer(lit):
+                bad.append("%s -> %s" % (_os.path.basename(f), m.group(1)))
+    assert not bad, ("Nidaan code now reads Sarathi tables directly: %s. Route it through "
+                     "biz_platform_bridge.py instead." % "; ".join(sorted(set(bad))[:6]))
+
+
+@boundary.step("the bridge still offers everything Nidaan needs from Sarathi")
+async def _w2(ctx):
+    for fn in ("upsert_bundle_tenant", "shorten_bundle_tenant", "find_bundle_tenants_ending_on"):
+        assert hasattr(ctx["bridge"], fn), \
+            "biz_platform_bridge lost %s() — Nidaan's bundle path depends on it" % fn
