@@ -39,10 +39,13 @@ import biz_nidaan as nidaan; nidaan.DB_PATH = dst
 import biz_av_scan as av
 import biz_nidaan_doc_intake as intake
 
-# Prove we loaded the CHANGED module, not the deployed one.
-print("  intake module: %s" % intake.__file__)
-if not intake.__file__.startswith(OV):
-    sys.exit("ABORT: loaded the deployed doc_intake, not the overlay - the test would be meaningless")
+# Say WHICH copy is under test, always. When checking a change before it ships, set
+# AV_REQUIRE_OVERLAY=1 and this refuses to run against the deployed tree - the first version of
+# this test silently exercised the deployed module and reported a pass for code that did not
+# contain the fix.
+print("  intake module under test: %s" % intake.__file__)
+if os.environ.get("AV_REQUIRE_OVERLAY") == "1" and not intake.__file__.startswith(OV):
+    sys.exit("ABORT: loaded the DEPLOYED doc_intake, not the overlay - this test would be meaningless")
 
 for _n, _m in list(sys.modules.items()):
     if _n.startswith("biz_") and getattr(_m, "DB_PATH", None) == LIVE:
