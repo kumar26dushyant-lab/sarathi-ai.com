@@ -232,6 +232,31 @@ Then the things DNS does not carry by itself:
 - [ ] **Telegram** — bot answers.
 - [ ] **A real login code** — the one path that has failed twice before. Send one, receive it.
 
+## Step 8b — Hand over the off-site backup (one machine owns it at a time)
+
+Both machines push the **same single blob** to `master` of `sarathi-db-backups` at 02:30. If both
+timers are armed they either race, or the older snapshot overwrites the newer backup. So the
+off-site backup has exactly one owner, and ownership transfers here — **Contabo first, Oracle
+second**, never overlapping and never with a gap.
+
+```bash
+# 1. Contabo stops owning it
+ssh root@84.247.172.252 'systemctl disable --now git-db-backup.timer; systemctl is-enabled git-db-backup.timer'
+
+# 2. Oracle takes it over
+ssh ubuntu@161.118.186.201 'sudo systemctl enable --now git-db-backup.timer; systemctl is-enabled git-db-backup.timer'
+
+# 3. Prove it, now, rather than discovering it at 02:30
+ssh ubuntu@161.118.186.201 'sudo systemctl start git-db-backup.service && sudo journalctl -u git-db-backup -n 5 --no-pager'
+#    expect: "off-server encrypted backup pushed at …"
+```
+
+*Already verified on 20 Sep:* the Oracle box's key authenticates, the script encrypts and pushes,
+and the blob **decrypts back to a valid database** (162 claims, 159 tables, `integrity_check` ok).
+That rehearsal ran on a throwaway branch so `master` stayed Contabo's; the branch has been deleted.
+
+`backup-db.timer` (local tarballs) is safe to run on both and is already armed on each.
+
 ## Step 9 — Close the door
 
 Only once Step 8 is fully green:

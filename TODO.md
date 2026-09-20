@@ -78,6 +78,14 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
 
+### ✅ OFF-SITE ENCRYPTED BACKUP PROVEN ON THE NEW BOX (2026-09-20)
+The last pre-cutover blocker is closed. **A backup that cannot be restored is not a backup**, so the whole chain was proven, not just the push.
+- Write deploy key added (founder's extension **correctly challenged my instruction** — I had said "the previous key was read-only", which was true of the *code* repo, not this one. The existing `sarathi-db-backup` key is **Contabo's**, verified by fingerprint, 3 successful pushes in 3 days. Left untouched; per-machine keys so each can be revoked independently).
+- **Round-trip verified:** encrypt → commit → push → pull → decrypt → open as SQLite. **162 claims, 159 tables, `integrity_check` ok.**
+- Rehearsed on a **throwaway branch** so `master` stayed Contabo-owned — both machines push the *same single blob*, so a push from here would have made the off-site tip an older snapshot. Branch deleted; `master` tip is still Contabo's `a40d410`.
+- 🔒 **`git-db-backup.timer` deliberately DISABLED on the new box.** Both boxes fire at 02:30; armed together they race, or the snapshot overwrites the newer backup. **One machine owns the off-site backup at a time** — new runbook **Step 8b** transfers ownership (Contabo off, Oracle on, prove immediately). `backup-db.timer` (local tarballs) is safe on both and armed on each.
+- ⚠️ **I did NOT copy the full real `biz.env`**, as originally planned — checking first showed `NIDAAN_NO_OUTBOUND` guards `send_message` but **not** Telegram's `getUpdates`, and the worker long-polls. The real bot token here would have made two workers fight over the same bot and **broken Telegram for staff on the live system**. Only `BACKUP_ENC_PASSPHRASE` was copied, **server-to-server, never through my machine, never printed**. The full env goes on at cutover per the runbook.
+
 ### ✅ NIDAANPARTNER VERIFIED ON ORACLE WITH REAL DATA (2026-09-20)
 Founder: *"it should work as it was working in contabo."* Everything before this was tested against an **empty database** — page shells, not the product. Now tested with the real thing.
 - **Real data loaded:** 162 claims, **914 MB** uploads (884 files), 898 pdfs, 689 apk — counts matching production exactly.
