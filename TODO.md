@@ -48,6 +48,17 @@ Verified item by item against the code and the live database, not against notes.
 - ✅ **Code backup fixed and silently-failing-jobs made visible.** It had been failing every 6h since ~16 Sep with every dashboard green. New App Health check **"Scheduled jobs"** (`systemctl is-failed` over 7 units) — critical, so it pages (founder only, re-verified at send). Proven by making a unit fail on purpose and watching it detected, then cleaning it up.
 - ℹ️ The encrypted **DB** backup was never affected — ran clean 02:30 today, as every day.
 
+### ✅ SARATHI SAFETY NET — 20 JOURNEYS, BOTH HALVES COVERED (2026-09-20)
+All 15 journeys were NidaanPartner. Before cutting a 29k-line file in half, the other half needed a net. **5 new journeys, 20 total, all green** — deployed and verified against deployed code.
+- **The seam first.** 37 of 59 Sarathi tenants were created by somebody buying NidaanPartner, so the bundle handover is not an edge case — it is how most tenants exist. Covered: plan grants the bundle → link resolves → tenant live → somebody is actually in it; provisioning creates a usable owner; **buying again refreshes the same tenant** instead of accumulating duplicates; bundle expiry **can only shorten** (an unattended sweep moving the date forward would hand out months nobody sold); no dangling links or orphan agents; and the Nidaan→Sarathi wall holds in real SQL.
+- **The SSO mechanism is already cross-domain** — `/nidaan/api/sarathi/access` mints a Sarathi JWT and redirects to `sarathi-ai.com/dashboard?token=...`. Not a shared cookie. **It survives the split as-is**; after splitting, step 4 (minting) moves to Sarathi or the two share the JWT secret. The founder's worry is genuinely the last domino, not the first.
+- **Three defects found — all in my tests, none in the code:**
+  1. `shorten_bundle_tenant` refused my call and was **right** (only shortens; I passed a later date). The never-extend guarantee is now its own assertion.
+  2. The boundary check flagged `biz_nidaan_crm.py` for the words *"update leads"* in a **docstring**. Now reads only non-docstring string literals via `ast`.
+  3. **The boundary check could not fail at all** — `glob()` ran against the working directory, so under `--overlay` it scanned the **deployed** code, not the code under test. Proven by injecting a real `FROM tenants` and watching it stay green. Now scans the tree the run actually loaded and **refuses to pass if it finds nothing**. Same family as the overlay bug of 19 Sep.
+- Scoped to **active** tenants/links deliberately: wiped test tenant #14 (`product_link.active=0`, expired) has no agent, and asserting over every row would have cried wolf on day one.
+- Live invariants confirmed healthy: 27 active bundle tenants, every one with an owner agent; 35 active links, none dangling; 0 orphan agents.
+
 ### ✅ PHASE 0 COMPLETE — ARM64 PROVEN ON ORACLE MUMBAI (2026-09-20)
 Box: **`nidaanpartner-mumbai-01` · 161.118.186.201 · ap-mumbai-1 · VM.Standard.A1.Flex aarch64 · 2 OCPU / 12 GB / 45 GB · Ubuntu 24.04**, dedicated `nidaanpartner-vcn`, isolated from goluq/sarathi. Key at `~/.ssh/id_nidaan_oracle`.
 - ✅ **R2 CLEARED — outbound SMTP works.** 587 and 465 **OPEN** (25 blocked, we do not use it). This was the potential showstopper: Oracle restricts mail egress and login codes depend on it. Also reachable: Razorpay, graph.facebook.com (WhatsApp Cloud), Telegram, Gemini, imap.gmail.com (Email Radar), GitHub.
