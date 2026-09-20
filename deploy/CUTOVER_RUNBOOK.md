@@ -281,6 +281,26 @@ That rehearsal ran on a throwaway branch so `master` stayed Contabo's; the branc
 
 `backup-db.timer` (local tarballs) is safe to run on both and is already armed on each.
 
+## Step 8c — Point the document backup at live data
+
+The Oracle box already writes an encrypted **full** backup (database **and** the 914 MB of claim
+documents) to Oracle Object Storage in Mumbai, keyless via instance principal. Until cutover those
+backups are of the pre-cutover snapshot; from here they are of live data, which needs nothing but
+the first run after the flip.
+
+```bash
+ssh ubuntu@161.118.186.201 'sudo systemctl start backup-db.service &&   sudo journalctl -u backup-db -n 6 --no-pager | grep -E "Archive|Offsite"'
+#   expect: "Archive: ... (870M)"  and  "Offsite OK ... -> oci:sarathi-backups-mumbai"
+```
+
+*Verified 20 Sep end to end: 912 MB encrypted object written in ~14s, then **restored from it** -
+`integrity_check ok`, 162 claims, 159 tables, **824 claim documents**, a real PDF opening with the
+right magic bytes. Retention prunes past 7 days on the remote as well as locally.*
+
+**Contabo's own offsite has never worked** (no `rclone.conf` on that machine at all), so before
+this the claim documents had no off-site copy anywhere. The cutover is what fixes that; there is
+nothing to migrate.
+
 ## Step 9 — Close the door
 
 Only once Step 8 is fully green:
