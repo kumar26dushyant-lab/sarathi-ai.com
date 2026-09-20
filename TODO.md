@@ -78,6 +78,16 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
 
+### ✅ NIDAANPARTNER VERIFIED ON ORACLE WITH REAL DATA (2026-09-20)
+Founder: *"it should work as it was working in contabo."* Everything before this was tested against an **empty database** — page shells, not the product. Now tested with the real thing.
+- **Real data loaded:** 162 claims, **914 MB** uploads (884 files), 898 pdfs, 689 apk — counts matching production exactly.
+- **All 20 journeys pass on ARM against real live data.**
+- **Byte-identical behaviour, proved properly.** Copied the *same DB file* to both machines (md5 `36ec0d7f…`) and ran NidaanPartner's real logic on each — so any difference would be the platform, not live activity. **28 metrics, zero differences:** every bucket board, awaiting-fee (19 waiting / 17 winnable / ₹22,97,315), document desk (115 waiting, 113 never asked), escalation clock, and 8 real claim checklists.
+- **Every NidaanPartner surface identical** with real data: `/` 155,126b · `/nidaan/ops` 1,231,837b · `/admins` 1,231,837b · `/nidaan/dashboard` 209,034b · branch portal, ₹499 review, start, terms, privacy, about · `/superadmin` → 302 · all matching Contabo byte for byte.
+- **Signed-URL document guard works identically** — a real claim PDF requested without a signature returns **403** on both boxes.
+- 🔒 **The box holds real data, so every service now runs with `NIDAAN_NO_OUTBOUND=1`** (verified in the running process environment, not just the file). Without it, a rehearsal with the real `biz.env` would have **two servers messaging the same complainants**. **Removing it is now runbook Step 4**, with Step 5 proving it is gone from the processes — left in, the live site looks healthy and silently delivers nothing.
+- All comparison copies of the live DB shredded from `/tmp` on both boxes and locally.
+
 ### ✅ PRE-CUTOVER WORK DONE (2026-09-20) — runbook: `deploy/CUTOVER_RUNBOOK.md`
 - ✅ **Backups armed and proven.** `backup-db.timer` live (02:01 daily), run once for real — a 61 KB archive landed. **Rescued into git: `git-db-backup.service`/`.timer` existed only on Contabo**, so a rebuild-from-source produced a box with **no encrypted off-site DB backup and nothing to say so**. Second time this shape has bitten (the script itself was untracked until a `git clean` deleted it 22 Jul). Every other unit audited — these two were the only gaps.
 - ✅ **Deploy mechanism installed and tested end to end** — narrow sudoers (5 exact commands, `visudo -c` validated), `sarathi-deploy.path` armed, SSH config so `git fetch` works non-interactively. A real deploy ran and rolled both web instances.
