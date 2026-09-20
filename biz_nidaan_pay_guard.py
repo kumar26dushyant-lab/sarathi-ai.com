@@ -248,19 +248,39 @@ async def _check_reconcile(findings: list, ran: set) -> None:
                           % (row["pay_id"], row["source"], int(row.get("total_paise") or 0) / 100, pid)})
 
     # The webhook is how late captures and renewals reach us at all.
+    #
+    # ASK WHETHER IT ARRIVED, NOT WHETHER IT WROTE A ROW. This check used to count payment rows
+    # with verify_method='webhook' in the last 24h. But record_payment is idempotent: a webhook
+    # for a payment the browser checkout already recorded writes NO row, by design. So on a day
+    # when every payment completed in the browser, a perfectly healthy webhook looked dead — and
+    # the alarm told a person to go and change the webhook URL and secret, which were correct.
+    # (20 Sep: nginx had logged webhooks arriving 11 hours earlier, with zero signature failures
+    # in a week.) An alarm that prescribes breaking a working thing is worse than silence.
+    #
+    # The webhook handler now stamps `razorpay_webhook_last_at` on arrival. We take the NEWER of
+    # that stamp and the old row-based signal, so this is strictly more accurate than before and
+    # needs no transition period: before the first stamp exists, it behaves exactly as it used to.
     if captured:
         async with aiosqlite.connect(DB_PATH) as c:
-            hook = await (await c.execute(
-                "SELECT COUNT(*) FROM nidaan_payments WHERE verify_method='webhook' "
-                "AND created_at > datetime('now','-24 hours')")).fetchone()
-        if not (hook and hook[0]):
+            row = await (await c.execute(
+                "SELECT MAX(created_at) FROM nidaan_payments WHERE verify_method='webhook'"
+            )).fetchone()
+        last_row = str((row or [None])[0] or "")
+        try:
+            last_seen = (await _n.get_ops_setting("razorpay_webhook_last_at", "") or "").split("|")[0].strip()
+        except Exception:
+            last_seen = ""
+        newest = max(last_row, last_seen)          # ISO strings compare correctly
+        cutoff = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        if not newest or newest < cutoff:
             findings.append({
                 "key": "webhook_silent", "check": "webhook", "severity": "critical",
                 "title": "No Razorpay webhook has reached us in 24 hours",
-                "detail": "Razorpay captured %d payment(s) in the last %dh, but nothing arrived by "
-                          "webhook in 24h. Renewals and late captures depend on it. Check the "
+                "detail": "Razorpay captured %d payment(s) in the last %dh, and no webhook has "
+                          "reached us in 24h%s. Renewals and late captures depend on it. Check the "
                           "webhook URL and secret in the Razorpay dashboard."
-                          % (len(captured), LOOK_BACK_H)})
+                          % (len(captured), LOOK_BACK_H,
+                             (" (last seen %s UTC)" % newest) if newest else " — none on record")})
 
 
 async def _check_effects_and_duplicates(findings: list, ran: set) -> None:

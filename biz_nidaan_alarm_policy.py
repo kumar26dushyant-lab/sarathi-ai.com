@@ -186,12 +186,39 @@ async def _recheck_unanswered(subject: str, body: str) -> bool:
     return True
 
 
+async def _recheck_payment_guardian(subject: str, body: str) -> bool:
+    """The guardian reports several findings; only ONE of them has ever been wrong.
+
+    "No Razorpay webhook has reached us in 24 hours" was announced on 20 Sep while webhooks were
+    arriving and verifying perfectly, because the check counted payment ROWS written by webhooks
+    rather than webhook ARRIVALS. The root cause is fixed, but a claim that once told a person to
+    change a working setting is worth confirming before it is repeated.
+
+    Deliberately narrow: an alert that mentions anything ELSE is sent untouched. Re-running the
+    whole guardian here would call Razorpay's API on every send, which is not a thing to do inside
+    a notification.
+    """
+    if "webhook" not in body.lower():
+        return True
+    import datetime as _dt
+    import biz_nidaan as _nid
+    stamp = (await _nid.get_ops_setting("razorpay_webhook_last_at", "") or "").split("|")[0].strip()
+    if not stamp:
+        return True          # nothing recorded either way — we cannot disprove it, so it goes
+    cutoff = (_dt.datetime.utcnow() - _dt.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    if stamp >= cutoff:
+        logger.info("ALARM DROPPED (payment.guardian): a webhook arrived at %s UTC", stamp)
+        return False
+    return True
+
+
 # Only keys listed here are ever re-verified. Everything else is sent as-is, on purpose.
 _RECHECKS = {
     "health.subsystem": _recheck_health,
     "radar.mailbox_down": _recheck_radar,
     "conversation.unanswered": _recheck_unanswered,
     "conversation.unanswered.escalated": _recheck_unanswered,
+    "payment.guardian": _recheck_payment_guardian,
 }
 
 

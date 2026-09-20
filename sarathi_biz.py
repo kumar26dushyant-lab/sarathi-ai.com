@@ -5594,6 +5594,28 @@ async def nidaan_razorpay_webhook(request: Request):
     event = data.get("event", "")
     payload = data.get("payload", {})
 
+    # PROOF OF ARRIVAL, stamped the moment a correctly-signed webhook gets this far.
+    #
+    # The payment guardian used to prove the webhook was alive by asking "has a webhook CREATED a
+    # payment row in the last 24 hours?" — which is a different question. record_payment is
+    # idempotent by design, so a webhook for a payment the browser checkout already recorded is a
+    # no-op and writes no row. On a day when every payment completes in the browser, that check
+    # sees nothing and concludes the webhook is dead.
+    #
+    # It did exactly that on 20 Sep: "No Razorpay webhook has reached us in 24 hours — check the
+    # webhook URL and secret", while webhooks were arriving and verifying perfectly (nginx logged
+    # them; zero signature failures in a week). That is worse than a noisy alarm, because it told
+    # a person to go and change a setting that was working.
+    #
+    # This records arrival itself — signature verified, JSON parsed — whatever the event turns out
+    # to do. Best-effort: a webhook must never fail because a diagnostic write failed.
+    try:
+        await nidaan.set_ops_setting(
+            "razorpay_webhook_last_at",
+            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + "|" + str(event or "")[:60])
+    except Exception:
+        pass
+
     # ── #3(ii): Payment FAILED — alert every super-admin on ALL channels ─────────
     if event == "payment.failed":
         _pe = payload.get("payment", {}).get("entity", {})
