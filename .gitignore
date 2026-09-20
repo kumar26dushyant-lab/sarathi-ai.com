@@ -1,9 +1,35 @@
 # ── Secrets & Environment ─────────────────────────────────────────────────────
-biz.env
+#
+# READ THIS BEFORE EDITING. On 20 Sep the six-hourly code backup (`git add -A` → push to
+# GitHub) was found trying to commit SEVEN `biz.env.bak.*` files — live SMTP passwords, API
+# keys, the JWT secret, the backup passphrase — plus nine full server tarballs and the
+# encrypted DB backup repo. It had been failing for days, and the ONLY reason nothing reached
+# GitHub is that one of those .bak files happened to be root-owned, so `git add` aborted with
+# "Permission denied" before it finished.
+#
+# In other words a BUG was the only thing protecting the secrets, and the obvious "fix" —
+# chown the file so the backup works — would have published them on the next run.
+#
+# `biz.env` matched the literal name and `*.env` matched files ENDING in .env. Neither
+# matches `biz.env.bak.1785960845`. Patterns here are now prefix-based for that reason: match
+# anything that STARTS with a secret's name, not just its exact spelling.
+biz.env*
 *.env
 .env
 *.env.local
 wa_env_append.txt
+*.bak
+*.bak.*
+
+# Backups are large, private, and belong off-site — never in the code repo. The daily tarballs
+# are ~500MB each, which is also what grew the abandoned temp packs that ate 30GB of disk.
+backups/
+db-backup-repo/
+
+# Credential stores that live in the app directory.
+.gnupg/
+.gitconfig
+*.kbx
 
 # ── Database ──────────────────────────────────────────────────────────────────
 *.db
