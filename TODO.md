@@ -78,6 +78,18 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
 
+### ✅ VIRUS SCANNING NOW COVERS EVERY PATH, ON BOTH BOXES (2026-09-20)
+Founder: *"Virus scan at upload and at any other places we're using, must also be working."* Auditing "any other places" found two real holes.
+- **All 11 HTTP upload paths** already used the single `validate_upload_scanned()` gate — confirmed, no upload path bypasses it.
+- ❌ **But `biz_av_scan` was imported by exactly ONE module: `sarathi_biz`.** Two paths wrote files from strangers straight to disk, unscanned, and staff then open them on an authenticated machine:
+  - **WhatsApp documents from complainants** (`biz_nidaan_doc_intake._store`)
+  - **Email Radar attachments from customer mailboxes** (`biz_nidaan_radar`)
+- **Both now scan AS RECEIVED**, before `normalize_to_pdf`, so the verdict is on the artefact the sender actually sent rather than our re-rendering of it. A zip is expanded first, so members are judged individually instead of as one opaque blob. Fail-closed, matching every other path.
+- **Nothing is said back to the complainant** — a refusal is ours to explain, so it reaches staff via `rejected` + notes, never as an accusation. **One bad file does not sink the batch**: clean files in the same batch are still filed.
+- **Proven with EICAR on the DEPLOYED code of both boxes: 9/9 each.** Infected file stores nothing and is reported; clean file gets through; mixed batch keeps the good one. App Health: *"clamd reachable — every upload is scanned"* green on both.
+- ⚠️ **My first version of that test passed for the wrong reason** — it loaded the *deployed* module (no fix in it) and the "infected file stored nothing" PASS was actually a permissions failure on the write. Now it prints which copy is under test and, with `AV_REQUIRE_OVERLAY=1`, refuses to run against the wrong one. Kept as `deploy/verify-av-paths.py`.
+- **Shipped to production too**, deliberately: the gap was real on Contabo as well, and doing the code change now keeps the cutover a pure infrastructure move with identical code both sides. Production deploy: **50/50 polls green**, both boxes on `ce810a2`, 20/20 journeys still passing.
+
 ### 🔴 FOUND ON CONTABO — CLAIM DOCUMENTS HAVE NO OFF-SITE BACKUP (2026-09-20)
 **Pre-existing on production, not caused by the migration.** Found while proving backup parity.
 - The nightly tarball (**873 MB**: database + `uploads` + `generated_pdfs` + videos) is encrypted with GPG and copied to `s3mumbai:sarathi-backups-mumbai` via rclone. **That copy has never worked** — `rclone.conf` **does not exist anywhere on the server**, so the `s3mumbai` remote is undefined. The log shows *"Offsite rclone FAILED"* on 17, 18, 19 and 20 Sep.
