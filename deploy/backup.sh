@@ -55,27 +55,53 @@ log "      Archive: $ARCHIVE ($ARCHIVE_SIZE)"
 #   BACKUP_GPG_PASSPHRASE  — symmetric encryption key (store it somewhere safe!)
 #   BACKUP_RCLONE_REMOTE   — e.g. "b2:my-bucket/sarathi" (run `rclone config` first)
 # Backups contain customer documents (PII) → encryption is mandatory (DPDP).
+OFFSITE_STATE="skipped"
 if [ -n "${BACKUP_GPG_PASSPHRASE:-}" ] && [ -n "${BACKUP_RCLONE_REMOTE:-}" ] \
    && command -v gpg >/dev/null && command -v rclone >/dev/null; then
     ENC="${ARCHIVE}.gpg"
     if gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
            --cipher-algo AES256 -c -o "$ENC" "$ARCHIVE" 2>>"$LOG_FILE"; then
-        if rclone copy --s3-no-check-bucket "$ENC" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
-            log "      Offsite ✓ $(basename "$ENC") → $BACKUP_RCLONE_REMOTE"
+        if rclone copy "$ENC" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
+            log "      Offsite OK $(basename "$ENC") -> $BACKUP_RCLONE_REMOTE"
+            OFFSITE_STATE="ok"
+            # PRUNE THE REMOTE TOO. Only local copies were ever pruned, so the remote grew
+            # without limit: 873MB a day passes a 20GB free tier in about three weeks, and
+            # then backups start failing for "no space" long after anyone remembers why.
+            if rclone delete --min-age "${KEEP_DAYS}d" "$BACKUP_RCLONE_REMOTE" 2>>"$LOG_FILE"; then
+                log "      Offsite pruned past ${KEEP_DAYS}d"
+            else
+                log "      NOTE: offsite prune failed - the remote may grow"
+            fi
         else
-            log "      ⚠️ Offsite rclone FAILED — check $LOG_FILE"
+            log "      OFFSITE RCLONE FAILED - check $LOG_FILE"
+            OFFSITE_STATE="failed"
         fi
         rm -f "$ENC"
     else
-        log "      ⚠️ Offsite gpg encryption FAILED"
+        log "      OFFSITE GPG ENCRYPTION FAILED"
+        OFFSITE_STATE="failed"
     fi
 else
-    log "      (offsite skipped — set BACKUP_GPG_PASSPHRASE + BACKUP_RCLONE_REMOTE + install gpg/rclone)"
+    log "      (offsite skipped - set BACKUP_GPG_PASSPHRASE + BACKUP_RCLONE_REMOTE + install gpg/rclone)"
 fi
 
-# ── Prune old backups ───────────────────────────────────────────────────────
+# --- Prune old local backups ------------------------------------------------
 DELETED=$(find "$BACKUP_DIR" -name "sarathi_backup_*.tar.gz" -mtime +${KEEP_DAYS} -print -delete | wc -l)
 [ "$DELETED" -gt 0 ] && log "Pruned $DELETED backup(s) older than ${KEEP_DAYS} days"
 
 log "=== Backup complete ==="
 echo "$ARCHIVE"
+
+# FAIL LOUDLY IF THE OFFSITE COPY DID NOT HAPPEN.
+#
+# This script used to log a warning and exit 0, so systemd recorded a clean run while the
+# only copy that survives losing the machine was not being written. On Contabo that went
+# unnoticed from at least 17 Sep. A configured-but-failing offsite IS a failed backup, and
+# the unit should say so: App Health watches for failed units, and it cannot watch for a
+# warning buried in a log file.
+#
+# "skipped" (not configured at all) stays exit 0 - that is a decision, not a fault.
+if [ "${OFFSITE_STATE:-skipped}" = "failed" ]; then
+    log "Exiting non-zero: the offsite copy failed."
+    exit 1
+fi
