@@ -7289,6 +7289,100 @@ quit silently and surface facts of why, if questions surface questions."*
 
 ---
 
+## A109 — [INFRA] CONTABO → ORACLE MUMBAI, AND WHAT A REBUILD EXPOSED (Sep 20 2026)
+
+### Where we are
+`nidaanpartner-mumbai-01` · `161.118.186.201` · ap-mumbai-1 · **VM.Standard.A1.Flex aarch64**
+· 2 OCPU / 12 GB / 45 GB · Ubuntu 24.04 · dedicated `nidaanpartner-vcn`, isolated from goluq.
+**https://new.nidaanpartner.com** and **https://new.sarathi-ai.com** both serve, over real TLS,
+routed by hostname. **Production is untouched throughout** — Contabo is still live and serving.
+
+Founder's drivers: **cost + performance + Mumbai data residency**. Tenancy already on
+**Pay As You Go**, which removes the idle-reclamation risk that would otherwise make Always Free
+unsuitable for a live claims business.
+
+### The two risks that had to be settled before anything else
+**Outbound SMTP works** — 587 and 465 open, 25 blocked (unused). This was the potential
+showstopper: Oracle restricts mail egress and login codes are our most fragile path. Also
+reachable: Razorpay, WhatsApp Cloud, Telegram, Gemini, IMAP, GitHub.
+
+**The stack runs on ARM.** All 101 packages at production's exact versions, `sarathi_biz` imports
+with 856 routes, **all journeys pass**, real HTTP served. Note the correction this forced: the
+project notes claimed we were *already* on Oracle ARM64 — stale by a whole migration. The live box
+was Contabo **x86_64**, so this is an **architecture change**, not a lift-and-shift.
+
+### Build from source, never clone a machine
+The previous migration (`deploy/migrate-to-contabo.sh`) was a restore-from-tarball, and it is what
+left `biz.env` copies lying beside the app — the same family as the 20 Sep secrets near-miss. A
+cloned machine carries forward every accident it ever had.
+
+So this one was built: `git clone` over a **read-only deploy key** scoped to this box, venv
+installed `--no-deps` to reproduce production exactly, nginx config taken from production's own
+file with two changes. Result: **zero CRLF**, and `nidaan_ops.html` byte-identical to production.
+
+**What rebuilding exposed, and cloning would have hidden:**
+1. **`git-db-backup.service`/`.timer` existed only on the server, never in git.** A rebuild
+   produces a box with **no encrypted off-site database backup** and nothing to say so. Second
+   time this shape has bitten — the script itself was untracked until a `git clean` deleted it on
+   22 Jul. Both units are now tracked; every other unit was audited and found clean.
+2. **The origin is firewalled to Cloudflare ranges on Contabo, and was open to the world on
+   Oracle.** Both domains are proxied, so every real visitor arrives from Cloudflare; direct
+   access bypasses the WAF entirely. That control lived only in the old server's firewall.
+   Now `deploy/lock-origin-to-cloudflare.sh` — idempotent, with status and undo, and it refuses to
+   run on a truncated range list because that would look exactly like an outage.
+3. **A missing `TELEGRAM_BOT_TOKEN` calls `sys.exit(1)` regardless of `APP_ROLE`** — so it kills
+   the **web** tier, not just the bot. A typo when rotating that token takes the whole site down.
+4. **The live venv cannot be rebuilt with pip's resolver on** — `moviepy` pins `pillow<12`,
+   production runs 12.2. Those packages belong to Sarathi's video studio, so the split resolves it.
+
+### Two real defects found and fixed
+**A rolling deploy produced a 502.** Restarting web@1 earned two refused connections; nginx
+benched 8001 for `fail_timeout=5s`; when web@2 restarted four seconds later, 8001 was **healthy
+again but still benched** — "no live upstreams". Fixed with `max_fails=0`: these peers are on
+loopback and the deploy is health-gated, so passive failure detection buys nothing, while
+`proxy_next_upstream` retries instantly. Re-measured: **180/180 polls green across both products**
+during a full deploy. *Production still has this defect; it is fixed by the move itself.*
+
+**The test hostname served the wrong product — caught by the founder, not by me.** The app picks
+its product from the Host header, and `new.nidaanpartner.com` matches neither name, so it served
+Sarathi and 404'd every `/nidaan/` route. My checks missed it because `/static/` is served from
+disk by nginx, bypassing the app — the most convincing check never touched the gate.
+**Standing rule since: "it returns 200" is not a check. The check is "did the right product
+answer, and does it match production?"** Verified that way since: 30 routes × 2 products = 60
+checks, zero differences, plus content fingerprints on the ten key pages.
+
+### Timezone — deliberately NOT changed
+Set to UTC, then **put back to Europe/Berlin to match Contabo**. Real business logic gates on
+naive `datetime.now().hour`: marketing windows, reminder sweeps, and the **bundle teardown nudge**,
+which fires at `now.hour == 9` while its own comment claims "09:23 UTC ≈ 14:53 IST" — on Berlin it
+actually runs at 07:23 UTC. Moving to UTC would have shifted all of them two hours at the moment of
+cutover: a behaviour change disguised as an infrastructure change.
+
+Founder wants IST displayed. The audit: the **ops screen is already correct** (appends `Z`, renders
+`Asia/Kolkata`); server-side output is IST-aware where a human reads it; but IST is defined **four
+different ways** across files. Plan, as its own work **after** cutover: keep storing UTC, display
+IST through one helper per side, replace the ~9 naive `datetime.now()` gates with explicit
+`datetime.now(IST)` or `utcnow()`, and only then set the server to UTC.
+
+### Capacity — measured, not guessed
+web@1 **205 MB**, web@2 **206 MB**, worker **238 MB** ≈ 650 MB (production ≈ 750 MB). After the
+split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed for Sarathi.** The Always Free
+A1 pool is fully consumed (goluq 2/12 + this 2/12 = the whole 4 OCPU / 24 GB allotment), so a third
+A1 would bill — for headroom the numbers say is unnecessary. **Separate repos, builds and deploys
+do not require separate machines**; two systemd services on one box deliver exactly what was asked.
+
+### The plan
+`deploy/CUTOVER_RUNBOOK.md` — ten steps, each with verification and rollback. Built on the fact
+that **both domains are Cloudflare-proxied**, so the flip is an origin A-record change effective in
+seconds, and the rollback is the same change reversed. Everything is verified *before* that step.
+The runbook states plainly that **rollback stops being clean once a real write lands** on the new
+database, and gives the snapshot command for when it is not.
+
+**Still pending:** real `biz.env` · off-site backup key + proven push · final data sync (uploads
+pre-staged in a `700` dir nginx cannot serve) · integration re-verification with real credentials
+· the window itself.
+
+
 **Docs on nidaanpartner.com (share key `doc_share_key`):** `/l2-design` (architecture),
 `/l2-screens` (screen walkthrough), `/l2-manual` (staff manual, Hinglish+English),
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
