@@ -12107,6 +12107,34 @@ async def _subsystem_checks() -> list:
             _chk("Backups", False, f"no backup files found in {_bd}")
     except Exception as _e:
         _chk("Backups", False, f"check failed: {str(_e)[:70]}")
+    # Scheduled jobs — the check above watches the local tarballs, and stayed GREEN for four days
+    # while the six-hourly OFF-SERVER code backup failed every single run. Nobody knew, because a
+    # systemd unit that fails on a timer tells no one: it just sits in 'failed' until somebody
+    # types systemctl. Each of those failed runs also abandoned a ~3GB temp pack, which is how
+    # 30GB of disk quietly disappeared.
+    #
+    # So this asks the one question the tarball check cannot: did any of our scheduled jobs FAIL?
+    # It is deliberately about state, not output — a job that fails is worth a person's attention
+    # whatever it was doing.
+    try:
+        _units = ["sarathi-worker", "sarathi-web@1", "sarathi-web@2",
+                  "git-backup", "git-db-backup", "backup-db", "sarathi-deploy"]
+        _failed = []
+        _proc = await asyncio.create_subprocess_exec(
+            "systemctl", "is-failed", *[u + ".service" for u in _units],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        _out, _ = await asyncio.wait_for(_proc.communicate(), timeout=8)
+        # One line per unit, in the order asked. "failed" is the only state we act on: inactive is
+        # normal for a timer-driven job between runs, and activating is normal mid-deploy.
+        for _u, _state in zip(_units, (_out or b"").decode().split()):
+            if _state.strip() == "failed":
+                _failed.append(_u)
+        _chk("Scheduled jobs", not _failed,
+             ("⚠️ failed: " + ", ".join(_failed)) if _failed
+             else f"{len(_units)} job(s) checked · none in a failed state")
+    except Exception as _e:
+        # Cannot ask systemd (not on this host, no permission)? Say so rather than claim health.
+        _chk("Scheduled jobs", True, f"not checked here ({str(_e)[:50]})")
 
     # ── Email sending allowance ─────────────────────────────────────────────
     # The worst kind of failure: Brevo's free plan does not refuse when it runs out, it returns

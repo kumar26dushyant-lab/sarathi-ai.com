@@ -64,7 +64,8 @@ _GAPS = {
 # Subsystems worth waking a human for. Anything else is informational only.
 _CRITICAL = {
     "Database", "WhatsApp Cloud API", "Email Radar", "AI (Gemini)", "SMTP (email out)",
-    "Subscription renewals", "Backups", "Disk", "Payments (Razorpay)", "Doc Splitter",
+    "Subscription renewals", "Backups", "Scheduled jobs", "Disk", "Payments (Razorpay)",
+    "Doc Splitter",
     # Delivery checks only: these judge what actually happened to the codes we sent, so a failure
     # here means people are being turned away right now.
     "Branch login — code delivery",
